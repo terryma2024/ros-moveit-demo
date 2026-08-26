@@ -1449,3 +1449,35 @@ evidence:
 decision: RETAIN_INVALID_LIVE_AND_REPEAT_LIVE_ONLY_WITH_IN_PANE_CD_READBACK
 next_experiment: NONE
 ```
+
+## CP-031 — Plan fresh live-only real RGB-D A/B with in-pane cwd gate
+
+```yaml
+checkpoint_id: CP-031
+recorded_at: 2026-08-27T01:02:22+08:00
+smoke_id: SMOKE-006
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 094b6649f79a35fb8cb61be0f452c65f85cccc9b
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_control_basis: SMOKE-005 empty control constructed the real installed node inside its 30 s budget and reached only the expected no-camera first-valid timeout.
+single_variable: Replace unreliable tmux -c behavior with an initially idle task tmux, explicit in-pane cd to the exact worktree, and exact pane_current_path/pwd readback before starting any product helper.
+identity:
+  domain: 215
+  session: mac-mrc010-real-rgbd-live-r3
+  tmux: mrc010-mac-real-rgbd-live-r3
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r3/live
+helpers:
+  base_sha256: 7b4a8c5c715579a3c43dc01d2beb026aa269f9b03d76e6ebc3b00d4a5d63b33c
+  static_tf_sha256: 411aee6274109f841f4125a79ebdee536fb2d76afbef7d3a5a6edaa17ef38c36
+  perception_sha256: c50541dbf1129e96ce635d24695facf36d8145487d3b322d4741d5f7f524cbf3
+method:
+  - Preflight legal domain/session/evidence/Viewer empty and helper syntax, then create only an idle task tmux shell.
+  - Send explicit cd to the exact task worktree and require both pane_current_path and captured pwd to match before committing RUNNING.
+  - Start static TF plus base; keep exact-Viewer baseline polling active; wait candidate plugin/controllers/MoveIt/Scene READ_BACK.
+  - Start only exact installed rgbd_cup_pose with formal 30 s args. PASS requires summary.json/cup.ply and /cup_pose; either construction or first-valid timeout is the first valid failure and stops diagnosis.
+cleanup: Use only exact recorded helper PIDs and task tmux; the r3 static-TF helper uses exact TERM for its child wrappers because r2 proved background ros2 wrappers ignore inherited SIGINT.
+decision: COMMIT_PLAN_THEN_CREATE_IDLE_TMUX_CWD_GATE
+next_experiment: SMOKE-006
+```
