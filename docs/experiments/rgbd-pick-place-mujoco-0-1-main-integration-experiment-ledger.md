@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-133
+latest_checkpoint: CP-134
 next_experiment: NONE_VALID_FAILURE_REQUIRES_FIX_AND_NEW_BATCH
 ```
 
@@ -249,6 +249,26 @@ preserved_canonical: /data/work/ws_moveit main@b3770360b26fe8f6fac0e19338d250b6f
 fresh_review: Completed independently; corrected experiment status enum, stale report text, overclaimed deeper mechanism, audit timestamps, and retained the delayed-cleanup-readback limitation.
 timestamp_audit_note: CP-129 through CP-132 retain their pre-existing recorded_at values even though they exceed the host wall-clock readback at this closure; append-only history is not rewritten, and experiment IDs plus Git commit order remain authoritative.
 decision: Publish the reviewed valid-failure closure; do not run EXP-049 through EXP-051 unless a separately authorized fix creates a new immutable candidate and newly preregistered batch.
+next_experiment: NONE
+```
+
+## CP-134 — Fresh review remediated and valid-failure closure published
+
+```yaml
+checkpoint_id: CP-134
+recorded_at: 2026-08-27T05:05:10+08:00
+status: VALID_PUBLICATION
+closure_commit: 6130a6d5728e6840c1f8ae63c0da1b6931a93de4
+closure_push: PASS
+closure_remote_readback: 6130a6d5728e6840c1f8ae63c0da1b6931a93de4
+fresh_review: PASS_AFTER_REMEDIATION
+verification:
+  - New EXP-048 and CP-133 YAML blocks parse successfully and git diff check passes.
+  - Runtime source tree remains unchanged from 2a636d9dfe04bb8707b196ac683396c5007cd14a; child remains 5e9d67ce9fde39d35bf94cc498721abf203a0ddd.
+  - All four fork packages plus support, teleop, and demo installed package manifests read 0.1.0.
+  - EXP-048 failure metrics recompute from the immutable dynamic manifest; EXP-047 runner/watcher remain zero.
+  - Canonical /data/work/ws_moveit remains read-only main@b3770360b26fe8f6fac0e19338d250b6f5cab0e7; task tmux and domain 112 remain empty.
+decision: Commit and push this additive publication checkpoint, then require final Gitee ls-remote to equal local HEAD.
 next_experiment: NONE
 ```
 
