@@ -789,7 +789,22 @@ def run_rgbd_cup_pose(
                 flush=True,
             )
             result = 1
-    except (OSError, RuntimeError, TimeoutError, ValueError) as error:
+    except RuntimeError as error:
+        if runtime.first_valid_published and not runtime.ok():
+            print(
+                _status_line("STOPPED", reason="ROS_CONTEXT_SHUTDOWN"),
+                flush=True,
+            )
+            result = 0
+        else:
+            print(
+                _status_line(
+                    "ERROR", failure="RGBD_CUP_POSE_FATAL", message=str(error)
+                ),
+                flush=True,
+            )
+            result = 1
+    except (OSError, TimeoutError, ValueError) as error:
         print(
             _status_line(
                 "ERROR", failure="RGBD_CUP_POSE_FATAL", message=str(error)
