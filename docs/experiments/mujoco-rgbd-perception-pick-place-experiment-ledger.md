@@ -1883,3 +1883,22 @@ owned_processes: NONE; domain 194, exact child, partition owner, owned tmux, Vie
 preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
 next_command: Commit this closure/plan, implement and read-only inspect the evidence-only coordinator below exp-017, then prove fresh domain 195/title/tmux isolation before RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-017-RUNNING-001
+recorded_at: 2026-08-26T12:22:40+08:00
+experiment_id: EXP-017
+from: PLANNED
+to: RUNNING
+source_commit: PENDING_LEDGER_COMMIT
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: The evidence-only launch wrapper and concurrent capture coordinator both pass zsh syntax validation; their completed-LIFT and completed-placement jq boundary queries pass against the retained EXP-016 manifest.
+  - OBSERVED: Task source and exact f19 are clean, canonical main is clean, domain 195 and partition owners are empty, owned tmux is absent, and exact-title Viewer window count is zero.
+  - OBSERVED: Window-scope CUA session rgbd-pick-exp017-viewer-20260826 is active before coordinator and launch start.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/pre-running/coordinator-check.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/pre-running/isolation-snapshot.log
+next_command: Start capture and launch as separate windows in exact-owned tmux rgbd-pick-exp017-20260826; wait only on their durable exit sidecars before inspecting the three images.
+```
