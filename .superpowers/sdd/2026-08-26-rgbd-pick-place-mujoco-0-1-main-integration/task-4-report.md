@@ -40,6 +40,10 @@ Repaired runtime provenance:
 Evidence is retained under the registered root in `mac-runs/exp-057` through `mac-runs/exp-060`,
 with the aggregate result in `mac-repair-validation-summary.json`. Nothing was deleted or archived.
 
+Publication closure `3edd55a9d922f99bdc380dfaa1a60954c8741a86` was accepted by Gitee on
+`codex/rgbd-pick-place-mujoco-0-1-main`; the first `git ls-remote` readback matched exactly. CP-149
+records that readback additively and changes no runtime bytes or live evidence.
+
 ## Historical pre-repair qualification
 
 ### Summary
