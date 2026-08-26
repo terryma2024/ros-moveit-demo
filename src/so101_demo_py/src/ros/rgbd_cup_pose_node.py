@@ -344,7 +344,6 @@ def _load_ros_api() -> Any:
         DurabilityPolicy,
         QoSProfile,
         ReliabilityPolicy,
-        qos_profile_sensor_data,
     )
     from rclpy.time import Time
     from sensor_msgs.msg import CameraInfo, Image
@@ -360,7 +359,6 @@ def _load_ros_api() -> Any:
         DurabilityPolicy=DurabilityPolicy,
         QoSProfile=QoSProfile,
         ReliabilityPolicy=ReliabilityPolicy,
-        qos_profile_sensor_data=qos_profile_sensor_data,
         Time=Time,
         CameraInfo=CameraInfo,
         Image=Image,
@@ -495,6 +493,11 @@ def _create_ros_runtime(
             reliability=ros.ReliabilityPolicy.RELIABLE,
             durability=ros.DurabilityPolicy.VOLATILE,
         )
+        camera_qos = ros.QoSProfile(
+            depth=1,
+            reliability=ros.ReliabilityPolicy.RELIABLE,
+            durability=ros.DurabilityPolicy.VOLATILE,
+        )
         publisher = node.create_publisher(
             ros.PoseStamped, options.output_topic, pose_qos
         )
@@ -529,7 +532,7 @@ def _create_ros_runtime(
                         ros.CameraInfo,
                         options.camera_info_topic,
                         self._on_camera_info,
-                        ros.qos_profile_sensor_data,
+                        camera_qos,
                     )
                 )
                 self._subscriptions.append(
@@ -537,7 +540,7 @@ def _create_ros_runtime(
                         ros.Image,
                         options.color_topic,
                         self._on_color,
-                        ros.qos_profile_sensor_data,
+                        camera_qos,
                     )
                 )
                 self._subscriptions.append(
@@ -545,7 +548,7 @@ def _create_ros_runtime(
                         ros.Image,
                         options.depth_topic,
                         self._on_depth,
-                        ros.qos_profile_sensor_data,
+                        camera_qos,
                     )
                 )
 
