@@ -2600,3 +2600,19 @@ runner_gate: After fresh preflight/RUNNING commit, create empty run/gui, invoke 
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
 next_experiment: EXP-020
 ```
+
+## CP-070 / TRANS-EXP-020-RUNNING-001 — Start explicit-zsh task_start qualification
+
+```yaml
+checkpoint_id: CP-070
+transition_id: TRANS-EXP-020-RUNNING-001
+recorded_at: 2026-08-27T02:42:00+08:00
+experiment_id: EXP-020
+from: PLANNED
+to: RUNNING
+qualification: true
+position: task_start
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+pre_running_observed: Domain 202, evidence, exact session/tmux/process identities, and Viewer are fresh and empty; frozen provenance unchanged.
+decision: PROVE_EXPLICIT_ZSH_CAPTURE_OWNER_THEN_START_PRODUCT
+```
