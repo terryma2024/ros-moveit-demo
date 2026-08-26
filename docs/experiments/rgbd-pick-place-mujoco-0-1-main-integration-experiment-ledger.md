@@ -28,8 +28,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-005
-next_experiment: EXP-014
+latest_checkpoint: CP-006
+next_experiment: NONE
 ```
 
 ## Shared live acceptance contract
@@ -97,7 +97,7 @@ next_experiment: EXP-014
 
 ```yaml
 experiment_id: EXP-014
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-010
 hypothesis: Binding the task-owned tmux pane to the current live worktree removes only the stale-cwd contamination and permits the unchanged task_start candidate to complete AC-001.
 prediction: No getcwd-failed diagnostic occurs; the perceived start pose is near [0.02, -0.28, 0.165], and the unchanged workflow releases the cup stably in the red target.
@@ -121,16 +121,17 @@ provenance:
   gz_partition: mac-mrc010-task-start-retry-exp014
 commands:
   - command: ROS_DOMAIN_ID=229 GZ_PARTITION=mac-mrc010-task-start-retry-exp014 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-retry-exp014 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/task-start-retry.json
-    exit_code: PENDING
+    exit_code: 245
 observed:
-  - NOT_RUN
+  - INVALID_ENVIRONMENT: the explicit tmux -c precondition failed before product startup; pane readback still selected the deleted historical worktree and child getcwd returned dot.
+  - Seven getcwd-failed diagnostics preceded the required MuJoCo runtime SIGSEGV; launch then shut down the remaining owned graph.
 inferred:
-  - NONE
-conclusion: PENDING
+  - No causal claim between stale cwd and the SIGSEGV is required or made; the pre-registered cwd isolation precondition independently makes the run non-counting.
+conclusion: Strict INVALID; excluded from product behavior conclusions.
 evidence:
   - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014
-decision: PENDING
-next_experiment: EXP-011
+decision: REPEAT_AFTER_NON_PRODUCT_TMUX_CWD_AB
+next_experiment: NONE
 ```
 
 ```yaml
@@ -580,4 +581,50 @@ evidence:
   - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp014-provenance-isolation.txt
 decision: START_EXACT_INSTALLED_EXP_014
 next_command: Commit this transition, create mrc010-mac-exp014 with tmux -c set to the task worktree, verify the pane cwd readback, and run the unchanged installed command with concurrent exact-window capture.
+```
+
+## CLOSE-EXP-014-001 / CP-006 — Explicit tmux `-c` did not satisfy cwd precondition
+
+```yaml
+closure_id: CLOSE-EXP-014-001
+checkpoint_id: CP-006
+recorded_at: 2026-08-26T23:41:01+08:00
+experiment_id: EXP-014
+status: INVALID
+classification: explicit_tmux_cwd_precondition_failed
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_closure: 7a99fce
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+first_bad_boundary: Before product startup, tmux-start-readback recorded pane_current_path as the deleted .worktrees/mujoco-ros2-control-0-1-upgrade path instead of the pre-registered live task worktree; child pwd -P consequently produced dot.
+competing_hypotheses:
+  - H1: The existing shared tmux server cannot honor new-session -c while its inherited base cwd has been unlinked.
+  - H2: An explicit absolute cd in the new pane command repairs cwd without restarting or disturbing the shared tmux server.
+  - H3: The current task worktree itself cannot be entered from a tmux pane.
+observed:
+  - OBSERVED: The current task worktree existed and was clean before launch. The exact start command did include tmux new-session -c with that path, but the immediate pane readback selected the deleted historical path and the child owner recorded working_directory=dot.
+  - OBSERVED: The first runtime diagnostics at 23:38:57 were getcwd failures in the MuJoCo runtime, robot_state_publisher, and both camera TF publishers; seven total processes reported the same boundary before any controller became active or scene setup completed.
+  - OBSERVED: The required MuJoCo runtime later raised SIGSEGV in the physics/plugin callback and exited -11. That first terminal child caused launch-owned SIGINT; scene_setup's wait_for_service interruption and move_group SIGKILL are downstream teardown, not external interrupts.
+  - OBSERVED: The exact wrapper naturally returned 245 with 9 starts, 6 clean exits, and 3 died processes. No perception process, point cloud, dynamic manifest, workflow state, transport, or final placement existed.
+  - OBSERVED: Capture helper started before launch, selected exact Viewer window 45252/PID 56131, and preserved one inspected 2504x1770 baseline. It performed no signal action and was interrupted with observed status 130 only after product terminal.
+  - OBSERVED: Original-resolution inspection shows task_start cup on table, red target empty, gripper open, and Viewer Running. PNG SHA256 is 7658774a607b0ee35e1c3499eb6727b7a0c5a9edfeddd1182ebf4ca09ecbfc04.
+  - OBSERVED: Exact-owned tmux was removed after terminal; target session/process/domain-daemon/Viewer identities are absent. Unrelated tmux sessions/windows remain preserved.
+classification_rationale:
+  - The pre-registered EXP-014 invalid criterion includes cwd/process isolation, and that precondition failed before any product boundary. Therefore this is INVALID even though the later MuJoCo SIGSEGV is observed; no claim that cwd caused SIGSEGV is necessary or made.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/run/tmux-start-readback.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/run/child.owner
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/run/full-restart.log
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/run/capture.owner
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/run/capture-terminal-note.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/gui/baseline-helper/20260826T233909-4f14a62519c6/manifest.json
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/gui/baseline-helper/20260826T233909-4f14a62519c6/window.png
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014/post-cleanup.log
+decision: RUN_NON_PRODUCT_TMUX_CWD_AB_BEFORE_NEW_EXPERIMENT
+last_valid_experiment: NONE
+owned_processes: NONE
+open_risks:
+  - Whether explicit in-pane cd repairs the stale shared tmux server cwd is not yet observed.
+  - No current-candidate Mac position is qualified.
+next_experiment: NONE
+next_command: Commit this INVALID closure, then run a task-owned empty tmux A/B that records pwd for -c alone versus explicit absolute cd; do not start ROS or MuJoCo.
 ```
