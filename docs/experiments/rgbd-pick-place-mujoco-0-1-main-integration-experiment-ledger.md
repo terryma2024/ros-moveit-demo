@@ -2728,6 +2728,34 @@ pre_running_observed:
 decision: CREATE_START_SIGNAL_AND_WAIT_FOR_UNCHANGED_2HZ_HELPER_NATURAL_EXIT
 ```
 
+## CP-077 / CLOSE-SMOKE-015-001 — 2 Hz shifts but does not eliminate action-result lag
+
+```yaml
+checkpoint_id: CP-077
+transition_id: CLOSE-SMOKE-015-001
+recorded_at: 2026-08-27T03:00:30+08:00
+smoke_id: SMOKE-015
+from: RUNNING
+to: CAUSAL_PARTIAL_PASS
+qualification: false
+valid_preconditions: Explicit task-worktree cwd, fresh domain204/session/evidence, diagnostic camera_publish_rate 2.0, exact candidate fork/support, perception world pose, and natural lifecycle all passed.
+original_boundary_result:
+  - State trace crossed DESCEND, CLOSE_GRIPPER, MICRO_LIFT, VERIFY_PHYSICAL_GRASP, ATTACH_MOVEIT, LIFT, and entered MOVE_ABOVE_PLACE.
+  - All six segmented DESCEND trajectories delivered controller success to MoveIt 0.0048 to 0.0539 seconds after physical Goal reached, versus about 2.148 seconds at the first DESCEND segment in EXP-020.
+later_failure:
+  - MOVE_ABOVE_PLACE arm goal accepted at 1787770704.058625 and physically reached at 1787770705.377898.
+  - MoveIt received no result before waitForExecution timeout at 1787770707.084773, a greater-than-1.706-second post-physical-completion lag.
+  - Manifest ended MOVEIT_EXECUTION_FAILED with last_error MOVEIT_EXECUTION_MONITOR_ABORTED:DYNAMIC_EARLY_TABLE_CONTACT and recovery state trace, so the full workflow did not succeed.
+conclusion: Lowering RGB-D from 10 to 2 Hz materially reduces result-delivery latency and moves the first failure later, supporting DDS/perception load causality, but 2 Hz alone is not a sufficient production fix.
+cleanup: Natural rc1; domain204, exact processes, Viewer, and session are empty.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/dds-2hz-smoke015
+  log_sha256: 959ee12613e60b369e5bd256b09922fded6fe4ed3edc47b304083d501bc72ae0
+  manifest_sha256: 57c2289a3ac29a3c33858bef25e451e9fb3961f93fe6d7ca3a592596110b2fc2
+decision: DO_NOT_TDD_2HZ_ALONE; TEST_LONG_LIVED_PERCEPTION_WITH_INPUT_SUBSCRIPTIONS_RELEASED_AFTER_FIRST_VALID_POSE
+next_experiment: SMOKE-016
+```
+
 ## CP-075 — Plan explicit-cwd 2 Hz camera-load causal probe
 
 ```yaml
