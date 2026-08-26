@@ -1802,3 +1802,22 @@ confirmed_conclusions:
   - EXP-012 through EXP-014 remain PLANNED and prohibited until task_start obtains a countable accepted run.
 next_command: Commit this closure/plan, then perform fresh domain 194 and exact-title window absence checks before transitioning EXP-016 to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-016-RUNNING-001
+recorded_at: 2026-08-26T12:17:24+08:00
+experiment_id: EXP-016
+from: PLANNED
+to: RUNNING
+source_commit: PENDING_LEDGER_COMMIT
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Task source, exact f19 submodule, and canonical main are clean; the only source delta after the built implementation is the persistent experiment ledger.
+  - OBSERVED: Domain 194 has no nodes, no process owns domain 194 or the EXP-016 partition, owned tmux is absent, and exact CUA title `MuJoCo : so101_task_scene` has zero windows.
+  - OBSERVED: All five runtime prefixes resolve to the same fresh task overlay used for the validated a8b3d87a implementation.
+  - OBSERVED: Window-scope CUA session rgbd-pick-exp016-viewer-20260826 is active before launch.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-016/pre-running/isolation-snapshot.log
+next_command: Launch the unchanged task_start wrapper and poll CUA list_windows by exact title at short cadence; capture baseline immediately, then use live manifest boundaries for transport and final snapshots.
+```
