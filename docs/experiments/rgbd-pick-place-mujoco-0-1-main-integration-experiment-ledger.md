@@ -2343,3 +2343,23 @@ helpers:
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
 next_experiment: SMOKE-013
 ```
+
+## CP-059 / TRANS-SMOKE-013-RUNNING-001 — Start installed reliable-QoS live perception smoke
+
+```yaml
+checkpoint_id: CP-059
+transition_id: TRANS-SMOKE-013-RUNNING-001
+recorded_at: 2026-08-27T02:28:10+08:00
+smoke_id: SMOKE-013
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+record_head_before_transition: 27f0b31998bb60400abdacd17f412a16d21d8e17
+pre_running_observed:
+  - Domain 207 graph, evidence path, exact task tmux/process identities, and Viewer were fresh and empty.
+  - Task-owned tmux pane completed explicit in-pane cd after shell initialization and read back the exact worktree path.
+  - Candidate prefixes, installed bundle, installed runtime source, support plugin SHA, focused installed contracts, and correct-source-order support CTest match CP-058.
+decision: START_BASE_STATIC_TF_GUI_THEN_OBSERVER_AND_INSTALLED_PERCEPTION
+next_command: No dynamic node or motion; close on the first valid installed perception result.
+```
