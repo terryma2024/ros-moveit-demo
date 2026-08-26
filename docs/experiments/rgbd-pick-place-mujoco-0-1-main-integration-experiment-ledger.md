@@ -1481,3 +1481,29 @@ cleanup: Use only exact recorded helper PIDs and task tmux; the r3 static-TF hel
 decision: COMMIT_PLAN_THEN_CREATE_IDLE_TMUX_CWD_GATE
 next_experiment: SMOKE-006
 ```
+
+## CP-032 / TRANS-SMOKE-006-RUNNING-001 — Start cwd-gated live real RGB-D A/B
+
+```yaml
+checkpoint_id: CP-032
+transition_id: TRANS-SMOKE-006-RUNNING-001
+recorded_at: 2026-08-27T01:04:02+08:00
+smoke_id: SMOKE-006
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: adb09be283ee3ab8dcfa2ca51b221321a7748087
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Domain 215, fresh session/process identity, diagnosis evidence path, and exact Viewer are empty; all r3 helper syntax checks pass and no helper process exists.
+  - An idle task tmux shell only was created. Explicit in-pane cd plus both pane_current_path and captured pwd resolve exactly to the current task worktree.
+  - No product helper has started and the diagnosis evidence path remains empty at this transition.
+owned_processes:
+  - tmux_session: mrc010-mac-real-rgbd-live-r3
+    idle_pane_pid: 75744
+cwd_gate_evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/smoke006-pane-readback.txt
+cwd_gate_sha256: 9b385e02891b19a4e9ad7285190d84c3b512d8c2890ba3403ac209f1eb4c4eef
+decision: START_STATIC_TF_BASE_GUI_THEN_REAL_PERCEPTION
+next_command: Start r3 static TF; send exact r3 base helper to the cwd-gated pane; start exact-Viewer polling; after Scene READ_BACK start exact installed rgbd_cup_pose.
+```
