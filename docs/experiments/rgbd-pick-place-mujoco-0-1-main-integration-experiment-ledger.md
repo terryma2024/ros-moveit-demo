@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-129
+latest_checkpoint: CP-130
 next_experiment: EXP-047
 ```
 
@@ -64,6 +64,30 @@ recorded_at: 2026-08-27T05:16:00+08:00
 status: VALID
 owned_processes: NONE
 decision: Commit/push then prove fresh domain/session/evidence/Viewer and exact dependencies.
+```
+
+## EXP-047 transition to RUNNING
+
+```yaml
+transition_id: TRANS-EXP-047-RUNNING-001
+recorded_at: 2026-08-27T05:18:00+08:00
+experiment_id: EXP-047
+from: PLANNED
+to: RUNNING
+preflight: {parent_child: CLEAN_EXACT, domain_111: EMPTY, target_session_tmux_process_evidence: ABSENT, viewer: ABSENT, mesa_glfw: PASS, open3d_numpy: EXACT_PASS}
+window_inventory_sha256: 16b21bff6110fa104dd3c7b5df635659c8ca21b9ba68e15483013b1564d00b1a
+watcher_sha256: a4d48b2d7b3528b6286c9ca0507873db271509a8493cec00dcb5b545e9edc009
+decision: START_WATCHER_V2_THEN_EXACT_RUNNER_ONCE
+```
+
+## CP-130 — EXP-047 cold-start gates GREEN
+
+```yaml
+checkpoint_id: CP-130
+recorded_at: 2026-08-27T05:18:00+08:00
+status: VALID
+owned_processes: NONE before launch
+decision: Execute and require runner/watcher zero, AC-001 structured gates, pixels, and cleanup.
 ```
 
 ## EXP-042 — watcher-qualified task_start FULL_RESTART
