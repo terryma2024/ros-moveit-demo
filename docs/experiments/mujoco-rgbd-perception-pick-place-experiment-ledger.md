@@ -2617,3 +2617,59 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/pre-running/cua-state.json
 next_command: Commit and push this transition, then run explicit-zsh capture and full restart concurrently on domain 206 for cup_test_right_5cm.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-028-001
+recorded_at: 2026-08-26T15:30:41+08:00
+experiment_id: EXP-028
+status: VALID
+classification: accepted_hardened_right_full_restart
+runtime_source_commit: d741f12e1216ae9407e30702c87e9dab9e149709
+implementation_commit: 48349ca7f6134e7bc4d15385338f86e5fbc182e7
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Fresh production perception consumed task_camera_frame 640x480 CameraPlugin RGB-D, selected 125 cup points from 98087 full points, wrote a nonempty PLY, fitted radius 0.03945093696604867 m, and published world [0.06963473821765558, -0.2805149484127753, 0.165] at source stamp 5533999999. Error to cup_test_right_5cm is 0.000631338 m.
+  - OBSERVED: Exactly one rgbd_cup_pose and one dynamic workflow started after scene setup; no truth bridge or cup_pose_tf_demo started. Dynamic input equals the accepted perception pose and unique exact producer stamp.
+  - OBSERVED: Session rgbd-pick-right-exp028-20260826/reset epoch 0 passed preflight. Workflow reached DONE with transition_count=19 and full trace, changing controller trajectories, joint/FK targets, and close/open gripper targets.
+  - OBSERVED: Physical truth achieved bilateral unsupported grasp, lifted from z=0.1668549051 to z=0.2248958154, and transported to [-0.0769951678, -0.2462358961, 0.2282904268] with bilateral contact and no table contact. Detach preceded open.
+  - OBSERVED: Release ended table-supported at [-0.0778932921, -0.2475248431, 0.1647761029] with zero finger contacts and near-zero velocity. final_xy_error_m=0.0025208466 and final_upright_tilt_rad=0.0032508470 pass; final Planning Scene is detached with pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Direct inspection of three distinct 1568x862 same-window PNGs shows the right-shifted baseline cup with open gripper, raised bilateral transport beside an empty target, and released cup inside the target with the gripper open above it.
+  - OBSERVED: Launch and coordinator naturally exited 0 and all required processes report clean exits. Exact child, domain 206, session/partition process set, tmux, Viewer, and CUA are empty after cleanup.
+retained_risk:
+  - OBSERVED: Streaming perception fail-closed rejected 110 motion/occlusion frames after the accepted input; none was consumed by the workflow.
+  - OBSERVED: ros2_control_node emitted two pal_statistics context-invalid shutdown diagnostics, then exited cleanly; retain as nonfatal shutdown risk.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run/capture-coordinator.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run.d/rgbd-pick-right-exp028-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run.d/rgbd-pick-right-exp028-20260826/perception/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/run.d/rgbd-pick-right-exp028-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-028/post-cleanup.log
+conclusion: cup_test_right_5cm has one accepted, countable hardened FULL_RESTART RGB-D-driven physical pick-place with complete numeric, identity, physical, Planning Scene, controller, visual, natural-exit, and cleanup evidence.
+decision: KEEP
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-036
+recorded_at: 2026-08-26T15:30:41+08:00
+last_valid_experiment: EXP-028
+current_hypothesis: All four frozen initial keyframes independently pass under hardened implementation 48349ca7 and exact f19; final repeat verification, independent review, and final evidence inventory remain.
+working_tree_status: Task source and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-028 exact child, domain 206, session/partition process set, tmux, Viewer, and CUA are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-025 task_start, EXP-026 forward, EXP-027 left, and EXP-028 right are four accepted independent countable FULL_RESTART runs under hardened implementation 48349ca7 and exact f19.
+  - Every countable run has RGB-D numeric agreement, exact MuJoCo identity, bilateral unsupported grasp/lift/transport, detached table-supported release, controller/FK/joint evidence, three directly inspected same-session visual frames, natural zero exits, and exact-owned cleanup.
+  - EXP-021 remains retained INVALID/non-counting; EXP-017 through EXP-020 remain historical-only for a8b3d87a; CP-016 remains immutable history.
+open_risks:
+  - Nonfatal pal_statistics shutdown diagnostics occurred in all four current runs.
+  - Streaming perception rejects motion/occlusion frames by design after the accepted static input; those rejects do not replace the workflow input.
+next_command: Commit and push this four-run closure, then repeat full tests, Ruff, six-package build, installed provenance, exact f19/canonical/owned-runtime checks, request independent code review, and produce the final evidence inventory as the last evidence write.
+```
