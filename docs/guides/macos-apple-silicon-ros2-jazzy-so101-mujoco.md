@@ -110,7 +110,7 @@ SO101_ROS_DEPENDENCY_OVERLAY=~/ros2_jazzy/extra_ws/install \
 ```
 
 fork 当前固定为候选标签 `so101-0.1.0-r1-candidate`、commit
-`f0f09abfe1498e1c6aa84a37a78cea87d2198b1d`。该 commit 同时包含官方 0.1.0
+`fbd61956bc99ad2fd3fd1500e7750d31bc0c72ae`。该 commit 同时包含官方 0.1.0
 `57fc6744844902d4532160b403fa95840c1d6f96` 与本地 r11
 `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08` 的 Git 祖先。候选标签不是 release tag；只有
 macOS 与 Linux 运行时验收完成后才创建 `so101-0.1.0-r1`。安装器从 clean submodule 创建独立
