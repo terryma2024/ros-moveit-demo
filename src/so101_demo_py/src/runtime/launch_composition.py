@@ -332,6 +332,8 @@ def perception_pick_place_exit_handlers(
 
     def one_shot_exit_handler(label: str):
         def on_exit(event, _context):
+            if exit_status.workflow_terminal:
+                return []
             if event.returncode == 0:
                 return []
             exit_status.record(event.returncode)

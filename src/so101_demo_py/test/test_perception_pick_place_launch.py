@@ -516,7 +516,9 @@ def test_first_terminal_process_status_wins(tmp_path: Path) -> None:
     assert exit_status.returncode == 31
 
 
-def test_workflow_terminal_ignores_all_required_teardown_exits(tmp_path: Path) -> None:
+def test_workflow_terminal_ignores_all_required_and_spawner_teardown_exits(
+    tmp_path: Path,
+) -> None:
     context, actions, exit_status = _materialize(evidence_file=tmp_path / "teardown.json")
     started = _dispatch_process_exit(
         actions,
@@ -538,6 +540,7 @@ def test_workflow_terminal_ignores_all_required_teardown_exits(tmp_path: Path) -
         }
     ]
     required.append(perception)
+    required.extend(node for node in _nodes(actions) if node.node_executable == "spawner")
 
     _dispatch_process_exit(actions, workflow, 0, context)
     emitted = [_dispatch_process_exit(actions, target, -15, context) for target in required]
