@@ -31,7 +31,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-014
+latest_checkpoint: CP-015
 next_experiment: EXP-016
 ```
 
@@ -933,5 +933,49 @@ evidence:
   loaded_plugin: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1/loaded-plugin.txt
   loaded_plugin_sha256: 030cec1caa40138f0f7f1dc9232778dc4ec807869f73b3353c342de16e7bf9cf
 decision: PASS_NON_QUALIFYING_ABI_SMOKE
+next_experiment: EXP-016
+```
+
+## CP-015 — Plan rebuilt-candidate task_start qualification
+
+```yaml
+checkpoint_id: CP-015
+recorded_at: 2026-08-27T00:12:16+08:00
+experiment_id: EXP-016
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+production_source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_checkpoint: 1f5a12d20a17f24a7304a55bf4b79b67afcd7c14
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+hypothesis: The ABI-aligned installed candidate completes every AC-001 clause from task_start on macOS.
+single_variable_from_smoke: Replace the non-qualifying base-stack smoke with the exact installed perception pick-place workflow; installed overlays, product policy, geometry, camera extrinsics, target, controller, and recovery remain frozen.
+identity:
+  domain: 232
+  session: mac-mrc010-task-start-exp016
+  partition: mac-mrc010-task-start-exp016
+  tmux: mrc010-mac-exp016
+  evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/task-start.json
+  evidence_root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016
+command: ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-exp016 mujoco_initial_keyframe:=task_start evidence_file:=/private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/task-start.json
+preconditions:
+  - SMOKE-001 is terminal PASS_NON_QUALIFYING; its exact owned domain/session/tmux/Viewer identities are absent.
+  - Worktree and child checkout are exact and clean; installed demo/support/fork prefixes and bundle hashes are freshly read back before RUNNING.
+  - Domain 232, session identity, mrc010-mac-exp016, exact Viewer title, and the entire EXP-016 evidence path are empty.
+  - Product tmux command starts with an explicit absolute in-pane cd and both pane and child cwd read back as the live worktree.
+capture_protocol:
+  - Resolve one exact MuJoCo : so101_task_scene Viewer window ID and retain the same ID for all captures.
+  - Capture and preserve helper manifest plus PNG at baseline, transport, and released-final live-manifest boundaries.
+  - Inspect all three PNGs at original resolution before classification.
+success_criteria:
+  - Every AC-001 perception, TF, no-truth-bridge, workflow, motion, physical-contact, Planning Scene, capture, exit, and cleanup clause passes from same-session evidence.
+failure_criteria:
+  - Preconditions and provenance are valid but any AC-001 product clause fails; stop the four-position batch for systematic debugging.
+invalid_criteria:
+  - Provenance, source order, cwd/process isolation, exact-window capture freshness, or evidence ownership is concretely invalid; retain evidence and use a fresh experiment ID.
+sequence_gate: EXP-017 forward is forbidden until EXP-016 has a committed countable-success closure.
+decision: COMMIT_PLAN_THEN_PREFLIGHT
 next_experiment: EXP-016
 ```
