@@ -2616,3 +2616,39 @@ implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
 pre_running_observed: Domain 202, evidence, exact session/tmux/process identities, and Viewer are fresh and empty; frozen provenance unchanged.
 decision: PROVE_EXPLICIT_ZSH_CAPTURE_OWNER_THEN_START_PRODUCT
 ```
+
+## CP-071 / CLOSE-EXP-020-001 — Valid MoveIt action-result delivery timeout
+
+```yaml
+checkpoint_id: CP-071
+transition_id: CLOSE-EXP-020-001
+recorded_at: 2026-08-27T02:46:30+08:00
+experiment_id: EXP-020
+from: RUNNING
+to: VALID_BEHAVIORAL_FAILURE
+qualification: false
+position: task_start
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+valid_preconditions:
+  - Fresh domain/session/evidence, exact installed prefixes/executable/child/support plugin/bundle, explicit cwd, Scene READ_BACK, camera, static TF, controllers, MoveIt, perception, and dynamic ownership all passed.
+  - Reliable perception produced task_camera_frame RGB-D, 98080 full points, 141 cup points, 4013-byte PLY, radius 0.0393805516 m, and world pose [0.0194990551, -0.2804047791, 0.165].
+failure:
+  code: MOVEIT_EXECUTION_FAILED
+  moveit_error: -6
+  state_trace: [IDLE, PREPARE_OPEN_GRIPPER, MOVE_ABOVE_OBJECT, DESCEND, RECOVER_OPEN_GRIPPER, RECOVER_DETACH_GAZEBO, RECOVER_DETACH_MOVEIT, RECOVER_SYNC_WORLD_OBJECT, RECOVER_RETREAT, ERROR]
+first_bad_boundary:
+  - DESCEND arm_controller accepted at 1787769891.171543 and physically reported Goal reached at 1787769892.420400.
+  - MoveIt timed out at 1787769894.095596 despite the physical success, then observed Controller successfully finished only at 1787769894.568601, about 2.148 s after controller completion.
+  - This is action-result delivery latency, not a joint/controller physical miss. Reliable 640x480 RGB-D at 10 Hz plus ongoing Open3D processing and frame-error logging remained active over this interval.
+recovery: Cup never left table support; recovery detach/sync/retreat completed and final cup remained at [0.02, -0.28, 0.1648015665] with no gripper contacts.
+capture_concern: Exact Viewer window 45531/PID57668 and baseline boundary time were recorded, but the nested capture command returned no PNG/manifest and an empty baseline-capture.json; no transport/final boundary existed after the product failure.
+cleanup: Product naturally exited one; only lingering exact capture pane was stopped; domain202, task tmux/processes, and Viewer are empty.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-020
+  log_sha256: 7981afffaf09e3bc9d973be8201788cfafa0c8cb9cf9569aed84726f59deac63
+  manifest_sha256: fb91758f88509f959a0e1c7284b936cb0988a38923411002e99f884f56d10618
+  perception_summary_sha256: 222b1b6bbd15aa83c17573f729897eda5eea3b7879623143d4a664d1c85aec29
+  ply_sha256: be6dc51ee934f0f8fb73a6744ebfa59235600a97c1143056f5d501b18fa3acb5
+decision: STOP_FOUR_POSITION_BATCH_AND_DIAGNOSE_DDS_PERCEPTION_LOAD_BEFORE_ANY_POLICY_CHANGE
+next_experiment: NONE
+```
