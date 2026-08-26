@@ -19,7 +19,7 @@
 - Do not change segmentation, point-cloud, cylinder-fit, pose transform, confidence, policy, thresholds, keyframes, geometry, grasp, attachment, placement, or recovery behavior.
 - Do not run `ament_uncrustify --reformat`; formatting edits must be targeted and `ruff format --check` is read-only.
 - Use standard Git against the Gitee `origin`; do not use `gh`.
-- Source `/opt/ros/jazzy/setup.zsh`, then the task overlay, and prepend the task-owned Python dependency directory before Python or ROS verification:
+- Source `/opt/ros/jazzy/setup.zsh`, then the task overlay. Prepend the task-owned Python dependency directory only for Python tests and ROS runtime verification that imports Open3D; do not prepend it for `colcon build`, because its newer setuptools is a runtime dependency and is incompatible with the ROS build's legacy `setup.py develop --uninstall` path:
 
 ```zsh
 source /opt/ros/jazzy/setup.zsh
@@ -558,7 +558,7 @@ ruff format --check \
 
 Expected: at least the prior 375 tests plus new regressions pass; Ruff returns zero. Do not change code merely to reduce the count.
 
-- [ ] **Step 3: Rebuild all five task packages into the registered overlay**
+- [ ] **Step 3: Rebuild the dependency-closed six task packages into the registered overlay**
 
 ```zsh
 colcon --log-base /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/log-hardening \
@@ -569,27 +569,28 @@ colcon --log-base /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-statio
   --symlink-install \
   --packages-select \
     mujoco_ros2_control_msgs \
+    so101_teleop \
     mujoco_ros2_control_plugins \
     mujoco_ros2_control \
     so101_mujoco_support \
     so101_demo_py
 ```
 
-Expected: five packages finish successfully and no selected prefix resolves to `/opt/ros/jazzy`.
+Expected: six packages finish successfully and no selected prefix resolves to `/opt/ros/jazzy`. Run this build from the ROS/overlay environment without the task Open3D dependency directory on `PYTHONPATH`.
 
 - [ ] **Step 4: Verify installed runner and ROS argument passthrough**
 
 ```zsh
 ros2 pkg executables so101_demo_py | rg '^so101_demo_py so101_mujoco_perception_pick_place$'
-ros2 run so101_demo_py so101_mujoco_perception_pick_place --ros-args --help
-ros2 run so101_demo_py dynamic_cup_pick_place --ros-args --help
+ros2 run so101_demo_py rgbd_cup_pose --help
+ros2 run so101_demo_py dynamic_cup_pick_place --help
 ```
 
-Expected: all return zero; the first command prints exactly one matching executable.
+Expected: all return zero; the first command prints exactly one matching executable. The perception launch runner intentionally has no argparse help surface: passing `--help` to it enters the launch contract and correctly fails closed because execution was not explicitly authorized. Its installed presence and provenance are covered by the executable readback and installed-provenance test; the two argparse CLIs exercise application-argument passthrough without starting the simulator.
 
 - [ ] **Step 5: Freeze provenance and append the source checkpoint**
 
-Record the current code HEAD as `implementation_commit`. Append a checkpoint containing test totals, build exit, five prefixes, rosdep output, Ruff results, exact gitlink/submodule, canonical main, and clean owned-runtime scan. State explicitly that EXP-017 through EXP-020 remain historical-only for `a8b3d87a`, and EXP-021 is next.
+Record the current code HEAD as `implementation_commit`. Append a checkpoint containing test totals, build exit, six prefixes, rosdep output, Ruff results, exact gitlink/submodule, canonical main, and clean owned-runtime scan. State explicitly that EXP-017 through EXP-020 remain historical-only for `a8b3d87a`, and EXP-021 is next.
 
 - [ ] **Step 6: Commit, push, and read back the freeze**
 
@@ -811,7 +812,7 @@ colcon --log-base /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-statio
   --build-base /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/build \
   --install-base /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install \
   --symlink-install \
-  --packages-select mujoco_ros2_control_msgs mujoco_ros2_control_plugins \
+  --packages-select mujoco_ros2_control_msgs so101_teleop mujoco_ros2_control_plugins \
     mujoco_ros2_control so101_mujoco_support so101_demo_py
 ros2 pkg executables so101_demo_py | rg '^so101_demo_py so101_mujoco_perception_pick_place$'
 git rev-parse HEAD:third_party/mujoco_ros2_control
@@ -819,7 +820,7 @@ git -C third_party/mujoco_ros2_control rev-parse HEAD
 git -C third_party/mujoco_ros2_control describe --tags --always
 ```
 
-Expected: five-package build green, installed runner present, both hashes exact f19, describe `so101-0.0.3-r8-3-gf19a8cc`, and no owned process/domain/tmux/Viewer/CUA residue.
+Expected: dependency-closed six-package build green, installed runner present, both hashes exact f19, describe `so101-0.0.3-r8-3-gf19a8cc`, and no owned process/domain/tmux/Viewer/CUA residue. Build without the task Open3D dependency directory on `PYTHONPATH`; restore it for runtime verification.
 
 - [ ] **Step 3: Request a fresh code review**
 
