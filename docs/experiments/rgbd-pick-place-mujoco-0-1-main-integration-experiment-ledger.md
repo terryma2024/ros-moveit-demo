@@ -2175,6 +2175,50 @@ decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN_RELIABLE_OBSERVER
 next_experiment: SMOKE-012
 ```
 
+## CP-055 / CLOSE-SMOKE-012-001 — Reliable QoS restores aligned RGB-D delivery
+
+```yaml
+checkpoint_id: CP-055
+transition_id: CLOSE-SMOKE-012-001
+recorded_at: 2026-08-27T02:17:39+08:00
+smoke_id: SMOKE-012
+from: RUNNING
+to: VALID_DIAGNOSTIC_SUCCESS
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: 9125f0d2af2b1a52b22191367e3470f351fee948
+observer_attempts:
+  - r1 was invalid because it stopped on per-topic counts before three common stamps; it nevertheless showed reliable delivery within 0.917 s.
+  - r2 was invalid because its first-ten frozen windows were not equivalent to production's rolling buffer; it showed ten messages for every topic.
+  - r3 used rolling last-twenty storage and is the countable causal gate.
+reliable_gate:
+  elapsed_s: 1.5492615830153227
+  camera_info_count: 16
+  color_count: 3
+  depth_count: 16
+  common_stamp_count: 3
+  common_stamps_ns: [258300000000, 258600000000, 258700000000]
+  frames: task_camera_frame for all three topics
+  encodings: [rgb8, 32FC1]
+  depth_finite_positive: 307200 of 307200
+  depth_range_m: [0.5510081052780151, 41.51203536987305]
+conclusion:
+  - Matching the reliable volatile depth-one CameraPlugin publisher QoS restores large color/depth delivery and aligned triplets under the unchanged FastDDS live stack.
+  - This is a causal contrast with SMOKE-011 sensor-data best-effort color zero and common stamp zero in 45.095 s.
+next_tdd:
+  - Add a RED contract requiring the perception camera subscriptions to use reliable volatile depth-one QoS, then make the minimal production change and retain sensor-data behavior nowhere in this perception node.
+cleanup:
+  - No perception or motion started. Exact observers/capture/static-TF/base/tmux were stopped; component teardown was clean.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-reliable-r5/live
+  reliable_r3_sha256: b55fe2cf35722754be839a826aa505c823fa757316e0f916b17b88732ac67367
+  baseline_manifest_sha256: 5b2967ec6d98ccea793b4f3e89ac64c90e29f04a6ab11a7a7fdcb8446e5750ac
+  baseline_png_sha256: b7b91ae34f3f37be76390df8a9a0ac12c93cc7efdf981c4940262561e7a56b95
+  base_log_sha256: 0f8617e62bf329135ec81fdf1b7671c4d4d669884a8a368cf5d4928e8b001b2a
+decision: COMMIT_CAUSAL_GATE_AND_BEGIN_TDD_RELIABLE_PERCEPTION_SUBSCRIPTIONS
+next_experiment: NONE
+```
+
 ## CP-053 / TRANS-SMOKE-012-RUNNING-001 — Start reliable RGB-D comparison
 
 ```yaml
