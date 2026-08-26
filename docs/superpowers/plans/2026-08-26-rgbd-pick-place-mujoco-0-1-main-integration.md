@@ -202,15 +202,17 @@ colcon --log-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/
   --base-paths src \
   --build-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-build \
   --install-base /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install \
-  --packages-select so101_demo_py --symlink-install
+  --packages-select so101_mujoco_support so101_demo_py --symlink-install
 ```
 
 - [ ] **Step 3: Prove installed provenance and run all package tests**
 
-Source the task fork install followed by the task project install. Read back `ros2 pkg prefix`, the
-installed runner path, launch path, installed provenance manifest, gitlink, both locks, and child
-HEAD. Then run all `src/so101_demo_py/test` tests with ROS logs and pytest cache under the registered
-root. Expected: all discovered tests pass, including the directed integration set.
+Source the task fork install followed by the task project install. Read back `ros2 pkg prefix` for
+both `so101_demo_py` and `so101_mujoco_support`; require the support prefix, plugin XML, and platform
+plugin dylib/so to come from the task project install. Also read back the installed runner path,
+launch path, installed provenance manifest, gitlink, both locks, and child HEAD. Then run all
+`src/so101_demo_py/test` tests with ROS logs and pytest cache under the registered root. Expected:
+all discovered tests pass, including the directed integration set.
 
 - [ ] **Step 4: Freeze the candidate in the ledger and commit**
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,22 @@ def test_final_install_contains_runtime_contract() -> None:
     assert (share / "config/policies/light_cup_wall_pick/v1/real_stub.yaml").is_file()
     assert (share / "config/policies/dynamic_cup_pick/v1/gazebo.yaml").is_file()
     assert (share / "config/policies/dynamic_cup_pick/v1/manifest.yaml").is_file()
+
+
+def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> None:
+    demo_prefix = Path(get_package_prefix("so101_demo_py")).resolve()
+    support_prefix = Path(get_package_prefix("so101_mujoco_support")).resolve()
+    expected_support_prefix = demo_prefix.parent / "so101_mujoco_support"
+    library_suffix = ".dylib" if platform.system() == "Darwin" else ".so"
+
+    assert support_prefix == expected_support_prefix
+    assert (
+        support_prefix
+        / "share/so101_mujoco_support/so101_mujoco_plugins.xml"
+    ).is_file()
+    assert (
+        support_prefix / f"lib/libso101_simulation_evidence_plugin{library_suffix}"
+    ).is_file()
 
 
 def test_pytest_collection_is_nonzero() -> None:
