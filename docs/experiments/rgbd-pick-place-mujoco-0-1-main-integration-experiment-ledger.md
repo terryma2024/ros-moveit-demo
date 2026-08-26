@@ -27,12 +27,13 @@ disproven_routes:
   - OBS-010: Mac EXP-015 is a VALID product failure: candidate project-install omitted ABI-dependent so101_mujoco_support, so the new 0.1.0 pre_step caller loaded the old isolated-workspace SimulationEvidencePlugin vtable and crashed with SIGSEGV before perception.
   - OBS-011: The RED support-plugin prefix contract is GREEN after building so101_mujoco_support against the candidate fork into the candidate project overlay; support CTest 1/1 and project pytest 443/443 pass.
   - OBS-012: Non-qualifying SMOKE-001 loaded only the ABI-aligned candidate SimulationEvidencePlugin, advanced authoritative simulation evidence from step 90989 to 90994, crossed the EXP-015 crash boundary for 221.44 s, and shut down cleanly after one owned SIGINT with no -11 or owned residue.
+  - OBS-013: EXP-016 is a VALID product failure after the ABI fix: exact installed provenance and cwd passed, but rgbd_cup_pose exhausted its startup deadline during ROS runtime construction before producing any RGB-D/point-cloud/cup-pose evidence.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-016
-next_experiment: EXP-016
+latest_checkpoint: CP-017
+next_experiment: NONE
 ```
 
 ## Shared live acceptance contract
@@ -1006,4 +1007,50 @@ evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live
 owned_processes: NONE
 decision: START_EXACT_INSTALLED_EXP_016
 next_command: Commit this transition; create only mrc010-mac-exp016 with explicit in-pane absolute cd; verify pane and child cwd; run the exact installed command and same-ID three-boundary GUI capture.
+```
+
+## CP-017 / CLOSE-EXP-016-001 — Valid RGB-D runtime-construction timeout
+
+```yaml
+checkpoint_id: CP-017
+transition_id: CLOSE-EXP-016-001
+recorded_at: 2026-08-27T00:20:46+08:00
+experiment_id: EXP-016
+from: RUNNING
+to: VALID_FAILURE
+qualification: true
+position: task_start
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+production_source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: 3dc08029a00311c2bb1f7b96d50a8097e17f8c0c
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+classification: VALID_BEHAVIORAL_FAILURE
+first_bad_boundary: rgbd_cup_pose exited 1 with RGBD_CUP_POSE_TIMEOUT and message startup deadline expired during ROS runtime construction before creating summary.json or cup.ply.
+validity_basis:
+  - Explicit in-pane cd repaired the shared tmux cwd; pane and child readbacks equal the live task worktree and the log contains zero getcwd failures.
+  - Domain 232, session, evidence path, task tmux, and exact Viewer were fresh; owner readback records the exact demo/support/fork prefixes, installed bundle e2d777dfa2d925998583b8c1b376f063ec47f476d98402297701b541da455175, runner SHA 9ade27dc, and ABI-aligned support SHA f4487cc3/UUID 74A169FE.
+  - Candidate camera and simulation_evidence plugins initialized without SIGSEGV; all three controllers activated and Planning Scene READ_BACK succeeded before perception started.
+observed:
+  - Eleven ROS processes started. The wrapper naturally exited 1; nine processes exited cleanly, rgbd_cup_pose exited 1, and dynamic_cup_pick_place exited -2 only after launch-owned SIGINT teardown.
+  - Perception and dynamic evidence directories were exclusively created, but no summary, PLY, dynamic manifest, point-cloud, cup-pose, state-machine, trajectory, contact, or final-placement evidence exists.
+  - No truth bridge was introduced; no product motion began. Dynamic exit -2 and KeyboardInterrupt are downstream of the required perception exit and are not separate root causes.
+capture:
+  - GUI helper selected exact Viewer window 45303/PID 66158 and preserved one fresh 2504x1770 baseline manifest/PNG.
+  - Original-resolution inspection shows the task_start cup table-supported, red target empty, gripper open, and Viewer Running.
+  - Transport/final boundaries never existed. After product terminal the exact capture PID was stopped with SIGINT and returned 130; no transport or final image is claimed.
+  - baseline_png_sha256: 82e1e84573635879cc59e54e16d43e6a635d6f85b691afd7dc9ecccf291c4439
+  - baseline_manifest_sha256: adf4acc65089bb4d75cf169640a2484786ec1083368982ffd1b68048af7dcdad
+cleanup:
+  - Exact owned product tmux, capture PID, domain/session processes, all eleven owned PIDs, and exact Viewer are absent.
+  - Historical unrelated tmux sessions remain untouched; no evidence was deleted.
+evidence:
+  owner: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/run/child.owner
+  owner_sha256: 888bf908218a22b9f19d9409e83116277c33a030861f1a790b7c209979f37f9c
+  log: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/run/full-restart.log
+  log_sha256: 8a6a06e77f82ea563e736a37e9f3b3b82b791116b89b4b6190290579acf100d6
+  baseline_manifest: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/gui/baseline-helper/20260827T001704-01ac7fe6b42d/manifest.json
+  baseline_png: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/gui/baseline-helper/20260827T001704-01ac7fe6b42d/window.png
+  cleanup: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-016/post-cleanup.txt
+decision: STOP_BATCH_AND_DEBUG_RGBD_RUNTIME_CONSTRUCTION
+next_experiment: NONE
 ```
