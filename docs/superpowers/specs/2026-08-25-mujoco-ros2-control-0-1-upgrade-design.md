@@ -107,8 +107,9 @@ viewer-camera 服务迁入这里，因为 0.1.0 中 viewer camera、selector 和
 该接口时继续按原路径运行。
 
 r11 已验证的 `MuJoCoROS2ControlRenderingPlugin` 继续作为独立能力存在，用于 CameraPlugin 的
-macOS context 注入、rendering enable/disable 和有序关闭。它不得添加到普通 plugin base vtable，
-避免再次出现 legacy plugin ABI 错位。
+平台 context handoff、rendering enable/disable 和有序关闭。公共能力使用
+`set_platform_render_context(void*)`：Apple 实现接收主线程创建的 GLFW context，非 Apple 实现接收
+`nullptr` 并保持 no-op。它不得添加到普通 plugin base vtable，避免再次出现 legacy plugin ABI 错位。
 
 ## 运行时数据流
 

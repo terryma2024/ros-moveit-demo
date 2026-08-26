@@ -764,3 +764,43 @@ deletion_candidates: []
 ```
 
 Fresh parent-side verification rechecked the 342-file manifest with zero mismatches, asserted all five checkpoint JSON contracts, read back the exact candidate/gitlink and both ancestry paths, recomputed camera/dynamic/screenshot hashes, and inspected the retained screenshot pixels. Linux is qualified for the exact `fa37de5`/`fcbc9f7` code candidate. Overall Task 9 remains blocked: macOS Task 7A exhausted its five permitted runtime rounds and the final exact-candidate run crashed in `_glfwSetWindowSizeCocoa` before camera/dynamic qualification. Linux success does not authorize a final tag or an overall `QUALIFIED` ledger state.
+
+### EXP-011: platform-neutral render-context capability rename
+
+```yaml
+scope: approved ABI rename and exact-candidate requalification boundary
+previous_fork_candidate: fcbc9f7b23f4493ceed888a22f32805a37493624
+fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
+api_change: set_macos_render_context(void*) -> set_platform_render_context(void*)
+compatibility_shim: none
+apple_contract: main-thread-created non-null GLFW context is handed to CameraPlugin
+non_apple_contract: caller passes nullptr and CameraPlugin treats the handoff as a no-op
+tdd_red: direct platform-context contract failed against the old public method name
+nested_green:
+  - platform/reset Python contracts 3/3
+  - registered platform/reset CTest 2/2
+  - Apple lifecycle 5/5
+  - focused MujocoSimulation 2/2
+fresh_macos_build: 6/6 nested packages in isolated build/install/log roots
+fresh_macos_tests:
+  - CameraPlugin 6/6
+  - Apple lifecycle 5/5
+  - core simulation/platform/reset CTest 3/3
+parent_contracts:
+  - macOS install and camera contracts 20/20
+  - backend integration PASS
+independent_review: PASS; 0 critical, 0 important, 0 minor
+linux_previous_evidence: remains valid only for exact fa37de5/fcbc9f7 pair
+linux_current_candidate: REQUALIFICATION_REQUIRED
+macos_current_candidate: NOT_RUNTIME_QUALIFIED
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
+archived_runs: []
+deletion_candidates: []
+```
+
+This rename keeps the public optional capability platform-neutral without hiding the ownership rule:
+Apple-only context creation and Cocoa work remain inside the Apple implementation path, while the common
+simulation/plugin contract is shared. The fresh isolated macOS build also proved that the earlier normal
+CameraPlugin typesupport loader failure came from a mixed stale overlay, not from this source change. No final
+release tag is authorized until Linux and macOS runtime acceptance are both valid for the current exact candidate.
