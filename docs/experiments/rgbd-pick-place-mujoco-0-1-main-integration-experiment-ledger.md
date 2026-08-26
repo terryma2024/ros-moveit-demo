@@ -1205,3 +1205,45 @@ owned_processes: NONE
 decision: START_NON_QUALIFYING_CONCURRENT_AB
 next_command: Commit transition; start base/capture; wait Scene READ_BACK; barrier-start timing plus installed dynamic wait; exact cleanup.
 ```
+
+## CP-023 / CLOSE-SMOKE-003-001 — Concurrent dynamic startup does not reproduce the deadline overrun
+
+```yaml
+checkpoint_id: CP-023
+transition_id: CLOSE-SMOKE-003-001
+recorded_at: 2026-08-27T00:43:32+08:00
+smoke_id: SMOKE-003
+from: RUNNING
+to: PASS_DIAGNOSTIC_HYPOTHESIS_REJECTED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 235608efdab55f02369aa53e1f44cd07afd048fd
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+readiness:
+  - Exact candidate camera/support plugins, all three controllers, MoveIt, and Planning Scene reached READ_BACK success in legal domain 228.
+  - The low-rate exact-Viewer GUI coordinator captured its baseline and remained active across the barrier, matching EXP-016's observer shape.
+barrier_result:
+  - The frozen timing probe and exact installed dynamic_cup_pick_place process started 0.004321 s apart.
+  - Timing probe exited zero: 18.331570 s internal and 20.710140 s wall; Open3D import used 9.617970 s and create_node used 7.309310 s.
+  - The installed dynamic process constructed successfully and exited one only at the expected CUP_POSE_TIMEOUT because this diagnostic intentionally provided no /cup_pose; it ran 52.719200 s and never planned or moved.
+  - No observer timeout occurred. CPU load remained high: ros2_control about 134 to 137%, preserved unrelated Code helper about 96 to 97%, move_group about 23 to 24%, and WindowServer about 35% before the barrier.
+inference:
+  - Same-barrier dynamic startup did not push runtime construction beyond the 30 s deadline, so this hypothesis does not reproduce EXP-016.
+  - This result does not authorize changing launch sequencing or the timeout. The next diagnostic must exercise the real installed rgbd_cup_pose entrypoint and split the actual deadline-covered phases.
+shutdown:
+  - SIGINT was sent only to exact task-owned GUI helper PID 69883 and exact tmux mrc010-mac-concurrent-startup-r1.
+  - Controller/RobotSystem teardown, move_group ordered shutdown, robot_state_publisher, and ros2_control_node completed cleanly.
+  - Exact PIDs 69883, 69874, 69878, 69873, 71764, and 71765 are absent; task tmux is absent; unrelated tmux sessions remain preserved.
+  - The base wrapper pane ended before wrapper exit files were written; component clean exits and absence readback are claimed, not a wrapper rc.
+evidence:
+  owner: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1/owner.txt
+  owner_sha256: 17d4231a6cc1f35e30fd6f017216c000cf067b84f923dffdbd36ad4d283f9e72
+  base_log: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1/base-stack.log
+  base_log_sha256: c659cd0291164f490c0d15c876d1cd63fcfcdfe8ed65c801dae5ff93d1bc975b
+  barrier_result: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1/barrier-result.txt
+  barrier_result_sha256: 65629c7feedc52487d028af2b810a0609572c0d411aea1414154f009b89e7cd8
+  baseline_manifest: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1/gui/baseline-helper/20260827T003740-a00000095a6d/manifest.json
+  baseline_png: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/concurrent-startup-r1/gui/baseline-helper/20260827T003740-a00000095a6d/window.png
+decision: RETAIN_RESULT_AND_PLAN_REAL_INSTALLED_RGBD_ENTRYPOINT_AB
+next_experiment: NONE
+```
