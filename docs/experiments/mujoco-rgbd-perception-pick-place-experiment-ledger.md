@@ -1612,3 +1612,20 @@ owned_processes: NONE; domain 188, recorded child PIDs, owned tmux, Viewer, CUA,
 preserved_processes: Existing unrelated tmux sessions and canonical main were not operated or modified.
 next_command: Execute EXP-011 only after a fresh immediate domain 189, partition, process, tmux, Viewer, source, submodule, and overlay isolation snapshot.
 ```
+
+```yaml
+transition_id: TRANS-EXP-011-RUNNING-001
+recorded_at: 2026-08-26T11:44:58+08:00
+experiment_id: EXP-011
+from: PLANNED
+to: RUNNING
+runtime_source_commit: e9e27a05e652046d9d35f18139db0e2796b28924
+implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39
+pre_running_observed:
+  - OBSERVED: Domain 189, exact session/partition target set, partition environment owners, owned tmux, and Viewer set are empty; exact f19, task source, canonical main, and all fresh overlay prefixes are clean and unchanged.
+  - OBSERVED: The first scanner encoded a no-match `rg -c` as an empty viewer_count and therefore conservatively exited 1. The retained correction changes only that measurement to `rg | wc -l`, reads viewer_count=0, and exits 0 before any runtime starts.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/pre-running/isolation.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/pre-running/isolation-corrected.log
+next_command: Start exact-owned tmux rgbd-pick-exp011-20260826 with the hardcoded task_start full-restart wrapper, then freeze baseline, transport, and released-final Viewer frames from manifest boundaries.
+```
