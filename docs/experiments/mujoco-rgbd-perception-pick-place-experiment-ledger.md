@@ -2832,3 +2832,24 @@ decision: PROCEED_TO_FRESH_EXACT_RUNNER_QUALIFICATION
 next_experiment: EXP-030
 next_command: Commit and push this source-freeze checkpoint and plan amendment, then prove fresh domain 208/session/evidence/Viewer/CUA isolation and transition EXP-030 only to RUNNING.
 ```
+
+```yaml
+transition_id: TRANS-EXP-030-RUNNING-001
+recorded_at: 2026-08-26T16:01:01+08:00
+experiment_id: EXP-030
+from: PLANNED
+to: RUNNING
+source_commit: e14cdbb903e54e703f9c574e88b0e513c54516fd
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Task source is clean at e14cdbb9; exact f19 gitlink/submodule/describe and clean canonical main b3770360 are preserved.
+  - OBSERVED: Domain 208, exact task-start runtime/runner/Viewer process set, task-owned tmux, exact Viewer title, CUA identity, and every nominal/derived/session evidence identity were empty.
+  - OBSERVED: Only allowed empty evidence parents now exist; production must allocate the session exclusively. Strict window-scope CUA session rgbd-pick-exp030-viewer-20260826 is active with desktop_unlocked=false.
+single_variable: Exercise the newly frozen installed runner at task_start; perception, policy, geometry, thresholds, helper arguments, and exact f19 dependency are unchanged.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/pre-running/cua-start.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-030/pre-running/cua-state.json
+next_command: Commit and push this transition, then run explicit-zsh capture and installed full restart concurrently on domain 208 for task_start.
+```
