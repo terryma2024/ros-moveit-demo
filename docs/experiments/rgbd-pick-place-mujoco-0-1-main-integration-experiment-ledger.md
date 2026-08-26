@@ -2496,3 +2496,19 @@ single_change_from_exp017: Replace unsupported domain 233 with supported fresh d
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
 next_experiment: EXP-018
 ```
+
+## CP-064 / TRANS-EXP-018-RUNNING-001 — Start fixed-candidate task_start qualification
+
+```yaml
+checkpoint_id: CP-064
+transition_id: TRANS-EXP-018-RUNNING-001
+recorded_at: 2026-08-27T02:37:20+08:00
+experiment_id: EXP-018
+from: PLANNED
+to: RUNNING
+qualification: true
+position: task_start
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+pre_running_observed: Domain 200 graph, fresh evidence/session/tmux/process identities, and exact Viewer title are all empty; installed prefixes/bundle/helper hashes remain CP-061/063.
+decision: START_EXACT_INSTALLED_FULL_RESTART_AND_CONCURRENT_CAPTURE
+```
