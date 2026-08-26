@@ -33,7 +33,42 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-125
+latest_checkpoint: CP-126
+next_experiment: EXP-042
+```
+
+## EXP-042 — watcher-qualified task_start FULL_RESTART
+
+```yaml
+experiment_id: EXP-042
+recorded_at: 2026-08-27T05:07:00+08:00
+status: PLANNED
+prior_experiment: EXP-037
+hypothesis: The frozen dependency-closed candidate repeats EXP-037's functional success while the pre-start observation watcher captures all three same-Viewer stages.
+prediction: AC-001 passes completely from task_start with three exact-window pixel-inspected images and clean shutdown.
+single_variable: Add the state-triggered observation-only gui-capture watcher; runner command, environment, keyframe, product source, and all acceptance thresholds remain EXP-037-exact.
+lifecycle: FULL_RESTART
+provenance: {source_commit: 2a636d9dfe04bb8707b196ac683396c5007cd14a, child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd, runtime_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce}
+identity: {domain: 106, partition: linux-rgbd-task-start-exp042, session: linux-rgbd-task-start-exp042, tmux: linux-rgbd-task-start-exp042, keyframe: task_start}
+evidence_file: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-042/task-start.json
+watcher:
+  path: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/gui-stage-watcher.zsh
+  capture_contract: repository gui-capture local exact-window only
+  triggers: [Viewer appears, MOVE_ABOVE_PLACE, VALIDATE_FINAL_PLACEMENT]
+success_criteria: AC-001 passes every clause.
+failure_criteria: Behavioral product failure under valid isolation and observation stops the batch.
+invalid_criteria: Any watcher/window/PID/freshness/provenance/environment or evidence completeness failure.
+decision: COMMIT_PLAN_THEN_FRESH_ISOLATION_PREFLIGHT
+```
+
+## CP-126 — EXP-042 preregistered
+
+```yaml
+checkpoint_id: CP-126
+recorded_at: 2026-08-27T05:07:00+08:00
+status: VALID
+owned_processes: NONE
+decision: Commit/push, preflight the new identity, then start runner and watcher once.
 next_experiment: EXP-042
 ```
 
