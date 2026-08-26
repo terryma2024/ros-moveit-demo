@@ -34,8 +34,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-144
-next_experiment: EXP-056
+latest_checkpoint: CP-146
+next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
 ```
 
 ## CP-140 — fresh review approved; repair five-run batch preregistered
@@ -262,6 +262,74 @@ four_positions: [EXP-052 task_start, EXP-053 forward, EXP-054 left, EXP-055 righ
 owned_processes: NONE
 next_experiment: EXP-056
 next_command: Commit the EXP-055 closure, fresh-preflight domain 120/session linux-rgbd-repair-task-start-repeat-exp056, then execute exactly one task_start repeat FULL_RESTART.
+```
+
+## EXP-056 closure — VALID repaired task_start repeat FULL_RESTART
+
+```yaml
+closure_id: CLOSE-EXP-056-001
+recorded_at: 2026-08-27T05:44:35+08:00
+experiment_id: EXP-056
+status: VALID
+qualification: COUNTABLE_5_OF_5
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+identity: {domain: 120, session: linux-rgbd-repair-task-start-repeat-exp056, keyframe: task_start}
+runner_exit_code: 0
+watcher_exit_code: 0
+perception: {position_error_m: 0.0006424288652577669, fitted_radius_m: 0.03938151231973142, full_points: 98120, cup_points: 141, input_frame: task_camera_frame, output_frame: world, topic: /cup_pose, source_stamp_ns: 3739999999}
+workflow: {status: DONE, transition_count: 19, failure: null, detach_before_open: true}
+motion: {trajectory_points: {move_above_object: 62, descend: 86, micro_lift: 9, lift: 32, move_above_place: 92, descend_to_place: 78, retreat: 34}, max_terminal_position_error_m: 0.0007417109024061276, terminal_joint_generations_and_source_stamps: FRESH_MONOTONIC}
+physical:
+  micro_lift: {cup_lift_m: 0.002711439820045264, left_contacts: 1, right_contacts: 1, table_contact: false, xyz_m: [0.019999581706941785, -0.27914210036898796, 0.1674434217737043]}
+  lift: {left_contacts: 1, right_contacts: 1, table_contact: false, xyz_m: [0.020005980978194563, -0.27930115117983845, 0.22427732858536503]}
+  transport: {left_contacts: 3, right_contacts: 4, table_contact: false, xyz_m: [-0.07595854247900752, -0.24735674355365583, 0.227976582318594]}
+  final: {xyz_m: [-0.07799148605571335, -0.24739494601801762, 0.1649805512243164], xy_error_m: 0.002390758571065989, tilt_rad: 0.008427712103781274, left_contacts: 0, right_contacts: 0, table_contact: true, velocity_near_zero: true}
+moveit: {attached_during_transport: true, detached_before_open: true, final_attached_ids: [], final_world_plastic_cup_primitives: 13}
+gui:
+  baseline: {sha256: 06ead32ad565b18496eac5e997f8520a95ea6a1507ad37289cc189ed61dc4077, inspected: Repeated task_start cup is outside the red target with the arm at its fresh start posture.}
+  transport: {sha256: 5aafa5baa55aa32b2ef5de61676c2287ef7d5cc5bf275892b9cfaaca1b30ac1f, inspected: Cup is visibly elevated and held between the gripper fingers above the target approach.}
+  final: {sha256: 59b81683d77d375d6f1b19975e657cb1a3dcdd6b3a54c4357dcd4e9a30716c45, inspected: Upright cup is visibly inside the red ring with the gripper open.}
+  same_viewer: {window_id: 54525959, pid: 1289973, exact_title: "MuJoCo : so101_task_scene"}
+shutdown: {moveit_ordered_marker: true, controller_introspection_stopped: true, target_tmux_absent: true, domain_120_direct_no_daemon_empty: true, identity_process_set_empty: true, viewer_absent: true}
+forbidden_routes: No truth publisher, truth bridge, cup_pose_tf_demo, fixed workflow, perception bypass, direct object write, simulator constraint, or physics edit was used.
+evidence: linux-runs/exp-056 including acceptance-summary.json, three gui-capture manifests/PNGs, dynamic/perception manifests, run.log, and postflight readbacks.
+decision: ACCEPT_FIVE_RUN_BATCH_PENDING_FINAL_FRESH_REVIEW
+```
+
+## CP-145 — repaired Linux five-run batch complete; final review required
+
+```yaml
+checkpoint_id: CP-145
+recorded_at: 2026-08-27T05:44:35+08:00
+status: FRESH_REVIEW_REQUIRED
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+valid_consecutive_batch: [EXP-052, EXP-053, EXP-054, EXP-055, EXP-056]
+positions: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm, task_start_repeat]
+micro_lift_range_m: [0.0026940034314079375, 0.0036661878589318297]
+perception_error_range_m: [0.0005936053996683152, 0.000692507946064855]
+maximum_terminal_tcp_position_error_m: 0.0015751582032574984
+final_xy_error_range_m: [0.0017285882551432705, 0.0024027416820903216]
+gui: Fifteen fresh exact-window captures inspected; three stages and same Viewer identity pass independently in every run.
+shutdown: All five task sessions, domains, Viewer instances, and identity process sets are empty; unrelated baseline tmux sessions remain present and untouched.
+decision: Update the qualification report and request a fresh review over implementation, tests, provenance, ledger, all five acceptance summaries/manifests/images, and cleanup evidence before final publication.
+next_experiment: FINAL_FRESH_REVIEW
+```
+
+## CP-146 — final fresh review approved Linux publication
+
+```yaml
+checkpoint_id: CP-146
+recorded_at: 2026-08-27T05:55:44+08:00
+status: FINAL_APPROVED_TO_PUBLISH
+review_scope: Implementation 3ea1530; installed binding and all static tests; EXP-052 through EXP-056 raw perception/dynamic/GUI/cleanup evidence; CP-145; Linux Task-5 and evidence-root reports.
+review_result: No correctness, provenance, evidence, schema, or report blocker.
+review_confirmed:
+  - The implementation/install source, policy, and executable hashes match; only the MuJoCo micro-lift target changes from 2 mm to 4 mm and the physical gate remains exactly 1-10 mm.
+  - All five independent FULL_RESTART identities pass source-stamped perception, DONE/19, fresh terminal joint evidence, trajectory, bilateral unsupported lift/transport, detach-before-open, stable final release, fifteen inspected exact-window GUI captures, and clean shutdown.
+  - EXP-053's retained default-daemon graph output is a cache false positive superseded by empty direct no-daemon DDS and process readbacks.
+non_blocking_risk: EXP-055 and EXP-056 log a transient exact-stamp TF-not-ready condition during startup, then the same production perception path obtains a source-stamped OK sample and completes; this recoverable startup race does not invalidate either run.
+decision: COMMIT_PUSH_AND_LS_REMOTE_READBACK
+next_experiment: MAC_REQUALIFICATION_FROM_3EA1530
 ```
 
 ## CP-139 — repair record commit resolved additively
