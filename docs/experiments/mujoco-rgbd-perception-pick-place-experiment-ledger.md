@@ -1469,3 +1469,39 @@ confirmed_conclusions:
   - Four FULL_RESTART runs remain prohibited until a VALID perception-only experiment is independently reviewed.
 next_command: Await explicit approval of the bounded two-branch design, then begin EXP-010 with a focused RED regression test.
 ```
+
+```yaml
+transition_id: TRANS-EXP-010-RUNNING-001
+recorded_at: 2026-08-26T11:27:53+08:00
+experiment_id: EXP-010
+from: PLANNED
+to: RUNNING
+approval: User explicitly approved the bounded shutdown-classification design.
+source_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39
+implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+ros_domain_id: 188
+gz_partition: rgbd-perception-ai-station-exp010-20260826
+session_id: rgbd-perception-ai-station-exp010-20260826
+owned_tmux_session: rgbd-exp010-20260826
+environment:
+  __GLX_VENDOR_LIBRARY_NAME: mesa
+  LIBGL_ALWAYS_SOFTWARE: "1"
+pre_running_observed:
+  - OBSERVED: The focused RED test failed exactly because current result was 1 rather than expected orderly 0; its companion live-context RuntimeError protection test passed.
+  - OBSERVED: After the minimal production branch, both focused tests passed, the full so101_demo_py suite passed 371 tests, Ruff lint passed, and the exact five-package fresh overlay rebuild exited 0.
+  - OBSERVED: The package's pre-existing full-file Ruff format baseline remains nonzero on both HEAD versions; no bulk reformat was performed and git diff --check passed.
+  - OBSERVED: Harmless exact-child wrapper smoke again wrote genuine exit 0 and left no child; Mesa ctypes GLFW smoke created and destroyed a hidden window with exit 0.
+  - OBSERVED: The first isolation scanner self-matched its own command and is retained as invalid diagnostic evidence; corrected scanner explicitly excluded its own PID and found domain 188, target process set, partition owners, and owned tmux empty.
+  - OBSERVED: Parent and exact f19 submodule are clean, canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7, and all five package prefixes resolve only into the fresh task overlay.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010-tdd-red-correct-env.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010-tdd-green-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010-pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010-overlay-rebuild.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/pre-running/wrapper-smoke.signal.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/pre-running/glfw-mesa-ctypes-hidden-smoke.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/pre-running/isolation-snapshot.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/pre-running/isolation-snapshot-corrected.log
+next_command: Start the exact child-PGID EXP-010 stack and reproduce the frozen perception-only numeric, topology, truth, visual, and all-zero cleanup gates without workflow or robot motion.
+```
