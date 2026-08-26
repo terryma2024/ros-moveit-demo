@@ -1282,3 +1282,27 @@ cleanup: Send signals only to exact recorded observer/static-TF/base tmux identi
 decision: COMMIT_PLAN_THEN_RUN_EMPTY_CONTROL
 next_experiment: SMOKE-004
 ```
+
+## CP-025 / TRANS-SMOKE-004-RUNNING-001 — Start real installed RGB-D empty control
+
+```yaml
+checkpoint_id: CP-025
+transition_id: TRANS-SMOKE-004-RUNNING-001
+recorded_at: 2026-08-27T00:50:16+08:00
+smoke_id: SMOKE-004
+from: PLANNED
+to: RUNNING
+phase: EMPTY_CONTROL
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: a806e15c49c23b3d3aa15cd2060192686b49dacd
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+pre_running_observed:
+  - Legal domains 219 and 218 contain no ROS nodes with daemon use disabled; session/process identities, task tmux, exact Viewer, and the registered diagnosis path are empty.
+  - Candidate prefixes resolve to project-install so101_demo_py/support and fork-install mujoco_ros2_control; installed bundle SHA256 is e2d777dfa2d925998583b8c1b376f063ec47f476d98402297701b541da455175.
+  - Empty/base/static-TF/perception helpers have task-owned paths and syntax/readback; their SHA256 values are cb79439d, 42a53e25, c30bf0bf, and c2dd5fde.
+  - A read-only syntax observer printed macOS nice permission warnings for background static-TF lines; exact process readback proved it started no process and created no diagnosis state.
+owned_processes: NONE
+decision: RUN_EMPTY_CONTROL_AND_STOP_ON_CONSTRUCTION_FAILURE
+next_command: Start exact installed rgbd_cup_pose in domain 219 with formal 30 s parameters; retain natural result before considering live A/B.
+```
