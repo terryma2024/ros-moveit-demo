@@ -33,7 +33,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-123
+latest_checkpoint: CP-124
 next_experiment: EXP-037
 ```
 
@@ -76,6 +76,38 @@ status: VALID
 owned_processes: NONE
 decision: Commit/push, then require new identity plus Mesa/Open3D preflight before RUNNING.
 next_experiment: EXP-037
+```
+
+## EXP-037 transition to RUNNING
+
+```yaml
+transition_id: TRANS-EXP-037-RUNNING-001
+recorded_at: 2026-08-27T05:00:00+08:00
+experiment_id: EXP-037
+from: PLANNED
+to: RUNNING
+preflight:
+  parent_and_child: Clean exact runtime and child; ledger HEAD c16d31ecf018a017ae8364b0b22b73a69dbc399e.
+  domain_101_nodes: NONE
+  target_tmux_process_evidence_session_root: ABSENT
+  target_viewer: ABSENT
+  mesa_glfw: PASS
+  open3d_production_preflight: PASS at 0.19.0 with NumPy 1.26.4 from task python-deps.
+  window_inventory: /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-037/preflight-windows.json
+  window_inventory_sha256: 16b21bff6110fa104dd3c7b5df635659c8ca21b9ba68e15483013b1564d00b1a
+note: An initial read-only Python preflight command had invalid shell quoting and exited before import; corrected invocation passed and no stack/session/evidence root existed during either probe.
+decision: START_EXACT_REGISTERED_COMMAND_ONCE
+```
+
+## CP-124 — EXP-037 all environment and isolation gates GREEN
+
+```yaml
+checkpoint_id: CP-124
+recorded_at: 2026-08-27T05:00:00+08:00
+status: VALID
+experiment_id: EXP-037
+owned_processes: NONE before launch
+decision: Launch and capture the exact task Viewer through the full workflow.
 ```
 
 ## EXP-032 — ai-station task_start Mesa FULL_RESTART
