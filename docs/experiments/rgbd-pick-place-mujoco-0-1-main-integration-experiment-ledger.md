@@ -26,12 +26,13 @@ disproven_routes:
   - OBS-009: putting the dylib farm ahead of the task fork selects the old fork library and is invalid candidate provenance.
   - OBS-010: Mac EXP-015 is a VALID product failure: candidate project-install omitted ABI-dependent so101_mujoco_support, so the new 0.1.0 pre_step caller loaded the old isolated-workspace SimulationEvidencePlugin vtable and crashed with SIGSEGV before perception.
   - OBS-011: The RED support-plugin prefix contract is GREEN after building so101_mujoco_support against the candidate fork into the candidate project overlay; support CTest 1/1 and project pytest 443/443 pass.
+  - OBS-012: Non-qualifying SMOKE-001 loaded only the ABI-aligned candidate SimulationEvidencePlugin, advanced authoritative simulation evidence from step 90989 to 90994, crossed the EXP-015 crash boundary for 221.44 s, and shut down cleanly after one owned SIGINT with no -11 or owned residue.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-013
-next_experiment: SMOKE-001
+latest_checkpoint: CP-014
+next_experiment: EXP-016
 ```
 
 ## Shared live acceptance contract
@@ -884,4 +885,53 @@ pre_running_observed:
 owned_processes: NONE
 decision: START_BASE_STACK_SMOKE
 next_command: Start exact-owned tmux with explicit live-worktree cd, observe the old crash boundary plus five seconds, then send SIGINT only to the owned pane.
+```
+
+## CP-014 / CLOSE-SMOKE-001-001 — ABI-aligned support crosses crash boundary
+
+```yaml
+checkpoint_id: CP-014
+transition_id: CLOSE-SMOKE-001-001
+recorded_at: 2026-08-27T00:10:09+08:00
+smoke_id: SMOKE-001
+from: RUNNING
+to: PASS_NON_QUALIFYING
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 7d0cf1d
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+runtime_identity:
+  domain: 231
+  session: mac-mrc010-abi-smoke-r1
+  tmux: mrc010-mac-abi-smoke-r1
+  ros2_control_pid: 64876
+  support_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support
+  loaded_plugin: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support/lib/libso101_simulation_evidence_plugin.dylib
+  loaded_plugin_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+  loaded_plugin_uuid: 74A169FE-F055-3D0D-A333-9F7F7BAEF574
+  old_isolated_plugin_loaded: false
+observations:
+  - MuJoCo physics thread started at 1787760321.650565; camera plugin initialized at 1787760324.136948; simulation_evidence initialized at 1787760324.247731; hardware activated at 1787760324.251299.
+  - Direct same-domain rclpy observer exited zero after samples 16571 and 16572 advanced simulation_step 90989 to 90994 for exact session mac-mrc010-abi-smoke-r1.
+  - gripper_controller, joint_state_broadcaster, and arm_controller all configured and activated; scene_setup READ_BACK succeeded.
+  - One Ctrl-C was sent only to the exact owned tmux pane at 1787760545.692; the candidate plugin therefore survived 221.44 s beyond its initialization and 224.04 s beyond physics-thread start.
+  - Log contains no SIGSEGV, segmentation fault, process died, exit code -11, or unexpected child exit before the owned stop.
+shutdown:
+  - controller manager deactivated and shut down all three controllers and RobotSystem.
+  - so101_move_group emitted SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK; move_group, robot_state_publisher, and ros2_control_node all reported clean process exit.
+  - Post-cleanup process-environment scan found no ROS_DOMAIN_ID=231, session, or smoke-tmux process; exact tmux is absent and GUI inventory contains no Viewer window.
+  - Historical unrelated tmux sessions mrc010-exp013-final-stack, mrc010-exp013-smoke-r3, mrc010-macos-task7a-r4, and mrc010-macos-task7a-r5 remain untouched.
+known_observation_gap:
+  - Ctrl-C reached the foreground launch and pane shell, so the wrapper did not write exit-code.txt or finished-at.txt. Component-level ordered clean-exit records and exact absence readback establish bounded cleanup; no wrapper exit code is claimed.
+evidence:
+  owner: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1/owner.txt
+  owner_sha256: 34d836ee13a4524a3444d791e2fd815877ca96bccace418ed41b6f987269635f
+  log: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1/full.log
+  log_sha256: 151c45de34bd1844ae978705ba83474fb564f765b686f4936d2700ac7899e417
+  observer: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1/observer-result.json
+  observer_sha256: 6aa71fdb317c795adea142568980092430c66226ab093f1f79efa034331cb0b3
+  loaded_plugin: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-smoke/abi-r1/loaded-plugin.txt
+  loaded_plugin_sha256: 030cec1caa40138f0f7f1dc9232778dc4ec807869f73b3353c342de16e7bf9cf
+decision: PASS_NON_QUALIFYING_ABI_SMOKE
+next_experiment: EXP-016
 ```
