@@ -16,6 +16,9 @@ class CupSceneObservation:
     moveit_pose_world: PoseEvidence
     moveit_received_monotonic_s: float
     moveit_attached: bool
+    simulation_session_id: str | None = None
+    reset_epoch: int | None = None
+    paused: bool | None = None
 
     def __post_init__(self) -> None:
         times = (self.simulator_received_monotonic_s, self.moveit_received_monotonic_s)

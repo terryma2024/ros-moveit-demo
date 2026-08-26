@@ -15,12 +15,12 @@ from ..application.dynamic_plan_only import (
 from ..cli.cup_pose_subscriber import status_line
 from ..core.domain import RunMode, RunRequest, State
 from ..core.dynamic_pick import resolve_motion_targets
-from ..core.runner import StateMachineRunner
 from ..core.dynamic_pick_policy import (
     LoadedDynamicPolicy,
     load_dynamic_pick_template,
     load_dynamic_policy_variant,
 )
+from ..core.runner import StateMachineRunner
 from ..runtime.dynamic_plan_manifest import write_dynamic_plan_manifest
 from .cup_pose_source import RosCupPoseSource
 from .cup_scene_observer import RosCupSceneObserver
@@ -197,9 +197,7 @@ class _CleanupOutcome:
 
     @property
     def message(self) -> str:
-        return "; ".join(
-            f"{failure.resource}: {failure.error}" for failure in self.failures
-        )
+        return "; ".join(f"{failure.resource}: {failure.error}" for failure in self.failures)
 
 
 def _cleanup_dynamic_execute(
@@ -256,7 +254,10 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         print("status=ERROR failure=DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED")
         return 1
 
-    from ..application.cup_pose_preflight import validate_cup_scene
+    from ..application.cup_pose_preflight import (
+        validate_cup_scene,
+        validate_mujoco_scene_identity,
+    )
     from ..application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     runtime = _dynamic_execute_runtime() if _runtime is None else _runtime
@@ -270,9 +271,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         print("status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED")
         return 1
     try:
-        geometry = runtime.load_geometry(
-            share_dir / "assets" / "common" / "geometry-manifest.yaml"
-        )
+        geometry = runtime.load_geometry(share_dir / "assets" / "common" / "geometry-manifest.yaml")
     except Exception as error:
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
@@ -296,8 +295,17 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         )
         source = runtime.cup_pose_source(node, loaded.template)
         sample = source.get_one(options.cup_pose_timeout_s)
-        truth_observer = runtime.cup_scene_observer(node, options.session_id)
+        truth_observer = runtime.cup_scene_observer(
+            node,
+            options.session_id,
+            options.expected_reset_epoch,
+        )
         initial = truth_observer.observe(5.0)
+        validate_mujoco_scene_identity(
+            initial,
+            expected_session_id=options.session_id,
+            expected_reset_epoch=options.expected_reset_epoch,
+        )
         task_scene = runtime.task_scene_port(
             node,
             "mujoco",
@@ -338,9 +346,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             try:
                 _finish_failed_execution(execution, error)
             except BaseException as finish_error:
-                secondary_failures.append(
-                    ("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error)
-                )
+                secondary_failures.append(("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error))
     else:
         try:
             execution.finish(result)
@@ -349,9 +355,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
                 primary_failure = "DYNAMIC_EXECUTION_FINISH_FAILED"
                 primary_message = finish_error
             else:
-                secondary_failures.append(
-                    ("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error)
-                )
+                secondary_failures.append(("DYNAMIC_EXECUTION_FINISH_FAILED", finish_error))
         if result.status.value != "DONE":
             primary_failure = "DYNAMIC_EXECUTION_FAILED"
             if result.failure is not None and result.failure.code:
