@@ -2009,3 +2009,21 @@ open_risks:
   - Forward, left, and right position generalization remain untested under the accepted implementation/evidence protocol.
 next_command: Commit this closure/correction/three-plan checkpoint, then perform immediate domain 196 and exact-title isolation before starting EXP-018 only.
 ```
+
+```yaml
+transition_id: TRANS-EXP-018-RUNNING-001
+recorded_at: 2026-08-26T12:27:54+08:00
+experiment_id: EXP-018
+from: PLANNED
+to: RUNNING
+source_commit: PENDING_LEDGER_COMMIT
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+pre_running_observed:
+  - OBSERVED: Generic evidence-only wrappers pass zsh syntax checks and preserve the accepted EXP-017 coordinator boundaries.
+  - OBSERVED: Task source, exact f19, and canonical main are clean; domain 196 and forward partition owners are empty, owned tmux and exact-title Viewer are absent.
+  - OBSERVED: Window-scope CUA session rgbd-pick-exp018-viewer-20260826 is active before launch.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-018/pre-running/isolation-snapshot.log
+next_command: Start concurrent capture and full-restart launch with runtime session rgbd-pick-forward-exp018-20260826 and the sole product change cup_test_forward_5cm.
+```
