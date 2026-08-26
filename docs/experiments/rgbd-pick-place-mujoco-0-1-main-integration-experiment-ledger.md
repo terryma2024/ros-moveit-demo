@@ -1306,3 +1306,34 @@ owned_processes: NONE
 decision: RUN_EMPTY_CONTROL_AND_STOP_ON_CONSTRUCTION_FAILURE
 next_command: Start exact installed rgbd_cup_pose in domain 219 with formal 30 s parameters; retain natural result before considering live A/B.
 ```
+
+## CP-026 / CLOSE-SMOKE-004-001 — Reject helper-expanded ROS parameter token
+
+```yaml
+checkpoint_id: CP-026
+transition_id: CLOSE-SMOKE-004-001
+recorded_at: 2026-08-27T00:52:00+08:00
+smoke_id: SMOKE-004
+from: RUNNING
+to: INVALID_RUNNER
+phase: EMPTY_CONTROL
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: 85cecb547d1310916aa48d2c4d49eb9e2bf4044f
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+observed:
+  - The generated owner command proves zsh expanded the unquoted token use_sim_time:=true to use_sim_time:/usr/bin/true.
+  - rclpy rejected that malformed parameter override before rgbd_cup_pose entered product setup; wrapper rc was one after 2.107121459 s.
+  - No construction, callback, TF, point-cloud, or deadline inference is valid from this run.
+classification_basis: This is a deterministic task-helper quoting defect outside the frozen installed implementation and formal launch token semantics.
+cleanup:
+  - The malformed process exited naturally; domain 219 readback contains no nodes and no task tmux/Viewer was created.
+  - The invalid evidence remains retained and will not be overwritten or reused.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r1/empty
+  owner_sha256: b9e2de234f10ce58dd2fafe8a850464fa4c781443d59d464a8b18dbfe0524964
+  stdout_sha256: 61a0fdb70abd07ba5f495131693f8f612162ee16b27dfdc490a9281e28fad719
+  stderr_sha256: 98c4e3ce09db4e5180bafa1e47debc179d5e5b0b5c301d1d25a76829be73be70
+decision: RETAIN_INVALID_AND_REPEAT_WITH_QUOTED_TOKEN_FRESH_IDENTITY
+next_experiment: NONE
+```
