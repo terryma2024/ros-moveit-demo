@@ -28,12 +28,13 @@ disproven_routes:
   - OBS-011: The RED support-plugin prefix contract is GREEN after building so101_mujoco_support against the candidate fork into the candidate project overlay; support CTest 1/1 and project pytest 443/443 pass.
   - OBS-012: Non-qualifying SMOKE-001 loaded only the ABI-aligned candidate SimulationEvidencePlugin, advanced authoritative simulation evidence from step 90989 to 90994, crossed the EXP-015 crash boundary for 221.44 s, and shut down cleanly after one owned SIGINT with no -11 or owned residue.
   - OBS-013: EXP-016 is a VALID product failure after the ABI fix: exact installed provenance and cwd passed, but rgbd_cup_pose exhausted its startup deadline during ROS runtime construction before producing any RGB-D/point-cloud/cup-pose evidence.
+  - OBS-014: SMOKE-002 measures material live-stack contention: the same runtime probe grows from 6.69 s empty-graph to 17.14 s with MuJoCo/MoveIt live, principally Open3D 3.32 to 9.01 s and create_node 2.85 to 6.82 s, but a single probe still remains below 30 s.
 open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-019
-next_experiment: SMOKE-002
+latest_checkpoint: CP-020
+next_experiment: NONE
 ```
 
 ## Shared live acceptance contract
@@ -1109,4 +1110,43 @@ pre_running_observed:
 owned_processes: NONE
 decision: START_NON_QUALIFYING_BASE_STACK_AB
 next_command: Commit transition, start exact-owned base stack with explicit cwd, wait for all readiness markers, run same-domain timing probe under 120 s bound, then exact SIGINT cleanup.
+```
+
+## CP-020 / CLOSE-SMOKE-002-001 — Live stack amplifies but does not alone exhaust startup budget
+
+```yaml
+checkpoint_id: CP-020
+transition_id: CLOSE-SMOKE-002-001
+recorded_at: 2026-08-27T00:33:24+08:00
+smoke_id: SMOKE-002
+from: RUNNING
+to: PASS_DIAGNOSTIC
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: cad4f4f84c8e43de3b7eae5ee9797f7a7a8c61e4
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+control_result:
+  - Three fresh-process empty-graph probes in domains 224 through 226 exited zero at 6.686, 6.691, and 6.782 s total.
+  - Domains 233 through 235 are invalid because Fast DDS rejects domain IDs above 232; no product conclusion uses them.
+live_stack_result:
+  - Exact candidate camera/support plugins, all three controllers, MoveIt, and Planning Scene reached steady-state READ_BACK in domain 227.
+  - The same-domain probe exited zero under its 120 s bound at 17.142 s, a 2.56x slowdown but still below the 30 s product startup deadline.
+  - Open3D import grew from 3.318 to 9.010 s (2.72x) and rclpy create_node from 2.847 to 6.821 s (2.40x); other individual resource segments remained below 0.50 s.
+  - During the probe ros2_control_node used about 146 to 149% CPU, move_group about 24 to 25%, WindowServer about 35%, and an unrelated preserved VS Code helper about 99 to 100%.
+inference:
+  - Live stack CPU/thread contention is real and explains much of EXP-016's reduced margin, but a steady-state stack plus one probe does not reproduce the >30 s failure.
+  - The remaining product-only variable is simultaneous scene-success startup of rgbd_cup_pose and dynamic_cup_pick_place; launch sequencing/concurrent startup must be tested before changing timeout.
+shutdown:
+  - One SIGINT was sent only to the exact owned base tmux. Controller/RobotSystem teardown, move_group ordered shutdown, robot_state_publisher, and ros2_control_node all completed cleanly.
+  - Domain 227/session/tmux/Viewer residue is absent; unrelated sessions/processes were preserved.
+  - Ctrl-C ended the pane before wrapper exit files were written; component clean exits and absence readback are claimed, not a wrapper rc.
+evidence:
+  owner: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/runtime-contention-r1/owner.txt
+  owner_sha256: 1f231c3dd77ef5d8dd69802a9b6787ed8024a293b07846f0bde2eba20b4ea87a
+  base_log: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/runtime-contention-r1/base-stack.log
+  base_log_sha256: 23b4e9d2b172da9533d131580363de6af687a7b2726c32e9e0ad59523f86c567
+  timing: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/runtime-contention-r1/timing-result.txt
+  timing_sha256: caa1fc2412c49633ed8149366f1a58ede2c0f303ed75854e775863e057600126
+decision: RETAIN_RESULT_AND_PLAN_CONCURRENT_STARTUP_AB
+next_experiment: NONE
 ```
