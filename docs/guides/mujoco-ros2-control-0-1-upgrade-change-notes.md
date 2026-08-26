@@ -16,14 +16,14 @@
 | 本地历史基线 | `f19a8cc3af61feccacb22a9f0d16cc972e3b2c08`（`so101-0.0.3-r11`） |
 | true merge commit | `6c562f861e09394ba631fa7dc4e63ea98f95e04c` |
 | true merge parents | `57fc674...`、`f19a8cc...` |
-| 最终 fork 候选 | `ca654e30ea9791564fab7110c90734733b68c8cc` |
-| 父仓库代码 pin | `db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb` |
+| 最终 fork 候选 | `aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c` |
+| 父仓库代码 pin | `ae5b8ab97dfd33c82ee6779193fc5516636f2b02` |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
-| Linux 状态 | `VALID / QUALIFIED`：parent runtime `7709b31...`、code pin `db6b1f2...`、fork `ca654e3...` |
-| macOS 状态 | `BREAKER / NOT QUALIFIED` |
-| 最终 release tag | 未创建 |
+| Linux 状态 | 旧候选 `ca654e3...` 已合格；当前 `aeff7e5...` 精确候选正在 ai-station 复验 |
+| macOS 状态 | `VALID / QUALIFIED`：parent `ae5b8ab...`、fork `aeff7e5...` |
+| 最终 release tag | 未创建；等待当前精确候选 Linux 复验 |
 
-相对官方 `57fc674...`，fork 最终候选修改 42 个文件，约 6257 行新增、344 行删除。大量官方
+相对官方 `57fc674...`，fork 最终候选修改 42 个文件，6273 行新增、344 行删除。大量官方
 `0.1.0` 新增内容则通过 true merge 直接继承，不会出现在这组“相对官方”的统计中。
 
 ## 2. 升级策略
@@ -33,7 +33,7 @@
 
 ```text
 official 0.1.0 @ 57fc674 ─────┐
-                              ├─ true merge @ 6c562f8 ── migration/fixes ── ca654e3
+                              ├─ true merge @ 6c562f8 ── migration/fixes ── aeff7e5
 local 0.0.3-r11 @ f19a8cc ───┘
 ```
 
@@ -178,9 +178,16 @@ reset”判断无法区分这些操作。最终实现把项目自有的 `ROS2Con
 - 公共 capability 使用平台中立的 `set_platform_render_context(void*)`，不在 ABI 中暴露 macOS 名称；
 - macOS 在主线程创建隐藏 GLFW camera context，再有界借给 camera worker 渲染；
 - viewer/GLFW 的主线程任务通过 `MacOSUIDispatcher` 串行执行；
+- macOS 不再在 `Simulate::RenderLoop()` 安装 UI callbacks 之前主动调用
+  `glfwSetWindowSize()`；Cocoa 保留 MuJoCo/GLFW 创建的默认窗口尺寸，Linux 仍执行原来的主显示器放大逻辑；
 - Linux 调用同一 capability 时传 `nullptr`，实现保持 no-op，并继续使用自身的隐藏 GLFW context；
 - `disable_rendering`、init rollback、`close_rendering` 和 worker join 有明确顺序；
 - camera topics 仍由官方 CameraPlugin 发布，SO-101 不复制第二套 RGB-D publisher。
+
+这里没有把所有平台差异简单包进一个大 `#if __APPLE__`：公共 plugin capability 始终使用平台中立的
+`set_platform_render_context(void*)`；Apple 专属的 Cocoa/GLFW 创建、主线程调度和 pre-RenderLoop
+窗口行为才留在 Apple 实现或最小编译 guard 内。这样 Linux ABI 和运行路径保持通用，macOS 细节也不会
+渗入公共接口。
 
 ### 4.7 controller introspection publisher 的停机顺序
 
@@ -342,7 +349,7 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 - Linux final parent：3 packages、25/25 native wrappers、236/236 JUnit、297/297 root pytest；
 - ABI、13 个 ROS interfaces、单一权威 `mj_step`、copy-install、relocation、RPATH/linkage、双 ancestry 全部通过。
 
-### 8.2 Linux 端到端
+### 8.2 Linux 端到端（上一候选 `ca654e3...` 的历史证据）
 
 - camera：32 个 color samples、30 个唯一 header，8.4155542658 Hz；RGB/depth/info 共同 timestamp；
 - 图像：640×480，`task_camera_frame`，`rgb8` / `32FC1`；
@@ -352,20 +359,38 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 - GUI 截图与物理/MoveIt/controller/TF 证据一致；
 - 一次正常 Ctrl-C 后无残留 task PID/node、无 invalid-context 或信号升级。
 
-当前精确候选的 Linux 完整报告位于：
+上一精确候选 `ca654e3...` 的 Linux 完整报告位于：
 `/tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2/linux-shutdown-fix2-report.md`。
 copyback manifest 包含 22534 项，远端/本地均 22534 OK、0 failure，SHA-256 为
 `4495642d15092866e999efc2ad1154006d19faf8c1bd87ab9fb5fa4a2fd8603f`。
 
-### 8.3 macOS 当前 blocker
+### 8.3 macOS 最终验收
 
-macOS Runtime Round 4 曾在同一生产代码上证明 camera 和 dynamic 功能可运行，但 shutdown 出现 PAL
-invalid-context 和 SIGTERM 升级，因此该轮不合格。修复停机顺序后，最终允许的 Round 5 在 viewer
-初始化的 `_glfwSetWindowSizeCocoa` 路径发生 SIGSEGV，`ros2_control_node` exit `-11`，未进入该轮
-camera/dynamic 验收。
+Round 5 的 `_glfwSetWindowSizeCocoa` 崩溃已解决。根因是项目在 `Simulate::RenderLoop()` 安装
+`PlatformUIAdapter` callbacks 之前主动 resize Cocoa window，窗口回调同步进入尚未初始化的
+`layout_callback_`。修复恢复了历史上丢失的 Apple startup no-resize contract，并保留 Linux 原路径。
 
-当前 `7709b31...` / `db6b1f2...` / `ca654e3...` 精确候选已重新完成 Linux 构建、camera、dynamic、GUI
-和干净停机验收。该结果不能替代 macOS 最终联合验收；当前仍不得创建 `so101-0.1.0-r1` release tag。
+当前 `ae5b8ab...` / `aeff7e5...` 精确候选结果：
+
+- 三次隔离 GUI 启动均越过原 Cocoa fault site 并进入 camera rendering；
+- camera：30 个真实、唯一 color header，9.9862258953 Hz；RGB/depth/info 共同 timestamp；
+- 图像：640×480，`task_camera_frame`，`rgb8` / `32FC1`，307200/307200 finite-positive depth；
+- dynamic cup pick-place：exit 0、`DONE`、19 transitions；
+- 第二显示器截图确认 MuJoCo viewer 正常运行、杯子已位于目标区域；
+- 一次前台 Ctrl-C 后，PAL publishers 先停、UI 在 process main thread 清理、长期节点 clean exit；
+- 无 SIGTERM 升级、PAL invalid-context 或 SIGBUS/SIGSEGV；验收后的一次新鲜读回确认登记的
+  stack/bridge wrapper PID 均不存在，ROS domain 220 节点数为 0。该读回不是停机瞬间捕获，不能替代
+  launch log 中的 clean-exit 顺序证据。
+
+证据目录为 `/tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/macos/exp-013/final`。
+其中 `post-shutdown-process-inventory.log`、`post-shutdown-domain-nodes.log` 和
+`post-shutdown-tmux.log` 分别记录自描述的进程、ROS graph 和 tmux 新鲜读回。
+
+### 8.4 当前 release gate
+
+macOS 已合格，但最终 tag 仍未创建。原因是这次修复把 fork commit 从 `ca654e3...` 推进到 `aeff7e5...`；
+严格的双平台规则要求 ai-station 也对这个精确 commit 复验。Linux 复验登记为 EXP-014，完成前仍不得创建
+`so101-0.1.0-r1` release tag。
 
 ## 9. 后续维护规则
 
