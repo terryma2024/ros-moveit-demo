@@ -1418,3 +1418,34 @@ evidence:
 decision: EMPTY_CONTROL_PASS_START_FRESH_LIVE_AB
 next_command: Start domain 216 base/static-TF/GUI baseline; after Planning Scene READ_BACK start only exact installed rgbd_cup_pose and stop on its first deadline classification.
 ```
+
+## CP-030 / CLOSE-SMOKE-005-001 — Reject live tmux cwd precondition
+
+```yaml
+checkpoint_id: CP-030
+transition_id: CLOSE-SMOKE-005-001
+recorded_at: 2026-08-27T01:00:24+08:00
+smoke_id: SMOKE-005
+from: RUNNING_LIVE_AB
+to: INVALID_LIVE_PREFLIGHT
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_transition: ba73b5d624d5d837f9651d3cdb44e706e9aa3b72
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_control_retained:
+  - The empty-domain real installed control remains a valid PASS and is not invalidated by this later live precondition failure.
+invalid_observation:
+  - Immediate tmux pane readback after new-session -c selected /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/mujoco-ros2-control-0-1-upgrade rather than the exact task worktree.
+  - Ctrl-C was sent before the base helper created its owner/log or established a product result; no GUI capture or real live perception process started.
+  - Static-TF wrappers had started in domain 216, but this environment precondition failure makes the live phase non-counting.
+cleanup:
+  - The exact base tmux received Ctrl-C and is absent. Static-TF wrapper 75143 and exact child PIDs 75241/75242 ignored bounded SIGINT, then exited after exact SIGTERM; no broad signal was used.
+  - Domain 216 is graph-empty; exact PIDs and Viewer are absent; unrelated tmux/processes remain preserved.
+evidence:
+  live_root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-entrypoint-r2/live
+  tf_owner_sha256: dd6061cfa46ff549bf5d65845977d9c0a51ba061997e7a368b136af889da278b
+  base_owner: ABSENT_STOPPED_BEFORE_HELPER_ENTRY
+  base_log: ABSENT_STOPPED_BEFORE_HELPER_ENTRY
+decision: RETAIN_INVALID_LIVE_AND_REPEAT_LIVE_ONLY_WITH_IN_PANE_CD_READBACK
+next_experiment: NONE
+```
