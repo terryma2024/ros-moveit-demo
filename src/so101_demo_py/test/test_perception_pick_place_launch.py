@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 import pytest
-from launch import LaunchContext
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
@@ -18,17 +17,18 @@ from launch.events.process import ProcessExited
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
-
 from so101_demo.runtime import launch_composition
+
+from launch import LaunchContext
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = PACKAGE_ROOT / "launch/so101_mujoco_perception_pick_place.launch.py"
 
 
 def _builder():
-    assert hasattr(
-        launch_composition, "build_perception_pick_place_launch_description"
-    ), "dedicated perception launch builder is missing"
+    assert hasattr(launch_composition, "build_perception_pick_place_launch_description"), (
+        "dedicated perception launch builder is missing"
+    )
     return launch_composition.build_perception_pick_place_launch_description
 
 
@@ -45,13 +45,12 @@ def _default(argument: DeclareLaunchArgument) -> str:
 
 
 def _materialize(*, evidence_file=None, **overrides):
-    description = _builder()()
+    exit_status = launch_composition.PerceptionLaunchExitStatus()
+    description = _builder()(exit_status)
     declared = _declared(description)
     context = LaunchContext()
     for name, argument in declared.items():
-        context.launch_configurations[name] = perform_substitutions(
-            context, argument.default_value
-        )
+        context.launch_configurations[name] = perform_substitutions(context, argument.default_value)
     context.launch_configurations.update(
         {
             "run_mode": "execute",
@@ -67,10 +66,8 @@ def _materialize(*, evidence_file=None, **overrides):
             **{key: str(value) for key, value in overrides.items()},
         }
     )
-    opaque = next(
-        entity for entity in description.entities if isinstance(entity, OpaqueFunction)
-    )
-    return context, opaque.execute(context)
+    opaque = next(entity for entity in description.entities if isinstance(entity, OpaqueFunction))
+    return context, opaque.execute(context), exit_status
 
 
 def _nodes(actions) -> list[Node]:
@@ -176,7 +173,7 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
     tmp_path: Path,
 ) -> None:
     evidence_file = tmp_path / "launch-run.json"
-    context, actions = _materialize(evidence_file=evidence_file)
+    context, actions, _exit_status = _materialize(evidence_file=evidence_file)
     initial_executables = [node.node_executable for node in _nodes(actions)]
 
     assert initial_executables[:2] == [
@@ -207,9 +204,7 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
         "--evidence-json",
         str(tmp_path / "launch-run.d/session-123/perception/summary.json"),
     ]
-    assert evaluate_parameters(context, perception._Node__parameters) == (
-        {"use_sim_time": True},
-    )
+    assert evaluate_parameters(context, perception._Node__parameters) == ({"use_sim_time": True},)
 
     workflow = _node(started, "dynamic_cup_pick_place")
     assert workflow._Node__arguments == [
@@ -230,9 +225,7 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
         str(tmp_path / "launch-run.d/session-123/dynamic"),
     ]
 
-    all_executables = initial_executables + [
-        node.node_executable for node in _nodes(started)
-    ]
+    all_executables = initial_executables + [node.node_executable for node in _nodes(started)]
     assert all_executables.count("rgbd_cup_pose") == 1
     assert "cup_pose_tf_demo" not in all_executables
     assert "mujoco_cup_pose_bridge" not in all_executables
@@ -243,7 +236,7 @@ def test_evidence_preflight_creates_owned_run_directory_before_nodes(
 ) -> None:
     evidence_file = tmp_path / "result.json"
 
-    _context, actions = _materialize(evidence_file=evidence_file)
+    _context, actions, _exit_status = _materialize(evidence_file=evidence_file)
 
     run_root = tmp_path / "result.d/session-123"
     assert run_root.is_dir()
@@ -260,7 +253,7 @@ def test_evidence_preflight_keeps_valid_preexisting_run_directory(
     run_root = tmp_path / "result.d/session-123"
     run_root.mkdir(parents=True)
 
-    _context, actions = _materialize(evidence_file=tmp_path / "result.json")
+    _context, actions, _exit_status = _materialize(evidence_file=tmp_path / "result.json")
 
     assert run_root.is_dir()
     assert _nodes(actions)
@@ -274,10 +267,8 @@ def test_evidence_preflight_passes_resolved_child_paths_to_nodes(
     alias_parent = tmp_path / "alias"
     alias_parent.symlink_to(real_parent, target_is_directory=True)
 
-    context, actions = _materialize(evidence_file=alias_parent / "result.json")
-    started = _dispatch_process_exit(
-        actions, _node(actions, "scene_setup"), 0, context
-    )
+    context, actions, _exit_status = _materialize(evidence_file=alias_parent / "result.json")
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     perception = _node(started, "rgbd_cup_pose")
     workflow = _node(started, "dynamic_cup_pick_place")
 
@@ -287,9 +278,7 @@ def test_evidence_preflight_passes_resolved_child_paths_to_nodes(
 
 
 @pytest.mark.parametrize("component", ("base", "session"))
-def test_evidence_preflight_rejects_symlink_components(
-    tmp_path: Path, component: str
-) -> None:
+def test_evidence_preflight_rejects_symlink_components(tmp_path: Path, component: str) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()
     base = tmp_path / "result.d"
@@ -382,15 +371,13 @@ def test_evidence_preflight_rejects_foreign_owned_final_directories(
 def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch(
     tmp_path: Path,
 ) -> None:
-    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
+    context, actions, _exit_status = _materialize(evidence_file=tmp_path / "launch-run.json")
     scene_setup = _node(actions, "scene_setup")
 
     emitted = _dispatch_process_exit(actions, scene_setup, 12, context)
 
     assert _nodes(emitted) == []
-    assert _shutdown_reasons(emitted) == [
-        "SO-101 Planning Scene setup failed with exit code 12"
-    ]
+    assert _shutdown_reasons(emitted) == ["SO-101 Planning Scene setup failed with exit code 12"]
     _assert_failure_status(emitted, context, "exit code 12")
 
 
@@ -398,7 +385,7 @@ def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch(
 def test_perception_exit_before_workflow_completion_is_terminal(
     tmp_path: Path, returncode: int
 ) -> None:
-    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
+    context, actions, _exit_status = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     perception = _node(started, "rgbd_cup_pose")
 
@@ -413,7 +400,7 @@ def test_perception_exit_before_workflow_completion_is_terminal(
 def test_clean_workflow_exit_owns_shutdown_and_later_perception_exit_is_ignored(
     tmp_path: Path,
 ) -> None:
-    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
+    context, actions, _exit_status = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     workflow = _node(started, "dynamic_cup_pick_place")
     perception = _node(started, "rgbd_cup_pose")
@@ -431,7 +418,7 @@ def test_clean_workflow_exit_owns_shutdown_and_later_perception_exit_is_ignored(
 def test_failed_workflow_exit_preserves_failure_and_suppresses_shutdown_race(
     tmp_path: Path,
 ) -> None:
-    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
+    context, actions, _exit_status = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     workflow = _node(started, "dynamic_cup_pick_place")
     perception = _node(started, "rgbd_cup_pose")
@@ -444,3 +431,115 @@ def test_failed_workflow_exit_preserves_failure_and_suppresses_shutdown_race(
     ]
     _assert_failure_status(workflow_emitted, context, "exit code 23")
     assert perception_emitted == []
+
+
+@pytest.mark.parametrize(
+    ("executable", "label"),
+    (
+        ("ros2_control_node", "MuJoCo runtime"),
+        ("robot_state_publisher", "robot_state_publisher"),
+        ("so101_move_group", "MoveIt move_group"),
+        ("static_transform_publisher", "camera static TF"),
+    ),
+)
+def test_required_long_lived_exit_before_workflow_is_terminal(
+    tmp_path: Path,
+    executable: str,
+    label: str,
+) -> None:
+    context, actions, exit_status = _materialize(evidence_file=tmp_path / "required-process.json")
+    target = next(node for node in _nodes(actions) if node.node_executable == executable)
+
+    emitted = _dispatch_process_exit(actions, target, 17, context)
+
+    assert exit_status.returncode == 17
+    assert any(label in reason for reason in _shutdown_reasons(emitted))
+    _assert_failure_status(emitted, context, "exit code 17")
+
+
+def test_unexpected_clean_required_exit_normalizes_to_one(tmp_path: Path) -> None:
+    context, actions, exit_status = _materialize(
+        evidence_file=tmp_path / "clean-required-process.json"
+    )
+    simulator = _node(actions, "ros2_control_node")
+
+    emitted = _dispatch_process_exit(actions, simulator, 0, context)
+
+    assert exit_status.returncode == 1
+    _assert_failure_status(emitted, context, "exit code 0")
+
+
+@pytest.mark.parametrize("spawner_index", range(3))
+@pytest.mark.parametrize("returncode", (0, 19))
+def test_controller_spawner_exit_policy(
+    tmp_path: Path,
+    spawner_index: int,
+    returncode: int,
+) -> None:
+    context, actions, exit_status = _materialize(
+        evidence_file=tmp_path / f"spawner-{spawner_index}-{returncode}.json"
+    )
+    spawners = [node for node in _nodes(actions) if node.node_executable == "spawner"]
+
+    emitted = _dispatch_process_exit(
+        actions,
+        spawners[spawner_index],
+        returncode,
+        context,
+    )
+
+    if returncode == 0:
+        assert emitted == []
+        assert exit_status.returncode is None
+    else:
+        assert exit_status.returncode == 19
+        _assert_failure_status(emitted, context, "exit code 19")
+
+
+def test_first_terminal_process_status_wins(tmp_path: Path) -> None:
+    context, actions, exit_status = _materialize(evidence_file=tmp_path / "first-status.json")
+
+    _dispatch_process_exit(
+        actions,
+        _node(actions, "ros2_control_node"),
+        31,
+        context,
+    )
+    _dispatch_process_exit(
+        actions,
+        _node(actions, "so101_move_group"),
+        41,
+        context,
+    )
+
+    assert exit_status.returncode == 31
+
+
+def test_workflow_terminal_ignores_all_required_teardown_exits(tmp_path: Path) -> None:
+    context, actions, exit_status = _materialize(evidence_file=tmp_path / "teardown.json")
+    started = _dispatch_process_exit(
+        actions,
+        _node(actions, "scene_setup"),
+        0,
+        context,
+    )
+    workflow = _node(started, "dynamic_cup_pick_place")
+    perception = _node(started, "rgbd_cup_pose")
+    required = [
+        node
+        for node in _nodes(actions)
+        if node.node_executable
+        in {
+            "ros2_control_node",
+            "robot_state_publisher",
+            "so101_move_group",
+            "static_transform_publisher",
+        }
+    ]
+    required.append(perception)
+
+    _dispatch_process_exit(actions, workflow, 0, context)
+    emitted = [_dispatch_process_exit(actions, target, -15, context) for target in required]
+
+    assert emitted == [[] for _target in required]
+    assert exit_status.returncode == 0
