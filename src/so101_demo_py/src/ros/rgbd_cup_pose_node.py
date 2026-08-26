@@ -483,6 +483,8 @@ def _create_ros_runtime(
             "rgbd_cup_pose",
             parameter_overrides=[ros.Parameter("use_sim_time", value=True)],
             automatically_declare_parameters_from_overrides=True,
+            start_parameter_services=False,
+            enable_rosout=False,
         )
         cleanup.node = node
         tf_buffer = ros.Buffer()
