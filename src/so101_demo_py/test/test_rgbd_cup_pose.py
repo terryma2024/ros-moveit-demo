@@ -1112,6 +1112,50 @@ def test_cli_rejects_invalid_options(arguments, message, capsys) -> None:
     assert message in capsys.readouterr().err
 
 
+def test_cli_removes_launch_injected_ros_parameter_arguments(monkeypatch, tmp_path) -> None:
+    from so101_demo.cli import rgbd_cup_pose
+    from so101_demo.ros import rgbd_cup_pose_node
+
+    params = tmp_path / "params.yaml"
+    params.write_text(
+        "/**:\n  ros__parameters:\n    use_sim_time: true\n",
+        encoding="utf-8",
+    )
+    calls = []
+    monkeypatch.setattr(
+        rgbd_cup_pose_node,
+        "run_rgbd_cup_pose",
+        lambda options: calls.append(options) or 23,
+    )
+
+    assert (
+        rgbd_cup_pose.main(
+            [
+                "--startup-timeout-s",
+                "30",
+                "--output-topic",
+                "/cup_pose",
+                "--ros-args",
+                "--params-file",
+                str(params),
+            ]
+        )
+        == 23
+    )
+    assert len(calls) == 1
+    assert calls[0].startup_timeout_s == 30.0
+    assert calls[0].output_topic == "/cup_pose"
+
+
+def test_cli_still_rejects_unknown_application_argument(capsys) -> None:
+    from so101_demo.cli.rgbd_cup_pose import main
+
+    with pytest.raises(SystemExit) as error:
+        main(["--unknown-application-option"])
+    assert error.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
+
+
 def test_package_registers_rgbd_cup_pose_executable() -> None:
     package_root = Path(__file__).resolve().parents[1]
     setup_source = (package_root / "setup.py").read_text(encoding="utf-8")
