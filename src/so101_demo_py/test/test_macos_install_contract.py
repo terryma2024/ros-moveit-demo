@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,33 +24,38 @@ PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_contro
 SUBMODULE = REPOSITORY_ROOT / "third_party" / "mujoco_ros2_control"
 LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
 RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
-R6_FORK_COMMIT = "738e304551b4ea6db020b466086a13db71b65607"
-EXPECTED_PORTABLE_DIFF_SHA256 = (
-    "38a3382e4a05a5eb960be8f05c020f7aa62590eb369deb80bb4a5168eb90de00"
+INTEGRATION_GUIDE = (
+    REPOSITORY_ROOT / "docs/guides/so101-mujoco-ros2-integration-guide.md"
 )
+UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
+LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
+CANDIDATE_COMMIT = "aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c"
+CANDIDATE_LABEL = "so101-0.1.0-r1-candidate"
 MUJOCO_340_COMMIT = "e55fff5dea6f1d5dd7963ca52eecc41d05ad0922"
 MUJOCO_GLFW_PATCH_SHA256 = (
     "aa506e126cf8bec3bcc60a961fbe457e056d2aeb1838bb6c67c7584d7ac5264e"
 )
 
 
-def test_r11_fork_is_the_only_portable_source_authority() -> None:
+def test_upgrade_candidate_provenance_is_identical_in_both_locks() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     runtime_lock = yaml.safe_load(RUNTIME_LOCK.read_text(encoding="utf-8"))
 
-    assert lock["fork"]["tag"] == "so101-0.0.3-r11"
-    assert runtime_lock["fork"]["tag"] == "so101-0.0.3-r11"
-    assert runtime_lock["fork"]["commit"] == lock["fork"]["commit"]
-    assert (
-        runtime_lock["fork"]["policy_behavior_commit"]
-        == lock["fork"]["policy_behavior_commit"]
-    )
+    for candidate_lock in (lock, runtime_lock):
+        assert candidate_lock["release"] == "0.1.0"
+        assert candidate_lock["fork"]["tag"] == CANDIDATE_LABEL
+        assert candidate_lock["fork"]["commit"] == CANDIDATE_COMMIT
+        assert candidate_lock["fork"]["lineage_commit"] == LOCAL_R11_COMMIT
+        assert candidate_lock["upstream"]["tag"] == "0.1.0"
+        assert candidate_lock["upstream"]["commit"] == UPSTREAM_010_COMMIT
+    assert runtime_lock["fork"] == lock["fork"]
+    assert runtime_lock["upstream"] == lock["upstream"]
     assert not PATCH_SERIES_DIR.exists()
     attributes = (REPOSITORY_ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "scripts/patches/mujoco_ros2_control" not in attributes
 
 
-def test_r11_gitlink_history_and_portable_bytes_are_exact() -> None:
+def test_upgrade_candidate_gitlink_is_clean_and_contains_both_ancestries() -> None:
     lock = yaml.safe_load(LOCK.read_text(encoding="utf-8"))
     locked_commit = lock["fork"]["commit"]
     gitlink = subprocess.run(
@@ -85,62 +91,81 @@ def test_r11_gitlink_history_and_portable_bytes_are_exact() -> None:
         ).stdout
         == ""
     )
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            str(SUBMODULE),
-            "merge-base",
-            "--is-ancestor",
-            R6_FORK_COMMIT,
-            locked_commit,
-        ],
-        check=True,
+    for ancestor in (UPSTREAM_010_COMMIT, LOCAL_R11_COMMIT):
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(SUBMODULE),
+                "merge-base",
+                "--is-ancestor",
+                ancestor,
+                locked_commit,
+            ],
+            check=True,
+        )
+
+
+def test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+    package_block = re.search(
+        r"readonly -a fork_packages=\(\n(?P<body>.*?)\n\)", installer, re.DOTALL
     )
-    subjects = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(SUBMODULE),
-            "log",
-            "--format=%s",
-            "--reverse",
-            f"{R6_FORK_COMMIT}..{locked_commit}",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    assert subjects == [
-        "portable heartbeat format",
-        "platform build and rpath",
-        "headless rendering control",
-        "Apple main thread UI",
-        "Apple framework linkage",
-        "Apple test logging runtime",
-        "Apple test RMW runtime",
-        "platform C++17 requirements",
-        "Apple conversion warnings",
-        "Apple test backward runtime",
-        "guard Apple test runtime dependencies",
-        "fix: guard unavailable GLFW primary monitor",
-        "fix: prepare macos camera context on main thread",
-        "feat: migrate cameras to plugin",
-        "fix: preserve plugin ABI for camera lifecycle",
+    assert package_block is not None
+    assert package_block.group("body").split() == [
+        "mujoco_3d_lidar",
+        "mujoco_ros2_control_msgs",
+        "mujoco_ros2_control_plugins",
+        "mujoco_ros2_control",
     ]
-    portable_diff = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(SUBMODULE),
-            "diff",
-            "--binary",
-            f"{R6_FORK_COMMIT}..{locked_commit}",
-        ],
-        check=True,
-        capture_output=True,
-    ).stdout
-    assert hashlib.sha256(portable_diff).hexdigest() == EXPECTED_PORTABLE_DIFF_SHA256
+    for required_interface in (
+        "mujoco_ros2_control_msgs/srv/SetFreeJointState",
+        "mujoco_ros2_control_msgs/srv/ResetWorld",
+        "mujoco_ros2_control_msgs/srv/SetPause",
+        "mujoco_ros2_control_msgs/msg/ViewerCamera",
+        "mujoco_ros2_control_msgs/srv/SetViewerCamera",
+        "mujoco_ros2_control_msgs/srv/GetViewerCamera",
+    ):
+        assert required_interface in installer
+    assert "mujoco_ros2_control_plugins/CameraPlugin" in installer
+
+
+def test_integration_guide_uses_the_optional_observer_abi_and_authoritative_order() -> None:
+    guide = INTEGRATION_GUIDE.read_text(encoding="utf-8")
+    evidence_section = guide.split("## 4.", maxsplit=1)[1].split("## 5.", maxsplit=1)[0]
+
+    assert "plugin base 新增" not in evidence_section
+    assert "MujocoSystemInterface::step_authoritative_physics()" not in evidence_section
+    assert "MuJoCoROS2ControlPluginBase" in evidence_section
+    assert "不属于 base" in evidence_section
+    assert "MuJoCoROS2ControlSimulationObserver" in evidence_section
+    assert "SimulationObserverDispatcher" in evidence_section
+
+    authoritative_order = (
+        "`apply_staged_control_inputs()`",
+        "`pre_step_callback_(mj_data_)`",
+        "`mj_step(mj_model_, mj_data_)`",
+        "`Diverged(...)`",
+        "`observer_dispatcher_.on_physics_step(...)`",
+        "`publish_control_state()`",
+        "`refresh_data_snapshot()`",
+        "`publish_clock()`",
+    )
+    assert all(token in evidence_section for token in authoritative_order)
+    positions = [evidence_section.index(token) for token in authoritative_order]
+    assert positions == sorted(positions)
+
+
+def test_integration_guide_reads_back_all_four_fork_package_prefixes() -> None:
+    guide = INTEGRATION_GUIDE.read_text(encoding="utf-8")
+
+    for package in (
+        "mujoco_3d_lidar",
+        "mujoco_ros2_control_msgs",
+        "mujoco_ros2_control_plugins",
+        "mujoco_ros2_control",
+    ):
+        assert f"ros2 pkg prefix {package}" in guide
 
 
 def test_macos_environment_defaults_to_ubuntu_ros_prefix() -> None:

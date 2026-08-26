@@ -12,6 +12,8 @@ def main(arguments: list[str] | None = None) -> int:
 
     import rclpy
     from geometry_msgs.msg import PoseStamped
+    from rclpy._rclpy_pybind11 import RCLError
+    from rclpy.executors import ExternalShutdownException
     from rclpy.parameter import Parameter
     from rclpy.qos import qos_profile_sensor_data
 
@@ -47,8 +49,11 @@ def main(arguments: list[str] | None = None) -> int:
     timer = node.create_timer(0.05, publish)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RCLError as error:
+        if rclpy.ok() or "context is not valid" not in str(error):
+            raise
     finally:
         node.destroy_timer(timer)
         node.destroy_node()

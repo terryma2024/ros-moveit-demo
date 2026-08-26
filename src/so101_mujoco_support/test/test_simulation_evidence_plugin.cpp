@@ -15,9 +15,15 @@
 #include <type_traits>
 #include <vector>
 
+#include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp>
+
 #define private public
 #include "so101_mujoco_support/simulation_evidence_plugin.hpp"
 #undef private
+
+static_assert(std::is_base_of_v<
+  mujoco_ros2_control_plugins::MuJoCoROS2ControlSimulationObserver,
+  so101_mujoco_support::SimulationEvidencePlugin>);
 
 namespace
 {
