@@ -193,6 +193,19 @@ decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_CAPTURE_OWNER_PRODUCT_NATURAL_EXIT
 next_experiment: EXP-021
 ```
 
+## CP-084 — Correct pre-product capture coordinator clock
+
+```yaml
+checkpoint_id: CP-084
+recorded_at: 2026-08-27T03:17:20+08:00
+experiment_id: EXP-021
+status: PLANNED
+pre_product_observation: The first direct coordinator invocation exited at line16 before creating evidence or ownership because noninteractive zsh with nounset did not define EPOCHSECONDS; no product/session/domain/Viewer started.
+correction: Replace all EPOCHSECONDS reads with date +%s while preserving the 900-second boundaries and every capture/identity/validation gate.
+corrected_capture_sha256: d2f714b34ad61eac861422d2242bdd99d374c968594fb13543baf837f23a82e4
+decision: KEEP_EXP021_PLANNED_AND_REPEAT_FRESH_CAPTURE_OWNER_GATE
+```
+
 ```yaml
 experiment_id: EXP-011
 status: PLANNED
