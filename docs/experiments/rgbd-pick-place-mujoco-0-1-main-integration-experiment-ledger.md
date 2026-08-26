@@ -31,7 +31,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-015
+latest_checkpoint: CP-016
 next_experiment: EXP-016
 ```
 
@@ -978,4 +978,32 @@ invalid_criteria:
 sequence_gate: EXP-017 forward is forbidden until EXP-016 has a committed countable-success closure.
 decision: COMMIT_PLAN_THEN_PREFLIGHT
 next_experiment: EXP-016
+```
+
+## CP-016 / TRANS-EXP-016-RUNNING-001 — Start rebuilt-candidate task_start qualification
+
+```yaml
+checkpoint_id: CP-016
+transition_id: TRANS-EXP-016-RUNNING-001
+recorded_at: 2026-08-27T00:15:39+08:00
+experiment_id: EXP-016
+from: PLANNED
+to: RUNNING
+qualification: true
+position: task_start
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+production_source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: 9f9670626b2e1e630106c9c7d33c7d7c9018d5a2
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Clean before this ledger-only transition; no production source or installed artifact changed after CP-011.
+pre_running_observed:
+  - Domain 232 and exact session process identity, mrc010-mac-exp016, exact Viewer title, and the entire EXP-016 evidence path are empty; preflight created no ROS daemon.
+  - Candidate demo/support/fork prefixes resolve to the registered frozen overlays; exact installed runner SHA256 is 9ade27dcc334b8cf26d203e3e6dc8b5b26e0fe46487ca4dd7539a52286f9bfd1.
+  - Installed support plugin SHA256 f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7 and UUID 74A169FE-F055-3D0D-A333-9F7F7BAEF574 match the passing ABI smoke.
+  - Installed bundle SHA256 is e2d777dfa2d925998583b8c1b376f063ec47f476d98402297701b541da455175 under SO101_SOURCE_COMMIT 74a6523.
+  - Frozen task-owned runner and capture helpers pass zsh syntax checks; capture uses the same exact Viewer window ID at all three live-manifest boundaries.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp016-provenance-isolation.txt
+owned_processes: NONE
+decision: START_EXACT_INSTALLED_EXP_016
+next_command: Commit this transition; create only mrc010-mac-exp016 with explicit in-pane absolute cd; verify pane and child cwd; run the exact installed command and same-ID three-boundary GUI capture.
 ```
