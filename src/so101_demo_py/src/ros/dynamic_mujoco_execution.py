@@ -76,6 +76,9 @@ class RosDynamicMujocoExecution:
             template.tcp_link,
         )
         self._positions: dict[str, float] = {}
+        self._joint_state_generation = 0
+        self._joint_state_source_stamp_ns: int | None = None
+        self._joint_state_received_monotonic_s: float | None = None
         self._state_events: list[dict[str, object]] = []
         self._final_samples: list[dict[str, object]] = []
         self._release_marker_sequence: int | None = None
@@ -165,14 +168,32 @@ class RosDynamicMujocoExecution:
 
     def _on_joint_state(self, message: Any) -> None:
         if len(message.name) == len(message.position):
-            self._positions.update(
+            positions = dict(
                 (name, float(position))
                 for name, position in zip(message.name, message.position, strict=True)
             )
+            self._positions.update(positions)
+            if all(name in positions for name in self._ARM_JOINTS):
+                stamp = getattr(getattr(message, "header", None), "stamp", None)
+                self._joint_state_source_stamp_ns = (
+                    None
+                    if stamp is None
+                    else int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
+                )
+                self._joint_state_received_monotonic_s = time.monotonic()
+                self._joint_state_generation += 1
 
-    def _joint_state(self, timeout_s: float = 5.0) -> tuple[float, ...]:
+    def _joint_state(
+        self,
+        timeout_s: float = 5.0,
+        *,
+        after_generation: int | None = None,
+    ) -> tuple[float, ...]:
         deadline = time.monotonic() + timeout_s
-        while any(name not in self._positions for name in self._ARM_JOINTS):
+        while any(name not in self._positions for name in self._ARM_JOINTS) or (
+            after_generation is not None
+            and self._joint_state_generation <= after_generation
+        ):
             if time.monotonic() >= deadline:
                 raise RuntimeError("JOINT_STATE_TIMEOUT")
             self._progress()
@@ -348,6 +369,7 @@ class RosDynamicMujocoExecution:
             if planned.failure is not None or planned.trajectory is None:
                 code = "CUP_POSE_PLAN_FAILED" if planned.failure is None else planned.failure.code
                 raise RuntimeError(code)
+            execution_generation = self._joint_state_generation
             executed = self._trajectory.execute(
                 planned.trajectory,
                 45.0,
@@ -363,8 +385,10 @@ class RosDynamicMujocoExecution:
                 raise RuntimeError(f"{code}: {message}")
             trajectory_points += len(planned.trajectory.joint_trajectory.points)
             segment_joint_targets.append(list(joint_target))
-            current = self._joint_state()
+            current = self._joint_state(after_generation=execution_generation)
         after = self._snapshot()
+        snapshot_joint_generation = self._joint_state_generation
+        current = self._joint_state(after_generation=snapshot_joint_generation)
         terminal_pose = self._ik.forward(current)
         details: dict[str, object] = {
             "target_pose": [*target.position_m, *target.orientation_xyzw],
@@ -390,6 +414,11 @@ class RosDynamicMujocoExecution:
             ),
             "terminal_orientation_error_rad": self._ik.orientation_error_rad(
                 terminal_pose, target
+            ),
+            "terminal_joint_state_generation": self._joint_state_generation,
+            "terminal_joint_state_source_stamp_ns": self._joint_state_source_stamp_ns,
+            "terminal_joint_state_received_monotonic_s": (
+                self._joint_state_received_monotonic_s
             ),
             "trajectory_points": trajectory_points,
         }
