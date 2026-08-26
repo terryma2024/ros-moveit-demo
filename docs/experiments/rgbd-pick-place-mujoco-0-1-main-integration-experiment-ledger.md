@@ -2282,3 +2282,23 @@ correction:
 decision: RERUN_ONLY_CORRECTED_OBSERVER_ON_UNCHANGED_LIVE_STACK
 next_experiment: SMOKE-012
 ```
+
+## CP-057 — GREEN camera-compatible perception subscription QoS
+
+```yaml
+checkpoint_id: CP-057
+recorded_at: 2026-08-27T02:22:08+08:00
+status: GREEN
+qualification: false
+record_head_before_checkpoint: da1265513b65fbc30f7be77f492743be16f6956c
+change:
+  - Construct a depth-one RELIABLE VOLATILE camera QoS profile and use it for CameraInfo, color, and depth subscriptions.
+  - Remove the unused sensor-data QoS import from the perception node.
+  - Preserve output publisher QoS, startup deadline, launch sequencing, perception policy, topics, TF, and motion behavior.
+tests:
+  - focused camera QoS contract: one passed in 0.28 s
+  - complete test_rgbd_cup_pose.py: 43 passed in 0.31 s
+  - complete src/so101_demo_py/test with registered-root ROS_LOG_DIR: 444 passed in 13.56 s
+decision: COMMIT_MINIMAL_GREEN_THEN_REBUILD_CANDIDATE_AND_RUN_REAL_LIVE_PERCEPTION_SMOKE
+next_experiment: SMOKE-013
+```
