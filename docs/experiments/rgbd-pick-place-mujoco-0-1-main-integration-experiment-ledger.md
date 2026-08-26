@@ -28,8 +28,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-006
-next_experiment: NONE
+latest_checkpoint: CP-007
+next_experiment: EXP-015
 ```
 
 ## Shared live acceptance contract
@@ -627,4 +627,70 @@ open_risks:
   - No current-candidate Mac position is qualified.
 next_experiment: NONE
 next_command: Commit this INVALID closure, then run a task-owned empty tmux A/B that records pwd for -c alone versus explicit absolute cd; do not start ROS or MuJoCo.
+```
+
+## CP-007 — tmux cwd A/B root cause and repaired retry plan
+
+```yaml
+checkpoint_id: CP-007
+recorded_at: 2026-08-26T23:42:32+08:00
+last_valid_experiment: NONE
+current_hypothesis: Explicit absolute cd inside the new pane command repairs only the shared tmux server cwd contamination and permits a clean unchanged task_start run.
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_checkpoint: c71a099
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Clean before this ledger-only checkpoint; no production or installed artifact changed.
+owned_processes: NONE
+ab_result:
+  - OBSERVED: Probe A used tmux new-session -c with the live task worktree but no in-pane cd. The pane still reported the deleted historical worktree and pwd -P produced dot.
+  - OBSERVED: Probe B used the same tmux server and -c option but added an explicit absolute cd in the pane command. Both pane_current_path and pwd -P reported the live task worktree exactly.
+  - OBSERVED: Neither probe sourced ROS nor started MuJoCo. Both task-owned sessions were removed and are absent.
+root_cause:
+  - CONFIRMED: The existing shared tmux server does not honor new-session -c while its inherited base cwd is unlinked; explicit in-pane cd repairs cwd without restarting or disturbing that shared server.
+  - H1 confirmed; H2 confirmed; H3 disproved.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/cwd-probe-a.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/cwd-probe-b.txt
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/cwd-ab-readback.txt
+decision: PLAN_EXP_015_WITH_EXPLICIT_IN_PANE_CD
+next_experiment: EXP-015
+```
+
+```yaml
+experiment_id: EXP-015
+status: PLANNED
+prior_experiment: EXP-014
+hypothesis: The unchanged frozen candidate completes task_start AC-001 when the exact-owned pane performs an observed explicit cd to the live worktree before sourcing or starting ROS.
+prediction: Pane and child cwd readbacks are exact, getcwd failures are zero, RGB-D perception succeeds, and the full physical workflow releases the cup stably in the red target.
+single_variable: Replace ineffective tmux -c-only cwd binding with explicit in-pane absolute cd; product command, overlays, keyframe, policy, geometry, thresholds, and capture protocol remain unchanged.
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-014 is terminal INVALID and all its exact-owned identities are absent; A/B probe sessions are absent.
+  - The immutable candidate and child are unchanged and clean.
+  - Domain 230, session mac-mrc010-task-start-retry-exp015, mrc010-mac-exp015, exact Viewer title, and the evidence path are empty.
+  - tmux pane_current_path and child pwd readback must equal /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main.
+success_criteria:
+  - AC-001 passes every clause and getcwd-failed count is zero.
+failure_criteria:
+  - All preconditions pass but any AC-001 product clause fails.
+invalid_criteria:
+  - Provenance, cwd/process isolation, GUI freshness, or evidence ownership is missing.
+provenance:
+  source_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+  install_overlay: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install
+  runtime_executable: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place
+  ros_domain_id: 230
+  gz_partition: mac-mrc010-task-start-retry-exp015
+commands:
+  - command: ROS_DOMAIN_ID=230 GZ_PARTITION=mac-mrc010-task-start-retry-exp015 ros2 run so101_demo_py so101_mujoco_perception_pick_place run_mode:=execute execute:=true headless:=false session_id:=mac-mrc010-task-start-retry-exp015 mujoco_initial_keyframe:=task_start evidence_file:=/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015/task-start-retry.json
+    exit_code: PENDING
+observed:
+  - NOT_RUN
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-015
+decision: PENDING
+next_experiment: EXP-011
 ```
