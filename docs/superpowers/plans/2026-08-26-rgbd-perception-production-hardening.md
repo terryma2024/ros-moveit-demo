@@ -883,3 +883,14 @@ For each run, prove all identities/evidence paths absent, append and push RUNNIN
 - [ ] Request a new independent review of the post-CP-037 diff. It must close both exact-status issues and explicitly recertify all five original findings.
 - [ ] Append/push the completion checkpoint with retained, archived, and deletion-candidate disposition. Treat EXP-029 through EXP-032 as the only current countable exact-runner set; retain EXP-025 through EXP-028 as physically valid but wrapper-nonqualifying history.
 - [ ] Regenerate `sha256.txt` and `sizes.txt` as the last evidence writes, verify every hash, then perform read-only final readback only.
+
+## Installed-runner argument return amendment
+
+EXP-029 consumed its identity as an INVALID pre-launch failure: the installed runner preserved child status but did not apply public `name:=value` launch arguments. CP-039 retains that failure. After a new RED/GREEN source freeze, Task 12 resumes without reusing any identity:
+
+- EXP-030: domain 208, session `rgbd-pick-task-start-exp030-20260826`, CUA `rgbd-pick-exp030-viewer-20260826`, keyframe `task_start`.
+- EXP-031: domain 209, session `rgbd-pick-forward-exp031-20260826`, CUA `rgbd-pick-exp031-viewer-20260826`, keyframe `cup_test_forward_5cm`.
+- EXP-032: domain 210, session `rgbd-pick-left-exp032-20260826`, CUA `rgbd-pick-exp032-viewer-20260826`, keyframe `cup_test_left_5cm`.
+- EXP-033: domain 211, session `rgbd-pick-right-exp033-20260826`, CUA `rgbd-pick-exp033-viewer-20260826`, keyframe `cup_test_right_5cm`.
+
+The final cleanup range consequently extends through domain 211, and final review/countable-set text uses EXP-030 through EXP-033. All other Task 12 and Task 13 gates remain unchanged.

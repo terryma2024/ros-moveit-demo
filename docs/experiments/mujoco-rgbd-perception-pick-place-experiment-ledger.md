@@ -2799,3 +2799,36 @@ confirmed_conclusions:
   - CP-016, CP-037, and all prior experiment evidence remain unchanged.
 next_command: Add a focused RED real-LaunchService regression for name:=value application, implement the minimal ROS-native parse-and-set adapter, rerun full verification and freeze a new implementation before allocating EXP-030.
 ```
+
+```yaml
+checkpoint_id: CP-040
+recorded_at: 2026-08-26T15:59:41+08:00
+last_valid_experiment: EXP-028
+current_hypothesis: The installed runner now both applies public launch arguments and preserves terminal child status; fresh physical qualification resumes at EXP-030 without reusing EXP-029.
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+runner_argument_resolution:
+  - OBSERVED: RED proved LaunchService observed the default value observe despite argv containing run_mode:=execute; the neighboring five status tests passed.
+  - OBSERVED: The minimal adapter uses ros2launch's native parser and SetLaunchConfiguration before the existing description entities; package.xml declares the ros2launch runtime dependency.
+  - OBSERVED: All 6 focused runner tests and the fresh full 403-test suite pass; targeted Ruff check/format and rosdep resolve ros2launch return zero.
+  - OBSERVED: The dependency-closed six-package build passes without task Open3D python-deps on build PYTHONPATH; installed provenance passes 3 tests and executable readback is exact.
+  - OBSERVED: Local and Gitee branch read back exact implementation 012420c9; gitlink/submodule remain clean exact f19a8cc3 with describe so101-0.0.3-r8-3-gf19a8cc; canonical main is clean at b3770360.
+identity_correction:
+  - EXP-029 remains retained INVALID and is not reused.
+  - Fresh exact-runner qualification is EXP-030 task_start/domain 208, EXP-031 forward/domain 209, EXP-032 left/domain 210, and EXP-033 right/domain 211.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-red/pytest-red.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-2/pytest-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/pytest-focused.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/ruff-check.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/ruff-format.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/rosdep-ros2launch.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/colcon-build.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/installed-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/source-freeze-prepush.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/task-14-green-3/gitee-readback.log
+decision: PROCEED_TO_FRESH_EXACT_RUNNER_QUALIFICATION
+next_experiment: EXP-030
+next_command: Commit and push this source-freeze checkpoint and plan amendment, then prove fresh domain 208/session/evidence/Viewer/CUA isolation and transition EXP-030 only to RUNNING.
+```
