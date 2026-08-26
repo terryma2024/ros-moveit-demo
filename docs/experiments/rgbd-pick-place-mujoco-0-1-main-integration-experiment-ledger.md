@@ -139,6 +139,37 @@ decision: REPEAT_AFTER_NON_PRODUCT_TMUX_CWD_AB
 next_experiment: NONE
 ```
 
+## CP-082 — Production input-release GREEN and installed freeze
+
+```yaml
+checkpoint_id: CP-082
+recorded_at: 2026-08-27T03:14:30+08:00
+cause: SMOKE-016 established that post-first-valid reliable RGB-D input traffic starved MoveIt action-result delivery on Mac.
+tdd:
+  red_commit: 4f260d2
+  red_command: test_rgbd_cup_pose.py::test_first_valid_publish_releases_exact_rgbd_inputs_once_and_cleanup_is_safe
+  red_result: Failed because zero of the three owned subscriptions were destroyed.
+  green_commit: fff7ba3b1c7efb4472f51d0842d8bcba87d64621
+  implementation: After the first successful world-pose publish, validate ownership count3, destroy inputs in reverse order, remove only successfully destroyed handles, mark release idempotently, and emit stable status INPUT_RELEASED_AFTER_FIRST_VALID; publisher/node/TF remain long-lived and cleanup sees an empty input list.
+tests:
+  focused: 1 passed
+  rgbd_file: 44 passed
+  full_project: 445 passed in 12.33s
+  installed_provenance: 4 passed
+installed:
+  demo_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_demo_py
+  support_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/project-install/so101_mujoco_support
+  fork_prefix: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-candidate/fork-install/mujoco_ros2_control
+  child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  bundle_sha256: 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a
+  support_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+  support_uuid: 74A169FE-F055-3D0D-A333-9F7F7BAEF574
+qualification_helpers:
+  runner_sha256: 8f0cbdce963608c21cc414972208ca439365e8fc90d9fba5574f0ac29353747b
+  capture_sha256: ee291e99b2c600c7142c704139da561c8b5d13d280cd1a5ccb4496ec3c40eed8
+decision: RESUME_FOUR_POSITION_FORMAL_BATCH_WITH_FRESH_EXP021
+```
+
 ```yaml
 experiment_id: EXP-011
 status: PLANNED
