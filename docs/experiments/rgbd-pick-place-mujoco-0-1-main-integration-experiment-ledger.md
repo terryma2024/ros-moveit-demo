@@ -2174,3 +2174,22 @@ helpers:
 decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN_RELIABLE_OBSERVER
 next_experiment: SMOKE-012
 ```
+
+## CP-053 / TRANS-SMOKE-012-RUNNING-001 — Start reliable RGB-D comparison
+
+```yaml
+checkpoint_id: CP-053
+transition_id: TRANS-SMOKE-012-RUNNING-001
+recorded_at: 2026-08-27T02:12:20+08:00
+smoke_id: SMOKE-012
+from: PLANNED
+to: RUNNING
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: 96b583e
+pre_running_observed:
+  - Domain 208 graph, evidence, exact task tmux/process identities, and Viewer were fresh and empty.
+  - Idle tmux pane 66040 completed explicit in-pane cd and captured pwd against the exact worktree after shell initialization.
+decision: START_BASE_STATIC_TF_GUI_THEN_RELIABLE_POST_SCENE_OBSERVER
+next_command: Run no perception or motion; close on the reliable three-topic gate result.
+```
