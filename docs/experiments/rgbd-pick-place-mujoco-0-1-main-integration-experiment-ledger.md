@@ -2756,6 +2756,18 @@ decision: DO_NOT_TDD_2HZ_ALONE; TEST_LONG_LIVED_PERCEPTION_WITH_INPUT_SUBSCRIPTI
 next_experiment: SMOKE-016
 ```
 
+## CP-079 — Correct SMOKE-015 primary-versus-recovery failure attribution
+
+```yaml
+checkpoint_id: CP-079
+recorded_at: 2026-08-27T03:02:30+08:00
+amends_checkpoint: CP-077
+primary_failure: MOVE_ABOVE_PLACE waitForExecution action-result timeout after physical Goal reached, as established by the wall-clock controller/MoveIt log boundary.
+secondary_recovery_failure: Manifest last_error DYNAMIC_EARLY_TABLE_CONTACT arose only after RECOVER_LIFT_TO_SAFE_HEIGHT and RECOVER_MOVE_ABOVE_PICK, when carried recovery RECOVER_DESCEND_TO_PICK approached the table-supported pick pose and rejected table contact.
+evidence_interpretation: Recovery samples through RECOVER_MOVE_ABOVE_PICK remain table_contact=false; DYNAMIC_EARLY_TABLE_CONTACT is not evidence that transport physically dropped the cup and must not replace the primary DDS/action-result diagnosis.
+decision: KEEP_SMOKE_016_FOCUSED_ON_POST_FIRST_VALID_RGBD_TRAFFIC
+```
+
 ## CP-078 — Plan post-first-valid perception input-release causal probe
 
 ```yaml
