@@ -1,3 +1,4 @@
+import json
 import math
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -77,6 +78,19 @@ class _DiagnosticIk:
         return 0.0
 
 
+def _joint_message(positions: tuple[float, ...], stamp_ns: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        name=list(RosDynamicMujocoExecution._ARM_JOINTS),
+        position=list(positions),
+        header=SimpleNamespace(
+            stamp=SimpleNamespace(
+                sec=stamp_ns // 1_000_000_000,
+                nanosec=stamp_ns % 1_000_000_000,
+            )
+        ),
+    )
+
+
 def test_dynamic_execute_uses_shared_workflow_and_topic_resolved_motion_targets() -> None:
     port = RecordingExecutionPort()
     targets = Targets()
@@ -152,19 +166,61 @@ def test_micro_lift_allows_initial_table_contact_but_transport_does_not() -> Non
     assert not RosDynamicMujocoExecution._reject_carried_table_contact(State.LIFT, False)
 
 
-def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics() -> None:
+def test_joint_state_waits_for_a_generation_after_the_execution_boundary() -> None:
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    stale = (0.01, 0.02, 0.03, 0.04, 0.05)
+    fresh = (0.11, 0.12, 0.13, 0.14, 0.15)
+    adapter._positions = {}
+    adapter._joint_state_generation = 0
+    adapter._joint_state_source_stamp_ns = None
+    adapter._joint_state_received_monotonic_s = None
+    adapter._on_joint_state(_joint_message(stale, 1_000_000_100))
+    boundary_generation = adapter._joint_state_generation
+    progress_calls = 0
+
+    def progress() -> None:
+        nonlocal progress_calls
+        progress_calls += 1
+        adapter._on_joint_state(_joint_message(fresh, 1_000_000_200))
+
+    adapter._progress = progress
+
+    actual = adapter._joint_state(after_generation=boundary_generation)
+
+    assert actual == fresh
+    assert progress_calls == 1
+    assert adapter._joint_state_generation == boundary_generation + 1
+    assert adapter._joint_state_source_stamp_ns == 1_000_000_200
+    assert adapter._joint_state_received_monotonic_s is not None
+
+
+def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
+    tmp_path,
+) -> None:
     adapter = object.__new__(RosDynamicMujocoExecution)
     before = _mujoco_sample(sequence=100, step=1000, cup_z_m=0.1646, table_contact=True)
     after = _mujoco_sample(sequence=107, step=1434, cup_z_m=0.1653, table_contact=False)
     snapshots = iter((before, after))
     start_joints = (0.0200, -0.3130, 0.2000, 0.0010, 0.0020)
     terminal_joints = (0.0199, -0.3131, 0.2035, 0.0011, 0.0021)
-    joint_states = iter((start_joints, terminal_joints))
+    joint_states = iter((start_joints, terminal_joints, terminal_joints))
     trajectory = SimpleNamespace(
         joint_trajectory=SimpleNamespace(points=(object(), object()))
     )
     adapter._snapshot = lambda: next(snapshots)
-    adapter._joint_state = lambda: next(joint_states)
+    adapter._joint_state_generation = 4
+    adapter._joint_state_source_stamp_ns = 1_000_000_100
+    adapter._joint_state_received_monotonic_s = 2.0
+
+    def joint_state(*_args, after_generation=None, **_kwargs):
+        value = next(joint_states)
+        if after_generation is not None:
+            adapter._joint_state_generation = after_generation + 1
+            adapter._joint_state_source_stamp_ns += 100
+            adapter._joint_state_received_monotonic_s += 0.01
+        return value
+
+    adapter._joint_state = joint_state
     adapter._ik = _DiagnosticIk()
     adapter._planning = SimpleNamespace(
         plan_joint_path=lambda *_args, **_kwargs: SimpleNamespace(
@@ -188,7 +244,7 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics() -> 
     adapter._before_micro_lift = None
     adapter._state_events = []
     adapter._document = {"state_events": adapter._state_events}
-    adapter._write = lambda: None
+    adapter._evidence_file = tmp_path / "failed-micro-lift.json"
     target = PoseEvidence((0.0200, -0.3130, 0.2040), (0.0, 0.0, 0.0, 1.0))
 
     with pytest.raises(RuntimeError, match="DYNAMIC_MICRO_LIFT_NOT_PROVED"):
@@ -205,9 +261,14 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics() -> 
     assert event["terminal_position_error_m"] == pytest.approx(
         math.dist(terminal_joints[:3], target.position_m)
     )
+    assert event["terminal_joint_state_generation"] > 4
+    assert event["terminal_joint_state_source_stamp_ns"] > 1_000_000_100
+    assert event["terminal_joint_state_received_monotonic_s"] > 2.0
     assert event["physical_cup_lift_m"] == pytest.approx(0.0007)
     assert event["physical_bilateral_contact"] is True
     assert event["physical_table_contact"] is False
+    persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
+    assert persisted["state_events"] == adapter._state_events
 
 
 def test_pose_interpolation_reaches_target_and_normalizes_quaternion() -> None:
