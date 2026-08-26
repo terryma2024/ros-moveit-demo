@@ -1793,3 +1793,44 @@ evidence:
 decision: RETAIN_INVALID_AND_REPEAT_WITH_ABSOLUTE_VENV_PYTHON_PLUS_IDENTITY_PARSER_PREFLIGHT
 next_experiment: NONE
 ```
+
+## CP-041 — Plan corrected real installed child stack sampling
+
+```yaml
+checkpoint_id: CP-041
+recorded_at: 2026-08-27T01:38:07+08:00
+smoke_id: SMOKE-009
+status: PLANNED
+qualification: false
+implementation_commit: 74a65234551527fb5483366aa06a79a8f5efacfe
+record_head_before_checkpoint: 9e569ce344180c1e40b9610e2289d62aabfe773b
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+problem: SMOKE-008 reproduced the real constructor timeout, but its sampler exited before the first boundary because it used an unavailable unqualified python token.
+hypothesis: With the observer corrected to the frozen absolute venv Python and its identity parser proven before product startup, two short samples of the exact immutable installed child at 25 s and 31 s will expose the blocking runtime call.
+identity:
+  domain: 211
+  session: mac-mrc010-real-sample-r2
+  tmux: mrc010-mac-real-sample-r2
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-sampling-r2/live
+observer_changes_only:
+  - Use /Users/matianyi/ros2_jazzy/.venv/bin/python for monotonic-delay arithmetic; do not change the installed product, product arguments, base stack, or deadline.
+  - Match the recorded exact parent and require that the child command contains the immutable installed console-script path, because the macOS process command begins with the resolved shebang interpreter.
+  - At 25 s and 31 s, skip when summary.json exists or the child exited; otherwise sample only the exact-owned child for two seconds and retain identity, argv, timing, status, and stack output.
+parser_preflight:
+  result: PASS
+  actual_pid: 86432
+  expected_parent: 86431
+  observed_parent: 86431
+  observed_command: /opt/homebrew/opt/python@3.12/Frameworks/Python.framework/Versions/3.12/Resources/Python.app/Contents/MacOS/Python /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/identity-parser-preflight-child.py
+  absolute_python: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  threshold_math_result: 0.10000025
+  evidence_sha256: c0cde871ba694da3e77e1ece83b2991cbb8542ccd3b6e7e10a32b328123d88cd
+helpers:
+  base_sha256: 82d9ed0be5c818a2f634296c6106ceb23e96c78e718e432bbf2ceb268a67fcc7
+  static_tf_sha256: 5aa187e4107c51664329f9ad43400f05846ff379c02c8072d621c3fdebd7d5c9
+  perception_sha256: d2a9d45ad6493fb20a110976e50e9d899af332e18f80b99a6c98fc661fd5a224
+  sampler_sha256: bc0fe14549085ca8ea044cab1546cf1ee74ecd47c330e80e33f76a393cd6b208
+  parser_preflight_sha256: a894694e475ddd258430499bb5fef8745008ed7453fcecf61175130baf557c60
+decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_DOMAIN_AND_EXACT_IDENTITIES
+next_experiment: SMOKE-009
+```
