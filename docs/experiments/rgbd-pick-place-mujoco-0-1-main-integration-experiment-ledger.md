@@ -643,6 +643,60 @@ pre_running_observed: Fresh domain223/session/processes/domain-daemon/Viewer/evi
 decision: START_EXACT_INSTALLED_FULL_CHAIN_AND_WAIT_NATURAL_EXIT
 ```
 
+## CP-112 / CLOSE-EXP-026-001 — right_5cm functional FULL_RESTART passes
+
+```yaml
+checkpoint_id: CP-112
+transition_id: CLOSE-EXP-026-001
+recorded_at: 2026-08-27T03:55:00+08:00
+experiment_id: EXP-026
+from: RUNNING
+to: FUNCTIONAL_PASS_GUI_UNAVAILABLE
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+result:
+  - Natural rc0, DONE/19, no failure, exact detach-before-open trace, 11 clean process exits, and one exact-three input release marker.
+  - Perception OK: 98078 full points, 180 candidates, 126 cup points, radius 0.0394509 m, world pose [0.0696331,-0.2805135,0.165], PLY retained.
+  - Final cup [-0.0779105,-0.2475472,0.1647760], table_contact=true, fingertip contacts 0/0, near-zero velocities; Planning Scene detached/world count13.
+  - Fresh exact CoreGraphics Viewer window45605/PID34391 retained; screenshot unavailable and not claimed.
+hashes: {log: b1efd84620c2568a6005f17aa7acc74056c8643e8357e06cfea55ffda8094237, manifest: 74f9b2b1a7b6454d444284e7bbb2b8b2465696ee80f68a5602b6e6ef5c78f71a, summary: 2ce334e58bb3ebb02eb3f77015222145f0e2260666c032f0f3e28d13c5b2f775, ply: edbe3541ee1d5df9df5456a79eb1831fa47e666b6f4a307b943f3260d64fa47d}
+cleanup: domain223/session/processes/domain-daemon/Viewer empty.
+decision: FOUR_POSITION_FUNCTIONAL_GOAL_ACHIEVED; REPORT_GUI_CLAUSE_UNAVAILABLE_SEPARATELY
+next_experiment: NONE
+```
+
+## CP-113 — Four-position Mac functional batch summary
+
+```yaml
+checkpoint_id: CP-113
+recorded_at: 2026-08-27T03:55:00+08:00
+status: FUNCTIONAL_PASS_GUI_EVIDENCE_UNAVAILABLE
+functional_successes: [EXP-023, EXP-024, EXP-025, EXP-026]
+frozen_runtime: {implementation: fff7ba3b1c7efb4472f51d0842d8bcba87d64621, child: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd, bundle: 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a, support_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7}
+common_result: All four fresh FULL_RESTARTs naturally exited rc0 with perception OK, exact RGB-D input release count3, world /cup_pose, DONE/19, complete MoveIt/controller trajectory, bilateral unsupported grasp/lift/transport, detach-before-open, valid final table support/region/tilt/contact, detached Planning Scene, 11 clean exits, and exact cleanup.
+gui_disposition: Fresh exact CoreGraphics Viewer identity exists in every run, but mandatory AXRaise screenshots are unavailable under the current non-bundled upstream GLFW window; CP-091 through CP-100 establish this independently. No screenshot or full AC-001 visual qualification is claimed.
+evidence_disposition: Retain EXP-023 through EXP-026 and all GUI diagnosis runs under the sole registered root; no deletion candidates are proposed without user authorization.
+decision: WRITE_TASK4_REPORT_AND_RUN_FINAL_STATIC_VERIFICATION
+```
+
+## CP-114 — Final Mac static and installed verification
+
+```yaml
+checkpoint_id: CP-114
+recorded_at: 2026-08-27T03:59:15+08:00
+worktree_status_before_commit: Only the planned ledger closure and Task 4 report are modified/untracked.
+verification:
+  - command: python -m pytest src/so101_demo_py/test -q
+    result: 445 passed in 12.60 s
+    log_sha256: 17cd7555598a6d031c7370f2345ebb1df0570496a93fce577040bd7a32196434
+  - command: python -m pytest test_bundle_provenance.py::test_installed_provenance_module_prints_one_clean_hash test_installed_provenance.py -q
+    result: 5 passed in 1.99 s
+    log_sha256: fbe8847e8062fdfc8e8fa050319ef7d71ee0aed91a6942dc65874da313b44b0e
+  - command: git diff --check
+    result: PASS
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/final-verification
+decision: COMMIT_FUNCTIONAL_RESULTS_WITH_GUI_UNAVAILABLE_EXPLICIT
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
