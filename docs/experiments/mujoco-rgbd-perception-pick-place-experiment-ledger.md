@@ -2228,3 +2228,30 @@ open_risks:
   - Streaming perception may reject motion/occlusion frames by design after the accepted static input; these rejected frames are not fed to the already-running workflow.
 next_command: Commit and push this closure checkpoint, then run final fresh package tests, lint/format checks, provenance/overlay/runtime cleanup checks, and an evidence inventory before the completion checkpoint.
 ```
+
+```yaml
+checkpoint_id: CP-030
+recorded_at: 2026-08-26T13:04:18+08:00
+last_valid_experiment: EXP-020
+current_hypothesis: The four accepted a8b3d87a runs are sound historical evidence, but final completion requires minimal production-boundary hardening and four new full-restart runs under the resulting implementation provenance.
+working_tree_status: The task branch was clean and matched origin at f5def65331a47e0d681855214f6e39b80c111ff0 before this documentation checkpoint; gitlink and clean submodule HEAD remain exact f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 with describe so101-0.0.3-r8-3-gf19a8cc. Canonical main remains preserved at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; domains 180 and 185 through 198, task-owned tmux sessions, task child PIDs, exact Viewer title, and task CUA sessions were empty at the preceding final verification.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+review_gate: BLOCKED_PENDING_HARDENING
+review_findings:
+  - CRITICAL: Required MuJoCo launch processes can exit without their return status reaching the wrapper because only scene, perception, and workflow exits are status-monitored and the simulator uses a direct Shutdown handler.
+  - IMPORTANT: Dynamic scene preflight can mutate MoveIt before proving the expected reset epoch and unpaused MuJoCo state.
+  - IMPORTANT: A pre-existing session evidence directory is accepted, allowing fixed PLY, JSON, and manifest paths to be overwritten.
+  - MINOR: Installed provenance omits the so101_mujoco_perception_pick_place executable.
+  - MINOR: so101_mujoco_support package metadata omits the OpenGL/EGL build dependencies required by CMake.
+confirmed_conclusions:
+  - EXP-017 task_start, EXP-018 forward, EXP-019 left, and EXP-020 right remain accepted, retained, and auditable under implementation a8b3d87a and exact f19; this checkpoint does not rewrite or invalidate them.
+  - CP-016 remains an immutable historical blocked conclusion; the published f19 correction and all later checkpoints are additive.
+  - Before final review, the correctly sourced fresh suite passed 375 tests, the fresh overlay build passed, Ruff and installed CLI smoke checks passed, and exact-owned cleanup passed at f5def653.
+  - User approved the minimal architectural direction. The written specification is docs/superpowers/specs/2026-08-26-rgbd-perception-production-hardening-design.md and is now presented for explicit review before implementation planning.
+open_risks:
+  - Any production-code fix changes implementation provenance, so EXP-021 through EXP-024 must repeat the four independent full-restart positions before completion.
+  - The three runtime-boundary findings remain unfixed until the written design is reviewed and a test-first implementation plan is executed.
+  - Intermittent nonfatal pal_statistics shutdown diagnostics remain a retained risk unless the hardening exposes a causal relationship.
+next_command: Await explicit user review of the written hardening design; after approval, invoke the writing-plans workflow before changing production code.
+```
