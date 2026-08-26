@@ -300,6 +300,41 @@ decision: COMPARE_PRIOR_VALID_CAPTURE_LAUNCH_CONTEXT_AND_INSPECT_GLFW_WINDOW_CRE
 next_experiment: NONE
 ```
 
+## CP-092 — Correct the negative-monitor capture hypothesis
+
+```yaml
+checkpoint_id: CP-092
+recorded_at: 2026-08-27T03:29:30+08:00
+amends_checkpoint: CP-088
+comparison:
+  - Twelve retained successful gui-capture manifests, including EXP-010, EXP-016, and the post-QoS live probes, captured the exact Viewer at the same CoreGraphics bounds [308,-1250,1140,773].
+  - EXP-010, EXP-016, and EXP-022 resolve the same candidate fork executable path and the same ros2_control_node arguments shape; the first two captured successfully while EXP-022 did not expose an AX window.
+  - The candidate source contains no interactive-viewer position hook on macOS; the only explicit macOS GLFW window is the hidden 1x1 camera context. The MuJoCo Simulate viewer owns its placement.
+conclusion: Negative CoreGraphics Y coordinates are not causal and moving to the primary display is not a necessary capture condition. The first bad boundary is current launch-context activation/Accessibility exposure: CoreGraphics sees the exact owned Viewer while System Events reports zero windows.
+decision: TEST_EXACT_OWNED_APPKIT_ACTIVATION_BEFORE_UNCHANGED_AXRAISE_CAPTURE
+next_experiment: SMOKE-018
+```
+
+## CP-093 — Plan exact-owned AppKit activation capture smoke
+
+```yaml
+checkpoint_id: CP-093
+recorded_at: 2026-08-27T03:29:30+08:00
+smoke_id: SMOKE-018
+status: PLANNED
+qualification: false
+identity: {domain: 209, session: mac-mrc010-gui-activation-smoke018, tmux: mac-mrc010-gui-activation-smoke018, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-activation-smoke018}
+method:
+  - Start only the exact installed task_start/headless=false base stack; no perception, dynamic workflow, or motion.
+  - Resolve exactly one CoreGraphics Viewer by exact title and the exact-owned ros2_control_node PID.
+  - Activate only that owned PID through NSRunningApplication with activateIgnoringOtherApps and activateAllWindows, then poll System Events for the exact PID becoming frontmost and exposing exactly one exact-title AX window.
+  - Only after that gate, invoke the unchanged gui-capture wrapper by the frozen CoreGraphics window ID and require a matching nonempty manifest and PNG.
+success_boundary: The exact owned PID exposes one exact-title AX window after bounded AppKit activation and the unchanged wrapper captures that same frozen window ID; inspect the PNG at original resolution, then exact-stop the no-motion stack.
+failure_boundary: Activation rejection, PID/title ambiguity, zero or multiple AX windows, identity drift, or wrapper capture failure stops without desktop fallback or helper weakening.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_START_ACTIVATE_CAPTURE_EXACT_STOP
+next_experiment: SMOKE-018
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
