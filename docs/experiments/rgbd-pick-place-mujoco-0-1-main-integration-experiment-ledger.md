@@ -441,6 +441,42 @@ pre_running_observed:
 decision: START_EXACT_TWO_PANE_NO_MOTION_CAPTURE_SMOKE
 ```
 
+## CP-100 / CLOSE-SMOKE-020-001 — Tmux invocation does not restore Accessibility mapping
+
+```yaml
+checkpoint_id: CP-100
+transition_id: CLOSE-SMOKE-020-001
+recorded_at: 2026-08-27T03:41:25+08:00
+smoke_id: SMOKE-020
+from: RUNNING
+to: GUI_ENV_FAILURE
+qualification: false
+valid_base: Exact installed no-motion stack created one owned CoreGraphics Viewer window45589/PID99431 at [308,-1250,1140,773].
+observer_correction: The first capture pane incorrectly forced system /bin/bash 3.2 and failed before capture on an empty-array nounset incompatibility. A fresh r2 pane against the unchanged stack invoked the helper directly through its Homebrew bash shebang and revalidated the identical frozen ID/PID.
+first_bad_boundary: Correct tmux-local r2 invocation reached the unchanged gui-capture helper but still failed exact CoreGraphics-to-Accessibility mapping; task-owned tmux/TCC invocation context is therefore not causal.
+conclusion: The exact upstream 0.1.0 non-bundled GLFW Viewer is currently not exposed through the required AXRaise route. AppKit, tmux-local helper, and project semantic GUI checks cannot address it without weakening exact identity/capture policy.
+cleanup: One Ctrl-C only to exact base pane; domain211, matching processes, Viewer, and session are empty.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/gui-tmux-smoke020
+decision: STOP_GUI_CAUSAL_SEARCH_AND_RUN_FOUR_FUNCTIONAL_FULL_RESTARTS_WITH_SCREENSHOT_CLAUSE_REPORTED_UNAVAILABLE
+next_experiment: EXP-023
+```
+
+## CP-101 — Plan post-fix task_start functional Mac FULL_RESTART
+
+```yaml
+checkpoint_id: CP-101
+recorded_at: 2026-08-27T03:41:25+08:00
+experiment_id: EXP-023
+status: PLANNED
+qualification_scope: FUNCTIONAL_AC001_WITH_GUI_CLAUSE_UNAVAILABLE
+identity: {domain: 224, session: mac-mrc010-task-start-exp023, tmux: mac-mrc010-task-start-exp023, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-023, keyframe: task_start}
+frozen_runtime: {implementation: fff7ba3b1c7efb4472f51d0842d8bcba87d64621, child: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd, bundle: 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a}
+method: Run the exact installed so101_mujoco_perception_pick_place full chain to natural exit, collect complete RGB-D/point-cloud/world-pose/TF/MoveIt/controller/simulation/contact/final-state evidence and fresh exact CoreGraphics Viewer identity. Do not claim the independently established unavailable screenshot clause.
+failure_boundary: Any valid functional failure stops the four-position batch for systematic debugging.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_AND_RUN
+next_experiment: EXP-023
+```
+
 ## CP-089 — Plan primary-screen exact Viewer capture smoke
 
 ```yaml
