@@ -17,7 +17,7 @@ object:
   cup_to_tcp_grasp_xyz_xyzw: [0.000676684, 0.017178979, 0.035829044, -0.010265991, -0.010262987, -0.706752687, 0.707311756]
 pick:
   pregrasp_world_z_clearance_m: 0.059162
-  micro_lift_world_z_clearance_m: 0.002
+  micro_lift_world_z_clearance_m: 0.004
   lift_world_z_clearance_m: 0.060
 place:
   tcp_world_xyz_xyzw: [-0.073711568, -0.232465520, 0.217634413, 0.004365887, 0.002920039, -0.830063261, 0.557644506]

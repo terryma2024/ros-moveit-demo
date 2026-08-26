@@ -41,6 +41,42 @@ class WorldObserver:
         )
 
 
+def _mujoco_sample(
+    *, sequence: int, step: int, cup_z_m: float, table_contact: bool
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        publisher_sequence=sequence,
+        simulation_step=step,
+        reset_epoch=0,
+        object_state=SimpleNamespace(
+            position_world=(0.02, -0.33, cup_z_m),
+            orientation_xyzw=(0.0, 0.0, 0.0, 1.0),
+            linear_velocity_world=(0.0, 0.0, -0.0001),
+            angular_velocity_world=(0.0, 0.0, 0.0),
+        ),
+        left_fingertip_contacts=(object(),),
+        right_fingertip_contacts=(object(),),
+        maximum_normal_force_n=0.5,
+        other_object_contacts=(
+            (SimpleNamespace(geom2="table_collision"),) if table_contact else ()
+        ),
+    )
+
+
+class _DiagnosticIk:
+    target_joints = (0.0200, -0.3130, 0.2040, 0.0010, 0.0020)
+
+    def solve(self, *_args, **_kwargs) -> tuple[float, ...]:
+        return self.target_joints
+
+    def forward(self, joints: tuple[float, ...]) -> PoseEvidence:
+        return PoseEvidence(tuple(joints[:3]), (0.0, 0.0, 0.0, 1.0))
+
+    @staticmethod
+    def orientation_error_rad(_actual: PoseEvidence, _target: PoseEvidence) -> float:
+        return 0.0
+
+
 def test_dynamic_execute_uses_shared_workflow_and_topic_resolved_motion_targets() -> None:
     port = RecordingExecutionPort()
     targets = Targets()
@@ -114,6 +150,64 @@ def test_micro_lift_allows_initial_table_contact_but_transport_does_not() -> Non
     assert not RosDynamicMujocoExecution._reject_carried_table_contact(State.MICRO_LIFT, True)
     assert RosDynamicMujocoExecution._reject_carried_table_contact(State.LIFT, True)
     assert not RosDynamicMujocoExecution._reject_carried_table_contact(State.LIFT, False)
+
+
+def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics() -> None:
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    before = _mujoco_sample(sequence=100, step=1000, cup_z_m=0.1646, table_contact=True)
+    after = _mujoco_sample(sequence=107, step=1434, cup_z_m=0.1653, table_contact=False)
+    snapshots = iter((before, after))
+    start_joints = (0.0200, -0.3130, 0.2000, 0.0010, 0.0020)
+    terminal_joints = (0.0199, -0.3131, 0.2035, 0.0011, 0.0021)
+    joint_states = iter((start_joints, terminal_joints))
+    trajectory = SimpleNamespace(
+        joint_trajectory=SimpleNamespace(points=(object(), object()))
+    )
+    adapter._snapshot = lambda: next(snapshots)
+    adapter._joint_state = lambda: next(joint_states)
+    adapter._ik = _DiagnosticIk()
+    adapter._planning = SimpleNamespace(
+        plan_joint_path=lambda *_args, **_kwargs: SimpleNamespace(
+            failure=None,
+            trajectory=trajectory,
+        )
+    )
+    adapter._trajectory = SimpleNamespace(
+        execute=lambda *_args, **_kwargs: ActionResult(ActionStatus.SUCCEEDED)
+    )
+    adapter._template = SimpleNamespace(
+        position_tolerance_m=0.002,
+        orientation_tolerance_rad=(0.10, 0.10, 0.10),
+        velocity_scaling=0.03,
+        acceleration_scaling=0.03,
+        planning_timeout_s=8.0,
+        planning_group="arm",
+        tcp_link="so101_tcp",
+    )
+    adapter._initial = before
+    adapter._before_micro_lift = None
+    adapter._state_events = []
+    adapter._document = {"state_events": adapter._state_events}
+    adapter._write = lambda: None
+    target = PoseEvidence((0.0200, -0.3130, 0.2040), (0.0, 0.0, 0.0, 1.0))
+
+    with pytest.raises(RuntimeError, match="DYNAMIC_MICRO_LIFT_NOT_PROVED"):
+        adapter._motion(State.MICRO_LIFT, target)
+
+    assert len(adapter._state_events) == 1
+    event = adapter._state_events[0]
+    assert event["state"] == State.MICRO_LIFT.value
+    assert event["validation_failure"] == "DYNAMIC_MICRO_LIFT_NOT_PROVED"
+    assert event["terminal_joint_positions_rad"] == list(terminal_joints)
+    assert event["terminal_fk_pose"] == pytest.approx(
+        [*terminal_joints[:3], 0.0, 0.0, 0.0, 1.0]
+    )
+    assert event["terminal_position_error_m"] == pytest.approx(
+        math.dist(terminal_joints[:3], target.position_m)
+    )
+    assert event["physical_cup_lift_m"] == pytest.approx(0.0007)
+    assert event["physical_bilateral_contact"] is True
+    assert event["physical_table_contact"] is False
 
 
 def test_pose_interpolation_reaches_target_and_normalizes_quaternion() -> None:
