@@ -1629,3 +1629,76 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/pre-running/isolation-corrected.log
 next_command: Start exact-owned tmux rgbd-pick-exp011-20260826 with the hardcoded task_start full-restart wrapper, then freeze baseline, transport, and released-final Viewer frames from manifest boundaries.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-011-001
+recorded_at: 2026-08-26T11:48:57+08:00
+experiment_id: EXP-011
+status: INVALID
+classification: integration_invalid_non_counting
+runtime_source_commit: 359c1bb251b874e5747c06b0562ae1f2c9a7b489
+implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+first_failure_boundary:
+  - OBSERVED: Planning Scene setup completed successfully and launch started exactly one rgbd_cup_pose process plus one dynamic_cup_pick_place process.
+  - OBSERVED: dynamic_cup_pick_place immediately exited 2 because argparse rejected launch-injected `--ros-args`; launch then initiated shutdown before the dynamic workflow emitted a manifest or commanded robot motion.
+  - OBSERVED: During that shutdown, rgbd_cup_pose also exited 2 because argparse rejected `--ros-args --params-file /tmp/launch_params_eclt9834`; no perception summary, run result, or dynamic manifest was written.
+  - OBSERVED: The launch wrapper naturally recorded exit 1. The Viewer window disappeared before the requested baseline state could be captured, so baseline.state.json contains a stale-window error and no baseline PNG exists.
+  - OBSERVED: Source inspection finds both affected entrypoints call strict `parse_args(arguments)` directly, while the already launch-safe scene_setup entrypoint uses `rclpy.utilities.remove_ros_args` and has an injected-ROS-arguments regression test.
+  - INFERRED: The first product boundary is CLI/launch integration, before perception publication and before any physical pick-place state; no perception or physical-placement conclusion can be drawn.
+cleanup:
+  - OBSERVED: Exact child PID 466504 is absent, owned tmux is absent, domain 189 has no nodes, no process owns domain 189 or partition rgbd-pick-task-start-exp011-20260826, Viewer is absent, and the CUA session is ended.
+  - OBSERVED: No EXP-011 MUJOCO_LOG.TXT exists under the task evidence root or task worktree.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/gui/baseline.state.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/post-cleanup/isolation-corrected.log
+conclusion: EXP-011 is strict INVALID and non-counting because production launch wiring could not pass ROS launch arguments through the two application CLIs and the mandatory baseline screenshot is absent; the run reached neither perception nor physical workflow evaluation.
+decision: Preserve EXP-011 unchanged, keep EXP-012 through EXP-014 PLANNED and prohibited, and require an approved TDD fix plus a fresh task_start FULL_RESTART retry before the remaining position runs.
+next_experiment: EXP-015
+```
+
+```yaml
+experiment_id: EXP-015
+status: PLANNED
+prior_experiment: EXP-011
+lifecycle: FULL_RESTART
+hypothesis: If both launch-spawned application CLIs remove only ROS-specific arguments before strict application parsing, the unchanged exact-f19 workflow can cross the EXP-011 integration boundary and execute the frozen task_start physical trial.
+prediction: Focused tests first reproduce both exit-2 boundaries, then pass after the minimal argument separation while unknown application arguments remain rejected; the full suite, lint, fresh five-package rebuild, and a new isolated task_start runtime all pass their applicable gates.
+single_variable: Apply the established scene_setup `rclpy.utilities.remove_ros_args` boundary to rgbd_cup_pose and dynamic_cup_pick_place before their existing argparse parsers; do not use parse_known_args and do not change launch parameters, perception, policy, geometry, keyframe, Mesa, or physical success criteria.
+preconditions:
+  - Receive explicit approval of this bounded design before implementation.
+  - Add focused RED coverage for both launch-injected argument forms and retain strict rejection of an unknown non-ROS application argument.
+  - Rebuild the same five-package fresh task-owned overlay from the approved implementation and prove source, exact f19, domain 193, partition, process, tmux, and Viewer isolation immediately before RUNNING.
+provenance:
+  source_commit: PENDING_APPROVAL
+  implementation_commit: PENDING_APPROVAL
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  ros_domain_id: 193
+  gz_partition: rgbd-pick-task-start-exp015-20260826
+  session_id: rgbd-pick-task-start-exp015-20260826
+  owned_tmux_session: rgbd-pick-exp015-20260826
+initial_cup_xyz_m: [0.02, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-015/
+success_criteria: SAME_AS_EXP_011
+failure_criteria: With valid provenance/isolation and successful CLI integration, any frozen perception, physical, manifest, visual, natural-exit, or cleanup product gate fails.
+invalid_criteria: Approval/TDD/provenance/isolation is incomplete, ROS arguments still fail before product execution, mandatory visual evidence is missing, or any exit is unauditable.
+decision: PENDING_APPROVAL
+next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-023
+recorded_at: 2026-08-26T11:48:57+08:00
+last_valid_experiment: EXP-010
+current_hypothesis: A minimal ROS/application argument separation at the two launch-spawned CLI boundaries can make the frozen full workflow runnable without weakening application argument validation.
+working_tree_status: Task worktree and exact f19 submodule were clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; EXP-011 child, domain 189, partition owners, owned tmux, Viewer, and CUA session are empty.
+preserved_processes: Existing unrelated tmux sessions and canonical main were not operated or modified; EXP-011 evidence is retained without overwrite or deletion.
+confirmed_conclusions:
+  - EXP-011 is INVALID/non-counting at a launch/CLI integration boundary; it neither confirms nor refutes physical pick-place behavior.
+  - EXP-010 remains the last VALID experiment and its independent acceptance is unchanged.
+  - EXP-012 through EXP-014 remain PLANNED but prohibited until an approved implementation and fresh task_start retry reach a countable physical result.
+next_command: Await explicit approval of EXP-015's bounded remove_ros_args design; after approval, begin with focused RED tests for both affected CLIs.
+```
