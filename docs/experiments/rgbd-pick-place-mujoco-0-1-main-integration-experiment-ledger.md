@@ -33,8 +33,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-132
-next_experiment: EXP-048
+latest_checkpoint: CP-133
+next_experiment: NONE_VALID_FAILURE_REQUIRES_FIX_AND_NEW_BATCH
 ```
 
 ## EXP-047 — state-events watcher task_start FULL_RESTART
@@ -173,6 +173,99 @@ status: VALID
 consecutive_count_before_run: 1
 owned_processes: NONE before launch
 ```
+
+## EXP-048 closure — VALID forward-position physical micro-lift failure
+
+```yaml
+closure_id: CLOSE-EXP-048-001
+recorded_at: 2026-08-27T05:02:11+08:00
+experiment_id: EXP-048
+status: VALID
+outcome: FAILURE
+classification: behavioral_failure_countable_batch_stopped
+runner_exit_code: 1
+watcher_exit_code: 7
+first_bad_boundary: DYNAMIC_MICRO_LIFT_NOT_PROVED
+perception:
+  position_world_m: [0.01962016787985498, -0.3304561742331846, 0.165]
+  position_error_m: 0.000593605
+  fitted_radius_m: 0.0394072673
+  full_points: 98123
+  cup_points: 167
+  rgbd_point_cloud_tf2_cup_pose: PASS
+planning_and_control:
+  micro_lift_target_tcp_z_delta_m: 0.002
+  moveit_goal: ACCEPTED
+  arm_controller_goal: ACCEPTED_AND_SUCCEEDED
+  moveit_execution: SUCCEEDED
+physical:
+  stable_grasp: {publisher_sequence: 362, simulation_step: 13091, cup_z_m: 0.1646403032626111, left_contacts: 1, right_contacts: 1, table_contact: true}
+  post_micro_lift: {publisher_sequence: 369, simulation_step: 13525, cup_z_m: 0.1653756343473091, left_contacts: 1, right_contacts: 1, table_contact: false, vertical_velocity_m_s: -0.00012370983461554628}
+  measured_cup_lift_m: 0.0007353310846980043
+  required_cup_lift_m: 0.001
+  shortfall_m: 0.0002646689153019957
+  lateral_drift_m: 0.00001914023120040423
+systematic_debugging:
+  - Planning/controller rejection disproved by accepted goals and explicit success readback.
+  - Stale or early observation disproved by seven fresh publisher sequences, 434 simulation steps, and negative post-motion vertical velocity.
+  - Lost bilateral contact and residual table support disproved at the failure sample: contacts are 1/1 and table_contact is false.
+  - Source/install/policy drift disproved by byte-identical source and policy hashes.
+  - Position-dependent physical micro-lift margin is supported but its deeper mechanism is inferred: the unchanged TCP target produced 0.001919640 m cup lift in EXP-047 but only 0.000735331 m at forward 5 cm.
+  - The failed-state manifest does not retain terminal joint/TCP evidence, so the shortfall cannot be further allocated between endpoint tracking tolerance and grasp/contact compliance; this is a diagnostic residual, not an acceptance ambiguity.
+gui:
+  baseline: {sha256: fa3f6b9132c71111b8006c1c8a0fbfab33c14e64b875abef2c0fd9d8abf8b701, viewer_pid: 1228084, inspected: Fresh exact Viewer shows forward-position cup, red target, reset arm, and live simulation counters.}
+  transport: NOT_REACHED_DUE_VALID_FAILURE
+  final: NOT_REACHED_DUE_VALID_FAILURE
+recovery:
+  - RECOVER_OPEN_GRIPPER completed and returned the cup to stable table support with zero fingertip contacts.
+  - No simulator constraint call was made; MoveIt attached IDs are empty and the world cup has 13 primitives.
+  - RECOVER_RETREAT completed.
+shutdown: {tmux_absent: true, domain_112_empty: true, identity_process_set_empty: true, ros2_control_shutdown_markers: present}
+shutdown_evidence_limit: Immediate cleanup is supported by ordered run.log shutdown; retained domain/tmux/process readback was performed later at 05:02:11 rather than atomically by the runner.
+forbidden_routes: No truth bridge, truth publisher, perception bypass, threshold relaxation, direct object-state write, or simulator constraint was used.
+evidence:
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/forward.d/linux-rgbd-forward-exp048/dynamic/dynamic-execute-manifest.json
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/run.log
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/root-cause-analysis.md
+  - /data/work/so101-evidence/rgbd-pick-place-mujoco-0-1-main/linux-20260827-2a636d9/linux-runs/exp-048/post-cleanup-readback.md
+decision: STOP_BATCH_WITHOUT_RETRY_OR_THRESHOLD_CHANGE
+not_executed: [EXP-049, EXP-050, EXP-051]
+```
+
+## CP-133 — Forward physical micro-lift boundary diagnosis closed; qualification stopped
+
+```yaml
+checkpoint_id: CP-133
+recorded_at: 2026-08-27T05:02:11+08:00
+status: VALID_DIAGNOSIS_QUALIFICATION_FAILED
+last_success: EXP-047
+valid_failure: EXP-048
+consecutive_successes_before_failure: 1
+remaining_runs: NOT_EXECUTED_BY_VALID_FAILURE_STOP_RULE
+proximate_root_cause: At cup_test_forward_5cm, the frozen controller-reported successful 2 mm TCP-target micro-lift produces only 0.735331 mm physical cup lift, below the immutable 1 mm proof boundary despite bilateral contact and table clearance.
+deeper_mechanism: INFERRED_POSITION_DEPENDENT_MARGIN; terminal joint/TCP evidence was not persisted, so endpoint tracking and grasp/contact compliance cannot be allocated without new instrumentation.
+owned_processes: NONE
+preserved_canonical: /data/work/ws_moveit main@b3770360b26fe8f6fac0e19338d250b6f5cab0e7 remains unmodified, unsourced, and unbuilt.
+fresh_review: Completed independently; corrected experiment status enum, stale report text, overclaimed deeper mechanism, audit timestamps, and retained the delayed-cleanup-readback limitation.
+timestamp_audit_note: CP-129 through CP-132 retain their pre-existing recorded_at values even though they exceed the host wall-clock readback at this closure; append-only history is not rewritten, and experiment IDs plus Git commit order remain authoritative.
+decision: Publish the reviewed valid-failure closure; do not run EXP-049 through EXP-051 unless a separately authorized fix creates a new immutable candidate and newly preregistered batch.
+next_experiment: NONE
+```
+
+### Evidence retention disposition at CP-133
+
+- **Retained primary evidence:** immutable clone and child checkout; task-owned fork/project installs;
+  build/test/provenance logs; EXP-047 countable success; EXP-048 valid failure, GUI baseline, and root-cause
+  record; watcher v2 helper/smoke; this ledger and the evidence-root Linux qualification report.
+- **Retained historical/non-counting:** EXP-027 (native GLX invalid), EXP-032 (dependency invalid),
+  EXP-037 (functional success with incomplete GUI), and EXP-042 (functional success with
+  watcher-schema-invalid GUI). They remain evidence under their original experiment IDs and are not
+  promoted into the consecutive count.
+- **Archived:** NONE. No artifact was moved to the repository-defined archived evidence root.
+- **Deletion candidates, not deleted:** superseded non-qualification `gui-watcher-smoke`, disposable
+  `build-discovery`, and generated `log`/`project-log` directories after an owner-approved retention
+  window. No experiment, provenance, test, installed-state, or root-cause evidence is a deletion
+  candidate; no cleanup beyond task-owned live processes was performed.
 
 ## EXP-042 — watcher-qualified task_start FULL_RESTART
 
