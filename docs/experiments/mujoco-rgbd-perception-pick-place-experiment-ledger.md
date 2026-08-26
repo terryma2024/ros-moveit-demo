@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs each use real aligned RGB-D
 worktree: /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place
 branch: codex/rgbd-perception-pick-place
 base_commit: a7e3745f13b892a8b7501980fdaf87436392ad50
-current_commit: 12c0d69252f8b84ad1335877192bf23b22947c52
+current_commit: 371992e6e5e8b259f0019548d4e54f764ff3d335
 evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/
 confirmed_conclusions:
   - Existing macOS CameraPlugin acceptance proves real aligned RGB-D is available only from a correctly sourced interactive runtime; topic names alone are insufficient.
@@ -19,6 +19,7 @@ confirmed_conclusions:
   - EXP-005 is pre-RUNNING environment-invalid and non-counting: normal-scope process isolation could not be audited because `ps` was denied and targeted `pgrep` returned rc3, so observers, elevation, stack, production, Viewer action, and motion never started.
   - EXP-006 is interrupted/environment-invalid and non-counting: elevated pre/post process probes, observers, elevated stack, active controllers, and static TF publishers passed, but production and Viewer acceptance never started; strict lock metadata preservation also failed because atime/mtime/ctime changed despite stable identity, mode, size, and SHA-256.
   - CP-016 recovered the task on ai-station at branch commit 12c0d69252f8b84ad1335877192bf23b22947c52 with no conflicting runtime graph, but the required f19a8cc3af61feccacb22a9f0d16cc972e3b2c08 submodule commit is not fetchable from Gitee and the r8 provenance gate remains closed.
+  - CORR-CP-016-001 preserves CP-016 as historical blocked evidence and records that Gitee branch codex/rgbd-camera-plugin-r8 now advertises exact f19a8cc, while the ai-station task worktree independently passes the gitlink/HEAD/describe/clean gate.
 disproven_routes:
   - Publishing MuJoCo truth as /cup_pose does not validate production camera perception.
   - Routing production through cup_pose_tf_demo duplicates the selected world-point transform boundary.
@@ -26,7 +27,7 @@ open_hypotheses:
   - The current color mask, DBSCAN, static TF, and circle fit localize all four named positions within 0.01 m.
   - Raising only production rgbd_cup_pose startup_timeout_s from 30 to 90 seconds may distinguish a bounded aggregate readiness delay from segmentation, fit, QoS/callback, or another production-only pipeline cause.
   - A fresh ai-station Linux build from the exact f19a8cc submodule can pass the perception-only gate without starting dynamic_cup_pick_place or robot motion.
-latest_checkpoint: CP-016
+latest_checkpoint: CP-017
 next_experiment: EXP-007
 ```
 
@@ -1026,4 +1027,56 @@ open_risks:
   - The failed checkout is retained in place for audit and must not be treated as a clean or usable submodule.
   - EXP-007 perception, TF, Viewer, and all four later FULL_RESTART physical acceptance runs remain unstarted.
 next_command: git -C /data/work/ws_moveit/.worktrees/rgbd-perception-pick-place/third_party/mujoco_ros2_control fetch origin f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+```
+
+```yaml
+correction_id: CORR-CP-016-001
+applies_to:
+  - CP-016
+  - EXP-007 preconditions and provenance
+recorded_at: 2026-08-26T09:51:55+08:00
+reason: After CP-016 was committed, the orchestrator published the previously unavailable pinned submodule commit to the configured Gitee origin and completed the task-worktree submodule update. This correction records the newly observable external state without rewriting CP-016's historically correct blocked conclusion.
+history_preserved:
+  - CP-016 remains the authoritative record that exact fetch returned 128 and the local submodule gate was closed at that checkpoint.
+  - EXP-003 through EXP-006 remain INVALID, non-counting, and unchanged.
+observed:
+  - OBSERVED: Parent HEAD is 371992e6e5e8b259f0019548d4e54f764ff3d335 on codex/rgbd-perception-pick-place and the superproject is clean before this ledger correction.
+  - OBSERVED: `git ls-tree HEAD third_party/mujoco_ros2_control` and task-worktree submodule HEAD both equal f19a8cc3af61feccacb22a9f0d16cc972e3b2c08.
+  - OBSERVED: Task-worktree submodule describe is exactly so101-0.0.3-r8-3-gf19a8cc and its status is clean.
+  - OBSERVED: Gitee branch codex/rgbd-camera-plugin-r8 advertises exact f19a8cc3af61feccacb22a9f0d16cc972e3b2c08.
+  - OBSERVED: Canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7 with gitlink and submodule HEAD 738e304551b4ea6db020b466086a13db71b65607 (so101-0.0.3-r6); it was not modified.
+  - OBSERVED: No conflicting MuJoCo, MoveIt, controller, static-TF, rgbd_cup_pose, or dynamic_cup_pick_place runtime was present in the read-only recovery probe; existing tmux sessions were not operated.
+effective_exp007_provenance:
+  source_commit: 371992e6e5e8b259f0019548d4e54f764ff3d335
+  implementation_commit: 12c0d69252f8b84ad1335877192bf23b22947c52
+  submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+  install_overlay: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install
+  runtime_executable: /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/install/so101_demo_py/lib/so101_demo_py/rgbd_cup_pose
+  ros_domain_id: 185
+  gz_partition: rgbd-perception-ai-station-exp007-20260826
+effective_precondition_correction:
+  - EXP-007's original exact-parent precondition is superseded only for the ledger-only checkpoint commit: parent HEAD is 371992e6, whose runtime implementation is unchanged from 12c0d692, and only this ledger may become tracked dirty before the RUNNING transition.
+  - EXP-007's original submodule-fetch command is satisfied by the orchestrator update plus this independent read-only verification. Do not repeat the historical failing exact-fetch route; continue with clean gate assertions and the fresh build/install overlay.
+decision: EXP-007 remains PLANNED and may proceed to fresh-overlay build/test provenance; it has not transitioned to RUNNING and no stack, GUI action, dynamic workflow, or motion has started.
+```
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-002
+current_hypothesis: With CP-016's external submodule blocker removed and exact f19a8cc provenance independently verified, EXP-007 can now distinguish ai-station fresh-overlay perception behavior from the prior invalid Mac environment runs without starting dynamic workflow or robot motion.
+working_tree_status: Before this correction the task superproject and f19a8cc submodule were clean at parent 371992e6; only docs/experiments/mujoco-rgbd-perception-pick-place-experiment-ledger.md is now intentionally tracked dirty.
+owned_processes: NONE; no stack, Viewer action, controller, static TF, perception, dynamic workflow, or robot motion has started.
+preserved_processes: Existing sessions MNT-Q-RESET-EXP136-140, codex, codex-cua, and so101-mujoco-gui were listed only and were not sent input, stopped, or modified. Canonical main remains untouched.
+confirmed_conclusions:
+  - CORR-CP-016-001 removes only CP-016's current external-state blocker; it does not change CP-016's historical result or any EXP-003 through EXP-006 status.
+  - Parent gitlink, task submodule HEAD, describe, cleanliness, and Gitee branch ref now satisfy the f19a8cc hard gate.
+  - EXP-007 remains the next experiment and provides new host/OS/fresh-overlay information; historical failed fetch and contaminated Mac attempts must not be repeated.
+disproven_routes:
+  - Canonical r6 remains prohibited and is not a fallback build/runtime source.
+  - Gitee availability alone does not prove installed runtime provenance; fresh overlay build and installed-prefix/readback gates remain mandatory.
+open_risks:
+  - ai-station package dependencies, full package tests, installed r8 runtime provenance, and perception-only acceptance remain unverified.
+  - GUI/CUA instructions must be loaded before the first Viewer action.
+  - Four independent FULL_RESTART physical runs remain gated on an independently reviewed VALID EXP-007.
+next_command: source /opt/ros/jazzy/setup.zsh and build the required dependency closure plus so101_demo_py with build/install/log bases only under /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay/
 ```
