@@ -17,10 +17,10 @@
 | true merge commit | `6c562f861e09394ba631fa7dc4e63ea98f95e04c` |
 | true merge parents | `57fc674...`、`f19a8cc...` |
 | 最终 fork 候选 | `aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c` |
-| 父仓库代码 pin | `ae5b8ab97dfd33c82ee6779193fc5516636f2b02` |
+| 父仓库代码 pin | `a925487de3b29a3b941994f95c93d588a968e983` |
 | candidate label | `so101-0.1.0-r1-candidate`，不是 Git tag |
 | Linux 状态 | 旧候选 `ca654e3...` 已合格；当前 `aeff7e5...` 精确候选正在 ai-station 复验 |
-| macOS 状态 | `VALID / QUALIFIED`：parent `ae5b8ab...`、fork `aeff7e5...` |
+| macOS 状态 | `VALID / QUALIFIED`：生产 runtime parent `ae5b8ab...`、fork `aeff7e5...`；`a925487...` 仅增加锁、合同和文档 |
 | 最终 release tag | 未创建；等待当前精确候选 Linux 复验 |
 
 相对官方 `57fc674...`，fork 最终候选修改 42 个文件，6273 行新增、344 行删除。大量官方

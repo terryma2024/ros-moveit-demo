@@ -4,14 +4,14 @@
 task_id: mujoco-control-1-0-upgrade-20260825
 evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
 parent_branch: codex/mujoco-ros2-control-0-1-upgrade
-parent_code_pin: ae5b8ab97dfd33c82ee6779193fc5516636f2b02
-parent_document_lineage_base: 9e54f5f
+parent_code_pin: a925487de3b29a3b941994f95c93d588a968e983
+parent_document_lineage_base: a925487de3b29a3b941994f95c93d588a968e983
 upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
 fork_candidate: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
 linux_status: PRIOR CANDIDATE QUALIFIED; exact aeff7e5 candidate requalification in progress
-macos_status: VALID / QUALIFIED for parent ae5b8ab, fork aeff7e5
+macos_status: VALID / QUALIFIED for production runtime parent ae5b8ab, fork aeff7e5; a925487 adds only locks, contracts, and docs
 release_tag_status: NOT_AUTHORIZED until exact-candidate Linux requalification completes
 retained_runs:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
@@ -987,10 +987,10 @@ against the new exact fork commit.
 ```yaml
 status: PLANNED
 execution: DELEGATED
-scope: requalify Linux against the exact parent ae5b8ab and fork aeff7e5 after the macOS-only startup guard
+scope: requalify Linux against the exact parent a925487 and fork aeff7e5 after the macOS-only startup guard and parent lock synchronization
 prior_experiments: EXP-012, EXP-013
 lifecycle: ISOLATED_STACK
-source_parent: ae5b8ab97dfd33c82ee6779193fc5516636f2b02
+source_parent: a925487de3b29a3b941994f95c93d588a968e983
 source_fork: aeff7e5a84044f07b8a334e3a15bfc3aa9c8aa5c
 evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-exp013-requal
 required_gates:
