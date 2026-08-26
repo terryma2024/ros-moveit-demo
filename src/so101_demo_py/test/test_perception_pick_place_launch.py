@@ -379,8 +379,10 @@ def test_evidence_preflight_rejects_foreign_owned_final_directories(
         _materialize(evidence_file=tmp_path / "result.json")
 
 
-def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch() -> None:
-    context, actions = _materialize()
+def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch(
+    tmp_path: Path,
+) -> None:
+    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
     scene_setup = _node(actions, "scene_setup")
 
     emitted = _dispatch_process_exit(actions, scene_setup, 12, context)
@@ -393,8 +395,10 @@ def test_scene_failure_starts_no_sensor_or_workflow_and_fails_launch() -> None:
 
 
 @pytest.mark.parametrize("returncode", (0, 9))
-def test_perception_exit_before_workflow_completion_is_terminal(returncode: int) -> None:
-    context, actions = _materialize()
+def test_perception_exit_before_workflow_completion_is_terminal(
+    tmp_path: Path, returncode: int
+) -> None:
+    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     perception = _node(started, "rgbd_cup_pose")
 
@@ -406,8 +410,10 @@ def test_perception_exit_before_workflow_completion_is_terminal(returncode: int)
     _assert_failure_status(emitted, context, f"exit code {returncode}")
 
 
-def test_clean_workflow_exit_owns_shutdown_and_later_perception_exit_is_ignored() -> None:
-    context, actions = _materialize()
+def test_clean_workflow_exit_owns_shutdown_and_later_perception_exit_is_ignored(
+    tmp_path: Path,
+) -> None:
+    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     workflow = _node(started, "dynamic_cup_pick_place")
     perception = _node(started, "rgbd_cup_pose")
@@ -422,8 +428,10 @@ def test_clean_workflow_exit_owns_shutdown_and_later_perception_exit_is_ignored(
     assert perception_emitted == []
 
 
-def test_failed_workflow_exit_preserves_failure_and_suppresses_shutdown_race() -> None:
-    context, actions = _materialize()
+def test_failed_workflow_exit_preserves_failure_and_suppresses_shutdown_race(
+    tmp_path: Path,
+) -> None:
+    context, actions = _materialize(evidence_file=tmp_path / "launch-run.json")
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
     workflow = _node(started, "dynamic_cup_pick_place")
     perception = _node(started, "rgbd_cup_pose")
