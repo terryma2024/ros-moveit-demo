@@ -8,11 +8,16 @@ class FakeRCLError(RuntimeError):
     """Stand in for the rclpy binding exception raised after context shutdown."""
 
 
+class FakeExternalShutdownException(Exception):
+    """Stand in for the public executor exception raised by external shutdown."""
+
+
 def _install_runtime_modules(
     monkeypatch,
     *,
     context_ok: bool,
     error_message: str = "failed to initialize wait set: the given context is not valid",
+    error_type: type[Exception] = FakeRCLError,
 ):
     state = {
         "destroy_node_calls": 0,
@@ -38,7 +43,7 @@ def _install_runtime_modules(
     rclpy.init = lambda: None
     rclpy.create_node = lambda *_args, **_kwargs: node
     rclpy.spin = lambda _node: (_ for _ in ()).throw(
-        FakeRCLError(error_message)
+        error_type(error_message)
     )
     rclpy.ok = lambda: context_ok
     rclpy.shutdown = lambda: state.__setitem__(
@@ -51,6 +56,8 @@ def _install_runtime_modules(
     rclpy_qos.qos_profile_sensor_data = object()
     rclpy_bindings = ModuleType("rclpy._rclpy_pybind11")
     rclpy_bindings.RCLError = FakeRCLError
+    rclpy_executors = ModuleType("rclpy.executors")
+    rclpy_executors.ExternalShutdownException = FakeExternalShutdownException
 
     geometry_msgs = ModuleType("geometry_msgs")
     geometry_msgs_msg = ModuleType("geometry_msgs.msg")
@@ -65,6 +72,7 @@ def _install_runtime_modules(
     monkeypatch.setitem(sys.modules, "rclpy.parameter", rclpy_parameter)
     monkeypatch.setitem(sys.modules, "rclpy.qos", rclpy_qos)
     monkeypatch.setitem(sys.modules, "rclpy._rclpy_pybind11", rclpy_bindings)
+    monkeypatch.setitem(sys.modules, "rclpy.executors", rclpy_executors)
     monkeypatch.setitem(sys.modules, "geometry_msgs", geometry_msgs)
     monkeypatch.setitem(sys.modules, "geometry_msgs.msg", geometry_msgs_msg)
     monkeypatch.setitem(sys.modules, "so101_demo.backends.mujoco.observer", observer)
@@ -77,6 +85,24 @@ def test_main_exits_cleanly_when_spin_reports_an_invalid_shutdown_context(monkey
     state = _install_runtime_modules(monkeypatch, context_ok=False)
 
     assert mujoco_cup_pose_bridge.main(["--session-id", "shutdown-test"]) == 0
+    assert state == {
+        "destroy_node_calls": 1,
+        "destroy_timer_calls": 1,
+        "shutdown_calls": 0,
+    }
+
+
+def test_main_exits_cleanly_when_executor_reports_external_shutdown(monkeypatch) -> None:
+    from so101_demo.ros import mujoco_cup_pose_bridge
+
+    state = _install_runtime_modules(
+        monkeypatch,
+        context_ok=False,
+        error_message="",
+        error_type=FakeExternalShutdownException,
+    )
+
+    assert mujoco_cup_pose_bridge.main(["--session-id", "external-shutdown-test"]) == 0
     assert state == {
         "destroy_node_calls": 1,
         "destroy_timer_calls": 1,
