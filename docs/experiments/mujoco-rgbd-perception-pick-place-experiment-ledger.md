@@ -1902,3 +1902,110 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/pre-running/isolation-snapshot.log
 next_command: Start capture and launch as separate windows in exact-owned tmux rgbd-pick-exp017-20260826; wait only on their durable exit sidecars before inspecting the three images.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-017-001
+recorded_at: 2026-08-26T12:25:28+08:00
+experiment_id: EXP-017
+status: VALID
+classification: accepted_task_start_full_restart
+runtime_source_commit: 69ebd9acaf032f728799ea3a80a1948f1f5ed414
+implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Fresh production perception consumed task_camera_frame 640x480 CameraPlugin RGB-D, selected 141 cup points from 98103 full points, wrote a nonempty 4013-byte PLY, fitted radius 0.03938151231973142 m, and published world [0.01950111783349788, -0.28040476095521005, 0.165] at source stamp 3443999999. Error to task_start is 0.000642429 m and error to the immediate MuJoCo sample is within 0.01 m.
+  - OBSERVED: Launch topology started exactly one rgbd_cup_pose and one dynamic_cup_pick_place after scene_setup; no truth bridge or cup_pose_tf_demo process started. The dynamic input repeats the same world pose and source stamp.
+  - OBSERVED: The workflow reached DONE with all 19 expected transitions. Arm trajectory/FK/joint targets changed through approach, lift, transport, place and retreat; gripper targets changed from close -0.0485 rad to open 0.75 rad, and every controller execution completed successfully.
+  - OBSERVED: Physical truth remained table-supported before grasp, obtained bilateral unsupported contact, lifted from z=0.1668942457 to z=0.2249125528, carried with bilateral contact, detached before open, and released to table-supported [-0.0777706060, -0.2475471776, 0.1648354858] with zero finger contacts and near-zero linear/angular velocity.
+  - OBSERVED: final_xy_error_m=0.0026447258 and final_upright_tilt_rad=0.0047441741 pass policy. Planning Scene ends detached with attached_object_ids=[] and world primitive counts pedestal=1, plastic_cup=13, table=1.
+  - OBSERVED: Concurrent CUA captured three distinct 1568x862 PNGs in the same session. Inspection shows: baseline initial orange cup/open gripper/red target; transport cup visibly off the table and held while target remains empty; final cup inside the red target with open gripper retreating. All screenshots show Running status and agree with their manifest boundaries.
+  - OBSERVED: Capture coordinator exit=0 and natural launch exit=0. All required processes report clean exits; unlike EXP-015/016, no context-invalid/FATAL/Traceback shutdown diagnostic appears.
+  - OBSERVED: Post-cleanup exact child, domain 195, partition owners, owned tmux, Viewer, and CUA session are empty.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/acceptance-gates.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run/full-restart.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run/full-restart.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run/capture-coordinator.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run/capture-coordinator.exit
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run.d/rgbd-pick-task-start-exp017-20260826/perception/summary.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run.d/rgbd-pick-task-start-exp017-20260826/perception/cup.ply
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/run.d/rgbd-pick-task-start-exp017-20260826/dynamic/dynamic-execute-manifest.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/gui/viewer-transport.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/gui/viewer-final.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-017/post-cleanup.log
+conclusion: task_start has one accepted, countable FULL_RESTART RGB-D-driven physical pick-place with complete numeric, physical, Planning Scene, controller, visual, natural-exit, and cleanup evidence.
+decision: KEEP
+next_experiment: EXP-018
+```
+
+```yaml
+correction_id: CORR-EXP-012-014-001
+recorded_at: 2026-08-26T12:25:28+08:00
+scope: [EXP-012, EXP-013, EXP-014]
+historical_status: PLANNED
+correction:
+  - Those frozen plans name implementation 9854a62f, which the real EXP-011 launch proved cannot accept ROS launch arguments. They were never transitioned to RUNNING and must not be executed or silently rewritten.
+  - The user-approved a8b3d87a CLI fix and the accepted EXP-017 concurrent visual protocol are now mandatory. Replacement plans EXP-018 through EXP-020 preserve the three initial keyframes and all product criteria while updating provenance and evidence orchestration explicitly.
+```
+
+```yaml
+experiment_id: EXP-018
+status: PLANNED
+prior_experiment: EXP-017
+lifecycle: FULL_RESTART
+hypothesis: With only initial_keyframe=cup_test_forward_5cm, the accepted implementation and concurrent visual protocol complete the same physical RGB-D pick-place from [0.02, -0.33, 0.165].
+single_variable: initial_keyframe=cup_test_forward_5cm
+provenance: {implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 196, gz_partition: rgbd-pick-forward-exp018-20260826, session_id: rgbd-pick-forward-exp018-20260826, owned_tmux_session: rgbd-pick-exp018-20260826}
+initial_cup_xyz_m: [0.02, -0.33, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-018/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+experiment_id: EXP-019
+status: PLANNED
+prior_experiment: EXP-018
+lifecycle: FULL_RESTART
+hypothesis: With only initial_keyframe=cup_test_left_5cm, the accepted implementation and concurrent visual protocol complete the same physical RGB-D pick-place from [-0.03, -0.28, 0.165].
+single_variable: initial_keyframe=cup_test_left_5cm
+provenance: {implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 197, gz_partition: rgbd-pick-left-exp019-20260826, session_id: rgbd-pick-left-exp019-20260826, owned_tmux_session: rgbd-pick-exp019-20260826}
+initial_cup_xyz_m: [-0.03, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-019/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+experiment_id: EXP-020
+status: PLANNED
+prior_experiment: EXP-019
+lifecycle: FULL_RESTART
+hypothesis: With only initial_keyframe=cup_test_right_5cm, the accepted implementation and concurrent visual protocol complete the same physical RGB-D pick-place from [0.07, -0.28, 0.165].
+single_variable: initial_keyframe=cup_test_right_5cm
+provenance: {implementation_commit: a8b3d87ac08dc124e0d54f27fbee93f62c8cfb4a, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 198, gz_partition: rgbd-pick-right-exp020-20260826, session_id: rgbd-pick-right-exp020-20260826, owned_tmux_session: rgbd-pick-exp020-20260826}
+initial_cup_xyz_m: [0.07, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-020/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+checkpoint_id: CP-026
+recorded_at: 2026-08-26T12:25:28+08:00
+last_valid_experiment: EXP-017
+current_hypothesis: The accepted task_start chain generalizes when only each named initial keyframe changes.
+working_tree_status: Task worktree, exact f19 submodule, and canonical main are clean before this ledger append; no runtime artifact is in source.
+owned_processes: NONE; EXP-017 exact child, domain, partition, tmux, Viewer, and CUA are empty.
+preserved_processes: Existing unrelated tmux/processes and canonical main were not operated or modified.
+confirmed_conclusions:
+  - EXP-017 is the first accepted task_start FULL_RESTART and satisfies every frozen gate.
+  - EXP-012 through EXP-014 remain historical unrun plans tied to a disproven implementation and are superseded by EXP-018 through EXP-020 without rewriting history.
+open_risks:
+  - Forward, left, and right position generalization remain untested under the accepted implementation/evidence protocol.
+next_command: Commit this closure/correction/three-plan checkpoint, then perform immediate domain 196 and exact-title isolation before starting EXP-018 only.
+```
