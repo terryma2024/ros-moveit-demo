@@ -63,8 +63,21 @@ _SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 @dataclass(frozen=True, slots=True)
 class _MujocoStackActions:
-    actions: tuple
+    robot_state_publisher: Node
+    simulator: Node
+    spawners: tuple[Node, ...]
+    move_group: Node
     scene_setup: Node
+
+    @property
+    def actions(self) -> tuple:
+        return (
+            self.robot_state_publisher,
+            self.simulator,
+            *self.spawners,
+            self.move_group,
+            self.scene_setup,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,10 +92,14 @@ class PerceptionLaunchExitStatus:
     """First terminal child status observed by the perception launch graph."""
 
     returncode: int | None = None
+    workflow_terminal: bool = False
 
     def record(self, returncode: int) -> None:
         if self.returncode is None:
             self.returncode = returncode
+
+    def mark_workflow_terminal(self) -> None:
+        self.workflow_terminal = True
 
     def resolve(self, launch_service_returncode: int) -> int:
         if self.returncode in {None, 0}:
@@ -180,7 +197,6 @@ def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStack
         parameters=parameters,
         output="both",
         emulate_tty=True,
-        on_exit=Shutdown(reason="MuJoCo runtime exited"),
     )
     spawners = [
         Node(
@@ -210,13 +226,10 @@ def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStack
         output="both",
     )
     return _MujocoStackActions(
-        actions=(
-            robot_state_publisher,
-            simulator,
-            *spawners,
-            move_group,
-            scene_setup,
-        ),
+        robot_state_publisher=robot_state_publisher,
+        simulator=simulator,
+        spawners=tuple(spawners),
+        move_group=move_group,
         scene_setup=scene_setup,
     )
 
@@ -263,7 +276,13 @@ def _mujoco_execute_actions(
             on_exit=[Shutdown(reason="SO-101 workflow complete")],
         )
     )
-    actions = list(stack.actions)
+    simulator_shutdown = RegisterEventHandler(
+        OnProcessExit(
+            target_action=stack.simulator,
+            on_exit=[Shutdown(reason="MuJoCo runtime exited")],
+        )
+    )
+    actions = [*stack.actions, simulator_shutdown]
     if include_workflow:
         actions.extend((start_workflow, shutdown))
     return actions
@@ -285,51 +304,70 @@ def perception_pick_place_exit_handlers(
     perception,
     workflow,
     *,
+    required_long_lived: tuple[tuple[str, object], ...],
+    successful_one_shots: tuple[tuple[str, object], ...],
     exit_status: PerceptionLaunchExitStatus,
 ):
     """Create the shared fail-closed process policy for production and tests."""
-
-    state = {"workflow_exited": False}
 
     def on_scene_exit(event, _context):
         if event.returncode == 0:
             return [perception, workflow]
         exit_status.record(event.returncode)
-        reason = (
-            "SO-101 Planning Scene setup failed with exit code "
-            f"{event.returncode}"
-        )
+        reason = f"SO-101 Planning Scene setup failed with exit code {event.returncode}"
         return _terminal_launch_actions(reason, failed=True)
 
-    def on_perception_exit(event, _context):
-        if state["workflow_exited"]:
-            return []
-        exit_status.record(event.returncode if event.returncode != 0 else 1)
-        reason = (
-            "RGB-D perception exited before dynamic workflow completed with exit code "
-            f"{event.returncode}"
-        )
-        return _terminal_launch_actions(reason, failed=True)
+    def required_exit_handler(label: str):
+        def on_exit(event, _context):
+            if exit_status.workflow_terminal:
+                return []
+            exit_status.record(event.returncode if event.returncode != 0 else 1)
+            reason = (
+                f"{label} exited before dynamic workflow completed with exit code "
+                f"{event.returncode}"
+            )
+            return _terminal_launch_actions(reason, failed=True)
+
+        return on_exit
+
+    def one_shot_exit_handler(label: str):
+        def on_exit(event, _context):
+            if event.returncode == 0:
+                return []
+            exit_status.record(event.returncode)
+            reason = f"{label} failed with exit code {event.returncode}"
+            return _terminal_launch_actions(reason, failed=True)
+
+        return on_exit
 
     def on_workflow_exit(event, _context):
-        state["workflow_exited"] = True
+        exit_status.mark_workflow_terminal()
         exit_status.record(event.returncode)
         outcome = "completed" if event.returncode == 0 else "failed"
-        reason = (
-            f"Dynamic perception workflow {outcome} with exit code {event.returncode}"
-        )
+        reason = f"Dynamic perception workflow {outcome} with exit code {event.returncode}"
         return _terminal_launch_actions(reason, failed=event.returncode != 0)
 
     return (
-        RegisterEventHandler(
-            OnProcessExit(target_action=scene_setup, on_exit=on_scene_exit)
+        RegisterEventHandler(OnProcessExit(target_action=scene_setup, on_exit=on_scene_exit)),
+        *(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=action,
+                    on_exit=required_exit_handler(label),
+                )
+            )
+            for label, action in required_long_lived
         ),
-        RegisterEventHandler(
-            OnProcessExit(target_action=perception, on_exit=on_perception_exit)
+        *(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=action,
+                    on_exit=one_shot_exit_handler(label),
+                )
+            )
+            for label, action in successful_one_shots
         ),
-        RegisterEventHandler(
-            OnProcessExit(target_action=workflow, on_exit=on_workflow_exit)
-        ),
+        RegisterEventHandler(OnProcessExit(target_action=workflow, on_exit=on_workflow_exit)),
     )
 
 
@@ -344,6 +382,7 @@ def _mujoco_perception_execute_actions(
     exit_status: PerceptionLaunchExitStatus,
 ):
     stack = _mujoco_stack_actions(context, share, session_id)
+    camera_transforms = tuple(camera_static_transform_nodes())
     perception = Node(
         package="so101_demo_py",
         executable="rgbd_cup_pose",
@@ -386,11 +425,25 @@ def _mujoco_perception_execute_actions(
         stack.scene_setup,
         perception,
         workflow,
+        required_long_lived=(
+            ("MuJoCo runtime", stack.simulator),
+            ("robot_state_publisher", stack.robot_state_publisher),
+            ("MoveIt move_group", stack.move_group),
+            *(
+                (f"camera static TF {index}", node)
+                for index, node in enumerate(camera_transforms, 1)
+            ),
+            ("RGB-D perception", perception),
+        ),
+        successful_one_shots=tuple(
+            (f"controller spawner {_CONTROLLERS[index]}", node)
+            for index, node in enumerate(stack.spawners)
+        ),
         exit_status=exit_status,
     )
     return [
         *handlers,
-        *camera_static_transform_nodes(),
+        *camera_transforms,
         *stack.actions,
     ]
 
@@ -690,14 +743,10 @@ def _prepare_perception_evidence_root(
     if resolved_run_root.parent != resolved_base:
         raise RuntimeError("session evidence root escapes derived evidence root")
 
-    perception = _owned_directory(
-        resolved_run_root / "perception", "perception evidence directory"
-    )
+    perception = _owned_directory(resolved_run_root / "perception", "perception evidence directory")
     if perception.parent != resolved_run_root:
         raise RuntimeError("perception evidence directory escapes session root")
-    dynamic = _owned_directory(
-        resolved_run_root / "dynamic", "dynamic evidence directory"
-    )
+    dynamic = _owned_directory(resolved_run_root / "dynamic", "dynamic evidence directory")
     if dynamic.parent != resolved_run_root:
         raise RuntimeError("dynamic evidence directory escapes session root")
     return _PerceptionEvidencePaths(
@@ -707,9 +756,7 @@ def _prepare_perception_evidence_root(
     )
 
 
-def _configured_perception_pick_place_actions(
-    context, *, exit_status: PerceptionLaunchExitStatus
-):
+def _configured_perception_pick_place_actions(context, *, exit_status: PerceptionLaunchExitStatus):
     run_mode = LaunchConfiguration("run_mode").perform(context)
     execute = LaunchConfiguration("execute").perform(context)
     headless = LaunchConfiguration("headless").perform(context)
@@ -725,9 +772,7 @@ def _configured_perception_pick_place_actions(
         raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
 
     _positive_finite_launch_value(context, "readiness_timeout_s")
-    perception_timeout = _positive_finite_launch_value(
-        context, "perception_startup_timeout_s"
-    )
+    perception_timeout = _positive_finite_launch_value(context, "perception_startup_timeout_s")
     cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
 
     session_id = LaunchConfiguration("session_id").perform(context)
@@ -767,9 +812,7 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
     share = Path(get_package_share_directory("so101_demo_py"))
     unique = uuid.uuid4().hex
     arguments = [
-        DeclareLaunchArgument(
-            "run_mode", default_value="dry_run", choices=("dry_run", "execute")
-        ),
+        DeclareLaunchArgument("run_mode", default_value="dry_run", choices=("dry_run", "execute")),
         DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
         DeclareLaunchArgument("headless", default_value="true", choices=("true", "false")),
         DeclareLaunchArgument("policy_id", default_value="light_cup_wall_pick"),
@@ -822,12 +865,8 @@ def build_perception_pick_place_launch_description(
             DeclareLaunchArgument(
                 "run_mode", default_value="dry_run", choices=("dry_run", "execute")
             ),
-            DeclareLaunchArgument(
-                "execute", default_value="false", choices=("true", "false")
-            ),
-            DeclareLaunchArgument(
-                "headless", default_value="false", choices=("true", "false")
-            ),
+            DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument("headless", default_value="false", choices=("true", "false")),
             DeclareLaunchArgument("session_id", default_value=unique),
             DeclareLaunchArgument(
                 "evidence_file", default_value=f"/tmp/so101-perception-{unique}.json"
@@ -842,9 +881,7 @@ def build_perception_pick_place_launch_description(
                 default_value="task_start",
                 choices=MUJOCO_CUP_KEYFRAMES,
             ),
-            DeclareLaunchArgument(
-                "perception_startup_timeout_s", default_value="30.0"
-            ),
+            DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
             DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
