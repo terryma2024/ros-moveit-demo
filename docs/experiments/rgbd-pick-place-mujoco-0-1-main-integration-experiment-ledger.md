@@ -2581,3 +2581,22 @@ correction: Invoke the unchanged helper as exec zsh helper and require the live 
 decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
 next_experiment: EXP-020
 ```
+
+## CP-069 — Plan explicit-zsh capture-safe task_start qualification
+
+```yaml
+checkpoint_id: CP-069
+recorded_at: 2026-08-27T02:41:20+08:00
+experiment_id: EXP-020
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_bundle_sha256: e1dae424668fe418e64f05cda6976308670ade43639df7b0fbc97d74fb8e4f93
+identity: {domain: 202, session: mac-mrc010-task-start-exp020, tmux: mrc010-mac-exp020, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-020, evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-020/task-start.json}
+runner_gate: After fresh preflight/RUNNING commit, create empty run/gui, invoke capture as exec zsh helper, and require capture pane plus owner file before launching the unchanged product. All CP-061 product/helper/AC-001 gates remain frozen.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT
+next_experiment: EXP-020
+```
