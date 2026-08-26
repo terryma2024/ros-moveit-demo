@@ -4,25 +4,27 @@
 task_id: mujoco-control-1-0-upgrade-20260825
 evidence_root: /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825
 parent_branch: codex/mujoco-ros2-control-0-1-upgrade
-parent_code_pin: 6b996c72b9fc103800112f6df33e6a90fc755e40
-parent_document_checkpoint: 0d4790032683a848a9de178d8e505ca8da57e403
+parent_code_pin: db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb
+parent_document_lineage_base: 9e54f5f
 upstream_target: 57fc6744844902d4532160b403fa95840c1d6f96
 local_r11: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
 fork_branch: codex/upstream-0.1.0-so101-r1
 fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
-linux_status: REQUALIFICATION_IN_PROGRESS for current exact candidate; fcbc9f7 evidence is historical only
+linux_status: SHUTDOWN_FIX2_REQUALIFICATION_IN_PROGRESS for current exact candidate
 macos_status: BREAKER / NOT_RUNTIME_QUALIFIED
 release_tag_status: NOT_AUTHORIZED
 retained_runs:
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename
   - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix1
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2
 archived_runs: []
 deletion_candidates: []
 
 latest_checkpoint:
-  state: PLATFORM_CONTEXT_LINUX_REQUALIFICATION_IN_PROGRESS
-  hypothesis: The platform-neutral ABI rename preserves Apple context ownership and Linux nullptr/no-op behavior after a clean rebuild.
-  next_action: Complete exact-candidate ai-station build, camera, dynamic, GUI, and clean-shutdown gates; then update EXP-011 and run final review.
+  state: PLATFORM_CONTEXT_LINUX_SHUTDOWN_FIX2_REQUALIFICATION_IN_PROGRESS
+  hypothesis: Explicit Jazzy ExternalShutdownException handling closes the remaining test-only truth-bridge shutdown boundary without weakening RCLError handling.
+  next_action: Complete exact-parent ai-station minimal shutdown, camera, dynamic, GUI, and clean-shutdown gates; then update EXP-012 and run final review.
 open_risks:
   - macOS final runtime camera/dynamic/clean-shutdown acceptance remains invalid after the prior Cocoa crash
   - no release tag until macOS and Linux qualify the same exact candidate
@@ -818,3 +820,44 @@ Apple-only context creation and Cocoa work remain inside the Apple implementatio
 simulation/plugin contract is shared. The fresh isolated macOS build also proved that the earlier normal
 CameraPlugin typesupport loader failure came from a mixed stale overlay, not from this source change. No final
 release tag is authorized until Linux and macOS runtime acceptance are both valid for the current exact candidate.
+
+### EXP-012: Linux strict-shutdown bridge fix rounds
+
+```yaml
+scope: test-only truth bridge shutdown lifecycle discovered by exact-candidate Linux requalification
+fork_candidate: ca654e30ea9791564fab7110c90734733b68c8cc
+initial_parent_runtime_candidate: 0d4790032683a848a9de178d8e505ca8da57e403
+initial_runtime_gates:
+  cp1_bundles: VALID
+  cp2_builds_tests: VALID
+  cp3_camera: VALID
+  cp4_dynamic: VALID
+  cp5_shutdown: INVALID
+initial_shutdown_root_cause: rclpy.spin leaked context-invalid RCLError after one normal SIGINT
+fix_round_1_commit: dea1062088130275c156ada89913a9904e80be5d
+fix_round_1_review: WITH_FIXES; rclpy.ok false alone could hide an unrelated RCLError race
+fix_round_2_commit: 1fe6ccb9685be3f63eeee884ff11d2e78fd53465
+fix_round_2_tests: focused 3/3; related 34/34; package 296/296
+fix_round_2_review: PASS
+fix_round_2_runtime: INVALID before full runtime; ExternalShutdownException escaped exact installed minimal SIGINT probe
+fix_round_3_commit: db6b1f20ff1ef8f8b7d9f9074c5828713b8bdacb
+fix_round_3_behavior:
+  - treat KeyboardInterrupt and ExternalShutdownException as explicit normal shutdown
+  - suppress RCLError only when context is invalid and message contains context is not valid
+  - rethrow context-valid and unrelated RCLError cases
+fix_round_3_tests: focused 4/4; related 35/35; package 297/297
+fix_round_3_review: PASS; 0 critical, 0 important, 0 minor
+fix_round_3_linux_runtime: IN_PROGRESS
+retained_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/platform-context-rename/bridge-shutdown-fix
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix1
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-platform-context-requal-shutdown-fix2
+archived_runs: []
+deletion_candidates: []
+```
+
+The two runtime failures were kept as separate fail-closed experiments. Neither was counted as a camera,
+dynamic, or shutdown qualification for its parent candidate. Fix Round 3 is the final exception-handling
+attempt in this series; another distinct shutdown failure requires lifecycle architecture review rather than
+another catch clause.
