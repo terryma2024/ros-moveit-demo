@@ -34,8 +34,8 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-143
-next_experiment: EXP-055
+latest_checkpoint: CP-144
+next_experiment: EXP-056
 ```
 
 ## CP-140 — fresh review approved; repair five-run batch preregistered
@@ -216,6 +216,52 @@ consecutive_count: 3
 owned_processes: NONE
 next_experiment: EXP-055
 next_command: Commit the EXP-054 closure, fresh-preflight domain 119/session linux-rgbd-repair-right-exp055, then execute exactly one cup_test_right_5cm FULL_RESTART.
+```
+
+## EXP-055 closure — VALID repaired right-5-cm FULL_RESTART
+
+```yaml
+closure_id: CLOSE-EXP-055-001
+recorded_at: 2026-08-27T05:42:08+08:00
+experiment_id: EXP-055
+status: VALID
+qualification: COUNTABLE_4_OF_5
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+identity: {domain: 119, session: linux-rgbd-repair-right-exp055, keyframe: cup_test_right_5cm}
+runner_exit_code: 0
+watcher_exit_code: 0
+perception: {position_error_m: 0.0006313382908245023, fitted_radius_m: 0.03945093696604867, full_points: 98087, cup_points: 125, input_frame: task_camera_frame, output_frame: world, topic: /cup_pose, source_stamp_ns: 4225999999}
+workflow: {status: DONE, transition_count: 19, failure: null, detach_before_open: true}
+motion: {trajectory_points: {move_above_object: 63, descend: 87, micro_lift: 9, lift: 32, move_above_place: 114, descend_to_place: 79, retreat: 34}, max_terminal_position_error_m: 0.0015751582032574984, terminal_joint_generations_and_source_stamps: FRESH_MONOTONIC}
+physical:
+  micro_lift: {cup_lift_m: 0.0036661878589318297, left_contacts: 1, right_contacts: 1, table_contact: false, xyz_m: [0.0700817799426632, -0.2793273540012644, 0.16825878891996776]}
+  lift: {left_contacts: 1, right_contacts: 1, table_contact: false, xyz_m: [0.07031874237000167, -0.2794137036248289, 0.22415355649969795]}
+  transport: {left_contacts: 3, right_contacts: 4, table_contact: false, xyz_m: [-0.07500125510027762, -0.24670066199740104, 0.22786614419431114]}
+  final: {xyz_m: [-0.07802381020432292, -0.24754519377396403, 0.16496568882906226], xy_error_m: 0.0024027416820903216, tilt_rad: 0.008024938863196628, left_contacts: 0, right_contacts: 0, table_contact: true, velocity_near_zero: true}
+moveit: {attached_during_transport: true, detached_before_open: true, final_attached_ids: [], final_world_plastic_cup_primitives: 13}
+gui:
+  baseline: {sha256: f1b74a7f335da5bac7ebdb080835f6ed5153a45651de9d3ed5b9e05f0882342f, inspected: Right-offset cup is outside the red target with the arm at its start posture.}
+  transport: {sha256: 6b029f499805174cde22c903731c1e1add05c35a86ec5c90af6ff4831540acf2, inspected: Cup is visibly elevated and held between the gripper fingers above the target approach.}
+  final: {sha256: b168d6ce9a1286b0fa03c6db306998bfdf3d8e9332766396ce74de9836443772, inspected: Upright cup is visibly inside the red ring with the gripper open.}
+  same_viewer: {window_id: 54525959, pid: 1286047, exact_title: "MuJoCo : so101_task_scene"}
+shutdown: {moveit_ordered_marker: true, controller_introspection_stopped: true, target_tmux_absent: true, domain_119_direct_no_daemon_empty: true, identity_process_set_empty: true, viewer_absent: true}
+forbidden_routes: No truth publisher, truth bridge, cup_pose_tf_demo, fixed workflow, perception bypass, direct object write, simulator constraint, or physics edit was used.
+evidence: linux-runs/exp-055 including acceptance-summary.json, three gui-capture manifests/PNGs, dynamic/perception manifests, run.log, and postflight readbacks.
+decision: ACCEPT_AND_CONTINUE_CONSECUTIVE_BATCH
+```
+
+## CP-144 — four positions GREEN; task_start repeat next
+
+```yaml
+checkpoint_id: CP-144
+recorded_at: 2026-08-27T05:42:08+08:00
+status: VALID
+last_valid_experiment: EXP-055
+consecutive_count: 4
+four_positions: [EXP-052 task_start, EXP-053 forward, EXP-054 left, EXP-055 right]
+owned_processes: NONE
+next_experiment: EXP-056
+next_command: Commit the EXP-055 closure, fresh-preflight domain 120/session linux-rgbd-repair-task-start-repeat-exp056, then execute exactly one task_start repeat FULL_RESTART.
 ```
 
 ## CP-139 — repair record commit resolved additively
