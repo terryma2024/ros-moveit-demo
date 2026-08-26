@@ -654,3 +654,36 @@ deletion_candidates:
 ```
 
 The final macOS code and regression candidate is fully built and reviewed, and one retained run proves the camera and dynamic behavior functionally. It is nevertheless not macOS-qualified because no single final run combines those outcomes with the mandatory clean-shutdown contract. The fifth and final runtime attempt crashed in the Cocoa GLFW window-resize path before readiness. The approved SDD ceiling prohibits a sixth Task 7A runtime attempt; Linux qualification proceeds independently and cannot erase this macOS blocker.
+
+### EXP-010: Task 8 Linux checkpoint and reproducible source blocker
+
+```yaml
+parent_code: 22a98d740219abda9459ea3c9cc67eb9fb07fc12
+fork_candidate: f0f09abfe1498e1c6aa84a37a78cea87d2198b1d
+remote_host: AI-STATION-001
+remote_tmux: mrc010-linux-upgrade-codex retained
+checkpoint_1: PASS exact bundles, hashes, detached clean commits, gitlink, locks, double ancestry
+linux_packages_built: 6/6
+linux_applicable_wrappers: 22
+cross_platform_source_inventory: 23 with one APPLE-only lifecycle wrapper
+wrapper_result: 21 passed, 1 timeout/error
+junit_cases: 287 total, 270 passed, 16 skipped, 0 assertion failures, 1 missing-result error
+blocking_test: MujocoSimulationTest.PausedDivergenceRejectsResumeUntilReset
+minimal_red: iterations 1-2 exit 0; iteration 3 hung after reset/resume and ignored SIGTERM
+ambient_skip_linux_camera_gate: PASS; Linux camera tests executed under SKIP_CAMERA_TESTS=true
+checkpoint_2: BLOCKED_REPRODUCIBLE_SOURCE_DEFECT
+checkpoint_3_camera: NOT_RUN
+checkpoint_4_dynamic: NOT_RUN
+checkpoint_5_screenshot: NOT_RUN
+copyback_files: 317 SHA-verified
+copyback_manifest_sha256: 55bde8a9196e7941da7994a60039183f994fd2f468f051bfddbe8db9d222e820
+fix_round: 1/5 IN_PROGRESS
+retained_remote_evidence:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux-runtime
+retained_local_copy:
+  - /tmp/so101-debug-mujoco-control-1-0-upgrade-20260825/linux/remote-evidence
+archived_runs: []
+deletion_candidates: []
+```
+
+Package parallelism and CTest wrapping are disproven as sole causes because a fresh sequential full run hit the same boundary and the direct single-test binary hung on the third iteration. The exact lock/wait owner is not yet proven. Fix Round 1 must instrument and establish that owner before changing production code; increasing timeouts, detaching threads, skipping teardown, or force-exiting cannot qualify as a fix.
