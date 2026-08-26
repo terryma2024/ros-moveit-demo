@@ -2691,3 +2691,22 @@ pre_running_observed:
 runner_sha256: 351c22403c75e84c834d90c28af93f60c425d598ddba2ddd6a3d21e83ea20c6b
 decision: START_NON_QUALIFYING_FULL_CHAIN_AND_WAIT_FOR_NATURAL_EXIT
 ```
+
+## CP-074 / CLOSE-SMOKE-014-001 — Reject deleted-cwd diagnostic runner
+
+```yaml
+checkpoint_id: CP-074
+transition_id: CLOSE-SMOKE-014-001
+recorded_at: 2026-08-27T02:54:45+08:00
+smoke_id: SMOKE-014
+from: RUNNING
+to: INVALID_RUNNER
+qualification: false
+reason: The tmux pane ignored the requested working directory, inherited a deleted mujoco-ros2-control worktree, recorded working_directory=., and emitted getcwd failed / Python path errors before and during stack construction; the product environment was not equivalent to EXP-020.
+product_disposition: No DDS/action-latency conclusion is drawn even though launch began.
+cleanup: One Ctrl-C was sent only to exact tmux mac-mrc010-dds-2hz-smoke014; domain203, exact processes, Viewer, and session are empty.
+correction: Use a fresh identity and an explicit in-pane cd plus absolute pwd readback gate before starting the unchanged diagnostic helper.
+evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/dds-2hz-smoke014
+decision: RETAIN_INVALID_AND_REPEAT_WITH_EXPLICIT_CWD
+next_experiment: SMOKE-015
+```
