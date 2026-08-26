@@ -2512,3 +2512,20 @@ implementation_commit: 7f767f818a3e97533b9d0b359d5c1e3ddc464bc7
 pre_running_observed: Domain 200 graph, fresh evidence/session/tmux/process identities, and exact Viewer title are all empty; installed prefixes/bundle/helper hashes remain CP-061/063.
 decision: START_EXACT_INSTALLED_FULL_RESTART_AND_CONCURRENT_CAPTURE
 ```
+
+## CP-065 / CLOSE-EXP-018-001 — Reject capture-directory race before baseline
+
+```yaml
+checkpoint_id: CP-065
+transition_id: CLOSE-EXP-018-001
+recorded_at: 2026-08-27T02:38:30+08:00
+experiment_id: EXP-018
+from: RUNNING
+to: INVALID_CAPTURE_RUNNER
+qualification: false
+reason: The capture helper started before runner-created run/ existed, failed writing run/capture.owner, and exited before Viewer discovery or baseline. Product was exact-stopped during startup and is not behavior-classified.
+cleanup: Exact session/process/Viewer/domain identities are empty; early shutdown diagnostics are secondary to intentional stop.
+correction: Pre-create only the fresh evidence run and gui directories before starting the unchanged capture and product helpers.
+decision: RETAIN_INVALID_AND_REPEAT_FRESH_TASK_START
+next_experiment: EXP-019
+```
