@@ -34,8 +34,51 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - A clean so101_mujoco_support rebuild against the frozen 0.1.0 child removes the confirmed ABI mismatch without source behavior changes.
-latest_checkpoint: CP-139
-next_experiment: NONE_SECOND_FRESH_REVIEW_REQUIRED
+latest_checkpoint: CP-140
+next_experiment: EXP-052
+```
+
+## CP-140 — fresh review approved; repair five-run batch preregistered
+
+```yaml
+checkpoint_id: CP-140
+recorded_at: 2026-08-27T05:26:00+08:00
+status: APPROVED_TO_PREREGISTER_LIVE
+fresh_review: APPROVED_TO_PREREGISTER_LIVE after verifying both prior Important findings and the Minor timestamp finding are closed.
+runtime_implementation_commit: 3ea1530530b274af3b3db5b9aa50165ae66b7e31
+repair_record_commit: 0ce4869fc3226e674b884cb515396df5f810df37
+preregistration_head: 9705125a2ddfbf144f4d1d2ebb8d7ea5b5982486
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+runner_sha256: 0c974759d11eb51b07f7bf921f30b1fc247b02c651ebf7908287e9a6dea7039c
+watcher_sha256: a4d48b2d7b3528b6286c9ca0507873db271509a8493cec00dcb5b545e9edc009
+launch_executable_sha256: 48a4b9dffce6f2d34cea48cd810cb3f9caac3c3a6363ca424776dcd07eebc5ce
+dynamic_executable_sha256: 5e23c4e05215f7b1bbc75a6abc11b346ef6111edf7136e85b334b0da388fa9e6
+preflight: No MuJoCo Viewer or task runtime was present; existing unrelated tmux sessions are preserved.
+batch_order: [EXP-052 task_start, EXP-053 cup_test_forward_5cm, EXP-054 cup_test_left_5cm, EXP-055 cup_test_right_5cm, EXP-056 task_start repeat]
+invariants: Each identity is an independent FULL_RESTART; unchanged RGB-D -> point cloud -> tf2 -> /cup_pose -> dynamic workflow -> MoveIt -> controller -> MuJoCo path; no truth bridge, no perception bypass, no physics edit, and physical lift remains 0.001 <= lift <= 0.010 m.
+stop_rule: Any valid product failure stops the batch for systematic debugging; invalid observation/isolation failures cannot count and require a new experiment identity.
+next_command: Commit this preregistration, create only EXP-052 owned evidence/session state, capture its preflight inventory, then run task_start FULL_RESTART.
+```
+
+## EXP-052 through EXP-056 — repaired immutable candidate FULL_RESTART batch
+
+| Experiment | Domain | Keyframe | Session / partition / tmux | Evidence file |
+|---|---:|---|---|---|
+| EXP-052 | 116 | `task_start` | `linux-rgbd-repair-task-start-exp052` | `linux-runs/exp-052/task-start.json` |
+| EXP-053 | 117 | `cup_test_forward_5cm` | `linux-rgbd-repair-forward-exp053` | `linux-runs/exp-053/forward.json` |
+| EXP-054 | 118 | `cup_test_left_5cm` | `linux-rgbd-repair-left-exp054` | `linux-runs/exp-054/left.json` |
+| EXP-055 | 119 | `cup_test_right_5cm` | `linux-rgbd-repair-right-exp055` | `linux-runs/exp-055/right.json` |
+| EXP-056 | 120 | `task_start` | `linux-rgbd-repair-task-start-repeat-exp056` | `linux-runs/exp-056/task-start-repeat.json` |
+
+```yaml
+lifecycle: FULL_RESTART for every row
+success_criteria:
+  - Runner and watcher exit zero; same Viewer window ID/PID is proven across baseline, transport, and final gui-capture manifests and each image passes pixel inspection.
+  - RGB-D perception, point cloud, tf2, /cup_pose and MoveIt scene preflight are source-stamped and within the unchanged acceptance tolerances.
+  - Motion evidence contains fresh terminal joint generation/stamp, target/actual FK-TCP errors, nonzero trajectories, controller success, bilateral grasp, physical micro-lift >= 0.001 m, unsupported lift/transport, detach before open, stable final table placement, zero final fingertip contacts, world sync, retreat, and DONE.
+  - Shutdown is clean with no task-owned tmux session, Viewer, or runtime residue; unrelated sessions/PIDs remain untouched.
+failure_criteria: Any unchanged product gate fails with valid provenance and observation.
+invalid_criteria: Provenance, isolation, GUI identity, watcher, evidence freshness, or cleanup defect.
 ```
 
 ## CP-139 — repair record commit resolved additively
