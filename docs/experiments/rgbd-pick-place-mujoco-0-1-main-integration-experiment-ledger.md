@@ -28,7 +28,7 @@ open_hypotheses:
   - The tree-identical child-main merge commit preserves all qualified 0.1.0 runtime behavior after RGB-D integration.
   - The merged camera contract retains both 0.1.0 lifecycle and perception task-camera requirements.
   - The final installed candidate succeeds at all four positions on both platforms.
-latest_checkpoint: CP-004
+latest_checkpoint: CP-005
 next_experiment: EXP-014
 ```
 
@@ -97,7 +97,7 @@ next_experiment: EXP-014
 
 ```yaml
 experiment_id: EXP-014
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-010
 hypothesis: Binding the task-owned tmux pane to the current live worktree removes only the stale-cwd contamination and permits the unchanged task_start candidate to complete AC-001.
 prediction: No getcwd-failed diagnostic occurs; the perceived start pose is near [0.02, -0.28, 0.165], and the unchanged workflow releases the cup stably in the red target.
@@ -554,4 +554,30 @@ open_risks:
   - All four Mac positions remain unqualified under the current candidate.
 next_experiment: EXP-014
 next_command: Commit this INVALID closure, prove EXP-014 domain/session/evidence/Viewer isolation, transition EXP-014 to RUNNING, and start its tmux pane with -c set to the current worktree.
+```
+
+## CP-005 / TRANS-EXP-014-RUNNING-001 — Clean task_start retry
+
+```yaml
+checkpoint_id: CP-005
+transition_id: TRANS-EXP-014-RUNNING-001
+recorded_at: 2026-08-26T23:37:34+08:00
+experiment_id: EXP-014
+from: PLANNED
+to: RUNNING
+last_valid_experiment: NONE
+implementation_commit: 208dd216f9ef52e2792830a19c1e070b8aef1778
+record_head_before_transition: ef62dd6d62a1d06e9290db14fc9670559eacffa6
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+working_tree_status: Clean before this ledger-only transition; immutable implementation and installed overlays are unchanged.
+owned_processes: NONE
+pre_running_observed:
+  - OBSERVED: Current task worktree exists at /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/rgbd-pick-place-mujoco-0-1-main and is the explicit tmux startup cwd for this retry.
+  - OBSERVED: Domain 229 session/partition process identity, mrc010-mac-exp014 tmux, exact Viewer title, and /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-014 were empty.
+  - OBSERVED: EXP-010 is terminal INVALID, its evidence remains retained, and no exact-owned product/capture process from it remains.
+single_variable: Add the explicit existing task worktree as the tmux pane cwd; all product inputs and the capture protocol are unchanged from EXP-010.
+evidence:
+  - /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-live-preflight/exp014-provenance-isolation.txt
+decision: START_EXACT_INSTALLED_EXP_014
+next_command: Commit this transition, create mrc010-mac-exp014 with tmux -c set to the task worktree, verify the pane cwd readback, and run the unchanged installed command with concurrent exact-window capture.
 ```
