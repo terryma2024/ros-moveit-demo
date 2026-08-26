@@ -1950,3 +1950,41 @@ invalid_test_observation:
 decision: COMMIT_MINIMAL_GREEN_THEN_REBUILD_CANDIDATE_AND_RUN_REAL_LIVE_GREEN_SMOKE
 next_experiment: NONE
 ```
+
+## CP-046 — Rebuild fixed candidate and plan real live perception GREEN smoke
+
+```yaml
+checkpoint_id: CP-046
+recorded_at: 2026-08-27T01:56:11+08:00
+smoke_id: SMOKE-010
+status: PLANNED
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_checkpoint: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+candidate_rebuild:
+  - Clean-cache rebuilt so101_mujoco_support and symlink-installed so101_demo_py against the frozen 0.1.0 child; build exited zero.
+  - Candidate prefixes resolve to project-installed so101_demo_py and so101_mujoco_support plus fork-installed mujoco_ros2_control.
+  - Installed provenance plus the new node contract passed five tests in 1.66 s; support CTest ran one test and passed.
+  - installed_bundle_sha256: 971b1257a90ba5940c5fa9053f32674b3aeba1305af999ce9b2cb3b75808934a
+  - simulation_evidence_plugin_sha256: f4487cc3e2467e2ffec5b2ca2fa407d8c372b63cfe07cc1e71e777185d1a7ab7
+  - build_log_sha256: 27f8f9f26243238e45d7c111b37afd524a1298ee3005d60f05f213f6090e3a9a
+identity:
+  domain: 210
+  session: mac-mrc010-real-green-r3
+  tmux: mrc010-mac-real-green-r3
+  evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-green-r3/live
+hypothesis: Removing the unused default parameter services and rosout leaves only the unavoidable type-description service and lets the exact installed perception node finish ROS construction, consume real RGB-D, and publish /cup_pose within its unchanged 30 s deadline on a fully ready live stack.
+success_criteria:
+  - Exact cwd/provenance, full base/static TF/controllers/MoveIt/Scene readiness, and unique Viewer baseline pass.
+  - A pre-start observer receives one world-frame /cup_pose; the exact installed node creates nonempty summary.json and cup.ply without RGBD_CUP_POSE_TIMEOUT.
+  - The summary/pose/PLY must appear before 30 s from exact child monotonic start; then only exact-owned child/base/TF/capture/observer identities are stopped and cleanup is clean.
+failure_criteria: Valid preconditions followed by constructor timeout, missing pose/PLY, invalid TF/frame, or 30 s budget violation.
+helpers:
+  base_sha256: d5256d272066e2afa45006c172ea6f11ae679ccbfd86c50f5c17961e0b920469
+  static_tf_sha256: cc610b52e7509c829e4894ea0c0733e8c63dd5c0d0262944b31eddbc08c5cc74
+  perception_sha256: 2abc96759e874903ed707b7b4718114842c4d58a4c7592616845d7aa0fe6093e
+  observer_sha256: 7355c39b1517384a544f2bf92a2d4588f9c508638754517757a2a29575586eb4
+decision: COMMIT_PLAN_THEN_PREFLIGHT_FRESH_REAL_LIVE_GREEN_SMOKE
+next_experiment: SMOKE-010
+```
