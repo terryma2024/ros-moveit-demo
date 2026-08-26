@@ -3120,3 +3120,56 @@ open_risks:
   - An unrelated concurrent domain 97 MuJoCo process may still be active and must be preserved during final exact-owned cleanup/readback.
 next_command: Commit and push this four-run closure, repeat fresh full/static/build/installed/provenance/cleanup verification, then request a new independent review of all original and CP-037 findings.
 ```
+
+```yaml
+checkpoint_id: CP-045
+recorded_at: 2026-08-26T16:37:04+08:00
+last_valid_experiment: EXP-033
+completion_status: COMPLETE_PENDING_FINAL_WRITE_INVENTORY
+source_head_before_checkpoint: 0f1b4508d21d962de4c5e0fff58fbfe07ba2df96
+implementation_commit: 012420c9d01e2a7d0dae9d834c22dcae28c4ccfb
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+final_verification:
+  - OBSERVED: Fresh full source suite passed 403 tests in 7.13 s; scoped Ruff check and format check returned zero.
+  - OBSERVED: rosdep resolves both opengl and ros2launch. The dependency-closed six-package build passed without task Open3D python-deps on build PYTHONPATH; installed provenance passed 3 tests; installed runner and both supported CLI help probes read back successfully.
+  - OBSERVED: Local/Gitee head matched at the pre-checkpoint source; task tree, exact f19 gitlink/submodule/describe, and canonical main b3770360 were clean and exact.
+  - OBSERVED: Domains 180 and 185 through 211, exact task processes, task-owned tmux, all EXP-025 through EXP-033 CUA identities, and all task capture PIDs were absent. An unrelated concurrent domain 97 Viewer was identified by PID/partition/evidence root and preserved.
+independent_review:
+  - VERDICT: READY_TO_MERGE_YES.
+  - CLOSED: All five original findings: required-process/first-terminal exact status; pre-scene session/reset/unpaused validation; exclusive immutable evidence allocation; installed runner provenance; OpenGL/EGL dependency.
+  - CLOSED: Both CP-037 findings: the installed runner is the exercised physical boundary, and post-terminal spawner teardown cannot supersede clean status while pre-terminal failures remain detected.
+  - CLOSED: The public name:=value launch arguments are parsed and applied before configured actions.
+  - OBSERVED: Reviewer directly inspected all 12 EXP-030 through EXP-033 PNGs and independently audited manifests, child ownership, capture continuity, EXP-030's additive gate correction, and EXP-033's unrelated domain 97 Viewer correction.
+  - MINOR_ONLY: Retained nonfatal controller_manager.pal_statistics shutdown diagnostics; all task processes exited cleanly and all qualification gates passed.
+qualification_disposition:
+  - CURRENT_COUNTABLE: EXP-030, EXP-031, EXP-032, EXP-033.
+  - RETAIN_INVALID: EXP-007, EXP-008, EXP-009, EXP-011, EXP-015, EXP-016, EXP-021, EXP-029.
+  - RETAIN_PERCEPTION_ONLY: EXP-010.
+  - RETAIN_HISTORICAL_A8_PHYSICAL: EXP-017, EXP-018, EXP-019, EXP-020.
+  - RETAIN_WRAPPER_NONQUALIFYING_PHYSICAL: EXP-025, EXP-026, EXP-027, EXP-028.
+  - PLANNED_OR_SUPERSEDED_WITHOUT_EVIDENCE_DIR: EXP-012, EXP-013, EXP-014, EXP-022, EXP-023, EXP-024.
+  - IMMUTABLE_HISTORY: CP-016 and CP-037 remain unchanged.
+evidence_disposition:
+  retained:
+    - Entire registered root /tmp/so101-debug-rgbd-perception-pick-place-20260826, including all ledger-classified run evidence, helpers, handoff, reviews, verification, corrections, and reproducible overlay, remains retained at completion.
+  archived: NONE.
+  durable_runs: NONE; no matching /data/work/so101-evidence task-family run exists.
+  deletion_candidates_requiring_future_explicit_authorization:
+    - /tmp/so101-debug-rgbd-perception-pick-place-20260826/ai-station-overlay (approximately 1.8 GiB reproducible build/install/python-deps after reproduction is no longer needed).
+    - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-verification (approximately 160 KiB superseded pre-CP-037 final diagnostics; newer final-hardening verification is authoritative).
+  deletion_performed: NONE.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/pytest-full.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/ruff-check.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/ruff-format.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/rosdep-opengl.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/rosdep-ros2launch.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/colcon-build.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/installed-provenance.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/provenance-cleanup-readback.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-verification-post-cp044/provenance-cleanup-readback-continuation.log
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/final-review-post-cp044/report.md
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/final-hardening/evidence-disposition-audit.log
+decision: ACCEPT_PRODUCTION_HARDENING_AND_QUALIFICATION
+next_command: Commit and push this completion checkpoint with remote readback, then regenerate sha256.txt and sizes.txt as the final evidence writes and verify every hash; afterward perform read-only final readback only.
+```
