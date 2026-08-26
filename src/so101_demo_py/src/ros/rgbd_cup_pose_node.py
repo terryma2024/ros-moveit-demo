@@ -508,6 +508,7 @@ def _create_ros_runtime(
                 self._buffer = AlignedRgbdBuffer()
                 self._fresh_frames = FreshFrameGate()
                 self._subscriptions = subscriptions
+                self._inputs_released = False
                 self._evidence_publisher = FirstValidEvidencePublisher(
                     write_ply=lambda frame: write_cup_point_cloud(
                         frame.cloud, options.output_ply
@@ -606,6 +607,36 @@ def _create_ros_runtime(
                         output_topic=options.output_topic,
                         position_xyz=list(frame.center_world_xyz),
                         fitted_radius_m=frame.fitted_radius_m,
+                    )
+                )
+                self._release_rgbd_inputs()
+
+            def _release_rgbd_inputs(self) -> None:
+                if self._inputs_released:
+                    return
+                expected_count = 3
+                if len(self._subscriptions) != expected_count:
+                    raise RuntimeError(
+                        "RGB-D input ownership changed before first valid pose: "
+                        f"expected {expected_count} subscriptions, found "
+                        f"{len(self._subscriptions)}"
+                    )
+                released_count = 0
+                while self._subscriptions:
+                    subscription = self._subscriptions[-1]
+                    destroyed = node.destroy_subscription(subscription)
+                    if destroyed is False:
+                        raise RuntimeError(
+                            "failed to release an RGB-D input subscription after "
+                            "the first valid pose"
+                        )
+                    self._subscriptions.pop()
+                    released_count += 1
+                self._inputs_released = True
+                node.get_logger().info(
+                    _status_line(
+                        "INPUT_RELEASED_AFTER_FIRST_VALID",
+                        released_subscription_count=released_count,
                     )
                 )
 
