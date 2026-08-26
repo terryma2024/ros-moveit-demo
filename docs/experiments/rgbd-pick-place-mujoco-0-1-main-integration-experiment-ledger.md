@@ -2014,3 +2014,44 @@ evidence:
 decision: START_BASE_STATIC_TF_GUI_OBSERVER_THEN_EXACT_INSTALLED_PERCEPTION
 next_command: Start domain 210 base/static-TF/GUI; after Scene READ_BACK start observer to readiness, then exact installed rgbd_cup_pose.
 ```
+
+## CP-048 / CLOSE-SMOKE-010-001 — Constructor fix passes boundary but no valid RGB-D pose appears
+
+```yaml
+checkpoint_id: CP-048
+transition_id: CLOSE-SMOKE-010-001
+recorded_at: 2026-08-27T02:01:22+08:00
+smoke_id: SMOKE-010
+from: RUNNING
+to: VALID_BEHAVIORAL_FAILURE
+qualification: false
+implementation_commit: dea3dfa41ba875a3114ed153f2bfcd8aca62dfba
+record_head_before_transition: 0cbc4abdde665172d65367b29cbe5317b5acdc99
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+valid_preconditions:
+  - Exact cwd/provenance/bundle/domain/session/installed-child identity passed; base/static TF/controllers/MoveIt/Scene READ_BACK and unique Viewer baseline passed.
+  - The lean pre-start /cup_pose observer completed construction and subscribed before the perception child began.
+observed:
+  - The exact fixed node no longer emitted startup deadline expired during ROS runtime construction.
+  - It naturally exited one after 32.290501875 s wrapper wall with no valid RGB-D cup pose was published within 30.000 seconds.
+  - summary.json, cup.ply, and the pre-ready observer's /cup_pose document are absent.
+conclusion:
+  - dea3dfa crosses the constructor-timeout boundary but does not yet satisfy the unchanged end-to-end 30 s startup contract.
+  - First bad boundary moves to the live frame pipeline after construction. No timeout or sequencing change is authorized until actual CameraInfo/color/depth samples, timestamps, and callback/TF/estimation boundaries are measured.
+next_diagnosis:
+  - Read candidate camera publisher QoS and lifetime behavior, especially whether CameraInfo is one-shot volatile before the scene-gated late subscription.
+  - Run a non-qualifying live topic/callback observer with fresh exact identities; if late CameraInfo loss is proven, TDD launch perception early while preserving dynamic workflow's Scene gate.
+cleanup:
+  - Exact perception exited naturally; exact observer/capture/static-TF/base identities were stopped, component teardown was clean, and domain 210/task tmux/Viewer are absent.
+  - Unrelated windows/processes/tmux remain preserved.
+evidence:
+  root: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-diagnosis/real-rgbd-green-r3/live
+  perception_owner_sha256: ec0e77049cc01122b208181b4edef7d8dd1467ac226f30b35945b22cfc85b95a
+  perception_child_owner_sha256: eecd3fa3e17f41044baf0f9930fac53ef132e9f08eb2d3b3d9d6c4bbea504dd4
+  stdout_sha256: 67bdfb14f0529fd68c340378004e61eb098a39e19a67ded1f2a363f1d27e6202
+  baseline_manifest_sha256: 3816efcb770036b00621d31402d891f4eea7c4d3985b5daa0944239c87441c94
+  baseline_png_sha256: 84f2f08347c2d09e2f3dee484f057a13d9a6f1a7e763beab2f8d36dcf7657cd4
+  base_log_sha256: 6ae0be2df197da737e3f29f5f6dabf57d608ba5f6cf781b60de06a691147e5de
+decision: RETAIN_VALID_FAILURE_AND_MEASURE_LATE_SUBSCRIBER_TOPIC_BOUNDARY
+next_experiment: NONE
+```
