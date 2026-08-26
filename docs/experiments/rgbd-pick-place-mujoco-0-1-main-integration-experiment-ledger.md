@@ -170,6 +170,29 @@ qualification_helpers:
 decision: RESUME_FOUR_POSITION_FORMAL_BATCH_WITH_FRESH_EXP021
 ```
 
+## CP-083 — Plan post-fix task_start Mac qualification
+
+```yaml
+checkpoint_id: CP-083
+recorded_at: 2026-08-27T03:15:00+08:00
+experiment_id: EXP-021
+status: PLANNED
+qualification: true
+position: task_start
+lifecycle: FULL_RESTART
+implementation_commit: fff7ba3b1c7efb4472f51d0842d8bcba87d64621
+record_head: cdc57ba
+child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+installed_bundle_sha256: 5c84da5a6bed093be023336da815fc2d1c7cb169aefa72cb13d6999346f25a2a
+identity: {domain: 206, session: mac-mrc010-task-start-exp021, tmux: mac-mrc010-task-start-exp021, evidence: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-021, evidence_file: /private/tmp/so101-debug-rgbd-pick-place-mrc010-main-20260826/mac-runs/exp-021/task-start.json}
+runner_gate:
+  - Fresh domain/session/evidence/process/Viewer, exact installed bundle/prefix/fork/support, explicit in-pane task-worktree cwd.
+  - Start fail-closed direct Codex capture coordinator first; require capture.owner before product. Freeze one exact Viewer window ID/PID and require nonempty validated manifest+PNG at baseline, LIFT/MOVE_ABOVE_PLACE transport, and WAIT_RELEASE_SETTLE/VALIDATE_FINAL_PLACEMENT final boundaries.
+acceptance: Full CP-061 / AC-001 including RGB-D/PLY/radius/world pose/TF/no truth bridge, INPUT_RELEASED_AFTER_FIRST_VALID count3, DONE/19, trajectory/FK, bilateral unsupported grasp/lift/transport, detach-before-open, final table/XY/tilt/contact/Planning Scene, eleven exits, screenshots, and exact cleanup.
+decision: COMMIT_PLAN_THEN_FRESH_PREFLIGHT_CAPTURE_OWNER_PRODUCT_NATURAL_EXIT
+next_experiment: EXP-021
+```
+
 ```yaml
 experiment_id: EXP-011
 status: PLANNED
