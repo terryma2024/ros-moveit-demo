@@ -38,6 +38,10 @@ Therefore the integration advances the parent gitlink and both dependency locks 
 project follows the formal child `main`, while retaining the exact code that passed the existing
 macOS and Linux 0.1.0 qualification.
 
+The lock's `fork.tag` provenance label changes from the no-longer-current candidate label to
+`main`; reproducibility still comes from the immutable full commit hash, never from resolving the
+moving branch name at build or runtime.
+
 Acceptance must prove all three references agree:
 
 1. parent gitlink `third_party/mujoco_ros2_control`;
