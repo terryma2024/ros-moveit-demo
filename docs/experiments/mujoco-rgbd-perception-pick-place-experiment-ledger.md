@@ -1505,3 +1505,110 @@ evidence:
   - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/pre-running/isolation-snapshot-corrected.log
 next_command: Start the exact child-PGID EXP-010 stack and reproduce the frozen perception-only numeric, topology, truth, visual, and all-zero cleanup gates without workflow or robot motion.
 ```
+
+```yaml
+closure_id: CLOSE-EXP-010-001
+recorded_at: 2026-08-26T11:36:00+08:00
+experiment_id: EXP-010
+status: VALID
+classification: accepted_perception_only_gate
+runtime_source_commit: 0e1d3cbe4b93f1b4312d393b784d35fd1cf4c117
+implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39
+submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08
+observed:
+  - OBSERVED: Exact f19 CameraPlugin and the fresh five-package overlay produced an exact-stamp 640x480 task_camera_frame rgb8/32FC1 triple; all 307200 depth values were finite and positive.
+  - OBSERVED: /cup_pose transitioned from zero publishers plus one waiting observer to one sole rgbd_cup_pose publisher. Production selected 141 cup points, fitted radius 0.03938151231973142 m, wrote a 4013-byte PLY, and published world [0.01950111783349788, -0.28040476095521005, 0.165].
+  - OBSERVED: The independent point-cloud path selected 141 points and wrote an identical-hash 4013-byte PLY with vertex count 141.
+  - OBSERVED: Exact-source-stamp world<-task_camera_frame lookup succeeded; MuJoCo truth error was 0.0006723769125849648 m and within_0_01_m=true.
+  - OBSERVED: Fresh baseline and post-table_corner_ne Viewer images have distinct hashes and were inspected as showing the robot, orange cup, red target, table, and Running status; camera readback was success=true and matched=true.
+  - OBSERVED: No workflow, truth bridge, or robot motion started. Genuine exits were perception=0, tf-base=0, tf-optical=0, observer=0, stack=0, RGB-D receipt=0, point cloud=0, and truth-TF=0.
+  - OBSERVED: Corrected post-cleanup proof found domain 188 empty, every recorded child absent, owned tmux absent, target process count zero, Viewer absent, and CUA ended.
+measurement_corrections:
+  - The initial GLFW probe lacking the optional Python glfw binding is retained; the equivalent ctypes probe against libglfw created and destroyed the hidden Mesa window with exit 0.
+  - The first isolation and post-cleanup scanners each matched their own zsh command. Their retained corrections exclude only the recorded checker PID and produce empty target sets; no runtime process was hidden.
+  - The first direct wrapper attempt failed before child creation because apply_patch did not set executable bits. Domain, process, and tmux readback were empty before the same immutable wrapper was invoked explicitly with zsh.
+independent_review:
+  reviewer: read-only independent subagent exp010_gate_review
+  result: PASS
+  blockers: NONE
+  conclusion: EXP-010 meets every frozen perception-only VALID criterion; the corrections and raw-observer helper provenance do not invalidate the run.
+evidence:
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/rgbd-sample.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/perception.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/point-cloud.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/truth-tf.json
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/running-topology.txt
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/gui/viewer-baseline.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/gui/viewer-after-table-corner-ne.png
+  - /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-010/run/post-cleanup-corrected.log
+conclusion: The exact-f19 fresh-overlay MuJoCo RGB-D perception chain is accepted on ai-station and independently reviewed; four physical FULL_RESTART runs may now begin.
+decision: Freeze EXP-011 through EXP-014 before any full runtime starts.
+next_experiment: EXP-011
+```
+
+```yaml
+experiment_id: EXP-011
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: The accepted RGB-D-driven dynamic workflow completes a physical pick-place from task_start without changing any policy or runtime input other than enabling the production workflow.
+single_variable: initial_keyframe=task_start
+provenance: {implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 189, gz_partition: rgbd-pick-task-start-exp011-20260826, session_id: rgbd-pick-task-start-exp011-20260826, owned_tmux_session: rgbd-pick-exp011-20260826}
+initial_cup_xyz_m: [0.02, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-011/
+success_criteria: [fresh CameraPlugin RGB-D and perception summary, sole rgbd_cup_pose input, perception-to-initial-truth error <= 0.01 m, dynamic DONE with complete forward state trace, controller and joint/TCP motion evidence, bilateral physical grasp and lift, MoveIt attach/detach/world readback, stable contact-free carry, released table-supported final cup within policy tolerance, three fresh inspected Viewer frames, natural launch exit 0, exact-owned cleanup empty]
+invalid_criteria: [mixed session, duplicate stack, unavailable fresh camera, missing screenshot, wrong overlay or submodule, unauditable exit, environment contamination]
+decision: PENDING
+```
+
+```yaml
+experiment_id: EXP-012
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: With only the named initial keyframe changed, the accepted chain completes the same physical pick-place from cup_test_forward_5cm.
+single_variable: initial_keyframe=cup_test_forward_5cm
+provenance: {implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 190, gz_partition: rgbd-pick-forward-exp012-20260826, session_id: rgbd-pick-forward-exp012-20260826, owned_tmux_session: rgbd-pick-exp012-20260826}
+initial_cup_xyz_m: [0.02, -0.33, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-012/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+experiment_id: EXP-013
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: With only the named initial keyframe changed, the accepted chain completes the same physical pick-place from cup_test_left_5cm.
+single_variable: initial_keyframe=cup_test_left_5cm
+provenance: {implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 191, gz_partition: rgbd-pick-left-exp013-20260826, session_id: rgbd-pick-left-exp013-20260826, owned_tmux_session: rgbd-pick-exp013-20260826}
+initial_cup_xyz_m: [-0.03, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-013/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+experiment_id: EXP-014
+status: PLANNED
+lifecycle: FULL_RESTART
+hypothesis: With only the named initial keyframe changed, the accepted chain completes the same physical pick-place from cup_test_right_5cm.
+single_variable: initial_keyframe=cup_test_right_5cm
+provenance: {implementation_commit: 9854a62f2698b361c5545a138e05f3d22fa8cc39, submodule_commit: f19a8cc3af61feccacb22a9f0d16cc972e3b2c08, ros_domain_id: 192, gz_partition: rgbd-pick-right-exp014-20260826, session_id: rgbd-pick-right-exp014-20260826, owned_tmux_session: rgbd-pick-exp014-20260826}
+initial_cup_xyz_m: [0.07, -0.28, 0.165]
+evidence_root: /tmp/so101-debug-rgbd-perception-pick-place-20260826/exp-014/
+success_criteria: SAME_AS_EXP_011
+invalid_criteria: SAME_AS_EXP_011
+decision: PENDING
+```
+
+```yaml
+checkpoint_id: CP-022
+recorded_at: 2026-08-26T11:36:00+08:00
+last_valid_experiment: EXP-010
+current_hypothesis: The independently accepted perception chain can drive four separate physical FULL_RESTART executions with only the named initial keyframe changing.
+working_tree_status: Task worktree and exact f19 submodule are clean before this ledger append; canonical main remains clean at b3770360b26fe8f6fac0e19338d250b6f5cab0e7.
+owned_processes: NONE; domain 188, recorded child PIDs, owned tmux, Viewer, CUA, and target process sets are empty.
+preserved_processes: Existing unrelated tmux sessions and canonical main were not operated or modified.
+next_command: Execute EXP-011 only after a fresh immediate domain 189, partition, process, tmux, Viewer, source, submodule, and overlay isolation snapshot.
+```
