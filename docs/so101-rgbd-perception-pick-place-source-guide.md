@@ -600,40 +600,6 @@ points:
 共享 MuJoCo/MoveIt 故障或“杯子仍被夹持、不能安全 reset”属于批次级故障，状态变为
 `NEEDS_OPERATOR_RECOVERY`，不会冒险继续覆盖物理状态。
 
-### 15.4 macOS 持久化批次资格结果
-
-2026-08-27 在 macOS 可见 Viewer 上，以源码 `137cfd9`、`mujoco_ros2_control`
-`5e9d67ce9fde39d35bf94cc498721abf203a0ddd`（六个 package 均为 `0.1.0`）和隔离安装前缀
-`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install` 运行了同一 stack 的四点
-`RESET_WORLD` 批次。结果不是四次重启拼接：同一 simulation session 的 reset epoch 连续为
-1、2、3、4。
-
-| 点位 | 感知中心误差 | reset epoch | 最终放置 XY 误差 | 结果 |
-|---|---:|---:|---:|---|
-| `task_start` | 0.644 mm | 1 | 2.631 mm | `SUCCEEDED`，`DONE/19` |
-| `cup_test_forward_5cm` | 0.594 mm | 2 | 2.458 mm | `SUCCEEDED`，`DONE/19` |
-| `cup_test_left_5cm` | 0.690 mm | 3 | 2.510 mm | `SUCCEEDED`，`DONE/19` |
-| `cup_test_right_5cm` | 0.631 mm | 4 | 2.495 mm | `SUCCEEDED`，`DONE/19` |
-
-权威结果是
-`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-four-r18/batches/mac-rgbd-task15-four-r18-20260827/batch-result.json`，
-SHA-256 为 `f544339ffd84ba3305fac07ed031d369c1178fb2e2973dbce4d810a1b0d04664`；四点各登记
-9 个 artifact。该轮走正常 controller success 路径，`execution_reconciliations` 为空，所以前述
-`-6` 对账机制不是四点通过的必要条件。
-
-另一个两点批次先提交 `cup=(0.02, -0.28, 0.45)`。杯子坐标本身合法，但由它推导的 TCP
-越过安全 workspace，因此第一点在 reset 和机器人运动之前记为 `SKIPPED_UNREACHABLE`；第二个
-`task_start` 随后以 epoch 1 完成 `DONE/19`。其权威结果 SHA-256 是
-`a4ca24e3769bb6d75f80c44e1d7f96d7a8551cb1a5262b4744471c68e45492e0`。批次聚合状态为
-`FAILED` 是预期语义：它保留“列表并非全成功”的事实，同时 `first_shared_failure=null` 证明共享
-环境没有失败、后续点可以继续。
-
-可见性证据使用 GUI 进程 PID 和 CoreGraphics 精确 window ID 捕获，而不是全屏裁切：
-`task15-gui/r14-live/window.png` 为 2504×1770，SHA-256
-`1f8b7fd6d51ca3d5d5e07e201586a9961a57f7e109ef4df61434daf33dfd08f7`。完整实验过程、失败批次和
-保留边界见
-[`macos-rgbd-reset-world-task-station-experiment-ledger.md`](experiments/macos-rgbd-reset-world-task-station-experiment-ledger.md)。
-
 ## 16. Teleop 任务页、实时截图和证据浏览
 
 `/tasks` 是独立于原 `/` Teleop 的任务工作台，包含三部分：
