@@ -29,8 +29,8 @@ def make_move_group_goal(
     segment mapping while the wire request stays standard.
     """
 
-    del state
     from moveit_msgs.action import MoveGroup
+    from moveit_msgs.msg import CollisionObject
 
     request = PosePlanRequest(
         joint_names=start.names,
@@ -53,12 +53,20 @@ def make_move_group_goal(
     goal.planning_options.plan_only = True
     goal.planning_options.replan = False
     goal.planning_options.planning_scene_diff.is_diff = True
-    goal.planning_options.planning_scene_diff.world.collision_objects = [
-        make_cup_collision_object(
+    if state is State.MOVE_ABOVE_OBJECT:
+        cup_object = make_cup_collision_object(
             cup_pose_world.position_m,
             cup_pose_world.orientation_xyzw,
         )
-    ]
+    else:
+        # Every later TCP segment intentionally contacts, carries, releases, or
+        # retreats from the target cup.  Keep that target out of this request-
+        # local TCP-only collision scene while retaining all shared obstacles.
+        cup_object = CollisionObject()
+        cup_object.header.frame_id = template.planning_frame
+        cup_object.id = template.object_id
+        cup_object.operation = CollisionObject.REMOVE
+    goal.planning_options.planning_scene_diff.world.collision_objects = [cup_object]
     return goal
 
 

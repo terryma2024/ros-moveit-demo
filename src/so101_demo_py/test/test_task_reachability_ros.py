@@ -79,6 +79,24 @@ def test_goal_is_plan_only_and_contains_request_local_cup_scene() -> None:
     assert goal.request.path_constraints.orientation_constraints == []
 
 
+def test_contact_and_carry_segments_remove_only_the_target_cup_obstacle() -> None:
+    from moveit_msgs.msg import CollisionObject
+
+    goal = make_move_group_goal(
+        state=State.DESCEND,
+        target=_target(),
+        start=_start(),
+        cup_pose_world=_cup(),
+        template=_template(),
+    )
+
+    objects = goal.planning_options.planning_scene_diff.world.collision_objects
+    assert len(objects) == 1
+    assert objects[0].id == "plastic_cup"
+    assert objects[0].operation == CollisionObject.REMOVE
+    assert objects[0].primitives == []
+
+
 class _Future:
     def __init__(self, value) -> None:
         self.value = value
