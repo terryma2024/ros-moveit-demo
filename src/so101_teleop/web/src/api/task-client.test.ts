@@ -36,6 +36,7 @@ describe("TaskApiClient event reconnect", () => {
     expect(onReconnect).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ sequence: 1 }));
     FakeSocket.instances[0].emit("close");
+    expect(onReconnect).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(250);
     expect(FakeSocket.instances).toHaveLength(2);
     stop();
