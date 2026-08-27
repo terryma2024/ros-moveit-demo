@@ -140,7 +140,7 @@ class RosTaskBatchRuntime:
         self._session_id = session_id
         self._points_file = points_file
         self._policy_file = policy_file
-        self._evidence_root = evidence_root
+        self._evidence_root = evidence_root.resolve(strict=True)
         self._viewer_capture = viewer_capture
         self._command_runner = command_runner
         self._resume = resume
