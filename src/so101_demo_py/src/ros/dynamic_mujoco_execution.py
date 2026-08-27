@@ -285,6 +285,41 @@ class RosDynamicMujocoExecution:
         world_z_dot = 1.0 - 2.0 * (x * x + y * y)
         return math.acos(min(1.0, max(-1.0, world_z_dot)))
 
+    @staticmethod
+    def _is_reconcilable_control_failure(result: ActionResult) -> bool:
+        """Recognize only MoveIt's controller-level false-negative candidate."""
+
+        return bool(
+            result.status is not ActionStatus.SUCCEEDED
+            and result.failure is not None
+            and result.failure.code == "MOVEIT_EXECUTION_FAILED"
+            and result.failure.metrics.get("moveit_error_code") == -6.0
+        )
+
+    @staticmethod
+    def _terminal_pose_reconciliation(
+        actual: PoseEvidence,
+        target: PoseEvidence,
+        *,
+        position_tolerance_m: float,
+        orientation_tolerance_rad: float,
+        orientation_error_rad,
+    ) -> dict[str, float] | None:
+        """Accept CONTROL_FAILED only when fresh terminal TCP evidence proves arrival."""
+
+        position_error_m = math.dist(actual.position_m, target.position_m)
+        orientation_error = orientation_error_rad(actual, target)
+        if (
+            position_error_m > position_tolerance_m
+            or orientation_error > orientation_tolerance_rad
+        ):
+            return None
+        return {
+            "moveit_error_code": -6,
+            "terminal_position_error_m": position_error_m,
+            "terminal_orientation_error_rad": orientation_error,
+        }
+
     def _wait_stable(self, predicate, duration_s: float, timeout_s: float):
         started: float | None = None
         latest = None
@@ -343,9 +378,10 @@ class RosDynamicMujocoExecution:
 
         trajectory_points = 0
         segment_joint_targets: list[list[float]] = []
+        execution_reconciliations: list[dict[str, float]] = []
         joint_target = current
         resolved_pose = self._ik.forward(current)
-        for motion_target in motion_targets:
+        for segment_index, motion_target in enumerate(motion_targets):
             joint_target = self._ik.solve(
                 motion_target,
                 current,
@@ -376,6 +412,25 @@ class RosDynamicMujocoExecution:
                 monitor=monitor,
             )
             if executed.status is not ActionStatus.SUCCEEDED:
+                if self._is_reconcilable_control_failure(executed):
+                    current = self._joint_state(after_generation=execution_generation)
+                    reconciliation = self._terminal_pose_reconciliation(
+                        self._ik.forward(current),
+                        motion_target,
+                        position_tolerance_m=self._template.position_tolerance_m,
+                        orientation_tolerance_rad=max(
+                            self._template.orientation_tolerance_rad
+                        ),
+                        orientation_error_rad=self._ik.orientation_error_rad,
+                    )
+                    if reconciliation is not None:
+                        reconciliation["segment_index"] = float(segment_index)
+                        execution_reconciliations.append(reconciliation)
+                        trajectory_points += len(
+                            planned.trajectory.joint_trajectory.points
+                        )
+                        segment_joint_targets.append(list(joint_target))
+                        continue
                 code = (
                     executed.failure.code
                     if executed.failure is not None
@@ -421,6 +476,7 @@ class RosDynamicMujocoExecution:
                 self._joint_state_received_monotonic_s
             ),
             "trajectory_points": trajectory_points,
+            "execution_reconciliations": execution_reconciliations,
         }
         validation_failure = None
         if state is State.MICRO_LIFT:

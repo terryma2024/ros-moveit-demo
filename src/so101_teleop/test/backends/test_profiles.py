@@ -30,7 +30,10 @@ def test_gazebo_cpp_profile_pins_installed_owners():
     assert all(
         value
         for name, value in profile.capabilities.as_dict().items()
-        if name != "workflow_stop"
+        if name not in {
+            "workflow_stop", "task_batch", "task_reachability",
+            "sensor_capture", "task_environment_shutdown",
+        }
     )
 
 
@@ -76,6 +79,10 @@ def test_gazebo_py_profile_routes_run_to_canonical_bounded_execute():
         "manual_joint_execute": True,
         "manual_tcp_execute": True,
         "camera_presets": True,
+        "task_batch": False,
+        "task_reachability": False,
+        "sensor_capture": False,
+        "task_environment_shutdown": False,
     }
 
 
@@ -83,11 +90,14 @@ def test_mujoco_profile_exposes_only_qualified_live_boundaries():
     profile = load_backend_profile("mujoco_py", PACKAGE)
 
     assert profile.owner_package == "so101_demo_py"
-    assert profile.probe.executable == "pick_place"
+    assert profile.probe.executable == "teleop_workflow"
     assert set(profile.operations) == {
         BackendOperation.WORKFLOW,
         BackendOperation.RESET_WORLD,
         BackendOperation.CAMERA_PRESET,
+        BackendOperation.TASK_BATCH,
+        BackendOperation.TASK_REACHABILITY,
+        BackendOperation.SENSOR_CAPTURE,
     }
     assert profile.capabilities.as_dict() == {
         "backend_probe": True,
@@ -102,7 +112,20 @@ def test_mujoco_profile_exposes_only_qualified_live_boundaries():
         "manual_joint_execute": False,
         "manual_tcp_execute": False,
         "camera_presets": True,
+        "task_batch": True,
+        "task_reachability": True,
+        "sensor_capture": True,
+        "task_environment_shutdown": True,
     }
+    assert profile.operations[BackendOperation.TASK_BATCH].executable == (
+        "so101_mujoco_rgbd_batch"
+    )
+    assert profile.operations[BackendOperation.TASK_REACHABILITY].executable == (
+        "task_reachability"
+    )
+    assert profile.operations[BackendOperation.SENSOR_CAPTURE].executable == (
+        "rgbd_sensor_capture"
+    )
 
 
 def test_profiles_and_nested_specs_are_frozen():

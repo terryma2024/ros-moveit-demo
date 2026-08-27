@@ -16,6 +16,10 @@ class BackendOperation(str, Enum):
     RESET_WORLD = "reset_world"
     SCENE = "scene"
     CAMERA_PRESET = "camera_preset"
+    TASK_BATCH = "task_batch"
+    TASK_REACHABILITY = "task_reachability"
+    SENSOR_CAPTURE = "sensor_capture"
+    TASK_ENVIRONMENT_SHUTDOWN = "task_environment_shutdown"
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,10 @@ class BackendCapabilities:
     manual_joint_execute: bool
     manual_tcp_execute: bool
     camera_presets: bool
+    task_batch: bool
+    task_reachability: bool
+    sensor_capture: bool
+    task_environment_shutdown: bool
 
     def as_dict(self) -> dict[str, bool]:
         return {

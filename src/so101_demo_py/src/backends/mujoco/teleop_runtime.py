@@ -7,7 +7,7 @@ import time
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
-from .client import MujocoRosClient
+from .client import FreeJointResetOverride, MujocoRosClient
 from .observer import EvidenceStale, MujocoWorldObserver
 from .reset import MujocoResetClient
 
@@ -31,22 +31,28 @@ def _pause_snapshot(node, observer, timeout_s: float):
     request.paused = True
     future = client.call_async(request)
     deadline = time.monotonic() + timeout_s
+    pause_accepted = False
     while rclpy.ok() and time.monotonic() <= deadline:
         rclpy.spin_once(node, timeout_sec=0.01)
         if future.done():
             response = future.result()
-            if response is None or not response.success:
+            if response is None:
                 raise RuntimeError("pause snapshot request failed")
+            pause_accepted = bool(response.success)
             break
     else:
         raise RuntimeError("pause snapshot request timed out")
     while rclpy.ok() and time.monotonic() <= deadline:
         rclpy.spin_once(node, timeout_sec=0.01)
         try:
-            return observer.snapshot()
+            evidence = observer.snapshot()
         except EvidenceStale:
             continue
-    raise RuntimeError("fresh atomic MuJoCo evidence unavailable")
+        if evidence.paused:
+            return evidence
+    if not pause_accepted:
+        raise RuntimeError("pause snapshot request failed")
+    raise RuntimeError("fresh paused atomic MuJoCo evidence unavailable")
 
 
 def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
@@ -69,6 +75,8 @@ def transactional_reset(
     simulation_session_id: str,
     *,
     keyframe: str = "task_start",
+    expected_object_position=CUP_START,
+    free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
     timeout_s: float = 10.0,
 ):
     """Run the qualified controller/pause/reset/epoch transaction."""
@@ -90,12 +98,12 @@ def transactional_reset(
         simulation_session_id=simulation_session_id,
         controller_names=CONTROLLERS,
         expected_joint_positions=RESET_JOINTS,
-        expected_object_position=CUP_START,
+        expected_object_position=expected_object_position,
         timeout_s=timeout_s,
         progress=progress,
     )
     try:
-        return resetter.reset(keyframe)
+        return resetter.reset(keyframe, free_joint_overrides)
     finally:
         observer_node.destroy_node()
         joint_node.destroy_node()

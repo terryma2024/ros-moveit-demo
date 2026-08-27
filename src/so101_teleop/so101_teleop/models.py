@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from enum import Enum
+import math
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ServerMode(str, Enum):
@@ -34,6 +35,10 @@ class BackendCapabilityMap(BaseModel):
     manual_joint_execute: bool
     manual_tcp_execute: bool
     camera_presets: bool
+    task_batch: bool
+    task_reachability: bool
+    sensor_capture: bool
+    task_environment_shutdown: bool
 
 
 class BackendCapabilitiesResponse(BaseModel):
@@ -179,3 +184,145 @@ class CommandResult(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
     snapshot_revision: Optional[int] = None
     validation: Optional[ValidationEvidence] = None
+
+
+_SAFE_TASK_ID = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$"
+
+
+class _StrictTaskModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class TaskPointModel(_StrictTaskModel):
+    id: str = Field(pattern=_SAFE_TASK_ID)
+    label: str = Field(min_length=1, max_length=120)
+    cup_position_world_m: tuple[float, float, float]
+
+    @field_validator("cup_position_world_m")
+    @classmethod
+    def finite_position(cls, value):
+        if not all(math.isfinite(item) for item in value):
+            raise ValueError("task point XYZ must be finite")
+        return value
+
+
+class TaskRunRequest(_StrictTaskModel):
+    schema_version: Literal[1]
+    points: List[TaskPointModel] = Field(min_length=1, max_length=100)
+    session_id: str = Field(pattern=_SAFE_TASK_ID)
+    lease_id: str = Field(min_length=1, max_length=120)
+    command_id: str = Field(pattern=_SAFE_TASK_ID)
+
+    @field_validator("points")
+    @classmethod
+    def unique_points(cls, value):
+        if len({point.id for point in value}) != len(value):
+            raise ValueError("task point IDs must be unique")
+        return value
+
+
+class TaskMutationRequest(_StrictTaskModel):
+    session_id: str = Field(pattern=_SAFE_TASK_ID)
+    lease_id: str = Field(min_length=1, max_length=120)
+    command_id: str = Field(pattern=_SAFE_TASK_ID)
+
+
+class TaskRecoveryRequest(TaskMutationRequest):
+    action: Literal["stop", "reset-and-continue"]
+    confirmation: str
+
+
+class TaskShutdownRequest(TaskMutationRequest):
+    confirmation: str
+
+
+class TaskCaptureRequest(TaskMutationRequest):
+    pass
+
+
+class TaskArtifactSummary(_StrictTaskModel):
+    artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
+    name: str = Field(min_length=1, max_length=160)
+    media_type: str = Field(min_length=1, max_length=100)
+    byte_size: int = Field(ge=0)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class TaskPointSummary(_StrictTaskModel):
+    id: str
+    status: str
+    failure_code: Optional[str] = None
+    reachability_status: Optional[str] = None
+    reset_epoch: Optional[int] = None
+    artifact_ids: List[str] = Field(default_factory=list)
+    artifacts: List[TaskArtifactSummary] = Field(default_factory=list)
+
+
+class TaskRunSummary(_StrictTaskModel):
+    run_id: str
+    status: str
+    simulation_session_id: str
+    points: List[TaskPointSummary] = Field(default_factory=list)
+    first_shared_failure: Optional[str] = None
+
+
+class ReachabilityResponse(_StrictTaskModel):
+    status: str
+    reports: List[Dict[str, Any]] = Field(default_factory=list)
+    simulation_session_id: str
+
+
+class CaptureResponse(_StrictTaskModel):
+    capture_id: str
+    status: str
+    artifact_ids: List[str] = Field(default_factory=list)
+    source_stamp_ns: Optional[int] = Field(default=None, ge=0)
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    artifacts: List[TaskArtifactSummary] = Field(default_factory=list)
+
+
+class RenderedImageRequest(TaskMutationRequest):
+    source_artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    png_base64: str = Field(min_length=1, max_length=14_000_000)
+    view_matrix: tuple[float, ...]
+    projection_matrix: tuple[float, ...]
+    point_size: float = Field(gt=0, le=100)
+    color_mode: Literal["rgb", "uniform"]
+    background_rgb: tuple[float, float, float]
+    viewport_px: tuple[int, int]
+    original_point_count: int = Field(gt=0)
+    displayed_point_count: int = Field(gt=0, le=400_000)
+    sampling_rule: Literal["all", "fixed-stride"]
+    sampling_stride: int = Field(ge=1)
+    captured_at: str = Field(min_length=1, max_length=80)
+
+    @field_validator("view_matrix", "projection_matrix")
+    @classmethod
+    def finite_matrix(cls, value):
+        if len(value) != 16 or not all(math.isfinite(item) for item in value):
+            raise ValueError("render matrices must contain 16 finite values")
+        return value
+
+    @field_validator("background_rgb")
+    @classmethod
+    def valid_background(cls, value):
+        if not all(math.isfinite(item) and 0.0 <= item <= 1.0 for item in value):
+            raise ValueError("background RGB values must be finite and within [0, 1]")
+        return value
+
+    @field_validator("viewport_px")
+    @classmethod
+    def valid_viewport(cls, value):
+        if not all(0 < item <= 16384 for item in value):
+            raise ValueError("viewport dimensions must be within [1, 16384]")
+        return value
+
+
+class TaskEvent(_StrictTaskModel):
+    sequence: int = Field(ge=1)
+    kind: str
+    run_id: Optional[str] = None
+    point_id: Optional[str] = None
+    status: str
+    failure_code: Optional[str] = None

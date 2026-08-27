@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from so101_demo.backends.mujoco.observer import EvidenceStale
+from so101_demo.backends.mujoco.client import FreeJointResetOverride
 from so101_demo.core.simulation.types import ResetReceipt
 
 
@@ -30,6 +31,8 @@ class MujocoResetClient:
         timeout_s: float = 5.0,
         joint_tolerance: float = 0.002,
         object_tolerance_m: float = 0.003,
+        orientation_tolerance: float = 1.0e-6,
+        velocity_tolerance: float = 1.0e-9,
         monotonic: Callable[[], float] = time.monotonic,
         progress: Callable[[], None] = lambda: time.sleep(0.01),
     ) -> None:
@@ -48,6 +51,8 @@ class MujocoResetClient:
         self._timeout_s = timeout_s
         self._joint_tolerance = joint_tolerance
         self._object_tolerance_m = object_tolerance_m
+        self._orientation_tolerance = orientation_tolerance
+        self._velocity_tolerance = velocity_tolerance
         self._monotonic = monotonic
         self._progress = progress
 
@@ -116,6 +121,24 @@ class MujocoResetClient:
                 > self._object_tolerance_m
             ):
                 raise self._failure("object pose convergence failed")
+            orientation = current.object_state.orientation_xyzw
+            identity = (0.0, 0.0, 0.0, 1.0)
+            negative_identity = (0.0, 0.0, 0.0, -1.0)
+            if min(
+                math.dist(orientation, identity),
+                math.dist(orientation, negative_identity),
+            ) > self._orientation_tolerance:
+                raise self._failure("object orientation convergence failed")
+            if any(
+                abs(value) > self._velocity_tolerance
+                for value in current.object_state.linear_velocity_world
+            ):
+                raise self._failure("object linear velocity convergence failed")
+            if any(
+                abs(value) > self._velocity_tolerance
+                for value in current.object_state.angular_velocity_world
+            ):
+                raise self._failure("object angular velocity convergence failed")
             return current
         raise self._failure("reset timeout waiting for authoritative step-zero evidence")
 
@@ -149,7 +172,11 @@ class MujocoResetClient:
             return current
         raise self._failure("initial evidence unavailable")
 
-    def reset(self, keyframe: str) -> ResetReceipt:
+    def reset(
+        self,
+        keyframe: str,
+        free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
+    ) -> ResetReceipt:
         if not keyframe:
             raise ValueError("keyframe must be non-empty")
         deadline = self._monotonic() + self._timeout_s
@@ -163,7 +190,10 @@ class MujocoResetClient:
                 "deactivate",
             )
             self._require(self._services.pause(True), "pause")
-            self._require(self._services.reset_world(keyframe), "reset")
+            self._require(
+                self._services.reset_world(keyframe, free_joint_overrides),
+                "reset",
+            )
             reset_snapshot = self._wait_for_reset_snapshot(
                 old=old,
                 expected_epoch=expected_epoch,

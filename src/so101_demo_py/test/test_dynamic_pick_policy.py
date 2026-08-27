@@ -52,6 +52,14 @@ def test_mujoco_candidate_resolves_four_mm_physical_micro_lift_margin() -> None:
     assert physical_margin_target == pytest.approx(0.004)
 
 
+def test_mujoco_source_age_budget_covers_synchronized_rgbd_artifacts() -> None:
+    from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
+
+    loaded = load_dynamic_policy_variant(PACKAGE, backend="mujoco")
+
+    assert loaded.template.maximum_source_age_s == pytest.approx(2.0)
+
+
 def test_rejects_an_unknown_backend_without_fallback() -> None:
     from so101_demo.core.dynamic_pick_policy import DynamicPolicyError, load_dynamic_policy_variant
 

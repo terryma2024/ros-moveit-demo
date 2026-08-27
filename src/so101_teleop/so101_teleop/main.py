@@ -14,6 +14,10 @@ from .backends.protocol import BackendOperation
 from .camera import BackendCameraController, CameraController, load_camera_presets
 from .server import RosTelemetryWorker
 from .service import TeleopService
+from .models import TaskPointModel
+from .task_artifacts import ManifestArtifactStore
+from .task_gateway import CliTaskGateway
+from .task_service import TaskService
 from .web_bundle import WebBundleError, validate_web_bundle
 
 
@@ -56,6 +60,7 @@ def installed_web_assets() -> Path:
 
 def main() -> None:
     import uvicorn
+    import yaml
 
     address = validate_bind_address(os.environ.get("SO101_TELEOP_BIND", "127.0.0.1"))
     backend = select_backend(os.environ)
@@ -71,11 +76,39 @@ def main() -> None:
                 camera_config = str(Path(get_package_share_directory("so101_teleop")) / "config" / "camera_views.yaml")
             camera = CameraController(load_camera_presets(camera_config))
         captures = Path(os.environ.get("SO101_TELEOP_CAPTURE_DIR", "/tmp/so101-teleop-captures"))
+        teleop = TeleopService(worker, camera, backend=backend)
+        tasks = None
+        capabilities = getattr(backend.profile, "capabilities", None)
+        if capabilities is not None and capabilities.task_batch:
+            evidence_root = Path(os.environ.get(
+                "SO101_TASK_EVIDENCE_ROOT",
+                "/tmp/so101-teleop-task-evidence",
+            ))
+            from ament_index_python.packages import get_package_share_directory
+            demo_share = Path(get_package_share_directory("so101_demo_py"))
+            points_document = yaml.safe_load(
+                (demo_share / "config/mujoco/rgbd_task_points.yaml").read_text()
+            )
+            presets = tuple(
+                TaskPointModel.model_validate(point)
+                for point in points_document["points"]
+            )
+            tasks = TaskService(
+                teleop,
+                CliTaskGateway(backend.profile),
+                ManifestArtifactStore(evidence_root),
+                presets=presets,
+                policy_path=(
+                    demo_share
+                    / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+                ),
+            )
         uvicorn.run(
             create_app(
-                TeleopService(worker, camera, backend=backend),
+                teleop,
                 installed_web_assets(),
                 captures,
+                task_service=tasks,
             ),
             host=address,
             port=int(os.environ.get("SO101_TELEOP_PORT", "8000")),

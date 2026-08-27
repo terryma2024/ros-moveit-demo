@@ -1,0 +1,95 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import subprocess
+
+
+def test_cli_defaults_visible_and_requires_explicit_attach_session(tmp_path: Path) -> None:
+    from so101_demo.cli.mujoco_rgbd_batch import build_parser
+
+    options = build_parser().parse_args(
+        [
+            "--points",
+            str(tmp_path / "points.yaml"),
+            "--batch-id",
+            "batch-1",
+            "--session-id",
+            "sim-a",
+            "--evidence-root",
+            str(tmp_path / "evidence"),
+        ]
+    )
+    assert options.headless is False
+    assert options.attach_existing_stack is False
+
+
+def test_cli_exit_is_nonzero_when_any_point_failed() -> None:
+    from so101_demo.application.task_batch import BatchStatus
+    from so101_demo.cli.mujoco_rgbd_batch import result_exit_code
+
+    assert result_exit_code(SimpleNamespace(status=BatchStatus.SUCCEEDED)) == 0
+    assert result_exit_code(SimpleNamespace(status=BatchStatus.FAILED)) == 1
+    assert result_exit_code(SimpleNamespace(status=BatchStatus.CANCELLED)) == 1
+
+
+def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() -> None:
+    from so101_demo.cli.mujoco_rgbd_batch import _wait_for_task_station
+
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append((tuple(argv), kwargs))
+        command = tuple(argv[2:])
+        if command[:3] == ("run", "so101_demo_py", "gazebo_ready"):
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                '{"ready": true, "phase": "READY"}\n',
+                "",
+            )
+        if command[:2] == ("topic", "echo"):
+            return subprocess.CompletedProcess(argv, 0, "name:\n- '1'\n", "")
+        if command[:3] == ("run", "so101_demo_py", "scene_setup"):
+            return subprocess.CompletedProcess(argv, 0, '{"success": true}\n', "")
+        raise AssertionError(argv)
+
+    _wait_for_task_station(1.0, runner=runner, sleep=lambda _seconds: None)
+
+    commands = [call[0][2:] for call in calls]
+    assert any(
+        command[:3] == ("run", "so101_demo_py", "gazebo_ready")
+        for command in commands
+    )
+    assert any(command[:3] == ("topic", "echo", "--once") for command in commands)
+    assert ("run", "so101_demo_py", "scene_setup", "--backend", "mujoco", "observe") in commands
+
+
+def test_task_station_readiness_reports_the_failed_stage() -> None:
+    from so101_demo.cli.mujoco_rgbd_batch import _wait_for_task_station
+
+    def runner(argv, **kwargs):
+        del kwargs
+        command = tuple(argv[2:])
+        assert command[:3] == ("run", "so101_demo_py", "gazebo_ready")
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            '{"ready": false, "phase": "CONTROLLERS"}\n',
+            "controller unavailable",
+        )
+
+    try:
+        _wait_for_task_station(1.0, runner=runner, sleep=lambda _seconds: None)
+    except TimeoutError as error:
+        assert "controllers_and_moveit" in str(error)
+        assert "CONTROLLERS" in str(error)
+    else:
+        raise AssertionError("a failed readiness stage must not be accepted")
+
+
+def test_task_station_readiness_default_budget_covers_macos_cold_start() -> None:
+    import inspect
+
+    from so101_demo.cli.mujoco_rgbd_batch import _wait_for_task_station
+
+    assert inspect.signature(_wait_for_task_station).parameters["timeout_s"].default >= 240.0

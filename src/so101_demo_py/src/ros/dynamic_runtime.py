@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -163,10 +165,34 @@ def _dynamic_execute_runtime():
     from rclpy.parameter import Parameter
 
     from ..application.dynamic_execute import build_dynamic_actions
+    from ..application.task_reachability import check_task_reachability
     from ..control.planning_scene.task_scene import RosTaskScenePort
     from ..core.task_geometry import load_task_geometry
+    from ..core.task_points import TaskPoint
     from .cup_scene_observer import RosMujocoCupSceneObserver
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
+    from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
+
+    def reachability_preflight(node, sample, template, scene_revision):
+        point = TaskPoint(
+            id="perceived_cup",
+            label="Perceived cup",
+            cup_position_world_m=tuple(sample.pose_world.values[:3]),
+        )
+        planner = RosMoveGroupReachabilityPlanner(node, template)
+        reader = RosJointStateReader(node, template.arm_joint_names)
+        try:
+            start = reader.read(template.planning_timeout_s)
+            return check_task_reachability(
+                point,
+                template,
+                start,
+                planner,
+                scene_revision=scene_revision,
+            )
+        finally:
+            reader.close()
+            planner.close()
 
     return SimpleNamespace(
         rclpy=rclpy,
@@ -179,10 +205,22 @@ def _dynamic_execute_runtime():
         task_scene_port=RosTaskScenePort,
         cleanup_task_scene=lambda _scene: None,
         resolve_motion_targets=resolve_motion_targets,
+        reachability_preflight=reachability_preflight,
         execution=RosDynamicMujocoExecution,
         build_actions=build_dynamic_actions,
         runner=StateMachineRunner,
     )
+
+
+def _write_reachability_evidence(path: Path, session_id: str, report: Any) -> None:
+    from ..cli.task_reachability import result_document
+
+    document = result_document((report,))
+    document["session_id"] = session_id
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+    os.replace(temporary, path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +321,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
     execution = None
     result = None
     evidence_file = Path(options.evidence_root) / "dynamic-execute-manifest.json"
+    reachability_file = Path(options.evidence_root) / "reachability-observed.json"
     primary_failure = None
     primary_message = None
     secondary_failures: list[tuple[str, BaseException]] = []
@@ -294,6 +333,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
         source = runtime.cup_pose_source(node, loaded.template)
+        print("status=READY subscription=/cup_pose", flush=True)
         sample = source.get_one(options.cup_pose_timeout_s)
         truth_observer = runtime.cup_scene_observer(
             node,
@@ -321,6 +361,21 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
         validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
         validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
         targets = runtime.resolve_motion_targets(sample, loaded.template)
+        reachability = runtime.reachability_preflight(
+            node,
+            sample,
+            loaded.template,
+            getattr(initial, "reset_epoch", None),
+        )
+        _write_reachability_evidence(
+            reachability_file,
+            options.session_id,
+            reachability,
+        )
+        if reachability.status.value == "UNREACHABLE":
+            raise RuntimeError("DYNAMIC_TARGET_UNREACHABLE")
+        if reachability.status.value != "REACHABLE":
+            raise RuntimeError("DYNAMIC_TARGET_REACHABILITY_UNKNOWN")
         execution = runtime.execution(
             node,
             loaded.template,

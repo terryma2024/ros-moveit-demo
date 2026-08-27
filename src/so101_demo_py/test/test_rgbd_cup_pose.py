@@ -352,10 +352,16 @@ def test_first_valid_evidence_is_written_once_while_fresh_frames_publish() -> No
     published = []
     ply_stamps = []
     json_stamps = []
+    rgb_stamps = []
+    full_stamps = []
+    preview_stamps = []
     evidence_publisher = FirstValidEvidencePublisher(
         write_ply=lambda frame: ply_stamps.append(frame.stamp_ns),
         write_json=lambda frame: json_stamps.append(frame.stamp_ns),
         publish=published.append,
+        write_rgb=lambda frame: rgb_stamps.append(frame.stamp_ns),
+        write_full_ply=lambda frame: full_stamps.append(frame.stamp_ns),
+        write_preview=lambda frame: preview_stamps.append(frame.stamp_ns),
     )
     frames = iter((_valid_frame(stamp_ns=20), _valid_frame(stamp_ns=21)))
     processor = CupPoseFrameProcessor(
@@ -369,6 +375,9 @@ def test_first_valid_evidence_is_written_once_while_fresh_frames_publish() -> No
     assert [frame.stamp_ns for frame in published] == [20, 21]
     assert ply_stamps == [20]
     assert json_stamps == [20]
+    assert rgb_stamps == [20]
+    assert full_stamps == [20]
+    assert preview_stamps == [20]
 
 
 def test_evidence_failure_is_fatal_and_prevents_publication() -> None:
