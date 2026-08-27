@@ -839,3 +839,94 @@ open_risks:
   - No lease-gated task API, event stream, or artifact-serving sandbox exists yet.
 next_command: git diff --check and commit the Task 9 paths.
 ```
+
+## CP-019 — Task 9 committed
+
+```yaml
+checkpoint_id: CP-019
+last_valid_experiment: EXP-009
+current_hypothesis: A typed TaskService can reuse the current Teleop lease/session gate while isolating task events and manifest-only artifact reads.
+working_tree_status: clean at ec342949d045894e7051473c8a638a9e987dd04f
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 9 is committed as ec34294 with no live process started.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Task API idempotency, lease/session enforcement, event ordering, old-command lockout, and artifact containment are unimplemented.
+next_command: Add Task 10 service, API, and artifact RED tests.
+```
+
+## EXP-010 — lease-gated task API and manifest artifact sandbox
+
+```yaml
+experiment_id: EXP-010
+status: VALID
+prior_experiment: EXP-009
+hypothesis: One typed TaskService can own task lifecycle, events, and manifest-indexed artifacts while the existing Teleop service remains wire-compatible and rejects conflicting mutations.
+prediction: RED fails because task models, TaskService, ManifestArtifactStore, /tasks routes, and the active-task mutation gate do not exist.
+single_variable: Add only Task 10 models, service, routes, task binding, artifact store, generated OpenAPI, and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is ec342949d045894e7051473c8a638a9e987dd04f.
+  - Tests use fake gateways and temporary evidence roots; no ROS or MuJoCo process starts.
+success_criteria:
+  - Start, reachability, cancel, recovery, capture, rendered image upload, and shutdown require a valid current lease/session and idempotent command ID.
+  - One active task blocks old motion/reset/attachment/scene/workflow mutations while telemetry and evidence reads remain unchanged.
+  - Browser refresh can read active/completed status and task events remain ordered through bounded queues.
+  - Opaque artifact reads reject unknown IDs, traversal, absolute paths, symlinks, non-regular files, size/hash drift, and root escape.
+  - Render uploads accept only bounded PNG bytes, finite view metadata, and a source PLY from the same capture.
+failure_criteria:
+  - A task starts without the lease/session gate, an old motion command overlaps, or a caller-selected path is served.
+invalid_criteria:
+  - Tests depend on live ROS, MuJoCo, or the old installed overlay.
+provenance:
+  source_commit: ec342949d045894e7051473c8a638a9e987dd04f
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 10 service, artifact, API, and safety RED tests.
+    exit_code: 2
+  - command: Run Task 10 focused gateway, service, artifact, API, safety, OpenAPI, and lifecycle tests.
+    exit_code: 0
+  - command: Run the complete Teleop regression outside the process-inspection sandbox.
+    exit_code: 0
+observed:
+  - Valid RED failed during collection because task models, TaskService, and ManifestArtifactStore did not exist.
+  - Focused GREEN passed 78 tests after the WebSocket disconnect path was changed to concurrently observe client closure; one deliberately hung test process was exact-stopped by PID without touching ROS or MuJoCo.
+  - Complete Teleop regression passed 247 tests after task construction was gated to task-capable backends, preserving Gazebo lifecycle behavior.
+  - Lease/session/capability gates, command idempotency, one-active-run ownership, old-command lockout, ordered bounded events, browser-refresh status, and confirmation-gated recovery/shutdown are covered.
+  - Artifact reads require a registered opaque ID and verify containment, regular-file type, no symlinks, size, and SHA-256; rendered images require PNG magic, a same-capture PLY, bounded bytes, and finite view metadata.
+  - Cancellation timeout retains both gateway ownership and the Teleop mutation lock instead of allowing an overlap with a still-running process.
+inferred:
+  - The new /tasks transport is isolated from existing /snapshot, /telemetry, /workflow, and legacy page route semantics.
+conclusion: The Task 10 API/service/artifact boundary is source-valid and fail-closed; live installed behavior remains a Task 14/15 gate.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task10-red.log sha256=d0daa6b87ac70b7c58ce49363168f88d95d4497cc58f249e923b0ff68ced6e30
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task10-green.log sha256=57c79bb79898f044afbbc4118462df440cbbd1b0cce2132100997d82f9d28b31
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task10-teleop-regression.log sha256=92efa4158d4f8d666a268749f3ed844412b0c89aee52fd4ee15ae2f227aa3ded
+decision: KEEP
+next_experiment: EXP-011
+```
+
+## CP-020 — Task 10 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-020
+last_valid_experiment: EXP-010
+current_hypothesis: A separate /tasks frontend shell can consume the typed API without importing or altering prior Teleop page state.
+working_tree_status: ledger plus Task 10 models, service, API, artifact store, task binding, generated OpenAPI, CMake test registration, and tests are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 10 focused tests pass 78 and complete Teleop regression passes 247.
+disproven_routes:
+  - A WebSocket loop that waits only on task events cannot observe a quiet client disconnect and was replaced with concurrent disconnect observation.
+  - Cancel timeout may not release task ownership or the old-command mutation lock.
+open_risks:
+  - The /tasks browser shell, free-point editor, reachability UX, and independent route-state tests do not exist yet.
+next_command: git diff --check and commit Task 10, then write Task 11 Bun RED tests.
+```

@@ -229,6 +229,47 @@ def test_second_client_cannot_silently_replace_an_unexpired_control_lease():
     asyncio.run(scenario())
 
 
+def test_active_task_blocks_old_motion_but_not_snapshot():
+    async def scenario():
+        service = service_for(Worker())
+        acquired = await service.command("lease", {"command_id": "lease-task"})
+        service.bind_task_active(lambda: True)
+        result = await service.command("plan_tcp", {
+            "command_id": "old-plan",
+            "lease_id": acquired.layers["lease_id"],
+            "session_id": "sim-a",
+            "target": {
+                "frame_id": "world", "tcp_frame": "gripper_frame",
+                "x_m": 0.1, "y_m": -0.2, "z_m": 0.3,
+                "roll_rad": 0.0, "pitch_rad": 0.0, "yaw_rad": 0.0,
+            },
+        })
+        assert result.code == "TASK_BATCH_ACTIVE"
+        assert (await service.current_snapshot()).simulation_session_id == "sim-a"
+    asyncio.run(scenario())
+
+
+def test_task_mutation_gate_requires_current_lease_and_session():
+    async def scenario():
+        worker = Worker()
+        backend = Backend(worker)
+        backend.profile = load_backend_profile("mujoco_py", PACKAGE)
+        service = TeleopService(worker, backend=backend)
+        acquired = await service.command("lease", {"command_id": "task-lease"})
+        missing = service.task_mutation_gate(
+            {"command_id": "missing", "session_id": "sim-a"},
+            "task_batch",
+        )
+        stale = service.task_mutation_gate({
+            "command_id": "stale",
+            "lease_id": acquired.layers["lease_id"],
+            "session_id": "old-session",
+        }, "task_batch")
+        assert missing.code == "LEASE_REQUIRED"
+        assert stale.code == "SESSION_MISMATCH"
+    asyncio.run(scenario())
+
+
 def test_valid_lease_renewal_is_not_rejected_while_workflow_owner_is_running():
     """A long workflow command must not make its own operator lose the lease."""
     async def scenario():

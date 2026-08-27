@@ -73,6 +73,22 @@
             "title": "Scene Operations",
             "type": "boolean"
           },
+          "sensor_capture": {
+            "title": "Sensor Capture",
+            "type": "boolean"
+          },
+          "task_batch": {
+            "title": "Task Batch",
+            "type": "boolean"
+          },
+          "task_environment_shutdown": {
+            "title": "Task Environment Shutdown",
+            "type": "boolean"
+          },
+          "task_reachability": {
+            "title": "Task Reachability",
+            "type": "boolean"
+          },
           "workflow_execute": {
             "title": "Workflow Execute",
             "type": "boolean"
@@ -106,9 +122,39 @@
           "physical_observation",
           "manual_joint_execute",
           "manual_tcp_execute",
-          "camera_presets"
+          "camera_presets",
+          "task_batch",
+          "task_reachability",
+          "sensor_capture",
+          "task_environment_shutdown"
         ],
         "title": "BackendCapabilityMap",
+        "type": "object"
+      },
+      "CaptureResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "capture_id": {
+            "title": "Capture Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_id",
+          "status"
+        ],
+        "title": "CaptureResponse",
         "type": "object"
       },
       "CollisionPair": {
@@ -119,16 +165,37 @@
             "type": "boolean"
           },
           "depth_m": {
-            "title": "Depth M",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth M"
           },
           "first_seen_at": {
-            "title": "First Seen At",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
           },
           "last_seen_at": {
-            "title": "Last Seen At",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
           },
           "object_a": {
             "title": "Object A",
@@ -143,8 +210,15 @@
             "type": "string"
           },
           "waypoint_index": {
-            "title": "Waypoint Index",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waypoint Index"
           }
         },
         "required": [
@@ -176,8 +250,15 @@
             "type": "number"
           },
           "lower_limit_rad": {
-            "title": "Lower Limit Rad",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower Limit Rad"
           },
           "name": {
             "title": "Name",
@@ -188,8 +269,15 @@
             "type": "number"
           },
           "upper_limit_rad": {
-            "title": "Upper Limit Rad",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper Limit Rad"
           },
           "velocity_rad_s": {
             "default": 0.0,
@@ -212,27 +300,69 @@
             "type": "number"
           },
           "final_pose": {
-            "$ref": "#/components/schemas/Pose6D"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Pose6D"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "first_sequence": {
-            "title": "First Sequence",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Sequence"
           },
           "gazebo_attached": {
-            "title": "Gazebo Attached",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gazebo Attached"
           },
           "gripper_contact": {
-            "title": "Gripper Contact",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gripper Contact"
           },
           "intended_support_contact": {
-            "title": "Intended Support Contact",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intended Support Contact"
           },
           "last_sequence": {
-            "title": "Last Sequence",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sequence"
           },
           "metrics": {
             "additionalProperties": {
@@ -242,16 +372,37 @@
             "type": "object"
           },
           "moveit_attached": {
-            "title": "Moveit Attached",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moveit Attached"
           },
           "primary_failure": {
-            "title": "Primary Failure",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Failure"
           },
           "release_epoch_id": {
-            "title": "Release Epoch Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Epoch Id"
           },
           "sample_count": {
             "default": 0,
@@ -259,8 +410,15 @@
             "type": "integer"
           },
           "world_object_synchronized": {
-            "title": "World Object Synchronized",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "World Object Synchronized"
           }
         },
         "title": "PhysicalOutcomeEvidence",
@@ -314,8 +472,133 @@
         "title": "Pose6D",
         "type": "object"
       },
+      "ReachabilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "reports": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "simulation_session_id": {
+            "title": "Simulation Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "simulation_session_id"
+        ],
+        "title": "ReachabilityResponse",
+        "type": "object"
+      },
+      "RenderedImageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Background",
+            "type": "string"
+          },
+          "captured_at": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Captured At",
+            "type": "string"
+          },
+          "color_mode": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Color Mode",
+            "type": "string"
+          },
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "png_base64": {
+            "maxLength": 14000000,
+            "minLength": 1,
+            "title": "Png Base64",
+            "type": "string"
+          },
+          "point_size": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Point Size",
+            "type": "number"
+          },
+          "projection_matrix": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Projection Matrix",
+            "type": "array"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source_artifact_id": {
+            "pattern": "^[a-f0-9]{24}$",
+            "title": "Source Artifact Id",
+            "type": "string"
+          },
+          "view_matrix": {
+            "items": {
+              "type": "number"
+            },
+            "title": "View Matrix",
+            "type": "array"
+          },
+          "viewport_height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 16384.0,
+            "title": "Viewport Height",
+            "type": "integer"
+          },
+          "viewport_width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 16384.0,
+            "title": "Viewport Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "lease_id",
+          "command_id",
+          "source_artifact_id",
+          "png_base64",
+          "view_matrix",
+          "projection_matrix",
+          "point_size",
+          "color_mode",
+          "background",
+          "viewport_width",
+          "viewport_height",
+          "captured_at"
+        ],
+        "title": "RenderedImageRequest",
+        "type": "object"
+      },
       "ServerMode": {
-        "description": "An enumeration.",
         "enum": [
           "STARTING",
           "READ_ONLY",
@@ -325,6 +608,322 @@
         ],
         "title": "ServerMode",
         "type": "string"
+      },
+      "TaskCaptureRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "lease_id",
+          "command_id"
+        ],
+        "title": "TaskCaptureRequest",
+        "type": "object"
+      },
+      "TaskMutationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "lease_id",
+          "command_id"
+        ],
+        "title": "TaskMutationRequest",
+        "type": "object"
+      },
+      "TaskPointModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cup_position_world_m": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Cup Position World M",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "cup_position_world_m"
+        ],
+        "title": "TaskPointModel",
+        "type": "object"
+      },
+      "TaskPointSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reachability_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reachability Status"
+          },
+          "reset_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Epoch"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "TaskPointSummary",
+        "type": "object"
+      },
+      "TaskRecoveryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "stop",
+              "reset-and-continue"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "lease_id",
+          "command_id",
+          "action",
+          "confirmation"
+        ],
+        "title": "TaskRecoveryRequest",
+        "type": "object"
+      },
+      "TaskRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TaskPointModel"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "points",
+          "session_id",
+          "lease_id",
+          "command_id"
+        ],
+        "title": "TaskRunRequest",
+        "type": "object"
+      },
+      "TaskRunSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "first_shared_failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Shared Failure"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TaskPointSummary"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "simulation_session_id": {
+            "title": "Simulation Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "simulation_session_id"
+        ],
+        "title": "TaskRunSummary",
+        "type": "object"
+      },
+      "TaskShutdownRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Command Id",
+            "type": "string"
+          },
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "lease_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "lease_id",
+          "command_id",
+          "confirmation"
+        ],
+        "title": "TaskShutdownRequest",
+        "type": "object"
       },
       "TelemetrySnapshot": {
         "properties": {
@@ -343,8 +942,15 @@
             "type": "object"
           },
           "gazebo_attached": {
-            "title": "Gazebo Attached",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gazebo Attached"
           },
           "gazebo_contacts": {
             "items": {
@@ -361,16 +967,19 @@
             "type": "object"
           },
           "mode": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ServerMode"
-              }
-            ],
+            "$ref": "#/components/schemas/ServerMode",
             "default": "STARTING"
           },
           "moveit_attached": {
-            "title": "Moveit Attached",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moveit Attached"
           },
           "moveit_collisions": {
             "items": {
@@ -380,14 +989,35 @@
             "type": "array"
           },
           "object_pose": {
-            "$ref": "#/components/schemas/Pose6D"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Pose6D"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "physical_outcome": {
-            "$ref": "#/components/schemas/PhysicalOutcomeEvidence"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhysicalOutcomeEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "real_time_factor": {
-            "title": "Real Time Factor",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Real Time Factor"
           },
           "revision": {
             "default": 0,
@@ -422,7 +1052,14 @@
             "type": "object"
           },
           "tcp": {
-            "$ref": "#/components/schemas/Pose6D"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Pose6D"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "TelemetrySnapshot",
@@ -487,6 +1124,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -542,6 +1180,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -579,6 +1218,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -616,6 +1256,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -680,6 +1321,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -717,6 +1359,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -754,6 +1397,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -818,6 +1462,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -855,6 +1500,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -892,6 +1538,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -940,6 +1587,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -977,6 +1625,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -1014,6 +1663,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -1051,6 +1701,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -1099,6 +1750,415 @@
         "summary": "Snapshot"
       }
     },
+    "/tasks/artifacts/{artifact_id}": {
+      "get": {
+        "operationId": "task_artifact_tasks_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Artifact"
+      }
+    },
+    "/tasks/captures": {
+      "post": {
+        "operationId": "task_capture_tasks_captures_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Capture"
+      }
+    },
+    "/tasks/captures/{capture_id}/rendered-image": {
+      "post": {
+        "operationId": "task_rendered_image_tasks_captures__capture_id__rendered_image_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capture_id",
+            "required": true,
+            "schema": {
+              "title": "Capture Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderedImageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Rendered Image"
+      }
+    },
+    "/tasks/environment/shutdown": {
+      "post": {
+        "operationId": "task_shutdown_tasks_environment_shutdown_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskShutdownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Shutdown"
+      }
+    },
+    "/tasks/presets": {
+      "get": {
+        "operationId": "task_presets_tasks_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Task Presets"
+      }
+    },
+    "/tasks/reachability": {
+      "post": {
+        "operationId": "task_reachability_tasks_reachability_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReachabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Reachability"
+      }
+    },
+    "/tasks/runs": {
+      "get": {
+        "operationId": "task_runs_tasks_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskRunSummary"
+                  },
+                  "title": "Response Task Runs Tasks Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Task Runs"
+      },
+      "post": {
+        "operationId": "task_start_tasks_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Start"
+      }
+    },
+    "/tasks/runs/{run_id}": {
+      "get": {
+        "operationId": "task_status_tasks_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Status"
+      }
+    },
+    "/tasks/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "task_cancel_tasks_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Cancel"
+      }
+    },
+    "/tasks/runs/{run_id}/recovery": {
+      "post": {
+        "operationId": "task_recovery_tasks_runs__run_id__recovery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Recovery"
+      }
+    },
     "/workflow/{operation}": {
       "post": {
         "operationId": "workflow_workflow__operation__post",
@@ -1117,6 +2177,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
