@@ -113,6 +113,7 @@ def _render_mujoco_robot_description(
     scene: str,
     *,
     headless: bool,
+    sensor_rendering: bool | None = None,
     initial_keyframe: str = "task_start",
     platform_name: str | None = None,
 ) -> str:
@@ -122,9 +123,11 @@ def _render_mujoco_robot_description(
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
     description = description.replace("@SO101_MUJOCO_HEADLESS@", str(headless).lower())
-    # Interactive Darwin launches use the fork's main-thread-owned GLFW context
-    # path.  Only an explicitly headless launch suppresses camera rendering.
-    disable_rendering = headless
+    # Preserve the historical generic behavior when no independent policy is
+    # supplied. RGB-D launches explicitly keep rendering enabled in headless mode.
+    if sensor_rendering is None:
+        sensor_rendering = not headless
+    disable_rendering = not sensor_rendering
     description = description.replace(
         "@SO101_MUJOCO_DISABLE_RENDERING@", str(disable_rendering).lower()
     )
@@ -171,11 +174,19 @@ def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStack
     scene = LaunchConfiguration("mujoco_scene").perform(context)
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
+    sensor_rendering_value = context.launch_configurations.get("sensor_rendering", "auto")
+    if sensor_rendering_value == "auto":
+        sensor_rendering = not headless
+    elif sensor_rendering_value in {"true", "false"}:
+        sensor_rendering = sensor_rendering_value == "true"
+    else:
+        raise RuntimeError("sensor_rendering must be auto, true, or false")
     timeout = LaunchConfiguration("readiness_timeout_s").perform(context)
     robot_description = _render_mujoco_robot_description(
         share,
         scene,
         headless=headless,
+        sensor_rendering=sensor_rendering,
         initial_keyframe=initial_keyframe,
     )
     config = share / "config/mujoco"
@@ -840,6 +851,11 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
         arguments.extend(
             (
                 DeclareLaunchArgument(
+                    "sensor_rendering",
+                    default_value="auto",
+                    choices=("auto", "true", "false"),
+                ),
+                DeclareLaunchArgument(
                     "mujoco_scene", default_value=str(share / "assets/mujoco/scene.xml")
                 ),
                 DeclareLaunchArgument(
@@ -882,6 +898,9 @@ def build_perception_pick_place_launch_description(
             ),
             DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
             DeclareLaunchArgument("headless", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument(
+                "sensor_rendering", default_value="true", choices=("true", "false")
+            ),
             DeclareLaunchArgument("session_id", default_value=unique),
             DeclareLaunchArgument(
                 "evidence_file", default_value=f"/tmp/so101-perception-{unique}.json"
@@ -992,6 +1011,9 @@ def build_task_station_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
             DeclareLaunchArgument("headless", default_value="false", choices=("false",)),
+            DeclareLaunchArgument(
+                "sensor_rendering", default_value="true", choices=("true",)
+            ),
             DeclareLaunchArgument("session_id", default_value=unique),
             DeclareLaunchArgument(
                 "task_evidence_root",
