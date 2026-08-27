@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: dd15da54adbd758091b184d9ede0e70c5b91e7a7
+current_commit: 137cfd9
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -1265,13 +1265,102 @@ next_experiment: EXP-015
 checkpoint_id: CP-026
 last_valid_experiment: EXP-014
 current_hypothesis: The exact candidate overlay can complete one visible four-preset RESET_WORLD batch and continue from an unreachable point to a later reachable point while retaining inspectable macOS evidence.
-working_tree_status: Task 14 install/provenance tests, teaching guide, and ledger are modified; runtime source is unchanged from candidate commit 0d8a3a6.
+working_tree_status: Task 14 install/provenance tests, teaching guide, and ledger are committed; runtime source is unchanged from candidate commit 0d8a3a6.
 owned_processes: NONE
 preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
 confirmed_conclusions:
   - Complete source suites pass 530 and 250 tests; Web passes 59 tests and production build; installed provenance passes 4 tests.
   - Candidate runtime and all mujoco_ros2_control fork packages resolve from the isolated merge-install prefix at version 0.1.0.
 open_risks:
-  - Real visible Viewer capture, four-point physical success, unreachable continuation, task-page live capture, and owned cleanup have not run in this task.
-next_command: Commit Task 14, read the gui-capture skill, inventory live state, and start Task 15 with a unique ROS domain and session.
+  - Real visible Viewer capture, four-point physical success, unreachable continuation, task-page live capture, and owned cleanup have not run at this checkpoint.
+next_command: Read the gui-capture skill, inventory live state, and start Task 15 with a unique ROS domain and session.
+```
+
+## EXP-015 — visible persistent RESET_WORLD runtime qualification
+
+```yaml
+experiment_id: EXP-015
+status: VALID
+prior_experiment: EXP-014
+hypothesis: One visible macOS MuJoCo/MoveIt stack can complete all four approved RGB-D cup points through atomic RESET_WORLD, and a deterministically unreachable point can be skipped before motion without blocking a later reachable point.
+prediction: The four-point batch succeeds with one simulation session and epochs 1..4; a second batch records SKIPPED_UNREACHABLE without reset, then succeeds at task_start with epoch 1.
+single_variable: Exercise the already packaged task-station runtime and apply only defects exposed by physical/runtime evidence.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source runtime commit is 137cfd9 after correcting the RGB-D startup flag exposed by diagnostic run r17.
+  - Candidate overlay is /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install.
+  - mujoco_ros2_control child is 5e9d67ce9fde39d35bf94cc498721abf203a0ddd and all six package versions are 0.1.0.
+  - Viewer is launched with headless=false; pre-existing mrc010 tmux sessions remain out of scope.
+success_criteria:
+  - Four presets succeed in order in one persistent session with reset epochs exactly 1, 2, 3, 4.
+  - Every successful point records aligned RGB-D/perception, dynamic DONE/19, terminal physical evidence, and registered artifacts.
+  - A target whose derived TCP exceeds the safe workspace is skipped before reset or motion, and the next reachable point succeeds.
+  - Exact-window GUI evidence, full source/Web suites, installed provenance, and owned-process cleanup are independently verified.
+failure_criteria:
+  - Full restart between presets, stale/non-monotonic epoch, hidden MJCF-truth perception fallback, unsafe continuation, missing terminal evidence, or unresolved fork package outside the candidate.
+invalid_criteria:
+  - Runs r16 and r17 are diagnostic rather than qualification: r16 exposed transient controller/perception timing; r17 used a wrong newly added RGB-D CLI flag and failed before perception.
+provenance:
+  source_commit: 137cfd9
+  submodule_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  child_package_versions: 0.1.0
+  install_overlay: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install
+  four_point_batch: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-four-r18/batches/mac-rgbd-task15-four-r18-20260827/batch-result.json
+  continuation_batch: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-unreachable-r20/batches/mac-rgbd-task15-unreachable-r20-20260827/batch-result.json
+commands:
+  - command: Run visible four-preset batch r18 through so101_mujoco_rgbd_batch against the candidate overlay.
+    exit_code: 0
+  - command: Run r20 with a derived-TCP-outside-workspace point followed by task_start.
+    exit_code: 1
+    note: Expected aggregate failure because one requested point is skipped; continuation behavior passed.
+  - command: Run complete so101_demo_py source suite from the candidate environment.
+    exit_code: 0
+  - command: Run complete so101_teleop source suite outside the process-enumeration sandbox.
+    exit_code: 0
+  - command: Run complete Vitest suite and production build.
+    exit_code: 0
+  - command: Run installed provenance tests with the expected candidate prefix.
+    exit_code: 0
+observed:
+  - r18 batch status is SUCCEEDED with first_shared_failure=null; task_start, forward, left, and right are SUCCEEDED at reset epochs 1, 2, 3, and 4.
+  - Each r18 point has 9 registered artifacts and dynamic DONE/19; perceived-center errors are 0.644, 0.594, 0.690, and 0.631 mm; final placement XY errors are 2.631, 2.458, 2.510, and 2.495 mm.
+  - r18 did not use the narrow CONTROL_FAILED reconciliation path; all execution_reconciliations arrays are empty.
+  - r20 point tcp_above_safe_workspace is SKIPPED_UNREACHABLE/TARGET_RESOLUTION_FAILED before reset and motion; task_start_after_skip then succeeds at epoch 1 with 9 artifacts and DONE/19.
+  - r20 aggregate status is FAILED by design, but first_shared_failure=null proves the persistent stack stayed healthy for continuation.
+  - The exact MuJoCo window capture is 2504x1770, bound to window ID 46798 and PID 59349; the point run associated with that live stack later reached DONE.
+  - Final candidate suites pass: so101_demo_py 549 tests, so101_teleop 250 tests, Vitest 59 tests across 21 files, production build, and installed provenance 4 tests.
+  - One earlier parallel test attempt resolved the parent overlay and one sandboxed Teleop attempt denied ps; corrected candidate/outside-sandbox reruns passed and are the qualifying results.
+inferred:
+  - The persistent macOS workflow now proves the complete MuJoCo -> aligned RGB-D -> point cloud -> tf2 -> /cup_pose -> dynamic state machine -> MoveIt -> controller -> MuJoCo loop at all four approved starting positions.
+  - Reachability is enforced on derived TCP phases, not just user-entered cup XYZ, and point-local rejection does not corrupt the shared environment.
+conclusion: Task 15 is physically, visually, source-, Web-, install-, and provenance-qualified on macOS for the four presets and deterministic unreachable continuation.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-four-r18/batches/mac-rgbd-task15-four-r18-20260827/batch-result.json sha256=f544339ffd84ba3305fac07ed031d369c1178fb2e2973dbce4d810a1b0d04664
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-unreachable-r20/batches/mac-rgbd-task15-unreachable-r20-20260827/batch-result.json sha256=a4ca24e3769bb6d75f80c44e1d7f96d7a8551cb1a5262b4744471c68e45492e0
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-gui/r14-live/window.png sha256=1f8b7fd6d51ca3d5d5e07e201586a9961a57f7e109ef4df61434daf33dfd08f7
+decision: KEEP
+next_experiment: NONE
+```
+
+## CP-027 — Task 15 qualified and ready to integrate
+
+```yaml
+checkpoint_id: CP-027
+last_valid_experiment: EXP-015
+current_hypothesis: The qualified branch can be integrated into main without changing its runtime provenance or evidence record.
+working_tree_status: Runtime source is committed at 137cfd9; only this final guide and ledger update remain before integration.
+owned_processes: NONE
+preserved_processes: Pre-existing tmux sessions mrc010-exp013-final-stack and mrc010-exp013-smoke-r3 remain untouched.
+confirmed_conclusions:
+  - A single visible macOS stack completed all four approved RGB-D RESET_WORLD points at epochs 1..4.
+  - Derived-TCP reachability rejected an unsafe target before motion and the following point succeeded.
+  - Candidate source, Web, bundle, installed provenance, physical evidence, and exact-window evidence all pass their separate gates.
+retention:
+  retained_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827
+  retained_runs: All r2-r20 diagnostic and qualifying runs remain present; r18 and r20 are the final authoritative batch results.
+  archived_runs: NONE
+  deletion_candidates: Superseded diagnostic runs r2-r17 and r19 may be reviewed for deletion later, but none is deleted without explicit user authorization.
+open_risks:
+  - Temporary evidence under /tmp is not durable across machine cleanup; copy it to the repository-approved durable evidence hierarchy before relying on long-term retention.
+next_command: Commit documentation, execute final branch verification, merge to local main, push origin, and verify remote ref parity.
 ```
