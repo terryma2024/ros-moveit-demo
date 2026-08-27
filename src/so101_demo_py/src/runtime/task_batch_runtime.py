@@ -339,7 +339,7 @@ class RosTaskBatchRuntime:
                 str(point_root / "point-cloud-preview.png"),
                 "--evidence-json",
                 str(point_root / "perception-summary.json"),
-                "--timeout-s",
+                "--startup-timeout-s",
                 "30.0",
             ),
             stdout_path=point_root / "rgbd-perception.log",
