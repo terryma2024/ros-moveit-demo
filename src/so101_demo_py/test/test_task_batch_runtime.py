@@ -107,10 +107,10 @@ def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -
         "--cup-pose-timeout-s",
         "75.0",
     ]
-    perception_timeout_index = perception_argv.index("--timeout-s")
+    perception_timeout_index = perception_argv.index("--startup-timeout-s")
     assert perception_argv[
         perception_timeout_index : perception_timeout_index + 2
-    ] == ["--timeout-s", "30.0"]
+    ] == ["--startup-timeout-s", "30.0"]
     assert str(point_root / "dynamic") in consumer_argv
     assert str(point_root / "rgb.png") in perception_argv
     assert str(point_root / "full-cloud.ply") in perception_argv
