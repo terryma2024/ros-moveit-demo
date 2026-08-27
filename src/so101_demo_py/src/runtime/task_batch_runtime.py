@@ -271,6 +271,8 @@ class RosTaskBatchRuntime:
                 "--mode",
                 "execute",
                 "--execute",
+                "--cup-pose-timeout-s",
+                "45.0",
                 "--session-id",
                 self._session_id,
                 "--expected-reset-epoch",
@@ -288,6 +290,10 @@ class RosTaskBatchRuntime:
             raise RuntimeError("subscription handshake requires dynamic consumer")
         deadline = self._monotonic() + timeout_s
         while self._monotonic() <= deadline:
+            if self._processes.poll("dynamic-consumer") is not None:
+                raise SharedStackFailure(
+                    "DYNAMIC_CONSUMER_EXITED_BEFORE_SUBSCRIPTION"
+                )
             if self._ros_graph.subscription_count(
                 "/so101_dynamic_cup_pick_place", "/cup_pose"
             ) == 1:

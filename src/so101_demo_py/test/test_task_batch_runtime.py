@@ -99,6 +99,11 @@ def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -
     assert ["--expected-reset-epoch", "3"] == consumer_argv[
         epoch_index : epoch_index + 2
     ]
+    timeout_index = consumer_argv.index("--cup-pose-timeout-s")
+    assert consumer_argv[timeout_index : timeout_index + 2] == [
+        "--cup-pose-timeout-s",
+        "45.0",
+    ]
     assert str(point_root / "dynamic") in consumer_argv
     assert str(point_root / "rgb.png") in perception_argv
     assert str(point_root / "full-cloud.ply") in perception_argv
@@ -172,6 +177,22 @@ def test_subscription_timeout_has_a_stable_shared_failure_code(tmp_path: Path) -
         assert error.code == "DYNAMIC_CONSUMER_SUBSCRIPTION_TIMEOUT"
     else:
         raise AssertionError("subscription timeout must be a shared stack failure")
+
+
+def test_subscription_handshake_fails_immediately_when_consumer_exits(tmp_path: Path) -> None:
+    from so101_demo.application.task_batch import SharedStackFailure
+
+    runtime, processes, _graph = _runtime(tmp_path)
+    processes.codes["dynamic-consumer"] = 1
+
+    try:
+        runtime.wait_consumer_subscription(
+            SimpleNamespace(role="dynamic-consumer"), 30.0
+        )
+    except SharedStackFailure as error:
+        assert error.code == "DYNAMIC_CONSUMER_EXITED_BEFORE_SUBSCRIPTION"
+    else:
+        raise AssertionError("an exited consumer cannot satisfy the handshake")
 
 
 def test_stop_point_children_targets_only_runtime_owned_groups(tmp_path: Path) -> None:
