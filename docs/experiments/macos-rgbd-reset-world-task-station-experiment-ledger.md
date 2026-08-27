@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: be4fae084e486578bd508a0413ed16808c1e00bd
+current_commit: dd15da54adbd758091b184d9ede0e70c5b91e7a7
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -21,13 +21,14 @@ confirmed_conclusions:
   - EXP-005 validates one-stamp RGB, full-cloud, cup-cloud, deterministic preview, and summary generation before pose publication.
   - EXP-006 validates exclusive batch/point allocation, fsynced atomic JSON, content addressing, and symlink/outside-root rejection.
   - EXP-007 validates point-local continuation, shared/held-cup abort, monotonic epochs, safe cancellation, and required terminal evidence.
+  - EXP-008 validates persistent visible launch composition, exact child argv/ordering, owned PGID cleanup, and PID-bound MuJoCo screenshots.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-014
-next_experiment: EXP-008
+latest_checkpoint: CP-016
+next_experiment: EXP-009
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -657,4 +658,96 @@ disproven_routes:
 open_risks:
   - No actual subprocess, ROS subscription, reset service, perception publisher, or viewer capture is bound yet.
 next_command: git diff --check and commit the three planned Task 7 paths including the ledger.
+```
+
+## CP-015 — Task 7 committed; Task 8 preregistered
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-007
+current_hypothesis: A persistent-stack ROS/process runtime can implement the batch port with exact process ownership, subscription-before-perception ordering, and one public CLI.
+working_tree_status: clean at dd15da54adbd758091b184d9ede0e70c5b91e7a7 before Task 8 RED tests
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 7 is committed as dd15da54adbd758091b184d9ede0e70c5b91e7a7.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Owned process groups, first-terminal status, macOS viewer PID/window identity, and attached-stack non-ownership require explicit seams and tests.
+next_command: Write and run Task 8 process/runtime/launch/CLI RED tests.
+```
+
+## EXP-008 — persistent stack and ROS/process batch runtime
+
+```yaml
+experiment_id: EXP-008
+status: VALID
+prior_experiment: EXP-007
+hypothesis: Argument-array subprocesses, owned process groups, ROS subscription probing, and PID-bound window capture can bind Task 7 to one reusable visible stack without broad process cleanup.
+prediction: RED fails because task_batch_runtime, task_stack, viewer_capture, public CLI, and task-station launch do not exist.
+single_variable: Add only the Task 8 ROS/process adapters, persistent composition, viewer capture, CLI, packaging, and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is dd15da54adbd758091b184d9ede0e70c5b91e7a7.
+  - Unit tests inject process, ROS graph, window, and screencapture seams; no live stack starts.
+success_criteria:
+  - Dynamic consumer starts and advertises /cup_pose subscription before perception starts.
+  - Child argv carries the exact session, reset epoch, and point-specific evidence paths without shell=True.
+  - Only owned PGIDs receive bounded SIGINT then SIGTERM escalation in reverse dependency order.
+  - The persistent launch uses headless=false and includes base stack plus both approved static TF nodes but no perception/workflow.
+  - macOS capture accepts exactly one on-screen MuJoCo window for the recorded PID and verifies fresh PNG output.
+  - CLI owns and shuts its stack unless attach-existing-stack is explicit; any failed point returns nonzero.
+failure_criteria:
+  - Perception races subscription, an unowned process is signaled, desktop fallback is used, or attached parent stack is shut down.
+invalid_criteria:
+  - Tests invoke live ROS, Swift, screencapture, or MuJoCo instead of injected seams.
+provenance:
+  source_commit: dd15da54adbd758091b184d9ede0e70c5b91e7a7
+  install_overlay: SOURCE_WITH_MACOS_JAZZY_FOR_LAUNCH_TESTS
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 8 runtime, stack, viewer, CLI, and launch tests.
+    exit_code: 2
+  - command: Run Task 8 tests plus launch composition, perception launch, and RGB-D pose regressions in sourced macOS Jazzy.
+    exit_code: 0
+  - command: Run the complete source test suite with the source-backed 0.1.0 message overlay.
+    exit_code: 1
+observed:
+  - Valid RED failed at collection because the task-station builder and Task 8 runtime modules did not exist.
+  - GREEN passed 115 tests; changed Python compiled, the Swift helper parsed, and whitespace checks passed.
+  - Full source regression passed 528 tests; only the explicitly deferred old-install executable closure failed.
+  - Consumer argv carries the exact session/epoch and subscribes to /cup_pose before perception starts with point-specific RGB/full/cup/preview paths.
+  - Persistent process roles stop in reverse order and only owned PGIDs receive bounded SIGINT/SIGTERM.
+  - The launch defaults headless=false, contains MuJoCo/controllers/MoveIt/scene plus both static TF nodes, and contains no perception or workflow.
+  - Viewer capture filters exactly one on-screen MuJoCo window by recorded PID and rejects ambiguous, stale, or non-PNG output without desktop fallback.
+inferred:
+  - Automatic and attached-stack modes now share the same batch port while ownership remains explicit: only automatic mode shuts down its parent launch.
+conclusion: The Task 8 ROS/process binding is source-valid; real process/window identity and visible motion remain Task 15 gates.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task8-red.log sha256=ba46b88eb28b5e2b488c10fce1be2ef462c27b7924354834d1967a6f42076f1e
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task8-green.log sha256=6fe6755a8e8a4f410c5758d8792908dd7006aa447756139c4bc3c56013c4f6ea
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task8-full-source.log sha256=eebf1ab16774c1a292166006b47330c8c0a6543da6fcc872f779a5b329a6f85c
+decision: KEEP
+next_experiment: EXP-009
+```
+
+## CP-016 — Task 8 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-008
+current_hypothesis: Teleop can host one asynchronous task owner beside existing pages without changing their routes or workflow contracts.
+working_tree_status: ledger plus planned Task 8 runtime, launch, Swift asset, CLI, continuous preview output, packaging, provenance expectation, and tests are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 8 launch/runtime regressions pass 115 tests and complete source regression passes 528 tests apart from the deferred old-install gate.
+disproven_routes:
+  - Desktop-wide screenshot fallback and starting perception before the dynamic /cup_pose subscription are forbidden.
+open_risks:
+  - Teleop has no task owner or /tasks page yet; live stack readiness and capture remain unqualified.
+next_command: git diff --check and commit the planned Task 8 paths.
 ```

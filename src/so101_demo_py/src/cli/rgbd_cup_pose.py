@@ -201,6 +201,7 @@ def main(arguments: list[str] | None = None) -> int:
     )
     parser.add_argument("--output-rgb", type=_output_path)
     parser.add_argument("--output-full-ply", type=_output_path)
+    parser.add_argument("--output-preview", type=_output_path)
     parsed = parser.parse_args(_application_arguments(arguments))
 
     from so101_demo.ros.rgbd_cup_pose_node import (
@@ -228,6 +229,7 @@ def main(arguments: list[str] | None = None) -> int:
             evidence_json=parsed.evidence_json,
             output_rgb=parsed.output_rgb,
             output_full_ply=parsed.output_full_ply,
+            output_preview=parsed.output_preview,
         )
     except ValueError as error:
         parser.error(str(error))

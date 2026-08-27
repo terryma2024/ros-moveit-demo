@@ -22,6 +22,7 @@ EXPECTED_EXECUTABLES = {
     "run_qualification",
     "scene_setup",
     "so101_mujoco_perception_pick_place",
+    "so101_mujoco_rgbd_batch",
     "teleop_reset",
     "teleop_workflow",
     "task_reachability",
@@ -32,6 +33,7 @@ EXPECTED_LAUNCHERS = {
     "so101_mujoco.launch.py",
     "so101_mujoco_perception_pick_place.launch.py",
     "so101_mujoco_pick_place.launch.py",
+    "so101_mujoco_task_station.launch.py",
 }
 
 
