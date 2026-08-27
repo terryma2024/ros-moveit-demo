@@ -146,6 +146,34 @@ def test_perception_cannot_start_before_subscription_handshake(tmp_path: Path) -
     assert processes.roles == ["dynamic-consumer"]
 
 
+def test_subscription_timeout_has_a_stable_shared_failure_code(tmp_path: Path) -> None:
+    from so101_demo.application.task_batch import SharedStackFailure
+    from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
+
+    runtime = RosTaskBatchRuntime(
+        _Processes(),
+        SimpleNamespace(subscription_count=lambda *_args: 0),
+        session_id="sim-a",
+        points_file=tmp_path / "points.yaml",
+        policy_file=tmp_path / "policy.yaml",
+        evidence_root=tmp_path,
+        viewer_capture=SimpleNamespace(capture=lambda *_args, **_kwargs: None),
+        command_runner=lambda *_args, **_kwargs: None,
+        resume=lambda: True,
+        monotonic=iter((0.0, 0.0, 31.0)).__next__,
+        sleep=lambda _value: None,
+    )
+
+    try:
+        runtime.wait_consumer_subscription(
+            SimpleNamespace(role="dynamic-consumer"), 30.0
+        )
+    except SharedStackFailure as error:
+        assert error.code == "DYNAMIC_CONSUMER_SUBSCRIPTION_TIMEOUT"
+    else:
+        raise AssertionError("subscription timeout must be a shared stack failure")
+
+
 def test_stop_point_children_targets_only_runtime_owned_groups(tmp_path: Path) -> None:
     runtime, processes, _graph = _runtime(tmp_path)
     runtime.start_consumer(tmp_path / "point", epoch=1)

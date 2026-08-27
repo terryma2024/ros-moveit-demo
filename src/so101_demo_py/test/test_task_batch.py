@@ -81,7 +81,7 @@ class FakeRuntime:
         return ManagedChild("consumer", 100, 100)
 
     def wait_consumer_subscription(self, child, timeout_s):
-        assert child.role == "consumer" and timeout_s == 5.0
+        assert child.role == "consumer" and timeout_s == 30.0
         self.events.append("consumer-ready")
 
     def start_perception(self, point_root):
