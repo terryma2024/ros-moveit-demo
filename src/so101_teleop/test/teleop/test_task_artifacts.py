@@ -92,8 +92,14 @@ def test_rendered_png_requires_same_capture_ply_and_finite_metadata(tmp_path):
         "view_matrix": [0.0] * 16,
         "projection_matrix": [0.0] * 16,
         "point_size": 1.0,
-        "viewport_width": 800,
-        "viewport_height": 600,
+        "viewport_px": [800, 600],
+        "background_rgb": [0.02, 0.03, 0.05],
+        "source_sha256": source.sha256,
+        "original_point_count": 401_000,
+        "displayed_point_count": 200_500,
+        "sampling_rule": "fixed-stride",
+        "sampling_stride": 2,
+        "color_mode": "rgb",
     }
 
     rendered = store.register_rendered_image(
@@ -101,12 +107,18 @@ def test_rendered_png_requires_same_capture_ply_and_finite_metadata(tmp_path):
     )
 
     assert store.open(rendered.artifact_id).path.read_bytes() == PNG
+    assert rendered.metadata["source_sha256"] == source.sha256
     with pytest.raises(ArtifactAccessError, match="RENDER_METADATA_INVALID"):
         store.register_rendered_image(
             "c1",
             source.artifact_id,
             PNG,
             {**metadata, "point_size": float("nan")},
+        )
+    with pytest.raises(ArtifactAccessError, match="RENDER_METADATA_INVALID"):
+        store.register_rendered_image(
+            "c1", source.artifact_id, PNG,
+            {**metadata, "source_sha256": "0" * 64},
         )
     with pytest.raises(ArtifactAccessError, match="RENDER_PNG_INVALID"):
         store.register_rendered_image(

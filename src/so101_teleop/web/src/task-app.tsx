@@ -6,6 +6,7 @@ import { TaskApiClient } from "@/api/task-client";
 import type { TaskPoint, TaskPointStatus, TaskRunSummary } from "@/api/task-types";
 import { isCommandFailure } from "@/api/task-types";
 import { TaskBuilder } from "@/components/tasks/task-builder";
+import { LiveSensor } from "@/components/tasks/live-sensor";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { dumpTaskYaml, parseTaskYaml, validateTaskPoints } from "@/lib/task-yaml";
@@ -116,12 +117,6 @@ export function TaskApp() {
     else { setRun(result); setNotice(`Recovery result: ${result.status}.`); }
   });
 
-  const capture = () => guarded(async () => {
-    const result = await client.capture(sessionId, leaseId);
-    if (isCommandFailure(result)) setNotice(`${result.code}: ${result.message ?? "capture failed"}`);
-    else setNotice(`Capture ${result.capture_id}: ${result.status}.`);
-  });
-
   const shutdown = () => guarded(async () => {
     const result = await client.shutdown(sessionId, leaseId);
     if (isCommandFailure(result)) setNotice(`${result.code}: ${result.message ?? "shutdown failed"}`);
@@ -189,12 +184,16 @@ export function TaskApp() {
           <Button variant="outline" disabled={!run} onClick={refresh}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
           <Button variant="destructive" disabled={!canMutate || run?.status !== "RUNNING"} onClick={cancel}>Cancel</Button>
           <Button variant="outline" disabled={!canMutate || run?.status !== "NEEDS_OPERATOR_RECOVERY"} onClick={recover}>Stop recovery</Button>
-          <Button variant="outline" disabled={!canMutate} onClick={capture}>Capture sensor now</Button>
           <Button variant="destructive" disabled={!canMutate || !run} onClick={shutdown}>Shutdown owned environment</Button>
         </div>
         <p aria-live="polite" className="rounded bg-slate-950 p-3 text-sm text-slate-300">{notice}</p>
         {run && <div className="rounded border border-slate-700 p-3 text-sm"><strong>{run.run_id}</strong> · {run.status} · {run.points.length} point results</div>}
       </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader><CardTitle>Live RGB-D evidence</CardTitle><CardDescription>Capture one synchronized RGB image, full cloud, cup crop, and exact-stamp metadata without restarting MuJoCo.</CardDescription></CardHeader>
+      <CardContent className="mt-4"><LiveSensor api={client} lease={leaseId} sessionId={sessionId} /></CardContent>
     </Card>
   </main>;
 }

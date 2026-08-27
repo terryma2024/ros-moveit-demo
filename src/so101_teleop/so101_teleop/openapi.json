@@ -141,13 +141,37 @@
             "title": "Artifact Ids",
             "type": "array"
           },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/TaskArtifactSummary"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
           "capture_id": {
             "title": "Capture Id",
             "type": "string"
           },
+          "source_stamp_ns": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Stamp Ns"
+          },
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
           }
         },
         "required": [
@@ -502,11 +526,22 @@
       "RenderedImageRequest": {
         "additionalProperties": false,
         "properties": {
-          "background": {
-            "maxLength": 40,
-            "minLength": 1,
-            "title": "Background",
-            "type": "string"
+          "background_rgb": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Background Rgb",
+            "type": "array"
           },
           "captured_at": {
             "maxLength": 80,
@@ -515,8 +550,10 @@
             "type": "string"
           },
           "color_mode": {
-            "maxLength": 40,
-            "minLength": 1,
+            "enum": [
+              "rgb",
+              "uniform"
+            ],
             "title": "Color Mode",
             "type": "string"
           },
@@ -525,11 +562,22 @@
             "title": "Command Id",
             "type": "string"
           },
+          "displayed_point_count": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 400000.0,
+            "title": "Displayed Point Count",
+            "type": "integer"
+          },
           "lease_id": {
             "maxLength": 120,
             "minLength": 1,
             "title": "Lease Id",
             "type": "string"
+          },
+          "original_point_count": {
+            "exclusiveMinimum": 0.0,
+            "title": "Original Point Count",
+            "type": "integer"
           },
           "png_base64": {
             "maxLength": 14000000,
@@ -550,6 +598,19 @@
             "title": "Projection Matrix",
             "type": "array"
           },
+          "sampling_rule": {
+            "enum": [
+              "all",
+              "fixed-stride"
+            ],
+            "title": "Sampling Rule",
+            "type": "string"
+          },
+          "sampling_stride": {
+            "minimum": 1.0,
+            "title": "Sampling Stride",
+            "type": "integer"
+          },
           "session_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$",
             "title": "Session Id",
@@ -560,6 +621,11 @@
             "title": "Source Artifact Id",
             "type": "string"
           },
+          "source_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          },
           "view_matrix": {
             "items": {
               "type": "number"
@@ -567,17 +633,19 @@
             "title": "View Matrix",
             "type": "array"
           },
-          "viewport_height": {
-            "exclusiveMinimum": 0.0,
-            "maximum": 16384.0,
-            "title": "Viewport Height",
-            "type": "integer"
-          },
-          "viewport_width": {
-            "exclusiveMinimum": 0.0,
-            "maximum": 16384.0,
-            "title": "Viewport Width",
-            "type": "integer"
+          "viewport_px": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Viewport Px",
+            "type": "array"
           }
         },
         "required": [
@@ -585,14 +653,18 @@
           "lease_id",
           "command_id",
           "source_artifact_id",
+          "source_sha256",
           "png_base64",
           "view_matrix",
           "projection_matrix",
           "point_size",
           "color_mode",
-          "background",
-          "viewport_width",
-          "viewport_height",
+          "background_rgb",
+          "viewport_px",
+          "original_point_count",
+          "displayed_point_count",
+          "sampling_rule",
+          "sampling_stride",
           "captured_at"
         ],
         "title": "RenderedImageRequest",
@@ -608,6 +680,47 @@
         ],
         "title": "ServerMode",
         "type": "string"
+      },
+      "TaskArtifactSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "pattern": "^[a-f0-9]{24}$",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "byte_size": {
+            "minimum": 0.0,
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "media_type": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "name",
+          "media_type",
+          "byte_size",
+          "sha256"
+        ],
+        "title": "TaskArtifactSummary",
+        "type": "object"
       },
       "TaskCaptureRequest": {
         "additionalProperties": false,
