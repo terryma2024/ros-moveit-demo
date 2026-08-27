@@ -84,12 +84,26 @@ class OwnedPointProcesses:
 
 
 class RosGraphProbe:
+    def __init__(self, *, runner: Callable = subprocess.run) -> None:
+        self._runner = runner
+
     def subscription_count(self, node_name: str, topic: str) -> int:
-        completed = subprocess.run(
-            ros2_command("node", "info", node_name),
-            capture_output=True,
-            text=True,
-        )
+        try:
+            completed = self._runner(
+                ros2_command(
+                    "node",
+                    "info",
+                    "--no-daemon",
+                    "--spin-time",
+                    "0.2",
+                    node_name,
+                ),
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+            )
+        except subprocess.TimeoutExpired:
+            return 0
         if completed.returncode != 0:
             return 0
         in_subscriptions = False

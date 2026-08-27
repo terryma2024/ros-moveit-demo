@@ -34,6 +34,28 @@ class _Graph:
         return 1
 
 
+def test_graph_probe_discovers_subscription_without_ros_daemon() -> None:
+    from so101_demo.runtime.task_batch_runtime import RosGraphProbe
+
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(
+            returncode=0,
+            stdout="Subscribers:\n  /cup_pose: geometry_msgs/msg/PoseStamped\nPublishers:\n",
+        )
+
+    probe = RosGraphProbe(runner=run)
+
+    assert probe.subscription_count(
+        "/so101_dynamic_cup_pick_place", "/cup_pose"
+    ) == 1
+    assert "--no-daemon" in calls[0][0]
+    assert calls[0][0][-1] == "/so101_dynamic_cup_pick_place"
+    assert calls[0][1]["timeout"] == 3.0
+
+
 def _runtime(tmp_path: Path):
     from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
 
