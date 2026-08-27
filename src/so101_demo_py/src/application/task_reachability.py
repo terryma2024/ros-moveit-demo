@@ -31,6 +31,9 @@ _UNKNOWN_FAILURE_CODES = frozenset(
     }
 )
 
+_SO101_GRIPPER_JOINT = "6"
+_SO101_PREOPEN_Q6 = 0.465038
+
 
 class ReachabilityStatus(StrEnum):
     REACHABLE = "REACHABLE"
@@ -75,6 +78,22 @@ class ReachabilityPlannerPort(Protocol):
         cup_pose_world: PoseEvidence,
         timeout_s: float,
     ) -> SegmentPlanReceipt: ...
+
+
+def prepare_reachability_start_state(
+    observed: JointStateEvidence,
+) -> JointStateEvidence:
+    """Model the real PREPARE_OPEN_GRIPPER predecessor for plan-only checks."""
+
+    if _SO101_GRIPPER_JOINT not in observed.names:
+        raise ValueError("GRIPPER_JOINT_STATE_UNAVAILABLE")
+    positions = list(observed.positions_rad)
+    positions[observed.names.index(_SO101_GRIPPER_JOINT)] = _SO101_PREOPEN_Q6
+    return JointStateEvidence(
+        observed.names,
+        tuple(positions),
+        observed.observed_monotonic_s,
+    )
 
 
 def _report(

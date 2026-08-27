@@ -136,9 +136,20 @@ class RosMoveGroupReachabilityPlanner:
         trajectory = result.planned_trajectory.joint_trajectory
         if not trajectory.points:
             return self._failure("TERMINAL_STATE_UNAVAILABLE", error_code)
+        planned_positions = {
+            name: float(value)
+            for name, value in zip(
+                trajectory.joint_names,
+                trajectory.points[-1].positions,
+                strict=True,
+            )
+        }
         terminal = JointStateEvidence(
-            tuple(trajectory.joint_names),
-            tuple(float(value) for value in trajectory.points[-1].positions),
+            start.names,
+            tuple(
+                planned_positions.get(name, position)
+                for name, position in zip(start.names, start.positions_rad, strict=True)
+            ),
             self._monotonic(),
         )
         return SegmentPlanReceipt(True, terminal, error_code, None)
