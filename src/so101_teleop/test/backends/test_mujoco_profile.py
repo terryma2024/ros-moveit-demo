@@ -98,7 +98,7 @@ def test_mujoco_profile_pins_formal_owner_operations():
 
     assert profile.owner_package == "so101_demo_py"
     assert profile.probe.package == "so101_demo_py"
-    assert profile.probe.executable == "pick_place"
+    assert profile.probe.executable == "teleop_workflow"
     assert profile.capabilities.workflow_run is True
     assert profile.capabilities.reset_world is True
     assert profile.capabilities.camera_presets is True
