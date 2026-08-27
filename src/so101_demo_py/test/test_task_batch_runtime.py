@@ -262,7 +262,7 @@ def test_declared_reachability_and_reset_preserve_point_session_epoch(tmp_path: 
         5,
         "sim-a",
     )
-    assert resumed == [True]
+    assert resumed == [True, True]
     reachability_argv = commands[0]
     joint_timeout = reachability_argv.index("--joint-state-timeout-s")
     assert reachability_argv[joint_timeout : joint_timeout + 2] == [
@@ -272,6 +272,33 @@ def test_declared_reachability_and_reset_preserve_point_session_epoch(tmp_path: 
     reset_argv = commands[1]
     coordinates = reset_argv.index("--cup-position-world-m")
     assert reset_argv[coordinates + 1 : coordinates + 4] == ["-0.03", "-0.28", "0.165"]
+
+
+def test_declared_reachability_fails_closed_when_world_cannot_resume(tmp_path: Path) -> None:
+    from so101_demo.application.task_batch import SharedStackFailure
+    from so101_demo.core.task_points import TaskPoint
+    from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
+
+    commands = []
+    runtime = RosTaskBatchRuntime(
+        _Processes(),
+        _Graph(),
+        session_id="sim-a",
+        points_file=tmp_path / "points.yaml",
+        policy_file=tmp_path / "policy.yaml",
+        evidence_root=tmp_path,
+        viewer_capture=SimpleNamespace(capture=lambda *_args, **_kwargs: None),
+        command_runner=lambda *args, **kwargs: commands.append((args, kwargs)),
+        resume=lambda: False,
+    )
+
+    try:
+        runtime.check_declared(TaskPoint("next", "Next", (0.02, -0.28, 0.165)))
+    except SharedStackFailure as error:
+        assert error.code == "MUJOCO_RESUME_FAILED"
+    else:
+        raise AssertionError("reachability must not run against a paused world")
+    assert commands == []
 
 
 def test_runtime_canonicalizes_symlinked_evidence_root(tmp_path: Path) -> None:

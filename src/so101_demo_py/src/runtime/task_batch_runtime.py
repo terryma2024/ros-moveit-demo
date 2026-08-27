@@ -195,6 +195,8 @@ class RosTaskBatchRuntime:
         return self._command_runner(argv, capture_output=True, text=True)
 
     def check_declared(self, point: TaskPoint) -> ReachabilityReport:
+        if not self._resume():
+            raise SharedStackFailure("MUJOCO_RESUME_FAILED")
         root = self._evidence_root / "declared-reachability"
         root.mkdir(parents=True, exist_ok=True)
         evidence = root / f"{point.id}.json"
