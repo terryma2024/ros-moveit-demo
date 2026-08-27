@@ -106,7 +106,7 @@ export function createThreePointCloudRenderer(
   const camera = new THREE.PerspectiveCamera(48, width / height, 0.001, 20);
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(width, height, false);
+  renderer.setSize(width, height);
   host.appendChild(renderer.domElement);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;

@@ -6,6 +6,7 @@ import type {
   RenderedPointCloudMetadata,
 } from "@/api/task-types";
 import { isCommandFailure } from "@/api/task-types";
+import { artifactLabel } from "@/components/tasks/evidence-browser";
 import { PointCloudViewer, type PointCloudViewerApi } from "@/components/tasks/point-cloud-viewer";
 import { Button } from "@/components/ui/button";
 
@@ -83,9 +84,24 @@ export function LiveSensor({
             <dt className="text-slate-500">Cup points</dt><dd>{String(capture.summary.cup_point_count ?? "unavailable")}</dd>
           </dl>
         </div>
-        <div className="rounded border border-slate-700 p-3 text-xs text-slate-400">
-          All displayed files are manifest-registered artifacts from capture <strong className="text-slate-200">{capture.capture_id}</strong>.
-        </div>
+        <section aria-label="Capture artifacts" className="rounded border border-slate-700 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <strong className="text-sm text-slate-200">Capture artifacts</strong>
+            <span className="text-xs text-slate-400">{capture.artifacts.length} registered artifacts</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Manifest-registered files from capture <strong className="text-slate-300">{capture.capture_id}</strong>.
+          </p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {capture.artifacts.map((artifact) => <li key={artifact.artifact_id} className="min-w-0 rounded bg-slate-950 p-2 text-xs">
+              <a className="font-medium text-cyan-400 underline" href={api.artifactUrl(artifact.artifact_id)} download>{artifactLabel(artifact)}</a>
+              <div className="mt-1 truncate text-slate-500" title={`${artifact.name} · ${artifact.byte_size.toLocaleString()} B`}>
+                {artifact.name} · {artifact.byte_size.toLocaleString()} B
+              </div>
+              <div className="truncate text-slate-600" title={artifact.sha256}>sha256 {artifact.sha256}</div>
+            </li>)}
+          </ul>
+        </section>
       </div>
       {viewerApi && <Viewer capture={capture} api={viewerApi} />}
     </>}
