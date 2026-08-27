@@ -45,6 +45,7 @@ def make_move_group_goal(
         planning_group=template.planning_group,
         frame_id=template.planning_frame,
         tcp_link=template.tcp_link,
+        enforce_orientation_path=False,
     )
     wire = make_get_motion_plan_pose_request(request)
     goal = MoveGroup.Goal()
