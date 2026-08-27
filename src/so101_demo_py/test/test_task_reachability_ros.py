@@ -76,6 +76,7 @@ def test_goal_is_plan_only_and_contains_request_local_cup_scene() -> None:
     )
     assert goal.request.group_name == "arm"
     assert goal.request.goal_constraints[0].position_constraints[0].link_name == "so101_tcp"
+    assert goal.request.path_constraints.orientation_constraints == []
 
 
 class _Future:
