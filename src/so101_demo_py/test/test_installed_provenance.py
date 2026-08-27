@@ -51,12 +51,13 @@ def test_manifest_matches_selected_installed_prefix_and_source() -> None:
     expected = os.environ.get("SO101_DEMO_EXPECTED_PREFIX")
     if expected is not None:
         assert prefix == Path(expected).resolve()
-    assert prefix.name == "so101_demo_py"
+    else:
+        assert prefix.name == "so101_demo_py"
     assert Path(get_package_share_directory("so101_demo_py")).resolve() == (
         prefix / "share/so101_demo_py"
     )
     manifest = installed_bundle().manifest["inputs"]
-    assert manifest["package_prefix"] == str(prefix)
+    assert Path(manifest["package_prefix"]).resolve() == prefix
     assert manifest["source_commit"] == os.environ.get("SO101_SOURCE_COMMIT", _git_head())
     dependency = manifest["mujoco_ros2_control"]
     assert dependency["prefix"] != "/opt/ros/jazzy"
@@ -82,7 +83,12 @@ def test_final_install_contains_runtime_contract() -> None:
 def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> None:
     demo_prefix = Path(get_package_prefix("so101_demo_py")).resolve()
     support_prefix = Path(get_package_prefix("so101_mujoco_support")).resolve()
-    expected_support_prefix = demo_prefix.parent / "so101_mujoco_support"
+    expected = os.environ.get("SO101_DEMO_EXPECTED_PREFIX")
+    expected_support_prefix = (
+        demo_prefix
+        if expected is not None
+        else demo_prefix.parent / "so101_mujoco_support"
+    )
     library_suffix = ".dylib" if platform.system() == "Darwin" else ".so"
 
     assert support_prefix == expected_support_prefix

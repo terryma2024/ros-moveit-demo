@@ -9,6 +9,9 @@ import pytest
 from so101_teleop.web_bundle import WebBundleError, ensure_web_bundle, select_bun
 
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _source(root: Path) -> Path:
     (root / "src").mkdir(parents=True)
     (root / "src" / "main.tsx").write_text("export default 1\n")
@@ -131,3 +134,14 @@ def test_bun_selection_rejects_invalid_version(tmp_path: Path):
 
     with pytest.raises(WebBundleError, match=r"Bun is required"):
         select_bun({"SO101_TELEOP_BUN": str(bun)}, runner=old_runner, pinned_bun=tmp_path / "absent")
+
+
+def test_installed_web_source_contract_contains_task_page_and_exact_three() -> None:
+    package = (PACKAGE_ROOT / "web/package.json").read_text(encoding="utf-8")
+    main = (PACKAGE_ROOT / "web/src/main.tsx").read_text(encoding="utf-8")
+    task_app = (PACKAGE_ROOT / "web/src/task-app.tsx").read_text(encoding="utf-8")
+    assert '"three": "0.184.0"' in package
+    assert '"@types/three": "0.184.0"' in package
+    assert 'location.pathname === "/tasks"' in main
+    assert "LiveSensor" in task_app
+    assert "EvidenceBrowser" in task_app
