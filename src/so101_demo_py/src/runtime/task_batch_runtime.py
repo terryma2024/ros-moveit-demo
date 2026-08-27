@@ -37,22 +37,41 @@ class OwnedPointProcesses:
         if environment is not None:
             self._environment.update(environment)
         self._children: dict[str, object] = {}
+        self._output_streams: dict[str, object] = {}
 
-    def start(self, role: str, argv: list[str], *, environment=None) -> ManagedChild:
+    def start(
+        self,
+        role: str,
+        argv: list[str],
+        *,
+        environment=None,
+        stdout_path: Path | None = None,
+    ) -> ManagedChild:
         if role in self._children:
             raise RuntimeError(f"point child role already exists: {role}")
         child_environment = dict(self._environment)
         if environment is not None:
             child_environment.update(environment)
-        child = self._popen(
-            argv,
-            start_new_session=True,
-            env=child_environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        output = None
+        if stdout_path is not None:
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
+            output = stdout_path.open("w", encoding="utf-8", buffering=1)
+        try:
+            child = self._popen(
+                argv,
+                start_new_session=True,
+                env=child_environment,
+                stdout=output if output is not None else subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        except BaseException:
+            if output is not None:
+                output.close()
+            raise
         self._children[role] = child
+        if output is not None:
+            self._output_streams[role] = output
         return ManagedChild(role, int(child.pid), int(child.pid))
 
     def poll(self, role: str):
@@ -77,6 +96,9 @@ class OwnedPointProcesses:
             except BaseException as error:
                 failures.append((role, error))
         self._children.clear()
+        for output in self._output_streams.values():
+            output.close()
+        self._output_streams.clear()
         if failures:
             raise RuntimeError(
                 "; ".join(f"{role}: {error}" for role, error in failures)
@@ -258,6 +280,7 @@ class RosTaskBatchRuntime:
                 "--scene-source",
                 "observe_only",
             ),
+            stdout_path=point_root / "dynamic-consumer.log",
         )
 
     def wait_consumer_subscription(self, child: ManagedChild, timeout_s: float) -> None:
@@ -293,6 +316,7 @@ class RosTaskBatchRuntime:
                 "--evidence-json",
                 str(point_root / "perception-summary.json"),
             ),
+            stdout_path=point_root / "rgbd-perception.log",
         )
 
     def wait_point_result(
@@ -331,6 +355,8 @@ class RosTaskBatchRuntime:
                 "cup-cloud.ply",
                 "point-cloud-preview.png",
                 "viewer.png",
+                "dynamic-consumer.log",
+                "rgbd-perception.log",
             )
             if (point_root / name).is_file()
         )

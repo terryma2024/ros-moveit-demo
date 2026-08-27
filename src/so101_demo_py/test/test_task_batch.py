@@ -237,6 +237,37 @@ def test_missing_terminal_artifact_fails_point_but_continues(tmp_path: Path) -> 
     assert result.points[1].status is PointStatus.SUCCEEDED
 
 
+def test_terminal_evidence_gap_does_not_overwrite_point_root_cause(tmp_path: Path) -> None:
+    from so101_demo.application.task_batch import LocalPointFailure, run_task_batch
+
+    registry = TaskArtifactRegistry(tmp_path)
+    runtime = FakeRuntime(
+        tmp_path,
+        outcomes={"first": LocalPointFailure("RGBD_PERCEPTION_EXITED_EARLY")},
+        incomplete=frozenset({"first"}),
+    )
+
+    result = run_task_batch(_request(tmp_path, "first"), runtime, registry)
+
+    assert result.points[0].failure_code == "RGBD_PERCEPTION_EXITED_EARLY"
+
+
+def test_unexpected_point_exception_is_retained_as_json_evidence(tmp_path: Path) -> None:
+    from so101_demo.application.task_batch import run_task_batch
+
+    registry = TaskArtifactRegistry(tmp_path)
+    runtime = FakeRuntime(tmp_path, outcomes={"first": RuntimeError("probe exploded")})
+
+    result = run_task_batch(_request(tmp_path, "first"), runtime, registry)
+
+    error_path = tmp_path / "batches/batch-1/points/01-first/point-runtime-error.json"
+    assert json.loads(error_path.read_text()) == {
+        "error_type": "RuntimeError",
+        "message": "probe exploded",
+    }
+    assert any(item.relative_path.endswith("point-runtime-error.json") for item in result.points[0].artifacts)
+
+
 def test_cancel_is_honored_only_after_safe_finalized_checkpoint(tmp_path: Path) -> None:
     from so101_demo.application.task_batch import BatchStatus, run_task_batch
 
