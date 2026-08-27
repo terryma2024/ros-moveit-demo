@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: 40dc356c501d12a000ff9552122ee59a6afe9b84
+current_commit: be4fae084e486578bd508a0413ed16808c1e00bd
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -20,13 +20,14 @@ confirmed_conclusions:
   - EXP-004 validates the MoveGroup plan-only wire adapter, stable task CLI contract, and mandatory dynamic pre-motion reachability gate.
   - EXP-005 validates one-stamp RGB, full-cloud, cup-cloud, deterministic preview, and summary generation before pose publication.
   - EXP-006 validates exclusive batch/point allocation, fsynced atomic JSON, content addressing, and symlink/outside-root rejection.
+  - EXP-007 validates point-local continuation, shared/held-cup abort, monotonic epochs, safe cancellation, and required terminal evidence.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-012
-next_experiment: EXP-007
+latest_checkpoint: CP-014
+next_experiment: EXP-008
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -568,4 +569,92 @@ disproven_routes:
 open_risks:
   - Batch continuation and safety classification are not yet applied to reset/perception/workflow outcomes.
 next_command: git diff --check and commit the three planned Task 6 paths including the ledger.
+```
+
+## CP-013 — Task 6 committed; Task 7 preregistered
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-006
+current_hypothesis: A first-failure batch state machine can continue after point-local failures while aborting shared-stack or held-cup failures and finalizing every point before advancing.
+working_tree_status: clean at be4fae084e486578bd508a0413ed16808c1e00bd before Task 7 RED tests
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 6 is committed as be4fae084e486578bd508a0413ed16808c1e00bd.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Failure scope, held-cup recovery, epoch monotonicity, cancellation, and terminal evidence completeness must be explicit state-machine decisions.
+next_command: Write and run Task 7 batch application RED tests.
+```
+
+## EXP-007 — reset-world batch continuation state machine
+
+```yaml
+experiment_id: EXP-007
+status: VALID
+prior_experiment: EXP-006
+hypothesis: A typed application loop can skip declared-unreachable points, continue after local failures, and abort safely on shared-stack or held-cup faults while preserving monotonic reset epochs and finalized evidence.
+prediction: RED fails because application.task_batch does not exist; GREEN proves point continuation, fatal abort, operator recovery, cancellation checkpoints, cleanup order, and manifest finalization.
+single_variable: Add only backend-neutral batch values, protocol, state machine, manifests, and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is be4fae084e486578bd508a0413ed16808c1e00bd.
+  - Task 6 registry owns one temporary test evidence root; no ROS or processes are started.
+success_criteria:
+  - UNREACHABLE is skipped without reset; UNKNOWN/shared failures abort; point-local failures finalize and continue.
+  - Each executed point increments the same session epoch exactly once.
+  - Consumer subscription is ready before perception starts.
+  - Required RGB/full PLY/cup PLY/preview/Viewer artifacts are captured before immutable point finalization.
+  - Children stop, safety passes, manifest finalizes, then and only then the next point can start.
+  - Held-cup faults end NEEDS_OPERATOR_RECOVERY without an automatic reset.
+failure_criteria:
+  - A later point runs after a shared fault, reset occurs for an unreachable point, or missing evidence is reported successful.
+invalid_criteria:
+  - A fake runtime writes outside the one registry root.
+provenance:
+  source_commit: be4fae084e486578bd508a0413ed16808c1e00bd
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run test_task_batch.py.
+    exit_code: 1
+  - command: Run test_task_batch.py and test_task_artifacts.py, then py_compile and git diff --check.
+    exit_code: 0
+observed:
+  - Valid RED failed because application.task_batch did not exist.
+  - GREEN passed 17 tests, and compilation plus whitespace checks passed.
+  - A point-local perception failure finalized FAILED evidence and the next point completed successfully.
+  - Shared session/epoch failures aborted remaining points; held-cup failure ended NEEDS_OPERATOR_RECOVERY without reset.
+  - Declared UNREACHABLE skipped reset, while incomplete RGB/PLY/preview/Viewer evidence failed only that point.
+  - Cancellation was honored after child cleanup, safety confirmation, and point-result.json finalization.
+inferred:
+  - The runtime adapter can remain process/ROS-specific while continuation policy and evidence ordering stay deterministic and unit-testable.
+conclusion: The backend-neutral RESET_WORLD batch application contract is source-valid and ready for the persistent ROS/process runtime.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task7-red.log sha256=ad5a8798e46e8f4acf96b8654ede19874e730be172522094aa42e84630fdf4df
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task7-green.log sha256=a44fbc805b9e3abae541e6c7d507a2374f44792f3b183195b4b950820da72bcb
+decision: KEEP
+next_experiment: EXP-008
+```
+
+## CP-014 — Task 7 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-007
+current_hypothesis: A persistent-stack ROS/process runtime can implement the batch port with exact process ownership, subscription-before-perception ordering, and one public CLI.
+working_tree_status: ledger plus application/task_batch.py and test_task_batch.py contain only planned Task 7 changes
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 7 batch and artifact regressions pass 17 tests.
+disproven_routes:
+  - Continuing after shared session/epoch faults or automatically resetting an unsupported held cup is forbidden.
+open_risks:
+  - No actual subprocess, ROS subscription, reset service, perception publisher, or viewer capture is bound yet.
+next_command: git diff --check and commit the three planned Task 7 paths including the ledger.
 ```
