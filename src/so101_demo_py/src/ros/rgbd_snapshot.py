@@ -162,7 +162,6 @@ class RosRgbdSnapshotSource:
     ) -> None:
         import rclpy
         from rclpy.parameter import Parameter
-        from rclpy.qos import qos_profile_sensor_data
         from sensor_msgs.msg import CameraInfo, Image
         from tf2_ros import Buffer, TransformListener
 
@@ -190,19 +189,19 @@ class RosRgbdSnapshotSource:
                     CameraInfo,
                     camera_info_topic,
                     lambda message: self._accept(self._buffer.add_camera_info(message)),
-                    qos_profile_sensor_data,
+                    10,
                 ),
                 self._node.create_subscription(
                     Image,
                     color_topic,
                     lambda message: self._accept(self._buffer.add_color(message)),
-                    qos_profile_sensor_data,
+                    10,
                 ),
                 self._node.create_subscription(
                     Image,
                     depth_topic,
                     lambda message: self._accept(self._buffer.add_depth(message)),
-                    qos_profile_sensor_data,
+                    10,
                 ),
             ]
         except BaseException as primary:

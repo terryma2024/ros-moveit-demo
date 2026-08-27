@@ -1,10 +1,18 @@
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    RegisterEventHandler,
+)
+from launch.event_handlers import OnProcessStart
 from launch_ros.actions import Node
 
 from launch import LaunchContext
+import so101_demo.runtime.launch_composition as launch_composition
 from so101_demo.runtime.launch_composition import build_task_station_launch_description
 
 
@@ -52,3 +60,57 @@ def test_public_task_station_launcher_is_thin() -> None:
     assert spec.loader is not None
     spec.loader.exec_module(module)
     assert module.generate_launch_description() is not None
+
+
+def test_task_station_starts_teleop_with_exact_mujoco_process_pid() -> None:
+    context = LaunchContext()
+    context.launch_configurations["teleop_port"] = "8080"
+
+    actions = launch_composition._task_station_teleop_actions(
+        SimpleNamespace(pid=53900),
+        context,
+        teleop_share=Path("/installed/share/so101_teleop"),
+        session_id="sim-a",
+    )
+
+    actions[0].execute(context)
+    assert context.environment["SO101_TASK_STATION_MUJOCO_PID"] == "53900"
+    assert isinstance(actions[1], IncludeLaunchDescription)
+
+
+def test_task_station_registers_teleop_start_handler_before_mujoco(
+    tmp_path: Path,
+) -> None:
+    description = build_task_station_launch_description()
+    declared = {
+        entity.name: entity
+        for entity in description.entities
+        if isinstance(entity, DeclareLaunchArgument)
+    }
+    context = LaunchContext()
+    for name, argument in declared.items():
+        context.launch_configurations[name] = argument.default_value[0].perform(context)
+    context.launch_configurations.update(
+        {
+            "session_id": "sim-a",
+            "task_evidence_root": str(tmp_path),
+            "include_teleop": "true",
+        }
+    )
+    opaque = next(
+        entity for entity in description.entities if isinstance(entity, OpaqueFunction)
+    )
+    actions = opaque.execute(context)
+
+    mujoco_index = next(
+        index
+        for index, action in enumerate(actions)
+        if isinstance(action, Node) and action.node_executable == "ros2_control_node"
+    )
+    handler_index = next(
+        index
+        for index, action in enumerate(actions)
+        if isinstance(action, RegisterEventHandler)
+        and isinstance(action.event_handler, OnProcessStart)
+    )
+    assert handler_index < mujoco_index

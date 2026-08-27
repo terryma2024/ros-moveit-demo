@@ -7,6 +7,7 @@ import re
 import stat
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from math import isfinite
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from launch.actions import (
     Shutdown,
     TimerAction,
 )
-from launch.event_handlers import OnProcessExit
+from launch.event_handlers import OnProcessExit, OnProcessStart
 from launch.events import Shutdown as ShutdownEvent
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
@@ -922,7 +923,23 @@ def _configured_task_station_actions(context):
         raise RuntimeError("include_teleop must be true or false")
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(context, share, session_id)
+    teleop_actions = []
+    if include_teleop == "true":
+        teleop_share = Path(get_package_share_directory("so101_teleop"))
+        teleop_actions.append(
+            RegisterEventHandler(
+                OnProcessStart(
+                    target_action=stack.simulator,
+                    on_start=partial(
+                        _task_station_teleop_actions,
+                        teleop_share=teleop_share,
+                        session_id=session_id,
+                    ),
+                )
+            )
+        )
     actions = [
+        *teleop_actions,
         *camera_static_transform_nodes(),
         *stack.actions,
         SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
@@ -933,23 +950,38 @@ def _configured_task_station_actions(context):
             )
         ),
     ]
-    if include_teleop == "true":
-        teleop_share = Path(get_package_share_directory("so101_teleop"))
-        actions.append(
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    str(teleop_share / "launch/so101_teleop.launch.py")
-                ),
-                launch_arguments={
-                    "backend": "mujoco_py",
-                    "bind_address": "127.0.0.1",
-                    "port": LaunchConfiguration("teleop_port"),
-                    "simulation_session_id": session_id,
-                    "build_web_if_needed": "false",
-                }.items(),
-            )
-        )
     return actions
+
+
+def _task_station_teleop_actions(
+    event,
+    context,
+    *,
+    teleop_share: Path,
+    session_id: str,
+):
+    del context
+    mujoco_pid = int(event.pid)
+    if mujoco_pid <= 0:
+        raise RuntimeError("task station MuJoCo PID must be positive")
+    return (
+        SetEnvironmentVariable(
+            "SO101_TASK_STATION_MUJOCO_PID",
+            str(mujoco_pid),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                str(teleop_share / "launch/so101_teleop.launch.py")
+            ),
+            launch_arguments={
+                "backend": "mujoco_py",
+                "bind_address": "127.0.0.1",
+                "port": LaunchConfiguration("teleop_port"),
+                "simulation_session_id": session_id,
+                "build_web_if_needed": "false",
+            }.items(),
+        ),
+    )
 
 
 def build_task_station_launch_description() -> LaunchDescription:

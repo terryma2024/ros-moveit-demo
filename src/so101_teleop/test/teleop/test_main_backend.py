@@ -45,6 +45,20 @@ def test_backend_is_required_before_profile_or_adapter_construction():
     assert calls == []
 
 
+def test_task_station_mujoco_pid_requires_explicit_positive_owner():
+    assert main_module.task_station_mujoco_pid(
+        {"SO101_TASK_STATION_MUJOCO_PID": "53900"}
+    ) == 53900
+
+    for environment in (
+        {},
+        {"SO101_TASK_STATION_MUJOCO_PID": "0"},
+        {"SO101_TASK_STATION_MUJOCO_PID": "bad"},
+    ):
+        with pytest.raises(RuntimeError, match="SO101_TASK_STATION_MUJOCO_PID"):
+            main_module.task_station_mujoco_pid(environment)
+
+
 def test_selected_backend_probe_failure_aborts_with_normalized_code():
     profile = SimpleNamespace(backend="gazebo_cpp")
     failure = BackendError("BACKEND_EXECUTABLE_NOT_FOUND", "owner missing")
