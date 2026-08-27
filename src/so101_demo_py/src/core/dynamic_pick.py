@@ -16,15 +16,20 @@ class DynamicPickError(ValueError):
     """A dynamic pose or template cannot produce safe motion targets."""
 
 
+DYNAMIC_REACHABILITY_STATES = (
+    State.MOVE_ABOVE_OBJECT,
+    State.DESCEND,
+    State.MICRO_LIFT,
+    State.LIFT,
+    State.MOVE_ABOVE_PLACE,
+    State.DESCEND_TO_PLACE,
+    State.RETREAT,
+)
+
+
 DYNAMIC_MOTION_STATES = frozenset(
     {
-        State.MOVE_ABOVE_OBJECT,
-        State.DESCEND,
-        State.MICRO_LIFT,
-        State.LIFT,
-        State.MOVE_ABOVE_PLACE,
-        State.DESCEND_TO_PLACE,
-        State.RETREAT,
+        *DYNAMIC_REACHABILITY_STATES,
         State.RECOVER_LIFT_TO_SAFE_HEIGHT,
         State.RECOVER_MOVE_ABOVE_PICK,
         State.RECOVER_DESCEND_TO_PICK,
