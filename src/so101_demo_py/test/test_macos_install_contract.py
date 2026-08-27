@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,7 @@ DYLIB_FARM = REPOSITORY_ROOT / "scripts" / "setup-macos-ros-dylib-farm.zsh"
 ENVRC_EXAMPLE = REPOSITORY_ROOT / ".envrc.example"
 PATCH_SERIES_DIR = REPOSITORY_ROOT / "scripts" / "patches" / "mujoco_ros2_control"
 SUBMODULE = REPOSITORY_ROOT / "third_party" / "mujoco_ros2_control"
+DEMO_SETUP = REPOSITORY_ROOT / "src/so101_demo_py/setup.py"
 LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/dependency-lock.yaml"
 RUNTIME_LOCK = REPOSITORY_ROOT / "src/so101_demo_py/config/dependency-lock.yaml"
 INTEGRATION_GUIDE = (
@@ -104,6 +106,21 @@ def test_upgrade_candidate_gitlink_is_clean_and_contains_both_ancestries() -> No
             ],
             check=True,
         )
+
+
+def test_task_station_install_contract_and_fork_versions_are_complete() -> None:
+    setup = DEMO_SETUP.read_text(encoding="utf-8")
+    for executable in (
+        "so101_mujoco_rgbd_batch",
+        "task_reachability",
+        "rgbd_sensor_capture",
+    ):
+        assert f'"{executable} =' in setup
+    assert (REPOSITORY_ROOT / "src/so101_demo_py/launch/so101_mujoco_task_station.launch.py").is_file()
+    assert (REPOSITORY_ROOT / "src/so101_demo_py/config/mujoco/rgbd_task_points.yaml").is_file()
+    package_files = sorted(SUBMODULE.glob("**/package.xml"))
+    assert package_files
+    assert {ET.parse(path).getroot().findtext("version") for path in package_files} == {"0.1.0"}
 
 
 def test_installer_builds_exact_upgrade_package_set_and_checks_new_artifacts() -> None:

@@ -1188,3 +1188,90 @@ open_risks:
   - Installed ROS package closure and candidate-overlay provenance remain unverified.
 next_command: Commit Task 13, then execute Task 14 source/package/install/provenance gates.
 ```
+
+## EXP-014 — full source, candidate install, and provenance qualification
+
+```yaml
+experiment_id: EXP-014
+status: VALID
+prior_experiment: EXP-013
+hypothesis: The complete task-station implementation is source-green and resolves every required runtime entry point from one isolated macOS candidate overlay built against mujoco_ros2_control 0.1.0.
+prediction: Focused install contracts, complete Python/Web suites, the production bundle, candidate build, installed tests, and launch introspection all pass without resolving the fork from the parent/default overlay.
+single_variable: Add Task 14 packaging/provenance assertions and documentation; do not change runtime behavior.
+lifecycle: NOT_STARTED
+preconditions:
+  - Runtime source commit is 0d8a3a6f3dd58e5aaa4deb76b209378f3146b4c2.
+  - mujoco_ros2_control submodule commit is 5e9d67ce9fde39d35bf94cc498721abf203a0ddd and every fork package version is 0.1.0.
+  - Registered evidence root is /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827.
+success_criteria:
+  - Complete so101_demo_py and so101_teleop source suites collect non-zero tests and pass.
+  - Complete Vitest suite and production bundle pass using Bun 1.3.14.
+  - Candidate prefix contains the batch, reachability, sensor-capture, task-station launch, preset YAML, task page, and exact Three.js dependencies.
+  - so101_demo_py, so101_teleop, mujoco_ros2_control, plugins, messages, and 3d_lidar resolve from the candidate prefix; all fork package versions are 0.1.0.
+  - Installed provenance tests and launch --show-args pass from the candidate overlay.
+failure_criteria:
+  - Zero tests collected, source-only entry point, parent/default fork resolution, stale package version, or missing runtime resource.
+invalid_criteria:
+  - A raw bun test run that bypasses Vitest configuration, a source test run against the old default install, or macOS CTest with a corrupted DYLD_LIBRARY_PATH is not a qualifying product result.
+provenance:
+  source_commit: 0d8a3a6f3dd58e5aaa4deb76b209378f3146b4c2
+  submodule_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
+  install_overlay: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install
+  build_base: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/build
+  ros_domain_id: NOT_STARTED
+commands:
+  - command: Run focused source install-contract tests.
+    exit_code: 0
+  - command: Run complete so101_demo_py source suite in the selected direnv/candidate environment.
+    exit_code: 0
+  - command: Run complete so101_teleop source suite outside the process-enumeration sandbox.
+    exit_code: 0
+  - command: Run the complete Vitest suite through bun run test.
+    exit_code: 0
+  - command: Run the TypeScript and Vite production build through Bun.
+    exit_code: 0
+  - command: Build the dependency-closed candidate with merge-install, explicitly skipping only locked macOS mujoco_vendor.
+    exit_code: 0
+  - command: Run installed provenance tests with SO101_DEMO_EXPECTED_PREFIX bound to the candidate.
+    exit_code: 0
+  - command: Record package prefixes, executable realpaths/stats, package XML hashes, submodule SHA, versions, and launch --show-args.
+    exit_code: 0
+observed:
+  - so101_demo_py passed 530 tests; so101_teleop passed 250 tests; Vitest passed 59 tests across 21 files; the production bundle built successfully with only the existing non-fatal chunk-size warning.
+  - The dependency-closed candidate built 7 packages in 95.8 seconds: fork core/plugins/messages/3d_lidar, so101_mujoco_support, so101_demo_py, and so101_teleop.
+  - mujoco_vendor was not rebuilt because the repository macOS environment supplies its locked staged headers and dylibs from the selected main underlay; no fork runtime package was reused from that underlay.
+  - Installed provenance passed 4 tests and launch argument introspection showed headless=false plus the four supported initial keyframes.
+  - A direct bun test invocation failed because Bun's native runner ignored Vitest jsdom and collected Playwright files; bun run test is the repository contract and passed.
+  - An additional colcon test attempt is non-qualifying: CTest emitted repeated append-env DYLD_LIBRARY_PATH assignments that collapsed to incomplete library lookup and rclpy could not load librosidl_typesupport_c.dylib. The same tests pass in the verified direnv shell, so this is retained as a macOS CTest harness limitation rather than converted into a product pass.
+inferred:
+  - The selected install is a complete, locally bundled task-station candidate with explicit 0.1.0 fork provenance; source and installed-runtime evidence are independently green.
+conclusion: Task 14 is source-, Web-, package-, install-, and provenance-valid; visible physical qualification remains Task 15.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-demo-source-green.log sha256=33ff758dfa71b0727969b3d526f546245f6060365949540b40bcfa827fc06842
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-teleop-source-green.log sha256=ea875985082fab160938fd9e06ba6144c8b7a39cc54af062eaef236a8ca37c24
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-web-vitest-green.log sha256=c21c27ad48bf3763a9ac6c1f10aafbbe89456836879f73cf930b233b3685084b
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-web-build-green.log sha256=babebb63088df147e66e9f965fd61422d2fd171add9e283519989fc8de54941f
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/colcon-log/build_2026-08-27_15-02-05/logger_all.log sha256=d5d29d9739182c4d5c5d85595662ec773b10c372dd4a292719821d9a0169b89e
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-installed-tests-green.log sha256=b354845c1e7b877d6fce29971f341f6719cafc886ee0c5f7d940103175fa1492
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-installed-provenance.log sha256=fb291051f374e13010ddafedaf70b9674334a4303a66c1f6e20cd00f538ce808
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task14-colcon-test-green.log sha256=9fe9e5451d59a77a29f7b7031d0ca3f68eda2147ed7bc21868065186cdccef36 non-qualifying harness evidence
+decision: KEEP
+next_experiment: EXP-015
+```
+
+## CP-026 — Task 14 GREEN, visible runtime pending
+
+```yaml
+checkpoint_id: CP-026
+last_valid_experiment: EXP-014
+current_hypothesis: The exact candidate overlay can complete one visible four-preset RESET_WORLD batch and continue from an unreachable point to a later reachable point while retaining inspectable macOS evidence.
+working_tree_status: Task 14 install/provenance tests, teaching guide, and ledger are modified; runtime source is unchanged from candidate commit 0d8a3a6.
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Complete source suites pass 530 and 250 tests; Web passes 59 tests and production build; installed provenance passes 4 tests.
+  - Candidate runtime and all mujoco_ros2_control fork packages resolve from the isolated merge-install prefix at version 0.1.0.
+open_risks:
+  - Real visible Viewer capture, four-point physical success, unreachable continuation, task-page live capture, and owned cleanup have not run in this task.
+next_command: Commit Task 14, read the gui-capture skill, inventory live state, and start Task 15 with a unique ROS domain and session.
+```
