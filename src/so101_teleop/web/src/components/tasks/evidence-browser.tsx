@@ -1,6 +1,6 @@
 import type { TaskArtifact, TaskRunSummary } from "@/api/task-types";
 
-function artifactLabel(artifact: TaskArtifact): string {
+export function artifactLabel(artifact: TaskArtifact): string {
   const name = artifact.name.toLowerCase();
   if (name === "rgb.png") return "RGB PNG";
   if (name === "full-cloud.ply") return "Full PLY";
