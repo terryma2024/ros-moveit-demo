@@ -23,6 +23,7 @@ EXPECTED_EXECUTABLES = {
     "so101_mujoco_perception_pick_place",
     "teleop_reset",
     "teleop_workflow",
+    "task_reachability",
 }
 EXPECTED_LAUNCHERS = {
     "so101_gazebo.launch.py",

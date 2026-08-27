@@ -61,6 +61,7 @@ setup(
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",
+            "task_reachability = so101_demo.cli.task_reachability:main",
         ]
     },
 )
