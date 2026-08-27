@@ -21,6 +21,7 @@ from .models import (
     TaskMutationRequest,
     TaskPointModel,
     TaskPointSummary,
+    TaskArtifactSummary,
     TaskRecoveryRequest,
     TaskRunRequest,
     TaskRunSummary,
@@ -418,6 +419,7 @@ class TaskService:
                     request, "TASK_CAPTURE_PATH_INVALID", "capture path is invalid"
                 )
             artifact_ids = []
+            artifacts = []
             media = {
                 ".png": "image/png",
                 ".ply": "application/octet-stream",
@@ -431,10 +433,27 @@ class TaskService:
                         capture_id=capture_id,
                     )
                     artifact_ids.append(record.artifact_id)
+                    artifacts.append(TaskArtifactSummary(
+                        artifact_id=record.artifact_id,
+                        name=path.name,
+                        media_type=record.media_type,
+                        byte_size=record.byte_size,
+                        sha256=record.sha256,
+                    ))
+            summary: dict[str, object] = {}
+            summary_path = output / "summary.json"
+            if summary_path.is_file() and not summary_path.is_symlink():
+                loaded = json.loads(summary_path.read_text())
+                if isinstance(loaded, dict):
+                    summary = loaded
+            stamp = summary.get("source_stamp_ns")
             return CaptureResponse(
                 capture_id=capture_id,
                 status=str(document.get("status", "SUCCEEDED")),
                 artifact_ids=artifact_ids,
+                source_stamp_ns=stamp if isinstance(stamp, int) and stamp >= 0 else None,
+                summary=summary,
+                artifacts=artifacts,
             )
 
         return await self._idempotent(request, operation)
@@ -456,9 +475,13 @@ class TaskService:
                         "projection_matrix": request.projection_matrix,
                         "point_size": request.point_size,
                         "color_mode": request.color_mode,
-                        "background": request.background,
-                        "viewport_width": request.viewport_width,
-                        "viewport_height": request.viewport_height,
+                        "background_rgb": request.background_rgb,
+                        "viewport_px": request.viewport_px,
+                        "source_sha256": request.source_sha256,
+                        "original_point_count": request.original_point_count,
+                        "displayed_point_count": request.displayed_point_count,
+                        "sampling_rule": request.sampling_rule,
+                        "sampling_stride": request.sampling_stride,
                         "captured_at": request.captured_at,
                     },
                 )

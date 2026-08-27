@@ -213,17 +213,34 @@ class ManifestArtifactStore:
             view = tuple(float(item) for item in metadata["view_matrix"])
             projection = tuple(float(item) for item in metadata["projection_matrix"])
             point_size = float(metadata["point_size"])
-            width = int(metadata["viewport_width"])
-            height = int(metadata["viewport_height"])
+            viewport = tuple(int(item) for item in metadata["viewport_px"])
+            background = tuple(float(item) for item in metadata["background_rgb"])
+            source_sha256 = str(metadata["source_sha256"])
+            original_count = int(metadata["original_point_count"])
+            displayed_count = int(metadata["displayed_point_count"])
+            sampling_rule = str(metadata["sampling_rule"])
+            sampling_stride = int(metadata["sampling_stride"])
+            color_mode = str(metadata["color_mode"])
         except (KeyError, TypeError, ValueError) as error:
             raise ArtifactAccessError("RENDER_METADATA_INVALID") from error
         if (
             len(view) != 16
             or len(projection) != 16
-            or not all(math.isfinite(item) for item in (*view, *projection, point_size))
+            or len(viewport) != 2
+            or len(background) != 3
+            or not all(math.isfinite(item) for item in (*view, *projection, *background, point_size))
             or point_size <= 0
-            or width <= 0
-            or height <= 0
+            or not all(0 < item <= 16384 for item in viewport)
+            or not all(0.0 <= item <= 1.0 for item in background)
+            or source_sha256 != source.sha256
+            or original_count <= 0
+            or displayed_count <= 0
+            or displayed_count > min(original_count, 400_000)
+            or sampling_rule not in {"all", "fixed-stride"}
+            or sampling_stride <= 0
+            or (sampling_rule == "all" and (sampling_stride != 1 or displayed_count != original_count))
+            or (sampling_rule == "fixed-stride" and sampling_stride <= 1)
+            or color_mode not in {"rgb", "uniform"}
         ):
             raise ArtifactAccessError("RENDER_METADATA_INVALID")
         directory = self.root / "captures" / capture_id

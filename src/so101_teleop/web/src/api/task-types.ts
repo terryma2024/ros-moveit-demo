@@ -55,6 +55,33 @@ export type CaptureResponse = {
   capture_id: string;
   status: string;
   artifact_ids: string[];
+  source_stamp_ns?: number | null;
+  summary: Record<string, unknown>;
+  artifacts: TaskArtifact[];
+};
+
+export type TaskArtifact = {
+  artifact_id: string;
+  name: string;
+  media_type: string;
+  byte_size: number;
+  sha256: string;
+};
+
+export type RenderedPointCloudMetadata = {
+  source_artifact_id: string;
+  source_sha256: string;
+  view_matrix: number[];
+  projection_matrix: number[];
+  point_size: number;
+  color_mode: "rgb" | "uniform";
+  background_rgb: [number, number, number];
+  viewport_px: [number, number];
+  original_point_count: number;
+  displayed_point_count: number;
+  sampling_rule: "all" | "fixed-stride";
+  sampling_stride: number;
+  captured_at: string;
 };
 
 export type TaskEvent = {

@@ -12,7 +12,11 @@ from typing import Any, Callable, Mapping, Protocol
 
 import numpy as np
 
-from ..cli.rgbd_point_cloud import RgbdPointCloudFrame, build_cup_point_cloud
+from ..cli.rgbd_point_cloud import (
+    RgbdPointCloudFrame,
+    build_cup_point_cloud,
+    robust_center,
+)
 from ..runtime.point_cloud_preview import render_point_cloud_preview, write_png_rgb8
 
 
@@ -134,6 +138,7 @@ def capture_rgbd_snapshot(
         "full_point_count": frame.full_point_count,
         "color_candidate_point_count": frame.color_candidate_point_count,
         "cup_point_count": frame.cup_point_count,
+        "cup_center_xyz": robust_center(frame.cup_points_xyz).tolist(),
         "exact_transform_confirmed": True,
         "preview": preview,
     }

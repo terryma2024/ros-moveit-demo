@@ -263,22 +263,37 @@ class ReachabilityResponse(_StrictTaskModel):
     simulation_session_id: str
 
 
+class TaskArtifactSummary(_StrictTaskModel):
+    artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
+    name: str = Field(min_length=1, max_length=160)
+    media_type: str = Field(min_length=1, max_length=100)
+    byte_size: int = Field(ge=0)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class CaptureResponse(_StrictTaskModel):
     capture_id: str
     status: str
     artifact_ids: List[str] = Field(default_factory=list)
+    source_stamp_ns: Optional[int] = Field(default=None, ge=0)
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    artifacts: List[TaskArtifactSummary] = Field(default_factory=list)
 
 
 class RenderedImageRequest(TaskMutationRequest):
     source_artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     png_base64: str = Field(min_length=1, max_length=14_000_000)
     view_matrix: tuple[float, ...]
     projection_matrix: tuple[float, ...]
     point_size: float = Field(gt=0, le=100)
-    color_mode: str = Field(min_length=1, max_length=40)
-    background: str = Field(min_length=1, max_length=40)
-    viewport_width: int = Field(gt=0, le=16384)
-    viewport_height: int = Field(gt=0, le=16384)
+    color_mode: Literal["rgb", "uniform"]
+    background_rgb: tuple[float, float, float]
+    viewport_px: tuple[int, int]
+    original_point_count: int = Field(gt=0)
+    displayed_point_count: int = Field(gt=0, le=400_000)
+    sampling_rule: Literal["all", "fixed-stride"]
+    sampling_stride: int = Field(ge=1)
     captured_at: str = Field(min_length=1, max_length=80)
 
     @field_validator("view_matrix", "projection_matrix")
@@ -286,6 +301,20 @@ class RenderedImageRequest(TaskMutationRequest):
     def finite_matrix(cls, value):
         if len(value) != 16 or not all(math.isfinite(item) for item in value):
             raise ValueError("render matrices must contain 16 finite values")
+        return value
+
+    @field_validator("background_rgb")
+    @classmethod
+    def valid_background(cls, value):
+        if not all(math.isfinite(item) and 0.0 <= item <= 1.0 for item in value):
+            raise ValueError("background RGB values must be finite and within [0, 1]")
+        return value
+
+    @field_validator("viewport_px")
+    @classmethod
+    def valid_viewport(cls, value):
+        if not all(0 < item <= 16384 for item in value):
+            raise ValueError("viewport dimensions must be within [1, 16384]")
         return value
 
 

@@ -2,6 +2,7 @@ import { createCommandId } from "@/lib/command-id";
 import type { CommandResult, TelemetrySnapshot } from "./types";
 import type {
   CaptureResponse,
+  RenderedPointCloudMetadata,
   ReachabilityResponse,
   TaskPoint,
   TaskPresetResponse,
@@ -99,6 +100,35 @@ export class TaskApiClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: this.body(sessionId, leaseId),
+    });
+  }
+
+  artifactUrl(artifactId: string): string {
+    return `/tasks/artifacts/${encodeURIComponent(artifactId)}`;
+  }
+
+  async fetchArtifact(artifactId: string): Promise<ArrayBuffer> {
+    const response = await this.fetcher(this.artifactUrl(artifactId));
+    if (!response.ok) throw new Error(`HTTP_${response.status}`);
+    return response.arrayBuffer();
+  }
+
+  async uploadRenderedImage(
+    captureId: string,
+    png: Blob,
+    metadata: RenderedPointCloudMetadata,
+    sessionId: string,
+    leaseId: string,
+  ): Promise<{ artifact_id: string } | CommandResult> {
+    const bytes = new Uint8Array(await png.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return this.json(`/tasks/captures/${encodeURIComponent(captureId)}/rendered-image`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: this.body(sessionId, leaseId, { ...metadata, png_base64: btoa(binary) }),
     });
   }
 

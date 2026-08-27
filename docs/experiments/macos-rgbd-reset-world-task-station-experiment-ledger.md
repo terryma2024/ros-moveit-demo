@@ -1026,3 +1026,99 @@ open_risks:
   - No PLY viewer, current RGB-D capture view, or rendered-image upload exists yet.
 next_command: git diff --check and commit Task 11, then add exact Three.js dependency and Task 12 RED tests.
 ```
+
+## CP-023 — Task 11 committed and Three.js pinned
+
+```yaml
+checkpoint_id: CP-023
+last_valid_experiment: EXP-011
+current_hypothesis: Three.js PLYLoader and an injected renderer seam can provide deterministic point-cloud interaction and screenshot metadata without a CDN or server path exposure.
+working_tree_status: package.json and bun.lock contain the planned exact Three.js dependencies after clean Task 11 commit 78f344de159612a05fcd0d0c57713cd96fae910f
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+dependency_provenance:
+  three: 0.184.0 exact production dependency
+  types_three: 0.184.0 exact development dependency
+  installer: /Users/matianyi/.bun/bin/bun 1.3.14
+confirmed_conclusions:
+  - Task 11 is committed as 78f344d.
+  - package-lock.json is absent and both Three.js packages are exact-pinned in bun.lock.
+disproven_routes:
+  - Initial sandboxed bun add could not write its temp directory; the approved Bun command succeeded outside that restriction.
+open_risks:
+  - WebGL lifecycle, deterministic >400000 point sampling, capture metadata, and artifact mapping are unimplemented.
+next_command: Add Task 12 renderer and live-sensor RED component tests.
+```
+
+## EXP-012 — Three.js PLY viewer and synchronized current capture
+
+```yaml
+experiment_id: EXP-012
+status: VALID
+prior_experiment: EXP-011
+hypothesis: A disposal-aware Three.js adapter can render registered full/cup PLY artifacts, deterministically bound display size, and upload a PNG bound to exact view/source metadata.
+prediction: RED fails because PointCloudViewer and LiveSensor do not exist.
+single_variable: Add only Task 12 exact dependencies, capture response metadata, viewer/live-sensor components, task-shell placement, and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 78f344de159612a05fcd0d0c57713cd96fae910f.
+  - Tests inject renderer and API seams; no WebGL context, ROS, camera, or network is used.
+success_criteria:
+  - Full and cup PLY load by opaque artifact ID; RGB/full/cup metadata share one capture/source stamp.
+  - Original PLY remains unchanged; display uses all points up to 400000 and fixed stride above it with exact counts recorded.
+  - Screenshot forces a render and uploads PNG plus source ID/SHA, matrices, viewport, point size, color/background, count, and sampling metadata.
+  - Capture change and unmount dispose geometry, materials, controls, renderer, object URLs, and animation resources.
+  - Production bundle contains pinned local Three.js code and no CDN reference.
+failure_criteria:
+  - Viewer accepts a filesystem path, silently downsamples without metadata, reuses stale capture, leaks renderer resources, or uploads non-source-bound PNG.
+invalid_criteria:
+  - Tests require GPU/WebGL, live topics, a browser download, or npm/npx.
+provenance:
+  source_commit: 78f344de159612a05fcd0d0c57713cd96fae910f
+  install_overlay: SOURCE_FRONTEND_ONLY
+  runtime_executable: /Users/matianyi/.bun/bin/bun
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 12 viewer and live-sensor RED tests through Bun.
+    exit_code: 1
+  - command: Run all Web tests through Bun after implementation.
+    exit_code: 0
+  - command: Run the TypeScript and Vite production build through Bun.
+    exit_code: 0
+  - command: Run Teleop Python plus RGB-D snapshot regression from the source overlay.
+    exit_code: 0
+observed:
+  - RED failed on the two absent component modules.
+  - Web regression passed 56 tests across 18 files; the production build passed with only the known non-fatal bundle-size warning.
+  - Python regression passed 131 tests and retained only existing deprecation warnings.
+  - Capture responses expose manifest descriptors, SHA-256, exact source stamp, and cup-center metadata; rendered PNG registration validates same-capture PLY provenance and view/sampling metadata.
+  - The local exact Three.js 0.184.0 PLYLoader renders full/cup clouds, displays axes and the computed center, bounds display to 400000 points using recorded fixed stride, and disposes its renderer resources.
+inferred:
+  - Current RGB-D evidence can be inspected and saved in the isolated task page without filesystem disclosure, CDN code, or a MuJoCo restart.
+conclusion: Task 12 is source-valid and production-build-valid.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task12-red.log sha256=3cff059038fc500d8b4cc1100d3602f3ef99b110f38f7f1b708070170b134ec3
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task12-web-green.log sha256=02a25917257e47f2b1b886cef066b6ed8301a06af11100c31ed99a289f7f6fab
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task12-web-build.log sha256=edba38316e2e571f22aa7c0f1757a3a1564b541131b5a9f1c1281e808fbeb686
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task12-python-green.log sha256=9271699a928309b3312e21fec72c1afd94b4ef74fdaf7824f1ba6069b76b2d30
+decision: KEEP
+next_experiment: EXP-013
+```
+
+## CP-024 — Task 12 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-024
+last_valid_experiment: EXP-012
+current_hypothesis: Existing task events and point summaries can drive a reconnect-safe progress and evidence browser without polling filesystem state.
+working_tree_status: Task 12 RGB-D capture metadata, Three.js viewer, live sensor panel, generated API, tests, and ledger are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 12 passes 56 Web tests, production build, and 131 Python/RGB-D tests.
+  - No npm/npx, CDN, WebGL test dependency, or live ROS process was used.
+open_risks:
+  - Run events are not yet rendered live and per-point evidence artifacts are not yet browsable from the task page.
+next_command: Commit Task 12, then add Task 13 progress/evidence RED tests.
+```

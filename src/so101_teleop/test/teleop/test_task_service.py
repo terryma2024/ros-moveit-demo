@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 from so101_teleop.models import (
@@ -54,6 +55,11 @@ class Gateway:
         output.mkdir(parents=True)
         (output / "rgb.png").write_bytes(b"\x89PNG\r\n\x1a\nimage")
         (output / "full-cloud.ply").write_bytes(b"ply\n")
+        (output / "summary.json").write_text(json.dumps({
+            "source_stamp_ns": 123456789,
+            "source_frame_id": "task_camera_frame",
+            "cup_center_xyz": [0.02, -0.28, 0.165],
+        }))
         return {
             "status": "SUCCEEDED",
             "capture_id": "capture-1",
@@ -142,8 +148,14 @@ def test_capture_registers_fresh_rgb_and_ply_artifacts(tmp_path):
             session_id="sim-a", lease_id="lease-a", command_id="capture-1"
         ))
         assert response.capture_id == "capture-1"
-        assert len(response.artifact_ids) == 2
+        assert len(response.artifact_ids) == 3
         assert all(store.open(item).path.is_file() for item in response.artifact_ids)
+        assert response.source_stamp_ns == 123456789
+        assert response.summary["cup_center_xyz"] == [0.02, -0.28, 0.165]
+        assert {item.name for item in response.artifacts} == {
+            "rgb.png", "full-cloud.ply", "summary.json"
+        }
+        assert all(len(item.sha256) == 64 for item in response.artifacts)
         assert gateway.calls[0][0] == "capture"
     asyncio.run(scenario())
 

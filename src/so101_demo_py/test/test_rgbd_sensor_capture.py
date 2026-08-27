@@ -66,6 +66,7 @@ def test_snapshot_writes_artifacts_from_one_source_stamp(tmp_path: Path) -> None
     )
 
     assert result.summary["source_stamp_ns"] == result.frame.stamp_ns
+    assert result.summary["cup_center_xyz"] == pytest.approx([-0.1, -0.1, 1.0])
     assert set(result.artifacts) == {
         "rgb",
         "full_cloud",
