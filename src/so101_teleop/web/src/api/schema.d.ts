@@ -788,6 +788,8 @@ export interface components {
         TaskPointSummary: {
             /** Artifact Ids */
             artifact_ids?: string[];
+            /** Artifacts */
+            artifacts?: components["schemas"]["TaskArtifactSummary"][];
             /** Failure Code */
             failure_code?: string | null;
             /** Id */

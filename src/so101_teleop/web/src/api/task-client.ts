@@ -5,6 +5,7 @@ import type {
   RenderedPointCloudMetadata,
   ReachabilityResponse,
   TaskPoint,
+  TaskEvent,
   TaskPresetResponse,
   TaskRunSummary,
 } from "./task-types";
@@ -140,5 +141,44 @@ export class TaskApiClient {
         confirmation: "CONFIRM TASK ENVIRONMENT SHUTDOWN",
       }),
     });
+  }
+
+  watchEvents(
+    onEvent: (event: TaskEvent) => void,
+    onReconnect: () => void | Promise<void>,
+  ): () => void {
+    let stopped = false;
+    let socket: WebSocket | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const connect = () => {
+      if (stopped) return;
+      const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${scheme}//${window.location.host}/tasks/events`);
+      socket.addEventListener("open", () => {
+        attempts = 0;
+        void onReconnect();
+      });
+      socket.addEventListener("message", (message) => {
+        try {
+          const event = JSON.parse(String(message.data)) as TaskEvent;
+          if (typeof event.sequence === "number" && typeof event.kind === "string") onEvent(event);
+        } catch {
+          // Ignore malformed event frames; status refresh remains authoritative.
+        }
+      });
+      socket.addEventListener("close", () => {
+        if (stopped) return;
+        const delay = Math.min(250 * 2 ** attempts, 4000);
+        attempts = Math.min(attempts + 1, 5);
+        timer = setTimeout(connect, delay);
+      });
+    };
+    connect();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      socket?.close();
+    };
   }
 }

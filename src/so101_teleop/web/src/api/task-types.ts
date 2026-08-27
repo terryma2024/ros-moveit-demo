@@ -28,6 +28,7 @@ export type TaskPointSummary = {
   reachability_status?: string | null;
   reset_epoch?: number | null;
   artifact_ids: string[];
+  artifacts: TaskArtifact[];
 };
 
 export type TaskRunSummary = {

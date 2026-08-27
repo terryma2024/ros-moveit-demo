@@ -828,6 +828,13 @@
             "title": "Artifact Ids",
             "type": "array"
           },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/TaskArtifactSummary"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
           "failure_code": {
             "anyOf": [
               {

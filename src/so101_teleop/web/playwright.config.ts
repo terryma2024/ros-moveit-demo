@@ -1,13 +1,18 @@
 import { defineConfig } from "@playwright/test";
 
 const baseURL = process.env.SO101_TELEOP_BASE_URL || "http://127.0.0.1:4173";
+const executablePath = process.env.SO101_PLAYWRIGHT_CHROME || (
+  process.platform === "darwin"
+    ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    : "/usr/bin/google-chrome"
+);
 
 export default defineConfig({
   testDir: "./e2e",
   use: {
     baseURL,
     browserName: "chromium",
-    launchOptions: { executablePath: "/usr/bin/google-chrome" },
+    launchOptions: { executablePath },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

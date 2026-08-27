@@ -174,18 +174,28 @@ class TaskService:
 
     @staticmethod
     def _point_summary(document: dict) -> TaskPointSummary:
-        artifact_ids = [
-            item["artifact_id"]
-            for item in document.get("artifacts", [])
-            if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
-        ]
+        artifacts = []
+        for item in document.get("artifacts", []):
+            if not isinstance(item, dict):
+                continue
+            try:
+                artifacts.append(TaskArtifactSummary(
+                    artifact_id=item["artifact_id"],
+                    name=Path(item["relative_path"]).name,
+                    media_type=item["media_type"],
+                    byte_size=item["byte_size"],
+                    sha256=item["sha256"],
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
         return TaskPointSummary(
             id=str(document.get("id", "unknown")),
             status=str(document.get("status", "UNKNOWN")),
             failure_code=document.get("failure_code"),
             reachability_status=document.get("reachability_status"),
             reset_epoch=document.get("reset_epoch"),
-            artifact_ids=artifact_ids,
+            artifact_ids=[artifact.artifact_id for artifact in artifacts],
+            artifacts=artifacts,
         )
 
     def _summary(
