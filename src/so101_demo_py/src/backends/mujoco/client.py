@@ -5,10 +5,12 @@ from __future__ import annotations
 import math
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import rclpy
 from controller_manager_msgs.srv import ListControllers, SwitchController
+from mujoco_ros2_control_msgs.msg import FreeJointState
 from mujoco_ros2_control_msgs.srv import ResetWorld, SetPause
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
@@ -18,8 +20,74 @@ class MujocoServiceError(RuntimeError):
     """Raised when a pinned ROS interface is unavailable or returns failure."""
 
 
+@dataclass(frozen=True, slots=True)
+class FreeJointResetOverride:
+    """Validated simulator-neutral free-joint pose applied during reset."""
+
+    name: str
+    position_world_m: tuple[float, float, float]
+    orientation_xyzw: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name or self.name != self.name.strip():
+            raise ValueError("free joint override name must be non-empty and trimmed")
+        if len(self.position_world_m) != 3 or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            for value in self.position_world_m
+        ):
+            raise ValueError("free joint override position must contain three finite numbers")
+        if len(self.orientation_xyzw) != 4 or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            for value in self.orientation_xyzw
+        ):
+            raise ValueError("free joint override orientation must contain four finite numbers")
+        orientation = tuple(float(value) for value in self.orientation_xyzw)
+        if not math.isclose(
+            math.sqrt(sum(value * value for value in orientation)),
+            1.0,
+            rel_tol=0.0,
+            abs_tol=1.0e-6,
+        ):
+            raise ValueError("free joint override orientation must be unit length")
+        object.__setattr__(
+            self,
+            "position_world_m",
+            tuple(float(value) for value in self.position_world_m),
+        )
+        object.__setattr__(self, "orientation_xyzw", orientation)
+
+
+def _free_joint_message(value: FreeJointResetOverride) -> FreeJointState:
+    message = FreeJointState()
+    message.name = value.name
+    message.pose.header.frame_id = ""
+    message.twist.header.frame_id = ""
+    (
+        message.pose.pose.position.x,
+        message.pose.pose.position.y,
+        message.pose.pose.position.z,
+    ) = value.position_world_m
+    (
+        message.pose.pose.orientation.x,
+        message.pose.pose.orientation.y,
+        message.pose.pose.orientation.z,
+        message.pose.pose.orientation.w,
+    ) = value.orientation_xyzw
+    message.twist.twist.linear.x = 0.0
+    message.twist.twist.linear.y = 0.0
+    message.twist.twist.linear.z = 0.0
+    message.twist.twist.angular.x = 0.0
+    message.twist.twist.angular.y = 0.0
+    message.twist.twist.angular.z = 0.0
+    return message
+
+
 class MujocoRosClient:
-    """Synchronous bounded facade over only the apt 0.0.3 service interfaces."""
+    """Synchronous bounded facade over the pinned 0.1.0 service interfaces."""
 
     def __init__(
         self, service_node: Any, joint_state_node: Any, *, service_timeout_s: float = 5.0
@@ -86,9 +154,19 @@ class MujocoRosClient:
         request.paused = paused
         return bool(self._call(self._pause, request, "pause").success)
 
-    def reset_world(self, keyframe: str) -> bool:
+    def reset_world(
+        self,
+        keyframe: str,
+        free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
+    ) -> bool:
+        names = tuple(value.name for value in free_joint_overrides)
+        if len(set(names)) != len(names):
+            raise ValueError("duplicate free joint override names are not allowed")
         request = ResetWorld.Request()
         request.keyframe = keyframe
+        request.state_overrides.free_joints = [
+            _free_joint_message(value) for value in free_joint_overrides
+        ]
         return bool(self._call(self._reset, request, "reset").success)
 
     def switch_controllers(self, *, activate, deactivate) -> bool:
