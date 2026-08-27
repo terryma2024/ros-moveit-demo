@@ -7,7 +7,7 @@ import time
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
-from .client import MujocoRosClient
+from .client import FreeJointResetOverride, MujocoRosClient
 from .observer import EvidenceStale, MujocoWorldObserver
 from .reset import MujocoResetClient
 
@@ -69,6 +69,8 @@ def transactional_reset(
     simulation_session_id: str,
     *,
     keyframe: str = "task_start",
+    expected_object_position=CUP_START,
+    free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
     timeout_s: float = 10.0,
 ):
     """Run the qualified controller/pause/reset/epoch transaction."""
@@ -90,12 +92,12 @@ def transactional_reset(
         simulation_session_id=simulation_session_id,
         controller_names=CONTROLLERS,
         expected_joint_positions=RESET_JOINTS,
-        expected_object_position=CUP_START,
+        expected_object_position=expected_object_position,
         timeout_s=timeout_s,
         progress=progress,
     )
     try:
-        return resetter.reset(keyframe)
+        return resetter.reset(keyframe, free_joint_overrides)
     finally:
         observer_node.destroy_node()
         joint_node.destroy_node()
