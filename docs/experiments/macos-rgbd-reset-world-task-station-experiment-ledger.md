@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: 73356e9a4353310892630ec9dd919c4a8aea75ae
+current_commit: 507169114e60b10bbe983dec14233927ab802112
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -18,13 +18,14 @@ confirmed_conclusions:
   - EXP-002 validates the 0.1.0 ResetWorld free-joint override and arbitrary cup-position CLI with 40 focused and regression tests.
   - EXP-003 validates seven-segment plan-only reachability with terminal-state chaining and first-failure classification.
   - EXP-004 validates the MoveGroup plan-only wire adapter, stable task CLI contract, and mandatory dynamic pre-motion reachability gate.
+  - EXP-005 validates one-stamp RGB, full-cloud, cup-cloud, deterministic preview, and summary generation before pose publication.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-008
-next_experiment: EXP-005
+latest_checkpoint: CP-010
+next_experiment: EXP-006
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -391,4 +392,94 @@ disproven_routes:
 open_risks:
   - The real MoveGroup action and macOS simulator have not been started; source-valid does not imply runtime-qualified.
 next_command: git diff --check and commit the nine planned Task 4 paths.
+```
+
+## CP-009 — Task 4 committed; Task 5 preregistered
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-004
+current_hypothesis: One exact-stamp RGB-D frame can own RGB, full-cloud, cup-cloud, deterministic preview, and summary artifacts without a file round-trip.
+working_tree_status: clean at 507169114e60b10bbe983dec14233927ab802112 before Task 5 RED tests
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 4 is committed as 507169114e60b10bbe983dec14233927ab802112.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Deterministic PNG and PLY writers must fail closed before success is reported.
+next_command: Write and run Task 5 synchronized artifact RED tests.
+```
+
+## EXP-005 — synchronized RGB-D snapshot artifacts
+
+```yaml
+experiment_id: EXP-005
+status: VALID
+prior_experiment: EXP-004
+hypothesis: One immutable exact-stamp frame can retain RGB, full cloud, segmented cup cloud, and generate deterministic PNG/PLY artifacts before pose publication.
+prediction: RED fails because rgbd_snapshot, point_cloud_preview, and rgbd_sensor_capture do not exist and the current cloud result discards RGB/full-cloud arrays.
+single_variable: Retain and write synchronized RGB-D artifacts without changing segmentation or cup fitting algorithms.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 507169114e60b10bbe983dec14233927ab802112.
+  - No ROS graph, camera, simulator, or GUI is started for source-level tests.
+success_criteria:
+  - Frame stamp, dimensions, RGB, full XYZ/RGB, and cup XYZ/RGB come from one aligned triple.
+  - Snapshot output includes valid RGB PNG, full/cup PLY, deterministic preview PNG, and a summary with one source stamp.
+  - Mismatched stamps, missing exact TF, invalid depth, or artifact write failure never report success.
+  - Production first-valid publisher writes selected RGB/full/cup/summary artifacts before /cup_pose.
+failure_criteria:
+  - Any artifact is sourced from a different stamp, full cloud requires a PLY readback, or publication precedes evidence writes.
+invalid_criteria:
+  - Tests fail only because Open3D is unavailable rather than through the injected cloud seam.
+provenance:
+  source_commit: 507169114e60b10bbe983dec14233927ab802112
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 5 RGB-D point cloud, pose, snapshot, and preview tests.
+    exit_code: 1
+  - command: Source macOS Jazzy and run RGB-D point cloud, pose, snapshot, preview, and asset closure tests.
+    exit_code: 0
+  - command: Run the complete source test suite with the source-backed 0.1.0 message overlay.
+    exit_code: 1
+observed:
+  - Valid RED exposed the discarded RGB/full-cloud arrays and three missing snapshot modules.
+  - Focused GREEN plus resource closure passed 63 tests, and py_compile passed every changed production module.
+  - The full source suite passed 497 tests; the sole failure remains the known old-install executable closure gate.
+  - One exact source stamp owns RGB PNG, full and cup PLY, deterministic z-buffered preview PNG, and summary.json.
+  - Missing exact TF or any artifact write failure prevents summary.json success output.
+  - Production first-valid cup-pose evidence writes optional RGB and full PLY before cup PLY, summary, and /cup_pose publication.
+inferred:
+  - Retaining arrays in memory eliminates the earlier PLY round-trip risk and permits both automated and browser-oriented point-cloud evidence from the same frame.
+conclusion: Synchronized RGB-D evidence generation is source-valid; live camera sampling remains a Task 15 runtime gate.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task5-red.log sha256=4ad3e462dcc69673c7f1dd917d413388c9bac22bf46b18539c8bc77d7083f15e
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task5-green.log sha256=4cf1d63d1fce6b79827d0d3e31027469019970f0fed97ee53d5235a94bc09ddb
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task5-full-source.log sha256=a437f76d3ca587a4533412ef6d8801779f45589c9900c18d13a85f0bfacdf1d7
+decision: KEEP
+next_experiment: EXP-006
+```
+
+## CP-010 — Task 5 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-005
+current_hypothesis: Exclusive path-safe artifact registration can make every batch and point manifest immutable and content-addressed beneath the one caller-owned evidence root.
+working_tree_status: ledger plus the planned Task 5 RGB-D frame, snapshot, preview, CLI, production evidence, packaging, and test paths are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 5 focused and closure tests pass 63 tests; the complete source suite passes 497 tests apart from the deferred old-install gate.
+  - The generated preview is deterministic and dependency-free; Open3D remains responsible only for production segmentation and legacy cup PLY compatibility.
+disproven_routes:
+  - Running ROS-aware tests without sourcing Jazzy is invalid and does not diagnose product behavior.
+open_risks:
+  - Artifact paths and checksums are not yet registered in exclusive batch/point manifests.
+next_command: git diff --check and commit the planned Task 5 paths.
 ```

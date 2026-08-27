@@ -199,6 +199,8 @@ def main(arguments: list[str] | None = None) -> int:
         type=_output_path,
         default=Path("/tmp/v4-t006-cup-pose.json"),
     )
+    parser.add_argument("--output-rgb", type=_output_path)
+    parser.add_argument("--output-full-ply", type=_output_path)
     parsed = parser.parse_args(_application_arguments(arguments))
 
     from so101_demo.ros.rgbd_cup_pose_node import (
@@ -224,6 +226,8 @@ def main(arguments: list[str] | None = None) -> int:
             minimum_cup_points=parsed.minimum_cup_points,
             output_ply=parsed.output_ply,
             evidence_json=parsed.evidence_json,
+            output_rgb=parsed.output_rgb,
+            output_full_ply=parsed.output_full_ply,
         )
     except ValueError as error:
         parser.error(str(error))
