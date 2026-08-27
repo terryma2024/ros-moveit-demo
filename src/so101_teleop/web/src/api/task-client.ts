@@ -151,13 +151,16 @@ export class TaskApiClient {
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
+    const refreshAuthoritativeState = () => {
+      void Promise.resolve(onReconnect()).catch(() => undefined);
+    };
     const connect = () => {
       if (stopped) return;
       const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
       socket = new WebSocket(`${scheme}//${window.location.host}/tasks/events`);
       socket.addEventListener("open", () => {
         attempts = 0;
-        void onReconnect();
+        refreshAuthoritativeState();
       });
       socket.addEventListener("message", (message) => {
         try {
@@ -169,6 +172,7 @@ export class TaskApiClient {
       });
       socket.addEventListener("close", () => {
         if (stopped) return;
+        refreshAuthoritativeState();
         const delay = Math.min(250 * 2 ** attempts, 4000);
         attempts = Math.min(attempts + 1, 5);
         timer = setTimeout(connect, delay);
