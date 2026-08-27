@@ -31,22 +31,28 @@ def _pause_snapshot(node, observer, timeout_s: float):
     request.paused = True
     future = client.call_async(request)
     deadline = time.monotonic() + timeout_s
+    pause_accepted = False
     while rclpy.ok() and time.monotonic() <= deadline:
         rclpy.spin_once(node, timeout_sec=0.01)
         if future.done():
             response = future.result()
-            if response is None or not response.success:
+            if response is None:
                 raise RuntimeError("pause snapshot request failed")
+            pause_accepted = bool(response.success)
             break
     else:
         raise RuntimeError("pause snapshot request timed out")
     while rclpy.ok() and time.monotonic() <= deadline:
         rclpy.spin_once(node, timeout_sec=0.01)
         try:
-            return observer.snapshot()
+            evidence = observer.snapshot()
         except EvidenceStale:
             continue
-    raise RuntimeError("fresh atomic MuJoCo evidence unavailable")
+        if evidence.paused:
+            return evidence
+    if not pause_accepted:
+        raise RuntimeError("pause snapshot request failed")
+    raise RuntimeError("fresh paused atomic MuJoCo evidence unavailable")
 
 
 def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
