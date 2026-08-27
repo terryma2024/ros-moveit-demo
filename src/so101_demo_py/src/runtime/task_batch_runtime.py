@@ -294,7 +294,7 @@ class RosTaskBatchRuntime:
                 self._subscription_ready = True
                 return
             self._sleep(0.02)
-        raise TimeoutError("dynamic consumer /cup_pose subscription unavailable")
+        raise SharedStackFailure("DYNAMIC_CONSUMER_SUBSCRIPTION_TIMEOUT")
 
     def start_perception(self, point_root: Path) -> ManagedChild:
         if not self._subscription_ready:

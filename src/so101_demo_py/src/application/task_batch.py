@@ -25,6 +25,7 @@ _REQUIRED_TERMINAL_FILES = frozenset(
         "viewer.png",
     }
 )
+_CONSUMER_SUBSCRIPTION_TIMEOUT_S = 30.0
 
 
 class PointStatus(StrEnum):
@@ -319,7 +320,9 @@ def run_task_batch(
                     )
                 )
                 consumer = runtime.start_consumer(point_root, reset_epoch)
-                runtime.wait_consumer_subscription(consumer, 5.0)
+                runtime.wait_consumer_subscription(
+                    consumer, _CONSUMER_SUBSCRIPTION_TIMEOUT_S
+                )
                 runtime.start_perception(point_root)
                 receipt = runtime.wait_point_result(
                     point, reset_epoch, point_root
