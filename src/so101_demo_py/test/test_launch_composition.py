@@ -115,22 +115,54 @@ def test_launch_source_reports_first_gazebo_phase_failure() -> None:
     assert "TimerAction(period=12.0" not in source
 
 
-def test_mujoco_rendering_is_enabled_for_interactive_macos_camera_stack() -> None:
+def test_mujoco_sensor_rendering_is_independent_from_headless_viewer() -> None:
     share = PACKAGE_ROOT
 
-    headless = launch_composition._render_mujoco_robot_description(
-        share, "scene.xml", headless=True, platform_name="linux"
+    headless_rgbd = launch_composition._render_mujoco_robot_description(
+        share,
+        "scene.xml",
+        headless=True,
+        sensor_rendering=True,
+        platform_name="darwin",
+    )
+    headless_physics_only = launch_composition._render_mujoco_robot_description(
+        share,
+        "scene.xml",
+        headless=True,
+        sensor_rendering=False,
+        platform_name="darwin",
     )
     linux_interactive = launch_composition._render_mujoco_robot_description(
-        share, "scene.xml", headless=False, platform_name="linux"
+        share,
+        "scene.xml",
+        headless=False,
+        sensor_rendering=True,
+        platform_name="linux",
     )
     macos_interactive = launch_composition._render_mujoco_robot_description(
-        share, "scene.xml", headless=False, platform_name="darwin"
+        share,
+        "scene.xml",
+        headless=False,
+        sensor_rendering=True,
+        platform_name="darwin",
     )
 
-    assert '<param name="disable_rendering">true</param>' in headless
+    assert '<param name="headless">true</param>' in headless_rgbd
+    assert '<param name="disable_rendering">false</param>' in headless_rgbd
+    assert '<param name="disable_rendering">true</param>' in headless_physics_only
     assert '<param name="disable_rendering">false</param>' in linux_interactive
     assert '<param name="disable_rendering">false</param>' in macos_interactive
+
+
+def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> None:
+    description = launch_composition.build_perception_pick_place_launch_description()
+    sensor_rendering = next(
+        action
+        for action in description.entities
+        if isinstance(action, DeclareLaunchArgument) and action.name == "sensor_rendering"
+    )
+
+    assert sensor_rendering.default_value[0].perform(LaunchContext()) == "true"
 
 
 def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
