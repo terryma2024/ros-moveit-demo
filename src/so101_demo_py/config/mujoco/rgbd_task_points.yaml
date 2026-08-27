@@ -1,0 +1,14 @@
+schema_version: 1
+points:
+  - id: task_start
+    label: Task start
+    cup_position_world_m: [0.02, -0.28, 0.165]
+  - id: cup_test_forward_5cm
+    label: Forward 5 cm
+    cup_position_world_m: [0.02, -0.33, 0.165]
+  - id: cup_test_left_5cm
+    label: Left 5 cm
+    cup_position_world_m: [-0.03, -0.28, 0.165]
+  - id: cup_test_right_5cm
+    label: Right 5 cm
+    cup_position_world_m: [0.07, -0.28, 0.165]
