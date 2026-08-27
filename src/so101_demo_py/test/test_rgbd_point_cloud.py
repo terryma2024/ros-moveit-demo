@@ -118,6 +118,10 @@ def test_build_cup_point_cloud_returns_selected_points_without_ply_roundtrip(
     assert result.points_xyz.shape[1] == 3
     assert result.colors_rgb.shape == result.points_xyz.shape
     assert np.isfinite(result.points_xyz).all()
+    assert result.rgb8.shape == (2, 2, 3)
+    assert result.full_points_xyz.shape == result.full_colors_rgb.shape
+    assert result.cup_points_xyz.shape == result.cup_colors_rgb.shape
+    assert result.full_point_count > result.cup_point_count > 0
 
 
 def test_decode_rgb_rejects_padded_row_stride() -> None:

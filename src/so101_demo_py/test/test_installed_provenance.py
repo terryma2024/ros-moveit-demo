@@ -18,6 +18,7 @@ EXPECTED_EXECUTABLES = {
     "gazebo_execute",
     "gazebo_ready",
     "rgbd_cup_pose",
+    "rgbd_sensor_capture",
     "run_qualification",
     "scene_setup",
     "so101_mujoco_perception_pick_place",
