@@ -190,6 +190,7 @@ class RosTaskBatchRuntime:
         self._subscription_ready = False
         self._consumer_log_path: Path | None = None
         self._terminal_timestamp: float | None = None
+        self._world_paused = False
 
     def _run(self, argv: list[str]):
         return self._command_runner(argv, capture_output=True, text=True)
@@ -197,6 +198,7 @@ class RosTaskBatchRuntime:
     def check_declared(self, point: TaskPoint) -> ReachabilityReport:
         if not self._resume():
             raise SharedStackFailure("MUJOCO_RESUME_FAILED")
+        self._world_paused = False
         root = self._evidence_root / "declared-reachability"
         root.mkdir(parents=True, exist_ok=True)
         evidence = root / f"{point.id}.json"
@@ -257,6 +259,7 @@ class RosTaskBatchRuntime:
             raise SharedStackFailure("TRANSACTIONAL_RESET_FAILED")
         if not self._resume():
             raise SharedStackFailure("MUJOCO_RESUME_FAILED")
+        self._world_paused = False
         return ResetPointReceipt(
             int(document["old_epoch"]),
             int(document["new_epoch"]),
@@ -281,7 +284,7 @@ class RosTaskBatchRuntime:
                 "execute",
                 "--execute",
                 "--cup-pose-timeout-s",
-                "45.0",
+                "75.0",
                 "--session-id",
                 self._session_id,
                 "--expected-reset-epoch",
@@ -336,6 +339,8 @@ class RosTaskBatchRuntime:
                 str(point_root / "point-cloud-preview.png"),
                 "--evidence-json",
                 str(point_root / "perception-summary.json"),
+                "--timeout-s",
+                "30.0",
             ),
             stdout_path=point_root / "rgbd-perception.log",
         )
@@ -388,6 +393,7 @@ class RosTaskBatchRuntime:
         from ..backends.mujoco.teleop_runtime import current_evidence
 
         evidence = current_evidence(self._session_id)
+        self._world_paused = True
         if evidence.simulation_session_id != self._session_id or evidence.reset_epoch != epoch:
             return SafetyReceipt(False, False, "SESSION_OR_EPOCH_MISMATCH")
         cup_z = float(evidence.object_state.position_world[2])
@@ -403,7 +409,10 @@ class RosTaskBatchRuntime:
         self._consumer_log_path = None
 
     def pause_world(self) -> None:
+        if self._world_paused:
+            return
         if self._safety_probe is None:
             from ..backends.mujoco.teleop_runtime import current_evidence
 
             current_evidence(self._session_id)
+            self._world_paused = True
