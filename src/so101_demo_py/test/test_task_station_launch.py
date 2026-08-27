@@ -38,7 +38,7 @@ def test_task_station_launch_is_visible_persistent_and_has_camera_tf(tmp_path: P
     assert context.launch_configurations["headless"] == "false"
     assert executables.count("static_transform_publisher") == 2
     assert "ros2_control_node" in executables
-    assert "so101_move_group" in executables
+    assert "graceful_shutdown_move_group" in executables
     assert "rgbd_cup_pose" not in executables
     assert "dynamic_cup_pick_place" not in executables
 
