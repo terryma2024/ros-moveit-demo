@@ -21,6 +21,10 @@ capabilities:
   manual_joint_execute: true
   manual_tcp_execute: true
   camera_presets: true
+  task_batch: false
+  task_reachability: false
+  sensor_capture: false
+  task_environment_shutdown: false
 operations:
   workflow:
     package: so101_demo_py

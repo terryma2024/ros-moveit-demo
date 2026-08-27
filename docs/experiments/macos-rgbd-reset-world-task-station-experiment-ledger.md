@@ -751,3 +751,91 @@ open_risks:
   - Teleop has no task owner or /tasks page yet; live stack readiness and capture remain unqualified.
 next_command: git diff --check and commit the planned Task 8 paths.
 ```
+
+## CP-017 — Task 8 committed
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-008
+current_hypothesis: A backend-profile-gated asynchronous task gateway can own one batch process group without exposing arbitrary commands or paths.
+working_tree_status: clean at 269b874b215ed45e29cfaeac23d8d3cb02e4d667
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 8 persistent launch/runtime/viewer work is committed as 269b874.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Task subprocess ownership, one-active-batch exclusion, atomic status reads, and capability gating are not implemented yet.
+next_command: Add Task 9 gateway/profile RED tests and run them without a live ROS graph.
+```
+
+## EXP-009 — teleop task capability boundary and owned CLI gateway
+
+```yaml
+experiment_id: EXP-009
+status: VALID
+prior_experiment: EXP-008
+hypothesis: Four explicit backend capabilities plus a fixed installed CLI gateway can expose batch, reachability, capture, and owned shutdown without weakening Teleop command safety.
+prediction: RED fails because the task capability fields, task operation enum values, and CliTaskGateway do not exist.
+single_variable: Add only Task 9 profile capability declarations, fixed operation specs, owned CLI task gateway, and unit tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 269b874b215ed45e29cfaeac23d8d3cb02e4d667.
+  - Tests inject resolver/process/signal seams and do not start ROS or MuJoCo.
+success_criteria:
+  - Gazebo profiles report every task capability false.
+  - MuJoCo reports task_batch, task_reachability, and sensor_capture true; task_environment_shutdown is true only for its supervisor-owned batch operation.
+  - Gateway accepts typed requests, writes submitted YAML below an exclusive input directory, and launches a fixed argv with shell disabled and a new session.
+  - A second active batch is rejected; status reads only its atomic manifest; cancellation signals only the owned PGID with bounded escalation.
+  - Task service-facing gateway surface is limited to start_batch, status, cancel, and capture.
+failure_criteria:
+  - Caller-controlled executable or shell reaches subprocess, paths escape the evidence root, multiple batches run, or an unowned PID/PGID is signaled.
+invalid_criteria:
+  - Tests start a live ROS graph or depend on the current installed overlay.
+provenance:
+  source_commit: 269b874b215ed45e29cfaeac23d8d3cb02e4d667
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 9 profile and gateway RED tests.
+    exit_code: 2
+  - command: Run Task 9 focused profile, adapter, capability, and gateway tests.
+    exit_code: 0
+  - command: Run the complete Teleop test suite outside the process-inspection sandbox.
+    exit_code: 0
+observed:
+  - Valid RED failed during collection because so101_teleop.task_gateway did not exist.
+  - Focused GREEN passed 48 tests including one-active-batch exclusion, fixed argv, owned PGID cancellation, capture, and symlinked-manifest rejection.
+  - The complete Teleop regression passed 225 tests; the first sandboxed attempt had two invalid recorder failures because macOS denied ps, and the unsandboxed rerun passed.
+  - Gazebo task capabilities are all false; MuJoCo advertises batch, reachability, capture, and supervisor-owned shutdown with installed executable specs.
+inferred:
+  - TaskService can depend on four narrow asynchronous methods without acquiring arbitrary subprocess or filesystem access.
+conclusion: The fixed CLI task owner boundary is source-valid and preserves all existing Teleop tests.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task9-red.log sha256=d70544d86cc01717038adcd988d64d70c50e1018618f9894eac466d3145a04ba
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task9-green.log sha256=784596e380d9b1652e6d0d2b9134ad7151abdfac997c1f9fa053e3d0554df9ea
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task9-teleop-regression-unsandboxed.log sha256=21c5d5a0712e6c3192bdcc351239a9ca011c7d974093f9cd83640d334d9cffd0
+decision: KEEP
+next_experiment: EXP-010
+```
+
+## CP-018 — Task 9 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-018
+last_valid_experiment: EXP-009
+current_hypothesis: A lease-gated TaskService and artifact sandbox can expose task lifecycle and evidence without weakening existing command routes.
+working_tree_status: ledger plus Task 9 profiles, protocol, gateway, and tests are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 9 focused tests pass 48 and complete Teleop regression passes 225.
+disproven_routes:
+  - Reading a manifest through a replaced symlinked batches directory is rejected.
+open_risks:
+  - No lease-gated task API, event stream, or artifact-serving sandbox exists yet.
+next_command: git diff --check and commit the Task 9 paths.
+```
