@@ -36,17 +36,8 @@ def result_exit_code(result) -> int:
     return 0 if result.status is BatchStatus.SUCCEEDED else 1
 
 
-_TASK_STATION_SERVICES = frozenset(
-    {
-        "/apply_planning_scene",
-        "/get_planning_scene",
-        "/plan_kinematic_path",
-    }
-)
-
-
 def _wait_for_task_station(
-    timeout_s: float = 120.0,
+    timeout_s: float = 240.0,
     *,
     runner=None,
     monotonic=time.monotonic,
@@ -54,71 +45,79 @@ def _wait_for_task_station(
 ) -> None:
     from ..application.qualification_stack import ros2_command
 
+    del sleep
     command_runner = subprocess.run if runner is None else runner
     deadline = monotonic() + timeout_s
-    while monotonic() < deadline:
+
+    def run_stage(name: str, command: list[str], *, maximum_s: float | None = None):
+        remaining = deadline - monotonic()
+        if remaining <= 0.0:
+            raise TimeoutError(f"task station readiness timed out at {name}")
+        process_timeout = remaining if maximum_s is None else min(remaining, maximum_s)
         try:
-            nodes = command_runner(
-                ros2_command(
-                    "node", "list", "--no-daemon", "--spin-time", "0.2"
-                ),
+            completed = command_runner(
+                command,
                 capture_output=True,
                 text=True,
-                timeout=5.0,
+                timeout=max(1.0, process_timeout),
             )
-            node_names = set(nodes.stdout.splitlines())
-            if not ({"/move_group", "/so101_move_group"} & node_names):
-                sleep(0.2)
-                continue
-            services = command_runner(
-                ros2_command(
-                    "service", "list", "--no-daemon", "--spin-time", "0.2"
-                ),
-                capture_output=True,
-                text=True,
-                timeout=5.0,
+        except subprocess.TimeoutExpired as error:
+            output = str(error.stdout or error.stderr or "").strip()[-1000:]
+            raise TimeoutError(
+                f"task station readiness timed out at {name}: {output}"
+            ) from error
+        if completed.returncode != 0:
+            output = "\n".join(
+                part.strip()
+                for part in (completed.stdout, completed.stderr)
+                if part and part.strip()
+            )[-1000:]
+            raise TimeoutError(
+                f"task station readiness failed at {name} "
+                f"(exit {completed.returncode}): {output}"
             )
-            if not _TASK_STATION_SERVICES <= set(services.stdout.splitlines()):
-                sleep(0.2)
-                continue
-            joint_state = command_runner(
-                ros2_command(
-                    "topic",
-                    "echo",
-                    "--once",
-                    "--timeout",
-                    "2",
-                    "--no-daemon",
-                    "/joint_states",
-                ),
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-            )
-            if joint_state.returncode != 0 or "name:" not in joint_state.stdout:
-                sleep(0.2)
-                continue
-            scene = command_runner(
-                ros2_command(
-                    "run",
-                    "so101_demo_py",
-                    "scene_setup",
-                    "--backend",
-                    "mujoco",
-                    "observe",
-                ),
-                capture_output=True,
-                text=True,
-                timeout=min(35.0, max(1.0, deadline - monotonic())),
-            )
-            if scene.returncode == 0:
-                return
-        except subprocess.TimeoutExpired:
-            pass
-        sleep(0.2)
-    raise TimeoutError(
-        "persistent task station did not provide joint states, MoveIt services, "
-        "and planning scene"
+        return completed
+
+    remaining = max(1.0, deadline - monotonic())
+    run_stage(
+        "controllers_and_moveit",
+        ros2_command(
+            "run",
+            "so101_demo_py",
+            "gazebo_ready",
+            "--timeout-s",
+            f"{remaining:.3f}",
+        ),
+    )
+    joint_timeout = max(1, min(15, int(deadline - monotonic())))
+    joint_state = run_stage(
+        "joint_states",
+        ros2_command(
+            "topic",
+            "echo",
+            "--once",
+            "--timeout",
+            str(joint_timeout),
+            "--no-daemon",
+            "/joint_states",
+        ),
+        maximum_s=float(joint_timeout + 10),
+    )
+    if "name:" not in joint_state.stdout:
+        raise TimeoutError(
+            "task station readiness failed at joint_states: sample had no joint names"
+        )
+    run_stage(
+        "planning_scene",
+        ros2_command(
+            "run",
+            "so101_demo_py",
+            "scene_setup",
+            "--backend",
+            "mujoco",
+            "observe",
+        ),
+        maximum_s=45.0,
     )
 
 
