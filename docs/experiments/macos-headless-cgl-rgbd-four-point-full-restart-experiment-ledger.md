@@ -128,13 +128,18 @@
   synchronized 640x480 RGB/depth/camera-info set into positive point counts,
   published `/cup_pose`, completed the 19-transition dynamic pick/place state
   machine at `DONE`, exited zero, and logged 11 clean process exits.
+- E06's runtime and all 11 child processes completed cleanly, but its temporary
+  outer zsh helper then used the reserved variable name `status` while trying
+  to record `$?`; the helper itself therefore returned 1 after the validated
+  runtime had ended. The helper was corrected to `run_status` before E07-E09,
+  whose outer exit statuses were recorded directly as zero.
 - A final process check after E09 found no remaining task runtime processes.
 
 ## Four-point results
 
 | ID | Keyframe | ROS domain | Session | RGB | Depth | Camera info | `/cup_pose` | Pick/place | Clean exit | Result |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| E06 | `task_start` | 181 | `macos-cgl-e06-task-start-20260828` | OK 640x480 | OK, 98,078 points | OK | `(0.01950, -0.28040, 0.16500)` | DONE, 19 transitions | 0; 11 clean exits | VALID |
+| E06 | `task_start` | 181 | `macos-cgl-e06-task-start-20260828` | OK 640x480 | OK, 98,078 points | OK | `(0.01950, -0.28040, 0.16500)` | DONE, 19 transitions | Runtime clean; helper post-hook 1 | VALID |
 | E07 | `cup_test_forward_5cm` | 182 | `macos-cgl-e07-forward-20260828` | OK 640x480 | OK, 98,078 points | OK | `(0.01962, -0.33046, 0.16500)` | DONE, 19 transitions | 0; 11 clean exits | VALID |
 | E08 | `cup_test_left_5cm` | 183 | `macos-cgl-e08-left-20260828` | OK 640x480 | OK, 98,135 points | OK | `(-0.03036, -0.28059, 0.16500)` | DONE, 19 transitions | 0; 11 clean exits | VALID |
 | E09 | `cup_test_right_5cm` | 184 | `macos-cgl-e09-right-20260828` | OK 640x480 | OK, 98,078 points | OK | `(0.06963, -0.28051, 0.16500)` | DONE, 19 transitions | 0; 11 clean exits | VALID |
