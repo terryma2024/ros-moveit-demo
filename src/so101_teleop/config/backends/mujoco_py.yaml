@@ -2,7 +2,7 @@ backend: mujoco_py
 owner_package: so101_demo_py
 probe:
   package: so101_demo_py
-  executable: pick_place
+  executable: teleop_workflow
   timeout_s: 10
   fixed_args: []
   scene_style: null

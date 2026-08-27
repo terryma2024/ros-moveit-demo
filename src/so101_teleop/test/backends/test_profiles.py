@@ -90,7 +90,7 @@ def test_mujoco_profile_exposes_only_qualified_live_boundaries():
     profile = load_backend_profile("mujoco_py", PACKAGE)
 
     assert profile.owner_package == "so101_demo_py"
-    assert profile.probe.executable == "pick_place"
+    assert profile.probe.executable == "teleop_workflow"
     assert set(profile.operations) == {
         BackendOperation.WORKFLOW,
         BackendOperation.RESET_WORLD,

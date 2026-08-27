@@ -36,23 +36,90 @@ def result_exit_code(result) -> int:
     return 0 if result.status is BatchStatus.SUCCEEDED else 1
 
 
-def _wait_for_move_group(timeout_s: float = 120.0) -> None:
+_TASK_STATION_SERVICES = frozenset(
+    {
+        "/apply_planning_scene",
+        "/get_planning_scene",
+        "/plan_kinematic_path",
+    }
+)
+
+
+def _wait_for_task_station(
+    timeout_s: float = 120.0,
+    *,
+    runner=None,
+    monotonic=time.monotonic,
+    sleep=time.sleep,
+) -> None:
     from ..application.qualification_stack import ros2_command
 
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        completed = subprocess.run(
-            ros2_command("node", "list"),
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode == 0 and any(
-            name in completed.stdout.splitlines()
-            for name in ("/move_group", "/so101_move_group")
-        ):
-            return
-        time.sleep(0.2)
-    raise TimeoutError("persistent MoveIt stack did not become ready")
+    command_runner = subprocess.run if runner is None else runner
+    deadline = monotonic() + timeout_s
+    while monotonic() < deadline:
+        try:
+            nodes = command_runner(
+                ros2_command(
+                    "node", "list", "--no-daemon", "--spin-time", "0.2"
+                ),
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            node_names = set(nodes.stdout.splitlines())
+            if not ({"/move_group", "/so101_move_group"} & node_names):
+                sleep(0.2)
+                continue
+            services = command_runner(
+                ros2_command(
+                    "service", "list", "--no-daemon", "--spin-time", "0.2"
+                ),
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            if not _TASK_STATION_SERVICES <= set(services.stdout.splitlines()):
+                sleep(0.2)
+                continue
+            joint_state = command_runner(
+                ros2_command(
+                    "topic",
+                    "echo",
+                    "--once",
+                    "--timeout",
+                    "2",
+                    "--no-daemon",
+                    "/joint_states",
+                ),
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            if joint_state.returncode != 0 or "name:" not in joint_state.stdout:
+                sleep(0.2)
+                continue
+            scene = command_runner(
+                ros2_command(
+                    "run",
+                    "so101_demo_py",
+                    "scene_setup",
+                    "--backend",
+                    "mujoco",
+                    "observe",
+                ),
+                capture_output=True,
+                text=True,
+                timeout=min(35.0, max(1.0, deadline - monotonic())),
+            )
+            if scene.returncode == 0:
+                return
+        except subprocess.TimeoutExpired:
+            pass
+        sleep(0.2)
+    raise TimeoutError(
+        "persistent task station did not provide joint states, MoveIt services, "
+        "and planning scene"
+    )
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -110,7 +177,7 @@ def main(arguments: list[str] | None = None) -> int:
                     include_teleop=options.include_teleop,
                 )
             )
-            _wait_for_move_group()
+            _wait_for_task_station()
             mujoco_pid = owned_stack.wait_for_descendant("ros2_control_node", 120.0)
         viewer = MacViewerCapture.from_package(int(mujoco_pid), share)
         runtime = RosTaskBatchRuntime(
