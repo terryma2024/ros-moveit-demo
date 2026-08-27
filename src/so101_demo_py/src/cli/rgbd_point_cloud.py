@@ -296,8 +296,10 @@ def _open3d_cloud(points: np.ndarray, colors: np.ndarray):
             "python3 -m pip install open3d"
         ) from error
     cloud = o3d.geometry.PointCloud()
-    cloud.points = o3d.utility.Vector3dVector(points.astype(np.float64, copy=False))
-    cloud.colors = o3d.utility.Vector3dVector(colors.astype(np.float64, copy=False))
+    writable_points = np.array(points, dtype=np.float64, order="C", copy=True)
+    writable_colors = np.array(colors, dtype=np.float64, order="C", copy=True)
+    cloud.points = o3d.utility.Vector3dVector(writable_points)
+    cloud.colors = o3d.utility.Vector3dVector(writable_colors)
     return o3d, cloud
 
 

@@ -263,6 +263,12 @@ def test_declared_reachability_and_reset_preserve_point_session_epoch(tmp_path: 
         "sim-a",
     )
     assert resumed == [True]
+    reachability_argv = commands[0]
+    joint_timeout = reachability_argv.index("--joint-state-timeout-s")
+    assert reachability_argv[joint_timeout : joint_timeout + 2] == [
+        "--joint-state-timeout-s",
+        "20.0",
+    ]
     reset_argv = commands[1]
     coordinates = reset_argv.index("--cup-position-world-m")
     assert reset_argv[coordinates + 1 : coordinates + 4] == ["-0.03", "-0.28", "0.165"]

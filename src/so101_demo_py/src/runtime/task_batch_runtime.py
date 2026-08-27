@@ -213,6 +213,8 @@ class RosTaskBatchRuntime:
                 str(evidence),
                 "--point-id",
                 point.id,
+                "--joint-state-timeout-s",
+                "20.0",
             )
         )
         document = _last_json(completed.stdout)
