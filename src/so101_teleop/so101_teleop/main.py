@@ -40,6 +40,19 @@ def select_backend(
     return backend
 
 
+def task_station_mujoco_pid(environment: Mapping[str, str]) -> int:
+    value = environment.get("SO101_TASK_STATION_MUJOCO_PID")
+    try:
+        pid = int(value) if value is not None else 0
+    except ValueError as error:
+        raise RuntimeError(
+            "SO101_TASK_STATION_MUJOCO_PID must be a positive integer"
+        ) from error
+    if pid <= 0:
+        raise RuntimeError("SO101_TASK_STATION_MUJOCO_PID must be a positive integer")
+    return pid
+
+
 def installed_web_assets() -> Path:
     override = os.environ.get("SO101_TELEOP_WEB_ROOT")
     if override:
@@ -95,7 +108,10 @@ def main() -> None:
             )
             tasks = TaskService(
                 teleop,
-                CliTaskGateway(backend.profile),
+                CliTaskGateway(
+                    backend.profile,
+                    attached_mujoco_pid=task_station_mujoco_pid(os.environ),
+                ),
                 ManifestArtifactStore(evidence_root),
                 presets=presets,
                 policy_path=(

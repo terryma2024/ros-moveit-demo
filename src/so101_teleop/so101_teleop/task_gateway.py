@@ -87,6 +87,7 @@ class CliTaskGateway:
         monotonic: Callable[[], float] = time.monotonic,
         stop_timeout_s: float = 3.0,
         uuid_factory: Callable[[], object] = _default_uuid,
+        attached_mujoco_pid: int | None = None,
     ) -> None:
         if package_prefix_resolver is None:
             from ament_index_python.packages import get_package_prefix
@@ -94,6 +95,8 @@ class CliTaskGateway:
             package_prefix_resolver = get_package_prefix
         if stop_timeout_s <= 0:
             raise ValueError("stop_timeout_s must be positive")
+        if attached_mujoco_pid is not None and attached_mujoco_pid <= 0:
+            raise ValueError("attached_mujoco_pid must be positive")
         self._profile = profile
         self._package_prefix_resolver = package_prefix_resolver
         self._popen = popen
@@ -104,6 +107,7 @@ class CliTaskGateway:
         self._monotonic = monotonic
         self._stop_timeout_s = stop_timeout_s
         self._uuid_factory = uuid_factory
+        self._attached_mujoco_pid = attached_mujoco_pid
         self._lock = asyncio.Lock()
         self._active: _OwnedTask | None = None
         self._runs: dict[str, _OwnedTask] = {}
@@ -178,6 +182,11 @@ class CliTaskGateway:
                 "session_id", request.simulation_session_id
             )
             points_yaml = self._points(request.points_yaml)
+            if (
+                not isinstance(request, TaskReachabilityOwnerRequest)
+                and self._attached_mujoco_pid is None
+            ):
+                raise TaskGatewayError("TASK_STATION_MUJOCO_PID_MISSING")
             root = self._root(request.evidence_root)
             run_id = self._safe_id("run_id", str(self._uuid_factory()))
             inputs = root / ".task-inputs"
@@ -220,6 +229,14 @@ class CliTaskGateway:
                     "--session-id", session_id,
                     "--evidence-root", str(root),
                 ]
+                if self._attached_mujoco_pid is not None:
+                    argv_tail.extend(
+                        [
+                            "--attach-existing-stack",
+                            "--mujoco-pid",
+                            str(self._attached_mujoco_pid),
+                        ]
+                    )
             executable = self._resolve(spec)
             stdout = (run_input / "owner.stdout.log").open("xb")
             stderr = (run_input / "owner.stderr.log").open("xb")

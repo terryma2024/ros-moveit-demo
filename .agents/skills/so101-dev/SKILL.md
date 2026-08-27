@@ -1,6 +1,6 @@
 ---
 name: so101-dev
-description: Use when diagnosing, modifying, testing, or visually validating SO-101 pick-place on ai-station in robot_demo_001, especially ROS 2 Jazzy, Gazebo Harmonic, MoveIt 2, stale installed binaries, controller or TF failures, Planning Scene and Gazebo attachment divergence, runtime logs, tmux, CUA, or screenshots.
+description: Use when diagnosing, modifying, testing, or visually validating SO-101 pick-place on ai-station or macOS in robot_demo_001, especially ROS 2 Jazzy, Gazebo Harmonic, MoveIt 2, SIP or DYLD test-collection failures, stale installed binaries, controller or TF failures, Planning Scene and Gazebo attachment divergence, runtime logs, tmux, CUA, or screenshots.
 ---
 
 # SO-101 开发调试闭环
@@ -121,6 +121,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
 - 在无法收敛时继续扩大 `rg` 范围。改为写出一个竞争假设并运行能区分它们的命令。
 - 看到成功日志就直接改物理或视觉层。先定位成功只覆盖了哪一层。
 - 修改 source 后直接 `ros2 run`。必须 build、source，再验证 package prefix/产物。
+- 在 macOS 上把 `colcon test` 收集阶段的 `@rpath` / `librosidl_typesupport_c.dylib` 加载失败直接算作代码回归。先按 [`references/test-and-acceptance.md`](references/test-and-acceptance.md) 的 macOS package-test 契约区分 runner 环境失败与真实测试失败。
 - 用 GUI 截图代替状态查询，或用状态查询代替 GUI 验收。两者都要有。
 - 为获得“干净环境”清理用户 worktree。用该 task 已登记的单一 evidence root 和最小补丁隔离。
 - 只在聊天、tmux 或 `/tmp` 中保存长程实验结论。先更新持久账本和 checkpoint，再交接或继续下一轮。

@@ -38,7 +38,13 @@ def executable_prefix(tmp_path, executable):
     return path
 
 
-def gateway_for(tmp_path, *, process=None, capture_result=None):
+def gateway_for(
+    tmp_path,
+    *,
+    process=None,
+    capture_result=None,
+    attached_mujoco_pid=53900,
+):
     profile = load_backend_profile("mujoco_py", PACKAGE)
     for spec in profile.operations.values():
         executable_prefix(tmp_path / "install", spec.executable)
@@ -64,6 +70,7 @@ def gateway_for(tmp_path, *, process=None, capture_result=None):
         getpgid=lambda pid: pid + 100,
         killpg=lambda pgid, sig: None,
         uuid_factory=lambda: "run-safe-001",
+        attached_mujoco_pid=attached_mujoco_pid,
     )
     return gateway, child, popen_calls, run_calls
 
@@ -100,9 +107,47 @@ def test_start_batch_owns_fixed_process_group_and_exclusive_input(tmp_path):
         "--batch-id", "run-safe-001",
         "--session-id", "sim-session-a",
         "--evidence-root", str(tmp_path / "evidence"),
+        "--attach-existing-stack",
+        "--mujoco-pid", "53900",
     ]
     assert options["shell"] is False
     assert options["start_new_session"] is True
+
+
+def test_start_batch_attaches_to_explicit_task_station_mujoco_pid(tmp_path):
+    profile = load_backend_profile("mujoco_py", PACKAGE)
+    for spec in profile.operations.values():
+        executable_prefix(tmp_path / "install", spec.executable)
+    popen_calls = []
+
+    def popen(argv, **kwargs):
+        popen_calls.append((argv, kwargs))
+        return FakeProcess()
+
+    gateway = CliTaskGateway(
+        profile,
+        package_prefix_resolver=lambda _package: str(tmp_path / "install"),
+        popen=popen,
+        getpgid=lambda pid: pid + 100,
+        uuid_factory=lambda: "attached-run",
+        attached_mujoco_pid=53900,
+    )
+
+    asyncio.run(gateway.start_batch(request(tmp_path / "evidence")))
+
+    argv = popen_calls[0][0]
+    assert argv[-3:] == ["--attach-existing-stack", "--mujoco-pid", "53900"]
+
+
+def test_start_batch_fails_closed_without_attached_task_station(tmp_path):
+    gateway, _child, popen_calls, _ = gateway_for(
+        tmp_path, attached_mujoco_pid=None
+    )
+
+    with pytest.raises(TaskGatewayError, match="TASK_STATION_MUJOCO_PID_MISSING"):
+        asyncio.run(gateway.start_batch(request(tmp_path / "evidence")))
+
+    assert popen_calls == []
 
 
 def test_only_one_active_batch_is_allowed(tmp_path):
@@ -166,6 +211,7 @@ def test_cancel_signals_only_owned_pgid_with_bounded_escalation(tmp_path):
         sleep=sleep,
         stop_timeout_s=0.001,
         uuid_factory=lambda: "cancel-run",
+        attached_mujoco_pid=53900,
     )
     handle = asyncio.run(gateway.start_batch(request(tmp_path / "evidence")))
 
@@ -192,6 +238,7 @@ def test_cancel_timeout_retains_exclusive_owner_for_safe_retry(tmp_path):
         monotonic=(clock := iter((0.0, 0.0, 1.0, 1.0, 2.0, 2.0))).__next__,
         stop_timeout_s=0.5,
         uuid_factory=lambda: "timeout-run",
+        attached_mujoco_pid=53900,
     )
     handle = asyncio.run(gateway.start_batch(request(tmp_path / "evidence")))
 

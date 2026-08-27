@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -51,6 +52,56 @@ class _Tf:
         if self.result is None:
             raise TimeoutError("exact transform unavailable")
         return self.result
+
+
+def test_ros_snapshot_source_requests_reliable_depth_ten_subscriptions(
+    monkeypatch,
+) -> None:
+    from so101_demo.ros.rgbd_snapshot import RosRgbdSnapshotSource
+
+    subscription_qos = []
+
+    class FakeNode:
+        def create_subscription(self, _type, _topic, _callback, qos):
+            subscription_qos.append(qos)
+            return object()
+
+    fake_rclpy = SimpleNamespace(
+        ok=lambda: True,
+        create_node=lambda *_args, **_kwargs: FakeNode(),
+    )
+    monkeypatch.setitem(sys.modules, "rclpy", fake_rclpy)
+    monkeypatch.setitem(
+        sys.modules,
+        "rclpy.parameter",
+        SimpleNamespace(Parameter=lambda *_args, **_kwargs: object()),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "rclpy.qos",
+        SimpleNamespace(qos_profile_sensor_data=object()),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "sensor_msgs.msg",
+        SimpleNamespace(CameraInfo=object, Image=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tf2_ros",
+        SimpleNamespace(
+            Buffer=lambda: object(),
+            TransformListener=lambda *_args: object(),
+        ),
+    )
+
+    RosRgbdSnapshotSource(
+        camera_info_topic="/test/camera_info",
+        color_topic="/test/color",
+        depth_topic="/test/depth",
+    )
+
+    assert subscription_qos == [10, 10, 10]
 
 
 def test_snapshot_writes_artifacts_from_one_source_stamp(tmp_path: Path) -> None:
