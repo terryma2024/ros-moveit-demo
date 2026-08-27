@@ -5,6 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from so101_demo.application.task_reachability import (
+    ReachabilityReport,
+    ReachabilityStatus,
+)
 from so101_demo.core.domain import RunStatus, State
 from so101_demo.core.task_geometry import TaskGeometry, load_task_geometry
 from so101_demo.ports.cup_scene_observation import CupSceneObservation
@@ -436,6 +440,7 @@ def _runtime(
     observations: tuple[CupSceneObservation, ...],
     scene: RecordingTaskScenePort,
     faults: frozenset[str] = frozenset(),
+    reachability_status: ReachabilityStatus = ReachabilityStatus.REACHABLE,
 ):
     scene.events = events
     sample = _sample(-0.03)
@@ -484,6 +489,23 @@ def _runtime(
         events.append("execution.create")
         return _FakeExecution(events, faults)
 
+    def reachability_preflight(_node, sample_arg, template_arg, scene_revision):
+        assert sample_arg is sample
+        assert template_arg is template
+        assert scene_revision == 3
+        events.append("reachability.check")
+        return ReachabilityReport(
+            point_id="perceived_cup",
+            status=reachability_status,
+            segments=(),
+            first_failure_code=(
+                None
+                if reachability_status is ReachabilityStatus.REACHABLE
+                else "MOVEIT_PLAN_FAILED"
+            ),
+            scene_revision=scene_revision,
+        )
+
     def build_actions(_execution, _targets):
         events.append("actions.build")
         return object()
@@ -510,6 +532,7 @@ def _runtime(
         task_scene_port=scene_factory,
         cleanup_task_scene=cleanup_task_scene,
         resolve_motion_targets=resolve,
+        reachability_preflight=reachability_preflight,
         execution=execution_factory,
         build_actions=build_actions,
         runner=runner_factory,
@@ -559,6 +582,7 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
         "truth.observe",
         "truth.observe",
         "targets.resolve",
+        "reachability.check",
         "execution.create",
         "actions.build",
         "runner.create",
@@ -572,6 +596,38 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
     ]
     assert scene.calls[:2] == ["apply", "observe"]
     assert "status=DONE" in capsys.readouterr().out
+
+
+def test_unreachable_preflight_writes_evidence_and_never_constructs_motion(
+    tmp_path,
+    capsys,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    scene = RecordingTaskScenePort()
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=scene,
+        reachability_status=ReachabilityStatus.UNREACHABLE,
+    )
+
+    assert run_dynamic_execute(_options(tmp_path), _runtime=runtime) == 1
+
+    document = __import__("json").loads(
+        (tmp_path / "reachability-observed.json").read_text()
+    )
+    assert document["reports"][0]["status"] == "UNREACHABLE"
+    assert "reachability.check" in events
+    assert "execution.create" not in events
+    assert "actions.build" not in events
+    assert "runner.run" not in events
+    assert "DYNAMIC_TARGET_UNREACHABLE" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

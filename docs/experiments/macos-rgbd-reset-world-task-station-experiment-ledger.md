@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062
+current_commit: 73356e9a4353310892630ec9dd919c4a8aea75ae
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -17,13 +17,14 @@ confirmed_conclusions:
   - EXP-001 validates strict schema-version-one task points and the four shipped presets with 17 focused tests.
   - EXP-002 validates the 0.1.0 ResetWorld free-joint override and arbitrary cup-position CLI with 40 focused and regression tests.
   - EXP-003 validates seven-segment plan-only reachability with terminal-state chaining and first-failure classification.
+  - EXP-004 validates the MoveGroup plan-only wire adapter, stable task CLI contract, and mandatory dynamic pre-motion reachability gate.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-006
-next_experiment: EXP-004
+latest_checkpoint: CP-008
+next_experiment: EXP-005
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -300,4 +301,94 @@ disproven_routes:
 open_risks:
   - Scene revision and collision diagnostics remain adapter-supplied until Task 4.
 next_command: git diff --check && commit the four planned Task 3 paths.
+```
+
+## CP-007 — Task 3 committed; Task 4 preregistered
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-003
+current_hypothesis: MoveGroup plan-only can implement the reachability port with a request-local plastic_cup Planning Scene diff and no execution side effect.
+working_tree_status: clean at 73356e9a4353310892630ec9dd919c4a8aea75ae before Task 4 RED tests
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 3 is committed as 73356e9a4353310892630ec9dd919c4a8aea75ae.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - MoveGroup action result and request-local scene fields require source-backed ROS message validation.
+next_command: Run Task 4 ROS wire and CLI RED tests.
+```
+
+## EXP-004 — MoveGroup plan-only adapter and task CLI
+
+```yaml
+experiment_id: EXP-004
+status: VALID
+prior_experiment: EXP-003
+hypothesis: A MoveGroup action goal with plan_only true and an is_diff request-local cup object can plan the seven targets without mutating the global Planning Scene or executing a trajectory.
+prediction: RED fails because ros.task_reachability and cli.task_reachability are absent; GREEN proves wire fields, terminal trajectory chaining, stable JSON/exit codes, installed entry point, and dynamic pre-motion rejection.
+single_variable: Bind Task 3 reachability to MoveGroup plan-only and expose the installed JSON CLI plus dynamic execute preflight.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 73356e9a4353310892630ec9dd919c4a8aea75ae.
+  - Tests use the sourced macOS ROS environment; no action server or controller is started.
+success_criteria:
+  - Goal plan_only is true, replan is false, start state is exact, and scene diff contains only plastic_cup.
+  - Accepted result returns the final trajectory point; rejection and timeout preserve stable diagnostics.
+  - No execute_trajectory, apply_planning_scene, or controller action client is created.
+  - CLI exit codes are 0 reachable, 2 unreachable, and 1 unknown/infrastructure.
+  - Dynamic execution rejects non-REACHABLE before creating workflow actions.
+failure_criteria:
+  - Any global scene mutation or execution boundary is invoked, diagnostics are lost, or motion begins after failed preflight.
+invalid_criteria:
+  - Tests resolve stale generated ROS messages or the old installed project executable set.
+provenance:
+  source_commit: 73356e9a4353310892630ec9dd919c4a8aea75ae
+  install_overlay: SOURCE_WITH_TASK2_MSG_CANDIDATE
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run test_task_reachability_ros.py and test_task_reachability_cli.py.
+    exit_code: 2
+  - command: Run test_task_reachability_ros.py, test_task_reachability_cli.py, and test_dynamic_scene_sync.py.
+    exit_code: 0
+  - command: Run the complete src/so101_demo_py/test suite with writable ROS_HOME and ROS_LOG_DIR.
+    exit_code: 1
+observed:
+  - The valid RED failed only because the ROS adapter and CLI modules did not exist.
+  - Focused GREEN passed 33 tests; dynamic execution regressions added another 13 passes.
+  - The full source suite passed 491 tests; its sole failure is the explicitly deferred old-install executable closure assertion.
+  - The MoveGroup goal is plan_only, contains only a request-local plastic_cup scene diff, and returns the accepted trajectory's final joint point.
+  - An UNREACHABLE preflight writes reachability-observed.json and prevents execution construction, action building, and runner invocation.
+inferred:
+  - The request-local Planning Scene avoids mutating the global scene during reachability planning while the existing scene convergence gate still runs first.
+conclusion: The installed CLI contract and dynamic pre-motion gate are source-valid; fresh installed-runtime closure remains deliberately deferred to Task 14.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task4-red.log sha256=b7956ee9a0e1c45488c415998fc47c0a2f230d9c05dd7e68bccf14435bea1310
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task4-green.log sha256=5f3ebba9afb45526e1e1b6b61ba22c64ccca996c3e903535228dbc9b3e4fb033
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task4-full-source.log sha256=05f710835a05170d620b8af913a79dc5b37e00d15ee1c7b0cb66c58741cd691a
+decision: KEEP
+next_experiment: EXP-005
+```
+
+## CP-008 — Task 4 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-004
+current_hypothesis: A typed sequential supervisor can reuse one visible stack, isolate every point's evidence, and continue after a point-local failure.
+working_tree_status: ledger plus Task 4 ROS adapter, CLI, setup entry point, dynamic gate, provenance expectation, and tests contain only planned changes
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 4 focused reachability and orchestration tests pass 33 tests.
+  - Complete Python source regression passes 491 tests, with only the known old-install executable closure gate deferred to Task 14.
+disproven_routes:
+  - Running ROS launch-construction tests without writable ROS_HOME and ROS_LOG_DIR is invalid under the workspace sandbox.
+open_risks:
+  - The real MoveGroup action and macOS simulator have not been started; source-valid does not imply runtime-qualified.
+next_command: git diff --check and commit the nine planned Task 4 paths.
 ```
