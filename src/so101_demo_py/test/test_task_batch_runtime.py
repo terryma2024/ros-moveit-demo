@@ -160,6 +160,54 @@ def test_declared_reachability_and_reset_preserve_point_session_epoch(tmp_path: 
     assert reset_argv[coordinates + 1 : coordinates + 4] == ["-0.03", "-0.28", "0.165"]
 
 
+def test_runtime_canonicalizes_symlinked_evidence_root(tmp_path: Path) -> None:
+    from so101_demo.core.task_points import TaskPoint
+    from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
+
+    real_root = tmp_path / "private-tmp"
+    real_root.mkdir()
+    alias_root = tmp_path / "tmp"
+    alias_root.symlink_to(real_root, target_is_directory=True)
+    commands = []
+
+    def run(argv, **_kwargs):
+        commands.append(argv)
+        document = {
+            "reports": [
+                {
+                    "point_id": "task_start",
+                    "status": "REACHABLE",
+                    "first_failure_code": None,
+                    "scene_revision": 1,
+                }
+            ]
+        }
+        return SimpleNamespace(
+            returncode=0,
+            stdout=__import__("json").dumps(document),
+        )
+
+    runtime = RosTaskBatchRuntime(
+        _Processes(),
+        _Graph(),
+        session_id="sim-a",
+        points_file=tmp_path / "points.yaml",
+        policy_file=tmp_path / "policy.yaml",
+        evidence_root=alias_root,
+        viewer_capture=SimpleNamespace(capture=lambda *_args, **_kwargs: None),
+        command_runner=run,
+        resume=lambda: True,
+    )
+
+    runtime.check_declared(
+        TaskPoint("task_start", "Task start", (0.02, -0.28, 0.165))
+    )
+
+    evidence_argument = commands[0][commands[0].index("--evidence-file") + 1]
+    assert Path(evidence_argument).is_relative_to(real_root.resolve())
+    assert not Path(evidence_argument).is_relative_to(alias_root.absolute())
+
+
 def test_first_terminal_child_status_controls_point_result(tmp_path: Path) -> None:
     from so101_demo.core.task_points import TaskPoint
 
