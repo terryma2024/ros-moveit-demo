@@ -10,9 +10,11 @@ import pytest
 from so101_teleop.backends.registry import load_backend_profile
 from so101_teleop.task_gateway import (
     CliTaskGateway,
+    TaskCaptureOwnerRequest,
     TaskGatewayBusy,
     TaskGatewayError,
     TaskOwnerRequest,
+    TaskReachabilityOwnerRequest,
 )
 
 
@@ -68,7 +70,7 @@ def gateway_for(tmp_path, *, process=None, capture_result=None):
 
 def request(evidence_root):
     return TaskOwnerRequest(
-        session_id="sim-session-a",
+        simulation_session_id="sim-session-a",
         points_yaml=(
             "schema_version: 1\npoints:\n"
             "  - id: free-a\n"
@@ -175,10 +177,37 @@ def test_cancel_signals_only_owned_pgid_with_bounded_escalation(tmp_path):
         asyncio.run(gateway.cancel(handle.run_id))
 
 
+def test_cancel_timeout_retains_exclusive_owner_for_safe_retry(tmp_path):
+    process = FakeProcess()
+    profile = load_backend_profile("mujoco_py", PACKAGE)
+    for spec in profile.operations.values():
+        executable_prefix(tmp_path / "install", spec.executable)
+    gateway = CliTaskGateway(
+        profile,
+        package_prefix_resolver=lambda _package: str(tmp_path / "install"),
+        popen=lambda _argv, **_kwargs: process,
+        getpgid=lambda _pid: 4201,
+        killpg=lambda _pgid, _sig: None,
+        sleep=lambda _seconds: asyncio.sleep(0),
+        monotonic=(clock := iter((0.0, 0.0, 1.0, 1.0, 2.0, 2.0))).__next__,
+        stop_timeout_s=0.5,
+        uuid_factory=lambda: "timeout-run",
+    )
+    handle = asyncio.run(gateway.start_batch(request(tmp_path / "evidence")))
+
+    result = asyncio.run(gateway.cancel(handle.run_id))
+
+    assert result["status"] == "CANCEL_TIMEOUT"
+    with pytest.raises(TaskGatewayBusy, match="TASK_BATCH_ACTIVE"):
+        asyncio.run(gateway.start_batch(request(tmp_path / "other")))
+
+
 def test_capture_uses_fixed_sensor_owner_and_exclusive_directory(tmp_path):
     gateway, _child, _popen_calls, run_calls = gateway_for(tmp_path)
 
-    result = asyncio.run(gateway.capture("sim-session-a", tmp_path / "evidence"))
+    result = asyncio.run(gateway.capture(TaskCaptureOwnerRequest(
+        "sim-session-a", tmp_path / "evidence"
+    )))
 
     argv, options = run_calls[0]
     assert argv[0].endswith("/lib/so101_demo_py/rgbd_sensor_capture")
@@ -209,3 +238,23 @@ def test_task_service_gateway_surface_is_narrow():
         if not name.startswith("_")
     }
     assert public_methods == {"start_batch", "status", "cancel", "capture"}
+
+
+def test_reachability_request_uses_fixed_plan_only_owner(tmp_path):
+    gateway, _child, popen_calls, _ = gateway_for(tmp_path)
+    policy = tmp_path / "policy.yaml"
+    policy.write_text("version: 1\n")
+    base = request(tmp_path / "evidence")
+
+    handle = asyncio.run(gateway.start_batch(TaskReachabilityOwnerRequest(
+        base.simulation_session_id,
+        base.points_yaml,
+        base.evidence_root,
+        policy,
+    )))
+
+    argv = popen_calls[0][0]
+    assert argv[0].endswith("/lib/so101_demo_py/task_reachability")
+    assert "--batch-id" not in argv
+    assert argv[argv.index("--policy") + 1] == str(policy)
+    assert handle.manifest_path.parent.name == "reachability"

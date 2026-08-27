@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 from pathlib import Path
 
@@ -10,7 +11,22 @@ from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .models import BackendCapabilitiesResponse, TelemetrySnapshot
+from .models import (
+    BackendCapabilitiesResponse,
+    CaptureResponse,
+    CommandResult,
+    ReachabilityResponse,
+    RenderedImageRequest,
+    TaskCaptureRequest,
+    TaskMutationRequest,
+    TaskRecoveryRequest,
+    TaskRunRequest,
+    TaskRunSummary,
+    TaskShutdownRequest,
+    TelemetrySnapshot,
+)
+from .task_artifacts import ArtifactAccessError
+from .task_gateway import TaskGatewayError
 
 
 def validate_bind_address(address: str) -> str:
@@ -24,7 +40,12 @@ def validate_bind_address(address: str) -> str:
     return address
 
 
-def create_app(service, static_dir: str | Path | None = None, capture_dir: str | Path | None = None) -> FastAPI:
+def create_app(
+    service,
+    static_dir: str | Path | None = None,
+    capture_dir: str | Path | None = None,
+    task_service=None,
+) -> FastAPI:
     app = FastAPI(title="SO-101 Teleop", version="1.0.0")
 
     @app.get("/health")
@@ -100,6 +121,133 @@ def create_app(service, static_dir: str | Path | None = None, capture_dir: str |
                 await service.telemetry_wait()
         except WebSocketDisconnect:
             return
+
+    def task_owner():
+        if task_service is None:
+            raise RuntimeError("TASK_SERVICE_UNAVAILABLE")
+        return task_service
+
+    def task_response(result):
+        if isinstance(result, CommandResult) and not result.succeeded:
+            code = result.code
+            status = 409 if code.startswith((
+                "LEASE_", "SESSION_", "COMMAND_", "CONFIRMATION_",
+                "TASK_BATCH_", "TASK_RUN_", "TASK_RECOVERY_",
+            )) else 503
+            return JSONResponse(status_code=status, content=result.model_dump())
+        return result
+
+    @app.get("/tasks/presets")
+    async def task_presets():
+        try:
+            return await task_owner().presets()
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/reachability", response_model=ReachabilityResponse)
+    async def task_reachability(body: TaskRunRequest):
+        try:
+            return task_response(await task_owner().reachability(body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/runs", response_model=TaskRunSummary)
+    async def task_start(body: TaskRunRequest):
+        try:
+            return task_response(await task_owner().start(body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.get("/tasks/runs", response_model=list[TaskRunSummary])
+    async def task_runs():
+        try:
+            return await task_owner().list_runs()
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.get("/tasks/runs/{run_id}", response_model=TaskRunSummary)
+    async def task_status(run_id: str):
+        try:
+            return await task_owner().status(run_id)
+        except (TaskGatewayError, ValueError):
+            return JSONResponse(status_code=404, content={"code": "TASK_RUN_NOT_FOUND"})
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/runs/{run_id}/cancel", response_model=TaskRunSummary)
+    async def task_cancel(run_id: str, body: TaskMutationRequest):
+        try:
+            return task_response(await task_owner().cancel(run_id, body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/runs/{run_id}/recovery", response_model=TaskRunSummary)
+    async def task_recovery(run_id: str, body: TaskRecoveryRequest):
+        try:
+            return task_response(await task_owner().recovery(run_id, body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/captures", response_model=CaptureResponse)
+    async def task_capture(body: TaskCaptureRequest):
+        try:
+            return task_response(await task_owner().capture(body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.post("/tasks/captures/{capture_id}/rendered-image")
+    async def task_rendered_image(capture_id: str, body: RenderedImageRequest):
+        try:
+            return task_response(
+                await task_owner().rendered_image(capture_id, body)
+            )
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.get("/tasks/artifacts/{artifact_id}")
+    async def task_artifact(artifact_id: str):
+        try:
+            opened = task_owner().artifacts.open(artifact_id)
+        except (ArtifactAccessError, RuntimeError):
+            return JSONResponse(status_code=404, content={"code": "ARTIFACT_NOT_FOUND"})
+        return FileResponse(
+            opened.path,
+            media_type=opened.media_type,
+            filename=opened.path.name,
+        )
+
+    @app.post("/tasks/environment/shutdown", response_model=TaskRunSummary)
+    async def task_shutdown(body: TaskShutdownRequest):
+        try:
+            return task_response(await task_owner().shutdown(body))
+        except RuntimeError as error:
+            return JSONResponse(status_code=503, content={"code": str(error)})
+
+    @app.websocket("/tasks/events")
+    async def task_events(websocket: WebSocket):
+        if task_service is None:
+            await websocket.close(code=1011, reason="TASK_SERVICE_UNAVAILABLE")
+            return
+        await websocket.accept()
+        queue = task_service.subscribe()
+        disconnect = asyncio.create_task(websocket.receive())
+        try:
+            while True:
+                event_ready = asyncio.create_task(queue.get())
+                done, _pending = await asyncio.wait(
+                    {event_ready, disconnect},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if disconnect in done:
+                    event_ready.cancel()
+                    return
+                event = event_ready.result()
+                await websocket.send_json(event.model_dump())
+        except WebSocketDisconnect:
+            return
+        finally:
+            disconnect.cancel()
+            task_service.unsubscribe(queue)
 
     if capture_dir is not None:
         captures = Path(capture_dir); captures.mkdir(parents=True, exist_ok=True)

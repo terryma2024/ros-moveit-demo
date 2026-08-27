@@ -1,8 +1,12 @@
+import json
+
 from fastapi.testclient import TestClient
 import pytest
 
 from so101_teleop.api import create_app, validate_bind_address
 from so101_teleop.models import CommandResult, ServerMode, TelemetrySnapshot
+from so101_teleop.models import CaptureResponse, TaskEvent, TaskRunSummary
+from so101_teleop.task_artifacts import ManifestArtifactStore
 
 
 class Service:
@@ -23,6 +27,52 @@ class Service:
 
     async def camera_presets(self):
         return {"presets": ["overview", "top"]}
+
+
+class TaskApiService:
+    def __init__(self):
+        self.calls = []
+
+    async def presets(self):
+        return {"schema_version": 1, "points": []}
+
+    async def start(self, request):
+        self.calls.append(("start", request))
+        return TaskRunSummary(
+            run_id="run-1", status="RUNNING",
+            simulation_session_id=request.session_id, points=[],
+        )
+
+    async def list_runs(self): return []
+    async def status(self, run_id):
+        return TaskRunSummary(
+            run_id=run_id, status="RUNNING",
+            simulation_session_id="sim-a", points=[],
+        )
+
+    async def cancel(self, run_id, request):
+        self.calls.append(("cancel", run_id, request))
+        return TaskRunSummary(
+            run_id=run_id, status="CANCELLED",
+            simulation_session_id=request.session_id, points=[],
+        )
+
+    async def capture(self, request):
+        return CaptureResponse(
+            capture_id="c1", status="SUCCEEDED", artifact_ids=[]
+        )
+
+    def subscribe(self):
+        import asyncio
+        queue = asyncio.Queue()
+        queue.put_nowait(TaskEvent(
+            sequence=1, kind="BATCH_STARTED", run_id="run-1",
+            status="RUNNING",
+        ))
+        return queue
+
+    def unsubscribe(self, queue):
+        self.unsubscribed = queue
 
 
 def test_unsafe_bind_is_rejected():
@@ -90,3 +140,59 @@ def test_camera_presets_are_listed_and_apply_uses_command_boundary():
     assert response.status_code == 409
     assert service.commands[-1][0] == "camera_preset"
     assert service.commands[-1][1]["preset"] == "overview"
+
+
+def test_task_routes_are_separate_and_typed():
+    tasks = TaskApiService()
+    client = TestClient(create_app(Service(), task_service=tasks))
+    response = client.post("/tasks/runs", json={
+        "schema_version": 1,
+        "points": [{
+            "id": "free-a", "label": "Free A",
+            "cup_position_world_m": [0.02, -0.30, 0.165],
+        }],
+        "session_id": "sim-a", "lease_id": "lease-a",
+        "command_id": "start-1",
+    })
+    assert response.status_code == 200
+    assert response.json()["run_id"] == "run-1"
+    assert tasks.calls[0][0] == "start"
+    assert client.get("/snapshot").json()["simulation_session_id"] == "sim-a"
+
+
+def test_task_artifact_route_rejects_manifest_escape(tmp_path):
+    tasks = TaskApiService()
+    tasks.artifacts = ManifestArtifactStore(tmp_path / "evidence")
+    tasks.artifacts.manifest_path.write_text(json.dumps({
+        "schema_version": 1,
+        "artifacts": [{
+            "artifact_id": "bad-id",
+            "relative_path": "../../etc/passwd",
+            "media_type": "text/plain",
+            "byte_size": 1,
+            "sha256": "0" * 64,
+            "capture_id": None,
+            "run_id": None,
+            "source_artifact_id": None,
+            "metadata": {},
+        }],
+    }))
+    client = TestClient(create_app(Service(), task_service=tasks))
+    response = client.get("/tasks/artifacts/bad-id")
+    assert response.status_code == 404
+    assert response.json()["code"] == "ARTIFACT_NOT_FOUND"
+
+
+def test_task_websocket_uses_independent_ordered_event_stream():
+    tasks = TaskApiService()
+    client = TestClient(create_app(Service(), task_service=tasks))
+    with client.websocket_connect("/tasks/events") as websocket:
+        event = websocket.receive_json()
+    assert event == {
+        "sequence": 1,
+        "kind": "BATCH_STARTED",
+        "run_id": "run-1",
+        "point_id": None,
+        "status": "RUNNING",
+        "failure_code": None,
+    }

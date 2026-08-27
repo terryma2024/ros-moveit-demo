@@ -34,8 +34,19 @@ class TaskGatewayBusy(TaskGatewayError):
 
 @dataclass(frozen=True, slots=True)
 class TaskOwnerRequest:
-    session_id: str
+    simulation_session_id: str
     points_yaml: str
+    evidence_root: Path
+
+
+@dataclass(frozen=True, slots=True)
+class TaskReachabilityOwnerRequest(TaskOwnerRequest):
+    policy_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class TaskCaptureOwnerRequest:
+    simulation_session_id: str
     evidence_root: Path
 
 
@@ -163,7 +174,9 @@ class CliTaskGateway:
                 self._active = None
             if not isinstance(request, TaskOwnerRequest):
                 raise TaskGatewayError("TASK_REQUEST_INVALID")
-            session_id = self._safe_id("session_id", request.session_id)
+            session_id = self._safe_id(
+                "session_id", request.simulation_session_id
+            )
             points_yaml = self._points(request.points_yaml)
             root = self._root(request.evidence_root)
             run_id = self._safe_id("run_id", str(self._uuid_factory()))
@@ -179,18 +192,38 @@ class CliTaskGateway:
             points_path = run_input / "points.yaml"
             with points_path.open("x", encoding="utf-8") as stream:
                 stream.write(points_yaml)
-            spec = self._spec(BackendOperation.TASK_BATCH, "task_batch")
+            if isinstance(request, TaskReachabilityOwnerRequest):
+                policy = Path(request.policy_path)
+                if (
+                    not policy.is_absolute()
+                    or policy.is_symlink()
+                    or not policy.is_file()
+                ):
+                    raise TaskGatewayError("TASK_POLICY_INVALID")
+                spec = self._spec(
+                    BackendOperation.TASK_REACHABILITY,
+                    "task_reachability",
+                )
+                manifest = root / "reachability" / f"{run_id}.json"
+                argv_tail = [
+                    "--points", str(points_path),
+                    "--policy", str(policy),
+                    "--session-id", session_id,
+                    "--evidence-file", str(manifest),
+                ]
+            else:
+                spec = self._spec(BackendOperation.TASK_BATCH, "task_batch")
+                manifest = root / "batches" / run_id / "batch-result.json"
+                argv_tail = [
+                    "--points", str(points_path),
+                    "--batch-id", run_id,
+                    "--session-id", session_id,
+                    "--evidence-root", str(root),
+                ]
             executable = self._resolve(spec)
-            manifest = root / "batches" / run_id / "batch-result.json"
             stdout = (run_input / "owner.stdout.log").open("xb")
             stderr = (run_input / "owner.stderr.log").open("xb")
-            argv = [
-                str(executable), *spec.fixed_args,
-                "--points", str(points_path),
-                "--batch-id", run_id,
-                "--session-id", session_id,
-                "--evidence-root", str(root),
-            ]
+            argv = [str(executable), *spec.fixed_args, *argv_tail]
             try:
                 process = self._popen(
                     argv,
@@ -221,15 +254,19 @@ class CliTaskGateway:
             if task is None:
                 raise TaskGatewayError("TASK_RUN_NOT_FOUND")
             manifest = task.handle.manifest_path
-            batch_root = task.evidence_root / "batches"
-            run_root = batch_root / run_id
-            if (
-                task.evidence_root.is_symlink()
-                or batch_root.is_symlink()
-                or run_root.is_symlink()
-                or manifest.is_symlink()
-            ):
+            try:
+                relative = manifest.absolute().relative_to(
+                    task.evidence_root.absolute()
+                )
+            except ValueError as error:
+                raise TaskGatewayError("TASK_MANIFEST_INVALID") from error
+            current = task.evidence_root
+            if current.is_symlink():
                 raise TaskGatewayError("TASK_MANIFEST_INVALID")
+            for part in relative.parts:
+                current = current / part
+                if current.is_symlink():
+                    raise TaskGatewayError("TASK_MANIFEST_INVALID")
             if manifest.exists():
                 try:
                     manifest.resolve(strict=True).relative_to(
@@ -262,9 +299,10 @@ class CliTaskGateway:
                 raise TaskGatewayError("TASK_MANIFEST_INVALID")
             payload = dict(payload)
             payload["run_id"] = run_id
+            payload["owner_running"] = task.process.poll() is None
             if payload["status"] != "RUNNING":
                 self._close(task)
-                if self._active is task and task.process.poll() is not None:
+                if self._active is task and not payload["owner_running"]:
                     self._active = None
             return payload
 
@@ -288,16 +326,19 @@ class CliTaskGateway:
             if not stopped:
                 self._killpg(task.handle.pgid, signal.SIGTERM)
                 stopped = await self._wait_stopped(task.process)
-            self._close(task)
-            self._active = None
+            if stopped:
+                self._close(task)
+                self._active = None
             return {
                 "run_id": run_id,
                 "status": "CANCELLED" if stopped else "CANCEL_TIMEOUT",
             }
 
-    async def capture(self, session_id: str, evidence_root: Path) -> dict[str, object]:
-        self._safe_id("session_id", session_id)
-        root = self._root(evidence_root)
+    async def capture(self, request: TaskCaptureOwnerRequest) -> dict[str, object]:
+        if not isinstance(request, TaskCaptureOwnerRequest):
+            raise TaskGatewayError("TASK_CAPTURE_REQUEST_INVALID")
+        self._safe_id("session_id", request.simulation_session_id)
+        root = self._root(request.evidence_root)
         spec = self._spec(BackendOperation.SENSOR_CAPTURE, "sensor_capture")
         executable = self._resolve(spec)
         captures = root / "captures"
