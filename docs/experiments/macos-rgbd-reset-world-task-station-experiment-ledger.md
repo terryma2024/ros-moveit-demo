@@ -930,3 +930,99 @@ open_risks:
   - The /tasks browser shell, free-point editor, reachability UX, and independent route-state tests do not exist yet.
 next_command: git diff --check and commit Task 10, then write Task 11 Bun RED tests.
 ```
+
+## CP-021 — Task 10 committed and Bun provenance
+
+```yaml
+checkpoint_id: CP-021
+last_valid_experiment: EXP-010
+current_hypothesis: The root module can dispatch /tasks to a separate controlled task builder without importing task state into the old App.
+working_tree_status: clean at 52fdcf781d9e501ea28f42221b4956b1f40322d3
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+tool_provenance:
+  bun_path: /Users/matianyi/.bun/bin/bun
+  bun_version: 1.3.14
+confirmed_conclusions:
+  - Task 10 is committed as 52fdcf7.
+  - Bun is locally available for all Task 11-13 frontend work; npm and npx are unnecessary.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Task YAML validation, free-point ordering/editing, lease-driven actions, and route isolation are unimplemented.
+next_command: Add Task 11 Bun RED tests for YAML and TaskBuilder.
+```
+
+## EXP-011 — separate task shell and free-point builder
+
+```yaml
+experiment_id: EXP-011
+status: VALID
+prior_experiment: EXP-010
+hypothesis: Path dispatch plus controlled point editing can add the /tasks experience without modifying the existing App component or its state.
+prediction: RED fails because TaskApp, TaskBuilder, task API types/client, and strict task YAML helpers do not exist.
+single_variable: Add only Task 11 frontend task shell, editor, API client/types, YAML helpers, path dispatch, and Bun tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 52fdcf781d9e501ea28f42221b4956b1f40322d3.
+  - Bun executable is /Users/matianyi/.bun/bin/bun version 1.3.14.
+success_criteria:
+  - /tasks renders TaskApp while / renders the byte-equivalent existing App import with no task state added to app.tsx.
+  - Four server presets and arbitrary finite free points can be added, reordered, edited, and deleted without duplicate IDs.
+  - Schema version 1 YAML round-trips in order and rejects non-finite XYZ, unknown fields, duplicate IDs, and invalid shapes.
+  - Validate, start, cancel, recovery, capture, and shutdown remain disabled until a lease and current session exist.
+failure_criteria:
+  - Old App source/state changes, task input reaches fetch without local validation, or npm/npx is used.
+invalid_criteria:
+  - Tests depend on ROS, MuJoCo, browser filesystem APIs beyond injected File/Blob seams, or network package mutation.
+provenance:
+  source_commit: 52fdcf781d9e501ea28f42221b4956b1f40322d3
+  install_overlay: SOURCE_FRONTEND_ONLY
+  runtime_executable: /Users/matianyi/.bun/bin/bun
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run Task 11 YAML and TaskBuilder RED tests with Bun.
+    exit_code: 1
+  - command: Run Task 11 focused Vitest through Bun.
+    exit_code: 0
+  - command: Run the Bun production build.
+    exit_code: 0
+  - command: Run all Web unit/component tests through Bun.
+    exit_code: 0
+observed:
+  - Valid RED failed because task-yaml and task-builder did not exist; the worktree-local dependencies were then installed from the frozen Bun lock without changing bun.lock.
+  - Focused GREEN passed 7 tests for ordered schema round-trip, strict validation, preset/free-point editing, reorder, and duplicate-ID visibility.
+  - Complete Web regression passed 52 tests across 16 files.
+  - TypeScript and Vite production build succeeded; its existing greater-than-500-kB chunk warning remains non-fatal and will be revisited with the Three.js split in Task 12.
+  - app.tsx has zero diff; main.tsx alone selects TaskApp for /tasks and the existing App otherwise.
+inferred:
+  - The new task workflow can evolve without coupling its state or controls to the established Teleop page.
+conclusion: Task 11 is source-valid with strict free-point/YAML handling and a separately dispatched task shell.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task11-red.log sha256=2c57554172b65191f5c342682eb601030252c264c40ee5c9e165cdc2715b0d94
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task11-green.log sha256=47f860aefb88485d1baa3448aa54b97c7029b8cb74bdf0248d2faa610276a31f
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task11-build.log sha256=68ad732822b698212a9069f0bbd94b49bd63d98102db9739d1750cfa2c917cb2
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task11-web-regression.log sha256=69a2d20f1967910bfd31a20c52eb556f9a375aedc63198d8c127c0ac7b73fe0d
+decision: KEEP
+next_experiment: EXP-012
+```
+
+## CP-022 — Task 11 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-022
+last_valid_experiment: EXP-011
+current_hypothesis: Exact-pinned Three.js can render registered PLY evidence and save view-bound PNG metadata without weakening the artifact boundary.
+working_tree_status: ledger plus Task 11 task types/client, YAML, builder, shell, path dispatch, and tests are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 11 focused tests pass 7, full Web regression passes 52, and production build passes.
+  - Existing app.tsx remains unchanged.
+disproven_routes:
+  - Direct bun test bypasses the repository Vitest setup; the accepted Bun-only command is bun run test.
+open_risks:
+  - No PLY viewer, current RGB-D capture view, or rendered-image upload exists yet.
+next_command: git diff --check and commit Task 11, then add exact Three.js dependency and Task 12 RED tests.
+```

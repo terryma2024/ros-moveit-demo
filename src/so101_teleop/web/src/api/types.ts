@@ -52,6 +52,10 @@ export type BackendCapabilityMap = {
   manual_joint_execute: boolean;
   manual_tcp_execute: boolean;
   camera_presets: boolean;
+  task_batch?: boolean;
+  task_reachability?: boolean;
+  sensor_capture?: boolean;
+  task_environment_shutdown?: boolean;
 };
 
 export type BackendCapabilities = {
