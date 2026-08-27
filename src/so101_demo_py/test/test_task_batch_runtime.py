@@ -1,0 +1,181 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+
+class _Processes:
+    def __init__(self) -> None:
+        self.roles = []
+        self.commands = []
+        self.children = {}
+        self.codes = {"dynamic-consumer": None, "rgbd-perception": None}
+
+    def start(self, role, argv, *, environment=None):
+        from so101_demo.application.task_batch import ManagedChild
+
+        self.roles.append(role)
+        self.commands.append(list(argv))
+        child = ManagedChild(role, 100 + len(self.roles), 100 + len(self.roles))
+        self.children[role] = child
+        return child
+
+    def stop_all(self):
+        self.roles.append("stopped")
+
+    def poll(self, role):
+        return self.codes[role]
+
+
+class _Graph:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def subscription_count(self, node_name, topic):
+        self.calls.append((node_name, topic))
+        return 1
+
+
+def _runtime(tmp_path: Path):
+    from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
+
+    processes = _Processes()
+    graph = _Graph()
+    runtime = RosTaskBatchRuntime(
+        processes,
+        graph,
+        session_id="sim-a",
+        points_file=tmp_path / "points.yaml",
+        policy_file=tmp_path / "policy.yaml",
+        evidence_root=tmp_path,
+        viewer_capture=SimpleNamespace(capture=lambda path, **_kwargs: path),
+        command_runner=lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="{}"
+        ),
+        resume=lambda: True,
+        monotonic=lambda: 1.0,
+        sleep=lambda _value: None,
+    )
+    return runtime, processes, graph
+
+
+def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -> None:
+    runtime, processes, graph = _runtime(tmp_path)
+    point_root = tmp_path / "point"
+    consumer = runtime.start_consumer(point_root, epoch=3)
+    runtime.wait_consumer_subscription(consumer, 5.0)
+    runtime.start_perception(point_root)
+
+    assert processes.roles == ["dynamic-consumer", "rgbd-perception"]
+    assert graph.calls == [("/so101_dynamic_cup_pick_place", "/cup_pose")]
+    consumer_argv, perception_argv = processes.commands
+    assert ["--session-id", "sim-a"] == consumer_argv[
+        consumer_argv.index("--session-id") : consumer_argv.index("--session-id") + 2
+    ]
+    epoch_index = consumer_argv.index("--expected-reset-epoch")
+    assert ["--expected-reset-epoch", "3"] == consumer_argv[
+        epoch_index : epoch_index + 2
+    ]
+    assert str(point_root / "dynamic") in consumer_argv
+    assert str(point_root / "rgb.png") in perception_argv
+    assert str(point_root / "full-cloud.ply") in perception_argv
+    assert str(point_root / "point-cloud-preview.png") in perception_argv
+
+
+def test_perception_cannot_start_before_subscription_handshake(tmp_path: Path) -> None:
+    runtime, processes, _graph = _runtime(tmp_path)
+    runtime.start_consumer(tmp_path / "point", epoch=1)
+    try:
+        runtime.start_perception(tmp_path / "point")
+    except RuntimeError as error:
+        assert "subscription" in str(error)
+    else:
+        raise AssertionError("perception started before subscription handshake")
+    assert processes.roles == ["dynamic-consumer"]
+
+
+def test_stop_point_children_targets_only_runtime_owned_groups(tmp_path: Path) -> None:
+    runtime, processes, _graph = _runtime(tmp_path)
+    runtime.start_consumer(tmp_path / "point", epoch=1)
+    runtime.wait_consumer_subscription(processes.children["dynamic-consumer"], 5.0)
+    runtime.start_perception(tmp_path / "point")
+    runtime.stop_point_children()
+    assert processes.roles[-1] == "stopped"
+
+
+def test_declared_reachability_and_reset_preserve_point_session_epoch(tmp_path: Path) -> None:
+    from so101_demo.application.task_reachability import ReachabilityStatus
+    from so101_demo.core.task_points import TaskPoint
+    from so101_demo.runtime.task_batch_runtime import RosTaskBatchRuntime
+
+    commands = []
+    resumed = []
+
+    def run(argv, **_kwargs):
+        commands.append(argv)
+        if "task_reachability" in argv:
+            document = {
+                "reports": [
+                    {
+                        "point_id": "left",
+                        "status": "REACHABLE",
+                        "first_failure_code": None,
+                        "scene_revision": 4,
+                    }
+                ]
+            }
+        else:
+            document = {
+                "success": True,
+                "old_epoch": 4,
+                "new_epoch": 5,
+                "simulation_session_id": "sim-a",
+            }
+        return SimpleNamespace(returncode=0, stdout=__import__("json").dumps(document))
+
+    runtime = RosTaskBatchRuntime(
+        _Processes(),
+        _Graph(),
+        session_id="sim-a",
+        points_file=tmp_path / "points.yaml",
+        policy_file=tmp_path / "policy.yaml",
+        evidence_root=tmp_path,
+        viewer_capture=SimpleNamespace(capture=lambda *_args, **_kwargs: None),
+        command_runner=run,
+        resume=lambda: resumed.append(True) or True,
+    )
+    point = TaskPoint("left", "Left", (-0.03, -0.28, 0.165))
+
+    report = runtime.check_declared(point)
+    reset = runtime.reset_point(point)
+
+    assert report.status is ReachabilityStatus.REACHABLE
+    assert report.scene_revision == 4
+    assert (reset.old_epoch, reset.new_epoch, reset.simulation_session_id) == (
+        4,
+        5,
+        "sim-a",
+    )
+    assert resumed == [True]
+    reset_argv = commands[1]
+    coordinates = reset_argv.index("--cup-position-world-m")
+    assert reset_argv[coordinates + 1 : coordinates + 4] == ["-0.03", "-0.28", "0.165"]
+
+
+def test_first_terminal_child_status_controls_point_result(tmp_path: Path) -> None:
+    from so101_demo.core.task_points import TaskPoint
+
+    runtime, processes, _graph = _runtime(tmp_path)
+    processes.codes["dynamic-consumer"] = 0
+    processes.codes["rgbd-perception"] = None
+    point_root = tmp_path / "point"
+    point_root.mkdir()
+
+    receipt = runtime.wait_point_result(
+        TaskPoint("first", "First", (0.02, -0.28, 0.165)),
+        3,
+        point_root,
+    )
+
+    assert receipt.succeeded is True
+    assert receipt.workflow_manifest == (
+        point_root / "dynamic/dynamic-execute-manifest.json"
+    )
