@@ -9,6 +9,7 @@ from so101_demo.application.task_reachability import (
     ReachabilityStatus,
     SegmentPlanReceipt,
     check_task_reachability,
+    prepare_reachability_start_state,
 )
 from so101_demo.core.domain import State
 from so101_demo.core.dynamic_pick import DynamicPickTemplate
@@ -62,6 +63,20 @@ def _point() -> TaskPoint:
 
 def _start_state() -> JointStateEvidence:
     return JointStateEvidence(("1", "2", "3", "4", "5"), (0.0,) * 5, 1.0)
+
+
+def test_reachability_start_models_the_real_preopen_predecessor() -> None:
+    observed = JointStateEvidence(
+        ("1", "2", "3", "4", "5", "6"),
+        (0.1, 0.2, 0.3, 0.4, 0.5, 0.0),
+        12.0,
+    )
+
+    prepared = prepare_reachability_start_state(observed)
+
+    assert prepared.names == observed.names
+    assert prepared.positions_rad == (0.1, 0.2, 0.3, 0.4, 0.5, 0.465038)
+    assert prepared.observed_monotonic_s == observed.observed_monotonic_s
 
 
 class RecordingPlanner:

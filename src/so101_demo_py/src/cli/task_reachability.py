@@ -11,6 +11,7 @@ from ..application.task_reachability import (
     ReachabilityReport,
     ReachabilityStatus,
     check_task_reachability,
+    prepare_reachability_start_state,
 )
 from ..core.dynamic_pick_policy import load_dynamic_pick_template
 from ..runtime.task_point_config import load_task_point_list
@@ -102,8 +103,13 @@ def main(arguments: list[str] | None = None) -> int:
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
         planner = RosMoveGroupReachabilityPlanner(node, template)
-        reader = RosJointStateReader(node, template.arm_joint_names)
-        start = reader.read(options.joint_state_timeout_s)
+        reader = RosJointStateReader(node, (*template.arm_joint_names, "6"))
+        observed_start = reader.read(options.joint_state_timeout_s)
+        start = (
+            None
+            if observed_start is None
+            else prepare_reachability_start_state(observed_start)
+        )
         reports = tuple(
             check_task_reachability(point, template, start, planner)
             for point in points

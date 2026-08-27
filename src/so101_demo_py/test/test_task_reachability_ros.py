@@ -41,7 +41,11 @@ def _template() -> DynamicPickTemplate:
 
 
 def _start() -> JointStateEvidence:
-    return JointStateEvidence(("1", "2", "3", "4", "5"), (0.0,) * 5, 1.0)
+    return JointStateEvidence(
+        ("1", "2", "3", "4", "5", "6"),
+        (0.0, 0.0, 0.0, 0.0, 0.0, 0.465038),
+        1.0,
+    )
 
 
 def _target() -> PoseEvidence:
@@ -138,7 +142,15 @@ def test_accepted_action_returns_final_trajectory_point() -> None:
 
     assert receipt.accepted is True
     assert receipt.moveit_error_code == 1
-    assert receipt.terminal_state.positions_rad == (0.1, 0.2, 0.3, 0.4, 0.5)
+    assert receipt.terminal_state.names == _start().names
+    assert receipt.terminal_state.positions_rad == (
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.465038,
+    )
     assert len(action.goals) == 1
 
 
