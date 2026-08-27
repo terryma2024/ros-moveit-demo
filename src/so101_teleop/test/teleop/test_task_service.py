@@ -174,6 +174,23 @@ def test_event_order_is_monotonic_and_bounded(tmp_path):
     asyncio.run(scenario())
 
 
+def test_point_summary_exposes_artifact_names_without_paths(tmp_path):
+    service, _teleop, _gateway, _store = service_for(tmp_path)
+    summary = service._point_summary({
+        "id": "first",
+        "status": "FAILED",
+        "artifacts": [{
+            "artifact_id": "a" * 24,
+            "relative_path": "batches/run-1/points/01-first/rgb.png",
+            "media_type": "image/png",
+            "byte_size": 8,
+            "sha256": "b" * 64,
+        }],
+    })
+    assert summary.artifacts[0].name == "rgb.png"
+    assert "relative_path" not in summary.artifacts[0].model_dump()
+
+
 def test_recovery_and_shutdown_require_exact_confirmations(tmp_path):
     async def scenario():
         from so101_teleop.models import TaskRecoveryRequest, TaskShutdownRequest

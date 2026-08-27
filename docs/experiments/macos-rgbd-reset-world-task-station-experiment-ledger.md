@@ -1122,3 +1122,69 @@ open_risks:
   - Run events are not yet rendered live and per-point evidence artifacts are not yet browsable from the task page.
 next_command: Commit Task 12, then add Task 13 progress/evidence RED tests.
 ```
+
+## EXP-013 — Reconnect-safe progress and per-point evidence browser
+
+```yaml
+experiment_id: EXP-013
+status: VALID
+prior_experiment: EXP-012
+hypothesis: Event-triggered authoritative status refresh plus artifact summaries can restore ordered progress and expose evidence without leaking paths.
+prediction: RED fails because TaskProgress, EvidenceBrowser, and point artifact summaries do not exist.
+single_variable: Add Task 13 progress, reconnect, evidence presentation, and isolated page E2E only.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 54b85146ec1d8e4ce7166161c4ae781d66ce9063.
+  - Browser tests mock HTTP task state and do not start ROS or MuJoCo.
+success_criteria:
+  - Refresh/reconnect restores the active/latest run and refetches authoritative status after event connection.
+  - Failed or unreachable points remain ordered and later successful points remain visible.
+  - Evidence links use only /tasks/artifacts opaque IDs; response models contain basenames and hashes but no paths.
+  - Existing / Teleop E2E remains green beside the separate /tasks page.
+failure_criteria:
+  - WebSocket frames become authoritative state, retries spin unbounded, filesystem paths reach the browser, or existing Teleop controls regress.
+invalid_criteria:
+  - E2E requires live ROS/MuJoCo or modifies pre-existing mrc010 processes.
+commands:
+  - command: Run TaskProgress, EvidenceBrowser, and TaskPointSummary RED tests.
+    exit_code: 1
+  - command: Run all Web unit tests and production build.
+    exit_code: 0
+  - command: Run complete macOS Chrome Playwright suite for / and /tasks.
+    exit_code: 0
+  - command: Run Teleop Python regression after OpenAPI regeneration.
+    exit_code: 0
+observed:
+  - RED failed on both absent Web modules and the absent point artifacts field.
+  - Web regression passed 59 tests across 21 files and the production bundle built successfully.
+  - macOS Chrome E2E passed all 10 scenarios, including task refresh, failure/unreachable continuation presentation, evidence links, and all existing Teleop scenarios.
+  - Teleop Python regression passed 128 tests; generated OpenAPI contains the path-free artifact summary contract.
+  - WebSocket retry starts at 250 ms, caps at 4000 ms, refetches run state after every open, and cancels its socket/timer on unmount.
+inferred:
+  - Task progress is reconnect-safe and the separate task page does not regress the existing Teleop page.
+conclusion: Task 13 is source-, build-, and browser-E2E-valid.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task13-red.log sha256=923bd28a115e72ebad1790feae344b341f6fb84c4abf801c12c9793a59b8ba00
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task13-web-green.log sha256=c75b5ee71638d3639a4b03eefaf15492adec8665ee57a2389f9dec2e0dc70b84
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task13-web-build.log sha256=401d2454c06e3adddc1a065960fe787fb3b6b126a1d24bd318f1cd265d8f809c
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task13-e2e-green.log sha256=b8ea3847f2c7bbbe23ccacfb03aaa98176d5c09219fc151af3f4806ce9e8f4e6
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task13-python-green.log sha256=9ac127a59c51fbe13921fa8a0e3f2b960e9658dd5a2611397c39cea3a12efc15
+decision: KEEP
+next_experiment: EXP-014
+```
+
+## CP-025 — Task 13 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-025
+last_valid_experiment: EXP-013
+current_hypothesis: A clean isolated candidate overlay will close package/install provenance and reveal any remaining installed-entrypoint defects before live qualification.
+working_tree_status: Task 13 progress, reconnect client, path-free artifact summaries, evidence browser, macOS Playwright config, tests, generated API, and ledger are modified
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 13 passes 59 Web tests, 128 Python tests, production build, and 10 macOS Chrome E2E tests.
+open_risks:
+  - Installed ROS package closure and candidate-overlay provenance remain unverified.
+next_command: Commit Task 13, then execute Task 14 source/package/install/provenance gates.
+```

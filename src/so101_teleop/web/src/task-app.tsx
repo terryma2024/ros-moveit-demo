@@ -7,6 +7,8 @@ import type { TaskPoint, TaskPointStatus, TaskRunSummary } from "@/api/task-type
 import { isCommandFailure } from "@/api/task-types";
 import { TaskBuilder } from "@/components/tasks/task-builder";
 import { LiveSensor } from "@/components/tasks/live-sensor";
+import { TaskProgress } from "@/components/tasks/task-progress";
+import { EvidenceBrowser } from "@/components/tasks/evidence-browser";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { dumpTaskYaml, parseTaskYaml, validateTaskPoints } from "@/lib/task-yaml";
@@ -22,6 +24,7 @@ export function TaskApp() {
   const [reachability, setReachability] = useState<Record<string, TaskPointStatus>>({});
   const [notice, setNotice] = useState("Acquire the control lease, add points, then validate reachability.");
   const [busy, setBusy] = useState(false);
+  const [currentPhase, setCurrentPhase] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -36,6 +39,18 @@ export function TaskApp() {
       .catch((error) => { if (active) setNotice(`Task API unavailable: ${String(error)}`); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => client.watchEvents(
+    (event) => {
+      setCurrentPhase(event.kind);
+      if (event.run_id) client.status(event.run_id).then(setRun).catch(() => undefined);
+    },
+    async () => {
+      const runs = await client.runs();
+      const restored = [...runs].reverse().find((candidate) => candidate.status === "RUNNING") ?? runs.at(-1);
+      if (restored) setRun(await client.status(restored.run_id));
+    },
+  ), []);
 
   const inputError = useMemo(() => {
     try {
@@ -172,6 +187,14 @@ export function TaskApp() {
         </div>
         <TaskBuilder presets={presets} points={points} onChange={(next) => { setPoints(next); setReachability({}); }} reachability={reachability} />
         {inputError && <p role="alert" className="text-sm text-amber-400">{inputError}: add at least one unique, finite point before validation.</p>}
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader><CardTitle>Runs &amp; Evidence</CardTitle><CardDescription>Live event progress and manifest-registered per-point artifacts survive page refresh and reconnect.</CardDescription></CardHeader>
+      <CardContent className="mt-4 space-y-5">
+        <TaskProgress run={run} currentPhase={currentPhase} />
+        <EvidenceBrowser run={run} artifactUrl={(artifactId) => client.artifactUrl(artifactId)} />
       </CardContent>
     </Card>
 

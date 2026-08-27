@@ -240,6 +240,14 @@ class TaskCaptureRequest(TaskMutationRequest):
     pass
 
 
+class TaskArtifactSummary(_StrictTaskModel):
+    artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
+    name: str = Field(min_length=1, max_length=160)
+    media_type: str = Field(min_length=1, max_length=100)
+    byte_size: int = Field(ge=0)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class TaskPointSummary(_StrictTaskModel):
     id: str
     status: str
@@ -247,6 +255,7 @@ class TaskPointSummary(_StrictTaskModel):
     reachability_status: Optional[str] = None
     reset_epoch: Optional[int] = None
     artifact_ids: List[str] = Field(default_factory=list)
+    artifacts: List[TaskArtifactSummary] = Field(default_factory=list)
 
 
 class TaskRunSummary(_StrictTaskModel):
@@ -261,14 +270,6 @@ class ReachabilityResponse(_StrictTaskModel):
     status: str
     reports: List[Dict[str, Any]] = Field(default_factory=list)
     simulation_session_id: str
-
-
-class TaskArtifactSummary(_StrictTaskModel):
-    artifact_id: str = Field(pattern=r"^[a-f0-9]{24}$")
-    name: str = Field(min_length=1, max_length=160)
-    media_type: str = Field(min_length=1, max_length=100)
-    byte_size: int = Field(ge=0)
-    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class CaptureResponse(_StrictTaskModel):
