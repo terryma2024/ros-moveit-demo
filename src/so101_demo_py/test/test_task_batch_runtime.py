@@ -105,8 +105,12 @@ def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -
     timeout_index = consumer_argv.index("--cup-pose-timeout-s")
     assert consumer_argv[timeout_index : timeout_index + 2] == [
         "--cup-pose-timeout-s",
-        "45.0",
+        "75.0",
     ]
+    perception_timeout_index = perception_argv.index("--timeout-s")
+    assert perception_argv[
+        perception_timeout_index : perception_timeout_index + 2
+    ] == ["--timeout-s", "30.0"]
     assert str(point_root / "dynamic") in consumer_argv
     assert str(point_root / "rgb.png") in perception_argv
     assert str(point_root / "full-cloud.ply") in perception_argv
@@ -368,3 +372,31 @@ def test_first_terminal_child_status_controls_point_result(tmp_path: Path) -> No
     assert receipt.workflow_manifest == (
         point_root / "dynamic/dynamic-execute-manifest.json"
     )
+
+
+def test_final_pause_reuses_safe_to_continue_paused_snapshot(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.backends.mujoco import teleop_runtime
+
+    evidence = SimpleNamespace(
+        simulation_session_id="sim-a",
+        reset_epoch=3,
+        object_state=SimpleNamespace(position_world=(0.02, -0.28, 0.165)),
+        left_fingertip_contacts=(),
+        right_fingertip_contacts=(),
+    )
+    calls = []
+
+    def current_evidence(_session_id):
+        calls.append("pause")
+        return evidence
+
+    monkeypatch.setattr(teleop_runtime, "current_evidence", current_evidence)
+    runtime, _processes, _graph = _runtime(tmp_path)
+
+    safety = runtime.safe_to_continue(3)
+    runtime.pause_world()
+
+    assert safety.safe_to_reset is True
+    assert calls == ["pause"]
