@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: 507169114e60b10bbe983dec14233927ab802112
+current_commit: 40dc356c501d12a000ff9552122ee59a6afe9b84
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -19,13 +19,14 @@ confirmed_conclusions:
   - EXP-003 validates seven-segment plan-only reachability with terminal-state chaining and first-failure classification.
   - EXP-004 validates the MoveGroup plan-only wire adapter, stable task CLI contract, and mandatory dynamic pre-motion reachability gate.
   - EXP-005 validates one-stamp RGB, full-cloud, cup-cloud, deterministic preview, and summary generation before pose publication.
+  - EXP-006 validates exclusive batch/point allocation, fsynced atomic JSON, content addressing, and symlink/outside-root rejection.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-010
-next_experiment: EXP-006
+latest_checkpoint: CP-012
+next_experiment: EXP-007
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -482,4 +483,89 @@ disproven_routes:
 open_risks:
   - Artifact paths and checksums are not yet registered in exclusive batch/point manifests.
 next_command: git diff --check and commit the planned Task 5 paths.
+```
+
+## CP-011 — Task 5 committed; Task 6 preregistered
+
+```yaml
+checkpoint_id: CP-011
+last_valid_experiment: EXP-005
+current_hypothesis: Exclusive path-safe artifact registration can make every batch and point manifest immutable and content-addressed beneath the one caller-owned evidence root.
+working_tree_status: clean at 40dc356c501d12a000ff9552122ee59a6afe9b84 before Task 6 RED tests
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 5 is committed as 40dc356c501d12a000ff9552122ee59a6afe9b84.
+disproven_routes:
+  - NONE beyond prior checkpoints.
+open_risks:
+  - Directory names, symlinks, and pre-existing outputs must fail closed without escaping the registered root.
+next_command: Write and run Task 6 artifact registry RED tests.
+```
+
+## EXP-006 — exclusive path-safe artifact registry
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+prior_experiment: EXP-005
+hypothesis: Exclusive allocation plus resolved-path validation can register immutable content-addressed artifacts without allowing duplicate IDs, overwrite, or symlink escape.
+prediction: RED fails because runtime.task_artifacts does not exist; GREEN proves exclusive batch/point allocation, fsynced atomic JSON, checksum identity, and symlink rejection.
+single_variable: Add only the backend-neutral task artifact registry and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 40dc356c501d12a000ff9552122ee59a6afe9b84.
+  - No ROS, simulator, process, or network is used.
+success_criteria:
+  - Batch and point directories are allocated exclusively under the caller root.
+  - Registered files are regular non-symlink files inside the resolved root and use only relative manifest paths.
+  - SHA-256, byte size, stable opaque ID, producing process, session, epoch, and UTC capture time are retained.
+  - atomic_json fsyncs a same-directory temporary before replace and does not leave a temporary file.
+failure_criteria:
+  - Duplicate allocation overwrites data, a symlink escapes, or an absolute path enters ArtifactRecord.
+invalid_criteria:
+  - Tests operate outside a temporary evidence root.
+provenance:
+  source_commit: 40dc356c501d12a000ff9552122ee59a6afe9b84
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run test_task_artifacts.py.
+    exit_code: 1
+  - command: Run test_task_artifacts.py and test_asset_closure.py, then py_compile and git diff --check.
+    exit_code: 0
+observed:
+  - The valid RED failed because runtime.task_artifacts did not exist.
+  - GREEN and package closure passed 13 tests, and compilation plus whitespace checks passed.
+  - Duplicate batch/point allocation, unsafe IDs, foreign batches, outside-root paths, and symlink paths all fail closed.
+  - Registered artifacts contain only root-relative paths plus byte size, SHA-256, stable opaque ID, process, session, epoch, and UTC time.
+  - atomic_json writes and fsyncs a same-directory temporary, replaces the target, fsyncs the directory, and removes temporary residue.
+inferred:
+  - Later API and browser layers can expose opaque IDs and relative paths without trusting caller-supplied filesystem paths.
+conclusion: The single-root artifact registry is source-valid and ready for the batch application layer.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task6-red.log sha256=3bec4ac636c7b77aa0558520785705fe8b7e2265fd68188e05dcf5c59319a680
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task6-green.log sha256=93827f6af963d1172f6b4321a05c857de4b5e0acdea33cf11473722016d3a8eb
+decision: KEEP
+next_experiment: EXP-007
+```
+
+## CP-012 — Task 6 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-006
+current_hypothesis: A first-failure batch state machine can continue after point-local failures while aborting shared-stack or held-cup failures and finalizing every point before advancing.
+working_tree_status: ledger plus runtime/task_artifacts.py and test_task_artifacts.py contain only planned Task 6 changes
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 6 focused and closure tests pass 13 tests.
+disproven_routes:
+  - Caller-supplied absolute artifact paths and symlink traversal are rejected as manifest identities.
+open_risks:
+  - Batch continuation and safety classification are not yet applied to reset/perception/workflow outcomes.
+next_command: git diff --check and commit the three planned Task 6 paths including the ledger.
 ```
