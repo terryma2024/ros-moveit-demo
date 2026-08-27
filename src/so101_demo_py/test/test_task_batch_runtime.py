@@ -8,12 +8,15 @@ class _Processes:
         self.commands = []
         self.children = {}
         self.codes = {"dynamic-consumer": None, "rgbd-perception": None}
+        self.stdout_paths = {}
 
-    def start(self, role, argv, *, environment=None):
+    def start(self, role, argv, *, environment=None, stdout_path=None):
         from so101_demo.application.task_batch import ManagedChild
 
         self.roles.append(role)
         self.commands.append(list(argv))
+        if stdout_path is not None:
+            self.stdout_paths[role] = stdout_path
         child = ManagedChild(role, 100 + len(self.roles), 100 + len(self.roles))
         self.children[role] = child
         return child
@@ -100,6 +103,35 @@ def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -
     assert str(point_root / "rgb.png") in perception_argv
     assert str(point_root / "full-cloud.ply") in perception_argv
     assert str(point_root / "point-cloud-preview.png") in perception_argv
+    assert processes.stdout_paths == {
+        "dynamic-consumer": point_root / "dynamic-consumer.log",
+        "rgbd-perception": point_root / "rgbd-perception.log",
+    }
+
+
+def test_owned_process_stdout_is_retained_and_closed(tmp_path: Path) -> None:
+    from so101_demo.runtime.task_batch_runtime import OwnedPointProcesses
+
+    captured = {}
+
+    class Child:
+        pid = 123
+
+        def poll(self):
+            return 0
+
+    def popen(argv, **kwargs):
+        captured.update(kwargs)
+        return Child()
+
+    processes = OwnedPointProcesses(popen=popen)
+    log_path = tmp_path / "consumer.log"
+    processes.start("consumer", ["example"], stdout_path=log_path)
+
+    assert captured["stdout"].name == str(log_path)
+    assert captured["stderr"] is __import__("subprocess").STDOUT
+    processes.stop_all()
+    assert captured["stdout"].closed is True
 
 
 def test_perception_cannot_start_before_subscription_handshake(tmp_path: Path) -> None:

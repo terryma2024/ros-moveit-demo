@@ -169,6 +169,7 @@ def _media_type(path: Path) -> str:
         ".json": "application/json",
         ".png": "image/png",
         ".ply": "application/octet-stream",
+        ".log": "text/plain",
     }.get(path.suffix.lower(), "application/octet-stream")
 
 
@@ -271,6 +272,7 @@ def run_task_batch(
         failure_code = None
         fatal_kind: str | None = None
         terminal_paths: tuple[Path, ...] = ()
+        diagnostic_paths: tuple[Path, ...] = ()
 
         try:
             report = runtime.check_declared(point)
@@ -368,6 +370,15 @@ def run_task_batch(
             fatal_kind = "shared"
             first_shared_failure = first_shared_failure or failure_code
             any_point_failure = True
+            diagnostic = point_root / "point-runtime-error.json"
+            atomic_json(
+                diagnostic,
+                {
+                    "error_type": type(error).__name__,
+                    "message": str(error),
+                },
+            )
+            diagnostic_paths = (diagnostic,)
         finally:
             if point_status is not PointStatus.SKIPPED_UNREACHABLE:
                 try:
@@ -375,6 +386,7 @@ def run_task_batch(
                         point_root,
                         failure_code or point_status.value,
                     )
+                    terminal_paths = (*terminal_paths, *diagnostic_paths)
                 except Exception:
                     if fatal_kind is None:
                         point_status = PointStatus.FAILED
@@ -409,7 +421,11 @@ def run_task_batch(
                 break
         if point_status is not PointStatus.SKIPPED_UNREACHABLE:
             terminal_names = {path.name for path in terminal_paths}
-            if not _REQUIRED_TERMINAL_FILES <= terminal_names and fatal_kind is None:
+            if (
+                not _REQUIRED_TERMINAL_FILES <= terminal_names
+                and fatal_kind is None
+                and failure_code is None
+            ):
                 point_status = PointStatus.FAILED
                 failure_code = "TERMINAL_EVIDENCE_INCOMPLETE"
                 any_point_failure = True
