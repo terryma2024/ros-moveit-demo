@@ -181,7 +181,7 @@ def test_ordered_shutdown_signals_only_stack_supervisor(tmp_path: Path) -> None:
 
     process = Process()
     log = tmp_path / "launch.log"
-    log.write_text("SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK\n")
+    log.write_text("GRACEFUL_SHUTDOWN_MOVE_GROUP_OK\n")
     handle = type(
         "Handle",
         (),

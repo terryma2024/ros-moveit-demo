@@ -40,11 +40,11 @@ ament_target_dependencies(so101_simulation_evidence_plugin PUBLIC
   geometry_msgs pluginlib rclcpp realtime_tools std_msgs)
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins so101_mujoco_plugins.xml)
 
-add_executable(so101_move_group src/so101_move_group.cpp)
-target_compile_features(so101_move_group PRIVATE cxx_std_17)
-target_include_directories(so101_move_group PRIVATE ${Boost_INCLUDE_DIRS})
-ament_target_dependencies(so101_move_group moveit_ros_move_group rclcpp)
-target_link_libraries(so101_move_group
+add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
+target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
+target_include_directories(graceful_shutdown_move_group PRIVATE ${Boost_INCLUDE_DIRS})
+ament_target_dependencies(graceful_shutdown_move_group moveit_ros_move_group rclcpp)
+target_link_libraries(graceful_shutdown_move_group
   moveit_ros_move_group::moveit_move_group_capabilities_base)
 
 if(BUILD_TESTING)
@@ -70,7 +70,7 @@ endif()
 
 install(TARGETS so101_simulation_evidence_plugin EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS so101_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
+install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(geometry_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib

@@ -56,7 +56,7 @@ console script 注册在 [`setup.py`](../src/so101_demo_py/setup.py)。`ros2 run
 | MuJoCo + controller manager | `mujoco_ros2_control/ros2_control_node` | 长驻 | 加载 MJCF、推进物理、发布 `/clock`、承载相机和物理证据插件、连接 ros2_control 硬件接口 |
 | Robot State Publisher | `robot_state_publisher` | 长驻 | 读取 URDF 和 `/joint_states`，发布机器人 `/tf` |
 | Controller spawner × 3 | `controller_manager/spawner` | 成功后退出 | 激活 `joint_state_broadcaster`、`arm_controller`、`gripper_controller` |
-| MoveIt | `so101_mujoco_support/so101_move_group` | 长驻 | 提供规划、轨迹执行和 Planning Scene 接口 |
+| MoveIt | `so101_mujoco_support/graceful_shutdown_move_group` | 长驻 | 提供标准 MoveIt 规划、轨迹执行和 Planning Scene 接口，并绕开当前 Jazzy 二进制组合的已知关停析构崩溃 |
 | Planning Scene 初始化 | `so101_demo_py/scene_setup` | 一次性 | 写入并回读桌子、底座和杯子的碰撞对象 |
 | 静态 TF × 2 | `tf2_ros/static_transform_publisher` | 长驻 | 发布 `base -> camera_link -> task_camera_frame` |
 | RGB-D 感知 | `so101_demo_py/rgbd_cup_pose` | 发布后等待统一关停 | 读取一帧有效 RGB-D，生成点云和 `world` 杯子 Pose，写感知证据 |

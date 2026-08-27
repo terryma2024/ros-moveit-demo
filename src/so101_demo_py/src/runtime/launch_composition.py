@@ -215,7 +215,7 @@ def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStack
     ]
     move_group = Node(
         package="so101_mujoco_support",
-        executable="so101_move_group",
+        executable="graceful_shutdown_move_group",
         parameters=[_moveit_parameters(share, robot_description), {"use_sim_time": True}],
         output="both",
     )
