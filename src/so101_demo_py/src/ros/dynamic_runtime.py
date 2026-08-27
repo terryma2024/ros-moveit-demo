@@ -333,6 +333,7 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
         source = runtime.cup_pose_source(node, loaded.template)
+        print("status=READY subscription=/cup_pose", flush=True)
         sample = source.get_one(options.cup_pose_timeout_s)
         truth_observer = runtime.cup_scene_observer(
             node,

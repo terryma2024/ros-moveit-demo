@@ -86,11 +86,14 @@ def test_runtime_waits_for_consumer_before_starting_perception(tmp_path: Path) -
     runtime, processes, graph = _runtime(tmp_path)
     point_root = tmp_path / "point"
     consumer = runtime.start_consumer(point_root, epoch=3)
+    (point_root / "dynamic-consumer.log").write_text(
+        "status=READY subscription=/cup_pose\n"
+    )
     runtime.wait_consumer_subscription(consumer, 5.0)
     runtime.start_perception(point_root)
 
     assert processes.roles == ["dynamic-consumer", "rgbd-perception"]
-    assert graph.calls == [("/so101_dynamic_cup_pick_place", "/cup_pose")]
+    assert graph.calls == []
     consumer_argv, perception_argv = processes.commands
     assert ["--session-id", "sim-a"] == consumer_argv[
         consumer_argv.index("--session-id") : consumer_argv.index("--session-id") + 2
@@ -169,10 +172,9 @@ def test_subscription_timeout_has_a_stable_shared_failure_code(tmp_path: Path) -
         sleep=lambda _value: None,
     )
 
+    consumer = runtime.start_consumer(tmp_path / "point", epoch=1)
     try:
-        runtime.wait_consumer_subscription(
-            SimpleNamespace(role="dynamic-consumer"), 30.0
-        )
+        runtime.wait_consumer_subscription(consumer, 30.0)
     except SharedStackFailure as error:
         assert error.code == "DYNAMIC_CONSUMER_SUBSCRIPTION_TIMEOUT"
     else:
@@ -183,12 +185,11 @@ def test_subscription_handshake_fails_immediately_when_consumer_exits(tmp_path: 
     from so101_demo.application.task_batch import SharedStackFailure
 
     runtime, processes, _graph = _runtime(tmp_path)
+    consumer = runtime.start_consumer(tmp_path / "point", epoch=1)
     processes.codes["dynamic-consumer"] = 1
 
     try:
-        runtime.wait_consumer_subscription(
-            SimpleNamespace(role="dynamic-consumer"), 30.0
-        )
+        runtime.wait_consumer_subscription(consumer, 30.0)
     except SharedStackFailure as error:
         assert error.code == "DYNAMIC_CONSUMER_EXITED_BEFORE_SUBSCRIPTION"
     else:
@@ -197,9 +198,13 @@ def test_subscription_handshake_fails_immediately_when_consumer_exits(tmp_path: 
 
 def test_stop_point_children_targets_only_runtime_owned_groups(tmp_path: Path) -> None:
     runtime, processes, _graph = _runtime(tmp_path)
-    runtime.start_consumer(tmp_path / "point", epoch=1)
+    point_root = tmp_path / "point"
+    runtime.start_consumer(point_root, epoch=1)
+    (point_root / "dynamic-consumer.log").write_text(
+        "status=READY subscription=/cup_pose\n"
+    )
     runtime.wait_consumer_subscription(processes.children["dynamic-consumer"], 5.0)
-    runtime.start_perception(tmp_path / "point")
+    runtime.start_perception(point_root)
     runtime.stop_point_children()
     assert processes.roles[-1] == "stopped"
 

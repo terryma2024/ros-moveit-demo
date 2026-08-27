@@ -595,7 +595,9 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
         "ros.shutdown",
     ]
     assert scene.calls[:2] == ["apply", "observe"]
-    assert "status=DONE" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "status=READY subscription=/cup_pose" in output
+    assert "status=DONE" in output
 
 
 def test_unreachable_preflight_writes_evidence_and_never_constructs_motion(
@@ -874,7 +876,8 @@ def test_primary_workflow_failure_survives_finish_and_cleanup_failures(
     )
 
     lines = capsys.readouterr().out.splitlines()
-    assert "failure=PRIMARY_WORKFLOW_FAILED" in lines[0]
+    failure_line = next(line for line in lines if "failure=PRIMARY_WORKFLOW_FAILED" in line)
+    assert "failure=PRIMARY_WORKFLOW_FAILED" in failure_line
     assert any("failure=DYNAMIC_EXECUTION_FINISH_FAILED" in line for line in lines[1:])
     assert any("failure=DYNAMIC_EXECUTION_CLEANUP_FAILED" in line for line in lines[1:])
     assert events[-6:] == [

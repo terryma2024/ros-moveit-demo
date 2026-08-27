@@ -23,6 +23,9 @@ from ..application.task_reachability import ReachabilityReport, ReachabilityStat
 from ..core.task_points import TaskPoint
 
 
+_CONSUMER_READY_TOKEN = "status=READY subscription=/cup_pose"
+
+
 class OwnedPointProcesses:
     def __init__(
         self,
@@ -185,6 +188,7 @@ class RosTaskBatchRuntime:
         self._sleep = sleep
         self._point_timeout_s = point_timeout_s
         self._subscription_ready = False
+        self._consumer_log_path: Path | None = None
         self._terminal_timestamp: float | None = None
 
     def _run(self, argv: list[str]):
@@ -260,6 +264,7 @@ class RosTaskBatchRuntime:
         dynamic = point_root / "dynamic"
         dynamic.mkdir(parents=True, exist_ok=False)
         self._subscription_ready = False
+        self._consumer_log_path = point_root / "dynamic-consumer.log"
         return self._processes.start(
             "dynamic-consumer",
             ros2_command(
@@ -282,21 +287,27 @@ class RosTaskBatchRuntime:
                 "--scene-source",
                 "observe_only",
             ),
-            stdout_path=point_root / "dynamic-consumer.log",
+            stdout_path=self._consumer_log_path,
         )
 
     def wait_consumer_subscription(self, child: ManagedChild, timeout_s: float) -> None:
         if child.role != "dynamic-consumer":
             raise RuntimeError("subscription handshake requires dynamic consumer")
+        if self._consumer_log_path is None:
+            raise RuntimeError("dynamic consumer log is unavailable")
         deadline = self._monotonic() + timeout_s
         while self._monotonic() <= deadline:
             if self._processes.poll("dynamic-consumer") is not None:
                 raise SharedStackFailure(
                     "DYNAMIC_CONSUMER_EXITED_BEFORE_SUBSCRIPTION"
                 )
-            if self._ros_graph.subscription_count(
-                "/so101_dynamic_cup_pick_place", "/cup_pose"
-            ) == 1:
+            try:
+                ready = _CONSUMER_READY_TOKEN in self._consumer_log_path.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            except OSError:
+                ready = False
+            if ready:
                 self._subscription_ready = True
                 return
             self._sleep(0.02)
@@ -385,6 +396,7 @@ class RosTaskBatchRuntime:
     def stop_point_children(self) -> None:
         self._processes.stop_all()
         self._subscription_ready = False
+        self._consumer_log_path = None
 
     def pause_world(self) -> None:
         if self._safety_probe is None:
