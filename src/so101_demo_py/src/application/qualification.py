@@ -358,7 +358,7 @@ class ProductionQualificationRunner:
             os.killpg(handle.process_group_id, signal.SIGTERM)
             returncode = handle.process.wait(timeout=10.0)
         log_text = handle.log_path.read_text(errors="replace")
-        marker = "SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK"
+        marker = "GRACEFUL_SHUTDOWN_MOVE_GROUP_OK"
         process_died = "process has died" in log_text
         fatal_signal = any(
             value in log_text for value in ("exit code -11", "Segmentation fault", "SIGSEGV")

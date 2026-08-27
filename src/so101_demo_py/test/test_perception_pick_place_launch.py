@@ -439,7 +439,7 @@ def test_failed_workflow_exit_preserves_failure_and_suppresses_shutdown_race(
     (
         ("ros2_control_node", "MuJoCo runtime"),
         ("robot_state_publisher", "robot_state_publisher"),
-        ("so101_move_group", "MoveIt move_group"),
+        ("graceful_shutdown_move_group", "MoveIt move_group"),
         ("static_transform_publisher", "camera static TF"),
     ),
 )
@@ -508,7 +508,7 @@ def test_first_terminal_process_status_wins(tmp_path: Path) -> None:
     )
     _dispatch_process_exit(
         actions,
-        _node(actions, "so101_move_group"),
+        _node(actions, "graceful_shutdown_move_group"),
         41,
         context,
     )
@@ -535,7 +535,7 @@ def test_workflow_terminal_ignores_all_required_and_spawner_teardown_exits(
         in {
             "ros2_control_node",
             "robot_state_publisher",
-            "so101_move_group",
+            "graceful_shutdown_move_group",
             "static_transform_publisher",
         }
     ]

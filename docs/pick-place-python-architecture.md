@@ -249,7 +249,7 @@ flowchart LR
   subgraph M["MuJoCo launcher"]
     M1["robot_state_publisher"] --> M2["mujoco_ros2_control"]
     M2 --> M3["controllers"]
-    M3 --> M4["so101_move_group"]
+    M3 --> M4["graceful_shutdown_move_group"]
     M4 --> M5["scene_setup"]
     M5 --> M6["pick_place"]
   end

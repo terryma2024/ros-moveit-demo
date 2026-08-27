@@ -34,6 +34,21 @@
 
 /* Author: Ioan Sucan */
 
+/*
+ * This executable intentionally preserves the standard MoveIt move_group
+ * node name, capabilities, parameters, and ROS interfaces.  It is not an
+ * SO-101-specific planner.  The project owns this entrypoint only to control
+ * shutdown ordering around a ROS 2 Jazzy apt MoveIt/rclcpp teardown defect.
+ *
+ * In the affected binary combination, a normal launch-driven SIGINT can let
+ * MoveItCpp tear down TrajectoryExecutionManager while one of its private
+ * executor callback groups is still being destroyed, producing SIGSEGV after
+ * an otherwise successful workflow.  The custom signal loop below first
+ * removes the public node from its executor, stops every public
+ * PlanningSceneMonitor worker, shuts down the ROS context, flushes diagnostics,
+ * and only then exits without entering that defective third-party destructor.
+ */
+
 #include <moveit/moveit_cpp/moveit_cpp.hpp>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.hpp>
 #include <tf2_ros/transform_listener.h>
@@ -362,16 +377,17 @@ int main(int argc, char** argv)
   else
     RCLCPP_ERROR(nh->get_logger(), "Planning scene not configured");
 
-  // The TrajectoryExecutionManager owns a private executor.  Once the public
-  // MoveIt workers have stopped, invalidate the context so that private spin
-  // loops leave before their nodes and callback groups are destroyed.
-  RCLCPP_INFO(nh->get_logger(), "SO101_MOVE_GROUP_ORDERED_SHUTDOWN_OK");
+  // TrajectoryExecutionManager owns a private executor that is not exposed by
+  // MoveIt's public API.  Invalidating the context here lets its private spin
+  // loops leave only after the public PlanningSceneMonitor workers have stopped.
+  RCLCPP_INFO(nh->get_logger(), "GRACEFUL_SHUTDOWN_MOVE_GROUP_OK");
   rclcpp::shutdown();
   std::fflush(nullptr);
 
-  // ROS Jazzy's binary rclcpp/MoveIt combination can segfault while
-  // TrajectoryExecutionManager destroys a private executor callback group.
-  // All public workers and the ROS context are stopped above; terminate this
-  // dedicated process without entering the defective third-party destructor.
+  // The affected ROS Jazzy apt rclcpp/MoveIt binary combination can still
+  // segfault while TrajectoryExecutionManager destroys its private executor
+  // callback group.  At this point all public workers are stopped, the ROS
+  // context is invalid, and buffered evidence is flushed, so _Exit is a bounded
+  // process-level compatibility workaround rather than a planning shortcut.
   std::_Exit(EXIT_SUCCESS);
 }
