@@ -7,7 +7,7 @@ success_contract: One unchanged visible MuJoCo session completes the four approv
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/macos-rgbd-reset-world-task-station
 branch: codex/macos-rgbd-reset-world-task-station
 base_commit: 6e807f8d7a5aff9ff7c2ff931d517828355fa5f2
-current_commit: d1e1d58f28990f8cc75899712f6281311ee62cd9
+current_commit: 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062
 child_commit: 5e9d67ce9fde39d35bf94cc498721abf203a0ddd
 child_version: 0.1.0
 evidence_root: /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/
@@ -16,13 +16,14 @@ confirmed_conclusions:
   - The isolated linked worktree resolves to its own absolute core.worktree after correcting the missing per-worktree metadata.
   - EXP-001 validates strict schema-version-one task points and the four shipped presets with 17 focused tests.
   - EXP-002 validates the 0.1.0 ResetWorld free-joint override and arbitrary cup-position CLI with 40 focused and regression tests.
+  - EXP-003 validates seven-segment plan-only reachability with terminal-state chaining and first-failure classification.
 disproven_routes:
   - A linked worktree without per-worktree core.worktree is invalid in this submodule checkout because the common core.worktree redirects Git into the submodule metadata directory.
 open_hypotheses:
   - The approved point schema and immutable point values can be added without changing existing dynamic pick-place defaults.
   - The frozen four-point behavior remains valid when one stack is reused through RESET_WORLD.
-latest_checkpoint: CP-004
-next_experiment: EXP-003
+latest_checkpoint: CP-006
+next_experiment: EXP-004
 ```
 
 ## CP-001 — isolated source checkpoint
@@ -213,4 +214,90 @@ disproven_routes:
 open_risks:
   - Full project installed provenance remains deferred to the isolated Task 14 overlay.
 next_command: git diff --check && commit the seven planned Task 2 paths.
+```
+
+## CP-005 — Task 2 committed; Task 3 preregistered
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-002
+current_hypothesis: The seven dynamic motion targets can be checked sequentially without exposing any execution method at the reachability boundary.
+working_tree_status: clean at 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062 before writing the Task 3 RED test
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 2 is committed as 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062.
+  - Candidate message overlay remains /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task2-msg-install for source tests requiring the 0.1.0 wire interface.
+disproven_routes:
+  - NONE beyond the previously recorded stale installed-message path.
+open_risks:
+  - Reachability is still an application-only contract until Task 4 binds MoveGroup plan-only.
+next_command: Run the missing task_reachability module RED test.
+```
+
+## EXP-003 — backend-neutral sequential reachability
+
+```yaml
+experiment_id: EXP-003
+status: VALID
+prior_experiment: EXP-002
+hypothesis: Planning each of the seven dynamic TCP targets from the prior accepted trajectory terminal state can classify a point as REACHABLE, UNREACHABLE, or UNKNOWN without any execution method.
+prediction: The RED test fails because application.task_reachability is absent; GREEN passes ordered terminal-state propagation, first-failure stop, and infrastructure-unknown cases.
+single_variable: Add only the backend-neutral reachability values, protocol, ordered sequence, algorithm, and tests.
+lifecycle: RESET_WORLD
+preconditions:
+  - Source commit is 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062.
+  - No ROS action, controller, simulator, or process is started.
+success_criteria:
+  - The exact seven production states are planned in order.
+  - Each accepted terminal state becomes the next segment start.
+  - The first rejected segment ends planning and preserves its MoveIt code, failure code, and collision pairs.
+  - Stale scene/joints, timeout, or unavailable planner classify UNKNOWN.
+  - ReachabilityPlannerPort exposes no execution operation.
+failure_criteria:
+  - A later segment is attempted after failure, terminal state propagation is lost, or infrastructure failure is misclassified reachable.
+invalid_criteria:
+  - The test imports ROS or fails from the stale installed message package.
+provenance:
+  source_commit: 2ee7676040d1bb5eaf972fdbb70bd4fc6850b062
+  install_overlay: SOURCE_ONLY
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  ros_domain_id: NOT_STARTED
+  gz_partition: NOT_STARTED
+commands:
+  - command: Run test_task_reachability.py under the evidence-root source shim.
+    exit_code: 2
+  - command: Run test_task_reachability.py, test_dynamic_pick.py, and test_dynamic_plan_only.py under the evidence-root source shim.
+    exit_code: 0
+observed:
+  - The valid RED failed because so101_demo.application.task_reachability did not exist.
+  - The GREEN passed 16 tests in 0.05 seconds.
+  - The application protocol contains plan only; no execute method is present.
+inferred:
+  - UNKNOWN is reserved for unavailable/stale infrastructure or missing terminal state; deterministic target resolution and MoveIt rejection are UNREACHABLE.
+conclusion: The exact seven dynamic states plan in order, each accepted terminal state seeds the next segment, and the first failure stops further planning with preserved diagnostics.
+evidence:
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task3-red.log sha256=b2029f02647300cc3387a4409569435f058f5c86d1edd3f85ccf6e71b3a4196d
+  - /tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task3-green.log sha256=30055d158000922f5cf284b6a3dccf5b6fbaaf37d82c50405629f507b4d6441c
+decision: KEEP
+next_experiment: EXP-004
+```
+
+## CP-006 — Task 3 GREEN, commit pending
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-003
+current_hypothesis: MoveGroup plan-only can implement the reachability port with a request-local plastic_cup Planning Scene diff and no execution side effect.
+working_tree_status: ledger, core/dynamic_pick.py, application/task_reachability.py, and test_task_reachability.py contain only planned Task 3 changes
+owned_processes: NONE
+preserved_processes: Pre-existing mrc010 tmux sessions and server process remain untouched.
+confirmed_conclusions:
+  - Task 3 focused and dynamic-target regressions pass 16 tests.
+  - The public ordered reachability tuple contains MOVE_ABOVE_OBJECT, DESCEND, MICRO_LIFT, LIFT, MOVE_ABOVE_PLACE, DESCEND_TO_PLACE, and RETREAT.
+disproven_routes:
+  - Independent planning of every segment from the same initial state is rejected; accepted terminal state chaining is required.
+open_risks:
+  - Scene revision and collision diagnostics remain adapter-supplied until Task 4.
+next_command: git diff --check && commit the four planned Task 3 paths.
 ```
