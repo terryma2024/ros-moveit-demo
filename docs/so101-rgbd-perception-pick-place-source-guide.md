@@ -400,6 +400,12 @@ pose:
 
 “MoveIt 返回成功”只证明规划/执行接口的结果，不足以证明杯子搬运成功。物理事实源是 MuJoCo 的 `/so101/simulation/evidence`；碰撞世界和 attachment 的事实源是 MoveIt Planning Scene。最终成功需要两者一致。
 
+macOS 上还存在一种窄范围的 controller 终态竞争：`/execute_trajectory` 可能返回
+`CONTROL_FAILED (-6)`，但 controller 的最后一帧关节状态随后已经到达目标。实现不会把任意
+`-6` 当作成功；它只在执行边界之后收到**更新鲜**的 joint sample，并且正向运动学证明 TCP
+位置和姿态同时落入策略容差时，才把该动作记为 reconciled success，同时把比较值写入
+`execution_reconciliations`。错误码不同、样本不新鲜或任一误差超限仍然 fail closed。
+
 ## 13. launch 的启动顺序和 fail-closed 行为
 
 launch 不是简单地一次性启动所有应用然后等待日志。关键时序是：
@@ -424,6 +430,10 @@ launch 不是简单地一次性启动所有应用然后等待日志。关键时�
 - RGB-D perception。
 
 controller spawner 和 `scene_setup` 是一次性进程：只有退出 0 才能继续。`rgbd_cup_pose` 在 startup timeout 内没有发布合法 Pose、TF 不可用、Open3D 不可用、点数不足或半径不符时均 fail closed，不会注入 MJCF 的杯子真值作为 fallback。
+
+持久化批次明确给生产 RGB-D 节点 30 秒 startup timeout，并给 `/cup_pose` 消费者 75 秒等待
+窗口，覆盖首次 Open3D/ROS 初始化但不允许无限等待。点间的 `safe_to_continue` 已经暂停仿真时，
+批次结束的最终 pause 是幂等操作，不会因为“已经暂停”把一个成功批次改写成失败。
 
 ## 14. 如何运行完整链路
 
@@ -589,6 +599,40 @@ points:
 截图、reachability 报告、dynamic manifest 和日志，再在确认夹爪未持杯且共享 stack 健康后继续。
 共享 MuJoCo/MoveIt 故障或“杯子仍被夹持、不能安全 reset”属于批次级故障，状态变为
 `NEEDS_OPERATOR_RECOVERY`，不会冒险继续覆盖物理状态。
+
+### 15.4 macOS 持久化批次资格结果
+
+2026-08-27 在 macOS 可见 Viewer 上，以源码 `137cfd9`、`mujoco_ros2_control`
+`5e9d67ce9fde39d35bf94cc498721abf203a0ddd`（六个 package 均为 `0.1.0`）和隔离安装前缀
+`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install` 运行了同一 stack 的四点
+`RESET_WORLD` 批次。结果不是四次重启拼接：同一 simulation session 的 reset epoch 连续为
+1、2、3、4。
+
+| 点位 | 感知中心误差 | reset epoch | 最终放置 XY 误差 | 结果 |
+|---|---:|---:|---:|---|
+| `task_start` | 0.644 mm | 1 | 2.631 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_forward_5cm` | 0.594 mm | 2 | 2.458 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_left_5cm` | 0.690 mm | 3 | 2.510 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_right_5cm` | 0.631 mm | 4 | 2.495 mm | `SUCCEEDED`，`DONE/19` |
+
+权威结果是
+`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-four-r18/batches/mac-rgbd-task15-four-r18-20260827/batch-result.json`，
+SHA-256 为 `f544339ffd84ba3305fac07ed031d369c1178fb2e2973dbce4d810a1b0d04664`；四点各登记
+9 个 artifact。该轮走正常 controller success 路径，`execution_reconciliations` 为空，所以前述
+`-6` 对账机制不是四点通过的必要条件。
+
+另一个两点批次先提交 `cup=(0.02, -0.28, 0.45)`。杯子坐标本身合法，但由它推导的 TCP
+越过安全 workspace，因此第一点在 reset 和机器人运动之前记为 `SKIPPED_UNREACHABLE`；第二个
+`task_start` 随后以 epoch 1 完成 `DONE/19`。其权威结果 SHA-256 是
+`a4ca24e3769bb6d75f80c44e1d7f96d7a8551cb1a5262b4744471c68e45492e0`。批次聚合状态为
+`FAILED` 是预期语义：它保留“列表并非全成功”的事实，同时 `first_shared_failure=null` 证明共享
+环境没有失败、后续点可以继续。
+
+可见性证据使用 GUI 进程 PID 和 CoreGraphics 精确 window ID 捕获，而不是全屏裁切：
+`task15-gui/r14-live/window.png` 为 2504×1770，SHA-256
+`1f8b7fd6d51ca3d5d5e07e201586a9961a57f7e109ef4df61434daf33dfd08f7`。完整实验过程、失败批次和
+保留边界见
+[`macos-rgbd-reset-world-task-station-experiment-ledger.md`](experiments/macos-rgbd-reset-world-task-station-experiment-ledger.md)。
 
 ## 16. Teleop 任务页、实时截图和证据浏览
 
