@@ -310,6 +310,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Artifact */
+        get: operations["task_artifact_tasks_artifacts__artifact_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/captures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Capture */
+        post: operations["task_capture_tasks_captures_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/captures/{capture_id}/rendered-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Rendered Image */
+        post: operations["task_rendered_image_tasks_captures__capture_id__rendered_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/environment/shutdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Shutdown */
+        post: operations["task_shutdown_tasks_environment_shutdown_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Presets */
+        get: operations["task_presets_tasks_presets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/reachability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Reachability */
+        post: operations["task_reachability_tasks_reachability_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Runs */
+        get: operations["task_runs_tasks_runs_get"];
+        put?: never;
+        /** Task Start */
+        post: operations["task_start_tasks_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Status */
+        get: operations["task_status_tasks_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Cancel */
+        post: operations["task_cancel_tasks_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/runs/{run_id}/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Task Recovery */
+        post: operations["task_recovery_tasks_runs__run_id__recovery_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflow/{operation}": {
         parameters: {
             query?: never;
@@ -364,6 +535,14 @@ export interface components {
             reset_world: boolean;
             /** Scene Operations */
             scene_operations: boolean;
+            /** Sensor Capture */
+            sensor_capture: boolean;
+            /** Task Batch */
+            task_batch: boolean;
+            /** Task Environment Shutdown */
+            task_environment_shutdown: boolean;
+            /** Task Reachability */
+            task_reachability: boolean;
             /** Workflow Execute */
             workflow_execute: boolean;
             /** Workflow Resume */
@@ -375,6 +554,23 @@ export interface components {
             /** Workflow Stop */
             workflow_stop: boolean;
         };
+        /** CaptureResponse */
+        CaptureResponse: {
+            /** Artifact Ids */
+            artifact_ids?: string[];
+            /** Artifacts */
+            artifacts?: components["schemas"]["TaskArtifactSummary"][];
+            /** Capture Id */
+            capture_id: string;
+            /** Source Stamp Ns */
+            source_stamp_ns?: number | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
         /** CollisionPair */
         CollisionPair: {
             /**
@@ -383,11 +579,11 @@ export interface components {
              */
             allowed: boolean;
             /** Depth M */
-            depth_m?: number;
+            depth_m?: number | null;
             /** First Seen At */
-            first_seen_at?: number;
+            first_seen_at?: number | null;
             /** Last Seen At */
-            last_seen_at?: number;
+            last_seen_at?: number | null;
             /** Object A */
             object_a: string;
             /** Object B */
@@ -395,7 +591,7 @@ export interface components {
             /** Source */
             source: string;
             /** Waypoint Index */
-            waypoint_index?: number;
+            waypoint_index?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -410,13 +606,13 @@ export interface components {
              */
             age_s: number;
             /** Lower Limit Rad */
-            lower_limit_rad?: number;
+            lower_limit_rad?: number | null;
             /** Name */
             name: string;
             /** Position Rad */
             position_rad: number;
             /** Upper Limit Rad */
-            upper_limit_rad?: number;
+            upper_limit_rad?: number | null;
             /**
              * Velocity Rad S
              * @default 0
@@ -430,34 +626,34 @@ export interface components {
              * @default 0
              */
             duration_s: number;
-            final_pose?: components["schemas"]["Pose6D"];
+            final_pose?: components["schemas"]["Pose6D"] | null;
             /** First Sequence */
-            first_sequence?: number;
+            first_sequence?: number | null;
             /** Gazebo Attached */
-            gazebo_attached?: boolean;
+            gazebo_attached?: boolean | null;
             /** Gripper Contact */
-            gripper_contact?: boolean;
+            gripper_contact?: boolean | null;
             /** Intended Support Contact */
-            intended_support_contact?: boolean;
+            intended_support_contact?: boolean | null;
             /** Last Sequence */
-            last_sequence?: number;
+            last_sequence?: number | null;
             /** Metrics */
             metrics?: {
                 [key: string]: number;
             };
             /** Moveit Attached */
-            moveit_attached?: boolean;
+            moveit_attached?: boolean | null;
             /** Primary Failure */
-            primary_failure?: string;
+            primary_failure?: string | null;
             /** Release Epoch Id */
-            release_epoch_id?: string;
+            release_epoch_id?: string | null;
             /**
              * Sample Count
              * @default 0
              */
             sample_count: number;
             /** World Object Synchronized */
-            world_object_synchronized?: boolean;
+            world_object_synchronized?: boolean | null;
         };
         /** Pose6D */
         Pose6D: {
@@ -478,12 +674,189 @@ export interface components {
             /** Z M */
             z_m: number;
         };
+        /** ReachabilityResponse */
+        ReachabilityResponse: {
+            /** Reports */
+            reports?: {
+                [key: string]: unknown;
+            }[];
+            /** Simulation Session Id */
+            simulation_session_id: string;
+            /** Status */
+            status: string;
+        };
+        /** RenderedImageRequest */
+        RenderedImageRequest: {
+            /** Background Rgb */
+            background_rgb: [
+                number,
+                number,
+                number
+            ];
+            /** Captured At */
+            captured_at: string;
+            /**
+             * Color Mode
+             * @enum {string}
+             */
+            color_mode: "rgb" | "uniform";
+            /** Command Id */
+            command_id: string;
+            /** Displayed Point Count */
+            displayed_point_count: number;
+            /** Lease Id */
+            lease_id: string;
+            /** Original Point Count */
+            original_point_count: number;
+            /** Png Base64 */
+            png_base64: string;
+            /** Point Size */
+            point_size: number;
+            /** Projection Matrix */
+            projection_matrix: number[];
+            /**
+             * Sampling Rule
+             * @enum {string}
+             */
+            sampling_rule: "all" | "fixed-stride";
+            /** Sampling Stride */
+            sampling_stride: number;
+            /** Session Id */
+            session_id: string;
+            /** Source Artifact Id */
+            source_artifact_id: string;
+            /** Source Sha256 */
+            source_sha256: string;
+            /** View Matrix */
+            view_matrix: number[];
+            /** Viewport Px */
+            viewport_px: [
+                number,
+                number
+            ];
+        };
         /**
          * ServerMode
-         * @description An enumeration.
          * @enum {string}
          */
         ServerMode: "STARTING" | "READ_ONLY" | "READY" | "BUSY" | "DEGRADED";
+        /** TaskArtifactSummary */
+        TaskArtifactSummary: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Media Type */
+            media_type: string;
+            /** Name */
+            name: string;
+            /** Sha256 */
+            sha256: string;
+        };
+        /** TaskCaptureRequest */
+        TaskCaptureRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Lease Id */
+            lease_id: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** TaskMutationRequest */
+        TaskMutationRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Lease Id */
+            lease_id: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** TaskPointModel */
+        TaskPointModel: {
+            /** Cup Position World M */
+            cup_position_world_m: [
+                number,
+                number,
+                number
+            ];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /** TaskPointSummary */
+        TaskPointSummary: {
+            /** Artifact Ids */
+            artifact_ids?: string[];
+            /** Artifacts */
+            artifacts?: components["schemas"]["TaskArtifactSummary"][];
+            /** Failure Code */
+            failure_code?: string | null;
+            /** Id */
+            id: string;
+            /** Reachability Status */
+            reachability_status?: string | null;
+            /** Reset Epoch */
+            reset_epoch?: number | null;
+            /** Status */
+            status: string;
+        };
+        /** TaskRecoveryRequest */
+        TaskRecoveryRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "stop" | "reset-and-continue";
+            /** Command Id */
+            command_id: string;
+            /** Confirmation */
+            confirmation: string;
+            /** Lease Id */
+            lease_id: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** TaskRunRequest */
+        TaskRunRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Lease Id */
+            lease_id: string;
+            /** Points */
+            points: components["schemas"]["TaskPointModel"][];
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: 1;
+            /** Session Id */
+            session_id: string;
+        };
+        /** TaskRunSummary */
+        TaskRunSummary: {
+            /** First Shared Failure */
+            first_shared_failure?: string | null;
+            /** Points */
+            points?: components["schemas"]["TaskPointSummary"][];
+            /** Run Id */
+            run_id: string;
+            /** Simulation Session Id */
+            simulation_session_id: string;
+            /** Status */
+            status: string;
+        };
+        /** TaskShutdownRequest */
+        TaskShutdownRequest: {
+            /** Command Id */
+            command_id: string;
+            /** Confirmation */
+            confirmation: string;
+            /** Lease Id */
+            lease_id: string;
+            /** Session Id */
+            session_id: string;
+        };
         /** TelemetrySnapshot */
         TelemetrySnapshot: {
             /** Controllers */
@@ -495,7 +868,7 @@ export interface components {
                 [key: string]: string;
             };
             /** Gazebo Attached */
-            gazebo_attached?: boolean;
+            gazebo_attached?: boolean | null;
             /** Gazebo Contacts */
             gazebo_contacts?: components["schemas"]["CollisionPair"][];
             /** Joints */
@@ -505,13 +878,13 @@ export interface components {
             /** @default STARTING */
             mode: components["schemas"]["ServerMode"];
             /** Moveit Attached */
-            moveit_attached?: boolean;
+            moveit_attached?: boolean | null;
             /** Moveit Collisions */
             moveit_collisions?: components["schemas"]["CollisionPair"][];
-            object_pose?: components["schemas"]["Pose6D"];
-            physical_outcome?: components["schemas"]["PhysicalOutcomeEvidence"];
+            object_pose?: components["schemas"]["Pose6D"] | null;
+            physical_outcome?: components["schemas"]["PhysicalOutcomeEvidence"] | null;
             /** Real Time Factor */
-            real_time_factor?: number;
+            real_time_factor?: number | null;
             /**
              * Revision
              * @default 0
@@ -541,7 +914,7 @@ export interface components {
             source_ages_s?: {
                 [key: string]: number;
             };
-            tcp?: components["schemas"]["Pose6D"];
+            tcp?: components["schemas"]["Pose6D"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -572,7 +945,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -625,7 +1000,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -658,7 +1035,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -691,7 +1070,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -746,7 +1127,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -779,7 +1162,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -812,7 +1197,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -867,7 +1254,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -900,7 +1289,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -933,7 +1324,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -968,7 +1361,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -1001,7 +1396,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -1034,7 +1431,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -1067,7 +1466,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -1111,6 +1512,345 @@ export interface operations {
             };
         };
     };
+    task_artifact_tasks_artifacts__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_capture_tasks_captures_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptureResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_rendered_image_tasks_captures__capture_id__rendered_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderedImageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_shutdown_tasks_environment_shutdown_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskShutdownRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_presets_tasks_presets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    task_reachability_tasks_reachability_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReachabilityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_runs_tasks_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"][];
+                };
+            };
+        };
+    };
+    task_start_tasks_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_status_tasks_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_cancel_tasks_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMutationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_recovery_tasks_runs__run_id__recovery_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRecoveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     workflow_workflow__operation__post: {
         parameters: {
             query?: never;
@@ -1122,7 +1862,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {

@@ -64,6 +64,10 @@ console script 注册在 [`setup.py`](../src/so101_demo_py/setup.py)。`ros2 run
 
 组件清单的源码入口是 [`_mujoco_stack_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py) 和 [`_mujoco_perception_execute_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py)。
 
+本文后半部分还会使用第二个入口 `so101_mujoco_task_station.launch.py`。它只启动一次
+MuJoCo、MoveIt、controller、相机 TF 和可选 Teleop，然后由批处理器在这个长驻环境里逐点
+执行 `RESET_WORLD`。与上面的单次 `FULL_RESTART` 入口相比，它不会为每个杯位重建整个仿真图。
+
 下面三个 executable **不会**被生产 launch 启动：
 
 | executable | 定位 | 为什么不在生产图中 |
@@ -396,6 +400,12 @@ pose:
 
 “MoveIt 返回成功”只证明规划/执行接口的结果，不足以证明杯子搬运成功。物理事实源是 MuJoCo 的 `/so101/simulation/evidence`；碰撞世界和 attachment 的事实源是 MoveIt Planning Scene。最终成功需要两者一致。
 
+macOS 上还存在一种窄范围的 controller 终态竞争：`/execute_trajectory` 可能返回
+`CONTROL_FAILED (-6)`，但 controller 的最后一帧关节状态随后已经到达目标。实现不会把任意
+`-6` 当作成功；它只在执行边界之后收到**更新鲜**的 joint sample，并且正向运动学证明 TCP
+位置和姿态同时落入策略容差时，才把该动作记为 reconciled success，同时把比较值写入
+`execution_reconciliations`。错误码不同、样本不新鲜或任一误差超限仍然 fail closed。
+
 ## 13. launch 的启动顺序和 fail-closed 行为
 
 launch 不是简单地一次性启动所有应用然后等待日志。关键时序是：
@@ -420,6 +430,10 @@ launch 不是简单地一次性启动所有应用然后等待日志。关键时�
 - RGB-D perception。
 
 controller spawner 和 `scene_setup` 是一次性进程：只有退出 0 才能继续。`rgbd_cup_pose` 在 startup timeout 内没有发布合法 Pose、TF 不可用、Open3D 不可用、点数不足或半径不符时均 fail closed，不会注入 MJCF 的杯子真值作为 fallback。
+
+持久化批次明确给生产 RGB-D 节点 30 秒 startup timeout，并给 `/cup_pose` 消费者 75 秒等待
+窗口，覆盖首次 Open3D/ROS 初始化但不允许无限等待。点间的 `safe_to_continue` 已经暂停仿真时，
+批次结束的最终 pause 是幂等操作，不会因为“已经暂停”把一个成功批次改写成失败。
 
 ## 14. 如何运行完整链路
 
@@ -466,6 +480,8 @@ session 目录使用 exclusive create。同一个 `session_id` 重跑会被拒�
 
 ## 15. 四个预制杯位如何验证
 
+### 15.1 旧资格基线：四次独立 FULL_RESTART
+
 MJCF 提供四个 keyframe：
 
 | Keyframe | 杯子初始中心 `(x, y, z)` m | 相对默认位置 |
@@ -498,7 +514,157 @@ evidence_file:=/tmp/so101-debug-rgbd-tutorial-001/forward.json
 
 视觉证据有独立边界：macOS 的非 bundle GLFW Viewer 没有出现在 Accessibility/CoreGraphics 窗口枚举中，因此该批次没有声称“精确窗口截图验收通过”。功能和物理证据通过不能改写成 GUI 证据通过。
 
-## 16. 运行时应检查什么
+### 15.2 新工作站：一次启动、逐点 RESET_WORLD
+
+日常观察和批量回归使用 [`so101_mujoco_rgbd_batch`](../src/so101_demo_py/src/cli/mujoco_rgbd_batch.py)。它把生命周期改为：
+
+```text
+prepare persistent environment once
+  -> for each point in the ordered YAML list
+       -> MoveIt plan-only TCP reachability gate
+       -> atomic ResetWorld(keyframe=task_start, plastic_cup pose override)
+       -> verify same session and reset epoch old + 1
+       -> wait for dynamic consumer subscription
+       -> capture one aligned RGB-D frame and publish /cup_pose
+       -> calculate dynamic TCP targets and run the pick-place state machine
+       -> capture/register terminal evidence
+       -> stop only this point's children
+       -> prove the cup is released and the stack is safe to reset
+  -> pause and clean up the owned persistent environment once
+```
+
+这里的“设置杯子位置”不是修改 MJCF 或切换四个 keyframe，而是调用
+`mujoco_ros2_control_msgs/srv/ResetWorld` 0.1.0 的 `state_overrides.free_joints`，原子写入
+`plastic_cup` 的 world Pose、单位四元数和零速度。因而同一个 YAML 可以包含任意数量的点，
+不要求这些点预先写进 `scene.xml`。
+
+复制下面的 macOS 命令即可运行内置四点列表。`direnv` 必须在普通交互 shell 中导出，
+然后 source 本次明确选定的 overlay；不要把“源码存在”当成“安装入口已选中”。
+
+```bash
+cd /Users/matianyi/Projects/robot_demo_001/moveit-demo
+eval "$(direnv export zsh)"
+source /path/to/candidate/install/setup.zsh
+
+export ROS_HOME=/tmp/so101-debug-rgbd-batch/ros-home
+export ROS_LOG_DIR=/tmp/so101-debug-rgbd-batch/ros-logs
+mkdir -p "$ROS_HOME" "$ROS_LOG_DIR" /tmp/so101-debug-rgbd-batch/evidence
+
+POINTS="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/config/mujoco/rgbd_task_points.yaml"
+ros2 run so101_demo_py so101_mujoco_rgbd_batch \
+  --points "$POINTS" \
+  --batch-id mac-visible-four-001 \
+  --session-id mac-visible-four-001 \
+  --evidence-root /tmp/so101-debug-rgbd-batch/evidence \
+  --include-teleop
+```
+
+这个入口固定使用 `headless=false`，自己持有并清理环境。运行期间可打开
+`http://127.0.0.1:8080/tasks`；原 Teleop 页面仍在 `/`，两者的 React 状态和页面入口彼此隔离。
+
+如果要手动维持工作站、从页面提交批次，可单独启动：
+
+```bash
+ros2 launch so101_demo_py so101_mujoco_task_station.launch.py \
+  headless:=false \
+  session_id:=mac-task-station-001 \
+  task_evidence_root:=/tmp/so101-debug-rgbd-batch/evidence \
+  include_teleop:=true \
+  teleop_port:=8080
+```
+
+不要同时再启动静态 TF、MoveIt、controller 或第二个 Teleop server；这个 launch 已拥有它们。
+
+### 15.3 自由点 YAML 与 TCP 可达性门禁
+
+任务文件使用严格 schema，点位顺序就是执行顺序：
+
+```yaml
+schema_version: 1
+points:
+  - id: custom_near_left
+    label: Custom near left
+    cup_position_world_m: [-0.01, -0.30, 0.165]
+  - id: custom_near_right
+    label: Custom near right
+    cup_position_world_m: [0.05, -0.30, 0.165]
+```
+
+解析器拒绝未知字段、重复或空 ID、非有限数和策略 workspace 之外的坐标。在真正 reset 之前，
+[`task_reachability`](../src/so101_demo_py/src/cli/task_reachability.py) 会按顺序从杯子位置推导每个
+抓取 TCP phase，使用真实 MoveIt 做 plan-only 校验。只有 `REACHABLE` 才会执行；明确不可达的点
+记为 `SKIPPED_UNREACHABLE`，不会移动机器人，批次继续检查后面的点。
+
+点内感知、规划或执行失败也会先保留 RGB、完整点云、杯子点云、点云预览、MuJoCo Viewer
+截图、reachability 报告、dynamic manifest 和日志，再在确认夹爪未持杯且共享 stack 健康后继续。
+共享 MuJoCo/MoveIt 故障或“杯子仍被夹持、不能安全 reset”属于批次级故障，状态变为
+`NEEDS_OPERATOR_RECOVERY`，不会冒险继续覆盖物理状态。
+
+### 15.4 macOS 持久化批次资格结果
+
+2026-08-27 在 macOS 可见 Viewer 上，以源码 `137cfd9`、`mujoco_ros2_control`
+`5e9d67ce9fde39d35bf94cc498721abf203a0ddd`（六个 package 均为 `0.1.0`）和隔离安装前缀
+`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/install` 运行了同一 stack 的四点
+`RESET_WORLD` 批次。结果不是四次重启拼接：同一 simulation session 的 reset epoch 连续为
+1、2、3、4。
+
+| 点位 | 感知中心误差 | reset epoch | 最终放置 XY 误差 | 结果 |
+|---|---:|---:|---:|---|
+| `task_start` | 0.644 mm | 1 | 2.631 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_forward_5cm` | 0.594 mm | 2 | 2.458 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_left_5cm` | 0.690 mm | 3 | 2.510 mm | `SUCCEEDED`，`DONE/19` |
+| `cup_test_right_5cm` | 0.631 mm | 4 | 2.495 mm | `SUCCEEDED`，`DONE/19` |
+
+权威结果是
+`/tmp/so101-debug-macos-rgbd-reset-world-task-ui-20260827/task15-four-r18/batches/mac-rgbd-task15-four-r18-20260827/batch-result.json`，
+SHA-256 为 `f544339ffd84ba3305fac07ed031d369c1178fb2e2973dbce4d810a1b0d04664`；四点各登记
+9 个 artifact。该轮走正常 controller success 路径，`execution_reconciliations` 为空，所以前述
+`-6` 对账机制不是四点通过的必要条件。
+
+另一个两点批次先提交 `cup=(0.02, -0.28, 0.45)`。杯子坐标本身合法，但由它推导的 TCP
+越过安全 workspace，因此第一点在 reset 和机器人运动之前记为 `SKIPPED_UNREACHABLE`；第二个
+`task_start` 随后以 epoch 1 完成 `DONE/19`。其权威结果 SHA-256 是
+`a4ca24e3769bb6d75f80c44e1d7f96d7a8551cb1a5262b4744471c68e45492e0`。批次聚合状态为
+`FAILED` 是预期语义：它保留“列表并非全成功”的事实，同时 `first_shared_failure=null` 证明共享
+环境没有失败、后续点可以继续。
+
+可见性证据使用 GUI 进程 PID 和 CoreGraphics 精确 window ID 捕获，而不是全屏裁切：
+`task15-gui/r14-live/window.png` 为 2504×1770，SHA-256
+`1f8b7fd6d51ca3d5d5e07e201586a9961a57f7e109ef4df61434daf33dfd08f7`。完整实验过程、失败批次和
+保留边界见
+[`macos-rgbd-reset-world-task-station-experiment-ledger.md`](experiments/macos-rgbd-reset-world-task-station-experiment-ledger.md)。
+
+## 16. Teleop 任务页、实时截图和证据浏览
+
+`/tasks` 是独立于原 `/` Teleop 的任务工作台，包含三部分：
+
+1. **Task Builder**：选择四个 preset，或增加、编辑、排序、删除自由 XYZ 点；先执行 TCP 可达性校验，再启动任务。
+2. **Live Sensor**：在当前仿真时间点请求一次严格对齐的 RGB、Depth、CameraInfo；显示 RGB，并加载完整点云与杯子点云。
+3. **Runs & Evidence**：刷新页面或 WebSocket 重连后，从服务端恢复 active/latest run，按原顺序显示失败、不可达与后续成功点，并通过不透明 artifact ID 浏览证据。
+
+点云浏览器使用随 Web bundle 固定安装的开源 [Three.js](https://threejs.org/) 0.184.0 和
+`PLYLoader`，没有 CDN 运行时依赖。显示超过 400000 点时采用确定性固定步长采样，但原始 PLY
+保持不变；保存当前视图时会把 PNG、源 PLY ID/SHA-256、相机矩阵、viewport、点大小、颜色、
+背景和采样参数一起登记，避免一张无法追溯到数据与视角的截图被当成证据。
+
+任务页面通过下列接口与后端通信：
+
+| HTTP/WebSocket 接口 | 作用 |
+|---|---|
+| `GET /tasks/presets` | 读取服务端安装的四个预制点 |
+| `POST /tasks/reachability` | 对完整有序列表执行 MoveIt plan-only TCP 校验 |
+| `POST /tasks/runs` | 由后端 owner 启动一个批次；浏览器不直接拉起 shell |
+| `GET /tasks/runs`、`GET /tasks/runs/{id}` | 恢复批次与逐点权威状态 |
+| `POST /tasks/runs/{id}/cancel`、`.../recovery` | 取消或显式执行恢复动作 |
+| `POST /tasks/captures` | 截取同一 source stamp 的 RGB、full PLY、cup PLY 和预览 |
+| `POST /tasks/captures/{id}/rendered-image` | 登记当前 Three.js 视图 PNG 与渲染元数据 |
+| `GET /tasks/artifacts/{artifact_id}` | 只读取 registry 内已登记 artifact；不接受文件系统路径 |
+| `WS /tasks/events` | 通知状态变化；重连后仍以 HTTP refetch 的权威状态为准 |
+
+控制 lease 和当前 simulation session 是所有写操作的共同门禁。浏览器只看到 artifact ID、
+basename、媒体类型、大小和哈希，证据根的绝对路径不会进入 Web API。
+
+## 17. 运行时应检查什么
 
 ### 16.1 相机输入
 
@@ -553,7 +719,7 @@ cup_pose_position_xyz 为有限值
 - MoveIt 最终没有 attached cup；
 - final placement 在策略容差内。
 
-## 17. 常见失败如何沿首个边界定位
+## 18. 常见失败如何沿首个边界定位
 
 | 症状 | 首先检查 | 不要先做什么 |
 |---|---|---|
@@ -570,7 +736,7 @@ cup_pose_position_xyz 为有限值
 
 原则是一次只验证一个最小假设，并在第一个分叉边界修复。RGB-D 输入错误不应在 IK 层补偿；TF 错误不应通过修改杯子坐标常量掩盖；物理抓取失败也不应通过伪造 Planning Scene attachment 变成“成功”。
 
-## 18. 当前实现的明确限制
+## 19. 当前实现的明确限制
 
 - 颜色分割只针对当前受控 MuJoCo 橙色材质，不是通用检测或分割模型；
 - Z 使用已知桌高与杯高先验，不适合任意高度、悬空或倾倒的杯子；
@@ -581,7 +747,7 @@ cup_pose_position_xyz 为有限值
 - 当前 production launch 只支持 MuJoCo execute，不代表真实机械臂安全门禁已经完成；
 - 四点资格结果证明当前受控仿真场景，不自动外推到换颜色、换杯型、遮挡或真实深度噪声。
 
-## 19. 建议的源码阅读顺序
+## 20. 建议的源码阅读顺序
 
 按数据流阅读，比直接打开最长的执行器更容易建立系统直觉：
 
@@ -593,9 +759,11 @@ cup_pose_position_xyz 为有限值
 6. [`rgbd_cup_pose_node.py`](../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py)：精确时间 TF、证据优先和 `/cup_pose` 发布；
 7. [`cup_pose_source.py`](../src/so101_demo_py/src/ros/cup_pose_source.py)：下游如何校验并冻结一条 Pose；
 8. [`launch_composition.py`](../src/so101_demo_py/src/runtime/launch_composition.py)：组件、启动顺序和退出策略；
-9. [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md)：动态目标、IK、MoveIt、状态机和物理闭环。
+9. [`task_batch.py`](../src/so101_demo_py/src/application/task_batch.py)：RESET_WORLD 批次、失败继续与安全中止策略；
+10. [`task_gateway.py`](../src/so101_teleop/so101_teleop/task_gateway.py)：Teleop 对批次、截图和证据的 owner 边界；
+11. [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md)：动态目标、IK、MoveIt、状态机和物理闭环。
 
-## 20. 自检问题
+## 21. 自检问题
 
 读完并运行实验后，应能不看文档回答：
 
@@ -607,6 +775,9 @@ cup_pose_position_xyz 为有限值
 6. `rgbd_point_cloud`、`rgbd_cup_pose` 和 `cup_pose_tf_demo` 的责任边界是什么？
 7. 为什么 `/cup_pose` 发布成功仍不足以证明 pick-place 成功？
 8. MoveIt attachment 和 MuJoCo 物理抓持为什么必须分别验证？
-9. 为什么四个杯位要用四次独立 `FULL_RESTART`，而不是只在一个 stack 中改四次坐标？
+9. `FULL_RESTART` 资格基线与持久化 `RESET_WORLD` 批次分别证明什么？
+10. 为什么自由点必须先通过每个 TCP phase 的 MoveIt plan-only 校验？
+11. 哪些局部失败可以保留证据后继续，哪些共享/持杯故障必须停止批次？
+12. 为什么 `/tasks/events` 只做变更通知，重连后仍要重新读取 HTTP 权威状态？
 
-如果能沿 topic、TF、service、action 和物理证据把这九个问题讲清楚，就已经掌握了这条 RGB-D 感知位置 PickPlace 链路的主要实现方式和调试边界。
+如果能沿 topic、TF、service、action 和物理证据把这些问题讲清楚，就已经掌握了这条 RGB-D 感知位置 PickPlace 链路的主要实现方式和调试边界。

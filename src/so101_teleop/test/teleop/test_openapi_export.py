@@ -45,4 +45,20 @@ def test_capabilities_route_exports_a_typed_backend_contract(tmp_path):
         "workflow_resume", "workflow_stop", "reset_world", "scene_operations",
         "physical_observation", "manual_joint_execute", "manual_tcp_execute",
         "camera_presets",
+        "task_batch", "task_reachability", "sensor_capture",
+        "task_environment_shutdown",
     }
+
+
+def test_openapi_exports_separate_task_station_contract(tmp_path):
+    output = tmp_path / "openapi.json"
+    export_openapi(output)
+    schema = json.loads(output.read_text())
+    assert {
+        "/tasks/presets", "/tasks/reachability", "/tasks/runs",
+        "/tasks/runs/{run_id}", "/tasks/runs/{run_id}/cancel",
+        "/tasks/runs/{run_id}/recovery", "/tasks/captures",
+        "/tasks/captures/{capture_id}/rendered-image",
+        "/tasks/artifacts/{artifact_id}", "/tasks/environment/shutdown",
+    } <= set(schema["paths"])
+    assert "TaskRunRequest" in schema["components"]["schemas"]

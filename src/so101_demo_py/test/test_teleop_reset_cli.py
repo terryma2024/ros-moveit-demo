@@ -34,7 +34,96 @@ def test_cli_defaults_to_compatible_mujoco(monkeypatch, capsys) -> None:
 
     assert teleop_reset.main(["--session-id", "session-a"]) == 0
     assert calls == [("session-a", "task_start")]
-    assert json.loads(capsys.readouterr().out)["backend"] == "mujoco"
+    document = json.loads(capsys.readouterr().out)
+    assert document["backend"] == "mujoco"
+    assert document["requested_object_position_world_m"] == [0.02, -0.28, 0.165]
+
+
+def test_cli_sends_custom_cup_position_and_records_evidence(
+    monkeypatch, capsys
+) -> None:
+    from so101_demo.cli import teleop_reset
+    from so101_demo.ports.planning_scene import SceneCommandReceipt
+
+    receipt = type(
+        "Receipt",
+        (),
+        {
+            "simulation_session_id": "session-a",
+            "old_epoch": 1,
+            "new_epoch": 2,
+            "simulation_step": 0,
+            "keyframe": "task_start",
+        },
+    )()
+    scene_receipt = SceneCommandReceipt(
+        backend="mujoco",
+        phase="READ_BACK",
+        success=True,
+        failure_code=None,
+        evidence={"world_ids": ["pedestal", "plastic_cup", "table"]},
+    )
+    calls = []
+
+    def execute(session_id, *, keyframe, cup_position_world_m=None):
+        calls.append((session_id, keyframe, cup_position_world_m))
+        return receipt, scene_receipt
+
+    monkeypatch.setattr(teleop_reset, "execute_mujoco_reset", execute)
+
+    assert teleop_reset.main(
+        [
+            "--session-id",
+            "session-a",
+            "--cup-position-world-m",
+            "-0.03",
+            "-0.28",
+            "0.165",
+        ]
+    ) == 0
+
+    assert calls == [("session-a", "task_start", (-0.03, -0.28, 0.165))]
+    document = json.loads(capsys.readouterr().out)
+    assert document["requested_object_position_world_m"] == [-0.03, -0.28, 0.165]
+
+
+def test_mujoco_reset_builds_exactly_one_plastic_cup_override(monkeypatch) -> None:
+    from so101_demo.cli import teleop_reset
+    from so101_demo.ports.planning_scene import SceneCommandReceipt
+
+    reset_receipt = object()
+    calls = []
+
+    def reset(session_id, **kwargs):
+        calls.append((session_id, kwargs))
+        return reset_receipt
+
+    monkeypatch.setattr(teleop_reset, "transactional_reset", reset)
+    monkeypatch.setattr(
+        teleop_reset,
+        "execute_scene_operation",
+        lambda *_args: SceneCommandReceipt(
+            backend="mujoco",
+            phase="READ_BACK",
+            success=True,
+            failure_code=None,
+            evidence={},
+        ),
+    )
+
+    receipt, _scene = teleop_reset.execute_mujoco_reset(
+        "sim-a",
+        keyframe="task_start",
+        cup_position_world_m=(-0.03, -0.28, 0.165),
+    )
+
+    assert receipt is reset_receipt
+    assert calls[0][0] == "sim-a"
+    assert calls[0][1]["expected_object_position"] == (-0.03, -0.28, 0.165)
+    overrides = calls[0][1]["free_joint_overrides"]
+    assert len(overrides) == 1
+    assert overrides[0].name == "plastic_cup"
+    assert overrides[0].position_world_m == (-0.03, -0.28, 0.165)
 
 
 def test_cli_dispatches_gazebo_transaction_and_writes_evidence(

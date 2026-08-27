@@ -2,7 +2,7 @@ backend: mujoco_py
 owner_package: so101_demo_py
 probe:
   package: so101_demo_py
-  executable: pick_place
+  executable: teleop_workflow
   timeout_s: 10
   fixed_args: []
   scene_style: null
@@ -26,6 +26,10 @@ capabilities:
   manual_joint_execute: false
   manual_tcp_execute: false
   camera_presets: true
+  task_batch: true
+  task_reachability: true
+  sensor_capture: true
+  task_environment_shutdown: true
 operations:
   workflow:
     package: so101_demo_py
@@ -45,6 +49,27 @@ operations:
     package: so101_demo_py
     executable: camera_preset
     timeout_s: 10
+    fixed_args: []
+    scene_style: null
+    session_style: null
+  task_batch:
+    package: so101_demo_py
+    executable: so101_mujoco_rgbd_batch
+    timeout_s: 3600
+    fixed_args: []
+    scene_style: null
+    session_style: null
+  task_reachability:
+    package: so101_demo_py
+    executable: task_reachability
+    timeout_s: 180
+    fixed_args: []
+    scene_style: null
+    session_style: null
+  sensor_capture:
+    package: so101_demo_py
+    executable: rgbd_sensor_capture
+    timeout_s: 30
     fixed_args: []
     scene_style: null
     session_style: null

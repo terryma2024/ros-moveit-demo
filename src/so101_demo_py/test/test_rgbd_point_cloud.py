@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import sys
 
 import numpy as np
 
@@ -86,6 +87,35 @@ def _fake_open3d_cloud(
     return object(), _FakeCloud(points, colors)
 
 
+def test_open3d_boundary_copies_frozen_arrays_to_writable_c_memory(monkeypatch) -> None:
+    received = []
+
+    class PointCloud:
+        pass
+
+    def vector(array):
+        received.append(array)
+        return array
+
+    fake_open3d = SimpleNamespace(
+        geometry=SimpleNamespace(PointCloud=PointCloud),
+        utility=SimpleNamespace(Vector3dVector=vector),
+    )
+    monkeypatch.setitem(sys.modules, "open3d", fake_open3d)
+    points = np.arange(9, dtype=np.float64).reshape(3, 3)
+    colors = np.full((3, 3), 0.5, dtype=np.float64)
+    points.setflags(write=False)
+    colors.setflags(write=False)
+
+    _module, cloud = rgbd_point_cloud._open3d_cloud(points, colors)
+
+    assert cloud.points is received[0]
+    assert cloud.colors is received[1]
+    assert all(array.flags.writeable and array.flags.c_contiguous for array in received)
+    assert not np.shares_memory(received[0], points)
+    assert not np.shares_memory(received[1], colors)
+
+
 def test_aligned_buffer_emits_only_an_exact_three_message_stamp() -> None:
     buffer = rgbd_point_cloud.AlignedRgbdBuffer(max_samples=3)
 
@@ -118,6 +148,10 @@ def test_build_cup_point_cloud_returns_selected_points_without_ply_roundtrip(
     assert result.points_xyz.shape[1] == 3
     assert result.colors_rgb.shape == result.points_xyz.shape
     assert np.isfinite(result.points_xyz).all()
+    assert result.rgb8.shape == (2, 2, 3)
+    assert result.full_points_xyz.shape == result.full_colors_rgb.shape
+    assert result.cup_points_xyz.shape == result.cup_colors_rgb.shape
+    assert result.full_point_count > result.cup_point_count > 0
 
 
 def test_decode_rgb_rejects_padded_row_stride() -> None:

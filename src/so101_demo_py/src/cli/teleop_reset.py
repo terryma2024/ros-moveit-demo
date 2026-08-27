@@ -10,7 +10,8 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 
-from ..backends.mujoco.teleop_runtime import transactional_reset
+from ..backends.mujoco.client import FreeJointResetOverride
+from ..backends.mujoco.teleop_runtime import CUP_START, transactional_reset
 from ..ports.reset import TransactionalResetReceipt
 from .scene_setup import execute_scene_operation
 
@@ -20,6 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", choices=("mujoco", "gazebo"), default="mujoco")
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--keyframe", default="task_start")
+    parser.add_argument(
+        "--cup-position-world-m",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+    )
     parser.add_argument("--evidence-file", type=Path)
     return parser
 
@@ -38,10 +45,27 @@ def execute_gazebo_reset(session_id: str) -> TransactionalResetReceipt:
     return run_gazebo_reset(share, session_id)
 
 
-def execute_mujoco_reset(session_id: str, *, keyframe: str):
+def execute_mujoco_reset(
+    session_id: str,
+    *,
+    keyframe: str,
+    cup_position_world_m: tuple[float, float, float] | None = None,
+):
     """Reset physical state, then restore MoveIt's canonical scene shadow."""
 
-    receipt = transactional_reset(session_id, keyframe=keyframe)
+    if cup_position_world_m is None:
+        receipt = transactional_reset(session_id, keyframe=keyframe)
+    else:
+        override = FreeJointResetOverride(
+            name="plastic_cup",
+            position_world_m=cup_position_world_m,
+        )
+        receipt = transactional_reset(
+            session_id,
+            keyframe=keyframe,
+            expected_object_position=cup_position_world_m,
+            free_joint_overrides=(override,),
+        )
     scene_receipt = execute_scene_operation("mujoco", "setup")
     if not scene_receipt.success:
         raise RuntimeError(
@@ -53,17 +77,30 @@ def execute_mujoco_reset(session_id: str, *, keyframe: str):
 
 def main(arguments: list[str] | None = None) -> int:
     options = build_parser().parse_args(arguments)
+    requested_position = (
+        tuple(options.cup_position_world_m)
+        if options.cup_position_world_m is not None
+        else CUP_START
+    )
     if options.backend == "mujoco":
         try:
-            receipt, scene_receipt = execute_mujoco_reset(
-                options.session_id, keyframe=options.keyframe
-            )
+            if options.cup_position_world_m is None:
+                receipt, scene_receipt = execute_mujoco_reset(
+                    options.session_id, keyframe=options.keyframe
+                )
+            else:
+                receipt, scene_receipt = execute_mujoco_reset(
+                    options.session_id,
+                    keyframe=options.keyframe,
+                    cup_position_world_m=requested_position,
+                )
         except Exception as error:
             document: dict[str, object] = {
                 "backend": "mujoco",
                 "success": False,
                 "phase": "TRANSACTION",
                 "failure_code": "TRANSACTIONAL_RESET_FAILED",
+                "requested_object_position_world_m": requested_position,
                 "evidence": {"message": str(error)},
             }
             print(json.dumps(document, sort_keys=True), flush=True)
@@ -80,6 +117,7 @@ def main(arguments: list[str] | None = None) -> int:
             "new_epoch": receipt.new_epoch,
             "simulation_step": receipt.simulation_step,
             "keyframe": receipt.keyframe,
+            "requested_object_position_world_m": requested_position,
             "planning_scene": asdict(scene_receipt),
         }
     else:

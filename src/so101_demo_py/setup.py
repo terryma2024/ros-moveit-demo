@@ -56,11 +56,14 @@ setup(
             "cup_pose_tf_demo = so101_demo.cli.cup_pose_tf_demo:main",
             "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main",
             "rgbd_cup_pose = so101_demo.cli.rgbd_cup_pose:main",
+            "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
             "so101_demo.cli.perception_pick_place_launch:main",
             "camera_preset = so101_demo.cli.camera_preset:main",
             "teleop_reset = so101_demo.cli.teleop_reset:main",
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",
+            "task_reachability = so101_demo.cli.task_reachability:main",
+            "so101_mujoco_rgbd_batch = so101_demo.cli.mujoco_rgbd_batch:main",
         ]
     },
 )

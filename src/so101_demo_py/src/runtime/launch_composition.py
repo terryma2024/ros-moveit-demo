@@ -903,3 +903,84 @@ def build_perception_pick_place_launch_description(
             ),
         ]
     )
+
+
+def _configured_task_station_actions(context):
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError("task station session_id is invalid")
+    headless = LaunchConfiguration("headless").perform(context)
+    if headless != "false":
+        raise RuntimeError("macOS task station requires headless=false")
+    evidence_root = Path(
+        LaunchConfiguration("task_evidence_root").perform(context)
+    )
+    if not evidence_root.is_absolute():
+        raise RuntimeError("task_evidence_root must be absolute")
+    include_teleop = LaunchConfiguration("include_teleop").perform(context)
+    if include_teleop not in {"true", "false"}:
+        raise RuntimeError("include_teleop must be true or false")
+    share = Path(get_package_share_directory("so101_demo_py"))
+    stack = _mujoco_stack_actions(context, share, session_id)
+    actions = [
+        *camera_static_transform_nodes(),
+        *stack.actions,
+        SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=stack.simulator,
+                on_exit=[Shutdown(reason="MuJoCo task station runtime exited")],
+            )
+        ),
+    ]
+    if include_teleop == "true":
+        teleop_share = Path(get_package_share_directory("so101_teleop"))
+        actions.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    str(teleop_share / "launch/so101_teleop.launch.py")
+                ),
+                launch_arguments={
+                    "backend": "mujoco_py",
+                    "bind_address": "127.0.0.1",
+                    "port": LaunchConfiguration("teleop_port"),
+                    "simulation_session_id": session_id,
+                    "build_web_if_needed": "false",
+                }.items(),
+            )
+        )
+    return actions
+
+
+def build_task_station_launch_description() -> LaunchDescription:
+    """Build one visible persistent MuJoCo/MoveIt/camera-TF task station."""
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    unique = uuid.uuid4().hex
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("headless", default_value="false", choices=("false",)),
+            DeclareLaunchArgument("session_id", default_value=unique),
+            DeclareLaunchArgument(
+                "task_evidence_root",
+                default_value=f"/tmp/so101-task-station-{unique}",
+            ),
+            DeclareLaunchArgument(
+                "include_teleop",
+                default_value="true",
+                choices=("true", "false"),
+            ),
+            DeclareLaunchArgument("teleop_port", default_value="8080"),
+            DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+            DeclareLaunchArgument(
+                "mujoco_scene",
+                default_value=str(share / "assets/mujoco/scene.xml"),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_initial_keyframe",
+                default_value="task_start",
+                choices=MUJOCO_CUP_KEYFRAMES,
+            ),
+            OpaqueFunction(function=_configured_task_station_actions),
+        ]
+    )

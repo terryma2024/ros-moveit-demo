@@ -97,6 +97,10 @@ def test_capabilities_include_frozen_owner_provenance():
     assert payload["capabilities"]["scene_operations"] is True
     assert payload["capabilities"]["reset_world"] is True
     assert payload["capabilities"]["camera_presets"] is True
+    assert payload["capabilities"]["task_batch"] is False
+    assert payload["capabilities"]["task_reachability"] is False
+    assert payload["capabilities"]["sensor_capture"] is False
+    assert payload["capabilities"]["task_environment_shutdown"] is False
 
 
 def test_unsupported_workflow_fails_before_run_or_checkpoint():

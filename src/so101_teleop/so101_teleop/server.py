@@ -568,6 +568,7 @@ class TeleopService:
         self._worker=worker; self._commands=CommandCoordinator(); self._plans=PlanStore(); self._lease: tuple[str,float] | None=None
         self._camera = camera
         self._backend = backend
+        self._task_active = lambda: False
         self._parameters=Path(os.environ.get("SO101_TELEOP_PARAMETERS", "/tmp/so101-teleop-parameters.json"))
         self._workflow: dict[str, tuple[Path, str]] = {}
     async def health(self):
@@ -595,11 +596,26 @@ class TeleopService:
         snapshot=self._worker.snapshot()
         return snapshot.mode is ServerMode.READY and self._lease_ok(body) and (
             not body.get("session_id") or body["session_id"] == snapshot.simulation_session_id)
-    def _mutation_gate(self, body):
+    def bind_task_active(self, predicate) -> None:
+        self._task_active = predicate
+    def _base_mutation_gate(self, body):
         if self._worker.snapshot().mode is not ServerMode.READY: return self._result(body,False,"READINESS_NOT_SATISFIED","fresh ROS, TF and controller evidence required")
         if not self._lease_ok(body): return self._result(body,False,"LEASE_REQUIRED","valid lease required")
         if body.get("session_id") and body["session_id"] != self._worker.snapshot().simulation_session_id: return self._result(body,False,"SESSION_MISMATCH","simulation session changed")
         return None
+    def _mutation_gate(self, body):
+        if gate := self._base_mutation_gate(body):
+            return gate
+        if self._task_active():
+            return self._result(
+                body, False, "TASK_BATCH_ACTIVE",
+                "the task owner has exclusive mutation access",
+            )
+        return None
+    def task_mutation_gate(self, body, capability: str):
+        if not getattr(self._backend.capabilities(), capability, False):
+            return self._backend_unavailable(body, capability)
+        return self._base_mutation_gate(body)
     def _required_capability(self, name: str) -> str | None:
         if name.startswith("workflow_"):
             operation = name.removeprefix("workflow_")

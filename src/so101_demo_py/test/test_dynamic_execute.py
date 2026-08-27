@@ -6,7 +6,15 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.application.dynamic_execute import build_dynamic_actions
-from so101_demo.core.domain import ActionResult, ActionStatus, RunMode, RunRequest, State
+from so101_demo.core.domain import (
+    ActionResult,
+    ActionStatus,
+    Failure,
+    FailureCategory,
+    RunMode,
+    RunRequest,
+    State,
+)
 from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.runner import StateMachineRunner
 from so101_demo.ports.evidence import PoseEvidence
@@ -292,3 +300,58 @@ def test_upright_tilt_ignores_cylindrical_cup_yaw() -> None:
 
     assert RosDynamicMujocoExecution._upright_tilt_rad(yaw_only) == pytest.approx(0.0)
     assert RosDynamicMujocoExecution._upright_tilt_rad(rolled) == pytest.approx(roll)
+
+
+def test_only_moveit_control_failed_is_eligible_for_terminal_reconciliation() -> None:
+    control_failed = ActionResult(
+        ActionStatus.FAILED,
+        Failure(
+            FailureCategory.EXECUTION,
+            "MOVEIT_EXECUTION_FAILED",
+            "MoveIt execution error -6",
+            {"moveit_error_code": -6.0},
+        ),
+    )
+    planning_failed = ActionResult(
+        ActionStatus.FAILED,
+        Failure(
+            FailureCategory.EXECUTION,
+            "MOVEIT_EXECUTION_FAILED",
+            "MoveIt execution error -1",
+            {"moveit_error_code": -1.0},
+        ),
+    )
+
+    assert RosDynamicMujocoExecution._is_reconcilable_control_failure(control_failed)
+    assert not RosDynamicMujocoExecution._is_reconcilable_control_failure(planning_failed)
+    assert not RosDynamicMujocoExecution._is_reconcilable_control_failure(
+        ActionResult(ActionStatus.SUCCEEDED)
+    )
+
+
+def test_control_failure_terminal_pose_must_be_within_both_policy_tolerances() -> None:
+    target = PoseEvidence((0.0200, -0.2800, 0.2000), (0.0, 0.0, 0.0, 1.0))
+    within = PoseEvidence((0.0205, -0.2804, 0.2003), (0.0, 0.0, 0.01, 0.99995))
+    outside = PoseEvidence((0.0230, -0.2800, 0.2000), (0.0, 0.0, 0.0, 1.0))
+
+    accepted = RosDynamicMujocoExecution._terminal_pose_reconciliation(
+        within,
+        target,
+        position_tolerance_m=0.002,
+        orientation_tolerance_rad=0.10,
+        orientation_error_rad=lambda _actual, _target: 0.02,
+    )
+    rejected = RosDynamicMujocoExecution._terminal_pose_reconciliation(
+        outside,
+        target,
+        position_tolerance_m=0.002,
+        orientation_tolerance_rad=0.10,
+        orientation_error_rad=lambda _actual, _target: 0.02,
+    )
+
+    assert accepted == {
+        "moveit_error_code": -6,
+        "terminal_position_error_m": pytest.approx(math.dist(within.position_m, target.position_m)),
+        "terminal_orientation_error_rad": pytest.approx(0.02),
+    }
+    assert rejected is None

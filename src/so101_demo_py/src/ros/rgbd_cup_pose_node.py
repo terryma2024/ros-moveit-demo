@@ -20,6 +20,8 @@ from so101_demo.cli.rgbd_point_cloud import (
     message_stamp_ns,
     write_cup_point_cloud,
 )
+from so101_demo.ros.rgbd_snapshot import write_full_point_cloud, write_rgb_png
+from so101_demo.runtime.point_cloud_preview import render_point_cloud_preview
 
 WORLD_FRAME = "world"
 
@@ -58,6 +60,9 @@ class RgbdCupPoseOptions:
     minimum_cup_points: int = 50
     output_ply: Path = Path("/tmp/v4-t006-cup-cloud.ply")
     evidence_json: Path = Path("/tmp/v4-t006-cup-pose.json")
+    output_rgb: Path | None = None
+    output_full_ply: Path | None = None
+    output_preview: Path | None = None
 
     def __post_init__(self) -> None:
         numeric_values = {
@@ -88,8 +93,21 @@ class RgbdCupPoseOptions:
             _validate_topic(name, value)
         _validate_output_path("output_ply", self.output_ply)
         _validate_output_path("evidence_json", self.evidence_json)
-        if self.output_ply == self.evidence_json:
-            raise ValueError("output_ply and evidence_json must be different paths")
+        optional_paths = {
+            "output_rgb": self.output_rgb,
+            "output_full_ply": self.output_full_ply,
+            "output_preview": self.output_preview,
+        }
+        for name, path in optional_paths.items():
+            if path is not None:
+                _validate_output_path(name, path)
+        paths = [
+            self.output_ply,
+            self.evidence_json,
+            *(path for path in optional_paths.values() if path is not None),
+        ]
+        if len(set(paths)) != len(paths):
+            raise ValueError("RGB-D evidence output paths must be different")
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,15 +180,27 @@ class FirstValidEvidencePublisher:
         write_ply: Callable[[CupPoseFrame], None],
         write_json: Callable[[CupPoseFrame], None],
         publish: Callable[[CupPoseFrame], None],
+        write_rgb: Callable[[CupPoseFrame], None] | None = None,
+        write_full_ply: Callable[[CupPoseFrame], None] | None = None,
+        write_preview: Callable[[CupPoseFrame], None] | None = None,
     ) -> None:
         self._write_ply = write_ply
         self._write_json = write_json
         self._publish = publish
+        self._write_rgb = write_rgb
+        self._write_full_ply = write_full_ply
+        self._write_preview = write_preview
         self._evidence_written = False
         self.published_count = 0
 
     def __call__(self, frame: CupPoseFrame) -> None:
         if not self._evidence_written:
+            if self._write_rgb is not None:
+                self._write_rgb(frame)
+            if self._write_full_ply is not None:
+                self._write_full_ply(frame)
+            if self._write_preview is not None:
+                self._write_preview(frame)
             self._write_ply(frame)
             self._write_json(frame)
             self._evidence_written = True
@@ -241,6 +271,13 @@ def _evidence_record(frame: CupPoseFrame, options: RgbdCupPoseOptions) -> dict[s
         "cup_bounds_min_xyz": points.min(axis=0).tolist(),
         "cup_bounds_max_xyz": points.max(axis=0).tolist(),
         "output_ply": str(options.output_ply),
+        "output_rgb": None if options.output_rgb is None else str(options.output_rgb),
+        "output_full_ply": (
+            None if options.output_full_ply is None else str(options.output_full_ply)
+        ),
+        "output_preview": (
+            None if options.output_preview is None else str(options.output_preview)
+        ),
     }
 
 
@@ -515,6 +552,29 @@ def _create_ros_runtime(
                     ),
                     write_json=lambda frame: _write_evidence_json(frame, options),
                     publish=self._publish_pose,
+                    write_rgb=(
+                        None
+                        if options.output_rgb is None
+                        else lambda frame: write_rgb_png(frame.cloud, options.output_rgb)
+                    ),
+                    write_full_ply=(
+                        None
+                        if options.output_full_ply is None
+                        else lambda frame: write_full_point_cloud(
+                            frame.cloud.full_points_xyz,
+                            frame.cloud.full_colors_rgb,
+                            options.output_full_ply,
+                        )
+                    ),
+                    write_preview=(
+                        None
+                        if options.output_preview is None
+                        else lambda frame: render_point_cloud_preview(
+                            frame.cloud.full_points_xyz,
+                            frame.cloud.full_colors_rgb,
+                            options.output_preview,
+                        )
+                    ),
                 )
                 self._processor = CupPoseFrameProcessor(
                     estimate=self._estimate_frame,

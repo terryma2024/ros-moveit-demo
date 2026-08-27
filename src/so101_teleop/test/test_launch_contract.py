@@ -10,6 +10,7 @@ from launch_ros.actions import Node
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PACKAGE.parents[1]
 LAUNCH = PACKAGE / "launch" / "so101_teleop.launch.py"
 
 
@@ -101,3 +102,13 @@ def test_launch_rejects_backend_outside_fixed_registry(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="unsupported Teleop backend"):
         module.launch_setup(context)
+
+
+def test_mujoco_task_station_launcher_and_presets_are_packaged_sources():
+    demo = REPOSITORY_ROOT / "src/so101_demo_py"
+    launcher = demo / "launch/so101_mujoco_task_station.launch.py"
+    presets = demo / "config/mujoco/rgbd_task_points.yaml"
+    setup = (demo / "setup.py").read_text(encoding="utf-8")
+    assert "build_task_station_launch_description" in launcher.read_text(encoding="utf-8")
+    assert "installed_resources" in setup
+    assert presets.is_file()

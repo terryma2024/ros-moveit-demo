@@ -18,21 +18,102 @@ def message_stamp_ns(message: Any) -> int:
     return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
 
 
-@dataclass(frozen=True, slots=True)
-class CupPointCloudResult:
+@dataclass(frozen=True, slots=True, init=False)
+class RgbdPointCloudFrame:
     frame_id: str
     stamp_ns: int
     image_width: int
     image_height: int
     intrinsics_fx_fy_cx_cy: tuple[float, float, float, float]
-    points_xyz: np.ndarray
-    colors_rgb: np.ndarray
-    full_point_count: int
+    rgb8: np.ndarray
+    full_points_xyz: np.ndarray
+    full_colors_rgb: np.ndarray
+    cup_points_xyz: np.ndarray
+    cup_colors_rgb: np.ndarray
     color_candidate_point_count: int
+
+    def __init__(
+        self,
+        *,
+        frame_id: str,
+        stamp_ns: int,
+        image_width: int,
+        image_height: int,
+        intrinsics_fx_fy_cx_cy: tuple[float, float, float, float],
+        rgb8: np.ndarray | None = None,
+        full_points_xyz: np.ndarray | None = None,
+        full_colors_rgb: np.ndarray | None = None,
+        cup_points_xyz: np.ndarray | None = None,
+        cup_colors_rgb: np.ndarray | None = None,
+        color_candidate_point_count: int,
+        points_xyz: np.ndarray | None = None,
+        colors_rgb: np.ndarray | None = None,
+        full_point_count: int | None = None,
+    ) -> None:
+        """Create a synchronized frame while accepting the legacy cup-only names."""
+
+        cup_points = cup_points_xyz if cup_points_xyz is not None else points_xyz
+        cup_colors = cup_colors_rgb if cup_colors_rgb is not None else colors_rgb
+        if cup_points is None or cup_colors is None:
+            raise ValueError("cup point and color arrays are required")
+        if full_points_xyz is None:
+            count = len(cup_points) if full_point_count is None else full_point_count
+            full_points_xyz = np.zeros((count, 3), dtype=np.float64)
+        if full_colors_rgb is None:
+            full_colors_rgb = np.zeros_like(full_points_xyz, dtype=np.float64)
+        if rgb8 is None:
+            rgb8 = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+        arrays = {
+            "rgb8": np.array(rgb8, copy=True),
+            "full_points_xyz": np.array(full_points_xyz, copy=True),
+            "full_colors_rgb": np.array(full_colors_rgb, copy=True),
+            "cup_points_xyz": np.array(cup_points, copy=True),
+            "cup_colors_rgb": np.array(cup_colors, copy=True),
+        }
+        if arrays["rgb8"].shape != (image_height, image_width, 3):
+            raise ValueError("rgb8 shape must match image dimensions")
+        if arrays["rgb8"].dtype != np.uint8:
+            raise ValueError("rgb8 must use uint8 channels")
+        for prefix in ("full", "cup"):
+            points_array = arrays[f"{prefix}_points_xyz"]
+            colors_array = arrays[f"{prefix}_colors_rgb"]
+            if points_array.ndim != 2 or points_array.shape[1:] != (3,):
+                raise ValueError(f"{prefix} points must have shape (count, 3)")
+            if colors_array.shape != points_array.shape:
+                raise ValueError(f"{prefix} colors must match point shape")
+            if not np.isfinite(points_array).all() or not np.isfinite(colors_array).all():
+                raise ValueError(f"{prefix} cloud must contain finite values")
+        for name, value in {
+            "frame_id": frame_id,
+            "stamp_ns": int(stamp_ns),
+            "image_width": int(image_width),
+            "image_height": int(image_height),
+            "intrinsics_fx_fy_cx_cy": tuple(intrinsics_fx_fy_cx_cy),
+            "color_candidate_point_count": int(color_candidate_point_count),
+            **arrays,
+        }.items():
+            if isinstance(value, np.ndarray):
+                value.setflags(write=False)
+            object.__setattr__(self, name, value)
+
+    @property
+    def points_xyz(self) -> np.ndarray:
+        return self.cup_points_xyz
+
+    @property
+    def colors_rgb(self) -> np.ndarray:
+        return self.cup_colors_rgb
+
+    @property
+    def full_point_count(self) -> int:
+        return int(self.full_points_xyz.shape[0])
 
     @property
     def cup_point_count(self) -> int:
-        return int(self.points_xyz.shape[0])
+        return int(self.cup_points_xyz.shape[0])
+
+
+CupPointCloudResult = RgbdPointCloudFrame
 
 
 class AlignedRgbdBuffer:
@@ -215,8 +296,10 @@ def _open3d_cloud(points: np.ndarray, colors: np.ndarray):
             "python3 -m pip install open3d"
         ) from error
     cloud = o3d.geometry.PointCloud()
-    cloud.points = o3d.utility.Vector3dVector(points.astype(np.float64, copy=False))
-    cloud.colors = o3d.utility.Vector3dVector(colors.astype(np.float64, copy=False))
+    writable_points = np.array(points, dtype=np.float64, order="C", copy=True)
+    writable_colors = np.array(colors, dtype=np.float64, order="C", copy=True)
+    cloud.points = o3d.utility.Vector3dVector(writable_points)
+    cloud.colors = o3d.utility.Vector3dVector(writable_colors)
     return o3d, cloud
 
 
@@ -229,7 +312,7 @@ def build_cup_point_cloud(
     cluster_eps_m: float,
     cluster_min_points: int,
     minimum_cup_points: int,
-) -> CupPointCloudResult:
+) -> RgbdPointCloudFrame:
     if not (
         camera_info.header.frame_id
         == color_message.header.frame_id
@@ -307,15 +390,17 @@ def build_cup_point_cloud(
     if cup_colors.shape != cup_points.shape or not np.isfinite(cup_colors).all():
         raise ValueError("selected cup colors must be finite RGB values")
 
-    return CupPointCloudResult(
+    return RgbdPointCloudFrame(
         frame_id=camera_info.header.frame_id,
         stamp_ns=message_stamp_ns(camera_info),
         image_width=int(camera_info.width),
         image_height=int(camera_info.height),
         intrinsics_fx_fy_cx_cy=(fx, fy, cx, cy),
-        points_xyz=cup_points,
-        colors_rgb=cup_colors,
-        full_point_count=len(points),
+        rgb8=rgb.copy(),
+        full_points_xyz=points,
+        full_colors_rgb=colors,
+        cup_points_xyz=cup_points,
+        cup_colors_rgb=cup_colors,
         color_candidate_point_count=len(color_candidate_indices),
     )
 
