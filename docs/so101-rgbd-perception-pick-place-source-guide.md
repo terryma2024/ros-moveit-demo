@@ -632,7 +632,7 @@ basename、媒体类型、大小和哈希，证据根的绝对路径不会进入
 
 ## 17. 运行时应检查什么
 
-### 16.1 相机输入
+### 17.1 相机输入
 
 “节点已注册 topic”不等于相机产生了样本。至少检查一次真实消息：
 
@@ -650,7 +650,7 @@ ros2 topic echo --once /task_camera/depth
 - Depth 是 `32FC1`；
 - 深度中存在有限、正值的样本。
 
-### 16.2 TF
+### 17.2 TF
 
 ```bash
 ros2 run tf2_ros tf2_echo world task_camera_frame
@@ -658,7 +658,7 @@ ros2 run tf2_ros tf2_echo world task_camera_frame
 
 应能解释 chain 中每一段来自哪里，而不只是看到一个最终矩阵。
 
-### 16.3 感知输出
+### 17.3 感知输出
 
 `summary.json` 至少应包含：
 
@@ -672,7 +672,7 @@ fitted_radius_m 接近 0.04
 cup_pose_position_xyz 为有限值
 ```
 
-### 16.4 执行结果
+### 17.4 执行结果
 
 `dynamic-execute-manifest.json` 至少应确认：
 
