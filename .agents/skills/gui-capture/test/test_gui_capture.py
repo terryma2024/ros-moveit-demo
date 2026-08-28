@@ -68,6 +68,38 @@ class GuiCaptureTest(unittest.TestCase):
         )
         self.assertEqual(output.read_bytes(), b"png")
 
+    def test_macos_focus_allows_unique_geometry_match_when_cg_title_is_empty(self):
+        module = load_capture_module()
+        commands = []
+
+        def run(command, **_kwargs):
+            commands.append(command)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        module.focus_macos_window(
+            {
+                "owner_pid": 27393,
+                "title": "",
+                "x": 1405,
+                "y": 360,
+                "width": 943,
+                "height": 889,
+            },
+            runner=run,
+        )
+
+        script = commands[0][-1]
+        self.assertIn(
+            "String(target.title) === '' ||",
+            script,
+            "an empty CoreGraphics title must not reject the unique PID/geometry match",
+        )
+        self.assertIn(
+            "if (matches.length !== 1)",
+            script,
+            "the empty-title fallback must remain fail-closed on ambiguity",
+        )
+
     def test_macos_window_inventory_preserves_global_multimonitor_coordinates(self):
         module = load_capture_module()
         payload = json.dumps(

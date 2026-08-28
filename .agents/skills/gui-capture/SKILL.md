@@ -13,7 +13,7 @@ Capture fresh visual evidence from the intended window, with an explicit platfor
 
 1. Prove whether execution is local or remote from live hostname and workspace evidence. A process already on the target host must not SSH to itself.
 2. Inspect current tools for a loaded semantic GUI capability. When healthy, use `snapshot -> action -> fresh snapshot`; resolve elements again after every snapshot.
-3. For deterministic capture, read the matching platform section in [references/platform-sop.md](references/platform-sop.md).
+3. For deterministic capture, read the matching platform section in [references/platform-sop.md](references/platform-sop.md). On macOS, if capture is invoked through SSH, TCC denies the capture, or no permission prompt appears, also read [references/macos-tcc-troubleshooting.md](references/macos-tcc-troubleshooting.md).
 4. Prefer window-level capture. List visible windows first, then select one unambiguous title/owner match or use its exact window ID. Never guess among duplicates.
 5. Use explicit desktop capture when debugging requires cross-window relationships, occlusion, focus, menus, notifications, or other desktop context. Do not silently widen a window request into a desktop capture.
 6. Capture into a task-owned directory outside the source tree, read [references/capture-contract.md](references/capture-contract.md), then visually inspect the fresh image at original resolution.
@@ -32,7 +32,7 @@ Use `--remote` only from an orchestrator and set `GUI_CAPTURE_SSH_TARGET` explic
 
 ## Safety boundaries
 
-- On macOS, the target must be raised through Accessibility before `screencapture -l`; grant Accessibility and Screen Recording permissions to the invoking terminal/app.
+- On macOS, the target must be raised through Accessibility before `screencapture -l`. Grant Accessibility and Screen Recording to the live responsibility process; an SSH session is not covered by the local terminal application's permission.
 - Multi-monitor macOS capture is keyed by CoreGraphics window ID, not display index or crop coordinates.
 - A macOS desktop capture uses `screencapture -x`; use it only when the requested evidence needs desktop context.
 - GNOME Wayland must use a loaded semantic driver or portal-aware tool; do not silently fall back to X11 injection or a whole-screen image.

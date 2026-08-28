@@ -14,12 +14,15 @@ confirmed_conclusions:
   - ai-station main fast-forwarded to e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4 and third_party/mujoco_ros2_control materialized 71bc9346cf93d6227a6678fcacf63f3e18acfcba without modifying preserved worktrees or sessions (EXP-201).
   - The installed third_party candidate passed 240 tests with zero errors/failures; isolated project support passed 20 tests, and the demo suite passed 551 tests with two stale CLI mock assertions deselected (EXP-202).
   - EXP-203 proved Linux EGL and 640x480 offscreen-buffer initialization but was INVALID_PREFLIGHT because the declared python3-open3d runtime dependency was absent; no perception result or grasp action was counted.
+  - Eight independent FULL_RESTART runs are VALID: four headless EGL runs (EXP-211 through EXP-214) and four visible GLFW runs (EXP-215, EXP-216, EXP-219, EXP-220), covering task_start, forward, left, and right keyframes.
+  - Every valid run consumed synchronized 640x480 RGB/depth/camera-info, published a bounded /cup_pose, completed the 19-transition dynamic workflow, proved bilateral physical lift/carry and final placement, exited zero, and left an empty per-domain ROS graph/process audit.
+  - Every visible run has a fresh exact-owner MuJoCo window capture and manifest paired with its runtime evidence.
 disproven_routes:
-  - NONE
+  - Abbreviated keyframe values such as `left` are rejected before launch; use the declared full value `cup_test_left_5cm` (EXP-217).
 open_hypotheses:
-  - The fast-forwarded Linux candidate builds and its installed runtime completes all four frozen keyframes in both headless and visible modes under independent FULL_RESTART lifecycle.
-latest_checkpoint: CP-203
-next_experiment: EXP-211
+  - NONE
+latest_checkpoint: CP-220
+next_experiment: NONE
 ---
 
 # ai-station Linux headless RGB-D four-point upgrade ledger
@@ -272,8 +275,48 @@ decision: PENDING
 next_experiment: NEXT_ROW_OR_NONE
 ```
 
+## Actual FULL_RESTART results
+
+The frozen plan was executed without directory reuse. EXP-217 was rejected by
+launch argument validation because the abbreviated keyframe `left` was passed;
+it never entered simulation and remains retained as invalid evidence. EXP-218
+was not started. The left and right visible rows were rerun with full keyframe
+names under fresh IDs/domains EXP-219 and EXP-220.
+
+| Experiment | Mode | Point | Status | Cup points | Perception planar error (mm) | Physical micro-lift (mm) | Max terminal error (mm) | Clean shutdown |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| EXP-211 | headless | task_start | VALID | 141 | 0.642 | 3.985 | 0.696 | yes |
+| EXP-212 | headless | forward | VALID | 167 | 0.594 | 3.986 | 1.174 | yes |
+| EXP-213 | headless | left | VALID | 377 | 0.693 | 3.593 | 0.837 | yes |
+| EXP-214 | headless | right | VALID | 125 | 0.631 | 2.986 | 1.530 | yes |
+| EXP-215 | visible | task_start | VALID | 141 | 0.642 | 3.436 | 0.779 | yes |
+| EXP-216 | visible | forward | VALID | 167 | 0.594 | 3.284 | 1.179 | yes |
+| EXP-217 | visible | left | INVALID_ARGUMENT | n/a | n/a | n/a | n/a | yes, no stack entered |
+| EXP-219 | visible | left | VALID | 377 | 0.693 | 3.543 | 0.820 | yes |
+| EXP-220 | visible | right | VALID | 125 | 0.631 | 3.727 | 1.530 | yes |
+
+## CP-220 - final qualification
+
+```yaml
+checkpoint_id: CP-220
+last_valid_experiment: EXP-220
+source_commit: e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4
+fork_commit: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+valid_full_restarts: 8
+headless_valid: 4
+visible_valid: 4
+rgbd_payload: synchronized rgb8/32FC1/camera-info at 640x480 with positive point counts in every valid run
+workflow: DONE with 19 transitions and physical final-placement validation in every valid run
+visible_evidence: exact MuJoCo owner window PNG plus capture manifest in every visible run
+postflight: empty per-run ROS graph/process audit; final task process audit empty
+owned_processes: NONE
+preserved_processes: existing codex and codex-cua tmux sessions; pre-existing linked worktrees
+decision: ACCEPT
+next_experiment: NONE
+```
+
 ## Evidence disposition
 
-- Retained: none yet
+- Retained: the complete registered evidence root, including source upgrade logs, candidate builds/tests, task-local Python dependencies, EXP-203 and EXP-217 invalid diagnostic runs, and all eight valid FULL_RESTART runs
 - Archived: none
 - Deletion candidates: none; no evidence may be deleted without explicit user authorization
