@@ -241,7 +241,8 @@ delay(0.15);
 const matches = process.windows().filter((window) => {{
   const position = window.position();
   const size = window.size();
-  return String(window.name()) === String(target.title) &&
+  return (String(target.title) === '' ||
+    String(window.name()) === String(target.title)) &&
     Math.abs(Number(position[0]) - Number(target.x)) <= 4 &&
     Math.abs(Number(position[1]) - Number(target.y)) <= 4 &&
     Math.abs(Number(size[0]) - Number(target.width)) <= 8 &&
