@@ -22,6 +22,7 @@ description: Use when diagnosing, modifying, testing, or visually validating SO-
    - 定位根因和区分证据层：[`references/debug-evidence.md`](references/debug-evidence.md)
    - 修改代码、运行测试或声明完成：[`references/test-and-acceptance.md`](references/test-and-acceptance.md)
    - 多轮实验、生命周期比较、上下文压缩或 agent 交接：[`references/experiment-ledger.md`](references/experiment-ledger.md)
+   - 安装 Python 依赖、选择 uv 索引或让镜像域名绕过代理：[`references/python-dependency-install.md`](references/python-dependency-install.md)
 3. 从当前 orchestrator 和 ai-station 分别记录 `pwd`、commit、branch、submodule 和 `git status --short`；已经位于 ai-station 的 coding agent 直接在本机取证，不再 SSH 自身。已有改动均视为用户工作，不能覆盖、清理或夹带。
 4. 检查现有进程、ROS graph 和 `codex-cua` tmux 状态。不得在不知情时启动第二套 `/move_group`、RViz 或 Gazebo。
 5. 按下述统一布局给整个 task 建立并登记唯一 evidence root；不要把日志、截图或构建产物写进源码目录。
