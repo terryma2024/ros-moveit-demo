@@ -664,14 +664,17 @@ next_experiment: EXP-008
 
 ```yaml
 experiment_id: EXP-008
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: 493e9aed5082385485b29dd6be16a8d833b19d98
   - status: RUNNING
     recorded_at: 2026-08-30T03:02:32+08:00
     evidence: final-fix/mac-qwen/exp-008-mac-qwen-4ebdf45/{pre-mutation-readback.log,runtime-env-resolution.log,stack-provenance.log,full-readiness.log,full-readiness-assertion.log,owned-panes-start.log,process-isolation-readback.log}; final-fix/mac-candidate-4ebdf45/{installed-provenance-corrected-v2.log,focused-corrected-v2.xml}
-execute_invocation_count: 0
+  - status: VALID
+    recorded_at: 2026-08-30T03:15:06+08:00
+    evidence: final-fix/mac-qwen/exp-008-mac-qwen-4ebdf45/{preview.json,preview.stderr.log,pre-execute-readiness.log,execute-invocation.marker,execute.json,execute.stderr.log,execute-result.json,dynamic-execute-manifest.json,reachability-observed.json,downstream-layer-summary.log,qualified-artifact-hashes.log,cleanup-readback.log,preserved-state-readback.log,text-agent-provenance/*.json}
+execute_invocation_count: 1
 observed_reset_epoch: 0
 created_at: 2026-08-30T02:10:40+08:00
 prior_experiment: EXP-007
@@ -692,7 +695,7 @@ endpoint: http://127.0.0.1:11434/api/chat
 preview_digest: sha256:v1:48f93b8acc2bc64be60a7be8c95264e21ae4a6f1f19c9c02eec0227359e7e89e
 request_id: v5-t003-exp008-mac-qwen-4ebdf45
 runtime_session_id: v5-t003-exp008-mac-qwen-4ebdf45
-expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+expected_reset_epoch: 0
 provenance:
   source_commit: 4ebdf451021f975f5f4903777bdcd5bb9a31b347
   source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-final-fix-mac-4ebdf45
@@ -711,6 +714,14 @@ failure_criteria:
 invalid_criteria:
   - EXP-007 not VALID; provider/model/digest/instruction/provenance/readiness mismatch; cloud key remains set; endpoint is non-loopback/non-/api/chat; headless unsupported; execute count other than one; contamination, missing correlation, broad cleanup, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun. If another production defect emerges, stop the bounded patch chain and report it rather than modifying production again.
-decision: PENDING
+observations:
+  - Candidate/source/install provenance remained exact and clean at 4ebdf451021f975f5f4903777bdcd5bb9a31b347. The isolated build/install and corrected candidate-cwd focused gate from EXP-007 were reused without mutation; EXP-008 passed a new domain-211 supported-headless readiness check with three active controllers, Planning Scene READ_BACK, fresh simulation evidence and cup pose, exact session/partition, and reset_epoch 0.
+  - ~/.env was loaded with export semantics and suppressed output, then only DEEPSEEK_API_KEY was unset and reported UNSET. The pre-existing loopback Ollama service remained live throughout; qwen3.5:4b tag digest was 2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd before preview and after cleanup.
+  - Preview exited 0 with empty stderr and returned DISPATCH_PREVIEW/dispatch=false, supported plastic_cup/pick/{}, ollama/qwen3.5:4b with fallback true, exact request ID, and digest sha256:v1:48f93b8acc2bc64be60a7be8c95264e21ae4a6f1f19c9c02eec0227359e7e89e. Its retained SHA-256 is a886560009172a2f305cad28ad7c4930b0b4a49aa16c953af079b81acd086ba9.
+  - Exactly one execute command was invoked with the exact instruction/digest pair. It exited 0 with empty stderr; the final Agent result is RUNTIME_COMPLETED/dispatch=true with RUNTIME_STARTED then RUNTIME_COMPLETED, exact v5-t003-exp008-mac-qwen-4ebdf45 request/runtime-session correlation, ollama/qwen3.5:4b/fallback true, and verified source/prefix/entry-point/module/Python/session/reset/evidence provenance. The persisted provenance artifact count is one.
+  - The state machine reached DONE with transition_count 19 and no failure; reachability was SUCCEEDED for perceived_cup. Controller/MoveIt logs contain 22 arm-goal, 3 gripper-goal, and 22 MoveIt execution successes, with zero future-stamp rejections in the Agent stream. These are downstream simulation diagnostics only and do not establish real-hardware or V5-T005 acceptance.
+  - Targeted tmux cleanup removed only the two owned roots. Three exact launch children had reparented to PID 1 while retaining owned process group 85575; read-only process correlation identified robot_state_publisher PID 85742, ros2_control_node PID 85743, and graceful_shutdown_move_group PID 85747, and targeted SIGTERM removed only those PIDs. Final domain 211 had zero nodes and only /parameter_events plus /rosout; related-process count was zero. Candidate/task worktrees remained clean, main plus its three pre-existing untracked files were unchanged, and the persistent Ollama service/model was not stopped or mutated.
+conclusion: VALID for final-candidate V5-T003 Mac qwen3.5:4b qualification with exactly one execute and clean targeted shutdown; EXP-006, EXP-007, and EXP-008 are all VALID. No real-hardware or V5-T005 conclusion.
+decision: KEEP
 next_experiment: NONE
 ```
