@@ -29,6 +29,8 @@ def test_valid_candidate_becomes_immutable_task_command() -> None:
         {"target_object": "plastic_cup", "action": "pick"},
         {"target_object": "plastic_cup", "action": "pick", "constraints": {}, "x": 0.1},
         {"target_object": "metal_cup", "action": "pick", "constraints": {}},
+        {"target_object": 1, "action": "pick", "constraints": {}},
+        {"target_object": "plastic_cup", "action": 1, "constraints": {}},
         {"target_object": "plastic_cup", "action": "place", "constraints": {}},
         {"target_object": "plastic_cup", "action": "pick", "constraints": {"speed": 0.2}},
         {"target_object": "plastic_cup", "action": "pick", "constraints": {"x": "left"}},
@@ -42,6 +44,7 @@ def test_invalid_candidates_fail_closed(candidate: object) -> None:
 
 def test_instruction_is_single_nonempty_bounded_string() -> None:
     assert validate_instruction("  帮我拿杯子  ") == "帮我拿杯子"
-    for invalid in (None, "", "   ", "拿杯子" * 51):
+    assert validate_instruction("你" * 200) == "你" * 200
+    for invalid in (None, "", "   ", "你" * 201):
         with pytest.raises(CommandValidationError):
             validate_instruction(invalid)
