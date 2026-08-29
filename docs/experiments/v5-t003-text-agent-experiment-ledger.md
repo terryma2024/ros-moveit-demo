@@ -407,7 +407,7 @@ next_experiment: EXP-004
 
 ```yaml
 experiment_id: EXP-004
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
@@ -415,7 +415,10 @@ transitions:
   - status: RUNNING
     recorded_at: 2026-08-30T01:34:59+08:00
     evidence: final-fix/mac-deepseek/exp-004-mac-deepseek-785a95e/{stack-provenance-attempt2.log,full-readiness-corrected.log,simulation-and-cup-readiness-corrected.log,owned-panes-attempt2-start.log}
-execute_invocation_count: 0
+  - status: VALID
+    recorded_at: 2026-08-30T01:42:35+08:00
+    evidence: final-fix/mac-deepseek/exp-004-mac-deepseek-785a95e/{preview.json,execute-invocation.marker,execute.json,execute-result.json,text-agent-provenance,dynamic-execute-manifest.json,reachability-observed.json,downstream-layer-summary.log,cleanup-readback-no-daemon.log}
+execute_invocation_count: 1
 observed_reset_epoch: 0
 prior_experiment: EXP-003
 hypothesis: After valid ai-station requalification, the same corrected candidate can use DeepSeek on Mac and execute one fresh isolated headless MuJoCo simulation with exact preview confirmation and provenance.
@@ -453,7 +456,15 @@ failure_criteria:
 invalid_criteria:
   - EXP-003 not VALID; Mac headless unsupported; provider/model/digest/instruction/provenance/readiness mismatch; execute count other than one; contamination, missing correlation, broad cleanup, evidence loss, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
-decision: PENDING
+observed:
+  - The first headless precondition attempt exposed a stale standalone-fork MuJoCo message library that the macOS dylib-farm wrapper had prepended ahead of the project-qualified library, causing a simulation-evidence plugin ABI mismatch. No preview or execute occurred, status remained PLANNED, targeted cleanup removed only the owned panes, and the preserved diagnostic evidence records the root cause. The corrected wrapper mirrors the approved environment ordering: project libraries first, stale standalone paths filtered, and the dylib farm appended.
+  - The second fresh headless stack resolved candidate source/install provenance exactly to 785a95e9df5dd18f32d8cb7d875f3fac948ce53e, loaded the project MuJoCo packages, activated three controllers, passed Planning Scene READ_BACK, and produced fresh /so101/simulation/evidence plus /cup_pose for simulation_session_id v5-t003-exp004-mac-deepseek-785a95e at reset_epoch 0.
+  - Preview returned DISPATCH_PREVIEW/dispatch=false with supported plastic_cup/pick/{}, deepseek/deepseek-v4-flash, exact request ID, and digest sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb; its stderr was empty.
+  - Exactly one execute command was invoked. It exited 0 and its final Agent JSON reports dispatch=true, RUNTIME_STARTED then RUNTIME_COMPLETED, exact request/runtime session correlation, DeepSeek provider/model, and verified source/prefix/module/entry-point/Python/session/reset/evidence provenance persisted before dispatch.
+  - Dynamic runtime reached DONE with transition_count 19; reachability was SUCCEEDED; controller logs record 22 arm, 3 gripper, and 22 MoveIt successful execution messages. Planning Scene and final MuJoCo samples are retained as downstream diagnostics only and make no real-hardware or V5-T005 claim.
+  - Targeted SIGINT cleanup removed only the two v5-t003-exp004-mac-deepseek panes. Fresh no-daemon domain 207 discovery and related-process read-back were empty; candidate and task worktrees remained clean, the DeepSeek key was reported SET without value disclosure, and the existing Ollama qwen3.5:4b service/model was preserved.
+conclusion: VALID for corrected-candidate V5-T003 Mac DeepSeek qualification with exactly one execute and clean owned shutdown; no real-hardware or V5-T005 conclusion.
+decision: KEEP
 next_experiment: EXP-005 only if EXP-004 is VALID
 ```
 
