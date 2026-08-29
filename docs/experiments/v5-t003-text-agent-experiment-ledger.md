@@ -90,6 +90,58 @@ next_experiment: EXP-002
 ```
 
 ```yaml
+experiment_id: EXP-002
+status: PLANNED
+prior_experiment: EXP-001
+hypothesis: The committed V5-T003 candidate can pass fail-closed preview qualification and perform exactly one authorized ai-station MuJoCo state-machine dispatch correlated by request_id and runtime session ID, without claiming V5-T005 physical success.
+prediction: Preview cases reject every incomplete or invalid request without a dynamic_cup_pick_place process, while one fully authorized installed-CLI execute request reaches the existing state-machine dispatch boundary exactly once with request_id/runtime session ID v5-t003-live-001.
+single_variable: One authorized live execute dispatch is added after preview and isolated-stack readiness gates; candidate implementation, request/session ID, install prefix, ROS domain, and Gazebo partition remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Candidate source commit is exactly 02e086be0171f08bb5e936901c79bfa70cda665f and is transferred with ancestry and file-hash read-back without overwriting ai-station user changes.
+  - ai-station checkout, install overlay, tmux sessions, relevant processes, ROS graph, Ollama qwen3.5:4b availability, and provider availability are inspected read-only before any remote write.
+  - No conflicting pre-existing gz sim, move_group, rviz2, dynamic_cup_pick_place, or text_pick_agent process exists in ROS_DOMAIN_ID 198 and GZ_PARTITION v5-t003-text-agent-task8-ai-20260829-164105.
+  - The only registered evidence root is /tmp/so101-debug-v5-t003-text-agent-20260829-164105 and no evidence is deleted.
+  - Installed so101_demo_py resolves from /data/work/ws_moveit/install/so101_demo_py and exposes text_pick_agent before stack startup.
+  - Request ID and runtime session ID are both v5-t003-live-001; the observed reset epoch is supplied to the installed CLI.
+success_criteria:
+  - Valid preview returns dispatch=false; empty input, semantically invalid candidate, both-provider failure, unconsumed constraint, partial authorization, and wrong backend all fail closed with dispatch=false and no dynamic_cup_pick_place process.
+  - The isolated MuJoCo stack is ready with fresh /cup_pose and an observed reset epoch before EXP-002 enters RUNNING.
+  - Exactly one installed live CLI execute command is invoked; it validates the candidate, resolves dynamic_cup_pick_place, passes double authorization and backend qualification, calls the executor once, and produces Agent/runtime log correlation for request_id and runtime session ID v5-t003-live-001 through the state-machine dispatch attempt.
+  - A single resident TextAgent harness rejects a duplicate v5-t003-live-001 request as DISPATCH_REJECTED while its injected executor call count remains one and it does not trigger a second live runtime dispatch.
+  - Only task-owned processes and tmux session are stopped; cleanup read-back preserves codex, codex-cua, unrelated processes, user changes, and all evidence.
+failure_criteria:
+  - Any validly configured preview or the sole authorized execute reports a product-level failure while provenance, readiness, and evidence remain valid.
+  - The live runtime reports a downstream MoveIt, controller, Planning Scene, or MuJoCo failure after the correlated state-machine dispatch attempt; this remains a downstream observation and is not a V5-T005 physical-success result.
+invalid_criteria:
+  - ai-station checkout, transferred source, built install, or runtime executable does not match candidate source commit 02e086be0171f08bb5e936901c79bfa70cda665f and expected prefix /data/work/ws_moveit/install/so101_demo_py.
+  - A pre-existing conflicting process, tmux session, ROS graph, ROS_DOMAIN_ID, or GZ_PARTITION contaminates the isolated stack.
+  - The execute CLI is invoked more than once, the observed reset epoch is missing or stale, request/runtime correlation is absent, or evidence leaves the sole registered evidence root.
+  - User-owned checkout changes, RGB-D ledger, codex/codex-cua session, unrelated process, or evidence is modified, stopped, overwritten, stashed, reset, cleaned, or deleted.
+  - Any real-hardware execution, push, merge, publication, broad cleanup, or V5-T005 physical-success claim occurs.
+provenance:
+  source_commit: 02e086be0171f08bb5e936901c79bfa70cda665f
+  install_overlay: /data/work/ws_moveit/install/so101_demo_py
+  runtime_executable: /data/work/ws_moveit/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 198
+  gz_partition: v5-t003-text-agent-task8-ai-20260829-164105
+commands:
+  - command: PENDING_READ_ONLY_PREFLIGHT
+    exit_code: PENDING
+  - command: PENDING_TRANSFER_BUILD_PREVIEW_STACK_EXECUTE_CLEANUP
+    exit_code: PENDING
+observed:
+  - CP-002 restored before remote access: EXP-001 is the last valid experiment; owned processes are NONE; codex and codex-cua are preserved; ai-station parity, provider availability, and live correlation remain open.
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t003-text-agent-20260829-164105/task8/
+decision: PENDING
+next_experiment: NONE
+```
+
+```yaml
 checkpoint_id: CP-002
 last_valid_experiment: EXP-001
 documentation_snapshot_parent: 44a4471cd1df4d6d15e8f69cf1eeea66f295ba2d
