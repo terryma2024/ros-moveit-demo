@@ -535,14 +535,17 @@ next_experiment: EXP-006 after the new final candidate is committed and fresh EX
 
 ```yaml
 experiment_id: EXP-006
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: 493e9aed5082385485b29dd6be16a8d833b19d98
   - status: RUNNING
     recorded_at: 2026-08-30T02:19:35+08:00
     evidence: final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/{pre-mutation-readback-corrected.log,import-provenance.log,build-provenance.log,module-resolution-corrected.log,focused.xml,stack-provenance.log,full-readiness.log,owned-panes-readiness-corrected.log}
-execute_invocation_count: 0
+  - status: VALID
+    recorded_at: 2026-08-30T02:29:33+08:00
+    evidence: final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/{preview.json,execute-invocation.marker,execute.json,execute-result.json,text-agent-provenance,dynamic-execute-manifest.json,reachability-observed.json,downstream-layer-summary.log,qualified-artifact-hashes.log,cleanup-readback.log,cleanup-readback-corrected.log}
+execute_invocation_count: 1
 observed_reset_epoch: 0
 created_at: 2026-08-30T02:10:40+08:00
 prior_experiment: EXP-005
@@ -582,8 +585,16 @@ failure_criteria:
 invalid_criteria:
   - Provider/model/digest/instruction/provenance/readiness mismatch, execute count other than one, contamination, missing correlation, evidence loss, user-state modification, broad cleanup, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
-decision: PENDING
-next_experiment: EXP-007 only if EXP-006 is VALID
+observed:
+  - The ancestry/hash-verified bundle had local and remote SHA-256 cdae8404ea013d0a74c4a9a4a8b52e0f13657023c478af5854c5857f26a370c0. The detached source worktree was clean at exact candidate 4ebdf451021f975f5f4903777bdcd5bb9a31b347, and the task-only install resolved the installed Text Agent entry point and source module to that candidate. The authoritative focused gate passed 190 tests.
+  - Supported headless readiness passed with three active controllers, Planning Scene READ_BACK, fresh /so101/simulation/evidence and /cup_pose, exact simulation_session_id v5-t003-exp006-ai-deepseek-4ebdf45, reset_epoch 0, domain 209, partition match, and only the two task-owned stack/bridge panes.
+  - Preview exited 0 with empty stderr and returned DISPATCH_PREVIEW/dispatch=false, supported plastic_cup/pick/{}, deepseek/deepseek-v4-flash with fallback false, exact request ID, and digest sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb. The retained preview SHA-256 is 731a66abfb32520966154808df20276e475f9d464821ff60720b8564d7165515.
+  - Exactly one execute command was invoked with the exact instruction/digest pair. It exited 0; the final Agent result is RUNTIME_COMPLETED/dispatch=true with RUNTIME_STARTED then RUNTIME_COMPLETED, exact request/runtime session correlation, DeepSeek provider/model/fallback false, and verified source/prefix/entry-point/module/Python/session/reset/evidence provenance. The persisted provenance artifact count is one.
+  - The state machine reached DONE with transition_count 19 and no failure; reachability was SUCCEEDED for perceived_cup. Controller/MoveIt logs contain 22 arm-goal, 3 gripper-goal, and 22 MoveIt execution successes. Three future-stamped /cup_pose samples were rejected within the same acquisition before a valid sample. These are downstream simulation diagnostics only and do not establish real-hardware or V5-T005 acceptance.
+  - Targeted SIGINT cleanup gracefully removed the two owned panes and all five captured owned PIDs. The first cleanup assertion expected an entirely empty domain and stopped after observing two topics; systematic read-back proved they are exactly /parameter_events and /rosout, identical to preflight, with zero nodes and no experiment session/PIDs. The corrected cleanup read-back also proves ai-station main e6ab8c1/main, gitlink 71bc934, the preserved untracked RGB-D ledger, codex/codex-cua, the clean detached candidate, and the registered evidence root remain intact.
+conclusion: VALID for final-candidate V5-T003 ai-station DeepSeek qualification with exactly one execute and clean owned shutdown; no real-hardware or V5-T005 conclusion.
+decision: KEEP
+next_experiment: EXP-007
 ```
 
 ```yaml
