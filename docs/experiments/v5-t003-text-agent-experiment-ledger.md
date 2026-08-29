@@ -599,7 +599,15 @@ next_experiment: EXP-007
 
 ```yaml
 experiment_id: EXP-007
-status: PLANNED
+status: RUNNING
+transitions:
+  - status: PLANNED
+    recorded_in_commit: 493e9aed5082385485b29dd6be16a8d833b19d98
+  - status: RUNNING
+    recorded_at: 2026-08-30T02:48:45+08:00
+    evidence: final-fix/mac-deepseek/exp-007-mac-deepseek-4ebdf45/{pre-mutation-readback.log,pre-mutation-readback-corrected.log,runtime-env-resolution.log,stack-provenance.log,full-readiness.log,full-readiness-assertion.log,owned-panes-start.log,process-isolation-readback.log}; final-fix/mac-candidate-4ebdf45/{build-and-provenance.log,installed-provenance-corrected-v2.log,focused-corrected-v2.xml}
+execute_invocation_count: 0
+observed_reset_epoch: 0
 created_at: 2026-08-30T02:10:40+08:00
 prior_experiment: EXP-006
 hypothesis: After valid final-candidate ai-station requalification, the same candidate can use DeepSeek on Mac and execute one fresh isolated headless MuJoCo simulation with exact preview confirmation and provenance.
