@@ -53,7 +53,7 @@ def validate_instruction(value: object, max_chars: int = 200) -> str:
     if not isinstance(value, str):
         raise CommandValidationError("instruction must be a string")
     instruction = value.strip()
-    if not instruction or len(instruction.encode("utf-8")) > max_chars:
+    if not instruction or len(instruction) > max_chars:
         raise CommandValidationError("instruction length is invalid")
     return instruction
 
@@ -65,7 +65,12 @@ def validate_task_command(candidate: object) -> TaskCommand:
         "constraints",
     }:
         raise CommandValidationError("top-level fields are invalid")
-    if candidate["target_object"] != "plastic_cup" or candidate["action"] != "pick":
+    if (
+        not isinstance(candidate["target_object"], str)
+        or not isinstance(candidate["action"], str)
+        or candidate["target_object"] != "plastic_cup"
+        or candidate["action"] != "pick"
+    ):
         raise CommandValidationError("object or action is unsupported")
     constraints = candidate["constraints"]
     if not isinstance(constraints, dict):
