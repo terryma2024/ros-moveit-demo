@@ -44,6 +44,74 @@ and MoveIt detach, parks and restores the cup, synchronizes the scene, opens the
 plans and executes the exact `home` plan, and verifies Gazebo, MoveIt, controllers, joints,
 velocities, and TF before returning success.
 
+## Text pick agent (V5-T003)
+
+`text_pick_agent` turns one bounded instruction into one *candidate* task; fixed code, not
+the model, decides whether it can reach the existing `dynamic_cup_pick_place` runtime.
+Preview is the default and has no runtime dispatch:
+
+```bash
+ros2 run so101_demo_py text_pick_agent \
+  --instruction "帮我拿杯子" \
+  --request-id preview-001 \
+  --backend mujoco
+```
+
+The cloud primary reads its key only from `DEEPSEEK_API_KEY`; do not put a key on the command
+line or in files. If the DeepSeek provider fails, the chain tries the local Ollama fallback once,
+at `http://127.0.0.1:11434/api/chat` with the default model `qwen3.5:4b`. A syntactically valid
+provider result is still untrusted. Its closed JSON Schema is exactly:
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target_object", "action", "constraints"],
+  "properties": {
+    "target_object": {"type": "string", "enum": ["plastic_cup"]},
+    "action": {"type": "string", "enum": ["pick"]},
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spatial_relation": {"type": "string", "enum": ["left", "right", "center", "nearest"]},
+        "speed": {"type": "string", "enum": ["slow", "normal"]}
+      }
+    }
+  }
+}
+```
+
+There are no extra top-level fields. The schema recognizes only `spatial_relation` (`left`,
+`right`, `center`, `nearest`) and `speed` (`slow`, `normal`) as constraint keys, but V5-T003 has
+no downstream consumer for either: every nonempty `constraints` object is rejected before
+dispatch.
+
+Execution requires both authorization flags, the qualified MuJoCo backend, and current runtime
+provenance. Resolve the source commit and installed prefix immediately before running—do not copy
+an old SHA:
+
+```bash
+ros2 run so101_demo_py text_pick_agent \
+  --instruction "帮我拿杯子" \
+  --request-id v5-t003-live-001 \
+  --backend mujoco \
+  --mode execute \
+  --execute \
+  --session-id v5-t003-live-001 \
+  --expected-reset-epoch 0 \
+  --evidence-root /tmp/so101-debug-v5-t003-text-agent-20260829-164105/task7 \
+  --source-commit "$(git rev-parse HEAD)" \
+  --installed-prefix "$(ros2 pkg prefix so101_demo_py)"
+```
+
+The fixed gate order is input check, Planner, closed-schema validation, capability whitelist,
+`--mode execute` plus `--execute`, `backend=mujoco`, then the runtime. A `DISPATCH_PREVIEW` result
+proves only static validation with `dispatch=false`. `RUNTIME_STARTED` in `state_trace` proves the
+state machine was invoked, while `RUNTIME_COMPLETED` is only the runtime return status. Neither is
+V5-T005 physical proof: cup pose/contact, MoveIt scene, controller/joint/TF, and fresh visual
+evidence remain separate acceptance requirements.
+
 ## Evidence and lifecycle
 
 Pass `evidence_file:=/absolute/path/result.json` for an execute launch. The common manifest
