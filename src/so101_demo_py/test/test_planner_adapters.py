@@ -7,6 +7,7 @@ import pytest
 from so101_demo.adapters.planner.deepseek import DeepSeekPlanner
 from so101_demo.adapters.planner.ollama import OllamaPlanner
 from so101_demo.adapters.planner.http_json import post_json
+from so101_demo.adapters.planner.prompt import PLANNER_SYSTEM_PROMPT
 from so101_demo.ports.task_planner import PlannerProviderError
 
 
@@ -45,6 +46,26 @@ def test_ollama_request_contract_and_tokens():
     assert captured["body"]["format"] == PLANNER_OUTCOME_JSON_SCHEMA
     assert captured["body"]["options"] == {"temperature": 0}
     assert result.metadata.input_tokens == 12 and result.metadata.output_tokens == 7
+
+
+def test_ollama_request_explicitly_disables_reasoning_mode():
+    captured = {}
+
+    def transport(_url, _headers, body, _timeout_s):
+        captured["body"] = body
+        return {"message": {"content": VALID}}
+
+    OllamaPlanner(_transport=transport).plan("Pick the plastic cup.")
+
+    assert captured["body"]["think"] is False
+
+
+def test_planner_prompt_forbids_inventing_unspecified_constraints():
+    assert "Never invent constraints." in PLANNER_SYSTEM_PROMPT
+    assert (
+        "If the instruction names no constraint, return constraints={}."
+        in PLANNER_SYSTEM_PROMPT
+    )
 
 
 def test_deepseek_missing_credential():

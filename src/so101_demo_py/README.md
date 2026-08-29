@@ -61,8 +61,10 @@ ros2 run so101_demo_py text_pick_agent \
 
 The cloud primary reads its key only from `DEEPSEEK_API_KEY`; do not put a key on the command
 line or in files. If the DeepSeek provider fails, the chain tries the local Ollama fallback once,
-at `http://127.0.0.1:11434/api/chat` with the default model `qwen3.5:4b`. A syntactically valid
-provider result is still untrusted. It must first select one closed outcome branch:
+at `http://127.0.0.1:11434/api/chat` with the default model `qwen3.5:4b`; the structured request
+sets `think=false` so reasoning text cannot consume the response deadline. The shared prompt
+forbids inferred constraints and requires `{}` when the instruction names none. A syntactically
+valid provider result is still untrusted. It must first select one closed outcome branch:
 
 ```json
 {
