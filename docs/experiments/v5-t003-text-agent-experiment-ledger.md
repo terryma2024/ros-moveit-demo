@@ -470,7 +470,7 @@ next_experiment: EXP-005 only if EXP-004 is VALID
 
 ```yaml
 experiment_id: EXP-005
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
@@ -478,6 +478,9 @@ transitions:
   - status: RUNNING
     recorded_at: 2026-08-30T01:50:25+08:00
     evidence: final-fix/mac-qwen/exp-005-mac-qwen-785a95e/{pre-mutation-readback-corrected.log,stack-provenance.log,full-readiness.log,owned-panes-start.log}
+  - status: VALID
+    recorded_at: 2026-08-30T02:03:41+08:00
+    evidence: final-fix/mac-qwen/exp-005-mac-qwen-785a95e/{preview.json,preview-attempt2.json,preview-attempt3-qualified.json,provider-direct-diagnostic-corrected.json,provider-think-false-diagnostic.json,ollama-server-chat-lines-after-preview3.log,provider-invalid-cleanup-readback.log,provider-invalid-cleanup-process-readback.log}
 execute_invocation_count: 0
 observed_reset_epoch: 0
 prior_experiment: EXP-004
@@ -517,6 +520,15 @@ failure_criteria:
 invalid_criteria:
   - EXP-004 not VALID; provider/model/digest/instruction/provenance/readiness mismatch; cloud key remains set; endpoint is non-loopback/non-/api/chat; headless unsupported; execute count other than one; contamination, missing correlation, broad cleanup, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
-decision: PENDING
-next_experiment: NONE
+observed:
+  - Preflight loaded ~/.env with export semantics and suppressed output, reported DEEPSEEK_API_KEY SET, then unset only that variable and reported UNSET. Loopback /api/tags and /api/ps resolved qwen3.5:4b with digest 2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd. Candidate/install provenance, separate headless stack, three active controllers, Planning Scene READ_BACK, fresh simulation evidence, /cup_pose, session ID, and reset_epoch 0 all passed.
+  - Three separately retained preview observations used the exact instruction/request/provider/model/loopback endpoint with execute count 0. The first two used the 12-second default and the third used an evidence-based 180-second timeout after the local server log showed earlier successful qwen requests needed 1m31s and 1m59s. All three failed closed as PLANNER_FAILED/PLANNER_CHAIN_FAILED with dispatch=false, no confirmation digest, and empty stderr.
+  - Ollama server request lines show each provider request ran until its client deadline and then returned 500 at 12 seconds, 12 seconds, 60 seconds, or 180 seconds; the loaded model and loopback endpoint remained healthy. A one-variable direct diagnostic adding top-level think=false returned 200/done in 6.046 seconds, isolating qwen3.5 reasoning-mode interaction with strict structured output. That diagnostic also inferred center/normal constraints absent from the instruction, proving the prompt must explicitly forbid invented constraints before the planned empty-constraint digest can be qualified.
+  - No execute command was invoked, no dynamic manifest or execution provenance was created, and no state-machine dispatch occurred. This is a valid provider-boundary/fail-closed observation, not a successful qwen execution qualification.
+  - Targeted SIGINT cleanup removed only the two owned EXP-005 panes. Fresh read-back found no task tmux session or related process; domain 208 had no experiment topics; candidate/task worktrees remained clean; the persistent Ollama service/model and all evidence were preserved.
+conclusion: VALID fail-closed provider-boundary result for candidate 785a95e; qwen3.5 cannot qualify this candidate because reasoning mode never completes the structured preview and the diagnostic response invents unspecified constraints. No execute, real-hardware, or V5-T005 conclusion.
+ruling: The controller accepted EXP-005 as a valid provider-boundary/fail-closed observation despite the original execute-oriented criteria; it does not satisfy the required qwen execute qualification, does not count as one of the corrected-candidate execution proofs, and cannot qualify any candidate newer than 785a95e.
+cost: Three Agent preview calls, one 60-second direct default-reasoning diagnostic, and one 6.046-second think=false diagnostic were retained; four provider calls ended at their 12/12/60/180-second client deadlines, execute count stayed zero, and the persistent Ollama service was not restarted or changed.
+decision: REPLACE after a bounded TDD correction; EXP-003 and EXP-004 remain truthful evidence for 785a95e only.
+next_experiment: EXP-006 after the new final candidate is committed and fresh EXP-006/007/008 PLANNED entries are recorded.
 ```
