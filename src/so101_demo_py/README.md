@@ -48,6 +48,8 @@ velocities, and TF before returning success.
 
 `text_pick_agent` turns one bounded instruction into one *candidate* task; fixed code, not
 the model, decides whether it can reach the existing `dynamic_cup_pick_place` runtime.
+The complete learner workflow, process map, ROS interfaces, safe provider setup, confirmation
+flow, and evidence boundaries are in [the Text Pick Agent guide](docs/text_pick_agent.md).
 Preview is the default and has no runtime dispatch:
 
 ```bash
@@ -60,36 +62,26 @@ ros2 run so101_demo_py text_pick_agent \
 The cloud primary reads its key only from `DEEPSEEK_API_KEY`; do not put a key on the command
 line or in files. If the DeepSeek provider fails, the chain tries the local Ollama fallback once,
 at `http://127.0.0.1:11434/api/chat` with the default model `qwen3.5:4b`. A syntactically valid
-provider result is still untrusted. Its closed JSON Schema is exactly:
+provider result is still untrusted. It must first select one closed outcome branch:
 
 ```json
 {
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["target_object", "action", "constraints"],
-  "properties": {
-    "target_object": {"type": "string", "enum": ["plastic_cup"]},
-    "action": {"type": "string", "enum": ["pick"]},
-    "constraints": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "spatial_relation": {"type": "string", "enum": ["left", "right", "center", "nearest"]},
-        "speed": {"type": "string", "enum": ["slow", "normal"]}
-      }
-    }
+  "outcome": "supported",
+  "command": {
+    "target_object": "plastic_cup",
+    "action": "pick",
+    "constraints": {}
   }
 }
 ```
 
-There are no extra top-level fields. The schema recognizes only `spatial_relation` (`left`,
-`right`, `center`, `nearest`) and `speed` (`slow`, `normal`) as constraint keys, but V5-T003 has
-no downstream consumer for either: every nonempty `constraints` object is rejected before
-dispatch.
+`unsupported` and `ambiguous` carry only the outcome field and terminate before Dispatcher;
+only `supported` carries the exact current TaskCommand. There are no extra fields. V5-T003 has
+no downstream constraint consumer, so every nonempty `constraints` object is rejected.
 
-Execution requires both authorization flags, the qualified MuJoCo backend, and current runtime
-provenance. Resolve the source commit and installed prefix immediately before running—do not copy
-an old SHA:
+Execution requires both authorization flags, the exact digest from an inspected preview, the
+qualified MuJoCo backend, and verified current runtime provenance. Resolve the source commit and
+installed prefix immediately before running—do not copy an old SHA:
 
 ```bash
 ros2 run so101_demo_py text_pick_agent \
@@ -98,6 +90,7 @@ ros2 run so101_demo_py text_pick_agent \
   --backend mujoco \
   --mode execute \
   --execute \
+  --confirmation-digest "$CONFIRMATION_DIGEST_FROM_PREVIEW" \
   --session-id v5-t003-live-001 \
   --expected-reset-epoch 0 \
   --evidence-root /tmp/so101-debug-v5-t003-text-agent-20260829-164105 \
@@ -105,13 +98,11 @@ ros2 run so101_demo_py text_pick_agent \
   --installed-prefix "$(ros2 pkg prefix so101_demo_py)"
 ```
 
-The fixed gate order is input check, Planner, closed-schema validation, capability whitelist,
-`--mode execute` plus `--execute`, `backend=mujoco`, then the runtime. A `DISPATCH_PREVIEW` result
-proves only static validation with `dispatch=false`. `RUNTIME_STARTED` in `state_trace` proves only
-that executor dispatch was attempted; a state-machine-start claim additionally requires correlated
-runtime session and log evidence. `RUNTIME_COMPLETED` is only the runtime return status. Neither is
-V5-T005 physical proof: cup pose/contact, MoveIt scene, controller/joint/TF, and fresh visual
-evidence remain separate acceptance requirements.
+The fixed gate order is input check, Planner outcome, closed TaskCommand validation, capability
+whitelist, double authorization, `backend=mujoco`, digest equality, atomic request claim, then the
+runtime. A `DISPATCH_PREVIEW` proves only static validation with `dispatch=false`.
+`RUNTIME_STARTED` in `state_trace` proves only that executor dispatch was attempted;
+`RUNTIME_COMPLETED` is only the runtime return status. Neither is V5-T005 physical proof.
 
 ## Evidence and lifecycle
 

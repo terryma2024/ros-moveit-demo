@@ -158,14 +158,14 @@ def test_cli_rejects_wrong_backend_before_agent(capsys) -> None:
         (
             [
                 "--session-id", "session-1", "--expected-reset-epoch", "0",
-                "--evidence-root", "/tmp/evidence", "--source-commit", "abc123",
+                "--evidence-root", "/tmp/evidence", "--source-commit", "a" * 40,
             ],
             "EXECUTION_INSTALLED_PREFIX_INVALID",
         ),
         (
             [
                 "--session-id", "session-1", "--expected-reset-epoch", "0",
-                "--evidence-root", "/tmp/evidence", "--source-commit", "abc123",
+                "--evidence-root", "/tmp/evidence", "--source-commit", "a" * 40,
                 "--installed-prefix", "relative",
             ],
             "EXECUTION_INSTALLED_PREFIX_INVALID",
@@ -228,7 +228,14 @@ def test_production_preview_composition_does_not_import_ros_runtime(
     from so101_demo.cli import text_pick_agent
 
     candidate = PlannerCandidate(
-        {"target_object": "plastic_cup", "action": "pick", "constraints": {}},
+        {
+            "outcome": "supported",
+            "command": {
+                "target_object": "plastic_cup",
+                "action": "pick",
+                "constraints": {},
+            },
+        },
         PlannerMetadata("deepseek", "test-model", 1, None, None, None, False),
     )
 
@@ -335,20 +342,22 @@ def test_cli_normalizes_provider_options_before_composition(monkeypatch, capsys)
     assert text_pick_agent.main(
         [
             "--instruction", "帮我拿杯子",
-            "--deepseek-model", " deepseek-model ",
-            "--deepseek-endpoint", " https://deepseek.test ",
-            "--ollama-model", " ollama-model ",
-            "--ollama-endpoint", " http://ollama.test ",
+            "--deepseek-model", " deepseek-v4-flash ",
+            "--deepseek-endpoint", " https://api.deepseek.com/chat/completions ",
+            "--ollama-model", " qwen3.5:4b ",
+            "--ollama-endpoint", " http://localhost:21434/api/chat ",
         ]
     ) == 0
 
     assert calls == {
         "deepseek": {
-            "model": "deepseek-model", "endpoint": "https://deepseek.test",
+            "model": "deepseek-v4-flash",
+            "endpoint": "https://api.deepseek.com/chat/completions",
             "timeout_s": 8.0,
         },
         "ollama": {
-            "model": "ollama-model", "endpoint": "http://ollama.test",
+            "model": "qwen3.5:4b",
+            "endpoint": "http://localhost:21434/api/chat",
             "timeout_s": 12.0,
         },
     }
@@ -370,6 +379,10 @@ def test_cli_normalizes_provider_options_before_composition(monkeypatch, capsys)
         ["--ollama-timeout-s", "-1"],
         ["--ollama-timeout-s", "nan"],
         ["--ollama-timeout-s", "inf"],
+        ["--deepseek-model", "deepseek-v3"],
+        ["--deepseek-endpoint", "https://example.test/chat/completions"],
+        ["--ollama-model", "qwen2.5:4b"],
+        ["--ollama-endpoint", "http://10.0.0.4:11434/api/chat"],
     ],
 )
 def test_provider_options_are_rejected_before_provider_or_agent(
@@ -387,14 +400,15 @@ def test_provider_options_are_rejected_before_provider_or_agent(
     assert output(capsys)["reason_code"] == "PROVIDER_OPTIONS_INVALID"
 
 
-def test_cli_builds_runtime_executor_only_for_valid_execute(monkeypatch, capsys) -> None:
+def test_cli_builds_runtime_executor_only_for_valid_execute(
+    monkeypatch, capsys, tmp_path
+) -> None:
     from so101_demo.cli import text_pick_agent
+    import subprocess
+    from pathlib import Path
+    from ament_index_python.packages import get_package_prefix
 
     calls: dict[str, object] = {}
-
-    class Context:
-        def __init__(self, **kwargs) -> None:
-            calls["context"] = kwargs
 
     class Executor:
         def __init__(self, context) -> None:
@@ -411,28 +425,36 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(monkeypatch, capsys)
                 dispatch=True,
             )
 
-    monkeypatch.setattr(text_pick_agent, "DynamicRuntimeContext", Context)
     monkeypatch.setattr(text_pick_agent, "DynamicCupPickPlaceExecutor", Executor)
     monkeypatch.setattr(text_pick_agent, "TextAgent", Agent)
     monkeypatch.setattr(text_pick_agent, "DeepSeekPlanner", lambda *_a, **_k: object())
     monkeypatch.setattr(text_pick_agent, "OllamaPlanner", lambda **_k: object())
     monkeypatch.setattr(text_pick_agent, "PlannerChain", lambda *_a: object())
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
 
     assert text_pick_agent.main(
         [
             "--instruction", "帮我拿杯子", "--mode", "execute", "--execute",
+            "--confirmation-digest", "sha256:v1:" + "0" * 64,
             "--session-id", " session-1 ", "--expected-reset-epoch", "0",
-            "--evidence-root", "/tmp/evidence", "--source-commit", " abc123 ",
-            "--installed-prefix", "/tmp/install", "--request-id", "req-fixed",
+            "--evidence-root", str(tmp_path), "--source-commit", f" {head.upper()} ",
+            "--installed-prefix", prefix, "--request-id", "req-fixed",
         ]
     ) == 0
 
-    assert calls["context"] == {
-        "session_id": "session-1", "expected_reset_epoch": 0,
-        "evidence_root": ANY, "source_commit": "abc123",
-        "installed_prefix": "/tmp/install",
-    }
-    assert str(calls["context"]["evidence_root"]) == "/tmp/evidence"
+    context = calls["executor"]
+    assert context.session_id == "session-1"
+    assert context.expected_reset_epoch == 0
+    assert context.evidence_root == tmp_path.resolve()
+    assert context.source_commit == head
+    assert context.installed_prefix == prefix
+    assert context.execution_provenance.source_commit == head
     assert output(capsys)["runtime_session_id"] == "session-1"
 
 

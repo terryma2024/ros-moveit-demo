@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
+import re
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,10 +16,16 @@ from ..adapters.pick_place_executor import (
     DynamicCupPickPlaceExecutor,
     DynamicRuntimeContext,
 )
-from ..adapters.planner.deepseek import DeepSeekPlanner
-from ..adapters.planner.ollama import OllamaPlanner
+from ..adapters.planner.deepseek import (
+    DeepSeekPlanner,
+    is_production_deepseek_configuration,
+)
+from ..adapters.planner.ollama import (
+    OllamaPlanner,
+    is_production_ollama_configuration,
+)
 from ..application.planner_chain import PlannerChain
-from ..application.text_agent import AgentRequest, AgentResult, AgentStatus, TextAgent
+from ..application.text_agent import AgentRequest, AgentStatus, TextAgent
 
 
 def new_request_id() -> str:
@@ -36,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--request-id")
     parser.add_argument("--mode", default="preview")
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--confirmation-digest")
     parser.add_argument("--backend", default="mujoco")
     parser.add_argument("--deepseek-model", default="deepseek-v4-flash")
     parser.add_argument(
@@ -89,22 +99,77 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
     if not isinstance(options.source_commit, str):
         return None, "EXECUTION_SOURCE_COMMIT_INVALID"
     source_commit = options.source_commit.strip()
-    if not source_commit or source_commit == "UNRECORDED_SOURCE":
+    if re.fullmatch(r"[0-9a-fA-F]{40}", source_commit) is None:
         return None, "EXECUTION_SOURCE_COMMIT_INVALID"
     if not isinstance(options.installed_prefix, str) or not options.installed_prefix.strip():
         return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
-    if not Path(options.installed_prefix).is_absolute():
+    installed_prefix = options.installed_prefix.strip()
+    if not Path(installed_prefix).is_absolute():
         return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
+    from ..runtime.provenance import (
+        ExecutionProvenanceError,
+        verify_execution_provenance,
+    )
+
+    try:
+        execution_provenance = verify_execution_provenance(
+            declared_source_commit=source_commit,
+            declared_installed_prefix=installed_prefix,
+            session_id=session_id,
+            expected_reset_epoch=reset_epoch,
+            evidence_root=evidence_root,
+        )
+    except ExecutionProvenanceError as error:
+        return None, error.code
     return (
         DynamicRuntimeContext(
             session_id=session_id,
             expected_reset_epoch=reset_epoch,
-            evidence_root=evidence_root,
-            source_commit=source_commit,
-            installed_prefix=options.installed_prefix,
+            evidence_root=Path(execution_provenance.evidence_root),
+            source_commit=execution_provenance.source_commit,
+            installed_prefix=execution_provenance.installed_prefix,
+            execution_provenance=execution_provenance,
         ),
         None,
     )
+
+
+def _persist_execution_provenance(
+    context: DynamicRuntimeContext,
+    request_id: str,
+) -> None:
+    directory = context.evidence_root / "text-agent-provenance"
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = hashlib.sha256(request_id.encode("utf-8")).hexdigest() + ".json"
+    destination = directory / filename
+    document = {
+        "request_id": request_id,
+        "execution_provenance": context.execution_provenance.to_dict(),
+    }
+    encoded = (
+        json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=directory,
+            prefix=".provenance-",
+            delete=False,
+        ) as stream:
+            temporary_path = stream.name
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                Path(temporary_path).unlink()
+            except OSError:
+                pass
 
 
 def _normalize_provider_options(options) -> bool:
@@ -126,7 +191,15 @@ def _normalize_provider_options(options) -> bool:
         value = getattr(options, name)
         if type(value) is not float or not math.isfinite(value) or value <= 0:
             return False
-    return True
+    return is_production_deepseek_configuration(
+        options.deepseek_model,
+        options.deepseek_endpoint,
+        options.deepseek_timeout_s,
+    ) and is_production_ollama_configuration(
+        options.ollama_model,
+        options.ollama_endpoint,
+        options.ollama_timeout_s,
+    )
 
 
 def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
@@ -172,6 +245,11 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         if reason_code is not None:
             _write_document(_rejection(request_id, reason_code))
             return 1
+        try:
+            _persist_execution_provenance(context, request_id)
+        except (OSError, TypeError, ValueError):
+            _write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
+            return 1
 
     agent = _agent if _agent is not None else _compose_agent(options, context)
     request = AgentRequest(
@@ -180,13 +258,20 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         mode=options.mode,
         execute=options.execute,
         backend=options.backend,
+        confirmation_digest=options.confirmation_digest,
+        execution_provenance=(
+            context.execution_provenance if context is not None else None
+        ),
     )
     try:
         result = agent.handle(request)
     except Exception:
         _write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
         return 1
-    _write_document(result.to_dict())
+    document = result.to_dict()
+    if context is not None:
+        document["execution_provenance"] = context.execution_provenance.to_dict()
+    _write_document(document)
     return _exit_code(result.status)
 
 
