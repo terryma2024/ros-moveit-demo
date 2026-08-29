@@ -64,6 +64,7 @@ setup(
             "teleop_workflow = so101_demo.cli.teleop_workflow:main",
             "task_reachability = so101_demo.cli.task_reachability:main",
             "so101_mujoco_rgbd_batch = so101_demo.cli.mujoco_rgbd_batch:main",
+            "text_pick_agent = so101_demo.cli.text_pick_agent:main",
         ]
     },
 )
