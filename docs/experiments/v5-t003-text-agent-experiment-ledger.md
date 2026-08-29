@@ -343,7 +343,15 @@ next_command: Await the user's choice of Subagent-Driven or Inline Execution, th
 
 ```yaml
 experiment_id: EXP-003
-status: PLANNED
+status: RUNNING
+transitions:
+  - status: PLANNED
+    recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
+  - status: RUNNING
+    recorded_at: 2026-08-30T01:05:15+08:00
+    evidence: final-fix/ai-station/exp-003-ai-deepseek-785a95e/{build-provenance-corrected.log,focused.xml,stack-provenance.log,simulation-evidence-readiness.log,cup-pose-readiness.log,controllers-readiness.log,owned-panes-readiness.log}
+execute_invocation_count: 0
+observed_reset_epoch: 0
 prior_experiment: EXP-002
 hypothesis: The corrected committed candidate can use the qualified DeepSeek provider on ai-station and execute the existing headless MuJoCo state machine exactly once with preview-bound confirmation and verified runtime provenance.
 prediction: One DeepSeek preview returns supported plastic_cup/pick/{}, provider/model deepseek/deepseek-v4-flash, and the precomputed digest; the exact instruction/digest pair then produces one correlated execute invocation and clean owned shutdown.
