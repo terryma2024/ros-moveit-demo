@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -107,6 +108,110 @@ def test_invalid_typed_request_is_rejected_without_runner_or_ros_import(
     assert result.exit_code == 1
     assert result.runtime_session_id == "text-agent-session"
     assert calls == []
+
+
+def test_invalid_typed_request_precedes_context_validation_and_default_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = DynamicRuntimeContext(
+        session_id=" ",
+        expected_reset_epoch=3,
+        evidence_root=tmp_path,
+        source_commit="e58eee1",
+        installed_prefix="/data/work/ws_moveit/install/so101_demo_py",
+    )
+    real_import = builtins.__import__
+
+    def reject_runtime_import(name: str, *args: object, **kwargs: object):
+        if name == "so101_demo.ros.dynamic_runtime":
+            raise AssertionError("default runtime import must not run")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_runtime_import)
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request(action="place"))
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"session_id": ""},
+        {"session_id": "   "},
+        {"session_id": 1},
+        {"expected_reset_epoch": True},
+        {"expected_reset_epoch": -1},
+        {"expected_reset_epoch": "3"},
+        {"evidence_root": "relative-evidence"},
+        {"evidence_root": Path("relative-evidence")},
+        {"source_commit": ""},
+        {"source_commit": "   "},
+        {"source_commit": 1},
+        {"installed_prefix": ""},
+        {"installed_prefix": "relative-prefix"},
+        {"installed_prefix": 1},
+    ],
+)
+def test_invalid_context_is_redacted_before_runner_or_default_runtime_import(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    changes: dict[str, object],
+) -> None:
+    values = {
+        "session_id": "text-agent-session",
+        "expected_reset_epoch": 3,
+        "evidence_root": tmp_path,
+        "source_commit": "e58eee1",
+        "installed_prefix": "/data/work/ws_moveit/install/so101_demo_py",
+    }
+    values.update(changes)
+    calls: list[object] = []
+    real_import = builtins.__import__
+
+    def reject_runtime_import(name: str, *args: object, **kwargs: object):
+        if name == "so101_demo.ros.dynamic_runtime":
+            raise AssertionError("default runtime import must not run")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_runtime_import)
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+    executor = DynamicCupPickPlaceExecutor(
+        DynamicRuntimeContext(**values),  # type: ignore[arg-type]
+        runner=lambda options: calls.append(options) or 0,
+    )
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert str(captured.value) == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    assert calls == []
+
+
+def test_default_runtime_import_exception_is_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_import = builtins.__import__
+
+    def fail_dynamic_runtime_import(name: str, *args: object, **kwargs: object):
+        if name.endswith("dynamic_runtime"):
+            raise ModuleNotFoundError("private runtime path /secret/dynamic_runtime.py")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
+    monkeypatch.setattr(builtins, "__import__", fail_dynamic_runtime_import)
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        DynamicCupPickPlaceExecutor(_context(tmp_path)).dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert str(captured.value) == "DYNAMIC_RUNTIME_EXCEPTION"
+    assert "secret" not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__suppress_context__ is True
 
 
 def test_preview_path_never_imports_ros_or_dispatches(

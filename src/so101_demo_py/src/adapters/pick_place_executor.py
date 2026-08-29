@@ -37,14 +37,15 @@ class DynamicCupPickPlaceExecutor:
     ) -> RuntimeDispatchResult:
         if not self._is_supported_request(request):
             return RuntimeDispatchResult(1, self._context.session_id)
-
-        runner = self._runner
-        if runner is None:
-            from ..ros.dynamic_runtime import run_dynamic_execute
-
-            runner = run_dynamic_execute
+        if not self._has_valid_context(self._context):
+            raise ExecutorDispatchError("DYNAMIC_RUNTIME_CONTEXT_INVALID")
 
         try:
+            runner = self._runner
+            if runner is None:
+                from ..ros.dynamic_runtime import run_dynamic_execute
+
+                runner = run_dynamic_execute
             exit_code = runner(self._runtime_options())
         except Exception:
             raise ExecutorDispatchError("DYNAMIC_RUNTIME_EXCEPTION") from None
@@ -75,4 +76,20 @@ class DynamicCupPickPlaceExecutor:
             and request.scene_source == "observe_only"
             and request.target_object == "plastic_cup"
             and request.action == "pick"
+        )
+
+    @staticmethod
+    def _has_valid_context(context: DynamicRuntimeContext) -> bool:
+        return (
+            type(context.session_id) is str
+            and bool(context.session_id.strip())
+            and type(context.expected_reset_epoch) is int
+            and context.expected_reset_epoch >= 0
+            and isinstance(context.evidence_root, Path)
+            and context.evidence_root.is_absolute()
+            and type(context.source_commit) is str
+            and bool(context.source_commit.strip())
+            and type(context.installed_prefix) is str
+            and bool(context.installed_prefix)
+            and Path(context.installed_prefix).is_absolute()
         )
