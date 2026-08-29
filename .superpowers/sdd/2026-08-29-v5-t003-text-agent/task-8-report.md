@@ -177,7 +177,7 @@ or cleanup proof.
 ## Audit fix round 1 — raw evidence and command closure
 
 This amendment performed no provider, stack, Text Agent, or runtime action. The live execute count
-remained one. Read-only ai-station inspection found all four reviewer-blocking artifacts and the
+remained one. Read-only ai-station inspection found all five reviewer-blocking artifacts and the
 supporting live/ownership/failure logs. A secret-safe byte scan covered 14 candidate files and
 reported only `candidate_file_count=14`, `secret_match_path_count=0`; no secret value was printed or
 copied.
@@ -253,3 +253,80 @@ evidence root, then reran the unchanged full suite: **692 passed in 12.88s**, ex
 `full-package-corrected.log` and `full-package-corrected.xml`. The ledger records the exact three
 test commands and exits; the focused and corrected full commands are rerun once more after the
 documentation-only amend so their final retained logs begin with the live final HEAD.
+
+## Audit fix round 2 — seven-case matrix and full-root secret scan
+
+This second audit amendment performed no provider call, CLI invocation, stack/tunnel/runtime
+restart, live execute, cleanup, or deletion. Current read-only ai-station read-back still found one
+`execute_invocation_count=1` line and no related task process. The complete injected preview
+evidence was already retained remotely as `task8/preview-injected.json`, its empty stderr artifact,
+and `task8/preview_cases.py`; no injected case was rerun.
+
+The deterministic remote matrix checker exited 0 with `adapter_mode=tested_injected`, seven exact
+named cases, aggregate `dispatch=false`, `dispatch_true_count=0`, and `executor_calls_total=0`:
+
+| Case | Exit | Status / reason | Dispatch | Executor calls |
+| --- | ---: | --- | --- | ---: |
+| `valid_preview` | 0 | `DISPATCH_PREVIEW` | false | 0 |
+| `empty_input` | 1 | `COMMAND_INVALID / INPUT_INVALID` | false | 0 |
+| `semantic_invalid_primary_candidate` | 1 | `COMMAND_INVALID / COMMAND_INVALID` | false | 0 |
+| `both_provider_failure` | 1 | `PLANNER_FAILED / PLANNER_CHAIN_FAILED` | false | 0 |
+| `unconsumed_constraint` | 1 | `DISPATCH_REJECTED / CONSTRAINT_UNCONSUMED` | false | 0 |
+| `partial_authorization` | 1 | `DISPATCH_REJECTED / PARTIAL_EXECUTE_AUTHORIZATION` | false | 0 |
+| `wrong_backend` | 1 | `DISPATCH_REJECTED / BACKEND_NOT_QUALIFIED` | false | 0 |
+
+After the full-root scanner returned zero matches, those exact three artifacts were copied into the
+existing `task8/audit-fix-round1/copied-remote/task8/` artifact subtree. The extended remote hash
+manifest now covers 17 files. Remote/local equality for the new files is:
+
+| Artifact | Remote/local SHA-256 |
+| --- | --- |
+| `task8/preview-injected.json` | `b85a95c734276290b254f54cf0fa84993843f9a4bd615fd8a123d7a1675a6a45` |
+| `task8/preview-injected.stderr.log` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| `task8/preview_cases.py` | `d4c8e4fd2a270860abc531700d7a38c648c2e244f9db059240b56e07a36cf4fa` |
+
+The recursive scanner traversed every regular file beneath the remote registered root without
+following symlinks. It searched raw bytes using narrowly scoped credential-value, private-key,
+Bearer-value, provider-token, cloud-key, credential-assignment-value, and embedded-URL credential
+rules; names such as `DEEPSEEK_API_KEY` without an assigned credential value do not match. It never
+prints matched content or secret values. Its safe aggregate result was:
+
+```text
+scanner_definition=so101-full-root-credential-values-private-keys-v1
+scanner_version=1.0.0
+scanner_sha256=f6625317a4b8e3f2ec7790aa57bcbe254705c6068ca4a133712dea8e627d3e82
+total_file_count=2143
+total_bytes=206053346
+match_path_count=0
+```
+
+The scanner, aggregate report, preview matrix checker/report, artifact hashes, and expanded contract
+output are retained beneath
+`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task8/audit-fix-round2/`. Scanner/report hashes
+are respectively `f6625317a4b8e3f2ec7790aa57bcbe254705c6068ca4a133712dea8e627d3e82`
+and `6096ddc5a20734cffa96f8c8d0b67177c37d30b92c4598da33e5996d900fd67c`.
+
+Exact audit commands and exits:
+
+| Command | Exit/result |
+| --- | --- |
+| `ssh ai-station 'python3 - f6625317a4b8e3f2ec7790aa57bcbe254705c6068ca4a133712dea8e627d3e82' < .../audit-fix-round2/full_root_secret_scan.py` | 0; 2,143 files, 206,053,346 bytes, zero match paths |
+| `ssh ai-station 'python3 -' < .../audit-fix-round2/remote_preview_matrix_check.py` | 0; seven-case contract valid, zero dispatches/calls |
+| `ssh ai-station 'cd .../task8 && sha256sum preview-injected.json preview-injected.stderr.log preview_cases.py'` | 0 |
+| `scp ai-station:.../task8/{preview-injected.json,preview-injected.stderr.log,preview_cases.py} .../audit-fix-round1/copied-remote/task8/` (three explicit source arguments) | 0 |
+| `python3 .../audit-fix-round1/evidence_contract_check.py` | 0; 17/17 remote hashes equal, complete matrix valid, full-root scan contract valid, execute count 1, duplicate calls 1 |
+
+The full exact absolute paths are recorded in the EXP-002 command list. Covering tests use the same
+task-owned `ROS_HOME`/`ROS_LOG_DIR` correction established in round 1. At the live final
+documentation HEAD, focused and full local results and JUnit are retained under
+`task8/audit-fix-round2/local-final/`; the commit is again reported by live `git rev-parse HEAD`
+rather than embedded as a self-reference.
+
+The exact final test commands set
+`ROS_HOME=/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task8/audit-fix-round2/local-final/ros-home`,
+set `ROS_LOG_DIR=$ROS_HOME/log`, and use
+`PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider`.
+The focused command names the six EXP-002 Text Agent test files and writes `focused.xml`; the full
+command names `src/so101_demo_py/test` and writes `full-package.xml`. Both exact expanded commands
+are in the ledger. At final HEAD the focused command reports **139 passed**, exit 0, and the full
+command reports **692 passed**, exit 0; no initial environment-invalid run was needed in round 2.
