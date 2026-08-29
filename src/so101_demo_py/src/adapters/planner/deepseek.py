@@ -24,8 +24,11 @@ class DeepSeekPlanner:
             usage = payload.get("usage", {})
             if not isinstance(usage, Mapping):
                 raise TypeError
+            for counter in ("prompt_tokens", "completion_tokens", "prompt_cache_hit_tokens"):
+                if counter in usage and usage[counter] is not None and type(usage[counter]) is not int:
+                    raise TypeError
             metadata = PlannerMetadata("deepseek", self._model, (time.perf_counter_ns() - started) // 1_000_000,
                 usage.get("prompt_tokens"), usage.get("completion_tokens"), usage.get("prompt_cache_hit_tokens"), False)
         except (KeyError, IndexError, TypeError):
-            raise PlannerProviderError("DEEPSEEK_RESPONSE_INVALID")
+            raise PlannerProviderError("DEEPSEEK_RESPONSE_INVALID") from None
         return PlannerCandidate(decode_candidate(content), metadata)

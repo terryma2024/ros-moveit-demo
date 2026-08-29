@@ -21,10 +21,10 @@ class OllamaPlanner:
         try:
             content = payload["message"]["content"]
             for counter in ("prompt_eval_count", "eval_count"):
-                if counter in payload and not isinstance(payload[counter], int):
+                if counter in payload and payload[counter] is not None and type(payload[counter]) is not int:
                     raise TypeError
             metadata = PlannerMetadata("ollama", self._model, (time.perf_counter_ns() - started) // 1_000_000,
                 payload.get("prompt_eval_count"), payload.get("eval_count"), None, False)
         except (KeyError, TypeError):
-            raise PlannerProviderError("OLLAMA_RESPONSE_INVALID")
+            raise PlannerProviderError("OLLAMA_RESPONSE_INVALID") from None
         return PlannerCandidate(decode_candidate(content), metadata)
