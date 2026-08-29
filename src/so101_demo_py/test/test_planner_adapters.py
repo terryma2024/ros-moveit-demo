@@ -1,0 +1,107 @@
+import json
+
+import pytest
+
+from so101_demo.adapters.planner.deepseek import DeepSeekPlanner
+from so101_demo.adapters.planner.ollama import OllamaPlanner
+from so101_demo.adapters.planner.http_json import post_json
+from so101_demo.ports.task_planner import PlannerProviderError
+
+
+VALID = '{"target_object":"plastic_cup","action":"pick","constraints":{}}'
+
+
+def test_deepseek_request_contract_and_tokens():
+    captured = {}
+    def transport(url, headers, body, timeout_s):
+        captured.update(url=url, headers=headers, body=body, timeout_s=timeout_s)
+        return {"choices":[{"message":{"content":VALID}}], "usage":{"prompt_tokens":10,"completion_tokens":8,"prompt_cache_hit_tokens":2}}
+    result = DeepSeekPlanner("secret", transport=transport).plan("帮我拿杯子")
+    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+    assert captured["body"]["model"] == "deepseek-v4-flash"
+    assert captured["body"]["response_format"] == {"type":"json_object"}
+    assert captured["body"]["thinking"] == {"type":"disabled"}
+    assert captured["body"]["temperature"] == 0 and captured["body"]["max_tokens"] == 128
+    assert [m["role"] for m in captured["body"]["messages"]] == ["system", "user"]
+    assert result.metadata.input_tokens == 10 and result.metadata.cache_hit_tokens == 2
+
+
+def test_ollama_request_contract_and_tokens():
+    captured = {}
+    def transport(url, headers, body, timeout_s):
+        captured.update(url=url, headers=headers, body=body)
+        return {"message":{"content":VALID}, "prompt_eval_count":12, "eval_count":7}
+    result = OllamaPlanner(transport=transport).plan("帮我拿杯子")
+    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
+    assert captured["body"]["model"] == "qwen3.5:4b"
+    assert captured["body"]["stream"] is False
+    from so101_demo.core.task_command import TASK_COMMAND_JSON_SCHEMA
+    assert captured["body"]["format"] == TASK_COMMAND_JSON_SCHEMA
+    assert captured["body"]["options"] == {"temperature": 0}
+    assert result.metadata.input_tokens == 12 and result.metadata.output_tokens == 7
+
+
+def test_deepseek_missing_credential():
+    with pytest.raises(PlannerProviderError, match="DEEPSEEK_CREDENTIAL_MISSING"):
+        DeepSeekPlanner("").plan("x")
+
+
+@pytest.mark.parametrize("payload", [None, {}, {"choices": []}, {"choices":[{"message":{}}]}, {"choices":[{"message":{"content":VALID}}],"usage":[]}, {"choices":[{"message":{"content":VALID}}],"usage":"bad"}])
+def test_deepseek_invalid_envelope_or_usage(payload):
+    with pytest.raises(PlannerProviderError) as exc:
+        DeepSeekPlanner("k", transport=lambda *_: payload).plan("x")
+    assert exc.value.code in {"DEEPSEEK_RESPONSE_INVALID", "PROVIDER_RESPONSE_INVALID"}
+
+
+@pytest.mark.parametrize("payload", [None, {}, {"message": {}}, {"message":{"content":VALID},"prompt_eval_count":[]}])
+def test_ollama_invalid_envelope_or_usage(payload):
+    with pytest.raises(PlannerProviderError) as exc:
+        OllamaPlanner(transport=lambda *_: payload).plan("x")
+    assert exc.value.code == "OLLAMA_RESPONSE_INVALID"
+
+
+@pytest.mark.parametrize("content", ["", "  ", "not-json"])
+def test_content_failures_are_stable(content):
+    with pytest.raises(PlannerProviderError) as exc:
+        DeepSeekPlanner("k", transport=lambda *_: {"choices":[{"message":{"content":content}}]}).plan("x")
+    assert exc.value.code in {"PROVIDER_CONTENT_EMPTY", "PROVIDER_JSON_INVALID"}
+
+
+def test_valid_json_shape_is_not_semantically_validated():
+    result = OllamaPlanner(transport=lambda *_: {"message":{"content":"[]"}}).plan("x")
+    assert result.value == []
+
+
+class _Response:
+    def __init__(self, data): self.data = data
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+    def read(self): return self.data
+
+
+@pytest.mark.parametrize("exc", [TimeoutError("x"), ValueError("x")])
+def test_post_json_transport_failures_are_redacted(monkeypatch, exc):
+    def fail(*args, **kwargs): raise exc
+    import so101_demo.adapters.planner.http_json as module
+    monkeypatch.setattr(module, "urlopen", fail)
+    with pytest.raises(PlannerProviderError) as error:
+        post_json("https://x.test/key", {"Authorization":"Bearer secret"}, {}, 1)
+    assert error.value.code == "PROVIDER_TRANSPORT_FAILED"
+    assert "secret" not in str(error.value)
+
+
+def test_post_json_malformed_http_json(monkeypatch):
+    import so101_demo.adapters.planner.http_json as module
+    monkeypatch.setattr(module, "urlopen", lambda *a, **k: _Response(b"{"))
+    with pytest.raises(PlannerProviderError) as error:
+        post_json("https://x.test", {}, {}, 1)
+    assert error.value.code == "PROVIDER_TRANSPORT_FAILED"
+
+
+def test_post_json_rejects_non_mapping(monkeypatch):
+    import so101_demo.adapters.planner.http_json as module
+    monkeypatch.setattr(module, "urlopen", lambda *a, **k: _Response(b"[]"))
+    with pytest.raises(PlannerProviderError) as error:
+        post_json("https://x.test", {}, {}, 1)
+    assert error.value.code == "PROVIDER_RESPONSE_INVALID"
