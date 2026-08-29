@@ -123,10 +123,10 @@ Review-fix evidence stays under the same registered root:
 
 ## Audit clarification — reviewer Minor finding
 
-The original `task5-review-fix/red.log` honestly records **15 context-related failures**, but its
-exact-name default-import hook did not match Python's relative import form. That test therefore
-entered the runtime and ended at `CUP_POSE_TIMEOUT`; this artifact does **not** itself prove the
-pre-fix import-exception leak. The reviewer independently probed base commit `4d4a99d` and
+The original `task5-review-fix/red.log` records **14 invalid-context failures; the fifteenth
+failure was the default-import test whose hook did not match** Python's relative import form. That
+test therefore entered the runtime and ended at `CUP_POSE_TIMEOUT`; this artifact does **not**
+itself prove the pre-fix import-exception leak. The reviewer independently probed base commit `4d4a99d` and
 confirmed that the import exception leaked there; the current `9705da6` boundary redacts it.
 
 Fresh authoritative reviewer verification is retained under
