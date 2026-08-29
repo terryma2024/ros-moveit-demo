@@ -1,4 +1,6 @@
 import json
+import traceback
+from urllib.error import URLError
 
 import pytest
 
@@ -105,3 +107,35 @@ def test_post_json_rejects_non_mapping(monkeypatch):
     with pytest.raises(PlannerProviderError) as error:
         post_json("https://x.test", {}, {}, 1)
     assert error.value.code == "PROVIDER_RESPONSE_INVALID"
+
+
+@pytest.mark.parametrize("counter_value", ["10", 1.5, True])
+def test_deepseek_rejects_wrong_typed_usage_counters(counter_value):
+    payload = {"choices": [{"message": {"content": VALID}}], "usage": {"prompt_tokens": counter_value}}
+    with pytest.raises(PlannerProviderError) as error:
+        DeepSeekPlanner("k", transport=lambda *_: payload).plan("x")
+    assert error.value.code == "DEEPSEEK_RESPONSE_INVALID"
+
+
+@pytest.mark.parametrize("counter_value", ["10", 1.5, True])
+def test_ollama_rejects_wrong_typed_usage_counters(counter_value):
+    payload = {"message": {"content": VALID}, "prompt_eval_count": counter_value}
+    with pytest.raises(PlannerProviderError) as error:
+        OllamaPlanner(transport=lambda *_: payload).plan("x")
+    assert error.value.code == "OLLAMA_RESPONSE_INVALID"
+
+
+def test_post_json_wraps_request_construction_failure():
+    with pytest.raises(PlannerProviderError) as error:
+        post_json("not a valid url with [", {}, {}, 1)
+    assert error.value.code == "PROVIDER_TRANSPORT_FAILED"
+
+
+def test_post_json_traceback_redacts_transport_details(monkeypatch):
+    import so101_demo.adapters.planner.http_json as module
+    secret_url = "https://api.example.test/token-secret"
+    monkeypatch.setattr(module, "urlopen", lambda *a, **k: (_ for _ in ()).throw(URLError(secret_url)))
+    with pytest.raises(PlannerProviderError) as error:
+        post_json(secret_url, {}, {}, 1)
+    rendered = "".join(traceback.format_exception(error.type, error.value, error.tb))
+    assert secret_url not in rendered and "token-secret" not in rendered

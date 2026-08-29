@@ -16,4 +16,4 @@ def decode_candidate(content: object) -> object:
     try:
         return json.loads(content)
     except json.JSONDecodeError as error:
-        raise PlannerProviderError("PROVIDER_JSON_INVALID") from error
+        raise PlannerProviderError("PROVIDER_JSON_INVALID") from None

@@ -39,3 +39,11 @@ Added the six adapter package/implementation files and `test/test_planner_adapte
 Transport and provider failures never include keys, instruction, raw body/content, or URL secrets. Usage envelopes/counters are type guarded; only documented counters map to metadata. Syntactically valid JSON of any shape proceeds unchanged to Task 4. No network calls or Task 4 work were performed.
 
 Retained runs: Task 3 logs, JUnit, and ROS_HOME under the registered root. Archived runs: none. Deletion candidates: none; no evidence was deleted.
+
+## Correction follow-up
+
+Review identified malformed counter typing, unprotected `Request` construction, and chained transport exception leakage. The original `task3/green.log` is retained unchanged; it actually records 1 failed / 20 passed despite the original report's 21-passed claim.
+
+Correction RED: `task3-fix/red.log`, exit 1, **6 failed / 23 passed**. Correction GREEN: `task3-fix/green.log`, exit 0, **29 passed**. The corrected full package suite is `task3-fix/full-suite.log`, exit 0, **598 passed in 19.95s**, with JUnit at `task3-fix/so101_demo_py-pytest.xml`.
+
+The follow-up enforces exact non-bool integer documented counters, wraps request construction failures, and raises redacted transport/provider parsing errors without chained raw exceptions. `git diff --check` passed. No remaining concerns beyond no live provider network testing (intentionally injected/offline).
