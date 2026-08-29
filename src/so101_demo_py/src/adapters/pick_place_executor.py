@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from types import SimpleNamespace
 from typing import Callable
 
 from ..ports.pick_place_executor import (
     DynamicCupPickPlaceRequest,
+    ExecutionProvenance,
     ExecutorDispatchError,
     RuntimeDispatchResult,
 )
@@ -19,6 +21,7 @@ class DynamicRuntimeContext:
     evidence_root: Path
     source_commit: str
     installed_prefix: str
+    execution_provenance: ExecutionProvenance
 
 
 class DynamicCupPickPlaceExecutor:
@@ -88,8 +91,17 @@ class DynamicCupPickPlaceExecutor:
             and isinstance(context.evidence_root, Path)
             and context.evidence_root.is_absolute()
             and type(context.source_commit) is str
-            and bool(context.source_commit.strip())
+            and re.fullmatch(r"[0-9a-f]{40}", context.source_commit) is not None
             and type(context.installed_prefix) is str
             and bool(context.installed_prefix)
             and Path(context.installed_prefix).is_absolute()
+            and isinstance(context.execution_provenance, ExecutionProvenance)
+            and context.execution_provenance.source_commit == context.source_commit
+            and context.execution_provenance.installed_prefix
+            == context.installed_prefix
+            and context.execution_provenance.session_id == context.session_id
+            and context.execution_provenance.expected_reset_epoch
+            == context.expected_reset_epoch
+            and context.execution_provenance.evidence_root
+            == str(context.evidence_root)
         )

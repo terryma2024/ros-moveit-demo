@@ -13,8 +13,26 @@ from so101_demo.adapters.pick_place_executor import (
 )
 from so101_demo.ports.pick_place_executor import (
     DynamicCupPickPlaceRequest,
+    ExecutionProvenance,
     ExecutorDispatchError,
 )
+
+
+SOURCE_COMMIT = "e58eee1a2ad94c859a6784bb968ca9702ec4031a"
+INSTALLED_PREFIX = "/data/work/ws_moveit/install/so101_demo_py"
+
+
+def _provenance(tmp_path: Path) -> ExecutionProvenance:
+    return ExecutionProvenance(
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        entrypoint=None,
+        module=None,
+        executable=None,
+        session_id="text-agent-session",
+        expected_reset_epoch=3,
+        evidence_root=str(tmp_path),
+    )
 
 
 def _context(tmp_path: Path) -> DynamicRuntimeContext:
@@ -22,8 +40,9 @@ def _context(tmp_path: Path) -> DynamicRuntimeContext:
         session_id="text-agent-session",
         expected_reset_epoch=3,
         evidence_root=tmp_path,
-        source_commit="e58eee1",
-        installed_prefix="/data/work/ws_moveit/install/so101_demo_py",
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        execution_provenance=_provenance(tmp_path),
     )
 
 
@@ -66,8 +85,8 @@ def test_context_is_frozen_and_adapter_calls_runner_once_with_only_whitelisted_o
         "scene_source": "observe_only",
         "dynamic_policy": None,
         "cup_pose_timeout_s": 5.0,
-        "source_commit": "e58eee1",
-        "installed_prefix": "/data/work/ws_moveit/install/so101_demo_py",
+        "source_commit": SOURCE_COMMIT,
+        "installed_prefix": INSTALLED_PREFIX,
         "session_id": "text-agent-session",
         "expected_reset_epoch": 3,
         "evidence_root": tmp_path,
@@ -118,8 +137,18 @@ def test_invalid_typed_request_precedes_context_validation_and_default_import(
         session_id=" ",
         expected_reset_epoch=3,
         evidence_root=tmp_path,
-        source_commit="e58eee1",
-        installed_prefix="/data/work/ws_moveit/install/so101_demo_py",
+        source_commit=SOURCE_COMMIT,
+        installed_prefix=INSTALLED_PREFIX,
+        execution_provenance=ExecutionProvenance(
+            source_commit=SOURCE_COMMIT,
+            installed_prefix=INSTALLED_PREFIX,
+            entrypoint=None,
+            module=None,
+            executable=None,
+            session_id=" ",
+            expected_reset_epoch=3,
+            evidence_root=str(tmp_path),
+        ),
     )
     real_import = builtins.__import__
 
@@ -164,8 +193,9 @@ def test_invalid_context_is_redacted_before_runner_or_default_runtime_import(
         "session_id": "text-agent-session",
         "expected_reset_epoch": 3,
         "evidence_root": tmp_path,
-        "source_commit": "e58eee1",
-        "installed_prefix": "/data/work/ws_moveit/install/so101_demo_py",
+        "source_commit": SOURCE_COMMIT,
+        "installed_prefix": INSTALLED_PREFIX,
+        "execution_provenance": _provenance(tmp_path),
     }
     values.update(changes)
     calls: list[object] = []
@@ -231,7 +261,14 @@ def test_preview_path_never_imports_ros_or_dispatches(
     class Planner:
         def plan(self, instruction: str) -> PlannerCandidate:
             return PlannerCandidate(
-                {"target_object": "plastic_cup", "action": "pick", "constraints": {}},
+                {
+                    "outcome": "supported",
+                    "command": {
+                        "target_object": "plastic_cup",
+                        "action": "pick",
+                        "constraints": {},
+                    },
+                },
                 PlannerMetadata("test", "test", 0, None, None, None, False),
             )
 

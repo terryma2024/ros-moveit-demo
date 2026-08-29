@@ -4,7 +4,12 @@ from dataclasses import FrozenInstanceError, dataclass, field
 import pytest
 
 from so101_demo.application.task_dispatch import TaskDispatcher
-from so101_demo.application.text_agent import AgentRequest, AgentStatus, TextAgent
+from so101_demo.application.text_agent import (
+    AgentRequest,
+    AgentStatus,
+    TextAgent,
+    build_confirmation_digest,
+)
 from so101_demo.core.task_command import TaskCommand
 from so101_demo.ports.pick_place_executor import (
     DynamicCupPickPlaceRequest,
@@ -23,6 +28,7 @@ VALID_CANDIDATE = {
     "action": "pick",
     "constraints": {},
 }
+VALID_OUTCOME = {"outcome": "supported", "command": VALID_CANDIDATE}
 METADATA = PlannerMetadata(
     provider="deepseek",
     model="deepseek-v4-flash",
@@ -87,13 +93,26 @@ def make_request(**changes: object) -> AgentRequest:
         "mode": "preview",
         "execute": False,
         "backend": "mujoco",
+        "confirmation_digest": None,
     }
     values.update(changes)
+    if (
+        values["mode"] == "execute"
+        and values["execute"] is True
+        and "confirmation_digest" not in changes
+        and isinstance(values["instruction"], str)
+    ):
+        values["confirmation_digest"] = build_confirmation_digest(
+            values["instruction"].strip(),
+            TaskCommand("plastic_cup", "pick", ()),
+            "dynamic_cup_pick_place",
+            METADATA,
+        )
     return AgentRequest(**values)  # type: ignore[arg-type]
 
 
 def make_agent(
-    planner_value: object = VALID_CANDIDATE,
+    planner_value: object = VALID_OUTCOME,
     executor: FakeExecutor | None = None,
 ) -> tuple[TextAgent, StubPlanner, FakeExecutor]:
     actual_executor = executor or FakeExecutor()
@@ -233,7 +252,9 @@ def test_semantically_invalid_candidate_never_dispatches() -> None:
         "action": "place",
         "constraints": {},
     }
-    agent, planner, executor = make_agent(candidate)
+    agent, planner, executor = make_agent(
+        {"outcome": "supported", "command": candidate}
+    )
 
     result = agent.handle(make_request())
 
@@ -249,7 +270,9 @@ def test_semantically_invalid_candidate_never_dispatches() -> None:
 
 def test_nonempty_constraint_is_rejected_without_dispatch() -> None:
     candidate = {**VALID_CANDIDATE, "constraints": {"speed": "slow"}}
-    agent, planner, executor = make_agent(candidate)
+    agent, planner, executor = make_agent(
+        {"outcome": "supported", "command": candidate}
+    )
 
     result = agent.handle(make_request())
 
@@ -276,6 +299,12 @@ def test_preview_returns_normalized_command_without_dispatch() -> None:
     assert result.capability == "dynamic_cup_pick_place"
     assert result.dispatch is False
     assert result.runtime_session_id is None
+    assert result.confirmation_digest == build_confirmation_digest(
+        "帮我拿杯子",
+        TaskCommand("plastic_cup", "pick", ()),
+        "dynamic_cup_pick_place",
+        METADATA,
+    )
     assert_terminal_only(result.status, result.state_trace)
     assert planner.calls == ["帮我拿杯子"]
     assert executor.calls == []
@@ -483,8 +512,15 @@ def test_to_dict_projects_only_approved_planner_and_trace_fields() -> None:
             "cache_hit_tokens": 0,
             "fallback_used": False,
         },
+        "planner_outcome": "supported",
         "command": VALID_CANDIDATE,
         "capability": "dynamic_cup_pick_place",
+        "confirmation_digest": build_confirmation_digest(
+            "帮我拿杯子",
+            TaskCommand("plastic_cup", "pick", ()),
+            "dynamic_cup_pick_place",
+            METADATA,
+        ),
     }
 
 
