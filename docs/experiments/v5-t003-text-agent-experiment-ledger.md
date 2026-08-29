@@ -2,26 +2,28 @@
 
 ```yaml
 task_id: so101-v5-t003-text-agent
-goal: Implement the approved V5-T003 single-turn text instruction agent with deterministic validation, fail-closed dispatch, and the existing MuJoCo dynamic cup pick-place runtime boundary.
-success_contract: Pure-Python RED-GREEN tests prove every static gate and exactly-once dispatch; package tests pass; ai-station preview and authorized MuJoCo dispatch are traced by one request_id without claiming V5-T005 physical completion.
+goal: Implement and final-review-correct the approved V5-T003 single-turn text instruction agent with deterministic validation, preview-bound confirmation, verified provenance, fail-closed providers, and the existing MuJoCo dynamic cup pick-place runtime boundary.
+success_contract: RED-GREEN tests prove the closed planner outcome, confirmation digest, provider boundary, verified provenance, atomic idempotency, and bounded qwen behavior; focused/full package tests pass; final-candidate ai-station DeepSeek, Mac DeepSeek, and Mac qwen simulations each preview then execute exactly once with correlated cleanup, without claiming V5-T005 physical completion.
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
 branch: codex/v5-t003-text-agent
 base_commit: e58eee1a2ad94c859a6784bb968ca9702ec4031a
-current_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
+current_commit: 4ebdf451021f975f5f4903777bdcd5bb9a31b347 (final production candidate; final documentation commit is resolved live at handoff)
 documentation_snapshot_parent: 44a4471cd1df4d6d15e8f69cf1eeea66f295ba2d
-live_commit_rule: Every EXP-002/Task 8 action must run and record `git rev-parse HEAD` immediately before its provenance-sensitive command.
+live_commit_rule: Every live experiment records the exact committed production candidate before mutation; final documentation resolves its containing commit with `git rev-parse HEAD` at handoff rather than embedding a self-reference.
 evidence_root: /tmp/so101-debug-v5-t003-text-agent-20260829-164105
 confirmed_conclusions:
   - Local moveit-demo is at e58eee1 while ai-station is at e6ab8c1; source/install/runtime parity must be established before live validation (CP-001).
   - V5-T003 acceptance ends at correct state-machine dispatch and does not claim V5-T005 physical pick-place completion (CP-001).
   - Local candidate validation at 25c30bec8aae4dd5fc0ca6b29945febe660f9d87 passed focused and package gates; the offline preview validated a fallback-marked PlannerCandidate without dispatch (EXP-001).
+  - Final candidate 4ebdf451021f975f5f4903777bdcd5bb9a31b347 closes the final-review findings and the EXP-005 qwen reasoning/prompt boundary with TDD evidence.
+  - EXP-006 ai-station DeepSeek, EXP-007 Mac DeepSeek, and EXP-008 Mac qwen are each VALID at the final candidate with exactly one execute, correlated runtime completion, and clean targeted shutdown.
 disproven_routes:
-  - NONE
+  - Treating a valid-looking planner command as sufficient authorization without a preview-bound digest.
+  - Treating old-candidate EXP-003/004 or fail-closed EXP-005 as qualification of the newer final candidate.
 open_hypotheses:
-  - The existing so101_demo_py package can expose the TextAgent through focused Python modules without changing the dynamic pick-place runtime contract.
-  - The existing dynamic runtime can be called through a typed Python adapter without shell command construction.
-latest_checkpoint: CP-003
-next_experiment: EXP-003
+  - NONE within V5-T003; physical acceptance belongs to separately authorized V5-T005 work.
+latest_checkpoint: CP-004
+next_experiment: NONE
 ```
 
 ```yaml
@@ -724,4 +726,34 @@ observations:
 conclusion: VALID for final-candidate V5-T003 Mac qwen3.5:4b qualification with exactly one execute and clean targeted shutdown; EXP-006, EXP-007, and EXP-008 are all VALID. No real-hardware or V5-T005 conclusion.
 decision: KEEP
 next_experiment: NONE
+```
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-008
+production_candidate: 4ebdf451021f975f5f4903777bdcd5bb9a31b347
+current_hypothesis: No further V5-T003 experiment or production patch is required; the controller should perform the single final re-review before any authorized local merge.
+working_tree_status: The final documentation/checkpoint commit is the commit containing this block and final-fix-report.md; resolve it live with git rev-parse HEAD. No merge or push was performed. A pre-report clean gate at 38a0773 passed build, installed provenance, 190 focused tests, 743 full tests, diff, status, and worktree secret scan; a post-commit final-HEAD rerun is retained outside Git under final-fix/final-gates.
+owned_processes: NONE; EXP-006/007/008 stacks, bridges, launch children, and provider tunnels are absent. The Mac Ollama service is persistent user state and remains live.
+preserved_processes: ai-station codex and codex-cua; persistent Mac Ollama; unrelated desktop/system processes.
+confirmed_conclusions:
+  - The final-review RED suite failed as expected with 37 failures/4 passes plus four CLI-provider failures; initial GREEN passed 45 final-review, 188 focused, and 741 full tests.
+  - EXP-005 was a valid fail-closed qwen provider-boundary result at candidate 785a95e with execute count zero. Its one-variable diagnostic isolated think=false and prompt constraint invention, leading to two new RED tests and final candidate 4ebdf45; GREEN passed 31 adapter, 190 focused, and 743 full tests.
+  - EXP-006, EXP-007, and EXP-008 are VALID at 4ebdf45. Each invoked execute exactly once, reached RUNTIME_COMPLETED and downstream DONE/19 with exact request/session correlation, retained verified provenance, and ended with zero owned nodes/processes.
+  - The 23-file ai-station evidence copy is byte-identical by remote/local SHA-256. Secret-safe scans found zero actual-key or strong generic credential matches across 23 selected remote/copied files, 2395 full remote-root files, 744 full local-root files, 563 new-evidence files, and 3342 worktree files at their respective scan times.
+  - The teaching guide is src/so101_demo_py/docs/text_pick_agent.md and is linked from the package README.
+  - No evidence was deleted, no real hardware was touched, and no V5-T005 conclusion is made.
+disproven_routes:
+  - Reusing old candidate live evidence for corrected shared provider/prompt behavior.
+  - Switching Mac to visible mode without gui-capture authorization; supported headless worked, so no switch occurred.
+  - Treating scan tool source identifiers as credential values; v1's sole generic match was its own secret_text identifier, while exact-key matches were zero and the token-shaped v2 scan passed both roots.
+open_risks:
+  - EXP-008 tmux teardown left three exact reparented launch children that required targeted SIGTERM after PGID/PID correlation; final graph/process read-back passed.
+  - macOS colcon prints a post-success LaunchServices kLSNoExecutableErr message despite exit zero; install/provenance/tests pass.
+  - Downstream DONE/MoveIt/controller/cup evidence remains diagnostic, not physical acceptance.
+evidence_disposition:
+  retained: Both complete registered roots; all RED/GREEN/JUnit, old/final experiments, failed verifier/environment observations, remote copied/hash/scan artifacts, and final gates.
+  archived: NONE
+  deletion_candidates: Superseded candidate-785a95e build/install, failed EXP-004 attempt, EXP-005 provider diagnostics, superseded bundle/intermediate build trees, failed verifier wrappers/logs, scanner v1, wrong-cwd full-gate evidence, and the previously listed /tmp/so101-debug-task1/ stray root. Listed only; nothing deleted.
+next_command: Controller runs one scoped final re-review; only if clean may the controller perform the separately authorized local main merge. Do not merge or push from this worktree.
 ```
