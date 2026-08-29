@@ -599,14 +599,17 @@ next_experiment: EXP-007
 
 ```yaml
 experiment_id: EXP-007
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: 493e9aed5082385485b29dd6be16a8d833b19d98
   - status: RUNNING
     recorded_at: 2026-08-30T02:48:45+08:00
     evidence: final-fix/mac-deepseek/exp-007-mac-deepseek-4ebdf45/{pre-mutation-readback.log,pre-mutation-readback-corrected.log,runtime-env-resolution.log,stack-provenance.log,full-readiness.log,full-readiness-assertion.log,owned-panes-start.log,process-isolation-readback.log}; final-fix/mac-candidate-4ebdf45/{build-and-provenance.log,installed-provenance-corrected-v2.log,focused-corrected-v2.xml}
-execute_invocation_count: 0
+  - status: VALID
+    recorded_at: 2026-08-30T02:55:32+08:00
+    evidence: final-fix/mac-deepseek/exp-007-mac-deepseek-4ebdf45/{preview.json,pre-execute-readiness.log,execute-invocation.marker,execute.json,execute-result.json,text-agent-provenance,dynamic-execute-manifest.json,reachability-observed.json,downstream-layer-summary.log,qualified-artifact-hashes.log,cleanup-readback.log,post-cleanup-process-readback.log}
+execute_invocation_count: 1
 observed_reset_epoch: 0
 created_at: 2026-08-30T02:10:40+08:00
 prior_experiment: EXP-006
@@ -645,8 +648,18 @@ failure_criteria:
 invalid_criteria:
   - EXP-006 not VALID; Mac headless unsupported; provider/model/digest/instruction/provenance/readiness mismatch; execute count other than one; contamination, missing correlation, broad cleanup, evidence loss, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
-decision: PENDING
-next_experiment: EXP-008 only if EXP-007 is VALID
+observed:
+  - Fresh preflight proved candidate target/overlay absent, domain 210 had only /parameter_events and /rosout with no nodes, DEEPSEEK_API_KEY was SET without value disclosure, qwen3.5:4b remained present at digest 2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd, and no related process existed. Normal-scope ps was denied and retained; the corrected read-only elevated inventory was empty.
+  - The detached target initially inherited the repository's empty per-worktree config.worktree and therefore resolved its common Git directory as the work tree. A narrow per-worktree core.worktree metadata correction restored the exact target without reset or source change. The resulting worktree was clean at 4ebdf451021f975f5f4903777bdcd5bb9a31b347 with gitlink 71bc934.
+  - The isolated candidate-only build exited 0 and installed Text Agent at the planned prefix. Two verifier-only harness errors were retained: an unqualified import name, then a symlink-preserving __file__ comparison; the corrected resolved-source provenance matched entry-point SHA-256 ffc193c71996d6743ca1fe7e762b25d231099fd04113efb6389be9c216fcb5d0, text-agent a30fde609c75bd4cc29bd467e161f523f7260173fdf57507aba634036b1cbbbf, Ollama adapter 656ba6ac751557c07facf8c30959c5a16b4b20a503df4171773b0452ccdece57, and prompt module 60d222cd22c3ed3539c3ccf75b4c2702d3691d8297b8bafb78f8ba9e397c98f6. A first focused run from the controller cwd correctly rejected three source-commit mismatches with 187 passes; the identical gate from candidate cwd passed 190 tests. No production change followed any harness issue.
+  - Runtime ordering filtered the stale standalone fork, placed project libraries first, and appended the macOS dylib farm last. The fresh stack passed supported headless mode, simulation-evidence plugin loading with no ABI failure, three active controllers, Planning Scene READ_BACK, fresh /cup_pose, exact session/partition/domain, and reset_epoch 0. Five active stack/bridge PIDs correlated to the two owned tmux roots before preview.
+  - Preview exited 0 with empty stderr and returned DISPATCH_PREVIEW/dispatch=false, supported plastic_cup/pick/{}, deepseek/deepseek-v4-flash with fallback false, exact request ID, and digest sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb. Its retained SHA-256 is bd46ebbf7f846991216fe8fe94a74be16a19c0326423874d77f01cb0fceca551.
+  - Exactly one execute command was invoked with the exact instruction/digest pair. It exited 0 with empty stderr; the final Agent result is RUNTIME_COMPLETED/dispatch=true with RUNTIME_STARTED then RUNTIME_COMPLETED, exact request/runtime session correlation, DeepSeek provider/model/fallback false, and verified source/prefix/entry-point/module/Python/session/reset/evidence provenance. The persisted provenance artifact count is one.
+  - The state machine reached DONE with transition_count 19 and no failure; reachability was SUCCEEDED for perceived_cup. Controller/MoveIt logs contain 22 arm-goal, 3 gripper-goal, and 22 MoveIt execution successes, with zero future-stamp rejections in the Agent stream. These are downstream simulation diagnostics only and do not establish real-hardware or V5-T005 acceptance.
+  - Targeted SIGINT cleanup removed only the two owned stack/bridge roots; their launch children had already exited after the runtime lifecycle. Post-cleanup domain 210 returned to its two pre-existing infrastructure topics with zero nodes, and the elevated related-process inventory was empty. Candidate/task worktrees stayed clean, main plus its three pre-existing untracked files were unchanged, all evidence remained retained, and the persistent Ollama service/model/digest stayed live.
+conclusion: VALID for final-candidate V5-T003 Mac DeepSeek qualification with exactly one execute and clean owned shutdown; no real-hardware or V5-T005 conclusion.
+decision: KEEP
+next_experiment: EXP-008
 ```
 
 ```yaml
