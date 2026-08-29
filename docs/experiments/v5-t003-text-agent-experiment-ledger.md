@@ -470,7 +470,16 @@ next_experiment: EXP-005 only if EXP-004 is VALID
 
 ```yaml
 experiment_id: EXP-005
-status: PLANNED
+status: RUNNING
+transitions:
+  - status: PLANNED
+    recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
+    provenance_path_amended_in_commit: ea9496405b959e51dd8a1c16ec7d03ff698350c4
+  - status: RUNNING
+    recorded_at: 2026-08-30T01:50:25+08:00
+    evidence: final-fix/mac-qwen/exp-005-mac-qwen-785a95e/{pre-mutation-readback-corrected.log,stack-provenance.log,full-readiness.log,owned-panes-start.log}
+execute_invocation_count: 0
+observed_reset_epoch: 0
 prior_experiment: EXP-004
 hypothesis: After both DeepSeek qualifications are valid, the corrected candidate can use local qwen3.5:4b on Mac and execute one separately isolated headless MuJoCo simulation with provider-bound preview confirmation.
 prediction: Loading ~/.env and then unsetting only DEEPSEEK_API_KEY selects ollama/qwen3.5:4b, returns the precomputed qwen digest, and one confirmed execute reaches the correlated state machine with clean owned shutdown.
