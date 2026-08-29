@@ -89,3 +89,34 @@ adapter boundary and avoids physical side effects. Runtime return code zero stil
 the existing runtime's outcome, not physical pick-place acceptance.
 
 Retained runs: `task5/` evidence listed above. Archived runs: none. Deletion candidates: none.
+
+## Review-fix correction
+
+The review identified that context values were previously trusted and that an import-time
+failure on the default runner path was outside the adapter's operational exception boundary.
+This correction preserves the earlier evidence and adds fail-closed validation after qualified
+request validation but before any context projection, runner call, or ROS import.
+
+- Context now accepts only: a nonblank exact `str` session ID; non-bool `int` epoch at least
+  zero; absolute `Path` evidence root; nonblank exact `str` source commit; and nonempty exact
+  `str` absolute installed prefix. Any invalid value raises only
+  `ExecutorDispatchError("DYNAMIC_RUNTIME_CONTEXT_INVALID")`.
+- Invalid typed requests still return nonzero first, even if context is invalid. They do not
+  validate context, import the default runtime, or invoke a runner.
+- The lazy default import and runner call share one `except Exception` boundary, so import-time
+  and runner operational failures become `DYNAMIC_RUNTIME_EXCEPTION` with `from None`; no
+  arbitrary runtime text is exposed. `BaseException` is still not caught.
+
+Review-fix evidence stays under the same registered root:
+`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task5-review-fix/`.
+
+- RED: `red.log`, exact zsh/direnv candidate-overlay command, **15 failed, 14 passed**. The
+  failures demonstrate that invalid contexts previously reached the injected runner and that
+  a real default import failure previously leaked past the adapter boundary.
+- GREEN focused: `green-focused.log` and `focused-junit.xml`, with ROS imports confirmed,
+  **36 passed**.
+- GREEN full package: `full-green.log` and
+  `full-junit/so101_demo_py-pytest.xml`, **651 passed, 0 errors, 0 failures, 0 skipped**.
+
+`git diff --check` passed for this correction. Retained runs: prior `task5/` and
+`task5-review-fix/`; archived: none; deletion candidates: none. No runtime stack was started.
