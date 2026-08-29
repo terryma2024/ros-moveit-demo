@@ -532,3 +532,137 @@ cost: Three Agent preview calls, one 60-second direct default-reasoning diagnost
 decision: REPLACE after a bounded TDD correction; EXP-003 and EXP-004 remain truthful evidence for 785a95e only.
 next_experiment: EXP-006 after the new final candidate is committed and fresh EXP-006/007/008 PLANNED entries are recorded.
 ```
+
+```yaml
+experiment_id: EXP-006
+status: PLANNED
+created_at: 2026-08-30T02:10:40+08:00
+prior_experiment: EXP-005
+correction_origin: EXP-005 proved candidate 785a95e fails closed because qwen3.5 reasoning mode does not complete strict structured output; candidate 4ebdf45 explicitly disables Ollama reasoning and forbids invented constraints.
+hypothesis: The bounded final candidate can still use DeepSeek on ai-station and execute the qualified headless MuJoCo state machine exactly once with preview-bound confirmation and verified runtime provenance.
+prediction: One DeepSeek preview returns supported plastic_cup/pick/{}, provider/model deepseek/deepseek-v4-flash, and the planned digest; the exact pair then produces one correlated execute invocation and clean owned shutdown.
+single_variable: Candidate changes from 785a95e to 4ebdf45 while host, DeepSeek provider/model, instruction, confirmation contract, and supported headless composition remain fixed; domain/partition/request/session/evidence are fresh.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Candidate source is exactly 4ebdf451021f975f5f4903777bdcd5bb9a31b347, transferred by an ancestry/hash-verified bundle into a new detached task-owned ai-station worktree without modifying main or preserved evidence.
+  - ai-station main/submodule/status, tmux/process/ROS state, preserved RGB-D ledger, and DEEPSEEK_API_KEY SET/UNSET state are read back before mutation without printing the value.
+  - A candidate-only so101_demo_py overlay resolves imported source and installed entry point to the exact candidate and passes the authoritative focused gate.
+  - A fresh supported headless stack and one test-only MuJoCo truth bridge pass controller, Planning Scene, reset-epoch, and fresh /cup_pose readiness before status changes to RUNNING.
+instruction: Pick the plastic cup.
+provider: deepseek
+model: deepseek-v4-flash
+endpoint: https://api.deepseek.com/chat/completions
+preview_digest: sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb
+request_id: v5-t003-exp006-ai-deepseek-4ebdf45
+runtime_session_id: v5-t003-exp006-ai-deepseek-4ebdf45
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 4ebdf451021f975f5f4903777bdcd5bb9a31b347
+  source_worktree: /data/work/ws_moveit/.worktrees/v5-t003-final-qwen-4ebdf45
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 209
+  gz_partition: v5-t003-exp006-ai-deepseek-4ebdf45
+  evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-006-ai-deepseek-4ebdf45
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, exact provider/model, normalized empty-constraint command, exact request ID, and planned digest.
+  - Exactly one byte-identical confirmed execute returns verified provenance and reaches correlated state-machine dispatch/RUNTIME_COMPLETED; downstream observations are separated by layer without a V5-T005 claim.
+  - Targeted cleanup removes only recorded owned processes and preserves ai-station main, RGB-D ledger, codex sessions, unrelated processes, and all evidence.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime or correlated downstream failure.
+invalid_criteria:
+  - Provider/model/digest/instruction/provenance/readiness mismatch, execute count other than one, contamination, missing correlation, evidence loss, user-state modification, broad cleanup, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
+decision: PENDING
+next_experiment: EXP-007 only if EXP-006 is VALID
+```
+
+```yaml
+experiment_id: EXP-007
+status: PLANNED
+created_at: 2026-08-30T02:10:40+08:00
+prior_experiment: EXP-006
+hypothesis: After valid final-candidate ai-station requalification, the same candidate can use DeepSeek on Mac and execute one fresh isolated headless MuJoCo simulation with exact preview confirmation and provenance.
+prediction: The Mac DeepSeek preview returns the planned supported candidate/digest, then one and only one confirmed execute reaches the correlated state machine and cleans up its owned stack.
+single_variable: Host changes from ai-station to Mac while final candidate, provider/model, instruction, confirmation contract, and headless composition remain fixed; domain/partition/request/session/evidence are fresh.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-006 is VALID; otherwise this experiment remains PLANNED and no Mac live mutation occurs.
+  - Local detached candidate and isolated install resolve exactly to 4ebdf451021f975f5f4903777bdcd5bb9a31b347.
+  - Mac process/ROS state, key SET/UNSET state, Ollama model/digest, and supported headless runtime are read back before startup without displaying secrets.
+  - A fresh headless stack and one test-only truth bridge pass exact readiness before status changes to RUNNING; unsupported headless runtime ends this route without visible-mode substitution.
+instruction: Pick the plastic cup.
+provider: deepseek
+model: deepseek-v4-flash
+endpoint: https://api.deepseek.com/chat/completions
+preview_digest: sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb
+request_id: v5-t003-exp007-mac-deepseek-4ebdf45
+runtime_session_id: v5-t003-exp007-mac-deepseek-4ebdf45
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 4ebdf451021f975f5f4903777bdcd5bb9a31b347
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-final-fix-mac-4ebdf45
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 210
+  gz_partition: v5-t003-exp007-mac-deepseek-4ebdf45
+  evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-deepseek/exp-007-mac-deepseek-4ebdf45
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, deepseek/deepseek-v4-flash, normalized empty-constraint command, exact request ID, and planned digest.
+  - Exactly one byte-identical confirmed execute returns verified provenance and reaches correlated state-machine dispatch/RUNTIME_COMPLETED in the fresh Mac headless stack.
+  - Downstream evidence remains V5-T003 diagnostic and targeted cleanup leaves no experiment node/process while preserving Ollama and unrelated user state.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime or correlated downstream failure.
+invalid_criteria:
+  - EXP-006 not VALID; Mac headless unsupported; provider/model/digest/instruction/provenance/readiness mismatch; execute count other than one; contamination, missing correlation, broad cleanup, evidence loss, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
+decision: PENDING
+next_experiment: EXP-008 only if EXP-007 is VALID
+```
+
+```yaml
+experiment_id: EXP-008
+status: PLANNED
+created_at: 2026-08-30T02:10:40+08:00
+prior_experiment: EXP-007
+hypothesis: After both final-candidate DeepSeek qualifications are valid, candidate 4ebdf45 can use local qwen3.5:4b on Mac and execute one separately isolated headless MuJoCo simulation with provider-bound preview confirmation.
+prediction: Loading ~/.env and then unsetting only DEEPSEEK_API_KEY selects ollama/qwen3.5:4b; think=false returns supported plastic_cup/pick/{} and the planned qwen digest within the normal deadline; one confirmed execute reaches the correlated state machine with clean shutdown.
+single_variable: Provider/model changes from Mac DeepSeek to Mac loopback Ollama while final candidate, host, instruction, confirmation/provenance rules, and headless composition remain fixed; domain/partition/request/session/evidence are fresh.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-007 is VALID; otherwise this experiment remains PLANNED and no qwen live mutation occurs.
+  - Local candidate/install provenance remains exactly 4ebdf451021f975f5f4903777bdcd5bb9a31b347.
+  - ~/.env is loaded with export semantics and suppressed output, then only DEEPSEEK_API_KEY is unset in the experiment shell; only SET/UNSET is reported.
+  - Ollama loopback /api/tags proves qwen3.5:4b and records its model digest without service mutation.
+  - A separate fresh supported Mac headless stack/truth bridge passes readiness before status changes to RUNNING.
+instruction: Pick the plastic cup.
+provider: ollama
+model: qwen3.5:4b
+endpoint: http://127.0.0.1:11434/api/chat
+preview_digest: sha256:v1:48f93b8acc2bc64be60a7be8c95264e21ae4a6f1f19c9c02eec0227359e7e89e
+request_id: v5-t003-exp008-mac-qwen-4ebdf45
+runtime_session_id: v5-t003-exp008-mac-qwen-4ebdf45
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 4ebdf451021f975f5f4903777bdcd5bb9a31b347
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-final-fix-mac-4ebdf45
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-4ebdf45/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 211
+  gz_partition: v5-t003-exp008-mac-qwen-4ebdf45
+  evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-qwen/exp-008-mac-qwen-4ebdf45
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, ollama/qwen3.5:4b, normalized empty-constraint command, exact request ID, and planned qwen digest.
+  - Exactly one byte-identical confirmed execute returns verified provenance and reaches correlated state-machine dispatch/RUNTIME_COMPLETED in the separately owned Mac headless stack.
+  - Downstream observations remain V5-T003 diagnostics; targeted cleanup leaves no experiment process and preserves the persistent Ollama service/model and unrelated user state.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime or correlated downstream failure.
+invalid_criteria:
+  - EXP-007 not VALID; provider/model/digest/instruction/provenance/readiness mismatch; cloud key remains set; endpoint is non-loopback/non-/api/chat; headless unsupported; execute count other than one; contamination, missing correlation, broad cleanup, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun. If another production defect emerges, stop the bounded patch chain and report it rather than modifying production again.
+decision: PENDING
+next_experiment: NONE
+```
