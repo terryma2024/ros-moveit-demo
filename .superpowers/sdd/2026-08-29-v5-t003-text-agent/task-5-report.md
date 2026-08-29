@@ -120,3 +120,17 @@ Review-fix evidence stays under the same registered root:
 
 `git diff --check` passed for this correction. Retained runs: prior `task5/` and
 `task5-review-fix/`; archived: none; deletion candidates: none. No runtime stack was started.
+
+## Audit clarification — reviewer Minor finding
+
+The original `task5-review-fix/red.log` honestly records **15 context-related failures**, but its
+exact-name default-import hook did not match Python's relative import form. That test therefore
+entered the runtime and ended at `CUP_POSE_TIMEOUT`; this artifact does **not** itself prove the
+pre-fix import-exception leak. The reviewer independently probed base commit `4d4a99d` and
+confirmed that the import exception leaked there; the current `9705da6` boundary redacts it.
+
+Fresh authoritative reviewer verification is retained under
+`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task5-review-fix/rereview-rerun/`:
+focused **36 passed** and full package **651 passed**. The separate
+`task5-review-fix/rereview/` directory is retained as a deletion candidate because its environment
+preflight failed. Nothing was deleted.
