@@ -10,9 +10,9 @@ preview, state-machine start, runtime completion, and V5-T005 physical proof.
 
 ## Local verification
 
-All new Task 7 artifacts are retained beneath the sole root
-`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task7/` with `ROS_DOMAIN_ID=197` and
-`GZ_PARTITION=v5-t003-text-agent-task7-local-20260829-164105`.
+All Task 7 artifacts are retained beneath the sole registered root
+`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/`, in the `task7/` artifact subdirectory,
+with `ROS_DOMAIN_ID=197` and `GZ_PARTITION=v5-t003-text-agent-task7-local-20260829-164105`.
 
 - Candidate `colcon build --packages-select so101_demo_py --symlink-install`: exit 0.
 - Focused six-file suite: **139 passed**, exit 0; JUnit `text-agent-focused.xml` has 0 errors and
@@ -41,3 +41,25 @@ success.
 
 Retained: all Task 7 logs/JUnit and the preserved initial failed ad-hoc preview command under the
 registered root. Archived: none. Deletion candidates: none; nothing was deleted.
+
+## Review correction
+
+The registered evidence root is the parent `/tmp/so101-debug-v5-t003-text-agent-20260829-164105/`;
+`task7/` and `task7-review-fix/` are retained artifact subdirectories, not separate roots. The
+live documentation snapshot was `44a4471cd1df4d6d15e8f69cf1eeea66f295ba2d`; the ledger now uses
+`LIVE_GIT_REV_PARSE_HEAD` for future actions rather than claiming a tracked file contains its own
+final commit SHA. `EXP-001` continues to name its actual validated implementation commit
+`25c30bec8aae4dd5fc0ca6b29945febe660f9d87`.
+
+`task7-review-fix/offline_preview.py` is a retained, injected offline proof. With the installed
+candidate overlay it produced exactly one JSON document, exit 0, empty stderr, `DISPATCH_PREVIEW`,
+`dispatch=false`, the validated command/capability, and `ollama/qwen3.5:4b` metadata with fallback
+and tokens. Its import guard rejects `rclpy` and runtime modules; its socket guard blocks network
+use; its `NoDispatch` executor raises if preview tries to dispatch. Invocation evidence records
+live HEAD, installed prefix, CLI module path and SHA256. The earlier failed ad-hoc command and the
+first script attempt are retained; nothing was deleted.
+
+`RUNTIME_STARTED` means only that executor dispatch was attempted. A state-machine-start claim
+needs correlated runtime session/log evidence. `RUNTIME_COMPLETED` remains a runtime return value,
+not V5-T005 physical proof. No live provider, runtime dispatch, remote action, or physical claim
+was made by this correction.

@@ -100,15 +100,16 @@ ros2 run so101_demo_py text_pick_agent \
   --execute \
   --session-id v5-t003-live-001 \
   --expected-reset-epoch 0 \
-  --evidence-root /tmp/so101-debug-v5-t003-text-agent-20260829-164105/task7 \
+  --evidence-root /tmp/so101-debug-v5-t003-text-agent-20260829-164105 \
   --source-commit "$(git rev-parse HEAD)" \
   --installed-prefix "$(ros2 pkg prefix so101_demo_py)"
 ```
 
 The fixed gate order is input check, Planner, closed-schema validation, capability whitelist,
 `--mode execute` plus `--execute`, `backend=mujoco`, then the runtime. A `DISPATCH_PREVIEW` result
-proves only static validation with `dispatch=false`. `RUNTIME_STARTED` in `state_trace` proves the
-state machine was invoked, while `RUNTIME_COMPLETED` is only the runtime return status. Neither is
+proves only static validation with `dispatch=false`. `RUNTIME_STARTED` in `state_trace` proves only
+that executor dispatch was attempted; a state-machine-start claim additionally requires correlated
+runtime session and log evidence. `RUNTIME_COMPLETED` is only the runtime return status. Neither is
 V5-T005 physical proof: cup pose/contact, MoveIt scene, controller/joint/TF, and fresh visual
 evidence remain separate acceptance requirements.
 
