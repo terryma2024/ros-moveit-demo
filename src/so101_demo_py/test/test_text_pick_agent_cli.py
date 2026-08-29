@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from builtins import __import__ as builtin_import
 from dataclasses import dataclass
 from unittest.mock import ANY
 
@@ -9,6 +10,7 @@ import pytest
 
 from so101_demo.application.text_agent import AgentResult, AgentStatus
 from so101_demo.core.task_command import TaskCommand
+from so101_demo.ports.task_planner import PlannerCandidate, PlannerMetadata
 
 
 @dataclass
@@ -220,6 +222,41 @@ def test_preview_does_not_import_rclpy(monkeypatch, capsys) -> None:
     assert output(capsys)["status"] == "DISPATCH_PREVIEW"
 
 
+def test_production_preview_composition_does_not_import_ros_runtime(
+    monkeypatch, capsys
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    candidate = PlannerCandidate(
+        {"target_object": "plastic_cup", "action": "pick", "constraints": {}},
+        PlannerMetadata("deepseek", "test-model", 1, None, None, None, False),
+    )
+
+    class Planner:
+        def plan(self, _instruction):
+            return candidate
+
+    original_import = builtin_import
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "rclpy" or name.startswith("so101_demo.ros"):
+            raise AssertionError(f"ROS import forbidden during preview: {name}")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(text_pick_agent, "DeepSeekPlanner", lambda *_a, **_k: Planner())
+    monkeypatch.setattr(text_pick_agent, "OllamaPlanner", lambda **_k: Planner())
+    monkeypatch.setattr("builtins.__import__", guarded_import)
+
+    assert text_pick_agent.main(["--instruction", "帮我拿杯子"]) == 0
+
+    document = output(capsys)
+    assert document["status"] == "DISPATCH_PREVIEW"
+    assert document["dispatch"] is False
+    assert document["command"] == {
+        "target_object": "plastic_cup", "action": "pick", "constraints": {}
+    }
+
+
 def test_cli_composes_exact_default_planners_and_reads_only_environment_key(
     monkeypatch, capsys
 ) -> None:
@@ -270,6 +307,86 @@ def test_cli_composes_exact_default_planners_and_reads_only_environment_key(
     assert "test-only-secret" not in capsys.readouterr().out
 
 
+def test_cli_normalizes_provider_options_before_composition(monkeypatch, capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    calls: dict[str, object] = {}
+
+    class Agent:
+        def __init__(self, _planner, _executor) -> None:
+            pass
+
+        def handle(self, request) -> AgentResult:
+            return result(request_id=request.request_id)
+
+    monkeypatch.setattr(
+        text_pick_agent,
+        "DeepSeekPlanner",
+        lambda _key, **kwargs: calls.setdefault("deepseek", kwargs),
+    )
+    monkeypatch.setattr(
+        text_pick_agent,
+        "OllamaPlanner",
+        lambda **kwargs: calls.setdefault("ollama", kwargs),
+    )
+    monkeypatch.setattr(text_pick_agent, "PlannerChain", lambda primary, fallback: object())
+    monkeypatch.setattr(text_pick_agent, "TextAgent", Agent)
+
+    assert text_pick_agent.main(
+        [
+            "--instruction", "帮我拿杯子",
+            "--deepseek-model", " deepseek-model ",
+            "--deepseek-endpoint", " https://deepseek.test ",
+            "--ollama-model", " ollama-model ",
+            "--ollama-endpoint", " http://ollama.test ",
+        ]
+    ) == 0
+
+    assert calls == {
+        "deepseek": {
+            "model": "deepseek-model", "endpoint": "https://deepseek.test",
+            "timeout_s": 8.0,
+        },
+        "ollama": {
+            "model": "ollama-model", "endpoint": "http://ollama.test",
+            "timeout_s": 12.0,
+        },
+    }
+    assert output(capsys)["status"] == "DISPATCH_PREVIEW"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--deepseek-model", "   "],
+        ["--deepseek-endpoint", "   "],
+        ["--ollama-model", "   "],
+        ["--ollama-endpoint", "   "],
+        ["--deepseek-timeout-s", "0"],
+        ["--deepseek-timeout-s", "-1"],
+        ["--deepseek-timeout-s", "nan"],
+        ["--deepseek-timeout-s", "inf"],
+        ["--ollama-timeout-s", "0"],
+        ["--ollama-timeout-s", "-1"],
+        ["--ollama-timeout-s", "nan"],
+        ["--ollama-timeout-s", "inf"],
+    ],
+)
+def test_provider_options_are_rejected_before_provider_or_agent(
+    capsys, arguments: list[str]
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "PROVIDER_OPTIONS_INVALID"
+
+
 def test_cli_builds_runtime_executor_only_for_valid_execute(monkeypatch, capsys) -> None:
     from so101_demo.cli import text_pick_agent
 
@@ -304,8 +421,8 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(monkeypatch, capsys)
     assert text_pick_agent.main(
         [
             "--instruction", "帮我拿杯子", "--mode", "execute", "--execute",
-            "--session-id", "session-1", "--expected-reset-epoch", "0",
-            "--evidence-root", "/tmp/evidence", "--source-commit", "abc123",
+            "--session-id", " session-1 ", "--expected-reset-epoch", "0",
+            "--evidence-root", "/tmp/evidence", "--source-commit", " abc123 ",
             "--installed-prefix", "/tmp/install", "--request-id", "req-fixed",
         ]
     ) == 0
@@ -317,6 +434,26 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(monkeypatch, capsys)
     }
     assert str(calls["context"]["evidence_root"]) == "/tmp/evidence"
     assert output(capsys)["runtime_session_id"] == "session-1"
+
+
+def test_execute_rejects_whitespace_wrapped_source_commit_sentinel(capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        [
+            "--instruction", "帮我拿杯子", "--mode", "execute", "--execute",
+            "--session-id", "session-1", "--expected-reset-epoch", "0",
+            "--evidence-root", "/tmp/evidence",
+            "--source-commit", "  UNRECORDED_SOURCE  ",
+            "--installed-prefix", "/tmp/install",
+        ],
+        _agent=agent,
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "EXECUTION_SOURCE_COMMIT_INVALID"
 
 
 def test_cli_uses_requested_id_or_generates_one(monkeypatch, capsys) -> None:
