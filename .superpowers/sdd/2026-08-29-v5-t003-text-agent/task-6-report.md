@@ -35,3 +35,26 @@
 - Retained: the complete Task 6 evidence directory above (RED log and JUnit files).
 - Archived: none.
 - Deletion candidates: none. No evidence was deleted.
+
+## Review correction — CLI composition hardening
+
+The first report summarized installed-entry-point results without retaining the
+corresponding raw command output. That evidence gap is corrected under the same
+task evidence root at
+`/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task6-review-fix/`:
+
+- `red.log`: 14 expected RED failures for missing provider-option pre-gates and
+  source/session whitespace normalization; the production-composition ROS-free
+  preview regression was already green because the existing preview executor was
+  lazy and never imported the ROS runtime.
+- `focused-junit.xml`: 44 passed, 0 errors, 0 failures.
+- `build.log`: candidate `so101_demo_py` rebuild output.
+- `installed-evidence.log`: resolved current HEAD and package prefix, executable
+  stat, `ros2 pkg executables` output, and installed wrong-backend JSON/exit 1.
+- `so101_demo_py-pytest.xml`: exact zsh ROS-overlay full package result, 692
+  passed, 0 errors, 0 failures.
+
+The CLI now strips session IDs and source commits before constructing runtime
+context, rejects normalized empty or `UNRECORDED_SOURCE` commits, and validates
+normalized nonempty provider names/endpoints with finite positive timeouts before
+constructing either provider. Preview composition remains ROS-runtime-free.

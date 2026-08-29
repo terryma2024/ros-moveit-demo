@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -69,7 +70,10 @@ def _write_document(document: dict[str, object]) -> None:
 
 
 def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str | None]:
-    if not isinstance(options.session_id, str) or not options.session_id.strip():
+    if not isinstance(options.session_id, str):
+        return None, "EXECUTION_SESSION_ID_REQUIRED"
+    session_id = options.session_id.strip()
+    if not session_id:
         return None, "EXECUTION_SESSION_ID_REQUIRED"
     try:
         reset_epoch = int(options.expected_reset_epoch)
@@ -82,11 +86,10 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
     evidence_root = Path(options.evidence_root)
     if not evidence_root.is_absolute():
         return None, "EXECUTION_EVIDENCE_ROOT_INVALID"
-    if (
-        not isinstance(options.source_commit, str)
-        or not options.source_commit.strip()
-        or options.source_commit == "UNRECORDED_SOURCE"
-    ):
+    if not isinstance(options.source_commit, str):
+        return None, "EXECUTION_SOURCE_COMMIT_INVALID"
+    source_commit = options.source_commit.strip()
+    if not source_commit or source_commit == "UNRECORDED_SOURCE":
         return None, "EXECUTION_SOURCE_COMMIT_INVALID"
     if not isinstance(options.installed_prefix, str) or not options.installed_prefix.strip():
         return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
@@ -94,14 +97,36 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
         return None, "EXECUTION_INSTALLED_PREFIX_INVALID"
     return (
         DynamicRuntimeContext(
-            session_id=options.session_id,
+            session_id=session_id,
             expected_reset_epoch=reset_epoch,
             evidence_root=evidence_root,
-            source_commit=options.source_commit,
+            source_commit=source_commit,
             installed_prefix=options.installed_prefix,
         ),
         None,
     )
+
+
+def _normalize_provider_options(options) -> bool:
+    string_names = (
+        "deepseek_model",
+        "deepseek_endpoint",
+        "ollama_model",
+        "ollama_endpoint",
+    )
+    for name in string_names:
+        value = getattr(options, name)
+        if not isinstance(value, str):
+            return False
+        normalized = value.strip()
+        if not normalized:
+            return False
+        setattr(options, name, normalized)
+    for name in ("deepseek_timeout_s", "ollama_timeout_s"):
+        value = getattr(options, name)
+        if type(value) is not float or not math.isfinite(value) or value <= 0:
+            return False
+    return True
 
 
 def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
@@ -136,6 +161,9 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         return 1
     if options.mode not in {"preview", "execute"}:
         _write_document(_rejection(request_id, "MODE_INVALID"))
+        return 1
+    if not _normalize_provider_options(options):
+        _write_document(_rejection(request_id, "PROVIDER_OPTIONS_INVALID"))
         return 1
 
     context = None
