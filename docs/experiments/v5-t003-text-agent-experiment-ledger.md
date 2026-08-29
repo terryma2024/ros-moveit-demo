@@ -7,7 +7,7 @@ success_contract: Pure-Python RED-GREEN tests prove every static gate and exactl
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
 branch: codex/v5-t003-text-agent
 base_commit: e58eee1a2ad94c859a6784bb968ca9702ec4031a
-current_commit: LIVE_GIT_REV_PARSE_HEAD
+current_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
 documentation_snapshot_parent: 44a4471cd1df4d6d15e8f69cf1eeea66f295ba2d
 live_commit_rule: Every EXP-002/Task 8 action must run and record `git rev-parse HEAD` immediately before its provenance-sensitive command.
 evidence_root: /tmp/so101-debug-v5-t003-text-agent-20260829-164105
@@ -21,7 +21,7 @@ open_hypotheses:
   - The existing so101_demo_py package can expose the TextAgent through focused Python modules without changing the dynamic pick-place runtime contract.
   - The existing dynamic runtime can be called through a typed Python adapter without shell command construction.
 latest_checkpoint: CP-003
-next_experiment: NONE
+next_experiment: EXP-003
 ```
 
 ```yaml
@@ -339,4 +339,136 @@ disproven_routes:
 open_risks:
   - User execution-method choice is pending; live DeepSeek credential and ai-station Ollama availability will be observed rather than assumed.
 next_command: Await the user's choice of Subagent-Driven or Inline Execution, then load the selected Superpowers execution skill before Task 1.
+```
+
+```yaml
+experiment_id: EXP-003
+status: PLANNED
+prior_experiment: EXP-002
+hypothesis: The corrected committed candidate can use the qualified DeepSeek provider on ai-station and execute the existing headless MuJoCo state machine exactly once with preview-bound confirmation and verified runtime provenance.
+prediction: One DeepSeek preview returns supported plastic_cup/pick/{}, provider/model deepseek/deepseek-v4-flash, and the precomputed digest; the exact instruction/digest pair then produces one correlated execute invocation and clean owned shutdown.
+single_variable: The corrected candidate and DeepSeek provider replace EXP-002's earlier candidate/qwen provider; the supported headless stack composition and V5-T003 evidence boundary remain unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Candidate source is exactly 785a95e9df5dd18f32d8cb7d875f3fac948ce53e, transferred by an ancestry/hash-verified bundle into a new detached task-owned worktree without modifying ai-station main.
+  - ai-station main/submodule/status, tmux/process/ROS state, preserved RGB-D ledger, and DEEPSEEK_API_KEY SET/UNSET state are read back before mutation without printing the value.
+  - A candidate-only so101_demo_py overlay is built beneath this experiment evidence identity and resolves the imported module and installed entry point to the exact candidate.
+  - A fresh supported headless stack and one test-only MuJoCo truth bridge pass controller, Planning Scene, reset-epoch, and fresh /cup_pose readiness before status changes to RUNNING.
+instruction: Pick the plastic cup.
+provider: deepseek
+model: deepseek-v4-flash
+endpoint: https://api.deepseek.com/chat/completions
+preview_digest: sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb
+request_id: v5-t003-exp003-ai-deepseek-785a95e
+runtime_session_id: v5-t003-exp003-ai-deepseek-785a95e
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
+  source_worktree: /data/work/ws_moveit/.worktrees/v5-t003-final-fix-785a95e
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-003-ai-deepseek-785a95e/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-003-ai-deepseek-785a95e/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-003-ai-deepseek-785a95e/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 206
+  gz_partition: v5-t003-exp003-ai-deepseek-785a95e
+  remote_evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/exp-003-ai-deepseek-785a95e
+  local_copy_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/ai-station/copied-remote/exp-003-ai-deepseek-785a95e
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, exact provider/model, normalized empty-constraint command, capability, request_id, and exact planned digest.
+  - Exactly one execute command is invoked with the byte-identical instruction and preview digest; verified provenance is persisted/returned before dispatch and matches the candidate source, prefix, runtime hashes, session, reset epoch, and evidence root.
+  - Agent and runtime evidence correlate the request/session through one state-machine dispatch and RUNTIME_COMPLETED; downstream observations are recorded by layer without a V5-T005 claim.
+  - Cleanup targets only recorded experiment PIDs/tmux panes and final read-back preserves codex, codex-cua, ai-station main, the untracked RGB-D ledger, unrelated processes, and all evidence.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime failure or correlated downstream failure.
+invalid_criteria:
+  - Provider/model/digest/instruction/provenance/readiness mismatch, execute count other than one, contamination by an existing process/domain/partition, missing correlation, evidence outside the registered root, user-state modification, broad cleanup, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
+decision: PENDING
+next_experiment: EXP-004 only if EXP-003 is VALID
+```
+
+```yaml
+experiment_id: EXP-004
+status: PLANNED
+prior_experiment: EXP-003
+hypothesis: After valid ai-station requalification, the same corrected candidate can use DeepSeek on Mac and execute one fresh isolated headless MuJoCo simulation with exact preview confirmation and provenance.
+prediction: The Mac DeepSeek preview returns the planned supported candidate/digest, then one and only one confirmed execute reaches the correlated state machine and cleans up its owned stack.
+single_variable: Host changes from ai-station to Mac while candidate, provider/model, instruction, confirmation contract, and headless composition remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-003 is VALID; otherwise this experiment remains PLANNED and no Mac live mutation occurs.
+  - Local candidate HEAD and worktree install resolve exactly to 785a95e9df5dd18f32d8cb7d875f3fac948ce53e.
+  - Mac processes, ROS graph, candidate overlay, DEEPSEEK_API_KEY SET/UNSET state, Ollama tags/model digest, and headless runtime support are inspected before stack startup without printing credential values.
+  - A fresh headless stack and one test-only truth bridge pass readiness in the unique domain/partition before status changes to RUNNING; unsupported headless runtime makes this experiment INVALID/BLOCKED without visible-mode substitution.
+instruction: Pick the plastic cup.
+provider: deepseek
+model: deepseek-v4-flash
+endpoint: https://api.deepseek.com/chat/completions
+preview_digest: sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb
+request_id: v5-t003-exp004-mac-deepseek-785a95e
+runtime_session_id: v5-t003-exp004-mac-deepseek-785a95e
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install
+  installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 207
+  gz_partition: v5-t003-exp004-mac-deepseek-785a95e
+  evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-deepseek/exp-004-mac-deepseek-785a95e
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, deepseek/deepseek-v4-flash, normalized empty-constraint command, request_id, and exact planned digest.
+  - Exactly one byte-identical confirmed execute invocation returns verified provenance and reaches correlated state-machine dispatch/RUNTIME_COMPLETED in the fresh Mac headless stack.
+  - Downstream observations are separated by Agent, state machine, MoveIt/Planning Scene, controllers, and MuJoCo layers; cleanup removes only recorded owned processes and leaves no experiment ROS nodes.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime or correlated downstream failure.
+invalid_criteria:
+  - EXP-003 not VALID; Mac headless unsupported; provider/model/digest/instruction/provenance/readiness mismatch; execute count other than one; contamination, missing correlation, broad cleanup, evidence loss, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
+decision: PENDING
+next_experiment: EXP-005 only if EXP-004 is VALID
+```
+
+```yaml
+experiment_id: EXP-005
+status: PLANNED
+prior_experiment: EXP-004
+hypothesis: After both DeepSeek qualifications are valid, the corrected candidate can use local qwen3.5:4b on Mac and execute one separately isolated headless MuJoCo simulation with provider-bound preview confirmation.
+prediction: Loading ~/.env and then unsetting only DEEPSEEK_API_KEY selects ollama/qwen3.5:4b, returns the precomputed qwen digest, and one confirmed execute reaches the correlated state machine with clean owned shutdown.
+single_variable: Provider/model changes from Mac DeepSeek to Mac loopback Ollama while candidate, host, instruction, confirmation/provenance rules, and headless composition remain fixed; domain/partition/request/session and stack are fresh.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-004 is VALID; otherwise this experiment remains PLANNED and no qwen live mutation occurs.
+  - Local candidate/install provenance remains exactly 785a95e9df5dd18f32d8cb7d875f3fac948ce53e.
+  - ~/.env is loaded with export semantics and suppressed output, then only DEEPSEEK_API_KEY is unset in the experiment shell; only SET/UNSET is reported.
+  - Ollama loopback /api/tags proves qwen3.5:4b and records its model digest without changing the service.
+  - A separate fresh supported Mac headless stack/truth bridge passes readiness in this experiment domain/partition before status changes to RUNNING.
+instruction: Pick the plastic cup.
+provider: ollama
+model: qwen3.5:4b
+endpoint: http://127.0.0.1:11434/api/chat
+preview_digest: sha256:v1:48f93b8acc2bc64be60a7be8c95264e21ae4a6f1f19c9c02eec0227359e7e89e
+request_id: v5-t003-exp005-mac-qwen-785a95e
+runtime_session_id: v5-t003-exp005-mac-qwen-785a95e
+expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
+provenance:
+  source_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install
+  installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py
+  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  ros_domain_id: 208
+  gz_partition: v5-t003-exp005-mac-qwen-785a95e
+  evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-qwen/exp-005-mac-qwen-785a95e
+success_criteria:
+  - Preview is DISPATCH_PREVIEW/dispatch=false with supported outcome, ollama/qwen3.5:4b, normalized empty-constraint command, request_id, and exact planned qwen digest.
+  - Exactly one byte-identical confirmed execute invocation returns verified provenance and reaches correlated state-machine dispatch/RUNTIME_COMPLETED in the separately owned Mac headless stack.
+  - Downstream observations remain V5-T003 diagnostics; targeted cleanup leaves no experiment stack/bridge/ROS process and preserves Ollama and unrelated user state.
+failure_criteria:
+  - Qualified provider/stack/provenance remain valid but the sole execute returns a product-level runtime or correlated downstream failure.
+invalid_criteria:
+  - EXP-004 not VALID; provider/model/digest/instruction/provenance/readiness mismatch; cloud key remains set; endpoint is non-loopback/non-/api/chat; headless unsupported; execute count other than one; contamination, missing correlation, broad cleanup, real hardware, or V5-T005 claim.
+execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
+decision: PENDING
+next_experiment: NONE
 ```
