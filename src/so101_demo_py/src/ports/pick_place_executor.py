@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 
+class ExecutorDispatchError(RuntimeError):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 @dataclass(frozen=True, slots=True)
 class DynamicCupPickPlaceRequest:
     request_id: str

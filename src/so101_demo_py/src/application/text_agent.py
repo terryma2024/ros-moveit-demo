@@ -5,10 +5,15 @@ from enum import Enum
 
 from ..core.task_command import (
     CommandValidationError,
+    TaskCommand,
     validate_instruction,
     validate_task_command,
 )
-from ..ports.pick_place_executor import PickPlaceExecutorPort
+from ..ports.pick_place_executor import (
+    ExecutorDispatchError,
+    PickPlaceExecutorPort,
+    RuntimeDispatchResult,
+)
 from ..ports.task_planner import PlannerMetadata, PlannerPort, PlannerProviderError
 from .task_dispatch import DispatchRejectedError, TaskDispatcher
 
@@ -38,7 +43,7 @@ class AgentResult:
     status: AgentStatus
     reason_code: str | None
     metadata: PlannerMetadata | None
-    command: dict[str, object] | None
+    command: TaskCommand | None
     capability: str | None
     dispatch: bool
     runtime_session_id: str | None
@@ -64,23 +69,12 @@ class AgentResult:
                 "fallback_used": self.metadata.fallback_used,
             }
         if self.command is not None:
-            result["command"] = self._project_command()
+            result["command"] = self.command.to_dict()
         if self.capability is not None:
             result["capability"] = self.capability
         if self.runtime_session_id is not None:
             result["runtime_session_id"] = self.runtime_session_id
         return result
-
-    def _project_command(self) -> dict[str, object]:
-        assert self.command is not None
-        constraints = self.command.get("constraints")
-        if not isinstance(constraints, dict):
-            constraints = {}
-        return {
-            "target_object": self.command.get("target_object"),
-            "action": self.command.get("action"),
-            "constraints": dict(constraints),
-        }
 
 
 class TextAgent:
@@ -135,20 +129,20 @@ class TextAgent:
             )
         try:
             dispatch_request = self._dispatcher.resolve(command, request.request_id)
-        except DispatchRejectedError:
+        except DispatchRejectedError as error:
             return self._terminal_result(
                 request,
                 AgentStatus.DISPATCH_REJECTED,
-                "CONSTRAINT_UNCONSUMED",
+                error.code,
                 metadata=planned.metadata,
-                command=command.to_dict(),
+                command=command,
             )
         if request.mode == "preview" and not request.execute:
             return self._terminal_result(
                 request,
                 AgentStatus.DISPATCH_PREVIEW,
                 metadata=planned.metadata,
-                command=command.to_dict(),
+                command=command,
                 capability=dispatch_request.capability,
             )
         if request.mode != "execute" or not request.execute:
@@ -157,7 +151,7 @@ class TextAgent:
                 AgentStatus.DISPATCH_REJECTED,
                 "EXPLICIT_EXECUTE_REQUIRED",
                 metadata=planned.metadata,
-                command=command.to_dict(),
+                command=command,
                 capability=dispatch_request.capability,
             )
         if request.backend != dispatch_request.backend:
@@ -166,7 +160,7 @@ class TextAgent:
                 AgentStatus.DISPATCH_REJECTED,
                 "BACKEND_NOT_QUALIFIED",
                 metadata=planned.metadata,
-                command=command.to_dict(),
+                command=command,
                 capability=dispatch_request.capability,
             )
         if request.request_id in self._claimed_request_ids:
@@ -175,12 +169,29 @@ class TextAgent:
                 AgentStatus.DISPATCH_REJECTED,
                 "DUPLICATE_REQUEST_ID",
                 metadata=planned.metadata,
-                command=command.to_dict(),
+                command=command,
                 capability=dispatch_request.capability,
             )
 
         self._claimed_request_ids.add(request.request_id)
-        runtime = self._executor.dispatch(dispatch_request)
+        try:
+            runtime = self._executor.dispatch(dispatch_request)
+        except ExecutorDispatchError as error:
+            return self._runtime_failure_result(
+                request,
+                planned.metadata,
+                command,
+                dispatch_request.capability,
+                error.code,
+            )
+        if not self._is_valid_runtime_result(runtime):
+            return self._runtime_failure_result(
+                request,
+                planned.metadata,
+                command,
+                dispatch_request.capability,
+                "EXECUTOR_RESULT_INVALID",
+            )
         status = (
             AgentStatus.RUNTIME_COMPLETED
             if runtime.exit_code == 0
@@ -191,11 +202,39 @@ class TextAgent:
             status=status,
             reason_code=None if runtime.exit_code == 0 else "RUNTIME_FAILED",
             metadata=planned.metadata,
-            command=command.to_dict(),
+            command=command,
             capability=dispatch_request.capability,
             dispatch=True,
             runtime_session_id=runtime.runtime_session_id,
             state_trace=(AgentStatus.RUNTIME_STARTED, status),
+        )
+
+    @staticmethod
+    def _is_valid_runtime_result(value: object) -> bool:
+        return (
+            isinstance(value, RuntimeDispatchResult)
+            and type(value.exit_code) is int
+            and isinstance(value.runtime_session_id, str)
+        )
+
+    @staticmethod
+    def _runtime_failure_result(
+        request: AgentRequest,
+        metadata: PlannerMetadata,
+        command: TaskCommand,
+        capability: str,
+        reason_code: str,
+    ) -> AgentResult:
+        return AgentResult(
+            request_id=request.request_id,
+            status=AgentStatus.RUNTIME_FAILED,
+            reason_code=reason_code,
+            metadata=metadata,
+            command=command,
+            capability=capability,
+            dispatch=True,
+            runtime_session_id=None,
+            state_trace=(AgentStatus.RUNTIME_STARTED, AgentStatus.RUNTIME_FAILED),
         )
 
     @staticmethod
@@ -214,11 +253,11 @@ class TextAgent:
         status: AgentStatus,
         reason_code: str | None = None,
         metadata: PlannerMetadata | None = None,
-        command: dict[str, object] | None = None,
+        command: TaskCommand | None = None,
         capability: str | None = None,
     ) -> AgentResult:
         return AgentResult(
-            request_id=request.request_id,
+            request_id=TextAgent._safe_request_id(request),
             status=status,
             reason_code=reason_code,
             metadata=metadata,
@@ -228,3 +267,9 @@ class TextAgent:
             runtime_session_id=None,
             state_trace=(status,),
         )
+
+    @staticmethod
+    def _safe_request_id(request: AgentRequest) -> str:
+        if isinstance(request.request_id, str):
+            return request.request_id
+        return ""

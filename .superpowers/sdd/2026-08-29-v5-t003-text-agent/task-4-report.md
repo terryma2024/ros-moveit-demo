@@ -31,3 +31,13 @@ The earlier focused and full-suite claims above are preserved as historical clai
 The repaired implementation projects a detached, allowlisted normalized command in `to_dict()`, while retaining the fixed gate order, strict request typing, exact-boolean authorization, terminal-only non-dispatch traces, two-entry dispatched traces, and request-ID claims immediately before dispatch. No files were deleted.
 
 Evidence root retained: `/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task4-repair/`. Archived: none. Deletion candidates: `/tmp/so101_demo` (unauthorized stray; retained untouched). No runtime stack was started.
+
+## Review-fix correction — authoritative evidence
+
+This correction preserves every earlier claim and log. It adds the reviewer-requested executor and result-contract hardening without deleting any evidence.
+
+- RED: `/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task4-review-fix/red.log`, **1 collection error**. The expected missing `ExecutorDispatchError` port import established that the prior public executor contract could not express controlled runtime dispatch failure.
+- GREEN focused: `/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task4-review-fix/green.log` and `text-agent-focused.xml`, **24 passed** with the exact zsh overlay and successful imports of `rclpy`, `launch`, `launch_ros`, and `ament_index_python`.
+- GREEN full package: `/tmp/so101-debug-v5-t003-text-agent-20260829-164105/task4-review-fix/full-green.log` and `full-junit/so101_demo_py-pytest.xml`, **622 passed in 19.69s**. `colcon test-result --verbose` reported **622 tests, 0 errors, 0 failures, 0 skipped**.
+
+The executor port now has a typed `ExecutorDispatchError(code)`. After request-ID claim, only that operational error and malformed result envelopes map to a dispatched `RUNTIME_FAILED`; ordinary exceptions still propagate while retaining the claim. `AgentResult` now stores immutable `TaskCommand`, serializing a fresh allowlisted command dictionary each time. A non-string request ID produces the empty-string result sentinel without stringification. Dispatcher rejection codes are stable and forwarded unchanged. Retained evidence roots are unchanged; archived: none; deletion candidate: `/tmp/so101_demo` (unauthorized, retained untouched).
