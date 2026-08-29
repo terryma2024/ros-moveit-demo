@@ -190,7 +190,7 @@ checkpoint_id: CP-003
 last_valid_experiment: EXP-002
 documentation_snapshot_parent: 32dd34a39b540f20a682d3aa088e27c50b5a104f
 current_hypothesis: No further V5-T003 experiment is required; any physical-success claim belongs to separately planned and authorized V5-T005 acceptance.
-working_tree_status: "Task-owned final ledger and Task 8 report are pending their documentation commit. ai-station main remains e6ab8c1 with only its pre-existing untracked RGB-D ledger; isolated candidate remains 02e086be with gitlink 71bc934. No source implementation was changed."
+working_tree_status: "Final ledger/result commit is 5357762448a06d2e43c0210fc1ca00cb08e06501; only its task-owned verification-report amendment is pending. ai-station main remains e6ab8c1 with only its pre-existing untracked RGB-D ledger; isolated candidate remains 02e086be with gitlink 71bc934. No source implementation was changed."
 owned_processes: NONE
 preserved_processes: ai-station tmux sessions codex and codex-cua; unrelated desktop processes. The task-owned SSH reverse tunnels and task-owned stack session were closed.
 confirmed_conclusions:
@@ -206,7 +206,7 @@ disproven_routes:
 open_risks:
   - Live qwen3.5:4b latency was 120139 ms for execute and earlier previews demonstrated constraint drift and timeout; fail-closed behavior is qualified, not model service-level reliability.
   - ai-station /data/work/ws_moveit/install/setup.zsh remains stale because unrelated indexed packages are absent; this task sourced exact package scripts and explicit prefix ordering instead of changing unrelated overlay state.
-  - ai-station direct full package pytest has two pre-existing test_mujoco_rgbd_batch_cli mock argv failures; colcon cwd adds eleven unrelated workspace-relative path failures. Final candidate-local package verification is required at final documentation HEAD.
+  - ai-station direct full package pytest has two pre-existing test_mujoco_rgbd_batch_cli mock argv failures; colcon cwd adds eleven unrelated workspace-relative path failures. Fresh candidate-local verification at final ledger/result commit 5357762448a06d2e43c0210fc1ca00cb08e06501 passed 139 focused and 692 full-package tests.
 evidence_disposition:
   retained: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/ (Task 8 build, provider, readiness, live execute, duplicate, runtime manifest, and cleanup artifacts remain beneath this sole registered root)
   archived: NONE

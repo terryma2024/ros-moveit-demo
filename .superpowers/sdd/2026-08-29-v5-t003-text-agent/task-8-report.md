@@ -10,7 +10,7 @@ hardware, push, merge, publish, delete evidence, or claim V5-T005 physical succe
 
 - Ledger-only planning commit: `32dd34a39b540f20a682d3aa088e27c50b5a104f`.
 - Executable candidate: `02e086be0171f08bb5e936901c79bfa70cda665f`.
-- Final ledger/result commit: `PENDING_FINAL_COMMIT`.
+- Final ledger/result commit: `5357762448a06d2e43c0210fc1ca00cb08e06501`.
 - Final verification-report commit: resolve with `git rev-parse HEAD` at handoff.
 
 ## Source, install, and runtime provenance
@@ -139,7 +139,9 @@ wrappers/logs listed in CP-003. Nothing was deleted.
   `test_mujoco_rgbd_batch_cli` mock argv slice mismatch.
 - ai-station colcon package test: 692 collected, 13 failed, exit 1; eleven additional failures are
   workspace-root-relative file lookups under the colcon package working directory.
-- Fresh final candidate-local focused and full package results: `PENDING_FINAL_TESTS`.
+- Fresh final candidate-local verification at
+  `5357762448a06d2e43c0210fc1ca00cb08e06501`: focused **139 passed in 0.51s** and full package
+  **692 passed in 13.39s**, both exit 0 with retained JUnit.
 
 Concerns: live qwen latency was 120139 ms and prior previews showed constraint drift/timeout;
 ai-station's aggregate `install/setup.zsh` remains stale because unrelated indexed packages are
