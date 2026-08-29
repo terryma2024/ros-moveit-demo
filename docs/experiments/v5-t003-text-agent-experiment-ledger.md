@@ -343,14 +343,17 @@ next_command: Await the user's choice of Subagent-Driven or Inline Execution, th
 
 ```yaml
 experiment_id: EXP-003
-status: RUNNING
+status: VALID
 transitions:
   - status: PLANNED
     recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
   - status: RUNNING
     recorded_at: 2026-08-30T01:05:15+08:00
     evidence: final-fix/ai-station/exp-003-ai-deepseek-785a95e/{build-provenance-corrected.log,focused.xml,stack-provenance.log,simulation-evidence-readiness.log,cup-pose-readiness.log,controllers-readiness.log,owned-panes-readiness.log}
-execute_invocation_count: 0
+  - status: VALID
+    recorded_at: 2026-08-30T01:11:36+08:00
+    evidence: final-fix/ai-station/exp-003-ai-deepseek-785a95e/{preview.json,execute-invocation.marker,execute.json,execute-result.json,text-agent-provenance,dynamic-execute-manifest.json,reachability-observed.json,cleanup-readback-no-daemon.log}
+execute_invocation_count: 1
 observed_reset_epoch: 0
 prior_experiment: EXP-002
 hypothesis: The corrected committed candidate can use the qualified DeepSeek provider on ai-station and execute the existing headless MuJoCo state machine exactly once with preview-bound confirmation and verified runtime provenance.
@@ -390,8 +393,16 @@ failure_criteria:
 invalid_criteria:
   - Provider/model/digest/instruction/provenance/readiness mismatch, execute count other than one, contamination by an existing process/domain/partition, missing correlation, evidence outside the registered root, user-state modification, broad cleanup, real hardware, or V5-T005 claim.
 execution_rule: Preview retries, if any, are separately recorded fail-closed provider observations; after the sole execute command is invoked it is never rerun.
-decision: PENDING
-next_experiment: EXP-004 only if EXP-003 is VALID
+observed:
+  - Candidate source, imported module, installed prefix, entry point, and persisted/returned artifact hashes resolve to 785a95e9df5dd18f32d8cb7d875f3fac948ce53e in the detached task worktree and experiment overlay; ai-station main remained e6ab8c1 with its untracked RGB-D ledger.
+  - Focused corrected-candidate gate passed 188 tests. Headless readiness recorded three active controllers, Planning Scene READ_BACK success, fresh /cup_pose, simulation_session_id v5-t003-exp003-ai-deepseek-785a95e, reset_epoch 0, and only the two owned tmux windows.
+  - Preview returned DISPATCH_PREVIEW/dispatch=false with supported plastic_cup/pick/{}, deepseek/deepseek-v4-flash, request ID match, and exact digest sha256:v1:a362fa42188acf5e277bc88ae17d1bb64ed41aa8db957101bc1075a27c837cfb.
+  - Exactly one execute command was invoked. It exited 0 and its final Agent JSON reports dispatch=true, RUNTIME_STARTED then RUNTIME_COMPLETED, exact request/runtime session correlation, DeepSeek provider/model, and verified provenance. The mixed stdout also contains dynamic runtime status lines, so the first whole-stream JSON parser failed after the successful execute; execute-result.json is the byte-preserved final JSON line, not a retry.
+  - Dynamic runtime reached DONE with transition_count 19; reachability was SUCCEEDED; controller logs record 22 arm, 3 gripper, and 22 MoveIt successful execution messages. Two future-stamped /cup_pose samples were rejected within the same acquisition before a valid sample was accepted. These are downstream diagnostics only and make no V5-T005 claim.
+  - Targeted SIGINT cleanup removed only v5-t003-exp003-ai-deepseek stack/bridge windows. Fresh no-daemon domain 206 discovery and related-process read-back were empty; codex and codex-cua remained.
+conclusion: VALID for corrected-candidate V5-T003 ai-station DeepSeek qualification with exactly one execute and clean owned shutdown; no real-hardware or V5-T005 conclusion.
+decision: KEEP
+next_experiment: EXP-004
 ```
 
 ```yaml
