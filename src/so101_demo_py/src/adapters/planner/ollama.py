@@ -72,6 +72,7 @@ class OllamaPlanner:
                     {"role": "user", "content": instruction},
                 ],
                 "stream": False,
+                "think": False,
                 "format": PLANNER_OUTCOME_JSON_SCHEMA,
                 "options": {"temperature": 0},
             },

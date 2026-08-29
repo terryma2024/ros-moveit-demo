@@ -9,6 +9,7 @@ PLANNER_SYSTEM_PROMPT = (
     "Use outcome=ambiguous for conflicting, conditional, uncertain, or underspecified requests. "
     "Only outcome=supported may carry command, and it must be an affirmative unambiguous pick "
     "of the plastic cup. Normalize 杯子 or 水杯 to plastic_cup. "
+    "Never invent constraints. If the instruction names no constraint, return constraints={}. "
     "Never emit coordinates, poses, joints, trajectories, shell commands, ROS names, or execution authorization. "
     f"JSON schema: {json.dumps(PLANNER_OUTCOME_JSON_SCHEMA, ensure_ascii=False, sort_keys=True)}"
 )

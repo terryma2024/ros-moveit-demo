@@ -38,9 +38,11 @@ CLI
   的 primary 结果不会被 fallback “修好”。
 - DeepSeek adapter 固定为官方 HTTPS `https://api.deepseek.com/chat/completions` 和
   `deepseek-v4-flash`。Ollama adapter 固定为 `qwen3.5:4b`，只接受 `127.0.0.1`、`::1` 或
-  `localhost` 的 `/api/chat`，允许端口覆盖以支持 localhost reverse tunnel。
+  `localhost` 的 `/api/chat`，允许端口覆盖以支持 localhost reverse tunnel；它显式发送
+  `think=false`，避免 reasoning text 占满结构化响应 deadline。
 - Planner outcome 只有三种闭合形状：`unsupported` 和 `ambiguous` 不能携带 command；
-  `supported` 必须携带当前闭合 TaskCommand。前两种在 Dispatcher 之前终止。
+  `supported` 必须携带当前闭合 TaskCommand。共享 prompt 禁止臆造 instruction 未明确给出的
+  constraints；没有明确 constraint 时必须返回 `{}`。前两种 outcome 在 Dispatcher 之前终止。
 - `TaskCommand` validator 把 mapping 归一化为 frozen value；V5-T003 虽认识 `speed` 和
   `spatial_relation`，但 Dispatcher 没有它们的 consumer，所以任何非空 constraints 都拒绝。
 - `TextAgent` 负责 double authorization、confirmation digest、backend gate 和 resident
