@@ -428,10 +428,10 @@ runtime_session_id: v5-t003-exp004-mac-deepseek-785a95e
 expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
 provenance:
   source_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
-  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
-  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install
-  installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py
-  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-final-fix-mac-785a95e
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
   ros_domain_id: 207
   gz_partition: v5-t003-exp004-mac-deepseek-785a95e
   evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-deepseek/exp-004-mac-deepseek-785a95e
@@ -472,10 +472,10 @@ runtime_session_id: v5-t003-exp005-mac-qwen-785a95e
 expected_reset_epoch: CAPTURE_FROM_READINESS_BEFORE_RUNNING
 provenance:
   source_commit: 785a95e9df5dd18f32d8cb7d875f3fac948ce53e
-  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent
-  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install
-  installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py
-  runtime_executable: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-text-agent/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
+  source_worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/v5-t003-final-fix-mac-785a95e
+  install_overlay: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install
+  installed_prefix: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install/so101_demo_py
+  runtime_executable: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-candidate-785a95e/install/so101_demo_py/lib/so101_demo_py/text_pick_agent
   ros_domain_id: 208
   gz_partition: v5-t003-exp005-mac-qwen-785a95e
   evidence_identity: /tmp/so101-debug-v5-t003-text-agent-20260829-164105/final-fix/mac-qwen/exp-005-mac-qwen-785a95e
