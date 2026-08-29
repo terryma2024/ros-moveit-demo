@@ -535,7 +535,15 @@ next_experiment: EXP-006 after the new final candidate is committed and fresh EX
 
 ```yaml
 experiment_id: EXP-006
-status: PLANNED
+status: RUNNING
+transitions:
+  - status: PLANNED
+    recorded_in_commit: 493e9aed5082385485b29dd6be16a8d833b19d98
+  - status: RUNNING
+    recorded_at: 2026-08-30T02:19:35+08:00
+    evidence: final-fix/ai-station/exp-006-ai-deepseek-4ebdf45/{pre-mutation-readback-corrected.log,import-provenance.log,build-provenance.log,module-resolution-corrected.log,focused.xml,stack-provenance.log,full-readiness.log,owned-panes-readiness-corrected.log}
+execute_invocation_count: 0
+observed_reset_epoch: 0
 created_at: 2026-08-30T02:10:40+08:00
 prior_experiment: EXP-005
 correction_origin: EXP-005 proved candidate 785a95e fails closed because qwen3.5 reasoning mode does not complete strict structured output; candidate 4ebdf45 explicitly disables Ollama reasoning and forbids invented constraints.
