@@ -49,6 +49,7 @@ def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
         "so101_mujoco_perception_pick_place = "
         "so101_demo.cli.perception_pick_place_launch:main",
         "run_qualification = so101_demo.cli.qualification:main",
+        "text_pick_agent = so101_demo.cli.text_pick_agent:main",
     }
 
     installed_files = {
