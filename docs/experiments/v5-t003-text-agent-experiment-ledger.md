@@ -407,7 +407,16 @@ next_experiment: EXP-004
 
 ```yaml
 experiment_id: EXP-004
-status: PLANNED
+status: RUNNING
+transitions:
+  - status: PLANNED
+    recorded_in_commit: e71f556f553c2f6749ff653044f5035235a67b10
+    provenance_path_amended_in_commit: ea9496405b959e51dd8a1c16ec7d03ff698350c4
+  - status: RUNNING
+    recorded_at: 2026-08-30T01:34:59+08:00
+    evidence: final-fix/mac-deepseek/exp-004-mac-deepseek-785a95e/{stack-provenance-attempt2.log,full-readiness-corrected.log,simulation-and-cup-readiness-corrected.log,owned-panes-attempt2-start.log}
+execute_invocation_count: 0
+observed_reset_epoch: 0
 prior_experiment: EXP-003
 hypothesis: After valid ai-station requalification, the same corrected candidate can use DeepSeek on Mac and execute one fresh isolated headless MuJoCo simulation with exact preview confirmation and provenance.
 prediction: The Mac DeepSeek preview returns the planned supported candidate/digest, then one and only one confirmed execute reaches the correlated state machine and cleans up its owned stack.
