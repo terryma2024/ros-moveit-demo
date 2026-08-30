@@ -46,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", default="preview")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--confirmation-digest")
+    parser.add_argument("--skip-confirmation", action="store_true")
     parser.add_argument("--backend", default="mujoco")
     parser.add_argument("--deepseek-model", default="deepseek-v4-flash")
     parser.add_argument(
@@ -137,6 +138,9 @@ def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str |
 def _persist_execution_provenance(
     context: DynamicRuntimeContext,
     request_id: str,
+    confirmation_mode: str,
+    *,
+    confirmation_validated: bool,
 ) -> None:
     directory = context.evidence_root / "text-agent-provenance"
     directory.mkdir(parents=True, exist_ok=True)
@@ -144,6 +148,8 @@ def _persist_execution_provenance(
     destination = directory / filename
     document = {
         "request_id": request_id,
+        "confirmation_mode": confirmation_mode,
+        "confirmation_validated": confirmation_validated,
         "execution_provenance": context.execution_provenance.to_dict(),
     }
     encoded = (
@@ -235,18 +241,33 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
     if options.mode not in {"preview", "execute"}:
         _write_document(_rejection(request_id, "MODE_INVALID"))
         return 1
+    if options.skip_confirmation and options.mode != "execute":
+        _write_document(
+            _rejection(request_id, "CONFIRMATION_BYPASS_REQUIRES_EXECUTE")
+        )
+        return 1
+    if options.skip_confirmation and options.confirmation_digest is not None:
+        _write_document(_rejection(request_id, "CONFIRMATION_MODE_CONFLICT"))
+        return 1
     if not _normalize_provider_options(options):
         _write_document(_rejection(request_id, "PROVIDER_OPTIONS_INVALID"))
         return 1
 
     context = None
+    confirmation_mode = None
     if options.mode == "execute":
+        confirmation_mode = "skipped" if options.skip_confirmation else "digest"
         context, reason_code = _valid_execute_context(options)
         if reason_code is not None:
             _write_document(_rejection(request_id, reason_code))
             return 1
         try:
-            _persist_execution_provenance(context, request_id)
+            _persist_execution_provenance(
+                context,
+                request_id,
+                confirmation_mode,
+                confirmation_validated=False,
+            )
         except (OSError, TypeError, ValueError):
             _write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
             return 1
@@ -259,6 +280,7 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         execute=options.execute,
         backend=options.backend,
         confirmation_digest=options.confirmation_digest,
+        skip_confirmation=options.skip_confirmation,
         execution_provenance=(
             context.execution_provenance if context is not None else None
         ),
@@ -269,9 +291,23 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         _write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
         return 1
     document = result.to_dict()
+    provenance_finalize_failed = False
     if context is not None:
         document["execution_provenance"] = context.execution_provenance.to_dict()
+        if result.confirmation_mode is not None:
+            try:
+                _persist_execution_provenance(
+                    context,
+                    request_id,
+                    result.confirmation_mode,
+                    confirmation_validated=True,
+                )
+            except (OSError, TypeError, ValueError):
+                document["reason_code"] = "EXECUTION_PROVENANCE_FINALIZE_FAILED"
+                provenance_finalize_failed = True
     _write_document(document)
+    if provenance_finalize_failed:
+        return 1
     return _exit_code(result.status)
 
 
