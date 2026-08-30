@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -29,9 +30,17 @@ class DynamicCupPickPlaceExecutor:
         self,
         context: DynamicRuntimeContext,
         *,
+        cup_pose_timeout_s: float = 30.0,
         runner: Callable[[SimpleNamespace], int] | None = None,
     ) -> None:
+        if (
+            type(cup_pose_timeout_s) is not float
+            or not math.isfinite(cup_pose_timeout_s)
+            or cup_pose_timeout_s <= 0.0
+        ):
+            raise ValueError("cup_pose_timeout_s must be finite and positive")
         self._context = context
+        self._cup_pose_timeout_s = cup_pose_timeout_s
         self._runner = runner
 
     def dispatch(
@@ -63,7 +72,7 @@ class DynamicCupPickPlaceExecutor:
             execute=True,
             scene_source="observe_only",
             dynamic_policy=None,
-            cup_pose_timeout_s=5.0,
+            cup_pose_timeout_s=self._cup_pose_timeout_s,
             source_commit=self._context.source_commit,
             installed_prefix=self._context.installed_prefix,
             session_id=self._context.session_id,
