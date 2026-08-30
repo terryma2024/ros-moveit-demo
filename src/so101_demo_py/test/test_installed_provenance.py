@@ -16,7 +16,7 @@ EXPECTED_EXECUTABLES = {
     "dynamic_cup_pick_place",
     "fixed_cup_pick_place",
     "gazebo_execute",
-    "gazebo_ready",
+    "motion_stack_ready",
     "rgbd_cup_pose",
     "rgbd_sensor_capture",
     "run_qualification",
@@ -69,6 +69,7 @@ def test_final_install_contains_runtime_contract() -> None:
     share = Path(get_package_share_directory("so101_demo_py")).resolve()
     installed_executables = {path.name for path in (prefix / "lib/so101_demo_py").iterdir()}
     assert installed_executables >= EXPECTED_EXECUTABLES
+    assert "gazebo_ready" not in installed_executables
     assert "pick_place" not in installed_executables
     assert {path.name for path in (share / "launch").glob("*.launch.py")} == EXPECTED_LAUNCHERS
     assert (share / "assets/mujoco/scene.xml").is_file()

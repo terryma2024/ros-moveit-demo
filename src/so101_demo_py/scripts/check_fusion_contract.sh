@@ -31,7 +31,7 @@ test "${actual_prefix}" = "${expected_prefix}"
 
 executables="$("${ros2_command[@]}" pkg executables so101_demo_py)"
 for executable in \
-  camera_preset gazebo_execute gazebo_ready pick_place run_qualification scene_setup \
+  camera_preset gazebo_execute motion_stack_ready pick_place run_qualification scene_setup \
   teleop_reset teleop_workflow; do
   printf '%s\n' "${executables}" | rg "^so101_demo_py ${executable}$"
 done

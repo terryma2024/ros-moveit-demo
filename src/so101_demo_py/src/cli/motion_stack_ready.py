@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True, slots=True)
-class GazeboReadiness:
+class MotionStackReadiness:
     ready: bool
     phase: str
     failure_code: str | None
@@ -38,32 +38,32 @@ def evaluate_readiness(
     controllers: dict[str, str],
     services: dict[str, bool],
     actions: dict[str, bool],
-) -> GazeboReadiness:
+) -> MotionStackReadiness:
     for name in _CONTROLLERS:
         if controllers.get(name) != "active":
-            return GazeboReadiness(
+            return MotionStackReadiness(
                 False,
                 "CONTROLLERS",
-                "GAZEBO_CONTROLLER_NOT_ACTIVE",
+                "MOTION_STACK_CONTROLLER_NOT_ACTIVE",
                 {"dependency": name, "observed": controllers.get(name)},
             )
     for name in _SERVICES:
         if not services.get(name, False):
-            return GazeboReadiness(
+            return MotionStackReadiness(
                 False,
                 "MOVEIT_SERVICES",
-                "GAZEBO_MOVEIT_SERVICE_UNAVAILABLE",
+                "MOTION_STACK_MOVEIT_SERVICE_UNAVAILABLE",
                 {"dependency": name},
             )
     for name in _ACTIONS:
         if not actions.get(name, False):
-            return GazeboReadiness(
+            return MotionStackReadiness(
                 False,
                 "ACTIONS",
-                "GAZEBO_ACTION_UNAVAILABLE",
+                "MOTION_STACK_ACTION_UNAVAILABLE",
                 {"dependency": name},
             )
-    return GazeboReadiness(
+    return MotionStackReadiness(
         True,
         "READY",
         None,
@@ -76,7 +76,7 @@ def evaluate_readiness(
 
 
 def main(arguments: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="gazebo_ready")
+    parser = argparse.ArgumentParser(prog="motion_stack_ready")
     parser.add_argument("--timeout-s", type=float, default=60.0)
     options = parser.parse_args(arguments)
     if options.timeout_s <= 0.0:
@@ -90,7 +90,7 @@ def main(arguments: list[str] | None = None) -> int:
     from rclpy.action import ActionClient
 
     rclpy.init()
-    node = rclpy.create_node("so101_gazebo_readiness")
+    node = rclpy.create_node("so101_motion_stack_readiness")
     controller_client = node.create_client(
         ListControllers, "/controller_manager/list_controllers"
     )
@@ -121,8 +121,8 @@ def main(arguments: list[str] | None = None) -> int:
         ),
     }
     deadline = time.monotonic() + options.timeout_s
-    latest = GazeboReadiness(
-        False, "CONTROLLERS", "GAZEBO_CONTROLLER_NOT_ACTIVE", {}
+    latest = MotionStackReadiness(
+        False, "CONTROLLERS", "MOTION_STACK_CONTROLLER_NOT_ACTIVE", {}
     )
     try:
         controllers: dict[str, str] = {}

@@ -593,7 +593,7 @@ def _gazebo_execute_actions(
     )
     readiness = Node(
         package="so101_demo_py",
-        executable="gazebo_ready",
+        executable="motion_stack_ready",
         arguments=["--timeout-s", timeout],
         output="both",
     )

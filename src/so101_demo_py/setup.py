@@ -51,7 +51,7 @@ setup(
             "run_qualification = so101_demo.cli.qualification:main",
             "scene_setup = so101_demo.cli.scene_setup:main",
             "gazebo_execute = so101_demo.backends.gazebo.execute:main",
-            "gazebo_ready = so101_demo.cli.gazebo_ready:main",
+            "motion_stack_ready = so101_demo.cli.motion_stack_ready:main",
             "cup_pose_subscriber = so101_demo.cli.cup_pose_subscriber:main",
             "cup_pose_tf_demo = so101_demo.cli.cup_pose_tf_demo:main",
             "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main",
