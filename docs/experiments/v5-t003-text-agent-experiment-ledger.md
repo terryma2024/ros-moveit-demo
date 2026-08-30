@@ -757,3 +757,132 @@ evidence_disposition:
   deletion_candidates: Superseded candidate-785a95e build/install, failed EXP-004 attempt, EXP-005 provider diagnostics, superseded bundle/intermediate build trees, failed verifier wrappers/logs, scanner v1, wrong-cwd full-gate evidence, and the previously listed /tmp/so101-debug-task1/ stray root. Listed only; nothing deleted.
 next_command: Controller runs one scoped final re-review; only if clean may the controller perform the separately authorized local main merge. Do not merge or push from this worktree.
 ```
+
+## Documentation rewrite DOC-001
+
+```yaml
+documentation_revision_id: DOC-001
+status: COMPLETE
+goal: Rewrite the Chinese source guide with humanizer-zh while preserving technical facts and source literals.
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
+source_commit: 6f651571036d54d968ba60c385eb63f14491a109
+evidence_root: /tmp/so101-debug-humanize-text-pick-guide-20260830-01
+target: docs/so101-text-pick-agent-source-guide.md
+runtime_validation: NOT_RUN; documentation-only task
+validation:
+  - 30 fenced code blocks are byte-identical before and after.
+  - 49 Markdown link targets are unchanged and every local target exists.
+  - 259 inline code literals are unchanged.
+  - Markdown fences are balanced and no trailing whitespace remains.
+retained:
+  - /tmp/so101-debug-humanize-text-pick-guide-20260830-01/before.md (sha256 a269f38ea3f2e0ff5b00f8d2e19390ec0091f67ac7bb05768535daf2f3b6ca70)
+  - /tmp/so101-debug-humanize-text-pick-guide-20260830-01/after.md (sha256 3e8ac160af30cc15a7d9fcc43e6e63b1e5693a44dc6de9d7dedf28c4b73ff175)
+archived: NONE
+deletion_candidates: NONE
+```
+
+## DeepSeek fallback diagnostic DIAG-001
+
+```yaml
+diagnostic_id: DIAG-001
+status: COMPLETE
+symptom: Preview succeeds through ollama/qwen3.5:4b with fallback_used=true even though DEEPSEEK_API_KEY is set.
+goal: Identify the first DeepSeek provider boundary that raises PlannerProviderError without exposing credentials.
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
+source_commit: 6f651571036d54d968ba60c385eb63f14491a109
+evidence_root: /tmp/so101-debug-deepseek-fallback-20260830-01
+run_mode: preview
+runtime_mutation: NONE
+secret_handling: Record only DEEPSEEK_API_KEY SET or UNSET; never record its value.
+observed:
+  - The reported preview used ollama/qwen3.5:4b with fallback_used=true, which requires the DeepSeek primary to raise PlannerProviderError.
+  - PlannerChain intentionally discards the successful-fallback primary exception, so the reported JSON cannot identify the primary reason.
+  - With ~/.env loaded using set -a, both the parent shell and a child Python process observed DEEPSEEK_API_KEY as SET without printing its value.
+  - Direct DeepSeekPlanner returned provider=deepseek and model=deepseek-v4-flash.
+  - A full preview through the installed text_pick_agent exited 0 with provider=deepseek, fallback_used=false, and empty stderr.
+inferred:
+  - The original shell most likely held DEEPSEEK_API_KEY as a non-exported shell variable; echo can see such a value while the ros2 child receives an empty environment entry.
+  - If a child-process SET/UNSET check reports SET in that same original shell, the remaining explanation is a transient DeepSeek transport or response failure during the earlier request; the exact reason was discarded by PlannerChain.
+conclusion: Current source, installed runtime, DeepSeek endpoint/model, credential, and service path are working; verify child-process export state in the original shell before changing code or provider configuration.
+retained:
+  - /tmp/so101-debug-deepseek-fallback-20260830-01/direct-primary-result.log (sha256 05ea838293c6f2e50edee6f2889037ed4cec274c2552aba74b9a49c6ee3d63b5)
+  - /tmp/so101-debug-deepseek-fallback-20260830-01/preview.json (sha256 194d018555c6c6f2f44ff0ea3cd7e3aa6eb818878acdece4ebd3d6477c6e5d3b)
+  - /tmp/so101-debug-deepseek-fallback-20260830-01/preview.stderr.log (sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)
+archived: NONE
+deletion_candidates: NONE
+```
+
+## Execute environment documentation DOC-002
+
+```yaml
+documentation_revision_id: DOC-002
+status: COMPLETE
+goal: Add the environment startup and readiness commands required by the Section 19 Execute examples.
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
+source_commit: 6f651571036d54d968ba60c385eb63f14491a109
+evidence_root: /tmp/so101-debug-text-guide-env-start-20260830
+target: docs/so101-text-pick-agent-source-guide.md
+runtime_validation: NOT_RUN; documentation-only task
+observed:
+  - Local main is 6f651571036d54d968ba60c385eb63f14491a109 with pre-existing guide and ledger edits preserved; the parent repository's unrelated dirty files were not modified.
+  - ai-station remains on e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4 with one unrelated untracked ledger; no SO-101 runtime process or ROS node was observed on either host, and ai-station codex/codex-cua tmux sessions were preserved.
+  - Installed launch arguments require run_mode:=execute and execute:=true together; the stack-only launch supports headless, sensor_rendering, session_id, and mujoco_initial_keyframe.
+  - Section 19 now supplies a common environment block, stack owner command, sole test truth bridge command, readiness and reset-epoch read-back, Execute command, and owner-scoped shutdown order.
+validation:
+  - All Section 19 zsh blocks pass zsh -n.
+  - The guide has 70 balanced fence markers, 50 valid local Markdown links, and no trailing-whitespace diff error.
+  - Installed --show-args and CLI help confirm every documented launch argument and option; the truth bridge module imports from the current so101_demo_py overlay.
+retained:
+  - /tmp/so101-debug-text-guide-env-start-20260830/section-19.md (sha256 716ac4df3f90468f5569bc793d670b723a69250e41ad043d93d5329d2f6f8c56)
+  - /tmp/so101-debug-text-guide-env-start-20260830/installed-command-contract.log (sha256 9becefe888e91c7071cc2cdace31cebd16fc477ee38416c0af6657471591505f)
+  - /tmp/so101-debug-text-guide-env-start-20260830/cli-help-contract.log (sha256 380fbbd6092ec2aaf8e58f233c731ee9c314704ec7c93891464b1b44439ad17a)
+  - /tmp/so101-debug-text-guide-env-start-20260830/{local,ai-station}-provenance.log
+archived: NONE
+deletion_candidates: NONE
+```
+
+## Motion stack readiness rename REN-001
+
+```yaml
+change_id: REN-001
+status: COMPLETE
+goal: Rename the backend-neutral readiness executable from gazebo_ready to motion_stack_ready while preserving its controller and MoveIt checks and using backend-neutral failure codes.
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
+source_commit: 6f651571036d54d968ba60c385eb63f14491a109
+evidence_root: /tmp/so101-debug-motion-stack-ready-20260830
+run_mode: ISOLATED_FAIL_CLOSED_ONLY; ROS_DOMAIN_ID=229; no simulator or robot motion started
+red_test:
+  - installed entrypoint contract failed because motion_stack_ready was absent before the setup.py change
+  - failure-code contract failed 3 tests while production still returned GAZEBO_* codes
+green_test:
+  - focused source and installed contract: 27 passed
+  - installed executable list contains motion_stack_ready and excludes gazebo_ready
+  - ros2 run so101_demo_py motion_stack_ready --help returned usage successfully
+package_test: 754 passed; 0 failed; direct pytest of src/so101_demo_py/test
+build: colcon build --packages-select so101_demo_py --symlink-install; exit 0
+runtime_validation:
+  - isolated timeout probe exited 1 as designed
+  - ready=false; phase=CONTROLLERS; failure_code=MOTION_STACK_CONTROLLER_NOT_ACTIVE
+  - the pre-existing user-owned MuJoCo launch, ros2_control, and move_group processes remained alive at final read-back
+physical_visual_validation: NOT_RUN; rename-only scope and the existing user-owned runtime was not disturbed
+installed_cleanup:
+  - the exact stale generated gazebo_ready install script was SHA-recorded and moved to the evidence root
+  - no source, user evidence, or runtime process was deleted
+retained:
+  - /tmp/so101-debug-motion-stack-ready-20260830/red-installed-entrypoint.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/red-failure-codes.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/colcon-build.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/focused-final.xml
+  - /tmp/so101-debug-motion-stack-ready-20260830/so101-demo-py-final.xml
+  - /tmp/so101-debug-motion-stack-ready-20260830/installed-executables-final.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/installed-help-final.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/isolated-fail-closed-final.json
+  - /tmp/so101-debug-motion-stack-ready-20260830/user-runtime-final-inventory.log
+  - /tmp/so101-debug-motion-stack-ready-20260830/final-evidence-sha256.log
+archived: NONE
+deletion_candidates: NONE
+```

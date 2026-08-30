@@ -281,7 +281,7 @@ resident producer; `rgbd_point_cloud`, `rgbd_sensor_capture`, and
 | `camera_preset` | Apply and read back a backend-specific camera preset | `ros2 run so101_demo_py camera_preset --backend mujoco table_corner_nw` |
 | `teleop_reset` | Perform a transactional simulation reset and resynchronize MoveIt | `ros2 run so101_demo_py teleop_reset --backend mujoco --session-id task-station-001` |
 | `task_reachability` | Plan-only check of every TCP segment for one or more task points | Requires `--points`, `--policy`, `--session-id`, and `--evidence-file` |
-| `gazebo_ready` | Wait for the three controllers and required MoveIt services/actions | `ros2 run so101_demo_py gazebo_ready --timeout-s 90` |
+| `motion_stack_ready` | Wait for the three controllers and required MoveIt services/actions | `ros2 run so101_demo_py motion_stack_ready --timeout-s 90` |
 
 `scene_setup` supports `setup`, `observe`, `attach`, `detach`, and `upsert`.
 Every operation prints a JSON receipt and returns nonzero on failure. The
@@ -384,12 +384,19 @@ ros2 run so101_demo_py text_pick_agent \
   --mode execute \
   --execute \
   --confirmation-digest "$CONFIRMATION_DIGEST" \
+  --cup-pose-timeout-s 30 \
   --session-id "$SESSION_ID" \
   --expected-reset-epoch "$RESET_EPOCH" \
   --evidence-root "$SO101_EVIDENCE_ROOT" \
   --source-commit "$(git rev-parse HEAD)" \
   --installed-prefix "$(ros2 pkg prefix so101_demo_py)"
 ```
+
+`--cup-pose-timeout-s` defaults to `30.0` and accepts only a finite positive
+number. It starts counting after the dynamic runtime reports
+`status=READY subscription=/cup_pose`; start the production RGB-D producer
+within that window. Increasing the timeout does not replay a volatile
+`/cup_pose` sample that was published before the subscriber became ready.
 
 Do not copy session, epoch, digest, or provenance values from an old run. See
 the [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md)
@@ -409,6 +416,7 @@ ros2 run so101_demo_py text_pick_agent \
   --mode execute \
   --execute \
   --skip-confirmation \
+  --cup-pose-timeout-s 30 \
   --session-id "$SESSION_ID" \
   --expected-reset-epoch "$RESET_EPOCH" \
   --evidence-root "$SO101_EVIDENCE_ROOT" \

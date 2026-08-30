@@ -40,7 +40,7 @@ def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() 
     def runner(argv, **kwargs):
         calls.append((tuple(argv), kwargs))
         command = tuple(argv[2:])
-        if command[:3] == ("run", "so101_demo_py", "gazebo_ready"):
+        if command[:3] == ("run", "so101_demo_py", "motion_stack_ready"):
             return subprocess.CompletedProcess(
                 argv,
                 0,
@@ -57,7 +57,7 @@ def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() 
 
     commands = [call[0][2:] for call in calls]
     assert any(
-        command[:3] == ("run", "so101_demo_py", "gazebo_ready")
+        command[:3] == ("run", "so101_demo_py", "motion_stack_ready")
         for command in commands
     )
     assert any(command[:3] == ("topic", "echo", "--once") for command in commands)
@@ -70,7 +70,7 @@ def test_task_station_readiness_reports_the_failed_stage() -> None:
     def runner(argv, **kwargs):
         del kwargs
         command = tuple(argv[2:])
-        assert command[:3] == ("run", "so101_demo_py", "gazebo_ready")
+        assert command[:3] == ("run", "so101_demo_py", "motion_stack_ready")
         return subprocess.CompletedProcess(
             argv,
             1,

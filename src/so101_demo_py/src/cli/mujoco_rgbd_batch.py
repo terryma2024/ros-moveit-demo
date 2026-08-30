@@ -84,7 +84,7 @@ def _wait_for_task_station(
         ros2_command(
             "run",
             "so101_demo_py",
-            "gazebo_ready",
+            "motion_stack_ready",
             "--timeout-s",
             f"{remaining:.3f}",
         ),

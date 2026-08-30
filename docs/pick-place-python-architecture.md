@@ -257,7 +257,7 @@ flowchart LR
     G1["gz_sim"] --> G2["materialized SDF"]
     G2 --> G3["ros_gz_bridge + controllers"]
     G3 --> G4["move_group"]
-    G4 --> G5["gazebo_ready"]
+    G4 --> G5["motion_stack_ready"]
     G5 --> G6["scene_setup --backend gazebo"]
     G6 --> G7["gazebo_execute"]
   end

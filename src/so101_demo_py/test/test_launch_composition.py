@@ -96,7 +96,7 @@ def test_stack_launcher_does_not_embed_workflow_or_shutdown_handler() -> None:
 
 def test_gazebo_workflow_is_event_gated_by_readiness_and_scene() -> None:
     source = inspect.getsource(launch_composition._gazebo_execute_actions)
-    assert 'executable="gazebo_ready"' in source
+    assert 'executable="motion_stack_ready"' in source
     assert 'executable="scene_setup"' in source
     assert 'executable="gazebo_execute"' in source
     assert source.count("OnProcessExit(") >= 3
