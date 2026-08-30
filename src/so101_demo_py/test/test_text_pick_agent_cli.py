@@ -103,6 +103,42 @@ def test_cli_rejects_partial_execute_before_agent_or_ros(
     }
 
 
+@pytest.mark.parametrize(
+    ("arguments", "reason_code"),
+    [
+        (["--skip-confirmation"], "CONFIRMATION_BYPASS_REQUIRES_EXECUTE"),
+        (
+            [
+                "--mode",
+                "execute",
+                "--execute",
+                "--skip-confirmation",
+                "--confirmation-digest",
+                "sha256:v1:" + "0" * 64,
+            ],
+            "CONFIRMATION_MODE_CONFLICT",
+        ),
+    ],
+)
+def test_cli_rejects_invalid_confirmation_bypass_before_provenance_or_agent(
+    capsys,
+    arguments: list[str],
+    reason_code: str,
+) -> None:
+    """Catches an invalid bypass reaching runtime provenance or the provider."""
+
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == reason_code
+
+
 def test_cli_rejects_wrong_backend_before_agent(capsys) -> None:
     from so101_demo.cli import text_pick_agent
 
@@ -456,6 +492,49 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(
     assert context.installed_prefix == prefix
     assert context.execution_provenance.source_commit == head
     assert output(capsys)["runtime_session_id"] == "session-1"
+
+
+def test_cli_forwards_explicit_confirmation_bypass_without_a_digest(
+    monkeypatch, capsys
+) -> None:
+    """Catches the public bypass flag being dropped before AgentRequest."""
+
+    from types import SimpleNamespace
+
+    from so101_demo.cli import text_pick_agent
+
+    context = SimpleNamespace(
+        execution_provenance=SimpleNamespace(to_dict=lambda: {})
+    )
+    monkeypatch.setattr(
+        text_pick_agent,
+        "_valid_execute_context",
+        lambda _options: (context, None),
+    )
+    monkeypatch.setattr(
+        text_pick_agent,
+        "_persist_execution_provenance",
+        lambda *_args, **_kwargs: None,
+    )
+    agent = StubAgent(result(AgentStatus.RUNTIME_COMPLETED, dispatch=True))
+
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "帮我拿杯子",
+            "--mode",
+            "execute",
+            "--execute",
+            "--skip-confirmation",
+        ],
+        _agent=agent,
+    )
+
+    assert exit_code == 0
+    assert len(agent.requests) == 1
+    assert agent.requests[0].skip_confirmation is True
+    assert agent.requests[0].confirmation_digest is None
+    assert output(capsys)["status"] == "RUNTIME_COMPLETED"
 
 
 def test_execute_rejects_whitespace_wrapped_source_commit_sentinel(capsys) -> None:

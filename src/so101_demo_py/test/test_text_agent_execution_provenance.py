@@ -154,6 +154,22 @@ class RecordingAgent:
             dispatch=True,
             runtime_session_id="provenance-session",
             state_trace=(AgentStatus.RUNTIME_STARTED, AgentStatus.RUNTIME_COMPLETED),
+            confirmation_mode=("skipped" if request.skip_confirmation else "digest"),
+        )
+
+
+class RejectingAgent:
+    def handle(self, request: object) -> AgentResult:
+        return AgentResult(
+            request_id=request.request_id,
+            status=AgentStatus.DISPATCH_REJECTED,
+            reason_code="CONFIRMATION_MISMATCH",
+            metadata=None,
+            command=None,
+            capability=None,
+            dispatch=False,
+            runtime_session_id=None,
+            state_trace=(AgentStatus.DISPATCH_REJECTED,),
         )
 
 
@@ -197,8 +213,158 @@ def test_cli_persists_verified_provenance_before_agent_dispatch(tmp_path: Path, 
     document = json.loads(persisted[0].read_text())
     assert document == {
         "request_id": "req-persist",
+        "confirmation_mode": "digest",
+        "confirmation_validated": True,
         "execution_provenance": request_projection,
     }
     assert hashlib.sha256(persisted[0].read_bytes()).hexdigest()
     rendered = json.loads(capsys.readouterr().out)
     assert rendered["status"] == "RUNTIME_COMPLETED"
+    assert rendered["confirmation_mode"] == "digest"
+
+
+def test_cli_records_skipped_confirmation_in_result_and_provenance(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Catches a direct Execute being indistinguishable from digest confirmation."""
+
+    from so101_demo.cli import text_pick_agent
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    agent = RecordingAgent()
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-skip-confirmation",
+            "--mode",
+            "execute",
+            "--execute",
+            "--skip-confirmation",
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=agent,
+    )
+
+    assert exit_code == 0
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    document = json.loads(persisted[0].read_text())
+    assert document["confirmation_mode"] == "skipped"
+    assert document["confirmation_validated"] is True
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["confirmation_mode"] == "skipped"
+
+
+def test_cli_does_not_label_rejected_digest_as_confirmed(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Catches a rejected digest attempt being persisted or rendered as validated."""
+
+    from so101_demo.cli import text_pick_agent
+
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-rejected-digest",
+            "--mode",
+            "execute",
+            "--execute",
+            "--confirmation-digest",
+            "sha256:v1:" + "0" * 64,
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=RejectingAgent(),
+    )
+
+    assert exit_code == 1
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    document = json.loads(persisted[0].read_text())
+    assert document["confirmation_mode"] == "digest"
+    assert document["confirmation_validated"] is False
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["reason_code"] == "CONFIRMATION_MISMATCH"
+    assert "confirmation_mode" not in rendered
+
+
+def test_cli_fails_closed_when_validated_provenance_cannot_be_finalized(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    """Catches returning success after the confirmation audit update was lost."""
+
+    from so101_demo.cli import text_pick_agent
+
+    original = text_pick_agent._persist_execution_provenance
+    calls = 0
+
+    def fail_second_write(*args, **kwargs) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("audit storage unavailable")
+        original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        text_pick_agent,
+        "_persist_execution_provenance",
+        fail_second_write,
+    )
+    prefix = str(Path(get_package_prefix("so101_demo_py")).resolve())
+    exit_code = text_pick_agent.main(
+        [
+            "--instruction",
+            "Pick the plastic cup.",
+            "--request-id",
+            "req-finalize-failure",
+            "--mode",
+            "execute",
+            "--execute",
+            "--confirmation-digest",
+            "sha256:v1:" + "0" * 64,
+            "--session-id",
+            "provenance-session",
+            "--expected-reset-epoch",
+            "4",
+            "--evidence-root",
+            str(tmp_path),
+            "--source-commit",
+            _head(),
+            "--installed-prefix",
+            prefix,
+        ],
+        _agent=RecordingAgent(),
+    )
+
+    assert exit_code == 1
+    rendered = json.loads(capsys.readouterr().out)
+    assert rendered["reason_code"] == "EXECUTION_PROVENANCE_FINALIZE_FAILED"
+    persisted = list((tmp_path / "text-agent-provenance").glob("*.json"))
+    assert len(persisted) == 1
+    assert json.loads(persisted[0].read_text())["confirmation_validated"] is False

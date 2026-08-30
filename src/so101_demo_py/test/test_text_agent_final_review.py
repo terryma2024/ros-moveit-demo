@@ -41,6 +41,7 @@ class ConfirmedRequest:
     execute: bool = False
     backend: str = "mujoco"
     confirmation_digest: object = None
+    skip_confirmation: object = False
     execution_provenance: object = None
 
 
@@ -181,6 +182,65 @@ def test_execute_rejects_absent_malformed_and_mismatched_confirmation_before_cla
     assert rejected.reason_code == reason_code
     assert rejected.dispatch is False
     assert preview_after_rejection.status is AgentStatus.DISPATCH_PREVIEW
+    assert executor.calls == []
+
+
+def test_execute_can_explicitly_skip_confirmation_without_a_preview_digest() -> None:
+    """Catches a requested confirmation bypass still being blocked by the digest gate."""
+
+    planner = ScriptedPlanner([SUPPORTED_OUTCOME])
+    executor = RecordingExecutor()
+    agent = TextAgent(planner, executor)
+
+    result = agent.handle(  # type: ignore[arg-type]
+        ConfirmedRequest(
+            mode="execute",
+            execute=True,
+            confirmation_digest=None,
+            skip_confirmation=True,
+        )
+    )
+
+    assert result.status is AgentStatus.RUNTIME_COMPLETED
+    assert result.dispatch is True
+    assert result.to_dict()["confirmation_mode"] == "skipped"
+    assert len(executor.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("agent_request", "reason_code"),
+    [
+        (
+            ConfirmedRequest(skip_confirmation=True),
+            "CONFIRMATION_BYPASS_REQUIRES_EXECUTE",
+        ),
+        (
+            ConfirmedRequest(
+                mode="execute",
+                execute=True,
+                confirmation_digest=EXPECTED_PREVIEW_DIGEST,
+                skip_confirmation=True,
+            ),
+            "CONFIRMATION_MODE_CONFLICT",
+        ),
+    ],
+)
+def test_invalid_confirmation_bypass_configuration_rejects_before_planning(
+    agent_request: ConfirmedRequest,
+    reason_code: str,
+) -> None:
+    """Catches ambiguous or non-execute bypass requests reaching the provider."""
+
+    planner = ScriptedPlanner([SUPPORTED_OUTCOME])
+    executor = RecordingExecutor()
+    agent = TextAgent(planner, executor)
+
+    result = agent.handle(agent_request)  # type: ignore[arg-type]
+
+    assert result.status is AgentStatus.DISPATCH_REJECTED
+    assert result.reason_code == reason_code
+    assert result.dispatch is False
+    assert planner.calls == []
     assert executor.calls == []
 
 

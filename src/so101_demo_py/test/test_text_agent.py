@@ -158,6 +158,19 @@ def test_truthy_integer_execute_is_rejected_before_planning() -> None:
     assert executor.calls == []
 
 
+def test_truthy_integer_skip_confirmation_is_rejected_before_planning() -> None:
+    agent, planner, executor = make_agent()
+
+    result = agent.handle(make_request(skip_confirmation=1))
+
+    assert result.status is AgentStatus.COMMAND_INVALID
+    assert result.reason_code == "INPUT_INVALID"
+    assert result.dispatch is False
+    assert_terminal_only(result.status, result.state_trace)
+    assert planner.calls == []
+    assert executor.calls == []
+
+
 def test_nonstring_instruction_is_rejected_before_planning() -> None:
     agent, planner, executor = make_agent()
 
@@ -411,6 +424,7 @@ def test_nonzero_runtime_result_claims_request_id() -> None:
         AgentStatus.RUNTIME_STARTED,
         AgentStatus.RUNTIME_FAILED,
     )
+    assert result.confirmation_mode == "digest"
     assert retry.status is AgentStatus.DISPATCH_REJECTED
     assert retry.reason_code == "DUPLICATE_REQUEST_ID"
     assert_terminal_only(retry.status, retry.state_trace)
@@ -434,6 +448,7 @@ def test_executor_domain_error_is_terminal_and_claims_request_id() -> None:
         AgentStatus.RUNTIME_STARTED,
         AgentStatus.RUNTIME_FAILED,
     )
+    assert result.confirmation_mode == "digest"
     assert retry.status is AgentStatus.DISPATCH_REJECTED
     assert retry.reason_code == "DUPLICATE_REQUEST_ID"
     assert planner.calls == ["帮我拿杯子", "帮我拿杯子"]
@@ -458,6 +473,7 @@ def test_malformed_executor_result_is_terminal_and_claims_request_id() -> None:
         AgentStatus.RUNTIME_STARTED,
         AgentStatus.RUNTIME_FAILED,
     )
+    assert result.confirmation_mode == "digest"
     assert retry.status is AgentStatus.DISPATCH_REJECTED
     assert retry.reason_code == "DUPLICATE_REQUEST_ID"
     assert planner.calls == ["帮我拿杯子", "帮我拿杯子"]

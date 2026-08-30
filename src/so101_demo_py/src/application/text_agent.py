@@ -46,6 +46,7 @@ class AgentRequest:
     backend: str
     confirmation_digest: str | None = None
     execution_provenance: ExecutionProvenance | None = None
+    skip_confirmation: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +63,7 @@ class AgentResult:
     planner_outcome: PlannerOutcomeKind | None = None
     confirmation_digest: str | None = None
     execution_provenance: ExecutionProvenance | None = None
+    confirmation_mode: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {
@@ -90,6 +92,8 @@ class AgentResult:
             result["capability"] = self.capability
         if self.confirmation_digest is not None:
             result["confirmation_digest"] = self.confirmation_digest
+        if self.confirmation_mode is not None:
+            result["confirmation_mode"] = self.confirmation_mode
         if self.runtime_session_id is not None:
             result["runtime_session_id"] = self.runtime_session_id
         if self.execution_provenance is not None:
@@ -149,6 +153,20 @@ class TextAgent:
                 request,
                 AgentStatus.DISPATCH_REJECTED,
                 "REQUEST_ID_INVALID",
+            )
+        if request.skip_confirmation and (
+            request.mode != "execute" or not request.execute
+        ):
+            return self._terminal_result(
+                request,
+                AgentStatus.DISPATCH_REJECTED,
+                "CONFIRMATION_BYPASS_REQUIRES_EXECUTE",
+            )
+        if request.skip_confirmation and request.confirmation_digest is not None:
+            return self._terminal_result(
+                request,
+                AgentStatus.DISPATCH_REJECTED,
+                "CONFIRMATION_MODE_CONFLICT",
             )
         try:
             instruction = validate_instruction(request.instruction)
@@ -246,7 +264,13 @@ class TextAgent:
                 capability=dispatch_request.capability,
                 planner_outcome=outcome.kind,
             )
-        if request.confirmation_digest is None or not request.confirmation_digest.strip():
+        if (
+            not request.skip_confirmation
+            and (
+                request.confirmation_digest is None
+                or not request.confirmation_digest.strip()
+            )
+        ):
             return self._terminal_result(
                 request,
                 AgentStatus.DISPATCH_REJECTED,
@@ -256,7 +280,10 @@ class TextAgent:
                 capability=dispatch_request.capability,
                 planner_outcome=outcome.kind,
             )
-        if _CONFIRMATION_PATTERN.fullmatch(request.confirmation_digest) is None:
+        if (
+            not request.skip_confirmation
+            and _CONFIRMATION_PATTERN.fullmatch(request.confirmation_digest) is None
+        ):
             return self._terminal_result(
                 request,
                 AgentStatus.DISPATCH_REJECTED,
@@ -266,7 +293,9 @@ class TextAgent:
                 capability=dispatch_request.capability,
                 planner_outcome=outcome.kind,
             )
-        if not hmac.compare_digest(request.confirmation_digest, confirmation_digest):
+        if not request.skip_confirmation and not hmac.compare_digest(
+            request.confirmation_digest, confirmation_digest
+        ):
             return self._terminal_result(
                 request,
                 AgentStatus.DISPATCH_REJECTED,
@@ -329,6 +358,7 @@ class TextAgent:
             runtime_session_id=runtime.runtime_session_id,
             state_trace=(AgentStatus.RUNTIME_STARTED, status),
             planner_outcome=outcome.kind,
+            confirmation_mode=("skipped" if request.skip_confirmation else "digest"),
             execution_provenance=request.execution_provenance,
         )
 
@@ -360,6 +390,7 @@ class TextAgent:
             runtime_session_id=None,
             state_trace=(AgentStatus.RUNTIME_STARTED, AgentStatus.RUNTIME_FAILED),
             planner_outcome=planner_outcome,
+            confirmation_mode=("skipped" if request.skip_confirmation else "digest"),
             execution_provenance=request.execution_provenance,
         )
 
@@ -370,6 +401,7 @@ class TextAgent:
             and isinstance(request.instruction, str)
             and isinstance(request.mode, str)
             and type(request.execute) is bool
+            and type(request.skip_confirmation) is bool
             and isinstance(request.backend, str)
             and (
                 request.confirmation_digest is None

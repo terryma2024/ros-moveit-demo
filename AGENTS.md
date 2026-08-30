@@ -1,5 +1,12 @@
 # Repository Rules
 
+- Write all README files in this repository in English. Keep commands, identifiers, paths, API
+  names, and other source literals unchanged.
+- When writing or substantially revising persistent, human-facing documentation such as README
+  files, guides, manuals, and tutorials, use the project-local `$humanizer-zh` skill for Chinese
+  prose and `$humanizer` for English prose. Do not apply these skills to ledgers, logs, generated
+  evidence, temporary notes, or other audit- or machine-oriented records. Preserve technical facts,
+  commands, identifiers, paths, API names, code, data, citations, and link targets unchanged.
 - When developing, modifying, debugging, testing, or visually validating any SO-101 application in
   this repository, you must use the project-local `$so101-dev` skill at
   `.agents/skills/so101-dev/SKILL.md` before taking task actions and follow its workflow and evidence

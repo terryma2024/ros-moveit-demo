@@ -741,7 +741,7 @@ confirmed_conclusions:
   - EXP-005 was a valid fail-closed qwen provider-boundary result at candidate 785a95e with execute count zero. Its one-variable diagnostic isolated think=false and prompt constraint invention, leading to two new RED tests and final candidate 4ebdf45; GREEN passed 31 adapter, 190 focused, and 743 full tests.
   - EXP-006, EXP-007, and EXP-008 are VALID at 4ebdf45. Each invoked execute exactly once, reached RUNTIME_COMPLETED and downstream DONE/19 with exact request/session correlation, retained verified provenance, and ended with zero owned nodes/processes.
   - The 23-file ai-station evidence copy is byte-identical by remote/local SHA-256. Secret-safe scans found zero actual-key or strong generic credential matches across 23 selected remote/copied files, 2395 full remote-root files, 744 full local-root files, 563 new-evidence files, and 3342 worktree files at their respective scan times.
-  - The teaching guide is src/so101_demo_py/docs/text_pick_agent.md and is linked from the package README.
+  - The teaching guide is docs/so101-text-pick-agent-source-guide.md and is linked from the package README.
   - No evidence was deleted, no real hardware was touched, and no V5-T005 conclusion is made.
 disproven_routes:
   - Reusing old candidate live evidence for corrected shared provider/prompt behavior.
