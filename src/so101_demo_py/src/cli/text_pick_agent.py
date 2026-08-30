@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ollama-endpoint", default="http://127.0.0.1:11434/api/chat"
     )
     parser.add_argument("--ollama-timeout-s", type=float, default=12.0)
+    parser.add_argument("--cup-pose-timeout-s", type=float, default=30.0)
     parser.add_argument("--session-id")
     parser.add_argument("--expected-reset-epoch")
     parser.add_argument("--evidence-root")
@@ -208,6 +209,11 @@ def _normalize_provider_options(options) -> bool:
     )
 
 
+def _valid_cup_pose_timeout(options) -> bool:
+    value = options.cup_pose_timeout_s
+    return type(value) is float and math.isfinite(value) and value > 0.0
+
+
 def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
     primary = DeepSeekPlanner(
         os.environ.get("DEEPSEEK_API_KEY", ""),
@@ -220,7 +226,14 @@ def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
         endpoint=options.ollama_endpoint,
         timeout_s=options.ollama_timeout_s,
     )
-    executor = _PreviewExecutor() if context is None else DynamicCupPickPlaceExecutor(context)
+    executor = (
+        _PreviewExecutor()
+        if context is None
+        else DynamicCupPickPlaceExecutor(
+            context,
+            cup_pose_timeout_s=options.cup_pose_timeout_s,
+        )
+    )
     return TextAgent(PlannerChain(primary, fallback), executor)
 
 
@@ -248,6 +261,9 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         return 1
     if options.skip_confirmation and options.confirmation_digest is not None:
         _write_document(_rejection(request_id, "CONFIRMATION_MODE_CONFLICT"))
+        return 1
+    if not _valid_cup_pose_timeout(options):
+        _write_document(_rejection(request_id, "CUP_POSE_TIMEOUT_INVALID"))
         return 1
     if not _normalize_provider_options(options):
         _write_document(_rejection(request_id, "PROVIDER_OPTIONS_INVALID"))

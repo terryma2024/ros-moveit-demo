@@ -436,6 +436,28 @@ def test_provider_options_are_rejected_before_provider_or_agent(
     assert output(capsys)["reason_code"] == "PROVIDER_OPTIONS_INVALID"
 
 
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_cup_pose_timeout_is_rejected_before_provider_or_agent(
+    capsys, value: str
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        [
+            "--instruction",
+            "帮我拿杯子",
+            "--cup-pose-timeout-s",
+            value,
+        ],
+        _agent=agent,
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "CUP_POSE_TIMEOUT_INVALID"
+
+
 def test_cli_builds_runtime_executor_only_for_valid_execute(
     monkeypatch, capsys, tmp_path
 ) -> None:
@@ -447,8 +469,9 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(
     calls: dict[str, object] = {}
 
     class Executor:
-        def __init__(self, context) -> None:
+        def __init__(self, context, *, cup_pose_timeout_s) -> None:
             calls["executor"] = context
+            calls["cup_pose_timeout_s"] = cup_pose_timeout_s
 
     class Agent:
         def __init__(self, planner, executor) -> None:
@@ -481,6 +504,7 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(
             "--session-id", " session-1 ", "--expected-reset-epoch", "0",
             "--evidence-root", str(tmp_path), "--source-commit", f" {head.upper()} ",
             "--installed-prefix", prefix, "--request-id", "req-fixed",
+            "--cup-pose-timeout-s", "42.5",
         ]
     ) == 0
 
@@ -491,6 +515,7 @@ def test_cli_builds_runtime_executor_only_for_valid_execute(
     assert context.source_commit == head
     assert context.installed_prefix == prefix
     assert context.execution_provenance.source_commit == head
+    assert calls["cup_pose_timeout_s"] == 42.5
     assert output(capsys)["runtime_session_id"] == "session-1"
 
 

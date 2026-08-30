@@ -84,13 +84,28 @@ def test_context_is_frozen_and_adapter_calls_runner_once_with_only_whitelisted_o
         "execute": True,
         "scene_source": "observe_only",
         "dynamic_policy": None,
-        "cup_pose_timeout_s": 5.0,
+        "cup_pose_timeout_s": 30.0,
         "source_commit": SOURCE_COMMIT,
         "installed_prefix": INSTALLED_PREFIX,
         "session_id": "text-agent-session",
         "expected_reset_epoch": 3,
         "evidence_root": tmp_path,
     }
+
+
+def test_adapter_forwards_explicit_cup_pose_timeout(tmp_path: Path) -> None:
+    calls: list[object] = []
+    executor = DynamicCupPickPlaceExecutor(
+        _context(tmp_path),
+        cup_pose_timeout_s=42.5,
+        runner=lambda options: calls.append(options) or 0,
+    )
+
+    result = executor.dispatch(_request())
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0].cup_pose_timeout_s == 42.5
 
 
 @pytest.mark.parametrize(
