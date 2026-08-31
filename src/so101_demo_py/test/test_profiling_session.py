@@ -1,5 +1,7 @@
 from pathlib import Path
 import json
+import math
+import threading
 
 import pytest
 
@@ -43,6 +45,12 @@ def test_disabled_factory_does_not_read_clocks_or_create_files(
 @pytest.mark.parametrize("value", [{"nested": 1}, [1], object()])
 def test_event_attributes_reject_non_scalar_values(value: object) -> None:
     with pytest.raises(TypeError, match="scalar JSON"):
+        validate_attributes({"bad": value})
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_event_attributes_reject_non_finite_floats(value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
         validate_attributes({"bad": value})
 
 
@@ -137,3 +145,125 @@ def test_sink_failure_disables_profiling_without_raising(tmp_path: Path) -> None
 
     assert profiler.disabled_by_error is True
     assert profiler.warnings == ("OSError: disk full",)
+
+
+def test_non_os_sink_failure_disables_profiling_without_raising(tmp_path: Path) -> None:
+    class BrokenAfterAnchorSink:
+        def __init__(self) -> None:
+            self.write_count = 0
+
+        def write(self, value: str) -> int:
+            self.write_count += 1
+            if self.write_count > 1:
+                raise ValueError("closed stream")
+            return len(value)
+
+        def flush(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.SUMMARY,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        ),
+        monotonic_ns=lambda: 10,
+        wall_time_ns=lambda: 20,
+        pid=lambda: 42,
+        thread_id=lambda: 7,
+        sink_factory=lambda _: BrokenAfterAnchorSink(),
+    )
+    assert profiler is not None
+
+    profiler.instant("perception.ready")
+
+    assert profiler.disabled_by_error is True
+    assert profiler.warnings == ("ValueError: closed stream",)
+
+
+def test_close_waits_for_an_inflight_write_without_leaking_errors(tmp_path: Path) -> None:
+    class BlockingSink:
+        def __init__(self) -> None:
+            self.instant_entered = threading.Event()
+            self.release_instant = threading.Event()
+            self.closed = threading.Event()
+
+        def write(self, value: str) -> int:
+            if '"event_type":"instant"' in value:
+                self.instant_entered.set()
+                assert self.release_instant.wait(timeout=2.0)
+            if self.closed.is_set():
+                raise ValueError("write after close")
+            return len(value)
+
+        def flush(self) -> None:
+            if self.closed.is_set():
+                raise ValueError("flush after close")
+
+        def close(self) -> None:
+            self.closed.set()
+
+    sink = BlockingSink()
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.SUMMARY,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        ),
+        monotonic_ns=lambda: 10,
+        wall_time_ns=lambda: 20,
+        pid=lambda: 42,
+        thread_id=threading.get_ident,
+        sink_factory=lambda _: sink,
+    )
+    assert profiler is not None
+    errors: list[BaseException] = []
+
+    def record(operation) -> None:
+        try:
+            operation()
+        except BaseException as error:
+            errors.append(error)
+
+    writer = threading.Thread(
+        target=record,
+        args=(lambda: profiler.instant("perception.ready"),),
+    )
+    writer.start()
+    assert sink.instant_entered.wait(timeout=2.0)
+    closer = threading.Thread(target=record, args=(profiler.close,))
+    closer.start()
+    sink.closed.wait(timeout=0.1)
+    sink.release_instant.set()
+    writer.join(timeout=2.0)
+    closer.join(timeout=2.0)
+
+    assert not writer.is_alive()
+    assert not closer.is_alive()
+    assert errors == []
+    assert profiler.disabled_by_error is False
+
+
+def test_each_profiler_instance_owns_a_unique_stream_file(tmp_path: Path) -> None:
+    config = ProfilingConfig(
+        mode=ProfilingMode.SUMMARY,
+        output_root=tmp_path / "profiling",
+        session_id="session-1",
+        process_role="perception",
+    )
+    first = build_profiler(config, pid=lambda: 42)
+    second = build_profiler(config, pid=lambda: 42)
+    assert first is not None
+    assert second is not None
+
+    first.close()
+    second.close()
+
+    streams = sorted((tmp_path / "profiling/processes").glob("*.events.jsonl"))
+    assert len(streams) == 2
+    assert streams[0] != streams[1]
