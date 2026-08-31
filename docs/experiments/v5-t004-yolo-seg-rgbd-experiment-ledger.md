@@ -22,11 +22,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-009
-next_experiment: EXP-008
+latest_checkpoint: CP-010
+next_experiment: EXP-009
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-007
+current_hypothesis: HYP-001
+working_tree_status: 本地任务分支仅有 EXP-008 无效结论待提交；远端 25680ad 隔离 worktree未修改
+owned_processes: NONE；v5-t004-train-exp008 已中断退出，未留下 yolo 训练进程
+preserved_processes: 516096-byte 禁止下载的 yolo26n.pt partial 已从 /home/lenovo 移入 EXP-008 证据目录并计算 SHA；未删除
+confirmed_conclusions:
+  - CONF-028 runtime 配置与 dataset 路径门通过，但 Ultralytics 8.4.115 在 amp=true 自检阶段主动联网下载 yolo26n.pt
+disproven_routes:
+  - DISPROVED-004 不可直接使用 Ultralytics 默认 amp=true，因为其 AMP check 会在运行时引入未锁定自动下载
+open_risks:
+  - 冻结 amp=false 是否完全绕过下载并完成训练尚未验证
+next_command: 先为 training.yaml 增加 amp=false 的 RED/GREEN contract，再预登记 EXP-009
+```
 
 ```yaml
 checkpoint_id: CP-009
@@ -188,7 +204,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-008
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-007
 hypothesis: 25680ad 生成的 runtime training/dataset 配置可被 Ultralytics 8.4.115 接受，并能从本地锁定 yolo11n-seg.pt 在 RTX 5080 上完成一次短训练
 prediction: get_cfg 与 check_det_dataset 均通过且指向正式 dataset；1 epoch、fraction 0.05 训练使用 CUDA、退出 0，并生成非空 best.pt 和训练指标
@@ -218,17 +234,22 @@ commands:
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-008, run_name=smoke, epochs_override=1, fraction=0.05)
     exit_code: 0
   - command: yolo segment train cfg=.../training/smoke-exp-008/training-config.yaml
-    exit_code: PENDING
+    exit_code: NOT_CAPTURED_AFTER_AUTHORIZED_INTERRUPT
 observed:
   - Linux 25680ad 聚焦训练配置测试 16/16 通过；训练 venv 不安装 pytest，源码测试使用系统 pytest，运行时仍固定锁定 venv
   - runtime config 已剥离 class_names，get_cfg 接受；dataset path 精确解析到正式 evidence dataset 的 train/val/test
   - provenance、GPU 进程和唯一 output root 已核验，实验进入 RUNNING
+  - 日志证明 CUDA:0 RTX 5080 与本地 base model 已加载，但 AMP checks 随后下载 https://github.com/ultralytics/assets/.../yolo26n.pt
+  - 下载在 516096 bytes 时被本任务立即中断；partial 移入本实验目录并保留 SHA，未进入任何训练 epoch
+  - v5-t004-train-exp008 退出且无残留 yolo 训练进程；wrapper 未能在 tmux 结束前写 exit-code.txt
 inferred:
-  - NONE
-conclusion: PENDING
+  - 默认 amp=true 的外部模型自检违反冻结依赖与 no-auto-download 前置契约，本轮不能用于训练质量或成功率结论
+conclusion: INVALID；训练未开始，首个坏边界为 Ultralytics AMP check 的未锁定运行时下载
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-008
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-008/prohibited-auto-download-yolo26n.partial.pt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-008/prohibited-auto-download.sha256
+decision: ABANDON
 next_experiment: EXP-009
 ```
 
