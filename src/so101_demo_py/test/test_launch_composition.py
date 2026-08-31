@@ -179,6 +179,20 @@ def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
     assert '<param name="initial_keyframe">cup_test_left_5cm</param>' in rendered
 
 
+def test_mujoco_launch_accepts_v5_multi_object_acceptance_keyframes() -> None:
+    scene = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
+
+    for keyframe in ("v5_no_cup", "v5_two_cups", "v5_cup_near_bottle"):
+        rendered = launch_composition._render_mujoco_robot_description(
+            PACKAGE_ROOT,
+            str(scene),
+            headless=True,
+            sensor_rendering=True,
+            initial_keyframe=keyframe,
+        )
+        assert f'<param name="initial_keyframe">{keyframe}</param>' in rendered
+
+
 def test_fixed_mujoco_composition_still_selects_only_the_fixed_workflow() -> None:
     context = LaunchContext()
     context.launch_configurations.update(

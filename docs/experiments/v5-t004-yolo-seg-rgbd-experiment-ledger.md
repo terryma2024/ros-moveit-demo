@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 41d6fcf7559f0c52bce2966cbf84ccc203c7beea
+current_commit: f92b0ac834382b6a3095d1885d7449c6c19e57db
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -20,17 +20,35 @@ confirmed_conclusions:
   - CONF-036 EXP-012 完成 100 epoch 全量训练；test mask precision 0.9997、recall 1.0、mAP50 0.995、mAP50-95 0.9737
   - CONF-039 EXP-015 在 Linux CUDA 上经生产 TargetSelector 以 confidence 0.50 从 296 个 raw candidates 唯一选中 plastic_cup，推理 37.58 ms
   - CONF-040 EXP-016 在 macOS MPS 上以同一权重和输入唯一选中 plastic_cup，推理 447.77 ms，mask 与 Linux 均为 5053 pixels
+  - CONF-042 多物体 MJCF keyframe 已加入公共 MuJoCo launch 白名单；RED 后聚焦 64/64、包级 889/889 通过
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-018
+latest_checkpoint: CP-019
 next_experiment: EXP-017
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-019
+last_valid_experiment: EXP-016
+current_hypothesis: 修复 keyframe launch 白名单后可预登记并启动 8 个真实 ROS RGB-D 场景
+working_tree_status: launch_composition.py、对应测试与本账本待提交；其余无用户改动
+owned_processes: NONE
+preserved_processes: 所有正式与无效证据保留；ai-station 用户文件未触碰
+confirmed_conclusions:
+  - CONF-042 v5_no_cup、v5_two_cups、v5_cup_near_bottle 原先被公共 launch 白名单拒绝；新增契约先 RED 后 GREEN
+  - CONF-043 设置任务专属 ROS_LOG_DIR 后 launch 聚焦 64/64、so101_demo_py 包级 889/889 通过
+disproven_routes:
+  - DISPROVED-007 未设置 ROS_LOG_DIR 的 sandbox 测试会因 ~/.ros/log 无写权限产生 58 个环境失败，不能解释为产品回归
+open_risks:
+  - 安装态尚未重建，8 个场景实验尚未预登记或启动
+next_command: 提交白名单修复，随后为 macOS/Linux x 四场景登记 EXP-017 至 EXP-024
+```
 
 ```yaml
 checkpoint_id: CP-018
