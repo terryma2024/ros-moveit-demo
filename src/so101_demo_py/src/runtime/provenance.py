@@ -23,6 +23,12 @@ class QualificationBundle:
     bundle_sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class InstalledExecutionIdentity:
+    source_commit: str
+    package_prefix: str
+
+
 class ExecutionProvenanceError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -66,6 +72,24 @@ def _resolved_source_commit(module_path: Path) -> str:
     return commit
 
 
+def resolve_installed_execution_identity() -> InstalledExecutionIdentity:
+    from ament_index_python.packages import get_package_prefix
+    from ..application import text_agent as runtime_module
+
+    try:
+        module_path = Path(runtime_module.__file__).resolve(strict=True)
+    except (OSError, RuntimeError, TypeError):
+        raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE") from None
+    try:
+        package_prefix = Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
+    except (LookupError, OSError, RuntimeError):
+        raise ExecutionProvenanceError("EXECUTION_PACKAGE_PREFIX_UNAVAILABLE") from None
+    return InstalledExecutionIdentity(
+        source_commit=_resolved_source_commit(module_path),
+        package_prefix=str(package_prefix),
+    )
+
+
 def verify_execution_provenance(
     *,
     declared_source_commit: str,
@@ -82,12 +106,8 @@ def verify_execution_provenance(
     except (OSError, RuntimeError):
         raise ExecutionProvenanceError("EXECUTION_INSTALLED_PREFIX_INVALID") from None
 
-    from ament_index_python.packages import get_package_prefix
-
-    try:
-        package_prefix = Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
-    except (LookupError, OSError, RuntimeError):
-        raise ExecutionProvenanceError("EXECUTION_PACKAGE_PREFIX_UNAVAILABLE") from None
+    identity = resolve_installed_execution_identity()
+    package_prefix = Path(identity.package_prefix)
     if declared_prefix != package_prefix:
         raise ExecutionProvenanceError("EXECUTION_INSTALLED_PREFIX_MISMATCH")
 
@@ -97,7 +117,7 @@ def verify_execution_provenance(
         module_path = Path(runtime_module.__file__).resolve(strict=True)
     except (OSError, RuntimeError, TypeError):
         raise ExecutionProvenanceError("EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE") from None
-    resolved_commit = _resolved_source_commit(module_path)
+    resolved_commit = identity.source_commit
     if normalized_commit != resolved_commit:
         raise ExecutionProvenanceError("EXECUTION_SOURCE_COMMIT_MISMATCH")
 
