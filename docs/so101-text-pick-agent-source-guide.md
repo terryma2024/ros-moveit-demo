@@ -804,6 +804,44 @@ runtime provenance、原子 claim request，最后进入同一个 Executor。省
 相等性门禁。不要同时传 `--confirmation-digest`；Preview 模式也不能传
 `--skip-confirmation`。输出和 provenance 中都应读到 `confirmation_mode=skipped`。
 
+### 19.3 用一个 launch 启动整条链路
+
+[`so101_mujoco_text_pick_agent.launch.py`](../src/so101_demo_py/launch/so101_mujoco_text_pick_agent.launch.py)
+适合明确授权跳过人工确认的一次性仿真。它会启动 MuJoCo、controller、MoveIt、Planning Scene、
+相机 TF、`rgbd_cup_pose` 和 `text_pick_agent`，工作流结束后再清理这些本轮进程。
+
+先按第 16 节把 `DEEPSEEK_API_KEY` 加载到当前 shell，或者确认本机 Ollama 已有
+`qwen3.5:4b`。然后执行：
+
+```zsh
+export EVIDENCE_ROOT=/tmp/so101-debug-text-agent-e2e-example-001
+mkdir -p "$EVIDENCE_ROOT"
+
+ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
+  instruction:="Pick the plastic cup. Apply no constraints." \
+  run_mode:=execute \
+  execute:=true \
+  skip_confirmation:=true \
+  headless:=false \
+  sensor_rendering:=true \
+  mujoco_initial_keyframe:=task_start \
+  session_id:=text-rgbd-task-start-001 \
+  evidence_file:="$EVIDENCE_ROOT/text-rgbd-task-start-001.json"
+```
+
+操作者仍要给出 instruction、三重执行授权、keyframe、session 和 evidence file。
+[`build_text_pick_agent_launch_description()`](../src/so101_demo_py/src/runtime/launch_composition.py)
+从已安装模块和 ament index 解析 source commit 与 package prefix，并固定 fresh stack 的 reset
+epoch 为 `0`。它还会把派生的 dynamic evidence root 传给 Text Agent，避免手工拼接 provenance
+参数。
+
+DeepSeek 和 Ollama 不属于这个 launch。launch 只继承 provider 配置，不启动、重启或停止模型服务。
+Text Agent 返回后，它也只清理自己创建的 ROS 和 MuJoCo 进程，不处理其他 tmux、ROS domain 或
+未知所有权的进程。
+
+这个入口只接受 `skip_confirmation:=true`。需要检查 Preview 和 digest 时，使用第 19.1 节的两步
+CLI 流程，不要把 digest 协议塞进这个 launch。
+
 ## 20. 每种状态分别证明什么
 
 | 状态/证据 | 它证明什么 | 它不证明什么 |

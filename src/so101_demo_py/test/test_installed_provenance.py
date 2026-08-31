@@ -34,6 +34,7 @@ EXPECTED_LAUNCHERS = {
     "so101_mujoco_perception_pick_place.launch.py",
     "so101_mujoco_pick_place.launch.py",
     "so101_mujoco_task_station.launch.py",
+    "so101_mujoco_text_pick_agent.launch.py",
 }
 
 
