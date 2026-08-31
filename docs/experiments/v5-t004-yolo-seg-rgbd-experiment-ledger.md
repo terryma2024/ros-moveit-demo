@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: c42b9c96d1dbfd345e22a52a730df17fa0078bc4
+current_commit: 9ae2d3621acc530f9d5d416a5f87b0b03497797d
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -16,17 +16,33 @@ confirmed_conclusions:
   - CONF-002 当前 macOS 与 ai-station Python 环境均未安装 torch/ultralytics/mujoco Python binding，来自 2026-08-31 双平台 import probe
   - CONF-003 ai-station NVIDIA 用户态 595.84 与已加载内核模块 595.71.05 不一致，nvidia-smi 当前失败
   - CONF-022 EXP-007 授权重启后 NVIDIA 内核模块、NVML 与磁盘模块统一为 595.84，nvidia-smi 与 RTX 5080 CUDA 张量 gate 通过
+  - CONF-034 EXP-011 预置锁定字体后，amp=false 与 YOLO_OFFLINE=true 的 CUDA smoke 零自动下载、退出 0 并生成完整训练工件
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-013
-next_experiment: EXP-011
+latest_checkpoint: CP-014
+next_experiment: EXP-012
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-011
+current_hypothesis: HYP-001
+working_tree_status: 本地仅有 EXP-011 结论与 EXP-012 计划待提交；remote source clean at 35db5f5
+owned_processes: NONE；EXP-011 正常退出且没有训练进程
+preserved_processes: EXP-008/009/010/011 全部工件保留；字体资产与 provenance hash 保留
+confirmed_conclusions:
+  - CONF-034 EXP-011 exit 0，CUDA RTX 5080、amp=false、offline、无 forbidden download marker
+  - CONF-035 EXP-011 best.pt 与 last.pt 各 5982884 bytes，关键配置、结果和日志均有 SHA256
+open_risks:
+  - 全 800 train/200 val、100 epochs 是否收敛以及 test split 指标尚未观察
+next_command: 预登记 EXP-012 后用相同 envelope 生成 full-exp-012 配置并启动全量训练
+```
 
 ```yaml
 checkpoint_id: CP-013
@@ -249,8 +265,54 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ## Experiments
 
 ```yaml
+experiment_id: EXP-012
+status: PLANNED
+prior_experiment: EXP-011
+hypothesis: 已由 EXP-011 验证的离线 CUDA envelope 可在完整 800/200 数据和 100 epoch 配置上训练出单一 best.pt，并完成独立 200-image test split 评估
+prediction: 训练扫描 800 train/200 val，CUDA:0 RTX 5080、amp=False、无自动下载，exit 0；test split 评估 exit 0 并生成 metrics.json、best.pt 和 SHA256
+single_variable: 相对 VALID EXP-011 仅移除 epochs=1/fraction=0.05 smoke 覆盖，恢复冻结 training.yaml 的 epochs=100 与完整 train split
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source 35db5f54c1d2516fbe752afbe7380d38522a2a19，EXP-011 同一 GPU/base model/dataset/envelope有效通过
+  - 800 train、200 val、200 test 数据与 base SHA 不变，锁定字体 SHA 有效
+  - 没有其他训练进程；output full-exp-012 不存在
+success_criteria:
+  - runtime config get_cfg/check_det_dataset 通过，epochs=100、无 fraction override、amp=false
+  - 日志扫描 800 train/200 val，明确 CUDA:0 RTX 5080，且无 Downloading、yolo26n.pt 或 PyPI update
+  - training exit-code.txt 精确为 0；best.pt、last.pt、results.csv、args.yaml 非空
+  - 使用 best.pt 对 200-image test split 评估退出 0，metrics.json 可解析并包含 box 与 mask 指标
+  - best.pt 与所有交付工件写 SHA256，且没有残留训练/评估进程
+failure_criteria:
+  - 训练或 test 评估非零、自动下载、CUDA 未使用、数据计数错误或工件/指标缺失
+invalid_criteria:
+  - provenance/output/exit-code 污染、外部训练进程干扰或主机生命周期中断
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/yolo
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: prepare_training_run(..., output_root=.../training/full-exp-012, run_name=train)
+    exit_code: PENDING
+  - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/full-exp-012/training-config.yaml
+    exit_code: PENDING
+  - command: YOLO(best.pt).val(data=dataset.yaml, split=test, device=cuda, imgsz=640) and write metrics.json
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012
+decision: PENDING
+next_experiment: EXP-013
+```
+
+```yaml
 experiment_id: EXP-011
-status: RUNNING
+status: VALID
 prior_experiment: EXP-010
 hypothesis: 将本机 DejaVuSans.ttf 以锁定 SHA 预置为 Ultralytics USER_CONFIG_DIR/Arial.ttf，可满足无条件字体检查并让 amp=false、YOLO_OFFLINE=true smoke 零下载完成
 prediction: 预置字体 SHA 与系统源一致；1 epoch、fraction 0.05 日志无 Downloading/yolo26n/PyPI update，exit-code.txt 精确为 0，关键训练工件非空
@@ -279,19 +341,26 @@ provenance:
   gz_partition: NONE
 commands:
   - command: cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf .../ultralytics-config/Ultralytics/Arial.ttf && sha256sum source target
-    exit_code: PENDING
+    exit_code: 0
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-011, run_name=smoke, epochs_override=1, fraction=0.05)
-    exit_code: PENDING
+    exit_code: 0
   - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-011/training-config.yaml
-    exit_code: PENDING
+    exit_code: 0
 observed:
   - source、GPU、dataset、base model、字体 source SHA、进程所有权与独立 output root 已核验，实验进入 RUNNING
+  - 预置 Arial.ttf 与系统 DejaVuSans.ttf SHA256 均为 ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280b
+  - 训练日志为 CUDA:0 RTX 5080、amp=False、40 train/200 val，且没有 Downloading、yolo26n.pt 或 PyPI update marker
+  - exit-code.txt 精确为 0；best.pt/last.pt 各 5982884 bytes；best SHA256=626a9be58a2fff5a89a0a69903f829eb53d5c1152d8552737ea29c4e32e20459
+  - results.csv、args.yaml、training config、dataset config、training log 全部非空并写入 artifacts.sha256
+  - 训练后没有残留 yolo/ultralytics 进程
 inferred:
-  - NONE
-conclusion: PENDING
+  - EXP-008 至 EXP-010 暴露的配置、AMP、offline 与字体隐式依赖均已在首个边界消除
+conclusion: PASS；离线 CUDA training smoke 和工件门完整通过，可进入全量训练
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-011
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-011/artifacts.sha256
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/ultralytics-config/Ultralytics/font-provenance.sha256
+decision: KEEP
 next_experiment: EXP-012
 ```
 
