@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 12aa6c17661d3aaf9a53813428e45de7671090b1
+current_commit: 93de1dbd630ac629556c725dbe1976067ee52347
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-030
+latest_checkpoint: CP-031
 next_experiment: EXP-029
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-031
+last_valid_experiment: EXP-016
+current_hypothesis: 已隔离的前台 PTY Aqua宿主可让 EXP-029 执行 MuJoCo process-main-thread UI task
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 EXP-029 尚未启动
+preserved_processes: 所有无效运行证据已持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-059 domain 229、两端 output与任务进程为空；Aqua/source/dylib/MPS preflight沿用已通过结果
+open_risks:
+  - 前台PTY下的Viewer/controller/payload/not-found/视觉/cleanup尚未观察
+next_command: 以前台 tty=true 启动 EXP-029 并保持 unified exec session作为 owner
+```
 
 ```yaml
 checkpoint_id: CP-030
@@ -986,7 +1000,7 @@ next_experiment: EXP-029
 
 ```yaml
 experiment_id: EXP-029
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-028
 hypothesis: launchctl asuser 501 的前台 PTY 宿主可执行 macOS process-main-thread UI task，并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
