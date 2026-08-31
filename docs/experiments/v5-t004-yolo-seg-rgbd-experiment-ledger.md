@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: eb4d99124277a01ffec9ab705c9f7280005a0427
+current_commit: 4d0b6e35e0b4754da4bc03d1038c3f928eac3ccc
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-037
-next_experiment: EXP-032
+latest_checkpoint: CP-038
+next_experiment: EXP-033
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-038
+last_valid_experiment: EXP-016
+current_hypothesis: 零候选时接受Ultralytics masks=None可让新FULL_RESTART EXP-033到达合法TARGET_NOT_FOUND边界
+working_tree_status: 仅本账本INVALID/RUNNING转换待提交；生产修复已提交并推送
+owned_processes: NONE；EXP-032前台PTY exit 0，domain 232无节点
+preserved_processes: EXP-032无效诊断批次已同步正式evidence root；用户进程/文件与ai-station主checkout未触碰
+confirmed_conclusions:
+  - CONF-072 EXP-032真实RGB-D、Viewer与三controllers通过，但首次请求因PATH入口无效，绝对入口重试暴露零候选masks=None契约缺口
+  - CONF-073 TDD RED复现空boxes/classes/confidence加masks=None；4d0b6e3仅在count=0时接受，Mac adapter22/22、包级891/891通过
+  - CONF-074 Linux isolated checkout/install=4d0b6e3，adapter22/22、RTX 5080 CUDA gate通过，installed import回读conf=0.25与零mask分支
+open_risks:
+  - EXP-033仍须新FULL_RESTART证明detections/overlay、TARGET_NOT_FOUND、MPS、延迟、无/cup_pose与cleanup同时成立
+next_command: domain 233与新output下启动EXP-033，observer先于Aqua MPS请求且至少120秒
+```
 
 ```yaml
 checkpoint_id: CP-037
@@ -1227,7 +1243,7 @@ next_experiment: EXP-032
 
 ```yaml
 experiment_id: EXP-032
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-031
 hypothesis: YOLO标准candidate floor=0.25可在保持所有模型候选与selector 0.50边界的同时，让 bottle_only overlay清晰且request_latency<=2000
 prediction: candidate_count=0、matching_count=0、TARGET_NOT_FOUND、runtime_device=mps、request_latency<=2000、无/cup_pose
@@ -1253,13 +1269,56 @@ provenance:
   gz_partition: v5t004-mac-exp032
 commands:
   - command: FULL_RESTART v5_no_cup plus 120s topic observer and Aqua MPS one-shot request
+    exit_code: stack=0, first_request=127, second_request=1, observer=1
+observed:
+  - main-thread UI、CameraPlugin 10Hz、三controllers active；640x480 rgb8/32FC1同stamp，finite positive depth=307200/307200
+  - exact-window ID 3519显示bottle-only与Viewer Running；Ctrl-C后MoveIt/MuJoCo clean，domain 232无节点
+  - 首次Aqua请求使用非绝对console script导致command not found；绝对入口重试在warmup后返回INFERENCE_FAILED
+  - result candidate_count=0但model/device/weight为空且无detections/overlay；源码与RED测试确认Ultralytics零候选masks=None被转换器拒绝
+inferred: [NONE]
+conclusion: INVALID；启动入口重试与零候选契约污染正式结果，不能纳入四场景矩阵
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-032-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-032-bottle-only
+decision: PRESERVE；4d0b6e3按TDD修复后以新ID EXP-033 FULL_RESTART
+next_experiment: EXP-033
+```
+
+```yaml
+experiment_id: EXP-033
+status: RUNNING
+prior_experiment: EXP-032
+hypothesis: 仅在零候选时接受Ultralytics masks=None，可发布空detections与清晰overlay，并由selector稳定返回TARGET_NOT_FOUND
+prediction: candidate_count=0、matching_count=0、TARGET_NOT_FOUND、runtime_device=mps、request_latency<=2000、observer detections>=1/overlay>=1/cup_pose=0
+single_variable: 相对INVALID EXP-032仅source/install从eb4d991改为4d0b6e3并使用已确认绝对入口；场景、权重、阈值、Aqua和设备不变
+lifecycle: FULL_RESTART
+preconditions:
+  - Mac package 891/891；Linux adapter22/22与CUDA gate；双平台install均回读4d0b6e3零mask分支
+  - weight SHA=f281d252...40781、device=mps、selector threshold=0.50、imgsz=640
+  - gui/501 foreground PTY、完整overlay DYLD闭包后接farm；ROS_DOMAIN_ID=233、GZ_PARTITION=v5t004-mac-exp033与新output为空
+success_criteria:
+  - main-thread UI、Viewer、三controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo与finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、candidate_count=0、matching_count=0、request_latency<=2000、无新/cup_pose
+  - detections与overlay topic被120秒observer接收；overlay清晰、exact-window MuJoCo、退出后零owned process/publisher完整
+failure_criteria:
+  - 候选/延迟/Viewer/controller/payload/not-found/device/topic/GUI/cleanup任一失败
+invalid_criteria:
+  - source/install/foreground PTY/Aqua/dylib/domain/partition/output/FULL_RESTART或observer窗口污染
+provenance:
+  source_commit: 4d0b6e35e0b4754da4bc03d1038c3f928eac3ccc
+  install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
+  runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 233
+  gz_partition: v5t004-mac-exp033
+commands:
+  - command: FULL_RESTART v5_no_cup plus 120s topic observer and Aqua MPS absolute installed entrypoint
     exit_code: PENDING
 observed: [NONE]
 inferred: [NONE]
 conclusion: PENDING
 evidence:
-  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-032-bottle-only
-  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-032-bottle-only
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-033-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-033-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
