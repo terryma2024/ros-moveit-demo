@@ -337,7 +337,7 @@ next_experiment: EXP-017
 
 ```yaml
 experiment_id: EXP-015
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-013
 hypothesis: seed 300001 的 raw candidates 经生产 TargetSelector(confidence_threshold=0.50) 后在 Linux CUDA 上唯一选择真实 plastic_cup
 prediction: raw_count>=1、eligible_count=1、selected confidence约0.9705、mask 480x640且非空、runtime_device=cuda、latency<=2000
@@ -364,7 +364,7 @@ commands:
   - command: precreate platform-smoke/linux-exp015; run YoloSegDetector plus TargetSelector at 0.50; write result and SHA
     exit_code: PENDING
 observed:
-  - NONE
+  - source、CUDA、weight/input hash、threshold 0.50 与新 output 已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
