@@ -226,6 +226,16 @@ def test_ambiguous_result_writes_candidates_but_never_localizes_or_publishes(
     assert (run_directory / "source-rgb.png").is_file()
     assert (run_directory / "prediction-overlay.png").is_file()
     assert (run_directory / "detections.json").is_file()
+    candidate_masks = [
+        run_directory / "candidate-mask-000.png",
+        run_directory / "candidate-mask-001.png",
+    ]
+    assert all(path.is_file() for path in candidate_masks)
+    detections = json.loads((run_directory / "detections.json").read_text())
+    assert [item["mask_artifact"] for item in detections["candidates"]] == [
+        str(path) for path in candidate_masks
+    ]
+    assert all(str(path) in result.artifact_paths for path in candidate_masks)
     assert not (run_directory / "selected-mask.png").exists()
     assert not (run_directory / "selected-cloud.ply").exists()
     assert json.loads((run_directory / "result.json").read_text())["failure"] == (
