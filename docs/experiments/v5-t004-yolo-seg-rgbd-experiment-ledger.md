@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: bc23ddad22e485696eab161bd806d0657c347827
+current_commit: e33fba2f5461a1556c3fec88a13244ae735a25f8
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-023
-next_experiment: EXP-025
+latest_checkpoint: CP-024
+next_experiment: EXP-026
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-024
+last_valid_experiment: EXP-016
+current_hypothesis: 通过 launchctl asuser 501 的 Aqua zsh 启动与正确环境可执行 macOS main-thread UI dispatch
+working_tree_status: 仅本账本 INVALID/替代计划待提交；源/测试 clean
+owned_processes: NONE；domain 225 与 PID 19518-19524 已清空
+preserved_processes: EXP-025 ROS日志已同步正式 evidence root；无证据删除
+confirmed_conclusions:
+  - CONF-049 EXP-025 已加载正确主项目插件和 MuJoCo 3.4.0，但普通 Codex 子进程两次出现 Timed out waiting to start simulation rendering
+  - CONF-050 既有有效运行使用 launchctl asuser 501 /bin/zsh -lc 进入 Aqua 后由 macOS main thread 执行 UI task；普通 shell不等价
+disproven_routes:
+  - DISPROVED-009 仅补 DYLD_LIBRARY_PATH 不能让普通 Codex 子进程完成 macOS Cocoa/MainThread 调度
+open_risks:
+  - EXP-026 必须回读 Aqua 启动 PID、controllers、真实 camera topics 与可见窗口后才算越过环境边界
+next_command: 预检并以 launchctl asuser 501 的前台 Aqua zsh 启动 EXP-026
+```
 
 ```yaml
 checkpoint_id: CP-023
@@ -450,10 +467,10 @@ next_experiment: EXP-025
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-025
+prior_experiment: EXP-026
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-025 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-026 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -708,7 +725,7 @@ next_experiment: EXP-025
 
 ```yaml
 experiment_id: EXP-025
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-017
 hypothesis: 显式加载锁定 macOS dylib farm 后，bottle_only 可进入真实 MuJoCo/RGB-D 边界并以 TARGET_NOT_FOUND 拒绝瓶子
 prediction: MuJoCo/控制器启动；真实 RGB-D 有效；runtime_device=mps；matching_count=0；无新 /cup_pose
@@ -733,15 +750,56 @@ provenance:
   gz_partition: v5t004-mac-exp025
 commands:
   - command: export locked dylib farm; fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
-    exit_code: PENDING
+    exit_code: SIGINT_AFTER_INVALID_BOUNDARY
 observed:
   - domain 225、local/remote output 与 task process为空；Mac install、weight hash、MPS available=true 已回读
   - 锁定 dylib farm 文件存在，显式 DYLD_LIBRARY_PATH 下 libmujoco_ros2_control.dylib dlopen gate通过
+  - 正确插件加载 v5_multi_object_scene.xml，但普通 Codex 子进程两次在10秒 UI task期限内报告 Timed out waiting to start simulation rendering
+  - 未创建 Viewer、未激活控制器、无真实 RGB-D 或模型请求；确认边界后 SIGINT，domain 225 与 owned PID清空
+  - 26558-byte launch.log 与分进程日志已同步正式 evidence root
 inferred: [NONE]
-conclusion: PENDING
+conclusion: INVALID；缺少已验证的 macOS Aqua main-thread 启动上下文，不支持感知结论
 evidence:
   - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-025-bottle-only
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-025-bottle-only
+decision: PRESERVE；以新 ID EXP-026 仅改用 launchctl asuser 501 Aqua zsh
+next_experiment: EXP-026
+```
+
+```yaml
+experiment_id: EXP-026
+status: PLANNED
+prior_experiment: EXP-025
+hypothesis: launchctl asuser 501 的 Aqua zsh 可让正确插件在 macOS main thread执行 UI task，进而为 bottle_only 发布真实 RGB-D
+prediction: Viewer可见、controllers active、RGB-D有效；MPS输出 TARGET_NOT_FOUND，且无 /cup_pose
+single_variable: 相对 INVALID EXP-025 仅把 stack owner 从普通 Codex子进程改为 launchctl asuser 501 Aqua zsh；overlay/device/model/scene不变
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - primary mujoco runtime、dylib farm、Aqua uid=501 已回读；ROS_DOMAIN_ID=226、GZ_PARTITION=v5t004-mac-exp026 与 output为空
+success_criteria:
+  - Aqua launch日志证明 main-thread UI task、Viewer与三 controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo及finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、matching_count=0、request_latency_ms<=2000、无新 /cup_pose
+  - exact-window MuJoCo与overlay/truth、安装态 provenance、退出后零 owned process/publisher完整
+failure_criteria:
+  - Viewer/controller/payload/not-found/device/latency/GUI/cleanup 任一失败
+invalid_criteria:
+  - Aqua PID/env/domain/partition/output/source/install provenance污染或非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: current so101_demo_py plus primary project mujoco runtime
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 226
+  gz_partition: v5t004-mac-exp026
+commands:
+  - command: launchctl asuser 501 /bin/zsh -lc with explicit ROS/current overlay/perception/DYLD environment; launch v5_no_cup and run observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-026-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-026-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
