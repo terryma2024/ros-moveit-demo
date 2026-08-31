@@ -6,6 +6,7 @@ import json
 import math
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -192,6 +193,34 @@ def _detection_message(
     return array
 
 
+def _wait_for_output_subscribers(
+    publishers: tuple[Any, ...],
+    *,
+    spin_once: Callable[[float], None],
+    timeout_s: float,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> bool:
+    if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+        raise ValueError("output subscriber timeout must be finite and positive")
+    deadline = monotonic() + timeout_s
+    while True:
+        if all(publisher.get_subscription_count() > 0 for publisher in publishers):
+            return True
+        remaining = deadline - monotonic()
+        if remaining <= 0.0:
+            return False
+        spin_once(min(0.05, remaining))
+
+
+def _publish_and_confirm(publisher: Any, message: Any, *, ack_timeout: Any) -> None:
+    publisher.publish(message)
+    if (
+        publisher.get_subscription_count() > 0
+        and not publisher.wait_for_all_acked(ack_timeout)
+    ):
+        raise RuntimeError("perception output publication was not acknowledged")
+
+
 def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
     from so101_demo.adapters.perception.yolo_seg import ModelSetupError, YoloSegDetector
 
@@ -284,6 +313,13 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             message_stamp_ns(color_message),
             color_message.header.frame_id,
         )
+        _wait_for_output_subscribers(
+            (detections_publisher, overlay_publisher),
+            spin_once=lambda timeout_s: rclpy.spin_once(
+                node, timeout_sec=timeout_s
+            ),
+            timeout_s=1.0,
+        )
 
         def lookup(target: str, source: str, stamp_ns: int) -> Any:
             try:
@@ -297,17 +333,22 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 raise RuntimeError(str(error)) from error
 
         def publish_detections(batch: DetectionBatch, overlay: np.ndarray) -> None:
-            detections_publisher.publish(
+            ack_timeout = Duration(seconds=0.5)
+            _publish_and_confirm(
+                detections_publisher,
                 _detection_message(
                     batch,
                     color_message.header,
                     Detection2DArray,
                     Detection2D,
                     ObjectHypothesisWithPose,
-                )
+                ),
+                ack_timeout=ack_timeout,
             )
-            overlay_publisher.publish(
-                _image_message(overlay, color_message.header, Image)
+            _publish_and_confirm(
+                overlay_publisher,
+                _image_message(overlay, color_message.header, Image),
+                ack_timeout=ack_timeout,
             )
 
         localizer = RgbdLocalizer(
