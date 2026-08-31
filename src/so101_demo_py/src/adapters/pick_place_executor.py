@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 import re
 from types import SimpleNamespace
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from ..ports.pick_place_executor import (
     DynamicCupPickPlaceRequest,
@@ -13,6 +13,9 @@ from ..ports.pick_place_executor import (
     ExecutorDispatchError,
     RuntimeDispatchResult,
 )
+
+if TYPE_CHECKING:
+    from ..profiling.session import SemanticProfiler
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +26,7 @@ class DynamicRuntimeContext:
     source_commit: str
     installed_prefix: str
     execution_provenance: ExecutionProvenance
+    profiler: SemanticProfiler | None = None
 
 
 class DynamicCupPickPlaceExecutor:
@@ -57,8 +61,12 @@ class DynamicCupPickPlaceExecutor:
             if runner is None:
                 from ..ros.dynamic_runtime import run_dynamic_execute
 
-                runner = run_dynamic_execute
-            exit_code = runner(self._runtime_options())
+                exit_code = run_dynamic_execute(
+                    self._runtime_options(),
+                    profiler=self._context.profiler,
+                )
+            else:
+                exit_code = runner(self._runtime_options())
         except Exception:
             raise ExecutorDispatchError("DYNAMIC_RUNTIME_EXCEPTION") from None
         if type(exit_code) is not int:

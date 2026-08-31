@@ -23,6 +23,8 @@ from ..core.dynamic_pick_policy import (
     load_dynamic_policy_variant,
 )
 from ..core.runner import StateMachineRunner
+from ..profiling.session import SemanticProfiler
+from ..profiling.wrappers import profile_actions
 from ..runtime.dynamic_plan_manifest import write_dynamic_plan_manifest
 from .cup_pose_source import RosCupPoseSource
 from .cup_scene_observer import RosCupSceneObserver
@@ -281,7 +283,12 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
-def run_dynamic_execute(options, *, _runtime=None) -> int:
+def run_dynamic_execute(
+    options,
+    *,
+    profiler: SemanticProfiler | None = None,
+    _runtime=None,
+) -> int:
     """Run the MuJoCo dynamic strategy through the shared state machine."""
 
     if (
@@ -299,18 +306,38 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
     from ..application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
     runtime = _dynamic_execute_runtime() if _runtime is None else _runtime
+    setup_token = (
+        profiler.start_span("runtime.setup", {"backend": "mujoco"})
+        if profiler is not None
+        else None
+    )
+    setup_finished = False
+
+    def finish_setup(outcome: str, reason_code: str | None = None) -> None:
+        nonlocal setup_finished
+        if setup_token is None or setup_finished:
+            return
+        attributes: dict[str, object] = {"backend": "mujoco"}
+        if reason_code is not None:
+            attributes["reason_code"] = reason_code
+        profiler.finish_span(setup_token, outcome=outcome, attributes=attributes)
+        setup_finished = True
+
     share_dir = Path(runtime.get_package_share_directory("so101_demo_py"))
     try:
         loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
+        finish_setup("rejected", _failure_code(error))
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
     if not loaded.execution_allowed:
+        finish_setup("rejected", "DYNAMIC_EXECUTION_NOT_QUALIFIED")
         print("status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED")
         return 1
     try:
         geometry = runtime.load_geometry(share_dir / "assets" / "common" / "geometry-manifest.yaml")
     except Exception as error:
+        finish_setup("rejected", _failure_code(error))
         print(status_line("ERROR", failure=_failure_code(error), message=error))
         return 1
 
@@ -387,14 +414,20 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             policy_path=loaded.path,
             policy_sha256=loaded.sha256,
         )
-        runner = runtime.runner(
+        actions = profile_actions(
             runtime.build_actions(execution, targets),
+            profiler,
+        )
+        runner = runtime.runner(
+            actions,
             session_id=options.session_id,
             policy_bundle_sha256=loaded.sha256,
             world_observer=execution.observer,
         )
+        finish_setup("accepted")
         result = runner.run(RunRequest(mode=RunMode.EXECUTE))
     except Exception as error:
+        finish_setup("rejected", _failure_code(error))
         primary_failure = _failure_code(error)
         primary_message = error
         if execution is not None:
@@ -416,6 +449,11 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             if result.failure is not None and result.failure.code:
                 primary_failure = result.failure.code
     finally:
+        cleanup_token = (
+            profiler.start_span("runtime.cleanup")
+            if profiler is not None
+            else None
+        )
         cleanup = _cleanup_dynamic_execute(
             runtime=runtime,
             initialized_here=initialized_here,
@@ -424,6 +462,12 @@ def run_dynamic_execute(options, *, _runtime=None) -> int:
             task_scene=task_scene,
             truth_observer=truth_observer,
         )
+        if cleanup_token is not None:
+            profiler.finish_span(
+                cleanup_token,
+                outcome="ok" if not cleanup.failures else "error",
+                attributes={"failure_count": len(cleanup.failures)},
+            )
 
     if primary_failure is not None:
         fields = {"failure": primary_failure}
