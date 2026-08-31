@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 2560e8b8db2ecf29ef73f0667952fc0bca42dbd8
+current_commit: 2ebdb226f5159eb643b1588adf3f6c4ba9dad37b
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -21,17 +21,43 @@ confirmed_conclusions:
   - CONF-039 EXP-015 在 Linux CUDA 上经生产 TargetSelector 以 confidence 0.50 从 296 个 raw candidates 唯一选中 plastic_cup，推理 37.58 ms
   - CONF-040 EXP-016 在 macOS MPS 上以同一权重和输入唯一选中 plastic_cup，推理 447.77 ms，mask 与 Linux 均为 5053 pixels
   - CONF-042 多物体 MJCF keyframe 已加入公共 MuJoCo launch 白名单；RED 后聚焦 64/64、包级 889/889 通过
+  - CONF-086 最终 2ebdb22 在 Linux CUDA 与 macOS MPS 四场景感知矩阵各 4/4 通过，唯一杯发布精确源时间戳 /cup_pose，双杯与无杯均拒绝
+  - CONF-087 最终 2ebdb22 在 Linux 与 macOS MuJoCo 多物体仿真各完成连续 5/5 pick&place，并通过抓取、微抬升、放置、脱离、桌面支撑与清理门禁
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
-open_hypotheses:
-  - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
-  - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-042
-next_experiment: EXP-018
+open_hypotheses: []
+latest_checkpoint: CP-043
+next_experiment: NONE
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-043
+last_valid_experiment: EXP-050
+current_hypothesis: CLOSED；2ebdb22已完成双平台MuJoCo多物体YOLO-Seg RGB-D到动态pick&place验收
+working_tree_status: 生产源与测试clean；仅本账本最终验收记录待提交
+owned_processes: NONE；本地与ai-station均无本任务残留进程
+preserved_processes: 用户进程、主checkout与用户dirty文件未触碰
+confirmed_conclusions:
+  - CONF-086 Linux CUDA与macOS MPS四场景矩阵各4/4；所有RGB/Depth/CameraInfo均640x480、同stamp、307200个有限正深度样本
+  - CONF-087 Linux final3与macOS final4各连续5/5；/cup_pose源时间戳和XYZ原样交付动态执行器，完成双指抓取、物理微抬升、放置、脱离及桌面支撑
+  - CONF-088 2ebdb22把感知组合栈仿真速度固定为1.0，消除Linux无头快速仿真造成的合法源时间戳陈旧，不伪造时间戳也不放宽安全门禁
+  - CONF-089 最终Mac包级899/899、双平台聚焦66/66；权重SHA256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+evidence_disposition:
+  retained:
+    - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix
+    - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/pick-place/linux/final3
+    - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/pick-place/macos/final4
+  archived: []
+  deletion_candidates: []
+  note: 所有失败与被替代批次继续保留；未经用户明确授权不删除
+remaining_boundary:
+  - 本检查点证明Mac与Linux MuJoCo仿真，不证明真实SO-101硬件pick&place
+next_command: NONE
+decision: ACCEPT_SIMULATION
+```
 
 ```yaml
 checkpoint_id: CP-042
@@ -1432,6 +1458,69 @@ evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-034-bottle-only
 decision: ACCEPT；纳入Mac四场景感知矩阵
 next_experiment: EXP-018
+```
+
+```yaml
+experiment_id: EXP-050
+status: VALID
+scope: final cross-platform perception matrix and MuJoCo pick-place acceptance
+lifecycle: FULL_RESTART_PER_RUN
+provenance:
+  source_commit: 2ebdb226f5159eb643b1588adf3f6c4ba9dad37b
+  weight_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  linux_device: cuda
+  macos_device: mps
+  linux_checkout: /data/work/ws_moveit-v5-t004
+  linux_install_overlay: /data/work/ws_moveit-v5-t004/install
+  evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
+perception_matrix:
+  linux:
+    result: 4/4 PASS
+    runs:
+      - exp-036-final2-one-cup: {candidate_count: 1, mask_iou: 0.905857, world_error_m: 0.000517, request_ms: 185.07, cup_pose: exact_source_stamp}
+      - exp-037-final2-two-cups: {candidate_count: 2, mask_iou: [0.911178, 0.881803], result: TARGET_AMBIGUOUS, cup_pose: absent, request_ms: 166.68}
+      - exp-038-final2-bottle-only: {candidate_count: 0, result: TARGET_NOT_FOUND, cup_pose: absent, request_ms: 151.59}
+      - exp-039-final2-cup-near-bottle: {candidate_count: 1, mask_iou: 0.890926, distractor_overlap_px: 0, world_error_m: 0.000577, request_ms: 173.91, cup_pose: exact_source_stamp}
+  macos:
+    result: 4/4 PASS
+    runs:
+      - exp-046-final2-one-cup: {candidate_count: 1, mask_iou: 0.908122, world_error_m: 0.000517, request_ms: 269.37, cup_pose: exact_source_stamp}
+      - exp-047-final2-two-cups: {candidate_count: 2, mask_iou: [0.909998, 0.894052], result: TARGET_AMBIGUOUS, cup_pose: absent, request_ms: 273.48}
+      - exp-048-final2-bottle-only: {candidate_count: 0, result: TARGET_NOT_FOUND, cup_pose: absent, request_ms: 239.02}
+      - exp-049-final2-cup-near-bottle: {candidate_count: 1, mask_iou: 0.893754, distractor_overlap_px: 0, world_error_m: 0.000574, request_ms: 343.34, cup_pose: exact_source_stamp}
+pick_place:
+  linux_final3:
+    result: 5/5 consecutive PASS
+    sessions: [v5t004-linux-final3-01, v5t004-linux-final3-02, v5t004-linux-final3-03, v5t004-linux-final3-04, v5t004-linux-final3-05]
+    request_ms: [146.715669, 155.490312, 161.217522, 142.528966, 146.04804]
+    final_xy_error_m: [0.00204463, 0.00201213, 0.00201538, 0.00204465, 0.00204745]
+  macos_final4:
+    result: 5/5 consecutive PASS
+    sessions: [v5t004-mac-final4-01, v5t004-mac-final4-02, v5t004-mac-final4-03, v5t004-mac-final4-04, v5t004-mac-final4-05]
+    request_ms: [239.341791, 321.937708, 349.575417, 332.85125, 343.965625]
+    final_xy_error_m: [0.00204387, 0.00203561, 0.00204115, 0.00202760, 0.00200055]
+  common_gates:
+    - unique plastic_cup selection and fresh /cup_pose
+    - zero-error source-stamp and XYZ handoff to dynamic executor
+    - bilateral grasp contact and physical micro-lift
+    - DONE after all 19 states
+    - final table support, zero fingertip contact, near-zero velocity, MoveIt detached
+    - clean process shutdown
+retained_nonqualifying_evidence:
+  - Linux matrix EXP-021/022/023/027/032 and Mac matrix EXP-035/040/045 remain retained with their invalid or failed causes
+  - Linux pick-place final2/run-03 validly failed CUP_POSE_STALE and led to 2ebdb22
+  - Mac pick-place final3/run-04 validly failed GRIPPER_RESULT_TIMEOUT; the superseded batch remains retained
+tests:
+  macos_package: 899 passed
+  focused_composition_perception_macos: 66 passed
+  focused_composition_perception_linux: 66 passed
+conclusion: ACCEPT_SIMULATION；实现多物体候选、实例分类、唯一plastic_cup选择、mask深度定位、精确源stamp /cup_pose及动态pick&place闭环
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/pick-place/linux/final3
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/pick-place/macos/final4
+decision: KEEP
 ```
 
 ```yaml
