@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 867df726be0de8dbbae3ca58fb7c3323379853b1
+current_commit: a8cd693d3092c141e5cf5f39c2691f39be984496
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -21,11 +21,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-006
+  - HYP-003 ai-station 完整重启后会加载磁盘上的 NVIDIA 595.84 内核模块并恢复 NVML
+latest_checkpoint: CP-007
 next_experiment: EXP-007
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-006
+current_hypothesis: HYP-003
+working_tree_status: 本地任务分支 clean at a8cd693；ai-station 主 checkout 保留一个未跟踪用户账本，隔离 worktree clean at 867df72
+owned_processes: NONE；重启前没有 gz sim、move_group、rviz2、pick_place_state_machine、ros2 launch 或 ros2 run
+preserved_processes: codex 与 codex-cua 均为空闲提示符；重启会终止 tmux server，完整窗格恢复快照已写入 EXP-007 证据目录；Xorg/GNOME/hiddify 属于共享桌面
+confirmed_conclusions:
+  - CONF-020 用户已明确授权选项 2，即协调重启共享 ai-station
+  - CONF-021 重启前加载模块为 595.71.05、磁盘模块与 NVML 为 595.84，nvidia-smi 报 driver/library version mismatch
+open_risks:
+  - 重启是否加载 595.84 尚未观察；主机、桌面或 SSH 未恢复则 EXP-007 不得计为有效 CUDA 修复
+next_command: ssh ai-station 'sudo -n systemctl reboot'
+```
 
 ```yaml
 checkpoint_id: CP-006
@@ -137,6 +153,55 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-007
+status: PLANNED
+prior_experiment: EXP-004
+hypothesis: ai-station 完整重启将以磁盘上的 NVIDIA 595.84 替换当前已加载的 595.71.05，从而消除 NVML driver/library version mismatch
+prediction: 重启后 /proc/driver/nvidia/version 与 modinfo 均为 595.84，nvidia-smi 退出 0，锁定 venv 中 torch.cuda 可用且 RTX 5080 张量计算得到 sum=140.0
+single_variable: 主机生命周期从当前 19 天 uptime 变为一次授权的完整重启；不改驱动包、模型、数据或源码
+lifecycle: FULL_RESTART
+preconditions:
+  - 用户明确授权选项 2
+  - sudo -n true 退出 0
+  - 没有运行中的 Gazebo、MoveIt、RViz 或 ROS pick-place stack
+  - 主 checkout 未跟踪用户账本、隔离 worktree、venv、数据集与正式证据根均已记录且不清理
+  - codex 与 codex-cua tmux 窗格已保存恢复快照，不向既有窗格发送按键
+success_criteria:
+  - 主机在重启后重新可通过 SSH 访问，uptime 表明发生了新 boot
+  - /proc/driver/nvidia/version 与 modinfo -F version nvidia 均报告 595.84
+  - nvidia-smi 退出 0 并识别 RTX 5080
+  - /data/work/venvs/so101-v5-t004-perception 中 torch.cuda.is_available() 为 true，实际 CUDA 张量 sum=140.0
+  - 主 checkout 用户文件、隔离 worktree和正式 evidence root 在重启后仍存在
+failure_criteria:
+  - 主机恢复但 NVIDIA 版本仍不一致、nvidia-smi 非零或 CUDA 张量失败
+invalid_criteria:
+  - 主机未在有界等待内恢复，或关键工作区/证据丢失，导致无法判断单一变量的结果
+provenance:
+  source_commit: 867df726be0de8dbbae3ca58fb7c3323379853b1
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/python
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: ssh ai-station 'sudo -n systemctl reboot'
+    exit_code: PENDING
+observed:
+  - 2026-08-31T20:35:50+08:00 重启前 uptime 19 days 23:52；加载 NVIDIA 595.71.05、磁盘模块 595.84、NVML 595.84
+  - 重启前主 checkout 唯一 dirty path 为 docs/experiments/ai-station-linux-headless-rgbd-four-point-upgrade-experiment-ledger.md
+  - 重启前 tmux 恢复快照保存在正式 evidence root
+inferred:
+  - 当前 mismatch 很可能由驱动包升级后尚未重启造成，但必须由重启后的版本与 CUDA gate 验证
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/pre-reboot-state.txt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/pre-reboot-sha256.txt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/tmux-codex-pre-reboot.txt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/tmux-codex-cua-pre-reboot.txt
+decision: PENDING
+next_experiment: EXP-008
+```
 
 ```yaml
 experiment_id: EXP-006
