@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs at task_start, cup_test_for
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
 branch: main
 base_commit: 03887b424797a2f644156725742077b970100a0f
-current_commit: 15ab84162083c591b0e531222434a4c85243d0ec
+current_commit: 2cf66ed5fbcfed3da8bef917b4c9b7e6d5113a01
 evidence_root: /tmp/so101-debug-text-agent-e2e-launch-20260831
 confirmed_conclusions:
   - DESIGN-001: The existing perception launch already owns MuJoCo, controllers, MoveIt, camera TF, RGB-D perception, and dynamic pick-place; the approved design adds a separate public launch that substitutes text_pick_agent for the direct dynamic workflow.
@@ -18,14 +18,17 @@ confirmed_conclusions:
   - CP-STATIC-GREEN: Focused source tests passed 90/90, the full package suite passed 792/792, and the installed overlay exposes the new launch with all 13 arguments.
   - CP-STATIC-GREEN: Missing skip_confirmation fails before evidence creation, leaves domain 221 empty, and returns launch status 1.
   - CP-MAC-VISIBLE-BLOCKED: The current macOS login context reports CGMainDisplayID=0 and zero active CoreGraphics displays; every visible launch reaches the MuJoCo main-thread UI boundary and then exits -11 in glfwGetVideoMode before Text Agent or motion starts.
+  - CP-LIVE-PROCESS-GREEN: text_pick_agent is a plain installed CLI and must be launched with ExecuteProcess so ROS launch does not append --ros-args.
+  - CP-MAC-HEADLESS-FUNCTIONAL: Four independent DeepSeek FULL_RESTART runs completed the natural-language, rendered RGB-D, MoveIt, controller, MuJoCo physical, exit, and cleanup gates at all four preset positions.
+  - CP-MAC-QWEN-FUNCTIONAL: With DEEPSEEK_API_KEY absent from the launch child and qwen3.5:4b warm in Ollama, an additional task_start run completed the same functional chain through the Ollama fallback.
 disproven_routes:
   - DESIGN-001: A shell wrapper is rejected because it splits process ownership, exit status, and evidence provenance.
   - DESIGN-001: Adding workflow selection to the existing perception launch is rejected to preserve its public contract.
   - CP-STATIC-GREEN: ROS_DOMAIN_ID values 240 through 244 are invalid on the local Fast DDS configuration because domain IDs above 232 overflow its port calculation; static and live domains were changed to 221 through 225.
 open_hypotheses:
-  - Each of the four FULL_RESTART runs can complete the full natural-language-to-physical chain on the local Mac with headless=true and sensor_rendering=true while the visible-only gate remains environment-blocked.
-latest_checkpoint: CP-MAC-VISIBLE-BLOCKED
-next_experiment: Run a fresh task_start FULL_RESTART functional acceptance in ROS domain 222 with headless=true and sensor_rendering=true.
+  - The four visible FULL_RESTART qualification runs can be repeated when the macOS login context has an active CoreGraphics display.
+latest_checkpoint: CP-FINAL-AUDIT
+next_experiment: Restore an active macOS display and repeat all four runs with headless=false for exact-window visual qualification.
 ```
 
 ## DESIGN-001
@@ -188,6 +191,195 @@ evidence_disposition:
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run3
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run4
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run5
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## CP-LIVE-PROCESS-GREEN
+
+```yaml
+checkpoint_id: CP-LIVE-PROCESS-GREEN
+date: 2026-08-31
+source_commit: 2cf66ed5fbcfed3da8bef917b4c9b7e6d5113a01
+status: FIXED_AND_REGRESSION_TESTED
+first_live_failure:
+  run: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_task_start
+  result: INVALID_PRODUCT
+  first_bad_boundary: ROS Node appended --ros-args to the plain text_pick_agent CLI, so argparse rejected the command before planning, perception, or motion.
+root_cause: text_pick_agent is an installed command-line workflow, not a ROS node; launch_ros.actions.Node always applies ROS CLI semantics.
+change: Resolve the exact installed entrypoint and start it with launch.actions.ExecuteProcess while retaining launch-owned exit and teardown handlers.
+red_green_evidence:
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/text-agent-plain-process-red.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/text-agent-plain-process-green.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/text-agent-launch-process-green.log
+decision: KEEP
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_task_start
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/static
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## CP-MAC-HEADLESS-FUNCTIONAL
+
+```yaml
+checkpoint_id: CP-MAC-HEADLESS-FUNCTIONAL
+date: 2026-08-31
+source_commit: 2cf66ed5fbcfed3da8bef917b4c9b7e6d5113a01
+installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/so101_demo_py
+lifecycle: FOUR_INDEPENDENT_FULL_RESTARTS
+mode:
+  headless: true
+  sensor_rendering: true
+  visual_qualification: NOT_SATISFIED
+instruction: Pick the plastic cup. Apply no constraints.
+planner:
+  provider: deepseek
+  model: deepseek-v4-flash
+  fallback_used: false
+  validated_command: {target_object: plastic_cup, action: pick, constraints: {}}
+  confirmation_mode: skipped
+runs:
+  - keyframe: task_start
+    ros_domain_id: 222
+    evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_task_start_run2
+    session_id: text-e2e-headless-task-start-run2-20260831
+    request_id: 49d9b9c6-c2ed-450c-bfde-54758dbb4fc4
+    perceived_xyz_m: [0.01949905513971856, -0.28040477913291795, 0.165]
+    rgbd: {width: 640, height: 480, full_points: 98078, cup_points: 141}
+    dynamic: {status: DONE, transitions: 19, state_events: 18, motion_events: 7}
+    final_xyz_m: [-0.07776387624460847, -0.2475368764937461, 0.16482891330851807]
+    final_physics: {table_contact: true, left_contacts: 0, right_contacts: 0}
+    planning_scene: {attached_ids: [], plastic_cup_primitives: 13}
+    launch_status: 0
+    post_cleanup_nodes: 0
+  - keyframe: cup_test_forward_5cm
+    ros_domain_id: 223
+    evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_forward
+    session_id: text-e2e-headless-forward-20260831
+    request_id: af61d6f4-f6ec-4ac1-924f-7a2719556fcf
+    perceived_xyz_m: [0.01962362709282407, -0.33046010304848167, 0.165]
+    rgbd: {width: 640, height: 480, full_points: 98078, cup_points: 168}
+    dynamic: {status: DONE, transitions: 19, state_events: 18, motion_events: 7}
+    final_xyz_m: [-0.07792698856416416, -0.24752272639551834, 0.16482335453386052]
+    final_physics: {table_contact: true, left_contacts: 0, right_contacts: 0}
+    planning_scene: {attached_ids: [], plastic_cup_primitives: 13}
+    launch_status: 0
+    post_cleanup_nodes: 0
+  - keyframe: cup_test_left_5cm
+    ros_domain_id: 224
+    evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_left
+    session_id: text-e2e-headless-left-20260831
+    request_id: 85fad7c1-c19b-4f96-acce-a62f170cd9d4
+    perceived_xyz_m: [-0.030362306397919193, -0.28058726069557155, 0.165]
+    rgbd: {width: 640, height: 480, full_points: 98135, cup_points: 378}
+    dynamic: {status: DONE, transitions: 19, state_events: 18, motion_events: 7}
+    final_xyz_m: [-0.07792410367976381, -0.2474694846362872, 0.16492354528282097]
+    final_physics: {table_contact: true, left_contacts: 0, right_contacts: 0}
+    planning_scene: {attached_ids: [], plastic_cup_primitives: 13}
+    launch_status: 0
+    post_cleanup_nodes: 0
+  - keyframe: cup_test_right_5cm
+    ros_domain_id: 225
+    evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_right
+    session_id: text-e2e-headless-right-20260831
+    request_id: ab51bba5-a26e-4834-b2f7-5b328ab77261
+    perceived_xyz_m: [0.06963311309305363, -0.28051349578752416, 0.165]
+    rgbd: {width: 640, height: 480, full_points: 98078, cup_points: 126}
+    dynamic: {status: DONE, transitions: 19, state_events: 18, motion_events: 7}
+    final_xyz_m: [-0.07792465204104866, -0.24755749935594762, 0.16477649409806938]
+    final_physics: {table_contact: true, left_contacts: 0, right_contacts: 0}
+    planning_scene: {attached_ids: [], plastic_cup_primitives: 13}
+    launch_status: 0
+    post_cleanup_nodes: 0
+aggregate_result: 4/4 VALID_FUNCTIONAL
+qualification_result: BLOCKED_VISUAL_ONLY
+preserved_processes:
+  - Pre-existing PIDs 79408, 79419, 79423, 80039, and 80040 were not used or signaled.
+owned_processes: All task-owned launch and GUI-wrapper processes exited or were terminated by exact PID after invalid preflights.
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_task_start_run2
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_forward
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_left
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_right
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/post-cleanup-domain-222
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/post-cleanup-domain-223
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/post-cleanup-domain-224
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/post-cleanup-domain-225
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## CP-MAC-QWEN-FUNCTIONAL
+
+```yaml
+checkpoint_id: CP-MAC-QWEN-FUNCTIONAL
+date: 2026-08-31
+source_commit: 2cf66ed5fbcfed3da8bef917b4c9b7e6d5113a01
+model: qwen3.5:4b
+provider: ollama
+deepseek_api_key_in_child: UNSET
+first_attempt:
+  evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_qwen_task_start
+  status: INVALID_PROVIDER_PREFLIGHT
+  launch_status: 1
+  reason: The cold Ollama model load exceeded the Text Agent default 12-second provider timeout, so the planner chain failed before RGB-D publication or motion.
+provider_recovery: A direct qwen3.5:4b adapter call loaded the model; a second call completed inside the production timeout without changing source or provider configuration.
+valid_attempt:
+  ros_domain_id: 226
+  evidence: /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_qwen_task_start_run2
+  session_id: text-e2e-headless-qwen-task-start-run2-20260831
+  request_id: a8357713-f98b-41a0-b872-0ac84ffb06bb
+  planner: {provider: ollama, model: qwen3.5:4b, fallback_used: true, latency_ms: 1627}
+  perceived_xyz_m: [0.01949905513971856, -0.28040477913291795, 0.165]
+  rgbd: {width: 640, height: 480, full_points: 98078, cup_points: 141}
+  dynamic: {status: DONE, transitions: 19, state_events: 18, motion_events: 7}
+  final_xyz_m: [-0.07777704634524335, -0.24756158640804266, 0.16482869648227444]
+  final_physics: {table_contact: true, left_contacts: 0, right_contacts: 0}
+  planning_scene: {attached_ids: [], plastic_cup_primitives: 13}
+  launch_status: 0
+result: VALID_FUNCTIONAL_EXTRA_PROVIDER_CHECK
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_qwen_task_start
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/headless_qwen_task_start_run2
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## CP-FINAL-AUDIT
+
+```yaml
+checkpoint_id: CP-FINAL-AUDIT
+date: 2026-08-31
+verified_source_commit: 2cf66ed5fbcfed3da8bef917b4c9b7e6d5113a01
+full_package_tests:
+  command: python3 -m pytest -q -p no:cacheprovider src/so101_demo_py/test
+  environment: Repository direnv plus macOS dylib farm, source PYTHONPATH, and evidence-root ROS_HOME/ROS_LOG_DIR.
+  result: 793 passed in 9.41s
+build:
+  command: colcon build --packages-select so101_demo_py --symlink-install
+  result: 1 package finished; exit status 0
+installed_readback:
+  package_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/so101_demo_py
+  launch: so101_mujoco_text_pick_agent.launch.py
+  public_argument_count: 13
+  preset_keyframes: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+cleanup_readback:
+  task_owned_text_agent_or_launch_processes: 0
+  preserved_preexisting_pids: [79408, 79419, 79423, 80039, 80040]
+  deepseek_domains_222_to_225_nodes_after_exit: 0
+  qwen_domain_226_nodes_after_exit: 0
+result:
+  implementation: PASS
+  four_point_headless_functional: PASS_4_OF_4
+  qwen_extra_functional: PASS
+  visible_exact_window_qualification: BLOCKED_NO_ACTIVE_DISPLAY
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831
   archived: NONE
   deletion_candidates: NONE
 ```
