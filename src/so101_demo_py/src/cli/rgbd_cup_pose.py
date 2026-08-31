@@ -261,14 +261,17 @@ def main(arguments: list[str] | None = None) -> int:
         parser.error("enabled profiling requires --profiling-output-root")
     if not parsed.profiling_session_id or not parsed.profiling_session_id.strip():
         parser.error("enabled profiling requires --profiling-session-id")
-    profiler = build_profiler(
-        ProfilingConfig(
-            mode=ProfilingMode.parse(parsed.profiling),
-            output_root=parsed.profiling_output_root,
-            session_id=parsed.profiling_session_id.strip(),
-            process_role="perception",
+    try:
+        profiler = build_profiler(
+            ProfilingConfig(
+                mode=ProfilingMode.parse(parsed.profiling),
+                output_root=parsed.profiling_output_root,
+                session_id=parsed.profiling_session_id.strip(),
+                process_role="perception",
+            )
         )
-    )
+    except OSError:
+        return run_rgbd_cup_pose(options)
     assert profiler is not None
     try:
         return run_rgbd_cup_pose(options, profiler=profiler)

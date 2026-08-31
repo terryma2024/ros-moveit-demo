@@ -157,9 +157,7 @@ class CupPoseFrameProcessor:
 
     def process(self, aligned: Any) -> bool:
         """Publish once for this valid frame, or report and skip an invalid frame."""
-        if self._wait_token is not None:
-            self._profiler.finish_span(self._wait_token, outcome="available")
-            self._wait_token = None
+        self.finish_wait("available")
         estimate_token = (
             self._profiler.start_span("perception.estimate_cup_pose")
             if self._profiler is not None
@@ -180,6 +178,13 @@ class CupPoseFrameProcessor:
             self._profiler.finish_span(estimate_token, outcome="accepted")
         self._publish(frame)
         return True
+
+    def finish_wait(self, outcome: str) -> None:
+        """Finish the first-frame wait once without overriding its first outcome."""
+        if self._wait_token is None:
+            return
+        self._profiler.finish_span(self._wait_token, outcome=outcome)
+        self._wait_token = None
 
 
 class FreshFrameGate:
@@ -240,7 +245,21 @@ class _Runtime(Protocol):
 
     def ok(self) -> bool: ...
 
+    def finish_wait_span(self, outcome: str) -> None: ...
+
     def close(self) -> None: ...
+
+
+def _finish_runtime_wait(
+    runtime: _Runtime | None,
+    profiler: SemanticProfiler | None,
+    outcome: str,
+) -> None:
+    if runtime is None or profiler is None:
+        return
+    finish = getattr(runtime, "finish_wait_span", None)
+    if callable(finish):
+        finish(outcome)
 
 
 def _status_line(status: str, **fields: Any) -> str:
@@ -551,6 +570,7 @@ def _create_ros_runtime(
     tf_listener = None
     publisher = None
     subscriptions: list[Any] = []
+    frame_processor: CupPoseFrameProcessor | None = None
     cleanup = RosResourceCleanup(
         ros_api=ros,
         initialized_here=initialized_here,
@@ -587,6 +607,7 @@ def _create_ros_runtime(
 
         class RosRuntime:
             def __init__(self) -> None:
+                nonlocal frame_processor
                 self._buffer = AlignedRgbdBuffer()
                 self._fresh_frames = FreshFrameGate()
                 self._subscriptions = subscriptions
@@ -633,6 +654,7 @@ def _create_ros_runtime(
                     ),
                     profiler=profiler,
                 )
+                frame_processor = self._processor
 
                 self._subscriptions.append(
                     node.create_subscription(
@@ -794,11 +816,17 @@ def _create_ros_runtime(
             def ok(self) -> bool:
                 return ros.rclpy.ok()
 
+            def finish_wait_span(self, outcome: str) -> None:
+                self._processor.finish_wait(outcome)
+
             def close(self) -> None:
+                self.finish_wait_span("interrupted")
                 cleanup.close()
 
         return RosRuntime()
     except BaseException as primary:
+        if frame_processor is not None:
+            frame_processor.finish_wait("error")
         try:
             cleanup.close()
         except CleanupError as cleanup_error:
@@ -820,6 +848,7 @@ def _run_rgbd_cup_pose(
     deadline = monotonic() + options.startup_timeout_s
     runtime: _Runtime | None = None
     setup_failed = False
+    setup_wait_outcome = "error"
     try:
         remaining_startup_s = deadline - monotonic()
         if remaining_startup_s <= 0.0:
@@ -839,6 +868,7 @@ def _run_rgbd_cup_pose(
         if not runtime.first_valid_published and deadline - monotonic() <= 0.0:
             raise TimeoutError("startup deadline expired during ROS runtime construction")
     except TimeoutError as error:
+        setup_wait_outcome = "timeout"
         print(
             _status_line(
                 "ERROR", failure="RGBD_CUP_POSE_TIMEOUT", message=str(error)
@@ -847,6 +877,7 @@ def _run_rgbd_cup_pose(
         )
         setup_failed = True
     except KeyboardInterrupt:
+        setup_wait_outcome = "interrupted"
         print(
             _status_line(
                 "ERROR",
@@ -877,6 +908,7 @@ def _run_rgbd_cup_pose(
 
     if setup_failed:
         if runtime is not None:
+            _finish_runtime_wait(runtime, profiler, setup_wait_outcome)
             try:
                 runtime.close()
             except BaseException as cleanup_error:
@@ -891,10 +923,12 @@ def _run_rgbd_cup_pose(
         return 1
 
     result = 1
+    wait_outcome = "error"
     try:
         while runtime.ok():
             now = monotonic()
             if not runtime.first_valid_published and now >= deadline:
+                wait_outcome = "timeout"
                 print(
                     _status_line(
                         "ERROR",
@@ -916,6 +950,7 @@ def _run_rgbd_cup_pose(
             if runtime.first_valid_published:
                 result = 0
             else:
+                wait_outcome = "interrupted"
                 print(
                     _status_line(
                         "ERROR",
@@ -928,6 +963,7 @@ def _run_rgbd_cup_pose(
                 )
                 result = 1
     except KeyboardInterrupt:
+        wait_outcome = "interrupted"
         if runtime.first_valid_published:
             print(_status_line("STOPPED", reason="SIGINT"), flush=True)
             result = 0
@@ -957,6 +993,7 @@ def _run_rgbd_cup_pose(
             )
             result = 1
     except (OSError, TimeoutError, ValueError) as error:
+        wait_outcome = "timeout" if isinstance(error, TimeoutError) else "error"
         print(
             _status_line(
                 "ERROR", failure="RGBD_CUP_POSE_FATAL", message=str(error)
@@ -965,6 +1002,7 @@ def _run_rgbd_cup_pose(
         )
         result = 1
     finally:
+        _finish_runtime_wait(runtime, profiler, wait_outcome)
         try:
             runtime.close()
         except BaseException as cleanup_error:

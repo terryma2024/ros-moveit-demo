@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import sys
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from typing import Any
 
 from so101_demo.runtime.task_artifacts import atomic_json
 
-from .model import ProfilingMode
+from .model import ProfilingMode, validate_attributes
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,8 +27,18 @@ class FinalizationResult:
 @dataclass(frozen=True, slots=True)
 class _Stream:
     path: Path
-    events: tuple[dict[str, Any], ...]
+    events: tuple["_Event", ...]
     malformed: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _Event:
+    line: int
+    value: dict[str, Any]
+
+
+class EventSchemaError(ValueError):
+    """A parsed JSON object does not satisfy the event schema."""
 
 
 def finalize_profiling(
@@ -35,33 +46,37 @@ def finalize_profiling(
     *,
     mode: ProfilingMode,
     backend: dict[str, object] | None = None,
+    expected_session_id: str | None = None,
 ) -> FinalizationResult:
     """Merge process streams into atomic summary, trace, and manifest files."""
 
     streams = [_load_stream(path) for path in sorted((profiling_root / "processes").glob("*.jsonl"))]
-    session_id = _select_session_id(streams)
+    session_id = expected_session_id or _select_session_id(streams)
     included: list[_Stream] = []
     mismatched: list[str] = []
     for stream in streams:
         session_ids = {
-            event.get("session_id")
-            for event in stream.events
-            if isinstance(event.get("session_id"), str)
+            record.value["session_id"]
+            for record in stream.events
         }
         if session_id is not None and session_ids and session_ids != {session_id}:
             mismatched.append(stream.path.name)
             continue
         included.append(stream)
 
-    spans, incomplete_processes = _complete_spans(included)
+    spans, incomplete_processes, lifecycle_errors = _complete_spans(included)
     malformed = [entry for stream in streams for entry in stream.malformed]
-    complete = not incomplete_processes and not malformed and not mismatched
+    malformed.extend(lifecycle_errors)
+    complete = bool(included) and session_id is not None
+    complete = complete and not incomplete_processes and not malformed and not mismatched
+    backend_document = backend or {"status": "disabled", "name": None}
     summary = _summary_document(
         session_id=session_id,
         mode=mode,
         complete=complete,
         streams=included,
         spans=spans,
+        backend=backend_document,
     )
     atomic_json(profiling_root / "summary.json", summary)
 
@@ -79,22 +94,23 @@ def finalize_profiling(
         "incomplete_processes": incomplete_processes,
         "mismatched_sessions": mismatched,
         "malformed_events": malformed,
-        "backend": backend or {"status": "disabled", "name": None},
+        "backend": backend_document,
     }
     atomic_json(profiling_root / "manifest.json", manifest)
     return FinalizationResult(complete, session_id, len(spans))
 
 
 def _load_stream(path: Path) -> _Stream:
-    events: list[dict[str, Any]] = []
+    events: list[_Event] = []
     malformed: list[dict[str, object]] = []
     with path.open(encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, start=1):
             try:
                 event = json.loads(line)
                 if not isinstance(event, dict):
-                    raise TypeError("profiling event must be an object")
-            except (json.JSONDecodeError, TypeError) as error:
+                    raise EventSchemaError("profiling event must be an object")
+                _validate_event(event)
+            except (json.JSONDecodeError, EventSchemaError, TypeError, ValueError) as error:
                 malformed.append(
                     {
                         "file": path.name,
@@ -103,13 +119,75 @@ def _load_stream(path: Path) -> _Stream:
                     }
                 )
                 continue
-            events.append(event)
+            events.append(_Event(line_number, event))
     return _Stream(path, tuple(events), tuple(malformed))
+
+
+def _validate_event(event: dict[str, Any]) -> None:
+    event_type = event.get("event_type")
+    if event.get("schema_version") != 1:
+        raise EventSchemaError("schema_version must be 1")
+    if event_type not in {
+        "process_anchor",
+        "span_start",
+        "span_complete",
+        "instant",
+        "process_close",
+    }:
+        raise EventSchemaError("unsupported event_type")
+    _require_nonempty_string(event, "session_id")
+    _require_nonempty_string(event, "process_role")
+    request_id = event.get("request_id")
+    if request_id is not None and not isinstance(request_id, str):
+        raise EventSchemaError("request_id must be a string or null")
+    for field in ("pid", "thread_id", "sequence", "monotonic_ns", "wall_time_ns"):
+        _require_nonnegative_integer(event, field)
+    if event_type == "process_anchor":
+        for field in ("source_commit", "installed_prefix"):
+            value = event.get(field)
+            if value is not None and not isinstance(value, str):
+                raise EventSchemaError(f"{field} must be a string or null")
+        return
+    if event_type in {"span_start", "span_complete"}:
+        _require_nonempty_string(event, "span_id")
+        _require_nonempty_string(event, "name")
+        attributes = event.get("attributes")
+        if not isinstance(attributes, dict):
+            raise EventSchemaError("attributes must be an object")
+        try:
+            validate_attributes(attributes)
+        except (TypeError, ValueError) as error:
+            raise EventSchemaError(str(error)) from error
+    if event_type == "span_complete":
+        _require_nonnegative_integer(event, "duration_ns")
+        _require_nonempty_string(event, "outcome")
+    elif event_type == "instant":
+        _require_nonempty_string(event, "name")
+        attributes = event.get("attributes")
+        if not isinstance(attributes, dict):
+            raise EventSchemaError("attributes must be an object")
+        try:
+            validate_attributes(attributes)
+        except (TypeError, ValueError) as error:
+            raise EventSchemaError(str(error)) from error
+
+
+def _require_nonempty_string(event: dict[str, Any], field: str) -> None:
+    value = event.get(field)
+    if not isinstance(value, str) or not value:
+        raise EventSchemaError(f"{field} must be a non-empty string")
+
+
+def _require_nonnegative_integer(event: dict[str, Any], field: str) -> None:
+    value = event.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise EventSchemaError(f"{field} must be a non-negative integer")
 
 
 def _select_session_id(streams: list[_Stream]) -> str | None:
     for stream in streams:
-        for event in stream.events:
+        for record in stream.events:
+            event = record.value
             session_id = event.get("session_id")
             if event.get("event_type") == "process_anchor" and isinstance(session_id, str):
                 return session_id
@@ -118,28 +196,48 @@ def _select_session_id(streams: list[_Stream]) -> str | None:
 
 def _complete_spans(
     streams: list[_Stream],
-) -> tuple[list[dict[str, object]], list[str]]:
+) -> tuple[list[dict[str, object]], list[str], list[dict[str, object]]]:
     spans: list[dict[str, object]] = []
     incomplete: list[str] = []
+    malformed: list[dict[str, object]] = []
     for stream in streams:
-        starts: dict[str, dict[str, Any]] = {}
+        starts: dict[str, _Event] = {}
         completed: set[str] = set()
+        anchored = False
         closed = False
         role = stream.path.name.removesuffix(".events.jsonl")
-        for event in stream.events:
+        for record in stream.events:
+            event = record.value
             event_type = event.get("event_type")
             span_id = event.get("span_id")
-            if event_type == "process_anchor" and isinstance(event.get("process_role"), str):
+            if event_type == "process_anchor":
                 role = event["process_role"]
-            elif event_type == "span_start" and isinstance(span_id, str):
-                starts[span_id] = event
-            elif event_type == "span_complete" and isinstance(span_id, str):
-                start = starts.get(span_id)
-                if start is None:
+                if anchored or closed:
+                    malformed.append(_lifecycle_error(stream, record))
+                    continue
+                anchored = True
+            elif not anchored or closed:
+                malformed.append(_lifecycle_error(stream, record))
+            elif event_type == "span_start":
+                assert isinstance(span_id, str)
+                if span_id in starts:
+                    malformed.append(_lifecycle_error(stream, record))
+                    continue
+                starts[span_id] = record
+            elif event_type == "span_complete":
+                assert isinstance(span_id, str)
+                start_record = starts.get(span_id)
+                if start_record is None or span_id in completed:
+                    if not _has_prior_schema_error(stream, record.line):
+                        malformed.append(_lifecycle_error(stream, record))
+                    continue
+                start = start_record.value
+                if start["name"] != event["name"]:
+                    malformed.append(_lifecycle_error(stream, record))
                     continue
                 completed.add(span_id)
-                attributes = dict(start.get("attributes") or {})
-                attributes.update(event.get("attributes") or {})
+                attributes = dict(start["attributes"])
+                attributes.update(event["attributes"])
                 spans.append(
                     {
                         "name": start.get("name"),
@@ -157,7 +255,7 @@ def _complete_spans(
                 )
             elif event_type == "process_close":
                 closed = True
-        if not closed or set(starts) != completed:
+        if not anchored or not closed or set(starts) != completed:
             incomplete.append(role)
     spans.sort(
         key=lambda span: (
@@ -166,7 +264,22 @@ def _complete_spans(
             int(span.get("sequence") or 0),
         )
     )
-    return spans, sorted(set(incomplete))
+    return spans, sorted(set(incomplete)), malformed
+
+
+def _lifecycle_error(stream: _Stream, record: _Event) -> dict[str, object]:
+    return {
+        "file": stream.path.name,
+        "line": record.line,
+        "error": "EventLifecycleError",
+    }
+
+
+def _has_prior_schema_error(stream: _Stream, line: int) -> bool:
+    return any(
+        isinstance(entry.get("line"), int) and entry["line"] < line
+        for entry in stream.malformed
+    )
 
 
 def _summary_document(
@@ -176,11 +289,13 @@ def _summary_document(
     complete: bool,
     streams: list[_Stream],
     spans: list[dict[str, object]],
+    backend: dict[str, object],
 ) -> dict[str, object]:
     anchors = [
         event
         for stream in streams
-        for event in stream.events
+        for record in stream.events
+        for event in (record.value,)
         if event.get("event_type") == "process_anchor"
     ]
     starts = [int(span["wall_start_ns"]) for span in spans]
@@ -194,6 +309,7 @@ def _summary_document(
         "platform": sys.platform,
         "mode": mode.value,
         "complete": complete,
+        "backend": backend,
         "total_duration_ns": max(ends) - min(starts) if starts else 0,
         "provenance": [
             {
@@ -225,12 +341,16 @@ def _aggregates(spans: list[dict[str, object]]) -> dict[str, dict[str, int | flo
             "min_ns": ordered[0],
             "max_ns": ordered[-1],
             "mean_ns": statistics.mean(ordered),
-            "p50_ns": statistics.median(ordered),
+            "p50_ns": _nearest_rank(ordered, 0.50),
         }
         if len(ordered) >= 20:
-            document["p95_ns"] = ordered[max(0, int(0.95 * len(ordered) + 0.9999) - 1)]
+            document["p95_ns"] = _nearest_rank(ordered, 0.95)
         aggregates[name] = document
     return aggregates
+
+
+def _nearest_rank(ordered: list[int], percentile: float) -> int:
+    return ordered[max(0, math.ceil(percentile * len(ordered)) - 1)]
 
 
 def _trace_document(spans: list[dict[str, object]]) -> dict[str, object]:
