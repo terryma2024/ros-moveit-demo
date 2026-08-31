@@ -62,6 +62,9 @@ MUJOCO_CUP_KEYFRAMES = (
     "cup_test_forward_5cm",
     "cup_test_left_5cm",
     "cup_test_right_5cm",
+    "v5_no_cup",
+    "v5_two_cups",
+    "v5_cup_near_bottle",
 )
 
 _SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
