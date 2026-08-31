@@ -18,6 +18,11 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
+from so101_demo.profiling import launch_support as profiling_launch_support
+from so101_demo.profiling.system_trace import (
+    RequiredSystemTraceUnavailable,
+    SystemTraceResult,
+)
 from so101_demo.runtime.provenance import InstalledExecutionIdentity
 
 from launch import LaunchContext
@@ -344,6 +349,64 @@ def test_enabled_trace_passes_correlated_child_arguments_and_finalizes(
     assert (profiling_root / "manifest.json").is_file()
     assert (profiling_root / "summary.json").is_file()
     assert (profiling_root / "trace.json").is_file()
+
+
+def test_linux_trace_action_precedes_application_actions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    trace_action = object()
+    monkeypatch.setattr(profiling_launch_support.sys, "platform", "linux")
+    monkeypatch.setattr(
+        profiling_launch_support,
+        "build_system_trace",
+        lambda **kwargs: SystemTraceResult(
+            "ready",
+            trace_action,
+            "ros2_tracing",
+            kwargs["profiling_root"]
+            / "ros2-tracing"
+            / f"so101-{kwargs['session_id']}",
+        ),
+    )
+
+    _context, actions, _exit_status = _materialize(
+        monkeypatch,
+        tmp_path,
+        profiling="trace",
+        profiling_require_system_trace="true",
+    )
+
+    assert actions[0] is trace_action
+    assert actions.index(trace_action) < actions.index(_node(actions, "scene_setup"))
+
+
+def test_required_linux_trace_failure_precedes_owned_process_evidence(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(profiling_launch_support.sys, "platform", "linux")
+
+    def unavailable(**_kwargs):
+        raise RequiredSystemTraceUnavailable("required ros2_tracing unavailable")
+
+    monkeypatch.setattr(
+        profiling_launch_support,
+        "build_system_trace",
+        unavailable,
+    )
+
+    with pytest.raises(RequiredSystemTraceUnavailable):
+        _materialize(
+            monkeypatch,
+            tmp_path,
+            profiling="trace",
+            profiling_require_system_trace="true",
+        )
+
+    run_root = tmp_path / "run.d/text-e2e-session-001"
+    assert not (run_root / "perception").exists()
+    assert not (run_root / "dynamic").exists()
 
 
 def test_scene_failure_starts_no_sensor_or_text_agent_and_fails_launch(

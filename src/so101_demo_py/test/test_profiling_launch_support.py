@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.profiling.launch_support import resolve_launch_profiling
+from so101_demo.profiling.system_trace import SystemTraceResult
 
 
 def test_off_launch_profiling_creates_nothing(tmp_path: Path) -> None:
@@ -55,6 +56,79 @@ def test_enabled_launch_profiling_uses_run_root_and_writes_launch_stream(
         "launch.stack_startup",
         "launch.scene_setup",
     ]
+
+
+def test_ready_linux_backend_exposes_prefix_and_manifest_metadata(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    trace_action = object()
+
+    session = resolve_launch_profiling(
+        mode_value="trace",
+        output_root_value="",
+        require_system_trace_value="true",
+        run_root=run_root,
+        session_id="session-1",
+        source_commit="a" * 40,
+        installed_prefix="/candidate/install",
+        platform_name="linux",
+        system_trace_builder=lambda **_kwargs: SystemTraceResult(
+            "ready",
+            trace_action,
+            "ros2_tracing",
+            run_root / "profiling/ros2-tracing/so101-session-1",
+        ),
+    )
+
+    assert session is not None
+    assert session.prefix_actions == (trace_action,)
+    session.finalize_for_shutdown(reason="test complete")
+    manifest = json.loads((session.profiling_root / "manifest.json").read_text())
+    assert manifest["backend"] == {
+        "status": "ready",
+        "name": "ros2_tracing",
+        "output": "ros2-tracing/so101-session-1",
+        "error": None,
+    }
+
+
+def test_unavailable_linux_backend_degrades_with_sanitized_warning(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+
+    session = resolve_launch_profiling(
+        mode_value="trace",
+        output_root_value="",
+        require_system_trace_value="false",
+        run_root=run_root,
+        session_id="session-1",
+        source_commit="a" * 40,
+        installed_prefix="/candidate/install",
+        platform_name="linux",
+        system_trace_builder=lambda **_kwargs: SystemTraceResult(
+            "unavailable",
+            None,
+            "ros2_tracing",
+            None,
+            "ImportError",
+        ),
+    )
+
+    assert session is not None
+    assert session.prefix_actions == ()
+    assert session.warnings == ("ros2_tracing unavailable (ImportError)",)
+    session.finalize_for_shutdown(reason="test complete")
+    manifest = json.loads((session.profiling_root / "manifest.json").read_text())
+    assert manifest["backend"] == {
+        "status": "unavailable",
+        "name": "ros2_tracing",
+        "output": None,
+        "error": "ImportError",
+    }
 
 
 @pytest.mark.parametrize(
