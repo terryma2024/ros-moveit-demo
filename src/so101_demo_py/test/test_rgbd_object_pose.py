@@ -25,7 +25,12 @@ from so101_demo.runtime.perception_evidence import (
     PerceptionEvidenceWriter,
     render_detection_overlay,
 )
-from so101_demo.ros.rgbd_object_pose_node import FreshFrameGate, RgbdObjectPoseOptions
+from so101_demo.ros.rgbd_object_pose_node import (
+    FreshFrameGate,
+    RgbdObjectPoseOptions,
+    _publish_and_confirm,
+    _wait_for_output_subscribers,
+)
 
 
 def _frame() -> DetectionFrame:
@@ -60,6 +65,52 @@ def _batch(*candidates: DetectionCandidate) -> DetectionBatch:
         image_height=4,
         candidates=tuple(candidates),
     )
+
+
+def test_one_shot_outputs_wait_for_discovery_and_ack_before_cleanup() -> None:
+    events: list[str] = []
+    clock = [0.0]
+
+    class Publisher:
+        def __init__(self, topic: str) -> None:
+            self.topic = topic
+            self.discovered = False
+
+        def get_subscription_count(self) -> int:
+            return int(self.discovered)
+
+        def publish(self, _message: object) -> None:
+            events.append(f"publish:{self.topic}")
+
+        def wait_for_all_acked(self, _timeout: object) -> bool:
+            events.append(f"ack:{self.topic}")
+            return True
+
+    detections = Publisher("detections")
+    overlay = Publisher("overlay")
+
+    def spin_once(timeout_s: float) -> None:
+        events.append("spin")
+        clock[0] += timeout_s
+        detections.discovered = True
+        overlay.discovered = True
+
+    assert _wait_for_output_subscribers(
+        (detections, overlay),
+        spin_once=spin_once,
+        timeout_s=0.5,
+        monotonic=lambda: clock[0],
+    )
+    _publish_and_confirm(detections, object(), ack_timeout=object())
+    _publish_and_confirm(overlay, object(), ack_timeout=object())
+
+    assert events == [
+        "spin",
+        "publish:detections",
+        "ack:detections",
+        "publish:overlay",
+        "ack:overlay",
+    ]
 
 
 def test_overlay_draws_visible_class_and_confidence_label() -> None:
