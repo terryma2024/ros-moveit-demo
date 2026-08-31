@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 25680adad79384c41f9f8b4d6e962a8c2091881e
+current_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -22,11 +22,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-010
+latest_checkpoint: CP-011
 next_experiment: EXP-009
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-011
+last_valid_experiment: EXP-007
+current_hypothesis: 冻结 amp=false 可绕过未锁定 AMP model download，并完成真实 CUDA smoke
+working_tree_status: 本地任务分支 clean at 35db5f5；ai-station 隔离 worktree clean detached at 同一 commit
+owned_processes: NONE；没有训练或 ROS stack
+preserved_processes: EXP-008 全部配置、日志与 516096-byte partial 保留；新实验使用独立 smoke-exp-009
+confirmed_conclusions:
+  - CONF-029 training.yaml amp=false 经 RED/GREEN、Mac package 888/888 与 Linux focused 16/16 验证
+open_risks:
+  - Ultralytics 实际训练是否完全不触发网络并生成 smoke 权重仍未观察
+next_command: 预登记 EXP-009 后准备唯一 output root 并启动 1 epoch、fraction 0.05 CUDA smoke
+```
 
 ```yaml
 checkpoint_id: CP-010
@@ -201,6 +215,50 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-009
+status: PLANNED
+prior_experiment: EXP-008
+hypothesis: 35db5f5 冻结 amp=false 后，Ultralytics 不再执行需要外部 yolo26n.pt 的 AMP check，并可从本地锁定 base model 完成 CUDA smoke
+prediction: 日志显示 amp=False、CUDA:0 RTX 5080，不出现 Downloading/http；1 epoch、fraction 0.05 退出 0并生成非空 best.pt/last.pt/results.csv/args.yaml
+single_variable: 相对 INVALID EXP-008 仅把 amp 从默认 true 冻结为 false，并使用新的未存在 output root
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 与远端隔离 worktree均为 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  - Linux focused 16/16、EXP-007 GPU gate 通过且没有其他训练进程
+  - 正式 dataset 与 base model SHA 不变
+  - output root /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-009 不存在
+success_criteria:
+  - runtime 配置 get_cfg/check_det_dataset 通过并包含 amp=false
+  - 日志不含 Downloading 或 http，明确 device CUDA:0 RTX 5080 与 amp=False
+  - 训练 wrapper 捕获 exit code 0
+  - smoke/smoke/weights/best.pt、last.pt、results.csv、args.yaml 均非空
+failure_criteria:
+  - 仍触发外部下载、配置/数据失败、CUDA 未使用、命令非零或工件不完整
+invalid_criteria:
+  - commit/model/dataset/output provenance 不匹配，或另一个训练进程污染本轮
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/yolo
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: prepare_training_run(..., output_root=.../training/smoke-exp-009, run_name=smoke, epochs_override=1, fraction=0.05)
+    exit_code: PENDING
+  - command: yolo segment train cfg=.../training/smoke-exp-009/training-config.yaml
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-009
+decision: PENDING
+next_experiment: EXP-010
+```
 
 ```yaml
 experiment_id: EXP-008
