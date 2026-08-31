@@ -1,0 +1,128 @@
+<mujoco model="so101_v5_multi_object_scene">
+  <include file="so101.xml"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"
+          noslip_iterations="10"/>
+  <asset>
+    <material name="cup_a_material" rgba="1.0 0.55 0.12 1"/>
+    <material name="cup_b_material" rgba="0.20 0.55 0.95 1"/>
+    <material name="bottle_material" rgba="1.0 0.55 0.12 1"/>
+  </asset>
+  <default>
+    <default class="cup_a_visual">
+      <geom group="0" contype="0" conaffinity="0" material="cup_a_material"/>
+    </default>
+    <default class="cup_b_visual">
+      <geom group="0" contype="0" conaffinity="0" material="cup_b_material"/>
+    </default>
+    <default class="cup_collision">
+      <geom group="2" contype="1" conaffinity="1" friction="1.2 0.01 0.001"
+            rgba="0 0 0 0"/>
+    </default>
+  </default>
+  <visual>
+    <global azimuth="135" elevation="-20"/>
+  </visual>
+  <worldbody>
+    <light name="key_light" pos="0 -0.5 1.2" dir="0 0.4 -1"/>
+    <light name="fill_light" pos="-0.4 -0.1 0.8" dir="0 -0.2 -1" diffuse="0.5 0.5 0.5"/>
+    <camera name="task_camera" resolution="640 480" pos="0.65 -0.65 0.55"
+            xyaxes="0.7 0.7 0 -0.35 0.35 0.87"/>
+    <body name="base_pedestal" pos="0 0 0.17">
+      <geom name="base_pedestal_visual" type="box" size="0.09 0.09 0.05"
+            group="0" contype="0" conaffinity="0" rgba="0.30 0.30 0.32 1"/>
+      <geom name="base_pedestal_collision" type="box" size="0.09 0.09 0.05"
+            group="2" contype="1" conaffinity="1" rgba="0 0 0 0"/>
+    </body>
+    <body name="table" pos="0 -0.20 0.10">
+      <geom name="table_visual" type="box" size="0.25 0.30 0.02"
+            group="0" contype="0" conaffinity="0" rgba="0.36 0.24 0.14 1"/>
+      <geom name="table_collision" type="box" size="0.25 0.30 0.02"
+            group="2" contype="1" conaffinity="1" friction="0.8 0.01 0.001"
+            rgba="0 0 0 0"/>
+    </body>
+    <body name="neutral_block" pos="-0.17 -0.18 0.155">
+      <geom name="neutral_block_visual" type="box" size="0.025 0.035 0.035"
+            group="0" contype="0" conaffinity="0" rgba="0.65 0.68 0.70 1"/>
+      <geom name="neutral_block_collision" type="box" size="0.025 0.035 0.035"
+            group="2" contype="1" conaffinity="1" rgba="0 0 0 0"/>
+    </body>
+    <body name="plastic_cup" pos="0.02 -0.28 0.165">
+      <joint name="cup_free_joint" type="free" damping="1.0"/>
+      <inertial pos="0 0 0" mass="0.020"
+                diaginertia="0.0000295 0.0000295 0.0000320"/>
+      <geom name="cup_a_wall_near_visual" class="cup_a_visual" type="box" pos="0 0.039 0.001" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_near_collision" class="cup_collision" type="box" pos="0 0.039 0.001" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_01_visual" class="cup_a_visual" type="box" pos="0.0195 0.033775 0.001" euler="0 0 -0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_01_collision" class="cup_collision" type="box" pos="0.0195 0.033775 0.001" euler="0 0 -0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_02_visual" class="cup_a_visual" type="box" pos="0.033775 0.0195 0.001" euler="0 0 -1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_02_collision" class="cup_collision" type="box" pos="0.033775 0.0195 0.001" euler="0 0 -1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_03_visual" class="cup_a_visual" type="box" pos="0.039 0 0.001" euler="0 0 -1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_03_collision" class="cup_collision" type="box" pos="0.039 0 0.001" euler="0 0 -1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_04_visual" class="cup_a_visual" type="box" pos="0.033775 -0.0195 0.001" euler="0 0 -2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_04_collision" class="cup_collision" type="box" pos="0.033775 -0.0195 0.001" euler="0 0 -2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_05_visual" class="cup_a_visual" type="box" pos="0.0195 -0.033775 0.001" euler="0 0 -2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_05_collision" class="cup_collision" type="box" pos="0.0195 -0.033775 0.001" euler="0 0 -2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_opposite_visual" class="cup_a_visual" type="box" pos="0 -0.039 0.001" euler="0 0 3.141592654" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_opposite_collision" class="cup_collision" type="box" pos="0 -0.039 0.001" euler="0 0 3.141592654" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_07_visual" class="cup_a_visual" type="box" pos="-0.0195 -0.033775 0.001" euler="0 0 2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_07_collision" class="cup_collision" type="box" pos="-0.0195 -0.033775 0.001" euler="0 0 2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_08_visual" class="cup_a_visual" type="box" pos="-0.033775 -0.0195 0.001" euler="0 0 2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_08_collision" class="cup_collision" type="box" pos="-0.033775 -0.0195 0.001" euler="0 0 2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_09_visual" class="cup_a_visual" type="box" pos="-0.039 0 0.001" euler="0 0 1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_09_collision" class="cup_collision" type="box" pos="-0.039 0 0.001" euler="0 0 1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_10_visual" class="cup_a_visual" type="box" pos="-0.033775 0.0195 0.001" euler="0 0 1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_10_collision" class="cup_collision" type="box" pos="-0.033775 0.0195 0.001" euler="0 0 1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_11_visual" class="cup_a_visual" type="box" pos="-0.0195 0.033775 0.001" euler="0 0 0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_wall_11_collision" class="cup_collision" type="box" pos="-0.0195 0.033775 0.001" euler="0 0 0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_a_bottom_visual" class="cup_a_visual" type="cylinder" pos="0 0 -0.044" size="0.040 0.001"/>
+      <geom name="cup_a_bottom_collision" class="cup_collision" type="cylinder" pos="0 0 -0.044" size="0.040 0.001"/>
+    </body>
+    <body name="plastic_cup_b" pos="2 2 2">
+      <joint name="cup_b_free_joint" type="free" damping="1.0"/>
+      <inertial pos="0 0 0" mass="0.020"
+                diaginertia="0.0000295 0.0000295 0.0000320"/>
+      <geom name="cup_b_wall_near_visual" class="cup_b_visual" type="box" pos="0 0.039 0.001" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_01_visual" class="cup_b_visual" type="box" pos="0.0195 0.033775 0.001" euler="0 0 -0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_02_visual" class="cup_b_visual" type="box" pos="0.033775 0.0195 0.001" euler="0 0 -1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_03_visual" class="cup_b_visual" type="box" pos="0.039 0 0.001" euler="0 0 -1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_04_visual" class="cup_b_visual" type="box" pos="0.033775 -0.0195 0.001" euler="0 0 -2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_05_visual" class="cup_b_visual" type="box" pos="0.0195 -0.033775 0.001" euler="0 0 -2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_opposite_visual" class="cup_b_visual" type="box" pos="0 -0.039 0.001" euler="0 0 3.141592654" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_07_visual" class="cup_b_visual" type="box" pos="-0.0195 -0.033775 0.001" euler="0 0 2.617993878" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_08_visual" class="cup_b_visual" type="box" pos="-0.033775 -0.0195 0.001" euler="0 0 2.094395102" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_09_visual" class="cup_b_visual" type="box" pos="-0.039 0 0.001" euler="0 0 1.570796327" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_10_visual" class="cup_b_visual" type="box" pos="-0.033775 0.0195 0.001" euler="0 0 1.047197551" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_wall_11_visual" class="cup_b_visual" type="box" pos="-0.0195 0.033775 0.001" euler="0 0 0.523598776" size="0.010352762 0.001 0.044"/>
+      <geom name="cup_b_bottom_visual" class="cup_b_visual" type="cylinder" pos="0 0 -0.044" size="0.040 0.001"/>
+      <geom name="cup_b_collision" class="cup_collision" type="cylinder" size="0.040 0.045"/>
+    </body>
+    <body name="orange_bottle" pos="0.11 -0.22 0.19">
+      <joint name="bottle_free_joint" type="free" damping="1.0"/>
+      <inertial pos="0 0 0" mass="0.030" diaginertia="0.00004 0.00004 0.00002"/>
+      <geom name="bottle_visual" type="cylinder" size="0.025 0.070"
+            group="0" contype="0" conaffinity="0" material="bottle_material"/>
+      <geom name="bottle_neck_visual" type="cylinder" pos="0 0 0.085" size="0.014 0.015"
+            group="0" contype="0" conaffinity="0" material="bottle_material"/>
+      <geom name="bottle_collision" type="cylinder" size="0.025 0.070"
+            group="2" contype="1" conaffinity="1" friction="0.8 0.01 0.001"
+            rgba="0 0 0 0"/>
+    </body>
+  </worldbody>
+  <contact>
+    <exclude name="exclude_base_shoulder" body1="base" body2="shoulder"/>
+  </contact>
+  <keyframe>
+    <key name="task_start"
+         qpos="0 0 0 0 0 0 0.02 -0.28 0.165 1 0 0 0 2 2 2 1 0 0 0 0.11 -0.22 0.19 1 0 0 0"
+         ctrl="0 0 0 0 0 0"/>
+    <key name="v5_no_cup"
+         qpos="0 0 0 0 0 0 2 2 2 1 0 0 0 2 2 2 1 0 0 0 0.11 -0.22 0.19 1 0 0 0"
+         ctrl="0 0 0 0 0 0"/>
+    <key name="v5_two_cups"
+         qpos="0 0 0 0 0 0 0.02 -0.28 0.165 1 0 0 0 -0.10 -0.30 0.165 1 0 0 0 0.11 -0.22 0.19 1 0 0 0"
+         ctrl="0 0 0 0 0 0"/>
+    <key name="v5_cup_near_bottle"
+         qpos="0 0 0 0 0 0 0.02 -0.28 0.165 1 0 0 0 2 2 2 1 0 0 0 0.095 -0.28 0.19 1 0 0 0"
+         ctrl="0 0 0 0 0 0"/>
+  </keyframe>
+</mujoco>
