@@ -135,13 +135,18 @@ def render_detection_overlay(frame: DetectionFrame, batch: DetectionBatch) -> np
     return np.asarray(image, dtype=np.uint8)
 
 
-def _candidate_document(candidate: DetectionCandidate) -> dict[str, object]:
+def _candidate_document(
+    candidate: DetectionCandidate,
+    *,
+    mask_artifact: Path,
+) -> dict[str, object]:
     return {
         "instance_id": candidate.instance_id,
         "class_id": candidate.class_id,
         "confidence": candidate.confidence,
         "bbox_xyxy": list(candidate.bbox_xyxy),
         "mask_pixel_count": int(candidate.mask.sum()),
+        "mask_artifact": str(mask_artifact),
         "source_stamp_ns": candidate.source_stamp_ns,
         "source_frame_id": candidate.source_frame_id,
     }
@@ -160,10 +165,24 @@ class PerceptionEvidenceWriter:
         source = root / "source-rgb.png"
         overlay = root / "prediction-overlay.png"
         detections = root / "detections.json"
-        if any(path.exists() for path in (source, overlay, detections)):
+        candidate_masks = tuple(
+            root / f"candidate-mask-{index:03d}.png"
+            for index, _candidate in enumerate(batch.candidates)
+        )
+        if any(
+            path.exists()
+            for path in (source, overlay, detections, *candidate_masks)
+        ):
             raise FileExistsError("detection evidence path already exists")
         _atomic_png(source, request.frame.rgb8)
         _atomic_png(overlay, render_detection_overlay(request.frame, batch))
+        for candidate, path in zip(batch.candidates, candidate_masks, strict=True):
+            pixels = np.zeros(
+                (candidate.image_height, candidate.image_width, 3),
+                dtype=np.uint8,
+            )
+            pixels[candidate.mask] = 255
+            _atomic_png(path, pixels)
         atomic_json(
             detections,
             {
@@ -175,11 +194,16 @@ class PerceptionEvidenceWriter:
                 "image_width": batch.image_width,
                 "image_height": batch.image_height,
                 "candidates": [
-                    _candidate_document(candidate) for candidate in batch.candidates
+                    _candidate_document(candidate, mask_artifact=mask_artifact)
+                    for candidate, mask_artifact in zip(
+                        batch.candidates, candidate_masks, strict=True
+                    )
                 ],
             },
         )
-        return tuple(str(path) for path in (source, overlay, detections))
+        return tuple(
+            str(path) for path in (source, overlay, detections, *candidate_masks)
+        )
 
     def write_selected(
         self,
