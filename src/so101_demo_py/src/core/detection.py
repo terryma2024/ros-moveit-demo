@@ -143,3 +143,40 @@ class DetectionBatch:
             if len(source_keys) != 1:
                 raise ValueError("candidates must share one source frame and stamp")
         object.__setattr__(self, "candidates", candidates)
+
+
+@dataclass(frozen=True, slots=True)
+class LocalizedObject:
+    instance_id: str
+    class_id: str
+    source_stamp_ns: int
+    source_frame_id: str
+    center_world_xyz: tuple[float, float, float]
+    fitted_radius_m: float
+    valid_depth_point_count: int
+    points_world: np.ndarray
+
+    def __post_init__(self) -> None:
+        if not self.instance_id:
+            raise ValueError("instance_id must be non-empty")
+        _validate_class_id(self.class_id)
+        if self.source_stamp_ns <= 0:
+            raise ValueError("source stamp must be nonzero")
+        if not self.source_frame_id:
+            raise ValueError("source frame_id must be non-empty")
+        if len(self.center_world_xyz) != 3 or not all(
+            math.isfinite(value) for value in self.center_world_xyz
+        ):
+            raise ValueError("center_world_xyz must contain three finite values")
+        if not math.isfinite(self.fitted_radius_m) or self.fitted_radius_m <= 0.0:
+            raise ValueError("fitted_radius_m must be finite and positive")
+        if self.valid_depth_point_count <= 0:
+            raise ValueError("valid_depth_point_count must be positive")
+        if self.points_world.ndim != 2 or self.points_world.shape != (
+            self.valid_depth_point_count,
+            3,
+        ):
+            raise ValueError("points_world shape must match valid_depth_point_count")
+        if not np.isfinite(self.points_world).all():
+            raise ValueError("points_world must contain finite values")
+        object.__setattr__(self, "points_world", _owned_read_only(self.points_world))

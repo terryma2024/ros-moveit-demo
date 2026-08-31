@@ -12,6 +12,8 @@ from typing import Any
 
 import numpy as np
 
+from so101_demo.core.detection import DetectionCandidate
+
 
 def message_stamp_ns(message: Any) -> int:
     stamp = message.header.stamp
@@ -243,6 +245,55 @@ def _decode_depth(message: Any) -> np.ndarray:
     return np.frombuffer(message.data, dtype=byte_order).reshape(
         int(message.height), int(message.width)
     ).astype(np.float32, copy=True)
+
+
+def build_mask_point_cloud(
+    candidate: DetectionCandidate,
+    camera_info: Any,
+    depth_message: Any,
+    *,
+    depth_trunc_m: float,
+) -> np.ndarray:
+    """Back-project valid depth pixels inside one selected instance mask."""
+    expected_dimensions = (candidate.image_width, candidate.image_height)
+    if not (
+        expected_dimensions
+        == (int(camera_info.width), int(camera_info.height))
+        == (int(depth_message.width), int(depth_message.height))
+        and candidate.source_stamp_ns
+        == message_stamp_ns(camera_info)
+        == message_stamp_ns(depth_message)
+        and candidate.source_frame_id
+        == camera_info.header.frame_id
+        == depth_message.header.frame_id
+    ):
+        raise ValueError(
+            "candidate, CameraInfo, and depth dimensions, stamp, or frame_id differ"
+        )
+    if not math.isfinite(depth_trunc_m) or depth_trunc_m <= 0.0:
+        raise ValueError("depth_trunc_m must be finite and positive")
+    depth = _decode_depth(depth_message)
+    fx, fy, cx, cy = (
+        float(camera_info.k[0]),
+        float(camera_info.k[4]),
+        float(camera_info.k[2]),
+        float(camera_info.k[5]),
+    )
+    if not all(math.isfinite(value) for value in (fx, fy, cx, cy)) or fx <= 0.0 or fy <= 0.0:
+        raise ValueError("CameraInfo intrinsics must be finite with positive focal lengths")
+    valid = (
+        candidate.mask
+        & np.isfinite(depth)
+        & (depth > 0.0)
+        & (depth <= depth_trunc_m)
+    )
+    pixel_rows, pixel_columns = np.nonzero(valid)
+    if len(pixel_rows) == 0:
+        return np.empty((0, 3), dtype=np.float64)
+    z = depth[pixel_rows, pixel_columns].astype(np.float64, copy=False)
+    x = (pixel_columns.astype(np.float64) - cx) * z / fx
+    y = (pixel_rows.astype(np.float64) - cy) * z / fy
+    return np.column_stack((x, y, z))
 
 
 def _capture_aligned_rgbd(timeout_s: float) -> tuple[Any, Any, Any]:
