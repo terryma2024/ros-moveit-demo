@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: ff8caef360715b41c0fa57f2e7c4f4b96eb5af5f
+current_commit: b23b168883b4a7225eee41ef02499766bc15d989
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-040
+latest_checkpoint: CP-041
 next_experiment: EXP-018
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-041
+last_valid_experiment: EXP-034
+current_hypothesis: b23b168在不改变检测选择的前提下可让每个候选mask进入证据，从而支持全部场景truth IoU
+working_tree_status: 仅本账本provenance更新待提交；生产源与测试clean
+owned_processes: NONE；EXP-018尚未启动，domain 218与output为空
+preserved_processes: EXP-034及truth-render诊断均保留；用户进程/文件与ai-station主checkout未触碰
+confirmed_conclusions:
+  - CONF-081 TDD RED证明TARGET_AMBIGUOUS没有每候选mask；b23b168写candidate-mask-NNN.png并在detections.json记录mask_artifact
+  - CONF-082 Mac包级892/892、Linux聚焦24/24、RTX 5080 CUDA gate通过；双平台安装态锁定b23b168
+  - CONF-083 本地MuJoCo object-ID truth必须在Aqua CGL运行；普通沙箱invalid CoreGraphics connection，失败目录已保留
+open_risks:
+  - EXP-018仍须验证IoU/world error/pose；EXP-034 bottle-only最终须在固定b23b168或后续最终commit补跑
+next_command: 提交provenance更新后在domain 218启动task_start、静态TF、truth/topic observer和Aqua MPS请求
+```
 
 ```yaml
 checkpoint_id: CP-040
@@ -720,10 +736,10 @@ status: RUNNING
 prior_experiment: EXP-034
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对VALID bottle-only EXP-034仅 keyframe=task_start、目标数从0变1并启用定位所需静态TF；代码/权重/阈值/平台不变
+single_variable: 相对VALID bottle-only EXP-034把场景改为task_start并启用定位TF；代码仅增加每候选mask证据，不改变模型/selector/localizer，权重/阈值/平台不变
 lifecycle: FULL_RESTART
 preconditions:
-  - source/install=ff8caef、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - source/install=b23b168、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
   - ROS_DOMAIN_ID=218、GZ_PARTITION=v5t004-mac-exp018 为空；output不存在
 success_criteria:
   - 同 stamp 的真实 640x480 rgb8/32FC1/CameraInfo、finite positive depth、exact-stamp tf2与 runtime_device=mps
@@ -734,7 +750,7 @@ failure_criteria:
 invalid_criteria:
   - provenance、domain、partition、output或 FULL_RESTART 污染
 provenance:
-  source_commit: ff8caef360715b41c0fa57f2e7c4f4b96eb5af5f
+  source_commit: b23b168883b4a7225eee41ef02499766bc15d989
   install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
   runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
   ros_domain_id: 218
