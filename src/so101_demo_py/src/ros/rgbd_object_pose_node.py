@@ -233,6 +233,17 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             model_id=options.model_id,
             imgsz=options.imgsz,
         )
+        localizer = RgbdLocalizer(
+            depth_trunc_m=options.depth_trunc_m,
+            minimum_cup_points=options.minimum_cup_points,
+            cluster_eps_m=options.cluster_eps_m,
+            cluster_min_points=options.cluster_min_points,
+            table_top_z=options.table_top_z,
+            cup_height=options.cup_height,
+            expected_radius_m=options.expected_radius,
+            radius_tolerance_m=options.radius_tolerance,
+        )
+        localization_warm_up_ms = localizer.warm_up()
     except (ImportError, ModelSetupError, RuntimeError) as error:
         print(json.dumps({"status": "ERROR", "failure": str(error)}, sort_keys=True))
         return 1
@@ -351,16 +362,6 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 ack_timeout=ack_timeout,
             )
 
-        localizer = RgbdLocalizer(
-            depth_trunc_m=options.depth_trunc_m,
-            minimum_cup_points=options.minimum_cup_points,
-            cluster_eps_m=options.cluster_eps_m,
-            cluster_min_points=options.cluster_min_points,
-            table_top_z=options.table_top_z,
-            cup_height=options.cup_height,
-            expected_radius_m=options.expected_radius,
-            radius_tolerance_m=options.radius_tolerance,
-        )
         result = detect_once(
             request=ObjectPoseRequest(
                 request_id=options.request_id,
@@ -370,7 +371,9 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 query=DetectionQuery("plastic_cup"),
                 confidence_threshold=options.confidence_threshold,
                 run_directory=options.evidence_root,
-                cold_start_latency_ms=detector.cold_start_latency_ms,
+                cold_start_latency_ms=(
+                    detector.cold_start_latency_ms + localization_warm_up_ms
+                ),
             ),
             detector=detector,
             selector=TargetSelector(),
