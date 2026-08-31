@@ -104,15 +104,20 @@ def _resize_mask_nearest(mask: np.ndarray, height: int, width: int) -> np.ndarra
 def _trim_mask_boundary(mask: np.ndarray) -> np.ndarray:
     if mask.ndim != 2 or mask.shape[0] <= 0 or mask.shape[1] <= 0:
         raise YoloResultError("mask must be a non-empty two-dimensional array")
-    padded = np.pad(mask, 1, mode="constant", constant_values=False)
-    trimmed = (
-        padded[1:-1, 1:-1]
-        & padded[:-2, 1:-1]
-        & padded[2:, 1:-1]
-        & padded[1:-1, :-2]
-        & padded[1:-1, 2:]
-    )
-    return np.asarray(trimmed if bool(trimmed.any()) else mask, dtype=bool)
+    trimmed = np.asarray(mask, dtype=bool)
+    for _ in range(2):
+        padded = np.pad(trimmed, 1, mode="constant", constant_values=False)
+        candidate = (
+            padded[1:-1, 1:-1]
+            & padded[:-2, 1:-1]
+            & padded[2:, 1:-1]
+            & padded[1:-1, :-2]
+            & padded[1:-1, 2:]
+        )
+        if not bool(candidate.any()):
+            break
+        trimmed = candidate
+    return np.asarray(trimmed, dtype=bool)
 
 
 def _class_name(class_names: Mapping[int, str] | list[str], index: int) -> str:
