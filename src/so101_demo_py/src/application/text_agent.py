@@ -24,6 +24,7 @@ from ..ports.pick_place_executor import (
     RuntimeDispatchResult,
 )
 from ..ports.task_planner import PlannerMetadata, PlannerPort, PlannerProviderError
+from ..profiling.session import SemanticProfiler
 from .task_dispatch import DispatchRejectedError, TaskDispatcher
 
 
@@ -134,48 +135,46 @@ class TextAgent:
         planner: PlannerPort,
         executor: PickPlaceExecutorPort,
         dispatcher: TaskDispatcher | None = None,
+        profiler: SemanticProfiler | None = None,
     ) -> None:
         self._planner = planner
         self._executor = executor
         self._dispatcher = dispatcher or TaskDispatcher()
+        self._profiler = profiler
         self._claimed_request_ids: set[str] = set()
         self._request_claim_lock = Lock()
 
     def handle(self, request: AgentRequest) -> AgentResult:
-        if not self._has_strict_input_types(request):
-            return self._terminal_result(
-                request,
-                AgentStatus.COMMAND_INVALID,
-                "INPUT_INVALID",
-            )
-        if not request.request_id.strip():
-            return self._terminal_result(
-                request,
-                AgentStatus.DISPATCH_REJECTED,
-                "REQUEST_ID_INVALID",
-            )
-        if request.skip_confirmation and (
-            request.mode != "execute" or not request.execute
-        ):
-            return self._terminal_result(
-                request,
-                AgentStatus.DISPATCH_REJECTED,
-                "CONFIRMATION_BYPASS_REQUIRES_EXECUTE",
-            )
-        if request.skip_confirmation and request.confirmation_digest is not None:
-            return self._terminal_result(
-                request,
-                AgentStatus.DISPATCH_REJECTED,
-                "CONFIRMATION_MODE_CONFLICT",
-            )
+        if self._profiler is None:
+            return self._handle(request)
+        token = self._profiler.start_span(
+            "agent.total",
+            {"request_id": TextAgent._safe_request_id(request)},
+        )
         try:
-            instruction = validate_instruction(request.instruction)
-        except CommandValidationError:
-            return self._terminal_result(
-                request,
-                AgentStatus.COMMAND_INVALID,
-                "INPUT_INVALID",
+            result = self._handle(request)
+        except Exception as error:
+            self._profiler.finish_span(
+                token,
+                outcome="error",
+                attributes={"error_class": type(error).__name__},
             )
+            raise
+        self._profiler.finish_span(
+            token,
+            outcome=result.status.value,
+            attributes={
+                "status": result.status.value,
+                "reason_code": result.reason_code,
+            },
+        )
+        return result
+
+    def _handle(self, request: AgentRequest) -> AgentResult:
+        instruction, input_rejection = self._validate_request_input(request)
+        if input_rejection is not None:
+            return input_rejection
+        assert instruction is not None
         try:
             planned = self._planner.plan(instruction)
         except PlannerProviderError:
@@ -184,14 +183,31 @@ class TextAgent:
                 AgentStatus.PLANNER_FAILED,
                 "PLANNER_CHAIN_FAILED",
             )
+        validation_token = (
+            self._profiler.start_span("agent.validate_command")
+            if self._profiler is not None
+            else None
+        )
         try:
             outcome = validate_planner_outcome(planned.value)
         except CommandValidationError:
+            if validation_token is not None:
+                self._profiler.finish_span(
+                    validation_token,
+                    outcome="rejected",
+                    attributes={"reason_code": "COMMAND_INVALID"},
+                )
             return self._terminal_result(
                 request,
                 AgentStatus.COMMAND_INVALID,
                 "COMMAND_INVALID",
                 metadata=planned.metadata,
+            )
+        if validation_token is not None:
+            self._profiler.finish_span(
+                validation_token,
+                outcome="accepted",
+                attributes={"planner_outcome": outcome.kind.value},
             )
         if outcome.kind is PlannerOutcomeKind.UNSUPPORTED:
             return self._terminal_result(
@@ -361,6 +377,46 @@ class TextAgent:
             confirmation_mode=("skipped" if request.skip_confirmation else "digest"),
             execution_provenance=request.execution_provenance,
         )
+
+    def _validate_request_input(
+        self,
+        request: AgentRequest,
+    ) -> tuple[str | None, AgentResult | None]:
+        token = (
+            self._profiler.start_span("agent.validate_input")
+            if self._profiler is not None
+            else None
+        )
+
+        def reject(status: AgentStatus, reason_code: str) -> tuple[None, AgentResult]:
+            if token is not None:
+                self._profiler.finish_span(
+                    token,
+                    outcome="rejected",
+                    attributes={"reason_code": reason_code},
+                )
+            return None, self._terminal_result(request, status, reason_code)
+
+        if not self._has_strict_input_types(request):
+            return reject(AgentStatus.COMMAND_INVALID, "INPUT_INVALID")
+        if not request.request_id.strip():
+            return reject(AgentStatus.DISPATCH_REJECTED, "REQUEST_ID_INVALID")
+        if request.skip_confirmation and (
+            request.mode != "execute" or not request.execute
+        ):
+            return reject(
+                AgentStatus.DISPATCH_REJECTED,
+                "CONFIRMATION_BYPASS_REQUIRES_EXECUTE",
+            )
+        if request.skip_confirmation and request.confirmation_digest is not None:
+            return reject(AgentStatus.DISPATCH_REJECTED, "CONFIRMATION_MODE_CONFLICT")
+        try:
+            instruction = validate_instruction(request.instruction)
+        except CommandValidationError:
+            return reject(AgentStatus.COMMAND_INVALID, "INPUT_INVALID")
+        if token is not None:
+            self._profiler.finish_span(token, outcome="accepted")
+        return instruction, None
 
     @staticmethod
     def _is_valid_runtime_result(value: object) -> bool:
