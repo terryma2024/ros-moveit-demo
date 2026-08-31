@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 3d9a279e7a7268c527ea2c5c13701b5161eafe10
+current_commit: 8932725a8ecbade50e73f556cbca98f63a1ed590
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-033
-next_experiment: EXP-030
+latest_checkpoint: CP-034
+next_experiment: EXP-031
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-034
+last_valid_experiment: EXP-016
+current_hypothesis: 保留overlay生成的完整DYLD顺序并只把farm追加到末尾，可让整套MuJoCo库来自同一主安装
+working_tree_status: 仅本账本 INVALID/替代计划待提交；源/测试 clean
+owned_processes: NONE；EXP-030 owner与child已Ctrl-C退出，domain 230无节点
+preserved_processes: EXP-030 ROS日志已同步正式 evidence root；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-063 EXP-030选中主安装core，但farm仍先于自动overlay中的msgs目录，导致主core绑定旧fork msgs并缺SetFreeJointState符号
+  - CONF-064 overlay自动DYLD已按support/core/plugins/msgs顺序包含全部主安装目录；共享farm只需作为最终fallback
+disproven_routes:
+  - DISPROVED-014 手工列举部分主安装库目录再把farm置于其后仍不完整；必须保持完整overlay闭包在farm前
+open_risks:
+  - EXP-031 仍须验证完整主安装闭包、UI握手与全部产品验收边界
+next_command: 预登记 EXP-031；唯一修改为保留自动DYLD闭包并把farm追加到最后
+```
 
 ```yaml
 checkpoint_id: CP-033
@@ -604,10 +621,10 @@ next_experiment: EXP-025
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-030
+prior_experiment: EXP-031
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-030 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-031 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -1073,7 +1090,7 @@ next_experiment: EXP-030
 
 ```yaml
 experiment_id: EXP-030
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-029
 hypothesis: 当前主安装的 core/plugin/support dylib优先于共享farm后，前台PTY Aqua宿主可完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: 主安装core与dispatcher一致；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
@@ -1099,13 +1116,56 @@ provenance:
   gz_partition: v5t004-mac-exp030
 commands:
   - command: launchctl asuser 501 Aqua foreground tty=true with primary dylibs first; launch v5_no_cup, then payload/perception/visual/cleanup observers
+    exit_code: 1
+observed:
+  - 前台PTY启动；主安装core被pluginlib选中，不再加载旧core
+  - 主core所需SetFreeJointState typesupport符号却从旧fork msgs dylib解析并失败；未进入UI task/Viewer/controller/RGB-D
+  - overlay自动DYLD包含主安装support/core/plugins/msgs完整闭包，但EXP-030手工把farm插在msgs之前
+  - Ctrl-C后全部child cleanly退出，domain 230无节点；ROS日志已同步正式 evidence root
+inferred: [NONE]
+conclusion: INVALID；只修正core而未保持完整同世代依赖闭包，未执行产品路径
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-030-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-030-bottle-only
+decision: PRESERVE；以新 ID EXP-031 仅把farm移动到完整自动DYLD闭包之后
+next_experiment: EXP-031
+```
+
+```yaml
+experiment_id: EXP-031
+status: PLANNED
+prior_experiment: EXP-030
+hypothesis: 保留overlay生成的完整DYLD依赖闭包并把共享farm追加到末尾，可让前台PTY Aqua完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
+prediction: core/msgs/plugins/dispatcher同属主安装；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
+single_variable: 相对 INVALID EXP-030 仅把共享farm从自动overlay闭包之前移动到闭包末尾
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - gui/501 foreground PTY；ROS_DOMAIN_ID=231、GZ_PARTITION=v5t004-mac-exp031 与两端output为空
+  - 自动DYLD已包含主安装support/core/plugins/msgs目录；farm旧fork污染仅作为最终fallback
+success_criteria:
+  - 日志出现Submitting/Running UI task、Viewer、三controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo与finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、matching_count=0、latency<=2000、无新 /cup_pose
+  - exact-window MuJoCo和overlay/truth、安装态 provenance、退出后零 owned process/publisher完整
+failure_criteria:
+  - 依赖闭包/UI/Viewer/controller/payload/not-found/device/latency/GUI/cleanup任一失败
+invalid_criteria:
+  - foreground PTY/Aqua/dylib/domain/partition/output/source/install provenance污染或非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: current so101_demo_py plus primary project mujoco runtime
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 231
+  gz_partition: v5t004-mac-exp031
+commands:
+  - command: launchctl asuser 501 Aqua foreground tty=true with overlay DYLD closure then farm; launch v5_no_cup, then payload/perception/visual/cleanup observers
     exit_code: PENDING
 observed: [NONE]
 inferred: [NONE]
 conclusion: PENDING
 evidence:
-  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-030-bottle-only
-  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-030-bottle-only
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-031-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-031-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
