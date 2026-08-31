@@ -49,3 +49,4 @@ def test_training_contract_uses_local_segmentation_base_and_fixed_seed() -> None
     assert document["data"] == "dataset.yaml"
     assert document["epochs"] > 0
     assert document["device"] == "cuda"
+    assert document["amp"] is False
