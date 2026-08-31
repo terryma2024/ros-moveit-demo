@@ -46,7 +46,7 @@ confirmed_conclusions:
   - CONF-074 Linux isolated checkout/install=4d0b6e3，adapter22/22、RTX 5080 CUDA gate通过，installed import回读conf=0.25与零mask分支
 open_risks:
   - EXP-033仍须新FULL_RESTART证明detections/overlay、TARGET_NOT_FOUND、MPS、延迟、无/cup_pose与cleanup同时成立
-next_command: domain 233与新output下启动EXP-033，observer先于Aqua MPS请求且至少120秒
+next_command: domain 220与新output下启动EXP-033，observer先于Aqua MPS请求且至少120秒
 ```
 
 ```yaml
@@ -1295,7 +1295,7 @@ lifecycle: FULL_RESTART
 preconditions:
   - Mac package 891/891；Linux adapter22/22与CUDA gate；双平台install均回读4d0b6e3零mask分支
   - weight SHA=f281d252...40781、device=mps、selector threshold=0.50、imgsz=640
-  - gui/501 foreground PTY、完整overlay DYLD闭包后接farm；ROS_DOMAIN_ID=233、GZ_PARTITION=v5t004-mac-exp033与新output为空
+  - gui/501 foreground PTY、完整overlay DYLD闭包后接farm；ROS_DOMAIN_ID=220、GZ_PARTITION=v5t004-mac-exp033与新output为空
 success_criteria:
   - main-thread UI、Viewer、三controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo与finite positive depth
   - runtime_device=mps、TARGET_NOT_FOUND、candidate_count=0、matching_count=0、request_latency<=2000、无新/cup_pose
@@ -1308,7 +1308,7 @@ provenance:
   source_commit: 4d0b6e35e0b4754da4bc03d1038c3f928eac3ccc
   install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
   runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
-  ros_domain_id: 233
+  ros_domain_id: 220
   gz_partition: v5t004-mac-exp033
 commands:
   - command: FULL_RESTART v5_no_cup plus 120s topic observer and Aqua MPS absolute installed entrypoint
