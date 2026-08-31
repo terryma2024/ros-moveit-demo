@@ -174,6 +174,27 @@ def test_localizer_uses_exact_stamp_transform_and_fits_cup_geometry() -> None:
     assert not result.points_world.flags.writeable
 
 
+def test_localizer_warm_up_primes_outlier_cleanup_once() -> None:
+    calls: list[np.ndarray] = []
+
+    def cleaner(points: np.ndarray, eps_m: float, min_points: int) -> np.ndarray:
+        calls.append(np.array(points, copy=True))
+        assert eps_m == 0.02
+        assert min_points == 5
+        return points
+
+    clock = iter([1_000_000_000, 1_007_000_000])
+    localizer = RgbdLocalizer(outlier_cleaner=cleaner)
+
+    assert localizer.warm_up(monotonic_ns=clock.__next__) == pytest.approx(7.0)
+    assert localizer.warm_up(monotonic_ns=lambda: pytest.fail("warm-up repeated")) == (
+        pytest.approx(7.0)
+    )
+    assert len(calls) == 1
+    assert calls[0].shape == (8, 3)
+    assert np.isfinite(calls[0]).all()
+
+
 def test_localizer_rejects_insufficient_depth_before_tf_lookup() -> None:
     calls: list[object] = []
     localizer = RgbdLocalizer(

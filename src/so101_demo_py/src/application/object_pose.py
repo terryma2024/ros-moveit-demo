@@ -149,6 +149,44 @@ class RgbdLocalizer:
         self._workspace_max = np.asarray(workspace_max_xyz, dtype=np.float64)
         self._point_cloud_builder = point_cloud_builder
         self._outlier_cleaner = outlier_cleaner
+        self._warm_up_latency_ms: float | None = None
+
+    def warm_up(
+        self,
+        *,
+        monotonic_ns: Callable[[], int] = time.monotonic_ns,
+    ) -> float:
+        """Prime lazy localization dependencies before accepting a request."""
+        if self._warm_up_latency_ms is not None:
+            return self._warm_up_latency_ms
+        started_ns = monotonic_ns()
+        offsets = np.linspace(-0.0035, 0.0035, 8, dtype=np.float64)
+        probe_points = np.column_stack(
+            (
+                offsets,
+                np.zeros_like(offsets),
+                np.full_like(offsets, 0.5),
+            )
+        )
+        cleaned = np.asarray(
+            self._outlier_cleaner(
+                probe_points,
+                self._cluster_eps_m,
+                self._cluster_min_points,
+            ),
+            dtype=np.float64,
+        )
+        if cleaned.ndim != 2 or cleaned.shape[1:] != (3,) or len(cleaned) == 0:
+            raise RuntimeError("localization warm-up produced no valid cluster")
+        from so101_demo.cli.rgbd_cup_pose import (
+            estimate_upright_cup_pose as _estimate_upright_cup_pose,
+            transform_points as _transform_points,
+        )
+
+        if not callable(_estimate_upright_cup_pose) or not callable(_transform_points):
+            raise RuntimeError("localization geometry helpers are unavailable")
+        self._warm_up_latency_ms = (monotonic_ns() - started_ns) / 1_000_000.0
+        return self._warm_up_latency_ms
 
     def localize(
         self,
