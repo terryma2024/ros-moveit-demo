@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs at task_start, cup_test_for
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
 branch: main
 base_commit: 03887b424797a2f644156725742077b970100a0f
-current_commit: 5396e2e7e1a07330a3872712e25bbdb8931fc5a7
+current_commit: b7518e6f99a11269a6e4b3f9b83ee95a1426520b
 evidence_root: /tmp/so101-debug-text-agent-e2e-launch-20260831
 confirmed_conclusions:
   - DESIGN-001: The existing perception launch already owns MuJoCo, controllers, MoveIt, camera TF, RGB-D perception, and dynamic pick-place; the approved design adds a separate public launch that substitutes text_pick_agent for the direct dynamic workflow.
@@ -15,14 +15,17 @@ confirmed_conclusions:
   - PROV-001: Local main is 03887b424797a2f644156725742077b970100a0f with pinned mujoco_ros2_control 71bc9346cf93d6227a6678fcacf63f3e18acfcba.
   - PROV-001: A pre-existing local MuJoCo stack and rgbd_cup_pose process tree is present and must not be stopped or reused without ownership confirmation.
   - PROV-001: ai-station remains at e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4 with its untracked RGB-D ledger and codex/codex-cua sessions preserved.
+  - CP-STATIC-GREEN: Focused source tests passed 90/90, the full package suite passed 792/792, and the installed overlay exposes the new launch with all 13 arguments.
+  - CP-STATIC-GREEN: Missing skip_confirmation fails before evidence creation, leaves domain 221 empty, and returns launch status 1.
 disproven_routes:
   - DESIGN-001: A shell wrapper is rejected because it splits process ownership, exit status, and evidence provenance.
   - DESIGN-001: Adding workflow selection to the existing perception launch is rejected to preserve its public contract.
+  - CP-STATIC-GREEN: ROS_DOMAIN_ID values 240 through 244 are invalid on the local Fast DDS configuration because domain IDs above 232 overflow its port calculation; static and live domains were changed to 221 through 225.
 open_hypotheses:
   - The dedicated launch can preserve existing fail-closed semantics while passing installed provenance to text_pick_agent automatically.
   - Each of the four FULL_RESTART runs can complete the full natural-language-to-physical chain on the local Mac.
-latest_checkpoint: CP-002
-next_experiment: Execute Task 1 of docs/superpowers/plans/2026-08-31-text-agent-rgbd-e2e-launch.md after the user selects the execution mode.
+latest_checkpoint: CP-STATIC-GREEN
+next_experiment: Run the task_start FULL_RESTART acceptance in ROS domain 222 after provider and process-ownership preflight.
 ```
 
 ## DESIGN-001
@@ -86,6 +89,50 @@ next_command: Select subagent-driven or inline plan execution, then begin the ca
 evidence_disposition:
   retained:
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/design
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## CP-STATIC-GREEN
+
+```yaml
+checkpoint_id: CP-STATIC-GREEN
+date: 2026-08-31
+source_commit: b7518e6f99a11269a6e4b3f9b83ee95a1426520b
+installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/so101_demo_py
+focused_tests: 90 passed
+full_package_tests: 792 passed
+installed_launch_count: 7
+installed_launch: so101_mujoco_text_pick_agent.launch.py
+launch_argument_count: 13
+fail_closed_smoke:
+  ros_domain_id: 221
+  launch_status: 1
+  reason: text-agent launch requires skip_confirmation:=true
+  evidence_directory_created: false
+  remaining_nodes: 0
+disproven_preflight:
+  ros_domain_id: 240
+  status: INVALID_ENVIRONMENT
+  reason: Fast DDS reports that domain IDs above 232 produce a port number that is too high.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/focused-pytest.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/colcon-build.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/package-prefix.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/installed-launches.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/show-args.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/full-pytest.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/rejected-domain-221-launch.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/rejected-domain-221-status.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/domain-221-nodes.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/domain-240-repro.log
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/static/domain-221-control.log
+owned_processes: NONE
+next_command: Run provider and process-ownership preflight, then start task_start in domain 222.
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/design
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/static
   archived: NONE
   deletion_candidates: NONE
 ```
