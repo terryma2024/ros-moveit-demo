@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,11 +10,14 @@ from so101_demo.application.task_reachability import (
     ReachabilityReport,
     ReachabilityStatus,
 )
-from so101_demo.core.domain import RunStatus, State
+from so101_demo.core.domain import ActionResult, ActionStatus, RunStatus, State
+from so101_demo.core.runner import ExecutionContext
 from so101_demo.core.task_geometry import TaskGeometry, load_task_geometry
 from so101_demo.ports.cup_scene_observation import CupSceneObservation
 from so101_demo.ports.evidence import PoseEvidence
 from so101_demo.ports.planning_scene import SceneCommandReceipt
+from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+from so101_demo.profiling.session import build_profiler
 from test_dynamic_pick import _sample, _template
 
 PACKAGE = Path(__file__).parents[1]
@@ -598,6 +602,77 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
     output = capsys.readouterr().out
     assert "status=READY subscription=/cup_pose" in output
     assert "status=DONE" in output
+
+
+def test_run_dynamic_execute_profiles_setup_state_and_cleanup(tmp_path) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=RecordingTaskScenePort(),
+    )
+
+    class Action:
+        def run(self, context: ExecutionContext) -> ActionResult:
+            assert context.state is State.PREPARE_OPEN_GRIPPER
+            return ActionResult(ActionStatus.SUCCEEDED)
+
+    original_runner = runtime.runner
+    runtime.build_actions = lambda _execution, _targets: {
+        State.PREPARE_OPEN_GRIPPER: Action()
+    }
+
+    def runner_factory(actions, **kwargs):
+        delegate = original_runner(actions, **kwargs)
+
+        class Runner:
+            def run(self, request):
+                actions[State.PREPARE_OPEN_GRIPPER].run(
+                    ExecutionContext(request, State.PREPARE_OPEN_GRIPPER, 0)
+                )
+                return delegate.run(request)
+
+        return Runner()
+
+    runtime.runner = runner_factory
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="task-5",
+            process_role="dynamic-runtime",
+        )
+    )
+    assert profiler is not None
+
+    assert run_dynamic_execute(
+        _options(tmp_path),
+        profiler=profiler,
+        _runtime=runtime,
+    ) == 0
+    profiler.close()
+
+    complete_events = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/dynamic-runtime.events.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+        if '"event_type":"span_complete"' in line
+    ]
+    assert [event["name"] for event in complete_events] == [
+        "runtime.setup",
+        "runtime.state.PREPARE_OPEN_GRIPPER",
+        "runtime.cleanup",
+    ]
+    assert complete_events[0]["outcome"] == "accepted"
+    assert complete_events[1]["outcome"] == "SUCCEEDED"
+    assert complete_events[2]["outcome"] == "ok"
 
 
 def test_unreachable_preflight_writes_evidence_and_never_constructs_motion(
