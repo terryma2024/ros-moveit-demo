@@ -30,6 +30,7 @@ from so101_demo.ros.rgbd_object_pose_node import (
     RgbdObjectPoseOptions,
     _publish_and_confirm,
     _wait_for_output_subscribers,
+    _wait_for_transform,
 )
 
 
@@ -115,6 +116,32 @@ def test_one_shot_outputs_wait_for_discovery_and_ack_before_cleanup() -> None:
         "ack:overlay",
         "publish:pose",
         "ack:pose",
+    ]
+
+
+def test_one_shot_waits_for_exact_source_transform_before_request() -> None:
+    clock = [0.0]
+    calls: list[tuple[str, str, int]] = []
+
+    def can_transform(target: str, source: str, stamp_ns: int) -> bool:
+        calls.append((target, source, stamp_ns))
+        return len(calls) >= 2
+
+    def spin_once(timeout_s: float) -> None:
+        clock[0] += timeout_s
+
+    assert _wait_for_transform(
+        can_transform,
+        target_frame="world",
+        source_frame="task_camera_frame",
+        source_stamp_ns=7,
+        spin_once=spin_once,
+        timeout_s=0.5,
+        monotonic=lambda: clock[0],
+    )
+    assert calls == [
+        ("world", "task_camera_frame", 7),
+        ("world", "task_camera_frame", 7),
     ]
 
 

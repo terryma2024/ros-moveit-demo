@@ -212,6 +212,30 @@ def _wait_for_output_subscribers(
         spin_once(min(0.05, remaining))
 
 
+def _wait_for_transform(
+    can_transform: Callable[[str, str, int], bool],
+    *,
+    target_frame: str,
+    source_frame: str,
+    source_stamp_ns: int,
+    spin_once: Callable[[float], None],
+    timeout_s: float,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> bool:
+    if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+        raise ValueError("transform readiness timeout must be finite and positive")
+    if source_stamp_ns <= 0:
+        raise ValueError("transform source stamp must be positive")
+    deadline = monotonic() + timeout_s
+    while True:
+        if can_transform(target_frame, source_frame, source_stamp_ns):
+            return True
+        remaining = deadline - monotonic()
+        if remaining <= 0.0:
+            return False
+        spin_once(min(0.05, remaining))
+
+
 def _publish_and_confirm(publisher: Any, message: Any, *, ack_timeout: Any) -> None:
     publisher.publish(message)
     if (
@@ -331,6 +355,30 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             ),
             timeout_s=1.0,
         )
+        if not _wait_for_transform(
+            lambda target, source, stamp_ns: bool(
+                tf_buffer.can_transform(
+                    target,
+                    source,
+                    Time(nanoseconds=stamp_ns),
+                    timeout=Duration(seconds=0.0),
+                )
+            ),
+            target_frame="world",
+            source_frame=frame.source_frame_id,
+            source_stamp_ns=frame.source_stamp_ns,
+            spin_once=lambda timeout_s: rclpy.spin_once(
+                node, timeout_sec=timeout_s
+            ),
+            timeout_s=options.startup_timeout_s,
+        ):
+            print(
+                json.dumps(
+                    {"status": "ERROR", "failure": "TF_UNAVAILABLE"},
+                    sort_keys=True,
+                )
+            )
+            return 1
 
         def lookup(target: str, source: str, stamp_ns: int) -> Any:
             try:
