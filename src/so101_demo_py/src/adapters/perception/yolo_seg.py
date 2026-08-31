@@ -101,6 +101,20 @@ def _resize_mask_nearest(mask: np.ndarray, height: int, width: int) -> np.ndarra
     return np.asarray(mask[np.ix_(rows, columns)] >= 0.5, dtype=bool)
 
 
+def _trim_mask_boundary(mask: np.ndarray) -> np.ndarray:
+    if mask.ndim != 2 or mask.shape[0] <= 0 or mask.shape[1] <= 0:
+        raise YoloResultError("mask must be a non-empty two-dimensional array")
+    padded = np.pad(mask, 1, mode="constant", constant_values=False)
+    trimmed = (
+        padded[1:-1, 1:-1]
+        & padded[:-2, 1:-1]
+        & padded[2:, 1:-1]
+        & padded[1:-1, :-2]
+        & padded[1:-1, 2:]
+    )
+    return np.asarray(trimmed if bool(trimmed.any()) else mask, dtype=bool)
+
+
 def _class_name(class_names: Mapping[int, str] | list[str], index: int) -> str:
     try:
         if isinstance(class_names, Mapping):
@@ -153,10 +167,12 @@ def convert_yolo_result(
         if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
             raise YoloResultError(f"confidence is invalid: {confidence}")
         bbox = tuple(float(value) for value in boxes[instance_index])
-        mask = _resize_mask_nearest(
-            masks[instance_index],
-            frame.image_height,
-            frame.image_width,
+        mask = _trim_mask_boundary(
+            _resize_mask_nearest(
+                masks[instance_index],
+                frame.image_height,
+                frame.image_width,
+            )
         )
         if not bool(mask.any()):
             raise YoloResultError(f"mask for instance {instance_index} is empty")
