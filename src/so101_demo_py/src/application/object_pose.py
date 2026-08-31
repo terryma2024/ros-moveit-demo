@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import math
+import re
+import time
 from collections.abc import Callable
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -238,3 +242,237 @@ class RgbdLocalizer:
             valid_depth_point_count=len(points_world),
             points_world=points_world,
         )
+
+
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectPoseRequest:
+    request_id: str
+    frame: Any
+    camera_info: Any
+    depth_message: Any
+    query: DetectionQuery
+    confidence_threshold: float
+    run_directory: Path
+    cold_start_latency_ms: float
+
+    def __post_init__(self) -> None:
+        from so101_demo.core.detection import DetectionFrame
+
+        if _REQUEST_ID.fullmatch(self.request_id) is None:
+            raise ValueError("request_id must be path-safe")
+        if not isinstance(self.frame, DetectionFrame):
+            raise ValueError("frame must be a DetectionFrame")
+        if not math.isfinite(self.confidence_threshold) or not (
+            0.0 <= self.confidence_threshold <= 1.0
+        ):
+            raise ValueError("confidence_threshold must be finite and in [0, 1]")
+        if not self.run_directory.is_absolute():
+            raise ValueError("run_directory must be absolute")
+        if not math.isfinite(self.cold_start_latency_ms) or self.cold_start_latency_ms < 0.0:
+            raise ValueError("cold_start_latency_ms must be finite and nonnegative")
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectPoseResult:
+    status: str
+    failure: str | None
+    request_id: str
+    source_stamp_ns: int
+    source_frame_id: str
+    model_id: str | None
+    weights_sha256: str | None
+    runtime_device: str | None
+    cold_start_latency_ms: float
+    inference_latency_ms: float | None
+    request_latency_ms: float
+    candidate_count: int
+    matching_candidate_count: int
+    published_cup_pose: bool
+    artifact_paths: tuple[str, ...]
+    center_world_xyz: tuple[float, float, float] | None = None
+
+    def to_document(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "failure": self.failure,
+            "request_id": self.request_id,
+            "source_stamp_ns": self.source_stamp_ns,
+            "source_frame_id": self.source_frame_id,
+            "model_id": self.model_id,
+            "weights_sha256": self.weights_sha256,
+            "runtime_device": self.runtime_device,
+            "cold_start_latency_ms": self.cold_start_latency_ms,
+            "inference_latency_ms": self.inference_latency_ms,
+            "request_latency_ms": self.request_latency_ms,
+            "candidate_count": self.candidate_count,
+            "matching_candidate_count": self.matching_candidate_count,
+            "published_cup_pose": self.published_cup_pose,
+            "artifact_paths": list(self.artifact_paths),
+            "center_world_xyz": (
+                None if self.center_world_xyz is None else list(self.center_world_xyz)
+            ),
+        }
+
+
+def _matching_count(
+    batch: DetectionBatch,
+    query: DetectionQuery,
+    confidence_threshold: float,
+) -> int:
+    return sum(
+        candidate.class_id == query.class_id
+        and candidate.confidence >= confidence_threshold
+        for candidate in batch.candidates
+    )
+
+
+def _result(
+    request: ObjectPoseRequest,
+    *,
+    start_ns: int,
+    monotonic_ns: Callable[[], int],
+    status: str,
+    failure: str | None,
+    batch: DetectionBatch | None,
+    matching_candidate_count: int,
+    published_cup_pose: bool,
+    artifact_paths: tuple[str, ...],
+    localized: LocalizedObject | None = None,
+) -> ObjectPoseResult:
+    return ObjectPoseResult(
+        status=status,
+        failure=failure,
+        request_id=request.request_id,
+        source_stamp_ns=request.frame.source_stamp_ns,
+        source_frame_id=request.frame.source_frame_id,
+        model_id=None if batch is None else batch.model_id,
+        weights_sha256=None if batch is None else batch.weights_sha256,
+        runtime_device=None if batch is None else batch.runtime_device,
+        cold_start_latency_ms=request.cold_start_latency_ms,
+        inference_latency_ms=None if batch is None else batch.inference_latency_ms,
+        request_latency_ms=(monotonic_ns() - start_ns) / 1_000_000.0,
+        candidate_count=0 if batch is None else len(batch.candidates),
+        matching_candidate_count=matching_candidate_count,
+        published_cup_pose=published_cup_pose,
+        artifact_paths=artifact_paths,
+        center_world_xyz=(
+            None if localized is None else localized.center_world_xyz
+        ),
+    )
+
+
+def detect_once(
+    *,
+    request: ObjectPoseRequest,
+    detector: Any,
+    selector: TargetSelector,
+    localizer: Any,
+    evidence_writer: Any,
+    pose_publisher: Callable[[LocalizedObject], None],
+    lookup_transform: Callable[[str, str, int], Any],
+    monotonic_ns: Callable[[], int] = time.monotonic_ns,
+) -> ObjectPoseResult:
+    start_ns = monotonic_ns()
+    batch: DetectionBatch | None = None
+    artifacts: tuple[str, ...] = ()
+    matching_count = 0
+
+    def finish(
+        failure: str,
+        *,
+        localized: LocalizedObject | None = None,
+    ) -> ObjectPoseResult:
+        result = _result(
+            request,
+            start_ns=start_ns,
+            monotonic_ns=monotonic_ns,
+            status="ERROR",
+            failure=failure,
+            batch=batch,
+            matching_candidate_count=matching_count,
+            published_cup_pose=False,
+            artifact_paths=artifacts,
+            localized=localized,
+        )
+        try:
+            result_path = evidence_writer.write_result(request, result)
+        except (OSError, ValueError):
+            if failure == "EVIDENCE_WRITE_FAILED":
+                return result
+            return replace(result, failure="EVIDENCE_WRITE_FAILED")
+        return replace(result, artifact_paths=(*artifacts, result_path))
+
+    try:
+        batch = detector.detect(request.frame, request.query)
+    except Exception:
+        return finish("INFERENCE_FAILED")
+    matching_count = _matching_count(
+        batch,
+        request.query,
+        request.confidence_threshold,
+    )
+    try:
+        artifacts = evidence_writer.write_detection(request, batch)
+    except (OSError, ValueError):
+        return finish("EVIDENCE_WRITE_FAILED")
+    try:
+        selected = selector.select(
+            batch,
+            request.query,
+            request.confidence_threshold,
+        )
+    except TargetSelectionError as error:
+        return finish(error.code)
+    try:
+        selected_path = evidence_writer.write_selected(request, selected)
+    except (OSError, ValueError):
+        return finish("EVIDENCE_WRITE_FAILED")
+    artifacts = (*artifacts, selected_path)
+    try:
+        localized = localizer.localize(
+            selected,
+            request.camera_info,
+            request.depth_message,
+            lookup_transform,
+        )
+    except LocalizationError as error:
+        return finish(error.code)
+    try:
+        cloud_path = evidence_writer.write_localized(request, localized)
+    except (OSError, ValueError):
+        return finish("EVIDENCE_WRITE_FAILED", localized=localized)
+    artifacts = (*artifacts, cloud_path)
+    staged = _result(
+        request,
+        start_ns=start_ns,
+        monotonic_ns=monotonic_ns,
+        status="OK",
+        failure=None,
+        batch=batch,
+        matching_candidate_count=matching_count,
+        published_cup_pose=False,
+        artifact_paths=artifacts,
+        localized=localized,
+    )
+    try:
+        result_path = evidence_writer.write_result(request, staged)
+    except (OSError, ValueError):
+        return finish("EVIDENCE_WRITE_FAILED", localized=localized)
+    artifacts = (*artifacts, result_path)
+    try:
+        pose_publisher(localized)
+    except Exception:
+        return finish("CLEANUP_FAILED", localized=localized)
+    completed = replace(
+        staged,
+        published_cup_pose=True,
+        artifact_paths=artifacts,
+    )
+    try:
+        evidence_writer.write_result(request, completed)
+    except (OSError, ValueError):
+        return replace(completed, status="ERROR", failure="EVIDENCE_WRITE_FAILED")
+    return completed
