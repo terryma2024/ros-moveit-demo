@@ -161,6 +161,17 @@ def _output_path(value: str) -> Path:
     return path
 
 
+def _output_root(value: str) -> Path:
+    if not value.strip():
+        raise argparse.ArgumentTypeError("must be a non-empty absolute directory path")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        raise argparse.ArgumentTypeError("must be an absolute directory path")
+    if path.exists() and not path.is_dir():
+        raise argparse.ArgumentTypeError("must be a directory path")
+    return path
+
+
 def _application_arguments(arguments: list[str] | None) -> list[str]:
     raw_arguments = list(sys.argv[1:] if arguments is None else arguments)
     if "--ros-args" not in raw_arguments:
@@ -202,6 +213,13 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--output-rgb", type=_output_path)
     parser.add_argument("--output-full-ply", type=_output_path)
     parser.add_argument("--output-preview", type=_output_path)
+    parser.add_argument(
+        "--profiling",
+        choices=("off", "summary", "trace"),
+        default="off",
+    )
+    parser.add_argument("--profiling-output-root", type=_output_root)
+    parser.add_argument("--profiling-session-id")
     parsed = parser.parse_args(_application_arguments(arguments))
 
     from so101_demo.ros.rgbd_cup_pose_node import (
@@ -233,7 +251,29 @@ def main(arguments: list[str] | None = None) -> int:
         )
     except ValueError as error:
         parser.error(str(error))
-    return run_rgbd_cup_pose(options)
+    if parsed.profiling == "off":
+        return run_rgbd_cup_pose(options)
+
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+
+    if parsed.profiling_output_root is None:
+        parser.error("enabled profiling requires --profiling-output-root")
+    if not parsed.profiling_session_id or not parsed.profiling_session_id.strip():
+        parser.error("enabled profiling requires --profiling-session-id")
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.parse(parsed.profiling),
+            output_root=parsed.profiling_output_root,
+            session_id=parsed.profiling_session_id.strip(),
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    try:
+        return run_rgbd_cup_pose(options, profiler=profiler)
+    finally:
+        profiler.close()
 
 
 if __name__ == "__main__":
