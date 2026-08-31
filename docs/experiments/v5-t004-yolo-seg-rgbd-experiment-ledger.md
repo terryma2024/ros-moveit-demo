@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 0c50e0309b833a5e507a35f095ba0244c513c854
+current_commit: 6f4a9af6fd65624458e96cdb0af44fcb2bab6e4c
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-028
+latest_checkpoint: CP-029
 next_experiment: EXP-028
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-029
+last_valid_experiment: EXP-016
+current_hypothesis: 已通过预检且无严格 shell flags 的 Aqua wrapper 可让 EXP-028 到达真实 stack
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 Aqua wrapper 尚未启动
+preserved_processes: EXP-017/025/026/027 无效证据均已持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-056 gui/501 Aqua 环境链、MuJoCo dylib dlopen与MPS通过；domain 228、两端 output与任务进程为空
+open_risks:
+  - Aqua UI task、controllers、真实 payload、MPS not-found、视觉证据与cleanup尚未观察
+next_command: 启动 EXP-028 Aqua owner并回读 PID/log/window/topic
+```
 
 ```yaml
 checkpoint_id: CP-028
@@ -913,7 +927,7 @@ next_experiment: EXP-028
 
 ```yaml
 experiment_id: EXP-028
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-027
 hypothesis: 不启用 errexit/nounset 的 gui/501 Aqua wrapper 可执行 macOS main-thread UI task，并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
