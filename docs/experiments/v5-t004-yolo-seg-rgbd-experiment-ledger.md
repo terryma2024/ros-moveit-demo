@@ -218,7 +218,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-009
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-008
 hypothesis: 35db5f5 冻结 amp=false 后，Ultralytics 不再执行需要外部 yolo26n.pt 的 AMP check，并可从本地锁定 base model 完成 CUDA smoke
 prediction: 日志显示 amp=False、CUDA:0 RTX 5080，不出现 Downloading/http；1 epoch、fraction 0.05 退出 0并生成非空 best.pt/last.pt/results.csv/args.yaml
@@ -246,11 +246,12 @@ provenance:
   gz_partition: NONE
 commands:
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-009, run_name=smoke, epochs_override=1, fraction=0.05)
-    exit_code: PENDING
+    exit_code: 0
   - command: yolo segment train cfg=.../training/smoke-exp-009/training-config.yaml
     exit_code: PENDING
 observed:
-  - NONE
+  - runtime config get_cfg 通过并明确 amp=false；dataset train/val/test 均解析到正式 evidence dataset
+  - source、base model、dataset、GPU 与唯一 output root已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
