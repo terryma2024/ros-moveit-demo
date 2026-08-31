@@ -4,6 +4,14 @@ from types import SimpleNamespace
 import subprocess
 
 
+def _ros2_arguments(argv) -> tuple[str, ...]:
+    command = tuple(argv)
+    for index, token in enumerate(command):
+        if token in {"run", "topic"}:
+            return command[index:]
+    raise AssertionError(f"ROS 2 subcommand missing: {command}")
+
+
 def test_cli_defaults_visible_and_requires_explicit_attach_session(tmp_path: Path) -> None:
     from so101_demo.cli.mujoco_rgbd_batch import build_parser
 
@@ -39,7 +47,7 @@ def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() 
 
     def runner(argv, **kwargs):
         calls.append((tuple(argv), kwargs))
-        command = tuple(argv[2:])
+        command = _ros2_arguments(argv)
         if command[:3] == ("run", "so101_demo_py", "motion_stack_ready"):
             return subprocess.CompletedProcess(
                 argv,
@@ -55,7 +63,7 @@ def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() 
 
     _wait_for_task_station(1.0, runner=runner, sleep=lambda _seconds: None)
 
-    commands = [call[0][2:] for call in calls]
+    commands = [_ros2_arguments(call[0]) for call in calls]
     assert any(
         command[:3] == ("run", "so101_demo_py", "motion_stack_ready")
         for command in commands
@@ -69,7 +77,7 @@ def test_task_station_readiness_reports_the_failed_stage() -> None:
 
     def runner(argv, **kwargs):
         del kwargs
-        command = tuple(argv[2:])
+        command = _ros2_arguments(argv)
         assert command[:3] == ("run", "so101_demo_py", "motion_stack_ready")
         return subprocess.CompletedProcess(
             argv,
