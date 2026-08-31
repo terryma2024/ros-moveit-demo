@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: a2c5e03
+current_commit: 867df726be0de8dbbae3ca58fb7c3323379853b1
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -21,11 +21,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-005
-next_experiment: EXP-006
+latest_checkpoint: CP-006
+next_experiment: EXP-007
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-006
+current_hypothesis: HYP-001
+working_tree_status: 分支已推送且本地/远端 SHA 一致；Linux 隔离 worktree 已完成聚焦测试与 renderer smoke
+owned_processes: NONE
+preserved_processes: ai-station 未重启；原 checkout 未跟踪账本与现有 tmux/桌面进程保持原状
+confirmed_conclusions:
+  - CONF-017 Gitee origin/codex/v5-t004-yolo-seg-rgbd 与本地均为 867df726be0de8dbbae3ca58fb7c3323379853b1
+  - CONF-018 ai-station 隔离 worktree 的 93 个感知、launch 与 source-layout 聚焦测试通过
+  - CONF-019 Linux MuJoCo EGL 生成 12 张真实 smoke 样本成功，0/1/2 分布 3/6/3；EGL 报告 DRI2 warning 但工件完整
+open_risks:
+  - 用户未授权重启，nvidia-smi gate 未通过，因此训练、真实 best.pt 和双平台 ROS/pick-place 均未开始
+next_command: 等待 ai-station 重启授权；授权后先验证 nvidia-smi，再训练，不跳过 gate
+```
 
 ```yaml
 checkpoint_id: CP-005
@@ -121,6 +137,22 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-006
+status: PASS_WITH_DRIVER_WARNING
+scope: Gitee publication readback and Linux isolated source/renderer smoke
+remote_branch_sha: 867df726be0de8dbbae3ca58fb7c3323379853b1
+linux_worktree: /data/work/ws_moveit-v5-t004
+focused_tests: 93 passed
+dataset_smoke:
+  sample_count: 12
+  visible_instance_distribution: {zero: 3, one: 6, two: 3}
+  copied_file_count: 38
+  copy_diff: clean
+warning: MuJoCo EGL emitted DRI2 screen warnings while still producing complete samples
+decision: renderer smoke accepted; CUDA training remains blocked by nvidia-smi gate
+```
 
 ```yaml
 experiment_id: EXP-005
