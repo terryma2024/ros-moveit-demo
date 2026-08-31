@@ -222,7 +222,7 @@ class YoloSegDetector:
                 source=source,
                 imgsz=self._imgsz,
                 device=self.runtime_device,
-                conf=0.0,
+                conf=0.25,
                 verbose=False,
             )
         except Exception as error:

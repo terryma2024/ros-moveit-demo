@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: b3c53f9bef6b1b08fa9c95b1217d6be1ad43f8a5
+current_commit: 5cdabefa303280fc2cc9501e6909f99553831c72
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,29 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-035
-next_experiment: EXP-031
+latest_checkpoint: CP-036
+next_experiment: EXP-032
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-036
+last_valid_experiment: EXP-016
+current_hypothesis: YOLO标准0.25候选下限可消除0.00噪声实例，使清晰overlay与request_latency<=2000同时成立
+working_tree_status: candidate-floor生产代码、RED/GREEN测试与本账本待提交；其余源 clean
+owned_processes: NONE；EXP-031 stack与感知进程均退出，domain 231无节点
+preserved_processes: EXP-031 stack/payload/MPS失败与overlay证据已同步正式 evidence root；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-066 EXP-031真实RGB-D 640x480 rgb8/32FC1对齐，finite positive depth 307200，三controllers active，exact-window Viewer有效
+  - CONF-067 Aqua MPS生产请求正确返回TARGET_NOT_FOUND且不发布pose，但297个约0.00候选令overlay不可读、request_latency=3033.05ms，构成有效产品失败
+  - CONF-068 TDD RED捕获conf=0.0；改为YOLO标准0.25后adapter 21/21、包级890/890通过，Mac候选install重建完成
+disproven_routes:
+  - DISPROVED-015 不得把所有NMS前近零分数proposals当作业务候选；它破坏overlay清晰度与2秒请求门槛
+open_risks:
+  - EXP-032 必须用新FULL_RESTART证明0.25下限下候选数、topic、延迟和not-found全部合格
+next_command: 提交候选下限修复；同步并重建Linux安装态，随后预登记EXP-032正式重跑
+```
 
 ```yaml
 checkpoint_id: CP-035
@@ -635,10 +653,10 @@ next_experiment: EXP-025
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-031
+prior_experiment: EXP-032
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-031 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-032 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -1147,7 +1165,7 @@ next_experiment: EXP-031
 
 ```yaml
 experiment_id: EXP-031
-status: RUNNING
+status: FAILED_VALID
 prior_experiment: EXP-030
 hypothesis: 保留overlay生成的完整DYLD依赖闭包并把共享farm追加到末尾，可让前台PTY Aqua完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: core/msgs/plugins/dispatcher同属主安装；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
@@ -1173,13 +1191,59 @@ provenance:
   gz_partition: v5t004-mac-exp031
 commands:
   - command: launchctl asuser 501 Aqua foreground tty=true with overlay DYLD closure then farm; launch v5_no_cup, then payload/perception/visual/cleanup observers
+    exit_code: 1
+observed:
+  - 主安装core/msgs/plugins/dispatcher同世代；日志出现Submitting/Running UI task、main-thread GLFW、Sim ready与10Hz CameraPlugin
+  - 三controllers active；RGB-D probe记录10.0Hz、640x480、rgb8/32FC1、同stamp、307200/307200 finite positive depth
+  - exact-window ID 3498显示v5_no_cup仅橙色瓶子与干扰物，Viewer status Running
+  - 普通受限shell的首次MPS请求INVALID并在产品前DEVICE_UNAVAILABLE；Aqua probe确认torch MPS=true并执行正式adapter
+  - Aqua MPS请求返回TARGET_NOT_FOUND、matching=0、published_cup_pose=false、inference=412.80ms、相同weight SHA
+  - 但conf=0.0产生297个约0.00候选，overlay被标签覆盖且request_latency=3033.05ms>2000；observer因25秒早于约60秒冷启动而未收到短暂topic
+  - stack Ctrl-C exit 0、全部child cleanly退出、domain 231无节点；完整证据已同步正式 root
+inferred: [NONE]
+conclusion: FAILED_VALID；目标拒绝正确，但候选噪声导致overlay和请求延迟两项产品门禁失败
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-031-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-031-bottle-only
+decision: PRESERVE；TDD修复detector候选下限后以新ID EXP-032 FULL_RESTART
+next_experiment: EXP-032
+```
+
+```yaml
+experiment_id: EXP-032
+status: PLANNED
+prior_experiment: EXP-031
+hypothesis: YOLO标准candidate floor=0.25可在保持所有模型候选与selector 0.50边界的同时，让 bottle_only overlay清晰且request_latency<=2000
+prediction: candidate_count=0、matching_count=0、TARGET_NOT_FOUND、runtime_device=mps、request_latency<=2000、无/cup_pose
+single_variable: 相对 FAILED_VALID EXP-031 仅把YoloSegDetector model candidate floor从0.0改为0.25；场景、权重、selector阈值与平台不变
+lifecycle: FULL_RESTART
+preconditions:
+  - candidate-floor patch经RED/GREEN与包级890/890；Mac install重建；Linux install必须在运行前同步重建
+  - weight SHA=f281d252...40781、device=mps、selector threshold=0.50、imgsz=640
+  - gui/501 foreground PTY、完整overlay DYLD闭包后接farm；ROS_DOMAIN_ID=232、GZ_PARTITION=v5t004-mac-exp032与两端output为空
+success_criteria:
+  - 主安装闭包、main-thread UI、Viewer、三controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo与finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、candidate_count=0、matching_count=0、request_latency<=2000、无新/cup_pose
+  - detections与overlay topic被120秒observer接收；overlay清晰、exact-window MuJoCo、退出后零owned process/publisher完整
+failure_criteria:
+  - 候选/延迟/Viewer/controller/payload/not-found/device/topic/GUI/cleanup任一失败
+invalid_criteria:
+  - source/install/foreground PTY/Aqua/dylib/domain/partition/output/FULL_RESTART或observer窗口污染
+provenance:
+  source_commit: PENDING candidate-floor commit based on 5cdabefa303280fc2cc9501e6909f99553831c72
+  install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 232
+  gz_partition: v5t004-mac-exp032
+commands:
+  - command: FULL_RESTART v5_no_cup plus 120s topic observer and Aqua MPS one-shot request
     exit_code: PENDING
 observed: [NONE]
 inferred: [NONE]
 conclusion: PENDING
 evidence:
-  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-031-bottle-only
-  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-031-bottle-only
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-032-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-032-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
