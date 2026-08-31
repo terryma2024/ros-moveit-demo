@@ -250,7 +250,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-011
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-010
 hypothesis: 将本机 DejaVuSans.ttf 以锁定 SHA 预置为 Ultralytics USER_CONFIG_DIR/Arial.ttf，可满足无条件字体检查并让 amp=false、YOLO_OFFLINE=true smoke 零下载完成
 prediction: 预置字体 SHA 与系统源一致；1 epoch、fraction 0.05 日志无 Downloading/yolo26n/PyPI update，exit-code.txt 精确为 0，关键训练工件非空
@@ -285,7 +285,7 @@ commands:
   - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-011/training-config.yaml
     exit_code: PENDING
 observed:
-  - NONE
+  - source、GPU、dataset、base model、字体 source SHA、进程所有权与独立 output root 已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
