@@ -77,27 +77,93 @@ def _default_outlier_cleaner(
     cluster_eps_m: float,
     cluster_min_points: int,
 ) -> np.ndarray:
-    from so101_demo.cli.rgbd_point_cloud import _open3d_cloud
-
-    _, cloud = _open3d_cloud(points, np.zeros_like(points))
-    labels = np.asarray(
-        cloud.cluster_dbscan(
-            eps=cluster_eps_m,
-            min_points=cluster_min_points,
-            print_progress=False,
-        )
-    )
-    cluster_ids = np.unique(labels[labels >= 0])
-    if len(cluster_ids) == 0:
+    values = np.asarray(points, dtype=np.float64)
+    if values.ndim != 2 or values.shape[1:] != (3,) or not np.isfinite(values).all():
+        raise ValueError("outlier cleanup points must be finite XYZ values")
+    if not math.isfinite(cluster_eps_m) or cluster_eps_m <= 0.0:
+        raise ValueError("cluster_eps_m must be finite and positive")
+    if cluster_min_points <= 0:
+        raise ValueError("cluster_min_points must be positive")
+    if len(values) == 0:
         return np.empty((0, 3), dtype=np.float64)
-    full_median = np.median(points, axis=0)
-    selected_id = min(
-        (int(cluster_id) for cluster_id in cluster_ids),
-        key=lambda cluster_id: float(
-            np.linalg.norm(np.median(points[labels == cluster_id], axis=0) - full_median)
+
+    voxel_coordinates = np.floor(values / cluster_eps_m).astype(np.int64)
+    voxels, point_voxel_ids, voxel_counts = np.unique(
+        voxel_coordinates,
+        axis=0,
+        return_inverse=True,
+        return_counts=True,
+    )
+    voxel_lookup = {
+        tuple(int(component) for component in coordinate): voxel_id
+        for voxel_id, coordinate in enumerate(voxels)
+    }
+    neighbor_offsets = tuple(
+        (x_offset, y_offset, z_offset)
+        for x_offset in (-1, 0, 1)
+        for y_offset in (-1, 0, 1)
+        for z_offset in (-1, 0, 1)
+    )
+
+    def neighboring_voxels(voxel_id: int) -> set[int]:
+        coordinate = voxels[voxel_id]
+        return {
+            neighbor_id
+            for offset in neighbor_offsets
+            if (
+                neighbor_id := voxel_lookup.get(
+                    tuple(
+                        int(coordinate[axis] + offset[axis])
+                        for axis in range(3)
+                    )
+                )
+            )
+            is not None
+        }
+
+    core_voxels = {
+        voxel_id
+        for voxel_id in range(len(voxels))
+        if sum(voxel_counts[neighbor_id] for neighbor_id in neighboring_voxels(voxel_id))
+        >= cluster_min_points
+    }
+    if not core_voxels:
+        return np.empty((0, 3), dtype=np.float64)
+
+    components: list[set[int]] = []
+    unseen = set(core_voxels)
+    while unseen:
+        pending = [unseen.pop()]
+        component: set[int] = set()
+        while pending:
+            voxel_id = pending.pop()
+            component.add(voxel_id)
+            connected = neighboring_voxels(voxel_id) & unseen
+            unseen.difference_update(connected)
+            pending.extend(connected)
+        components.append(component)
+
+    clusters: list[np.ndarray] = []
+    for component in components:
+        included_voxels: set[int] = set()
+        for voxel_id in component:
+            included_voxels.update(neighboring_voxels(voxel_id))
+        point_indices = np.flatnonzero(
+            np.isin(point_voxel_ids, tuple(sorted(included_voxels)))
+        )
+        if len(point_indices) >= cluster_min_points:
+            clusters.append(point_indices)
+    if not clusters:
+        return np.empty((0, 3), dtype=np.float64)
+
+    full_median = np.median(values, axis=0)
+    selected_indices = min(
+        clusters,
+        key=lambda indices: float(
+            np.linalg.norm(np.median(values[indices], axis=0) - full_median)
         ),
     )
-    return np.asarray(points[labels == selected_id], dtype=np.float64)
+    return np.asarray(values[selected_indices], dtype=np.float64)
 
 
 class RgbdLocalizer:

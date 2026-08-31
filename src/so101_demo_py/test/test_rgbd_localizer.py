@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import builtins
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from so101_demo.application.object_pose import LocalizationError, RgbdLocalizer
+from so101_demo.application.object_pose import (
+    LocalizationError,
+    RgbdLocalizer,
+    _default_outlier_cleaner,
+)
 from so101_demo.cli.rgbd_point_cloud import build_mask_point_cloud
 from so101_demo.core.detection import DetectionCandidate
 
@@ -193,6 +198,50 @@ def test_localizer_warm_up_primes_outlier_cleanup_once() -> None:
     assert len(calls) == 1
     assert calls[0].shape == (8, 3)
     assert np.isfinite(calls[0]).all()
+
+
+def test_default_outlier_cleanup_has_no_open3d_runtime_dependency(monkeypatch) -> None:
+    main_cluster = np.column_stack(
+        (
+            np.linspace(-0.008, 0.008, 25),
+            np.zeros(25),
+            np.full(25, 0.5),
+        )
+    )
+    secondary_cluster = np.column_stack(
+        (
+            np.linspace(0.192, 0.208, 8),
+            np.full(8, 0.2),
+            np.full(8, 0.7),
+        )
+    )
+    points = np.vstack((main_cluster, secondary_cluster))
+    original_import = builtins.__import__
+
+    def reject_open3d(name, *args, **kwargs):
+        if name == "open3d" or name.startswith("open3d."):
+            raise ImportError("Open3D intentionally unavailable")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_open3d)
+
+    cleaned = _default_outlier_cleaner(points, 0.02, 5)
+
+    np.testing.assert_allclose(cleaned, main_cluster)
+
+
+def test_default_outlier_cleanup_rejects_only_isolated_voxels() -> None:
+    isolated = np.column_stack(
+        (
+            np.arange(8, dtype=np.float64) * 0.1,
+            np.zeros(8),
+            np.full(8, 0.5),
+        )
+    )
+
+    cleaned = _default_outlier_cleaner(isolated, 0.02, 5)
+
+    assert cleaned.shape == (0, 3)
 
 
 def test_localizer_rejects_insufficient_depth_before_tf_lookup() -> None:
