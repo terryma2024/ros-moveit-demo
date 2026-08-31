@@ -77,11 +77,11 @@ def _result(
     )
 
 
-def test_instance_mask_trims_one_boundary_pixel_without_destroying_tiny_masks() -> None:
-    mask = np.zeros((7, 7), dtype=bool)
-    mask[1:6, 1:6] = True
-    expected = np.zeros((7, 7), dtype=bool)
-    expected[2:5, 2:5] = True
+def test_instance_mask_trims_two_boundary_pixels_without_destroying_tiny_masks() -> None:
+    mask = np.zeros((9, 9), dtype=bool)
+    mask[1:8, 1:8] = True
+    expected = np.zeros((9, 9), dtype=bool)
+    expected[3:6, 3:6] = True
 
     np.testing.assert_array_equal(_trim_mask_boundary(mask), expected)
 
