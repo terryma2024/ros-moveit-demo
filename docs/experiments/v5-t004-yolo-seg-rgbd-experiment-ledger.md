@@ -233,7 +233,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-010
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-009
 hypothesis: 使用 YOLO_OFFLINE=true 并修正退出码 capture 后，同一 35db5f5 amp=false 配置可产生无自动下载且退出证据完整的 CUDA smoke
 prediction: 1 epoch、fraction 0.05 训练退出 0；日志无 Downloading、yolo26n.pt 或 PyPI update 提示；exit-code.txt 内容精确为单行 0；关键工件非空
@@ -264,7 +264,7 @@ commands:
   - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-010/training-config.yaml
     exit_code: PENDING
 observed:
-  - NONE
+  - source、GPU、dataset、base model、进程所有权与独立 output root 已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
