@@ -88,21 +88,24 @@ def test_one_shot_outputs_wait_for_discovery_and_ack_before_cleanup() -> None:
 
     detections = Publisher("detections")
     overlay = Publisher("overlay")
+    pose = Publisher("pose")
 
     def spin_once(timeout_s: float) -> None:
         events.append("spin")
         clock[0] += timeout_s
         detections.discovered = True
         overlay.discovered = True
+        pose.discovered = True
 
     assert _wait_for_output_subscribers(
-        (detections, overlay),
+        (detections, overlay, pose),
         spin_once=spin_once,
         timeout_s=0.5,
         monotonic=lambda: clock[0],
     )
     _publish_and_confirm(detections, object(), ack_timeout=object())
     _publish_and_confirm(overlay, object(), ack_timeout=object())
+    _publish_and_confirm(pose, object(), ack_timeout=object())
 
     assert events == [
         "spin",
@@ -110,6 +113,8 @@ def test_one_shot_outputs_wait_for_discovery_and_ack_before_cleanup() -> None:
         "ack:detections",
         "publish:overlay",
         "ack:overlay",
+        "publish:pose",
+        "ack:pose",
     ]
 
 
