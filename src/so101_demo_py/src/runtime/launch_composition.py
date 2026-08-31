@@ -37,7 +37,11 @@ from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
 from .camera_tf import camera_static_transform_nodes
 from .composition import backend_capabilities
-from .provenance import installed_bundle
+from .provenance import (
+    InstalledExecutionIdentity,
+    installed_bundle,
+    resolve_installed_execution_identity,
+)
 
 COMMON_ARGUMENTS = {
     "run_mode",
@@ -462,6 +466,21 @@ def _mujoco_perception_execute_actions(
     ]
 
 
+def _mujoco_text_pick_agent_execute_actions(
+    context,
+    share: Path,
+    session_id: str,
+    *,
+    instruction: str,
+    evidence_paths: _PerceptionEvidencePaths,
+    perception_timeout: str,
+    cup_pose_timeout: str,
+    execution_identity: InstalledExecutionIdentity,
+    exit_status: PerceptionLaunchExitStatus,
+):
+    return []
+
+
 def _materialize_gazebo_model(context, share: Path):
     from ..backends.gazebo.model_asset import materialize_prepared_model
 
@@ -832,6 +851,70 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     )
 
 
+def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunchExitStatus):
+    instruction = LaunchConfiguration("instruction").perform(context)
+    run_mode = LaunchConfiguration("run_mode").perform(context)
+    execute = LaunchConfiguration("execute").perform(context)
+    skip_confirmation = LaunchConfiguration("skip_confirmation").perform(context)
+    headless = LaunchConfiguration("headless").perform(context)
+    sensor_rendering = LaunchConfiguration("sensor_rendering").perform(context)
+    if not instruction.strip():
+        raise RuntimeError("instruction must be non-empty")
+    if run_mode != "execute":
+        raise RuntimeError("text-agent launch requires run_mode=execute")
+    if execute != "true":
+        raise RuntimeError("text-agent launch requires execute:=true")
+    if skip_confirmation != "true":
+        raise RuntimeError("text-agent launch requires skip_confirmation:=true")
+    if sensor_rendering != "true":
+        raise RuntimeError("text-agent launch requires sensor_rendering=true")
+    if headless not in {"true", "false"}:
+        raise RuntimeError("headless must be true or false")
+
+    initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
+    if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
+        raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
+
+    _positive_finite_launch_value(context, "readiness_timeout_s")
+    perception_timeout = _positive_finite_launch_value(
+        context, "perception_startup_timeout_s"
+    )
+    cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
+
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError(
+            "session_id must start with an alphanumeric character and contain only "
+            "letters, digits, dot, underscore, or hyphen"
+        )
+
+    evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
+    if not evidence_file.is_absolute() or evidence_file.name in {"", ".", ".."}:
+        raise RuntimeError("evidence_file must be a usable absolute file path")
+    if os.path.lexists(evidence_file):
+        raise RuntimeError("evidence_file must not already exist")
+    scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+    if not scene.is_absolute():
+        raise RuntimeError("mujoco_scene must be an absolute file path")
+    if not scene.is_file():
+        raise RuntimeError(f"mujoco_scene does not exist: {scene}")
+
+    execution_identity = resolve_installed_execution_identity()
+    share = Path(get_package_share_directory("so101_demo_py"))
+    evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
+    return _mujoco_text_pick_agent_execute_actions(
+        context,
+        share,
+        session_id,
+        instruction=instruction,
+        evidence_paths=evidence_paths,
+        perception_timeout=perception_timeout,
+        cup_pose_timeout=cup_pose_timeout,
+        execution_identity=execution_identity,
+        exit_status=exit_status,
+    )
+
+
 def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescription:
     if backend not in {"mujoco", "gazebo"}:
         raise ValueError(f"unsupported launch backend: {backend}")
@@ -919,6 +1002,53 @@ def build_perception_pick_place_launch_description(
             DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
+                kwargs={"exit_status": exit_status},
+            ),
+        ]
+    )
+
+
+def build_text_pick_agent_launch_description(
+    exit_status: PerceptionLaunchExitStatus | None = None,
+) -> LaunchDescription:
+    """Build the explicit MuJoCo natural-language RGB-D execute graph."""
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    unique = uuid.uuid4().hex
+    if exit_status is None:
+        exit_status = PerceptionLaunchExitStatus()
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("instruction"),
+            DeclareLaunchArgument(
+                "run_mode", default_value="dry_run", choices=("dry_run", "execute")
+            ),
+            DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument(
+                "skip_confirmation", default_value="false", choices=("true", "false")
+            ),
+            DeclareLaunchArgument("headless", default_value="false", choices=("true", "false")),
+            DeclareLaunchArgument(
+                "sensor_rendering", default_value="true", choices=("true",)
+            ),
+            DeclareLaunchArgument("session_id", default_value=unique),
+            DeclareLaunchArgument(
+                "evidence_file", default_value=f"/tmp/so101-text-agent-{unique}.json"
+            ),
+            DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+            DeclareLaunchArgument(
+                "mujoco_scene",
+                default_value=str(share / "assets/mujoco/scene.xml"),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_initial_keyframe",
+                default_value="task_start",
+                choices=MUJOCO_CUP_KEYFRAMES,
+            ),
+            DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
+            DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
+            OpaqueFunction(
+                function=_configured_text_pick_agent_actions,
                 kwargs={"exit_status": exit_status},
             ),
         ]
