@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: cc5bce3b3f4c0a30a1453fef39a35f3b2d5b2d90
+current_commit: 0c50e0309b833a5e507a35f095ba0244c513c854
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-027
-next_experiment: EXP-027
+latest_checkpoint: CP-028
+next_experiment: EXP-028
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-028
+last_valid_experiment: EXP-016
+current_hypothesis: 不启用 errexit/nounset 的 Aqua wrapper 可让 EXP-028 到达真实 stack
+working_tree_status: 仅本账本 INVALID/替代计划待提交；源/测试 clean
+owned_processes: NONE；PID 23072 已退出，domain 227 无 ROS 节点
+preserved_processes: EXP-027 的空 stack.log 与 PID 文件已同步正式 evidence root；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-054 EXP-027 在任何 ROS child、topic 或产品输出产生前退出；Aqua owner消失且 stack.log为空
+  - CONF-055 相同完整 source/dylib/MPS 环境链在不启用 set -e/-u 的 gui/501 Aqua 预检中通过
+disproven_routes:
+  - DISPROVED-011 不得给 ROS overlay source chain启用 errexit；可选 setup脚本返回值会让 wrapper静默退出
+open_risks:
+  - EXP-028 仍须证明 Viewer、controllers、真实 RGB-D、MPS not-found、GUI证据与干净退出
+next_command: 预登记并启动 EXP-028；相对 EXP-027 仅移除 wrapper errexit
+```
 
 ```yaml
 checkpoint_id: CP-027
@@ -511,10 +528,10 @@ next_experiment: EXP-025
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-027
+prior_experiment: EXP-028
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-027 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-028 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -854,7 +871,7 @@ next_experiment: EXP-027
 
 ```yaml
 experiment_id: EXP-027
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-026
 hypothesis: 兼容 ROS setup 的 gui/501 Aqua wrapper 可执行 macOS main-thread UI task，并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
@@ -879,15 +896,56 @@ provenance:
   gz_partition: v5t004-mac-exp027
 commands:
   - command: compatible launchctl asuser 501 Aqua zsh; launch v5_no_cup, then payload/perception/visual/cleanup observers
-    exit_code: PENDING
+    exit_code: 1
 observed:
   - wrapper syntax、gui/501 Aqua、domain 227、local/remote output absence 与 task process isolation通过
   - 产品 source/install/weight/device/scene/threshold 与 EXP-026 不变
+  - Aqua owner PID 23072 在任何 ROS child、topic或产品输出产生前退出；stack.log为空，domain 227无节点
+  - 空 stack.log与PID文件已同步正式 evidence root；未删除任何无效证据
 inferred: [NONE]
-conclusion: PENDING
+conclusion: INVALID；wrapper errexit在 source chain中静默退出，未执行产品路径
 evidence:
   - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-027-bottle-only
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-027-bottle-only
+decision: PRESERVE；以新 ID EXP-028 仅移除 wrapper errexit，产品参数不变
+next_experiment: EXP-028
+```
+
+```yaml
+experiment_id: EXP-028
+status: PLANNED
+prior_experiment: EXP-027
+hypothesis: 不启用 errexit/nounset 的 gui/501 Aqua wrapper 可执行 macOS main-thread UI task，并让 bottle_only 到达真实 RGB-D/MPS not-found边界
+prediction: Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
+single_variable: 相对 INVALID EXP-027 仅移除 wrapper errexit；产品环境和参数不变
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - gui/501 Aqua、相同完整 source/dylib/MPS 环境链预检通过；ROS_DOMAIN_ID=228、GZ_PARTITION=v5t004-mac-exp028 与 output为空
+success_criteria:
+  - Aqua launch证明 main-thread UI、Viewer、三 controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo 与 finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、matching_count=0、latency<=2000、无新 /cup_pose
+  - exact-window MuJoCo和overlay/truth、安装态 provenance、退出后零 owned process/publisher完整
+failure_criteria:
+  - Viewer/controller/payload/not-found/device/latency/GUI/cleanup 任一失败
+invalid_criteria:
+  - wrapper/Aqua PID/env/domain/partition/output/source/install provenance污染或非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: current so101_demo_py plus primary project mujoco runtime
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 228
+  gz_partition: v5t004-mac-exp028
+commands:
+  - command: launchctl asuser 501 Aqua zsh without strict shell flags; launch v5_no_cup, then payload/perception/visual/cleanup observers
+    exit_code: PENDING
+observed:
+  - 同一 Aqua source/dylib/MPS 环境链的 env-only预检通过；session=0、dlopen_ok=1、MPS available=true
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-028-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-028-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
