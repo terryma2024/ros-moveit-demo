@@ -325,7 +325,7 @@ next_experiment: EXP-015
 
 ```yaml
 experiment_id: EXP-013
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-012
 hypothesis: full-exp-012 best.pt 可在 Linux CUDA YoloSegDetector 上对固定 seed 300001 输出唯一 plastic_cup 与非空 full-resolution mask
 prediction: runtime_device=cuda、weights SHA=f281d252...40781、candidate_count=1、class=plastic_cup、mask非空且 inference_latency_ms<=2000
@@ -354,7 +354,7 @@ commands:
   - command: instantiate YoloSegDetector(requested_device=cuda, allow_cpu_fallback=false) and detect dataset/images/test/000300001.png
     exit_code: PENDING
 observed:
-  - NONE
+  - source、CUDA、best.pt hash、seed 300001 image/truth与独立 Linux output 已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
