@@ -673,3 +673,33 @@ def test_cli_enabled_profiling_writes_correlated_agent_stream(
         "agent.validate_command",
         "agent.dispatch",
     }
+
+
+def test_cli_can_build_a_separate_dynamic_runtime_stream(tmp_path: Path) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    options = text_pick_agent.build_parser().parse_args(
+        [
+            "--instruction",
+            "pick",
+            "--profiling",
+            "summary",
+            "--profiling-output-root",
+            str(tmp_path / "profiling"),
+            "--profiling-session-id",
+            "session-1",
+        ]
+    )
+
+    profiler = text_pick_agent._build_semantic_profiler(
+        options,
+        request_id="request-1",
+        process_role="dynamic-runtime",
+    )
+    assert profiler is not None
+    profiler.close()
+
+    stream = tmp_path / "profiling/processes/dynamic-runtime.events.jsonl"
+    assert stream.is_file()
+    anchor = json.loads(stream.read_text().splitlines()[0])
+    assert anchor["process_role"] == "dynamic-runtime"

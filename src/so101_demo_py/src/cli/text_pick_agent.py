@@ -9,6 +9,7 @@ import math
 import os
 import re
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
@@ -276,6 +277,7 @@ def _build_semantic_profiler(
     options,
     *,
     request_id: str,
+    process_role: str = "text-agent",
 ) -> SemanticProfiler | None:
     mode = ProfilingMode.parse(options.profiling)
     if mode is ProfilingMode.OFF:
@@ -307,7 +309,7 @@ def _build_semantic_profiler(
             mode=mode,
             output_root=output_root,
             session_id=options.profiling_session_id.strip(),
-            process_role="text-agent",
+            process_role=process_role,
             request_id=request_id,
             source_commit=source_commit,
             installed_prefix=installed_prefix,
@@ -366,9 +368,20 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
             _write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
             return 1
 
+    profiler = None
+    runtime_profiler = None
     try:
         profiler = _build_semantic_profiler(options, request_id=request_id)
+        if context is not None and profiler is not None:
+            runtime_profiler = _build_semantic_profiler(
+                options,
+                request_id=request_id,
+                process_role="dynamic-runtime",
+            )
+            context = replace(context, profiler=runtime_profiler)
     except (OSError, TypeError, ValueError):
+        if profiler is not None:
+            profiler.close()
         _write_document(_rejection(request_id, "PROFILING_CONFIGURATION_INVALID"))
         return 1
     try:
@@ -414,6 +427,8 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
             return 1
         return _exit_code(result.status)
     finally:
+        if runtime_profiler is not None:
+            runtime_profiler.close()
         if profiler is not None:
             profiler.close()
 
