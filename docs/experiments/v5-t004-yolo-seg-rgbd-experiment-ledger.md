@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 6bb16778d053a8bd9bb67c71fd0a1430b94ba2aa
+current_commit: 25680adad79384c41f9f8b4d6e962a8c2091881e
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -22,11 +22,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-008
+latest_checkpoint: CP-009
 next_experiment: EXP-008
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-007
+current_hypothesis: HYP-001
+working_tree_status: 训练配置归一化修复已提交并推送为 25680ad；ai-station 隔离 worktree clean detached at 25680ad
+owned_processes: NONE；尚未启动训练
+preserved_processes: ai-station 主 checkout 用户账本保持不变；正式 dataset/base model/reboot evidence 不覆盖
+confirmed_conclusions:
+  - CONF-025 Ultralytics 8.4.115 明确拒绝项目元数据 class_names，原 training.yaml 不能直接作为 cfg
+  - CONF-026 原 dataset.yaml 的 path 点号被解析到 /home/lenovo/images/val，不能定位正式 evidence dataset
+  - CONF-027 25680ad 新增 runtime 配置归一化，RED 为模块缺失，GREEN 为新增 3/3、聚焦 16/16、Mac package 888/888
+open_risks:
+  - 新 runtime 配置尚未经过 Ultralytics get_cfg/check_det_dataset 与真实 CUDA 训练
+next_command: 准备 /training/smoke-exp-008 并启动 1 epoch、fraction 0.05 的 CUDA segmentation smoke
+```
 
 ```yaml
 checkpoint_id: CP-008
@@ -169,6 +185,50 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-008
+status: PLANNED
+prior_experiment: EXP-007
+hypothesis: 25680ad 生成的 runtime training/dataset 配置可被 Ultralytics 8.4.115 接受，并能从本地锁定 yolo11n-seg.pt 在 RTX 5080 上完成一次短训练
+prediction: get_cfg 与 check_det_dataset 均通过且指向正式 dataset；1 epoch、fraction 0.05 训练使用 CUDA、退出 0，并生成非空 best.pt 和训练指标
+single_variable: 首次执行归一化后的真实 CUDA 训练；smoke 覆盖 epochs=1、fraction=0.05，其余冻结 training.yaml 参数
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-007 nvidia-smi 与 CUDA 张量 gate 有效通过
+  - source commit 为 25680adad79384c41f9f8b4d6e962a8c2091881e，隔离 worktree clean
+  - 1200 样本 dataset 与本地 base model SHA256 55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152 均存在
+  - output root /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-008 不存在
+success_criteria:
+  - runtime training config 不含 class_names，model/data/project 均为正式 evidence root 下绝对路径
+  - runtime dataset config 的 path 为正式 1200 样本 dataset 根，Ultralytics 检查得到 800/200/200
+  - 日志证明 device=CUDA:0 NVIDIA GeForce RTX 5080，训练命令退出 0
+  - 生成非空 best.pt、last.pt、results.csv 与 args.yaml
+failure_criteria:
+  - 配置仍被拒绝、数据路径错误、CUDA 未使用、训练异常退出或关键工件缺失
+invalid_criteria:
+  - source/dataset/model provenance 不匹配，或存在另一个本任务训练进程污染 GPU/输出目录
+provenance:
+  source_commit: 25680adad79384c41f9f8b4d6e962a8c2091881e
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/yolo
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: prepare_training_run(..., output_root=.../training/smoke-exp-008, run_name=smoke, epochs_override=1, fraction=0.05)
+    exit_code: PENDING
+  - command: yolo segment train cfg=.../training/smoke-exp-008/training-config.yaml
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-008
+decision: PENDING
+next_experiment: EXP-009
+```
 
 ```yaml
 experiment_id: EXP-007
