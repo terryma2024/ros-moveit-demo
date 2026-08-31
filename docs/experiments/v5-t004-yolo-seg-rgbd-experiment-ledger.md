@@ -27,11 +27,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-039
-next_experiment: EXP-034
+latest_checkpoint: CP-040
+next_experiment: EXP-018
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-040
+last_valid_experiment: EXP-034
+current_hypothesis: 当前ff8caef与同一权重可在task_start唯一选择plastic_cup并从真实Depth发布准确/cup_pose
+working_tree_status: 仅本账本VALID/RUNNING转换待提交；生产源与测试clean
+owned_processes: NONE；EXP-034前台PTY exit 0，domain 219无节点
+preserved_processes: EXP-034有效证据已同步正式evidence root；用户进程/文件与ai-station主checkout未触碰
+confirmed_conclusions:
+  - CONF-078 EXP-034真实RGB-D、Viewer、controllers、MPS、weight SHA、candidate=0与TARGET_NOT_FOUND全部通过
+  - CONF-079 EXP-034 observer收到空detections与640x480 rgb8 overlay各1条、同stamp、cup_pose=0；inference247.50ms、request319.31ms
+  - CONF-080 EXP-034 overlay清晰，Ctrl-C后MuJoCo/MoveIt clean且domain 219无节点；Mac bottle-only矩阵项VALID
+open_risks:
+  - EXP-018首次生产定位仍须验证exact-stamp TF、唯一mask、IoU、深度点、world error与新鲜/cup_pose
+next_command: domain 218下启动task_start、任务自有静态TF、120秒observer与Aqua MPS one-shot
+```
 
 ```yaml
 checkpoint_id: CP-039
@@ -700,15 +716,15 @@ next_experiment: EXP-025
 
 ```yaml
 experiment_id: EXP-018
-status: PLANNED
-prior_experiment: EXP-032
+status: RUNNING
+prior_experiment: EXP-034
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-032 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对VALID bottle-only EXP-034仅 keyframe=task_start、目标数从0变1并启用定位所需静态TF；代码/权重/阈值/平台不变
 lifecycle: FULL_RESTART
 preconditions:
-  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
-  - ROS_DOMAIN_ID=222、GZ_PARTITION=v5t004-mac-exp018 为空；output不存在
+  - source/install=ff8caef、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=218、GZ_PARTITION=v5t004-mac-exp018 为空；output不存在
 success_criteria:
   - 同 stamp 的真实 640x480 rgb8/32FC1/CameraInfo、finite positive depth、exact-stamp tf2与 runtime_device=mps
   - matching_count=1、plastic_cup mask IoU>=0.80、world position error<0.01m、request_latency_ms<=2000、新鲜 /cup_pose
@@ -718,10 +734,10 @@ failure_criteria:
 invalid_criteria:
   - provenance、domain、partition、output或 FULL_RESTART 污染
 provenance:
-  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
-  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
-  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
-  ros_domain_id: 222
+  source_commit: ff8caef360715b41c0fa57f2e7c4f4b96eb5af5f
+  install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
+  runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 218
   gz_partition: v5t004-mac-exp018
 commands:
   - command: fresh visible MuJoCo task_start stack plus one-shot rgbd_object_pose and acceptance observers
@@ -1345,7 +1361,7 @@ next_experiment: EXP-034
 
 ```yaml
 experiment_id: EXP-034
-status: RUNNING
+status: VALID
 prior_experiment: EXP-033
 hypothesis: 在推理前发现detections/overlay订阅者并在发布后等待可靠DDS ack，可让一次性not-found结果被外部observer接收
 prediction: candidate_count=0、matching_count=0、TARGET_NOT_FOUND、runtime_device=mps、request_latency<=2000、observer detections>=1/overlay>=1/cup_pose=0
@@ -1371,14 +1387,19 @@ provenance:
   gz_partition: v5t004-mac-exp034
 commands:
   - command: FULL_RESTART v5_no_cup plus 120s topic observer and Aqua MPS absolute installed entrypoint
-    exit_code: PENDING
-observed: [NONE]
+    exit_code: stack=0, request=1, observer=0
+observed:
+  - main-thread UI、CameraPlugin 10Hz、三controllers active；640x480 rgb8/32FC1同stamp，finite positive depth=307200/307200
+  - exact-window ID 3561显示bottle-only与Viewer Running；overlay清晰无噪声标签
+  - MPS结果candidate=0、matching=0、TARGET_NOT_FOUND、published=false、inference=247.50ms、request=319.31ms、weight SHA正确
+  - observer收到detections=1且candidate[0]=0、overlay=1且640x480 rgb8，同stamp，cup_pose=0
+  - Ctrl-C后MoveIt GRACEFUL_SHUTDOWN_MOVE_GROUP_OK、MuJoCo主线程资源释放、domain 219无节点
 inferred: [NONE]
-conclusion: PENDING
+conclusion: VALID；Mac bottle-only场景通过真实payload、分类拒绝、topic、GUI、性能与cleanup全部门禁
 evidence:
   - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-034-bottle-only
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-034-bottle-only
-decision: PENDING
+decision: ACCEPT；纳入Mac四场景感知矩阵
 next_experiment: EXP-018
 ```
 
