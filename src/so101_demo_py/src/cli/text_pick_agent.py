@@ -26,6 +26,14 @@ from ..adapters.planner.ollama import (
 )
 from ..application.planner_chain import PlannerChain
 from ..application.text_agent import AgentRequest, AgentStatus, TextAgent
+from ..application.task_dispatch import TaskDispatcher
+from ..profiling.model import ProfilingConfig, ProfilingMode
+from ..profiling.session import SemanticProfiler, build_profiler
+from ..profiling.wrappers import (
+    profile_dispatcher,
+    profile_executor,
+    profile_planner,
+)
 
 
 def new_request_id() -> str:
@@ -64,6 +72,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evidence-root")
     parser.add_argument("--source-commit", default="UNRECORDED_SOURCE")
     parser.add_argument("--installed-prefix")
+    parser.add_argument(
+        "--profiling",
+        choices=[mode.value for mode in ProfilingMode],
+        default=ProfilingMode.OFF.value,
+    )
+    parser.add_argument("--profiling-output-root")
+    parser.add_argument("--profiling-session-id")
     return parser
 
 
@@ -214,7 +229,11 @@ def _valid_cup_pose_timeout(options) -> bool:
     return type(value) is float and math.isfinite(value) and value > 0.0
 
 
-def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
+def _compose_agent(
+    options,
+    context: DynamicRuntimeContext | None,
+    profiler: SemanticProfiler | None = None,
+) -> TextAgent:
     primary = DeepSeekPlanner(
         os.environ.get("DEEPSEEK_API_KEY", ""),
         model=options.deepseek_model,
@@ -226,6 +245,7 @@ def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
         endpoint=options.ollama_endpoint,
         timeout_s=options.ollama_timeout_s,
     )
+    planner = PlannerChain(primary, fallback)
     executor = (
         _PreviewExecutor()
         if context is None
@@ -234,7 +254,65 @@ def _compose_agent(options, context: DynamicRuntimeContext | None) -> TextAgent:
             cup_pose_timeout_s=options.cup_pose_timeout_s,
         )
     )
-    return TextAgent(PlannerChain(primary, fallback), executor)
+    if profiler is None:
+        return TextAgent(planner, executor)
+    planner = profile_planner(
+        planner,
+        profiler,
+        provider="deepseek+ollama",
+        model=f"{options.deepseek_model}|{options.ollama_model}",
+    )
+    executor = profile_executor(executor, profiler)
+    dispatcher = profile_dispatcher(TaskDispatcher(), profiler)
+    return TextAgent(
+        planner,
+        executor,
+        dispatcher=dispatcher,
+        profiler=profiler,
+    )
+
+
+def _build_semantic_profiler(
+    options,
+    *,
+    request_id: str,
+) -> SemanticProfiler | None:
+    mode = ProfilingMode.parse(options.profiling)
+    if mode is ProfilingMode.OFF:
+        return None
+    if not isinstance(options.profiling_output_root, str):
+        raise ValueError("enabled profiling requires --profiling-output-root")
+    output_root = Path(options.profiling_output_root)
+    if not output_root.is_absolute():
+        raise ValueError("profiling output root must be absolute")
+    if (
+        not isinstance(options.profiling_session_id, str)
+        or not options.profiling_session_id.strip()
+    ):
+        raise ValueError("enabled profiling requires --profiling-session-id")
+    source_commit = (
+        options.source_commit.strip().lower()
+        if isinstance(options.source_commit, str)
+        and re.fullmatch(r"[0-9a-fA-F]{40}", options.source_commit.strip())
+        else None
+    )
+    installed_prefix = (
+        options.installed_prefix.strip()
+        if isinstance(options.installed_prefix, str)
+        and Path(options.installed_prefix.strip()).is_absolute()
+        else None
+    )
+    return build_profiler(
+        ProfilingConfig(
+            mode=mode,
+            output_root=output_root,
+            session_id=options.profiling_session_id.strip(),
+            process_role="text-agent",
+            request_id=request_id,
+            source_commit=source_commit,
+            installed_prefix=installed_prefix,
+        )
+    )
 
 
 def _exit_code(status: AgentStatus) -> int:
@@ -288,43 +366,56 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
             _write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
             return 1
 
-    agent = _agent if _agent is not None else _compose_agent(options, context)
-    request = AgentRequest(
-        request_id=request_id,
-        instruction=options.instruction,
-        mode=options.mode,
-        execute=options.execute,
-        backend=options.backend,
-        confirmation_digest=options.confirmation_digest,
-        skip_confirmation=options.skip_confirmation,
-        execution_provenance=(
-            context.execution_provenance if context is not None else None
-        ),
-    )
     try:
-        result = agent.handle(request)
-    except Exception:
-        _write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
+        profiler = _build_semantic_profiler(options, request_id=request_id)
+    except (OSError, TypeError, ValueError):
+        _write_document(_rejection(request_id, "PROFILING_CONFIGURATION_INVALID"))
         return 1
-    document = result.to_dict()
-    provenance_finalize_failed = False
-    if context is not None:
-        document["execution_provenance"] = context.execution_provenance.to_dict()
-        if result.confirmation_mode is not None:
-            try:
-                _persist_execution_provenance(
-                    context,
-                    request_id,
-                    result.confirmation_mode,
-                    confirmation_validated=True,
-                )
-            except (OSError, TypeError, ValueError):
-                document["reason_code"] = "EXECUTION_PROVENANCE_FINALIZE_FAILED"
-                provenance_finalize_failed = True
-    _write_document(document)
-    if provenance_finalize_failed:
-        return 1
-    return _exit_code(result.status)
+    try:
+        agent = (
+            _agent
+            if _agent is not None
+            else _compose_agent(options, context, profiler=profiler)
+        )
+        request = AgentRequest(
+            request_id=request_id,
+            instruction=options.instruction,
+            mode=options.mode,
+            execute=options.execute,
+            backend=options.backend,
+            confirmation_digest=options.confirmation_digest,
+            skip_confirmation=options.skip_confirmation,
+            execution_provenance=(
+                context.execution_provenance if context is not None else None
+            ),
+        )
+        try:
+            result = agent.handle(request)
+        except Exception:
+            _write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
+            return 1
+        document = result.to_dict()
+        provenance_finalize_failed = False
+        if context is not None:
+            document["execution_provenance"] = context.execution_provenance.to_dict()
+            if result.confirmation_mode is not None:
+                try:
+                    _persist_execution_provenance(
+                        context,
+                        request_id,
+                        result.confirmation_mode,
+                        confirmation_validated=True,
+                    )
+                except (OSError, TypeError, ValueError):
+                    document["reason_code"] = "EXECUTION_PROVENANCE_FINALIZE_FAILED"
+                    provenance_finalize_failed = True
+        _write_document(document)
+        if provenance_finalize_failed:
+            return 1
+        return _exit_code(result.status)
+    finally:
+        if profiler is not None:
+            profiler.close()
 
 
 if __name__ == "__main__":
