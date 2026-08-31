@@ -238,6 +238,21 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
     assert "mujoco_cup_pose_bridge" not in all_executables
 
 
+def test_perception_launch_caps_simulation_at_realtime_for_fresh_source_stamps(
+    tmp_path: Path,
+) -> None:
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        headless="true",
+    )
+    simulator = _node(actions, "ros2_control_node")
+    robot_description = evaluate_parameters(
+        context, simulator._Node__parameters
+    )[0]["robot_description"]
+
+    assert '<param name="sim_speed_factor">1.0</param>' in robot_description
+
+
 def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
     tmp_path: Path,
 ) -> None:

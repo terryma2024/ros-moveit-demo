@@ -154,6 +154,18 @@ def test_mujoco_sensor_rendering_is_independent_from_headless_viewer() -> None:
     assert '<param name="disable_rendering">false</param>' in macos_interactive
 
 
+def test_mujoco_robot_description_renders_explicit_simulation_speed_factor() -> None:
+    rendered = launch_composition._render_mujoco_robot_description(
+        PACKAGE_ROOT,
+        "scene.xml",
+        headless=True,
+        sensor_rendering=True,
+        sim_speed_factor=1.0,
+    )
+
+    assert '<param name="sim_speed_factor">1.0</param>' in rendered
+
+
 def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> None:
     description = launch_composition.build_perception_pick_place_launch_description()
     sensor_rendering = next(
