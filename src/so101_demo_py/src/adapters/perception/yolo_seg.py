@@ -35,7 +35,7 @@ class YoloResultError(ValueError):
 
 
 def verify_weights(path: Path, expected_sha256: str) -> str:
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         raise ModelSetupError("MODEL_UNAVAILABLE", f"weights are not a regular file: {path}")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     if digest != expected_sha256:
