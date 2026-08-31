@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
+current_commit: 23cc6e1
 evidence_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 confirmed_conclusions:
   - CONF-001 现有颜色阈值加最大 DBSCAN 聚类没有实例类别语义，来自设计文档与 f09cf88 源码检查
@@ -19,11 +19,31 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-001
-next_experiment: EXP-001
+latest_checkpoint: CP-002
+next_experiment: EXP-002
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-002
+last_valid_experiment: EXP-001
+current_hypothesis: HYP-001
+working_tree_status: Task 1-4 已提交；Task 5 ROS/CLI/launch 集成通过工作树测试，待提交
+owned_processes: NONE
+preserved_processes: ai-station codex 与 codex-cua tmux 会话；主 checkout 与 ai-station 未跟踪实验账本未修改
+confirmed_conclusions:
+  - CONF-004 检测契约、目标歧义门禁、mask-only RGB-D 定位和一次性证据流已通过 70 个聚焦测试
+  - CONF-005 ROS CLI/节点与双 backend launch 集成通过 79 个聚焦测试；yolo_seg 路径只创建一个 /cup_pose publisher
+  - CONF-006 ROS overlay source 之后必须最后注入工作树 PYTHONPATH，否则测试会错误导入旧安装
+disproven_routes:
+  - DISPROVED-003 不把旧 install overlay 的 ModuleNotFoundError 当作工作树源码缺失
+open_risks:
+  - prediction overlay 仍需在验收前加入可见类别与置信度文字
+  - 共享 ai-station 的 CUDA 修复可能需要协调重启
+  - Task 7 前必须迁移唯一证据根到持久存储
+next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest src/so101_demo_py/test/test_yolo_seg_dataset.py -q
+```
 
 ```yaml
 checkpoint_id: CP-001
@@ -48,4 +68,14 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ## Experiments
 
-实验条目必须在命令执行前按 `PLANNED` 写入；当前尚未启动运行时实验。
+```yaml
+experiment_id: EXP-001
+status: PASS
+scope: Task 1-5 source and launch contract tests on macOS
+command_contract: source ROS overlays, then prepend /tmp/so101-debug-v5-t004-yolo-seg-20260831/python to PYTHONPATH, set ROS_HOME and ROS_LOG_DIR under the registered evidence root, disable external pytest plugins
+result: 79 passed, 2 third-party deprecation warnings; compileall passed
+failure_injection:
+  - missing worktree PYTHONPATH after overlay sourcing reproduced stale-install ModuleNotFoundError
+  - symlink model weights rejected by both launch/options and YOLO adapter
+artifacts: source tests only; no runtime RGB-D or pick-place evidence claimed
+```

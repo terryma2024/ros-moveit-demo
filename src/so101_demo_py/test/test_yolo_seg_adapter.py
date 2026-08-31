@@ -94,6 +94,11 @@ def test_verify_weights_fails_closed_for_missing_or_mismatched_file(tmp_path: Pa
     with pytest.raises(ModelSetupError, match="WEIGHTS_HASH_MISMATCH"):
         verify_weights(weights, "a" * 64)
 
+    link = tmp_path / "linked.pt"
+    link.symlink_to(weights)
+    with pytest.raises(ModelSetupError, match="MODEL_UNAVAILABLE"):
+        verify_weights(link, hashlib.sha256(b"wrong").hexdigest())
+
 
 @pytest.mark.parametrize(
     ("requested", "allow_cpu", "cuda", "mps", "expected"),

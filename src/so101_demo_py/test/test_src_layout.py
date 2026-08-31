@@ -1,4 +1,5 @@
 import runpy
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import setuptools
@@ -25,3 +26,19 @@ def test_setup_maps_so101_demo_namespace_to_src(monkeypatch) -> None:
     assert captured["name"] == "so101_demo_py"
     assert captured["package_dir"] == {"so101_demo": "src"}
     assert "so101_demo" in captured["packages"]
+    entry_points = captured["entry_points"]
+    assert isinstance(entry_points, dict)
+    assert (
+        "rgbd_object_pose = so101_demo.cli.rgbd_object_pose:main"
+        in entry_points["console_scripts"]
+    )
+
+
+def test_package_declares_vision_msgs_runtime_dependency() -> None:
+    root = ET.parse(PACKAGE_ROOT / "package.xml").getroot()
+    dependencies = {
+        element.text
+        for element in root
+        if element.tag in {"depend", "exec_depend"}
+    }
+    assert "vision_msgs" in dependencies

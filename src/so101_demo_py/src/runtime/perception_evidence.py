@@ -76,7 +76,7 @@ def _atomic_ply(path: Path, points: np.ndarray) -> None:
             pass
 
 
-def _overlay(frame: DetectionFrame, batch: DetectionBatch) -> np.ndarray:
+def render_detection_overlay(frame: DetectionFrame, batch: DetectionBatch) -> np.ndarray:
     result = np.array(frame.rgb8, copy=True)
     colors = (
         np.array([0, 255, 80], dtype=np.float64),
@@ -130,7 +130,7 @@ class PerceptionEvidenceWriter:
         if any(path.exists() for path in (source, overlay, detections)):
             raise FileExistsError("detection evidence path already exists")
         _atomic_png(source, request.frame.rgb8)
-        _atomic_png(overlay, _overlay(request.frame, batch))
+        _atomic_png(overlay, render_detection_overlay(request.frame, batch))
         atomic_json(
             detections,
             {

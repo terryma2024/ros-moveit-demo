@@ -373,6 +373,7 @@ def detect_once(
     evidence_writer: Any,
     pose_publisher: Callable[[LocalizedObject], None],
     lookup_transform: Callable[[str, str, int], Any],
+    detection_publisher: Callable[[DetectionBatch, np.ndarray], None] | None = None,
     monotonic_ns: Callable[[], int] = time.monotonic_ns,
 ) -> ObjectPoseResult:
     start_ns = monotonic_ns()
@@ -418,6 +419,16 @@ def detect_once(
         artifacts = evidence_writer.write_detection(request, batch)
     except (OSError, ValueError):
         return finish("EVIDENCE_WRITE_FAILED")
+    if detection_publisher is not None:
+        from so101_demo.runtime.perception_evidence import render_detection_overlay
+
+        try:
+            detection_publisher(
+                batch,
+                render_detection_overlay(request.frame, batch),
+            )
+        except Exception:
+            return finish("CLEANUP_FAILED")
     try:
         selected = selector.select(
             batch,

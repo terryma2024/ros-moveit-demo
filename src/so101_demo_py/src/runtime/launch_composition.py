@@ -399,26 +399,64 @@ def _mujoco_perception_execute_actions(
     evidence_paths: _PerceptionEvidencePaths,
     perception_timeout: str,
     cup_pose_timeout: str,
+    perception_backend: str,
+    perception_weights: Path | None,
+    perception_weights_sha256: str | None,
+    perception_device: str,
+    perception_allow_cpu_fallback: bool,
     exit_status: PerceptionLaunchExitStatus,
 ):
     stack = _mujoco_stack_actions(context, share, session_id)
     camera_transforms = tuple(camera_static_transform_nodes())
-    perception = Node(
-        package="so101_demo_py",
-        executable="rgbd_cup_pose",
-        arguments=[
+    if perception_backend == "color_geometry":
+        perception = Node(
+            package="so101_demo_py",
+            executable="rgbd_cup_pose",
+            arguments=[
+                "--startup-timeout-s",
+                perception_timeout,
+                "--output-topic",
+                "/cup_pose",
+                "--output-ply",
+                str(evidence_paths.perception / "cup.ply"),
+                "--evidence-json",
+                str(evidence_paths.perception / "summary.json"),
+            ],
+            parameters=[{"use_sim_time": True}],
+            output="both",
+        )
+    else:
+        if perception_weights is None or perception_weights_sha256 is None:
+            raise RuntimeError("validated YOLO perception weights are missing")
+        arguments = [
             "--startup-timeout-s",
             perception_timeout,
             "--output-topic",
             "/cup_pose",
-            "--output-ply",
-            str(evidence_paths.perception / "cup.ply"),
-            "--evidence-json",
-            str(evidence_paths.perception / "summary.json"),
-        ],
-        parameters=[{"use_sim_time": True}],
-        output="both",
-    )
+            "--detections-topic",
+            "/perception/detections",
+            "--overlay-topic",
+            "/perception/overlay",
+            "--weights",
+            str(perception_weights),
+            "--weights-sha256",
+            perception_weights_sha256,
+            "--device",
+            perception_device,
+            "--request-id",
+            session_id,
+            "--evidence-root",
+            str(evidence_paths.perception),
+        ]
+        if perception_allow_cpu_fallback:
+            arguments.append("--allow-cpu-fallback")
+        perception = Node(
+            package="so101_demo_py",
+            executable="rgbd_object_pose",
+            arguments=arguments,
+            parameters=[{"use_sim_time": True}],
+            output="both",
+        )
     workflow = Node(
         package="so101_demo_py",
         executable="dynamic_cup_pick_place",
@@ -896,6 +934,35 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     perception_timeout = _positive_finite_launch_value(context, "perception_startup_timeout_s")
     cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
 
+    perception_backend = LaunchConfiguration("perception_backend").perform(context)
+    if perception_backend not in {"color_geometry", "yolo_seg"}:
+        raise RuntimeError("perception_backend must be color_geometry or yolo_seg")
+    perception_weights: Path | None = None
+    perception_weights_sha256: str | None = None
+    perception_device = LaunchConfiguration("perception_device").perform(context)
+    if perception_device not in {"auto", "cuda", "mps", "cpu"}:
+        raise RuntimeError("perception_device must be auto, cuda, mps, or cpu")
+    cpu_fallback_value = LaunchConfiguration("perception_allow_cpu_fallback").perform(context)
+    if cpu_fallback_value not in {"true", "false"}:
+        raise RuntimeError("perception_allow_cpu_fallback must be true or false")
+    if perception_backend == "yolo_seg":
+        perception_weights = Path(
+            LaunchConfiguration("perception_weights").perform(context)
+        )
+        if (
+            not perception_weights.is_absolute()
+            or perception_weights.is_symlink()
+            or not perception_weights.is_file()
+        ):
+            raise RuntimeError("perception_weights must be an existing absolute file")
+        perception_weights_sha256 = LaunchConfiguration(
+            "perception_weights_sha256"
+        ).perform(context)
+        if re.fullmatch(r"[0-9a-f]{64}", perception_weights_sha256) is None:
+            raise RuntimeError(
+                "perception_weights_sha256 must be a lowercase SHA256 digest"
+            )
+
     session_id = LaunchConfiguration("session_id").perform(context)
     if not _SESSION_ID_PATTERN.fullmatch(session_id):
         raise RuntimeError(
@@ -923,6 +990,11 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         evidence_paths=evidence_paths,
         perception_timeout=perception_timeout,
         cup_pose_timeout=cup_pose_timeout,
+        perception_backend=perception_backend,
+        perception_weights=perception_weights,
+        perception_weights_sha256=perception_weights_sha256,
+        perception_device=perception_device,
+        perception_allow_cpu_fallback=cpu_fallback_value == "true",
         exit_status=exit_status,
     )
 
@@ -1076,6 +1148,23 @@ def build_perception_pick_place_launch_description(
             ),
             DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
             DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
+            DeclareLaunchArgument(
+                "perception_backend",
+                default_value="color_geometry",
+                choices=("color_geometry", "yolo_seg"),
+            ),
+            DeclareLaunchArgument("perception_weights", default_value=""),
+            DeclareLaunchArgument("perception_weights_sha256", default_value=""),
+            DeclareLaunchArgument(
+                "perception_device",
+                default_value="auto",
+                choices=("auto", "cuda", "mps", "cpu"),
+            ),
+            DeclareLaunchArgument(
+                "perception_allow_cpu_fallback",
+                default_value="false",
+                choices=("true", "false"),
+            ),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
                 kwargs={"exit_status": exit_status},

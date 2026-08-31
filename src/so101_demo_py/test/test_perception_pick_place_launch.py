@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -130,11 +131,17 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
         "mujoco_initial_keyframe",
         "perception_startup_timeout_s",
         "cup_pose_timeout_s",
+        "perception_backend",
+        "perception_weights",
+        "perception_weights_sha256",
+        "perception_device",
+        "perception_allow_cpu_fallback",
     } <= declared.keys()
     assert _default(declared["headless"]) == "false"
     assert _default(declared["mujoco_initial_keyframe"]) == "task_start"
     assert _default(declared["perception_startup_timeout_s"]) == "30.0"
     assert _default(declared["cup_pose_timeout_s"]) == "45.0"
+    assert _default(declared["perception_backend"]) == "color_geometry"
 
     assert LAUNCH_PATH.is_file()
     source = LAUNCH_PATH.read_text(encoding="utf-8")
@@ -229,6 +236,81 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
     assert all_executables.count("rgbd_cup_pose") == 1
     assert "cup_pose_tf_demo" not in all_executables
     assert "mujoco_cup_pose_bridge" not in all_executables
+
+
+def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
+    tmp_path: Path,
+) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=digest,
+        perception_device="mps",
+        perception_allow_cpu_fallback="false",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    assert [node.node_executable for node in _nodes(started)] == [
+        "rgbd_object_pose",
+        "dynamic_cup_pick_place",
+    ]
+    perception = _node(started, "rgbd_object_pose")
+    assert perception._Node__arguments == [
+        "--startup-timeout-s",
+        "30.0",
+        "--output-topic",
+        "/cup_pose",
+        "--detections-topic",
+        "/perception/detections",
+        "--overlay-topic",
+        "/perception/overlay",
+        "--weights",
+        str(weights),
+        "--weights-sha256",
+        digest,
+        "--device",
+        "mps",
+        "--request-id",
+        "session-123",
+        "--evidence-root",
+        str(tmp_path / "launch-run.d/session-123/perception"),
+    ]
+    assert all(node.node_executable != "rgbd_cup_pose" for node in _nodes(started))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"perception_backend": "unknown"}, "perception_backend"),
+        ({"perception_backend": "yolo_seg"}, "perception_weights"),
+        (
+            {
+                "perception_backend": "yolo_seg",
+                "perception_weights": "/tmp/missing-best.pt",
+                "perception_weights_sha256": "a" * 64,
+            },
+            "perception_weights",
+        ),
+        (
+            {
+                "perception_backend": "yolo_seg",
+                "perception_weights": __file__,
+                "perception_weights_sha256": "not-a-sha",
+            },
+            "perception_weights_sha256",
+        ),
+    ],
+)
+def test_invalid_yolo_backend_configuration_fails_before_nodes(
+    tmp_path: Path, overrides: dict[str, object], message: str
+) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        _materialize(evidence_file=tmp_path / "result.json", **overrides)
 
 
 def test_evidence_preflight_creates_owned_run_directory_before_nodes(

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from so101_demo.application.object_pose import (
     LocalizationError,
@@ -20,6 +22,7 @@ from so101_demo.core.detection import (
     LocalizedObject,
 )
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
+from so101_demo.ros.rgbd_object_pose_node import FreshFrameGate, RgbdObjectPoseOptions
 
 
 def _frame() -> DetectionFrame:
@@ -124,6 +127,7 @@ def test_ambiguous_result_writes_candidates_but_never_localizes_or_publishes(
         localizer=_Localizer(calls),
         evidence_writer=PerceptionEvidenceWriter(),
         pose_publisher=lambda _localized: calls.append("publish"),
+        detection_publisher=lambda _batch, _overlay: calls.append("publish-detections"),
         lookup_transform=lambda *_args: object(),
         monotonic_ns=iter([0, 10_000_000]).__next__,
     )
@@ -131,7 +135,7 @@ def test_ambiguous_result_writes_candidates_but_never_localizes_or_publishes(
     assert result.status == "ERROR"
     assert result.failure == "TARGET_AMBIGUOUS"
     assert result.matching_candidate_count == 2
-    assert calls == []
+    assert calls == ["publish-detections"]
     assert (run_directory / "source-rgb.png").is_file()
     assert (run_directory / "prediction-overlay.png").is_file()
     assert (run_directory / "detections.json").is_file()
@@ -166,11 +170,12 @@ def test_success_writes_all_stage_evidence_before_publishing_pose(tmp_path: Path
         localizer=_Localizer(calls),
         evidence_writer=PerceptionEvidenceWriter(),
         pose_publisher=publish,
+        detection_publisher=lambda _batch, _overlay: calls.append("publish-detections"),
         lookup_transform=lambda *_args: SimpleNamespace(transform=True),
         monotonic_ns=iter([0, 10_000_000]).__next__,
     )
 
-    assert calls == ["localize", "publish"]
+    assert calls == ["publish-detections", "localize", "publish"]
     assert result.status == "OK"
     assert result.failure is None
     assert result.published_cup_pose
@@ -194,12 +199,13 @@ def test_localization_failure_keeps_selected_mask_but_never_publishes(
         localizer=_Localizer(calls, failure="GEOMETRY_REJECTED"),
         evidence_writer=PerceptionEvidenceWriter(),
         pose_publisher=lambda _localized: calls.append("publish"),
+        detection_publisher=lambda _batch, _overlay: calls.append("publish-detections"),
         lookup_transform=lambda *_args: object(),
         monotonic_ns=iter([0, 10_000_000]).__next__,
     )
 
     assert result.failure == "GEOMETRY_REJECTED"
-    assert calls == ["localize"]
+    assert calls == ["publish-detections", "localize"]
     assert (run_directory / "selected-mask.png").is_file()
     assert not (run_directory / "selected-cloud.ply").exists()
 
@@ -218,9 +224,117 @@ def test_evidence_failure_prevents_pose_publication(tmp_path: Path) -> None:
         localizer=_Localizer(calls),
         evidence_writer=FailedEvidenceWriter(),
         pose_publisher=lambda _localized: calls.append("publish"),
+        detection_publisher=lambda _batch, _overlay: calls.append("publish-detections"),
         lookup_transform=lambda *_args: object(),
         monotonic_ns=iter([0, 10_000_000]).__next__,
     )
 
     assert result.failure == "EVIDENCE_WRITE_FAILED"
-    assert calls == []
+    assert calls == ["publish-detections"]
+
+
+def _stamped(stamp_ns: int):
+    return SimpleNamespace(
+        header=SimpleNamespace(
+            stamp=SimpleNamespace(
+                sec=stamp_ns // 1_000_000_000,
+                nanosec=stamp_ns % 1_000_000_000,
+            )
+        )
+    )
+
+
+def test_fresh_frame_gate_rejects_cached_or_misaligned_samples() -> None:
+    gate = FreshFrameGate(minimum_source_stamp_ns=10)
+
+    assert gate.accept((_stamped(10), _stamped(10), _stamped(10))) is None
+    assert gate.accept((_stamped(11), _stamped(12), _stamped(11))) is None
+    fresh = (_stamped(13), _stamped(13), _stamped(13))
+    assert gate.accept(fresh) is fresh
+    assert gate.accept((_stamped(14), _stamped(14), _stamped(14))) is fresh
+
+
+def test_rgbd_object_pose_options_require_local_weight_and_absolute_evidence(
+    tmp_path: Path,
+) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+
+    options = RgbdObjectPoseOptions(
+        weights_path=weights,
+        weights_sha256=digest,
+        request_id="req-001",
+        evidence_root=tmp_path / "evidence",
+        once=True,
+        device="mps",
+    )
+
+    assert options.weights_path == weights
+    assert options.once
+    for invalid_path, message in [
+        (Path("relative.pt"), "weights_path"),
+        (tmp_path / "missing.pt", "regular file"),
+    ]:
+        with pytest.raises(ValueError, match=message):
+            RgbdObjectPoseOptions(
+                weights_path=invalid_path,
+                weights_sha256=digest,
+                request_id="req-001",
+                evidence_root=tmp_path / "evidence",
+            )
+    linked_weights = tmp_path / "linked.pt"
+    linked_weights.symlink_to(weights)
+    with pytest.raises(ValueError, match="regular file"):
+        RgbdObjectPoseOptions(
+            weights_path=linked_weights,
+            weights_sha256=digest,
+            request_id="req-001",
+            evidence_root=tmp_path / "evidence",
+        )
+    with pytest.raises(ValueError, match="evidence_root"):
+        RgbdObjectPoseOptions(
+            weights_path=weights,
+            weights_sha256=digest,
+            request_id="req-001",
+            evidence_root=Path("relative"),
+        )
+
+
+def test_rgbd_object_pose_cli_constructs_explicit_once_request(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.cli import rgbd_object_pose
+    from so101_demo.ros import rgbd_object_pose_node
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    calls: list[RgbdObjectPoseOptions] = []
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "run_rgbd_object_pose",
+        lambda options: calls.append(options) or 17,
+    )
+
+    assert (
+        rgbd_object_pose.main(
+            [
+                "--weights",
+                str(weights),
+                "--weights-sha256",
+                digest,
+                "--device",
+                "mps",
+                "--request-id",
+                "req-001",
+                "--evidence-root",
+                str(tmp_path / "evidence"),
+                "--once",
+            ]
+        )
+        == 17
+    )
+    assert len(calls) == 1
+    assert calls[0].device == "mps"
+    assert calls[0].once
