@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 5864f837752360eb60689874f548e5c00a6e2129
+current_commit: 1354eda55adbd4d08d225cdabaf4dac2d659e8ca
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -18,17 +18,32 @@ confirmed_conclusions:
   - CONF-022 EXP-007 授权重启后 NVIDIA 内核模块、NVML 与磁盘模块统一为 595.84，nvidia-smi 与 RTX 5080 CUDA 张量 gate 通过
   - CONF-034 EXP-011 预置锁定字体后，amp=false 与 YOLO_OFFLINE=true 的 CUDA smoke 零自动下载、退出 0 并生成完整训练工件
   - CONF-036 EXP-012 完成 100 epoch 全量训练；test mask precision 0.9997、recall 1.0、mAP50 0.995、mAP50-95 0.9737
+  - CONF-039 EXP-015 在 Linux CUDA 上经生产 TargetSelector 以 confidence 0.50 从 296 个 raw candidates 唯一选中 plastic_cup，推理 37.58 ms
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-016
-next_experiment: EXP-015
+latest_checkpoint: CP-017
+next_experiment: EXP-016
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-015
+current_hypothesis: 同一权重在 Mac MPS 上也可经生产 selector 唯一选中 plastic_cup
+working_tree_status: 仅有本次 EXP-015 有效结论待提交；remote source clean at 35db5f5
+owned_processes: NONE；Linux CUDA detector/selector probe 正常退出
+preserved_processes: EXP-013 无效 raw 输出、EXP-015 有效结果与所有训练工件均保留
+confirmed_conclusions:
+  - CONF-039 EXP-015 runtime_device=cuda、raw_count=296、eligible_count=1、selected confidence=0.970513、mask_pixels=5053、inference=37.58 ms
+open_risks:
+  - Mac MPS 尚未对同一权重与同一输入执行 detector/selector 验证
+next_command: 核对并复制 best.pt 与 seed 300001 到 Mac staging，随后执行 EXP-016 MPS probe
+```
 
 ```yaml
 checkpoint_id: CP-016
@@ -337,7 +352,7 @@ next_experiment: EXP-017
 
 ```yaml
 experiment_id: EXP-015
-status: RUNNING
+status: VALID
 prior_experiment: EXP-013
 hypothesis: seed 300001 的 raw candidates 经生产 TargetSelector(confidence_threshold=0.50) 后在 Linux CUDA 上唯一选择真实 plastic_cup
 prediction: raw_count>=1、eligible_count=1、selected confidence约0.9705、mask 480x640且非空、runtime_device=cuda、latency<=2000
@@ -362,15 +377,18 @@ provenance:
   gz_partition: NONE
 commands:
   - command: precreate platform-smoke/linux-exp015; run YoloSegDetector plus TargetSelector at 0.50; write result and SHA
-    exit_code: PENDING
+    exit_code: 0
 observed:
-  - source、CUDA、weight/input hash、threshold 0.50 与新 output 已核验，实验进入 RUNNING
+  - runtime_device=cuda；raw_count=296、eligible_count=1；selected plastic_cup confidence=0.9705128074
+  - selected mask_shape=[480,640]、mask_pixels=5053；inference_latency_ms=37.581604、cold_start_latency_ms=2249.773627
+  - result.json SHA256=12d58f356855b523269b18fad2f9c72b9cfe65dc66f0fc2458de072e2d7360e5；权重 SHA 与正式 best.pt 一致
+  - 命令退出 0，probe 后无本任务 inference 进程残留
 inferred:
-  - NONE
-conclusion: PENDING
+  - raw candidates 数量是 adapter 的低阈值输出细节；生产唯一性由 TargetSelector 的 0.50 阈值保证
+conclusion: PASS；Linux CUDA detector/selector 平台冒烟通过
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/linux-exp015
-decision: PENDING
+decision: KEEP；以相同权重和输入继续 EXP-016 Mac MPS
 next_experiment: EXP-016
 ```
 
