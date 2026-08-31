@@ -5,8 +5,17 @@ import math
 from pathlib import Path
 
 import pytest
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    EmitEvent,
+    OpaqueFunction,
+    RegisterEventHandler,
+)
+from launch.events import Shutdown as ShutdownEvent
+from launch.events.process import ProcessExited
 from launch.utilities import perform_substitutions
+from launch_ros.actions import Node
+from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
 from so101_demo.runtime.provenance import InstalledExecutionIdentity
 
@@ -68,6 +77,51 @@ def _materialize(monkeypatch, tmp_path: Path, **overrides):
     )
     opaque = next(entity for entity in description.entities if isinstance(entity, OpaqueFunction))
     return context, opaque.execute(context), exit_status
+
+
+def _nodes(actions) -> list[Node]:
+    return [action for action in actions if isinstance(action, Node)]
+
+
+def _node(actions, executable: str) -> Node:
+    matches = [node for node in _nodes(actions) if node.node_executable == executable]
+    assert len(matches) == 1, (executable, [node.node_executable for node in _nodes(actions)])
+    return matches[0]
+
+
+def _dispatch_process_exit(actions, target: Node, returncode: int, context: LaunchContext):
+    event = ProcessExited(
+        action=target,
+        name=str(target.node_executable),
+        cmd=[str(target.node_executable)],
+        cwd=None,
+        env=None,
+        pid=101,
+        returncode=returncode,
+    )
+    emitted = []
+    for registration in actions:
+        if not isinstance(registration, RegisterEventHandler):
+            continue
+        handler = registration.event_handler
+        if handler.matches(event):
+            emitted.extend(handler.handle(event, context) or [])
+    return emitted
+
+
+def _shutdown_reasons(actions) -> list[str]:
+    return [
+        action.event.reason
+        for action in actions
+        if isinstance(action, EmitEvent) and isinstance(action.event, ShutdownEvent)
+    ]
+
+
+def _assert_failure_status(actions, context: LaunchContext, pattern: str) -> None:
+    failure_actions = [action for action in actions if isinstance(action, OpaqueFunction)]
+    assert len(failure_actions) == 1
+    with pytest.raises(RuntimeError, match=pattern):
+        failure_actions[0].execute(context)
 
 
 def test_public_text_agent_launch_is_thin_and_declares_contract() -> None:
@@ -150,3 +204,203 @@ def test_valid_preflight_creates_exclusive_session_evidence_directories(
     assert (run_root / "perception").is_dir()
     assert (run_root / "dynamic").is_dir()
     assert isinstance(actions, list)
+
+
+def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context, actions, _exit_status = _materialize(monkeypatch, tmp_path)
+    initial_executables = [node.node_executable for node in _nodes(actions)]
+
+    assert initial_executables[:2] == [
+        "static_transform_publisher",
+        "static_transform_publisher",
+    ]
+    assert "scene_setup" in initial_executables
+    assert "rgbd_cup_pose" not in initial_executables
+    assert "text_pick_agent" not in initial_executables
+    assert "dynamic_cup_pick_place" not in initial_executables
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    assert [node.node_executable for node in _nodes(started)] == [
+        "rgbd_cup_pose",
+        "text_pick_agent",
+    ]
+
+    perception = _node(started, "rgbd_cup_pose")
+    assert perception._Node__arguments == [
+        "--startup-timeout-s",
+        "30.0",
+        "--output-topic",
+        "/cup_pose",
+        "--output-ply",
+        str(tmp_path / "run.d/text-e2e-session-001/perception/cup.ply"),
+        "--evidence-json",
+        str(tmp_path / "run.d/text-e2e-session-001/perception/summary.json"),
+    ]
+    assert evaluate_parameters(context, perception._Node__parameters) == (
+        {"use_sim_time": True},
+    )
+
+    workflow = _node(started, "text_pick_agent")
+    assert workflow._Node__arguments == [
+        "--instruction",
+        INSTRUCTION,
+        "--mode",
+        "execute",
+        "--execute",
+        "--skip-confirmation",
+        "--backend",
+        "mujoco",
+        "--cup-pose-timeout-s",
+        "45.0",
+        "--session-id",
+        "text-e2e-session-001",
+        "--expected-reset-epoch",
+        "0",
+        "--evidence-root",
+        str(tmp_path / "run.d/text-e2e-session-001/dynamic"),
+        "--source-commit",
+        "a" * 40,
+        "--installed-prefix",
+        "/tmp/so101-text-agent-install",
+    ]
+
+    all_executables = initial_executables + [
+        node.node_executable for node in _nodes(started)
+    ]
+    assert all_executables.count("rgbd_cup_pose") == 1
+    assert all_executables.count("text_pick_agent") == 1
+    assert "dynamic_cup_pick_place" not in all_executables
+    assert "cup_pose_tf_demo" not in all_executables
+    assert "mujoco_cup_pose_bridge" not in all_executables
+
+
+def test_scene_failure_starts_no_sensor_or_text_agent_and_fails_launch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context, actions, _exit_status = _materialize(monkeypatch, tmp_path)
+
+    emitted = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 12, context)
+
+    assert _nodes(emitted) == []
+    assert _shutdown_reasons(emitted) == [
+        "SO-101 Planning Scene setup failed with exit code 12"
+    ]
+    _assert_failure_status(emitted, context, "exit code 12")
+
+
+@pytest.mark.parametrize("returncode", (0, 9))
+def test_rgbd_exit_before_text_agent_completion_is_terminal(
+    tmp_path: Path, monkeypatch, returncode: int
+) -> None:
+    context, actions, _exit_status = _materialize(monkeypatch, tmp_path)
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    emitted = _dispatch_process_exit(
+        actions, _node(started, "rgbd_cup_pose"), returncode, context
+    )
+
+    assert _shutdown_reasons(emitted) == [
+        f"RGB-D perception exited before dynamic workflow completed with exit code {returncode}"
+    ]
+    _assert_failure_status(emitted, context, f"exit code {returncode}")
+
+
+def test_clean_text_agent_exit_owns_shutdown_and_suppresses_teardown(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context, actions, exit_status = _materialize(monkeypatch, tmp_path)
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    workflow = _node(started, "text_pick_agent")
+    perception = _node(started, "rgbd_cup_pose")
+
+    workflow_emitted = _dispatch_process_exit(actions, workflow, 0, context)
+    perception_emitted = _dispatch_process_exit(actions, perception, -15, context)
+
+    assert _shutdown_reasons(workflow_emitted) == [
+        "Text Agent RGB-D workflow completed with exit code 0"
+    ]
+    assert not [
+        action for action in workflow_emitted if isinstance(action, OpaqueFunction)
+    ]
+    assert perception_emitted == []
+    assert exit_status.returncode == 0
+
+
+def test_failed_text_agent_exit_preserves_failure_and_suppresses_teardown(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context, actions, exit_status = _materialize(monkeypatch, tmp_path)
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    workflow = _node(started, "text_pick_agent")
+    perception = _node(started, "rgbd_cup_pose")
+
+    workflow_emitted = _dispatch_process_exit(actions, workflow, 23, context)
+    perception_emitted = _dispatch_process_exit(actions, perception, -15, context)
+
+    assert _shutdown_reasons(workflow_emitted) == [
+        "Text Agent RGB-D workflow failed with exit code 23"
+    ]
+    _assert_failure_status(workflow_emitted, context, "exit code 23")
+    assert perception_emitted == []
+    assert exit_status.returncode == 23
+
+
+@pytest.mark.parametrize(
+    ("executable", "label"),
+    (
+        ("ros2_control_node", "MuJoCo runtime"),
+        ("robot_state_publisher", "robot_state_publisher"),
+        ("graceful_shutdown_move_group", "MoveIt move_group"),
+        ("static_transform_publisher", "camera static TF"),
+    ),
+)
+def test_required_long_lived_exit_before_text_agent_is_terminal(
+    tmp_path: Path,
+    monkeypatch,
+    executable: str,
+    label: str,
+) -> None:
+    context, actions, exit_status = _materialize(monkeypatch, tmp_path)
+    target = next(node for node in _nodes(actions) if node.node_executable == executable)
+
+    emitted = _dispatch_process_exit(actions, target, 17, context)
+
+    assert exit_status.returncode == 17
+    assert any(label in reason for reason in _shutdown_reasons(emitted))
+    _assert_failure_status(emitted, context, "exit code 17")
+
+
+@pytest.mark.parametrize("spawner_index", range(3))
+@pytest.mark.parametrize("returncode", (0, 19))
+def test_text_agent_controller_spawner_exit_policy(
+    tmp_path: Path,
+    monkeypatch,
+    spawner_index: int,
+    returncode: int,
+) -> None:
+    context, actions, exit_status = _materialize(monkeypatch, tmp_path)
+    spawners = [node for node in _nodes(actions) if node.node_executable == "spawner"]
+
+    emitted = _dispatch_process_exit(
+        actions, spawners[spawner_index], returncode, context
+    )
+
+    if returncode == 0:
+        assert emitted == []
+        assert exit_status.returncode is None
+    else:
+        assert exit_status.returncode == 19
+        _assert_failure_status(emitted, context, "exit code 19")
+
+
+def test_first_text_agent_terminal_process_status_wins(tmp_path: Path, monkeypatch) -> None:
+    context, actions, exit_status = _materialize(monkeypatch, tmp_path)
+
+    _dispatch_process_exit(actions, _node(actions, "ros2_control_node"), 31, context)
+    _dispatch_process_exit(
+        actions, _node(actions, "graceful_shutdown_move_group"), 41, context
+    )
+
+    assert exit_status.returncode == 31

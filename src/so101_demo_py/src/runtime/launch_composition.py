@@ -323,6 +323,7 @@ def perception_pick_place_exit_handlers(
     required_long_lived: tuple[tuple[str, object], ...],
     successful_one_shots: tuple[tuple[str, object], ...],
     exit_status: PerceptionLaunchExitStatus,
+    workflow_label: str = "Dynamic perception workflow",
 ):
     """Create the shared fail-closed process policy for production and tests."""
 
@@ -362,7 +363,7 @@ def perception_pick_place_exit_handlers(
         exit_status.mark_workflow_terminal()
         exit_status.record(event.returncode)
         outcome = "completed" if event.returncode == 0 else "failed"
-        reason = f"Dynamic perception workflow {outcome} with exit code {event.returncode}"
+        reason = f"{workflow_label} {outcome} with exit code {event.returncode}"
         return _terminal_launch_actions(reason, failed=event.returncode != 0)
 
     return (
@@ -478,7 +479,77 @@ def _mujoco_text_pick_agent_execute_actions(
     execution_identity: InstalledExecutionIdentity,
     exit_status: PerceptionLaunchExitStatus,
 ):
-    return []
+    stack = _mujoco_stack_actions(context, share, session_id)
+    camera_transforms = tuple(camera_static_transform_nodes())
+    perception = Node(
+        package="so101_demo_py",
+        executable="rgbd_cup_pose",
+        arguments=[
+            "--startup-timeout-s",
+            perception_timeout,
+            "--output-topic",
+            "/cup_pose",
+            "--output-ply",
+            str(evidence_paths.perception / "cup.ply"),
+            "--evidence-json",
+            str(evidence_paths.perception / "summary.json"),
+        ],
+        parameters=[{"use_sim_time": True}],
+        output="both",
+    )
+    workflow = Node(
+        package="so101_demo_py",
+        executable="text_pick_agent",
+        arguments=[
+            "--instruction",
+            instruction,
+            "--mode",
+            "execute",
+            "--execute",
+            "--skip-confirmation",
+            "--backend",
+            "mujoco",
+            "--cup-pose-timeout-s",
+            cup_pose_timeout,
+            "--session-id",
+            session_id,
+            "--expected-reset-epoch",
+            "0",
+            "--evidence-root",
+            str(evidence_paths.dynamic),
+            "--source-commit",
+            execution_identity.source_commit,
+            "--installed-prefix",
+            execution_identity.package_prefix,
+        ],
+        output="both",
+    )
+    handlers = perception_pick_place_exit_handlers(
+        stack.scene_setup,
+        perception,
+        workflow,
+        required_long_lived=(
+            ("MuJoCo runtime", stack.simulator),
+            ("robot_state_publisher", stack.robot_state_publisher),
+            ("MoveIt move_group", stack.move_group),
+            *(
+                (f"camera static TF {index}", node)
+                for index, node in enumerate(camera_transforms, 1)
+            ),
+            ("RGB-D perception", perception),
+        ),
+        successful_one_shots=tuple(
+            (f"controller spawner {_CONTROLLERS[index]}", node)
+            for index, node in enumerate(stack.spawners)
+        ),
+        exit_status=exit_status,
+        workflow_label="Text Agent RGB-D workflow",
+    )
+    return [
+        *handlers,
+        *camera_transforms,
+        *stack.actions,
+    ]
 
 
 def _materialize_gazebo_model(context, share: Path):
