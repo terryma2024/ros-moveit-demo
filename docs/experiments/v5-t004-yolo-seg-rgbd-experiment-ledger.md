@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: f92b0ac834382b6a3095d1885d7449c6c19e57db
+current_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-019
+latest_checkpoint: CP-020
 next_experiment: EXP-017
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-020
+last_valid_experiment: EXP-016
+current_hypothesis: 固定 f732afc 与 f281d252 权重可在双平台八次 FULL_RESTART 真实 ROS RGB-D 场景满足 fail-closed、IoU、3D 与延迟门槛
+working_tree_status: 仅本账本的 Task 8 预登记待提交；源代码与测试 clean
+owned_processes: NONE；8 次运行均未启动
+preserved_processes: 所有历史证据保留；ai-station 用户文件未触碰
+confirmed_conclusions:
+  - CONF-044 EXP-017 至 EXP-024 已在启动前冻结 commit、权重、参数、domain、partition、场景与判定边界
+open_risks:
+  - 双平台安装态尚未重建到 f732afc；真实 RGB-D、truth IoU/pose、GUI 与 cleanup 尚未观察
+next_command: 重建并回读 macOS 安装态，随后从 EXP-017 bottle_only 开始
+```
 
 ```yaml
 checkpoint_id: CP-019
@@ -344,6 +358,303 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-017
+status: PLANNED
+prior_experiment: EXP-016
+hypothesis: macOS MPS 的 bottle_only 场景不会把橙色瓶子误判为 plastic_cup，也不会发布新 /cup_pose
+prediction: TARGET_NOT_FOUND；matching_count=0；无新 pose；真实 RGB-D 与 cleanup 全部合格
+single_variable: Task 8 首个真实 ROS 场景；platform=macOS、keyframe=v5_no_cup
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=221、GZ_PARTITION=v5t004-mac-exp017 为空；本地与正式 output 均不存在
+success_criteria:
+  - 640x480 rgb8/32FC1/CameraInfo 为同一非零 stamp，frame ID与 finite positive depth有效；runtime_device=mps
+  - TARGET_NOT_FOUND、matching_count=0、无新 /cup_pose；request_latency_ms<=2000；瓶子不产生 cup mask
+  - exact-window overlay、truth对照、安装态 provenance、退出后零 owned inference 与零 /cup_pose publisher 完整
+failure_criteria:
+  - 误选瓶子、发布 pose、payload/device/latency/GUI/cleanup 任一失败
+invalid_criteria:
+  - domain/partition/output/source/install/input provenance 污染或进程图非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 221
+  gz_partition: v5t004-mac-exp017
+commands:
+  - command: fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-017-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-017-bottle-only
+decision: PENDING
+next_experiment: EXP-018
+```
+
+```yaml
+experiment_id: EXP-018
+status: PLANNED
+prior_experiment: EXP-017
+hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
+prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
+single_variable: 相对 EXP-017 仅 keyframe=task_start 与期望目标数从0变1
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=222、GZ_PARTITION=v5t004-mac-exp018 为空；output不存在
+success_criteria:
+  - 同 stamp 的真实 640x480 rgb8/32FC1/CameraInfo、finite positive depth、exact-stamp tf2与 runtime_device=mps
+  - matching_count=1、plastic_cup mask IoU>=0.80、world position error<0.01m、request_latency_ms<=2000、新鲜 /cup_pose
+  - overlay标注类别/置信度/边界；安装态 provenance与退出后零 owned inference/publisher完整
+failure_criteria:
+  - 候选非唯一、IoU/pose/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 222
+  gz_partition: v5t004-mac-exp018
+commands:
+  - command: fresh visible MuJoCo task_start stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-018-one-cup-distractors
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-018-one-cup-distractors
+decision: PENDING
+next_experiment: EXP-019
+```
+
+```yaml
+experiment_id: EXP-019
+status: PLANNED
+prior_experiment: EXP-018
+hypothesis: macOS MPS 的 two_cups 场景检测两个 plastic_cup 并以 TARGET_AMBIGUOUS 拒绝发布 pose
+prediction: matching_count=2；两实例 IoU均>=0.80；无新 /cup_pose
+single_variable: 相对 EXP-018 仅 keyframe=v5_two_cups 与期望目标数从1变2
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=223、GZ_PARTITION=v5t004-mac-exp019 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 RGB-D/CameraInfo、finite positive depth、runtime_device=mps
+  - TARGET_AMBIGUOUS、matching_count=2、两 cup mask IoU均>=0.80、request_latency_ms<=2000、无新 /cup_pose
+  - overlay分开标出两实例；安装态 provenance与退出后零 owned inference/pose publisher完整
+failure_criteria:
+  - 非两个匹配、发布 pose、IoU/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 223
+  gz_partition: v5t004-mac-exp019
+commands:
+  - command: fresh visible MuJoCo v5_two_cups stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-019-two-cups
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-019-two-cups
+decision: PENDING
+next_experiment: EXP-020
+```
+
+```yaml
+experiment_id: EXP-020
+status: PLANNED
+prior_experiment: EXP-019
+hypothesis: macOS MPS 的 cup_adjacent_bottle 场景可分离相邻同色物体并唯一定位 plastic_cup
+prediction: matching_count=1；cup mask不含瓶子；IoU>=0.80；world error<0.01m；新鲜 pose
+single_variable: 相对 EXP-019 仅 keyframe=v5_cup_near_bottle 与期望目标数从2变1
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=224、GZ_PARTITION=v5t004-mac-exp020 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 RGB-D/CameraInfo、finite positive depth、exact-stamp tf2、runtime_device=mps
+  - matching_count=1、cup mask IoU>=0.80且不含瓶子 truth pixels、world error<0.01m、latency<=2000、新鲜 /cup_pose
+  - overlay清楚分离杯/瓶；安装态 provenance与退出后零 owned inference/publisher完整
+failure_criteria:
+  - 杯瓶粘连或候选非唯一，及 pose/IoU/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 224
+  gz_partition: v5t004-mac-exp020
+commands:
+  - command: fresh visible MuJoCo v5_cup_near_bottle stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-020-cup-adjacent-bottle
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-020-cup-adjacent-bottle
+decision: PENDING
+next_experiment: EXP-021
+```
+
+```yaml
+experiment_id: EXP-021
+status: PLANNED
+prior_experiment: EXP-020
+hypothesis: Linux CUDA 的 bottle_only 场景不会把橙色瓶子误判为 plastic_cup，也不会发布新 /cup_pose
+prediction: TARGET_NOT_FOUND；matching_count=0；无新 pose；真实 RGB-D 与 cleanup 合格
+single_variable: 相对 EXP-017 仅平台/device变为 Linux CUDA
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=cuda、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=231、GZ_PARTITION=v5t004-linux-exp021 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 rgb8/32FC1/CameraInfo、finite positive depth、runtime_device=cuda
+  - TARGET_NOT_FOUND、matching_count=0、无新 /cup_pose、latency<=2000；overlay/truth/provenance/cleanup完整
+failure_criteria:
+  - 误选瓶子、发布 pose、payload/device/latency/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/ws_moveit-v5-t004/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 231
+  gz_partition: v5t004-linux-exp021
+commands:
+  - command: fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux/exp-021-bottle-only
+decision: PENDING
+next_experiment: EXP-022
+```
+
+```yaml
+experiment_id: EXP-022
+status: PLANNED
+prior_experiment: EXP-021
+hypothesis: Linux CUDA 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
+prediction: matching_count=1；IoU>=0.80；world error<0.01m；新鲜 pose
+single_variable: 相对 EXP-021 仅 keyframe=task_start 与期望目标数从0变1
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=cuda、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=232、GZ_PARTITION=v5t004-linux-exp022 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 RGB-D/CameraInfo、finite positive depth、exact-stamp tf2、runtime_device=cuda
+  - matching_count=1、IoU>=0.80、world error<0.01m、latency<=2000、新鲜 /cup_pose；GUI/provenance/cleanup完整
+failure_criteria:
+  - 候选非唯一、IoU/pose/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/ws_moveit-v5-t004/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 232
+  gz_partition: v5t004-linux-exp022
+commands:
+  - command: fresh visible MuJoCo task_start stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux/exp-022-one-cup-distractors
+decision: PENDING
+next_experiment: EXP-023
+```
+
+```yaml
+experiment_id: EXP-023
+status: PLANNED
+prior_experiment: EXP-022
+hypothesis: Linux CUDA 的 two_cups 场景检测两个 plastic_cup 并以 TARGET_AMBIGUOUS 拒绝发布 pose
+prediction: matching_count=2；两实例 IoU均>=0.80；无新 /cup_pose
+single_variable: 相对 EXP-022 仅 keyframe=v5_two_cups 与期望目标数从1变2
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=cuda、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=233、GZ_PARTITION=v5t004-linux-exp023 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 RGB-D/CameraInfo、finite positive depth、runtime_device=cuda
+  - TARGET_AMBIGUOUS、matching_count=2、两 mask IoU均>=0.80、latency<=2000、无新 /cup_pose；GUI/provenance/cleanup完整
+failure_criteria:
+  - 非两个匹配、发布 pose、IoU/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/ws_moveit-v5-t004/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 233
+  gz_partition: v5t004-linux-exp023
+commands:
+  - command: fresh visible MuJoCo v5_two_cups stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux/exp-023-two-cups
+decision: PENDING
+next_experiment: EXP-024
+```
+
+```yaml
+experiment_id: EXP-024
+status: PLANNED
+prior_experiment: EXP-023
+hypothesis: Linux CUDA 的 cup_adjacent_bottle 场景可分离相邻同色物体并唯一定位 plastic_cup
+prediction: matching_count=1；cup mask不含瓶子；IoU>=0.80；world error<0.01m；新鲜 pose
+single_variable: 相对 EXP-023 仅 keyframe=v5_cup_near_bottle 与期望目标数从2变1
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=cuda、threshold=0.50、imgsz=640
+  - ROS_DOMAIN_ID=234、GZ_PARTITION=v5t004-linux-exp024 为空；output不存在
+success_criteria:
+  - 真实同 stamp 640x480 RGB-D/CameraInfo、finite positive depth、exact-stamp tf2、runtime_device=cuda
+  - matching_count=1、cup mask IoU>=0.80且不含瓶子 truth pixels、world error<0.01m、latency<=2000、新鲜 /cup_pose
+  - overlay清楚分离杯/瓶；安装态 provenance与退出后零 owned inference/publisher完整
+failure_criteria:
+  - 杯瓶粘连或候选非唯一，及 pose/IoU/latency/payload/device/GUI/cleanup 任一失败
+invalid_criteria:
+  - provenance、domain、partition、output或 FULL_RESTART 污染
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/ws_moveit-v5-t004/install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 234
+  gz_partition: v5t004-linux-exp024
+commands:
+  - command: fresh visible MuJoCo v5_cup_near_bottle stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux/exp-024-cup-adjacent-bottle
+decision: PENDING
+next_experiment: EXP-025
+```
 
 ```yaml
 experiment_id: EXP-016
