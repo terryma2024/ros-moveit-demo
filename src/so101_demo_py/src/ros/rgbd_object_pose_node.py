@@ -59,7 +59,7 @@ class RgbdObjectPoseOptions:
     confidence_threshold: float = 0.50
     depth_trunc_m: float = 3.0
     minimum_cup_points: int = 50
-    cluster_eps_m: float = 0.02
+    cluster_eps_m: float = 0.015
     cluster_min_points: int = 5
     table_top_z: float = 0.12
     cup_height: float = 0.09

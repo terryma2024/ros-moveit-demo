@@ -73,7 +73,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--confidence-threshold", type=_probability, default=0.50)
     parser.add_argument("--depth-trunc-m", type=_positive_finite, default=3.0)
     parser.add_argument("--minimum-cup-points", type=_positive_integer, default=50)
-    parser.add_argument("--cluster-eps-m", type=_positive_finite, default=0.02)
+    parser.add_argument("--cluster-eps-m", type=_positive_finite, default=0.015)
     parser.add_argument("--cluster-min-points", type=_positive_integer, default=5)
     parser.add_argument("--table-top-z", type=float, default=0.12)
     parser.add_argument("--cup-height", type=_positive_finite, default=0.09)

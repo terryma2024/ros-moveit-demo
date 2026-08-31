@@ -184,7 +184,7 @@ def test_localizer_warm_up_primes_outlier_cleanup_once() -> None:
 
     def cleaner(points: np.ndarray, eps_m: float, min_points: int) -> np.ndarray:
         calls.append(np.array(points, copy=True))
-        assert eps_m == 0.02
+        assert eps_m == 0.015
         assert min_points == 5
         return points
 
