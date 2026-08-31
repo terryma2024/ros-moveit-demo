@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: e33fba2f5461a1556c3fec88a13244ae735a25f8
+current_commit: 4f852fabd74b3178106497459931fae9a955ca58
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-024
+latest_checkpoint: CP-025
 next_experiment: EXP-026
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-025
+last_valid_experiment: EXP-016
+current_hypothesis: 干净 gui/501 Aqua session可执行 EXP-026 main-thread UI与真实 RGB-D
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；Aqua stack 尚未启动
+preserved_processes: EXP-017/025无效证据持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-051 gui/501 session=Aqua、WindowServer PID 599；domain 226、两端 output、task process为空；dylib/MPS gate通过
+open_risks:
+  - launchctl asuser 实际 stack、窗口、payload、not-found与cleanup尚未观察
+next_command: 通过 launchctl asuser 501 /bin/zsh -lc 启动并记录 Aqua stack owner PID
+```
 
 ```yaml
 checkpoint_id: CP-024
@@ -768,7 +782,7 @@ next_experiment: EXP-026
 
 ```yaml
 experiment_id: EXP-026
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-025
 hypothesis: launchctl asuser 501 的 Aqua zsh 可让正确插件在 macOS main thread执行 UI task，进而为 bottle_only 发布真实 RGB-D
 prediction: Viewer可见、controllers active、RGB-D有效；MPS输出 TARGET_NOT_FOUND，且无 /cup_pose
@@ -794,7 +808,9 @@ provenance:
 commands:
   - command: launchctl asuser 501 /bin/zsh -lc with explicit ROS/current overlay/perception/DYLD environment; launch v5_no_cup and run observers
     exit_code: PENDING
-observed: [NONE]
+observed:
+  - gui/501=session Aqua、WindowServer PID 599；domain 226、local/remote output 与 task process为空
+  - primary mujoco runtime、dylib dlopen、current so101 install、weight hash、MPS available=true 已回读
 inferred: [NONE]
 conclusion: PENDING
 evidence:
