@@ -266,7 +266,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-012
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-011
 hypothesis: 已由 EXP-011 验证的离线 CUDA envelope 可在完整 800/200 数据和 100 epoch 配置上训练出单一 best.pt，并完成独立 200-image test split 评估
 prediction: 训练扫描 800 train/200 val，CUDA:0 RTX 5080、amp=False、无自动下载，exit 0；test split 评估 exit 0 并生成 metrics.json、best.pt 和 SHA256
@@ -300,7 +300,7 @@ commands:
   - command: YOLO(best.pt).val(data=dataset.yaml, split=test, device=cuda, imgsz=640) and write metrics.json
     exit_code: PENDING
 observed:
-  - NONE
+  - source、GPU、dataset/base model/font hash、进程所有权与独立 full output root已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
