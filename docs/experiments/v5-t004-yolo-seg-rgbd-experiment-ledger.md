@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 4b73da881e7a6b0fc2e482290c71121e1428e5cb
+current_commit: 41d6fcf7559f0c52bce2966cbf84ccc203c7beea
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -19,17 +19,33 @@ confirmed_conclusions:
   - CONF-034 EXP-011 预置锁定字体后，amp=false 与 YOLO_OFFLINE=true 的 CUDA smoke 零自动下载、退出 0 并生成完整训练工件
   - CONF-036 EXP-012 完成 100 epoch 全量训练；test mask precision 0.9997、recall 1.0、mAP50 0.995、mAP50-95 0.9737
   - CONF-039 EXP-015 在 Linux CUDA 上经生产 TargetSelector 以 confidence 0.50 从 296 个 raw candidates 唯一选中 plastic_cup，推理 37.58 ms
+  - CONF-040 EXP-016 在 macOS MPS 上以同一权重和输入唯一选中 plastic_cup，推理 447.77 ms，mask 与 Linux 均为 5053 pixels
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-017
-next_experiment: EXP-016
+latest_checkpoint: CP-018
+next_experiment: EXP-017
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-018
+last_valid_experiment: EXP-016
+current_hypothesis: 同一权重已通过 CUDA/MPS adapter 与 selector，下一边界是真实 ROS RGB-D 四场景定位
+working_tree_status: 仅有 EXP-016 有效结论待提交；remote source clean at 35db5f5
+owned_processes: NONE；Mac MPS probe 正常退出，受控 process readback 无残留
+preserved_processes: Linux/Mac platform smoke、训练、无效探针全部保留；用户文件未触碰
+confirmed_conclusions:
+  - CONF-040 Mac runtime_device=mps、raw_count=296、eligible_count=1、confidence=0.970541、mask_pixels=5053、inference=447.77 ms
+  - CONF-041 Mac result/stdout/probe/hash manifest 已同步到正式 evidence root，远端逐文件 SHA 回读一致
+open_risks:
+  - adapter smoke 尚未证明真实 ROS RGB-D、深度定位、/cup_pose、四场景 fail-closed 与 GUI/cleanup
+next_command: 按 Task 8 先预登记 macOS/Linux 各四个 FULL_RESTART 场景实验，再逐场执行
+```
 
 ```yaml
 checkpoint_id: CP-017
@@ -313,7 +329,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-016
-status: RUNNING
+status: VALID
 prior_experiment: EXP-015
 hypothesis: 同一 best.pt 与 seed 300001 在 Mac MPS 上经 confidence 0.50 TargetSelector 后可唯一选出 plastic_cup，且与 Linux selected mask 结论一致
 prediction: runtime_device=mps、raw_count>=1、eligible_count=1、selected class=plastic_cup、mask 480x640非空、latency<=2000、weight SHA一致
@@ -338,17 +354,21 @@ provenance:
   gz_partition: NONE
 commands:
   - command: copy and verify best.pt/image, run detector plus TargetSelector at 0.50, sync result/hash to remote
-    exit_code: PENDING
+    exit_code: 0
 observed:
   - remote 与 Mac output 均预先不存在；best.pt 与输入图像已复制到独立 Mac staging
   - best.pt SHA256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781；图像 SHA256=4462803146c9e5abeaca5a05a7615557eb8b51817fc5dc2a82c03d2b9753d909，均与正式 evidence root 一致
   - sandbox 内 mps_available=false 属于执行环境限制；正式探针将以受控的 sandbox 外命令重新核验并强制 mps、禁止 CPU fallback
+  - 受控 sandbox 外 gate 为 mps_built=true、mps_available=true；runtime_device=mps，未允许 CPU fallback
+  - raw_count=296、eligible_count=1；selected plastic_cup confidence=0.9705414176，mask_shape=[480,640]、mask_pixels=5053
+  - inference_latency_ms=447.77475、cold_start_latency_ms=14943.576125；一次性 Ultralytics settings/font cache 初始化计入 cold start，不计入单次请求门槛
+  - result.json SHA256=d699eba199a562929bfe21adbb372046a4204773ad685d6b186e9f5ed65b1252；远端同步回读一致，probe 后无进程残留
 inferred:
-  - NONE
-conclusion: PENDING
+  - Linux 与 Mac 的 bbox/confidence 仅有浮点级差异，选择结果和 5053-pixel mask 一致
+conclusion: PASS；Mac MPS detector/selector 平台冒烟通过
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/macos-exp016
-decision: PENDING
+decision: KEEP；进入双平台四场景真实 ROS RGB-D 验收
 next_experiment: EXP-017
 ```
 
