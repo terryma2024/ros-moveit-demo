@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 5cdabefa303280fc2cc9501e6909f99553831c72
+current_commit: eb4d99124277a01ffec9ab705c9f7280005a0427
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-036
+latest_checkpoint: CP-037
 next_experiment: EXP-032
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-037
+last_valid_experiment: EXP-016
+current_hypothesis: 双平台安装态已包含0.25候选下限，EXP-032可在正式FULL_RESTART通过not-found全部门禁
+working_tree_status: 仅本账本 RUNNING 转换待提交；生产源/测试 clean
+owned_processes: NONE；正式 EXP-032 尚未启动
+preserved_processes: 所有失败与无效证据已持久化；ai-station主checkout用户未跟踪账本未触碰
+confirmed_conclusions:
+  - CONF-069 candidate-floor commit=eb4d991；Mac installed import与Linux isolated installed import均回读conf=0.25
+  - CONF-070 Mac包级890/890、Linux adapter 21/21；Mac MPS与Linux RTX 5080 CUDA gate通过
+  - CONF-071 domain 232、两端output与任务进程为空
+open_risks:
+  - EXP-032真实候选数、topic observer、延迟、overlay与cleanup尚未观察
+next_command: 前台PTY FULL_RESTART EXP-032，先起120秒topic observer再通过Aqua MPS发起请求
+```
 
 ```yaml
 checkpoint_id: CP-036
@@ -1211,7 +1227,7 @@ next_experiment: EXP-032
 
 ```yaml
 experiment_id: EXP-032
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-031
 hypothesis: YOLO标准candidate floor=0.25可在保持所有模型候选与selector 0.50边界的同时，让 bottle_only overlay清晰且request_latency<=2000
 prediction: candidate_count=0、matching_count=0、TARGET_NOT_FOUND、runtime_device=mps、request_latency<=2000、无/cup_pose
@@ -1230,7 +1246,7 @@ failure_criteria:
 invalid_criteria:
   - source/install/foreground PTY/Aqua/dylib/domain/partition/output/FULL_RESTART或observer窗口污染
 provenance:
-  source_commit: PENDING candidate-floor commit based on 5cdabefa303280fc2cc9501e6909f99553831c72
+  source_commit: eb4d99124277a01ffec9ab705c9f7280005a0427
   install_overlay: current so101_demo_py plus current worktree so101_mujoco_support and primary project mujoco runtime
   runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
   ros_domain_id: 232
