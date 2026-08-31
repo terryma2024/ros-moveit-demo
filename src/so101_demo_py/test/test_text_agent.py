@@ -25,6 +25,7 @@ from so101_demo.ports.task_planner import (
 )
 from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
 from so101_demo.profiling.session import build_profiler
+from so101_demo.profiling.wrappers import profile_executor
 
 
 VALID_CANDIDATE = {
@@ -482,6 +483,32 @@ def test_malformed_executor_result_is_terminal_and_claims_request_id() -> None:
     assert retry.reason_code == "DUPLICATE_REQUEST_ID"
     assert planner.calls == ["帮我拿杯子", "帮我拿杯子"]
     assert len(executor.calls) == 1
+
+
+def test_profiled_malformed_executor_object_preserves_stable_terminal_result(
+    tmp_path: Path,
+) -> None:
+    malformed = MalformedResultExecutor(object())
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="text-agent",
+            request_id="req-001",
+        )
+    )
+    assert profiler is not None
+    planner = StubPlanner(VALID_OUTCOME)
+    agent = TextAgent(planner, profile_executor(malformed, profiler))
+
+    result = agent.handle(make_request(mode="execute", execute=True))
+    profiler.close()
+
+    assert result.status is AgentStatus.RUNTIME_FAILED
+    assert result.reason_code == "EXECUTOR_RESULT_INVALID"
+    assert result.dispatch is True
+    assert result.runtime_session_id is None
 
 
 def test_generic_executor_exception_propagates_after_claim() -> None:

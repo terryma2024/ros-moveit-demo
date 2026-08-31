@@ -118,7 +118,7 @@ class _ProfiledDispatcher(TaskDispatcher):
             raise
         self._profiler.finish_span(
             token,
-            outcome="execute",
+            outcome="resolved",
             attributes={"backend": request.backend},
         )
         return request
@@ -148,6 +148,17 @@ class _ProfiledExecutor:
                 },
             )
             raise
+        if not (
+            isinstance(result, RuntimeDispatchResult)
+            and type(result.exit_code) is int
+            and isinstance(result.runtime_session_id, str)
+        ):
+            self.profiler.finish_span(
+                token,
+                outcome="invalid",
+                attributes={"result_type": type(result).__name__},
+            )
+            return result
         self.profiler.finish_span(
             token,
             outcome="ok" if result.exit_code == 0 else "error",
