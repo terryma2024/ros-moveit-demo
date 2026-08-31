@@ -314,7 +314,7 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             color_message.header.frame_id,
         )
         _wait_for_output_subscribers(
-            (detections_publisher, overlay_publisher),
+            (detections_publisher, overlay_publisher, pose_publisher),
             spin_once=lambda timeout_s: rclpy.spin_once(
                 node, timeout_sec=timeout_s
             ),
@@ -376,8 +376,10 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             selector=TargetSelector(),
             localizer=localizer,
             evidence_writer=PerceptionEvidenceWriter(),
-            pose_publisher=lambda localized: pose_publisher.publish(
-                _pose_message(localized, PoseStamped)
+            pose_publisher=lambda localized: _publish_and_confirm(
+                pose_publisher,
+                _pose_message(localized, PoseStamped),
+                ack_timeout=Duration(seconds=0.5),
             ),
             detection_publisher=publish_detections,
             lookup_transform=lookup,
