@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, dataclass, field
+import json
+from pathlib import Path
 import pytest
 
 from so101_demo.application.task_dispatch import TaskDispatcher
@@ -21,6 +23,8 @@ from so101_demo.ports.task_planner import (
     PlannerMetadata,
     PlannerProviderError,
 )
+from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+from so101_demo.profiling.session import build_profiler
 
 
 VALID_CANDIDATE = {
@@ -557,3 +561,45 @@ def test_to_dict_does_not_expose_mutable_command_state() -> None:
     first_command["constraints"]["speed"] = "slow"
     assert second_serialized["command"] == VALID_CANDIDATE
     assert result.command.to_dict() == VALID_CANDIDATE
+
+
+def test_profiled_agent_preserves_result_and_records_internal_stages(
+    tmp_path: Path,
+) -> None:
+    baseline, _, _ = make_agent()
+    baseline_result = baseline.handle(make_request())
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="text-agent",
+            request_id="req-001",
+        )
+    )
+    assert profiler is not None
+    planner = StubPlanner(VALID_OUTCOME)
+    profiled = TextAgent(planner, FakeExecutor(), profiler=profiler)
+
+    profiled_result = profiled.handle(make_request())
+    profiler.close()
+
+    assert profiled_result == baseline_result
+    complete_events = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/text-agent.events.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+        if '"event_type":"span_complete"' in line
+    ]
+    assert [event["name"] for event in complete_events] == [
+        "agent.validate_input",
+        "agent.validate_command",
+        "agent.total",
+    ]
+    assert complete_events[0]["outcome"] == "accepted"
+    assert complete_events[1]["attributes"] == {"planner_outcome": "supported"}
+    assert complete_events[2]["attributes"] == {
+        "reason_code": None,
+        "status": "DISPATCH_PREVIEW",
+    }
