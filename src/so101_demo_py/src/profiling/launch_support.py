@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from launch.event_handlers import OnProcessExit, OnShutdown
 from .artifacts import FinalizationResult, finalize_profiling
 from .model import ProfilingConfig, ProfilingMode
 from .session import SemanticProfiler, SpanToken, build_profiler
+from .system_trace import SystemTraceResult, build_system_trace
 
 
 @dataclass(slots=True)
@@ -22,6 +25,7 @@ class LaunchProfilingSession:
     profiling_root: Path
     require_system_trace: bool
     profiler: SemanticProfiler
+    system_trace: SystemTraceResult
     _total_span: SpanToken
     _stack_span: SpanToken
     _scene_span: SpanToken
@@ -43,6 +47,14 @@ class LaunchProfilingSession:
             "--profiling-session-id",
             self.profiler.config.session_id,
         )
+
+    @property
+    def prefix_actions(self) -> tuple[object, ...]:
+        """System actions that must execute before the application graph."""
+
+        if self.system_trace.action is None:
+            return ()
+        return (self.system_trace.action,)
 
     @property
     def warnings(self) -> tuple[str, ...]:
@@ -121,18 +133,25 @@ class LaunchProfilingSession:
             return finalize_profiling(
                 self.profiling_root,
                 mode=self.mode,
-                backend={
-                    "status": (
-                        "portable_only"
-                        if self.mode is ProfilingMode.TRACE
-                        else "disabled"
-                    ),
-                    "name": None,
-                },
+                backend=self._backend_manifest(),
             )
         except (OSError, RuntimeError, ValueError) as error:
             self._warnings.append(f"{type(error).__name__}: {error}")
             return None
+
+    def _backend_manifest(self) -> dict[str, object]:
+        status = self.system_trace.status
+        if status == "unsupported":
+            status = "portable_only"
+        output = None
+        if self.system_trace.output_path is not None:
+            output = str(self.system_trace.output_path.relative_to(self.profiling_root))
+        return {
+            "status": status,
+            "name": self.system_trace.backend,
+            "output": output,
+            "error": self.system_trace.error,
+        }
 
 
 def resolve_launch_profiling(
@@ -144,6 +163,8 @@ def resolve_launch_profiling(
     session_id: str,
     source_commit: str | None,
     installed_prefix: str | None,
+    platform_name: str | None = None,
+    system_trace_builder: Callable[..., SystemTraceResult] | None = None,
 ) -> LaunchProfilingSession | None:
     """Validate launch values and construct profiling only for enabled modes."""
 
@@ -163,6 +184,14 @@ def resolve_launch_profiling(
         registered_root=registered_root,
     )
     profiling_root = output_root / "profiling"
+    trace_builder = system_trace_builder or build_system_trace
+    system_trace = trace_builder(
+        mode=mode,
+        require=require_system_trace,
+        profiling_root=profiling_root,
+        session_id=session_id,
+        platform_name=sys.platform if platform_name is None else platform_name,
+    )
     try:
         profiling_root.mkdir(mode=0o700)
     except FileExistsError as error:
@@ -187,14 +216,21 @@ def resolve_launch_profiling(
     total_span = profiler.start_span("launch.total")
     stack_span = profiler.start_span("launch.stack_startup")
     scene_span = profiler.start_span("launch.scene_setup")
+    warnings = []
+    if system_trace.status == "unavailable":
+        warnings.append(
+            f"ros2_tracing unavailable ({system_trace.error or 'UnknownError'})"
+        )
     return LaunchProfilingSession(
         mode=mode,
         profiling_root=profiling_root,
         require_system_trace=require_system_trace,
         profiler=profiler,
+        system_trace=system_trace,
         _total_span=total_span,
         _stack_span=stack_span,
         _scene_span=scene_span,
+        _warnings=warnings,
     )
 
 

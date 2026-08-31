@@ -996,6 +996,11 @@ def _exclusive_owned_directory(path: Path, label: str) -> Path:
 def _prepare_perception_evidence_root(
     evidence_file: Path, session_id: str
 ) -> _PerceptionEvidencePaths:
+    run_root = _prepare_perception_run_root(evidence_file, session_id)
+    return _prepare_perception_evidence_directories(run_root)
+
+
+def _prepare_perception_run_root(evidence_file: Path, session_id: str) -> Path:
     try:
         evidence_parent = evidence_file.parent.resolve(strict=True)
     except FileNotFoundError as error:
@@ -1012,6 +1017,12 @@ def _prepare_perception_evidence_root(
     resolved_run_root = _exclusive_owned_directory(run_root, "session evidence root")
     if resolved_run_root.parent != resolved_base:
         raise RuntimeError("session evidence root escapes derived evidence root")
+    return resolved_run_root
+
+
+def _prepare_perception_evidence_directories(
+    resolved_run_root: Path,
+) -> _PerceptionEvidencePaths:
 
     perception = _exclusive_owned_directory(
         resolved_run_root / "perception", "perception evidence directory"
@@ -1232,17 +1243,18 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
 
     execution_identity = resolve_installed_execution_identity()
     share = Path(get_package_share_directory("so101_demo_py"))
-    evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
+    run_root = _prepare_perception_run_root(evidence_file, session_id)
     profiling_session = resolve_launch_profiling(
         mode_value=profiling_mode,
         output_root_value=profiling_output_root,
         require_system_trace_value=profiling_require_system_trace,
-        run_root=evidence_paths.run_root,
+        run_root=run_root,
         session_id=session_id,
         source_commit=execution_identity.source_commit,
         installed_prefix=execution_identity.package_prefix,
     )
-    return _mujoco_text_pick_agent_execute_actions(
+    evidence_paths = _prepare_perception_evidence_directories(run_root)
+    application_actions = _mujoco_text_pick_agent_execute_actions(
         context,
         share,
         session_id,
@@ -1254,6 +1266,9 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
         exit_status=exit_status,
         profiling_session=profiling_session,
     )
+    if profiling_session is None:
+        return application_actions
+    return [*profiling_session.prefix_actions, *application_actions]
 
 
 def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescription:
