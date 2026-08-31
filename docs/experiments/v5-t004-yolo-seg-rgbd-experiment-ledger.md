@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 9ae2d3621acc530f9d5d416a5f87b0b03497797d
+current_commit: 0e738f1040888b1bfda4a20483733bd5ce974038
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -17,17 +17,33 @@ confirmed_conclusions:
   - CONF-003 ai-station NVIDIA 用户态 595.84 与已加载内核模块 595.71.05 不一致，nvidia-smi 当前失败
   - CONF-022 EXP-007 授权重启后 NVIDIA 内核模块、NVML 与磁盘模块统一为 595.84，nvidia-smi 与 RTX 5080 CUDA 张量 gate 通过
   - CONF-034 EXP-011 预置锁定字体后，amp=false 与 YOLO_OFFLINE=true 的 CUDA smoke 零自动下载、退出 0 并生成完整训练工件
+  - CONF-036 EXP-012 完成 100 epoch 全量训练；test mask precision 0.9997、recall 1.0、mAP50 0.995、mAP50-95 0.9737
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-014
-next_experiment: EXP-012
+latest_checkpoint: CP-015
+next_experiment: EXP-013
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-012
+current_hypothesis: 同一 f281d252 best.pt 可在 Linux CUDA 与 Mac MPS adapter 上得到唯一 plastic_cup mask
+working_tree_status: 本地仅有 EXP-012 结论与双平台 smoke 计划待提交；remote source clean at 35db5f5
+owned_processes: NONE；全量训练与 test eval均结束
+preserved_processes: 全量训练/测试、所有 smoke/invalid 工件、数据、base model、字体资产均保留
+confirmed_conclusions:
+  - CONF-036 full training/test exit 0，best.pt 6001316 bytes，SHA256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  - CONF-037 test mask precision=0.999735、recall=1.0、mAP50=0.995、mAP50-95=0.973662；model inference约0.976 ms/image
+open_risks:
+  - 真实 YoloSegDetector 在 CUDA/MPS 的候选转换、mask尺寸与同权重 hash尚未实测
+next_command: 对固定 test seed 300001 分别执行 EXP-013 CUDA 与 EXP-014 MPS adapter smoke
+```
 
 ```yaml
 checkpoint_id: CP-014
@@ -265,8 +281,92 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ## Experiments
 
 ```yaml
+experiment_id: EXP-014
+status: PLANNED
+prior_experiment: EXP-013
+hypothesis: 从正式 evidence root 拷贝并核对相同 SHA 的 best.pt 可在 Mac MPS YoloSegDetector 上对 seed 300001 输出唯一 plastic_cup 与非空 full-resolution mask
+prediction: runtime_device=mps、weights SHA=f281d252...40781、candidate_count=1、class=plastic_cup、mask非空且 inference_latency_ms<=2000
+single_variable: 相对 EXP-013 仅平台/device 从 ai-station CUDA 变为 Mac MPS；权重、图像、query、imgsz与 adapter source相同
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Mac MPS available=true，锁定 torch/ultralytics 版本已通过
+  - 从正式 evidence root复制 best.pt 与 seed 300001 image 后逐文件 SHA 回读一致
+  - 没有其他本任务 inference 进程；独立 Mac staging 与正式 platform-smoke/macos 输出不存在
+success_criteria:
+  - YoloSegDetector 实际 runtime_device=mps 且不允许 CPU fallback
+  - model weight SHA 精确为 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  - candidate_count=1、class_id=plastic_cup、mask shape=480x640 且非空、inference_latency_ms<=2000
+  - JSON 与 hash manifest 同步回正式 evidence root
+failure_criteria:
+  - MPS 不可用/回退、hash不一致、候选数/类别/mask/延迟不符合
+invalid_criteria:
+  - 图像/权重/source provenance 或结果同步 hash 不匹配
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /tmp/so101-v5-t004-perception-macos/bin/python
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: scp ai-station:.../full-exp-012/best.pt and dataset/images/test/000300001.png to registered Mac staging; verify SHA
+    exit_code: PENDING
+  - command: instantiate YoloSegDetector(requested_device=mps, allow_cpu_fallback=false) and detect seed 300001
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/macos
+decision: PENDING
+next_experiment: EXP-015
+```
+
+```yaml
+experiment_id: EXP-013
+status: PLANNED
+prior_experiment: EXP-012
+hypothesis: full-exp-012 best.pt 可在 Linux CUDA YoloSegDetector 上对固定 seed 300001 输出唯一 plastic_cup 与非空 full-resolution mask
+prediction: runtime_device=cuda、weights SHA=f281d252...40781、candidate_count=1、class=plastic_cup、mask非空且 inference_latency_ms<=2000
+single_variable: 首次用正式 best.pt 运行生产 YoloSegDetector；固定平台 CUDA、图像 seed 300001、query plastic_cup、imgsz 640
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source 35db5f54c1d2516fbe752afbe7380d38522a2a19 与锁定 runtime venv
+  - best.pt SHA f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  - seed 300001 truth 为 one_cup_distractors 且 visible_instance_count=1
+  - CUDA gate有效且没有其他本任务 inference 进程；Linux output 不存在
+success_criteria:
+  - YoloSegDetector 实际 runtime_device=cuda 且不允许 CPU fallback
+  - batch weights SHA 正确，candidate_count=1、class_id=plastic_cup
+  - mask shape=480x640 且非空，inference_latency_ms<=2000；JSON 与 hash写入正式 evidence root
+failure_criteria:
+  - CUDA/权重/候选数/类别/mask/延迟任一不符合
+invalid_criteria:
+  - source/image/weight provenance 不匹配或外部 inference 污染
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/python
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: instantiate YoloSegDetector(requested_device=cuda, allow_cpu_fallback=false) and detect dataset/images/test/000300001.png
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/linux
+decision: PENDING
+next_experiment: EXP-014
+```
+
+```yaml
 experiment_id: EXP-012
-status: RUNNING
+status: VALID
 prior_experiment: EXP-011
 hypothesis: 已由 EXP-011 验证的离线 CUDA envelope 可在完整 800/200 数据和 100 epoch 配置上训练出单一 best.pt，并完成独立 200-image test split 评估
 prediction: 训练扫描 800 train/200 val，CUDA:0 RTX 5080、amp=False、无自动下载，exit 0；test split 评估 exit 0 并生成 metrics.json、best.pt 和 SHA256
@@ -294,19 +394,26 @@ provenance:
   gz_partition: NONE
 commands:
   - command: prepare_training_run(..., output_root=.../training/full-exp-012, run_name=train)
-    exit_code: PENDING
+    exit_code: 0
   - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/full-exp-012/training-config.yaml
-    exit_code: PENDING
+    exit_code: 0
   - command: YOLO(best.pt).val(data=dataset.yaml, split=test, device=cuda, imgsz=640) and write metrics.json
-    exit_code: PENDING
+    exit_code: 0
 observed:
   - source、GPU、dataset/base model/font hash、进程所有权与独立 full output root已核验，实验进入 RUNNING
+  - runtime config epochs=100、fraction absent、amp=false；扫描 800 train/200 val 且日志无 forbidden download marker
+  - 100 epochs in 0.133 hours；training exit 0，best/last各 6001316 bytes，best SHA256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  - 独立 200-image test exit 0：mask precision=0.999735、recall=1.0、mAP50=0.995、mAP50-95=0.973662
+  - metrics.json、weights.sha256、artifacts.sha256 可解析；训练/评估后无残留进程
 inferred:
-  - NONE
-conclusion: PENDING
+  - 合成 test split 表明模型离线分割质量充分进入双平台真实 adapter 与 ROS 场景验收，但不能代替真实 topic/3D/pick-place
+conclusion: PASS；全量 best.pt 与 test metrics 交付门通过
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/metrics.json
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/weights.sha256
+decision: KEEP
 next_experiment: EXP-013
 ```
 
