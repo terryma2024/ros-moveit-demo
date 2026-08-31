@@ -551,7 +551,7 @@ Expected: the launch appears in installed share, all 13 arguments appear, and in
 Use an isolated ROS domain and task-owned ROS logs:
 
 ```zsh
-export ROS_DOMAIN_ID=240
+export ROS_DOMAIN_ID=221
 export ROS_HOME=/tmp/so101-debug-text-agent-e2e-launch-20260831/static/ros-home
 export ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-launch-20260831/static/ros-log
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR"
@@ -562,10 +562,10 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
   2>&1 | tee /tmp/so101-debug-text-agent-e2e-launch-20260831/static/rejected-launch.log
 test ! -e /tmp/so101-debug-text-agent-e2e-launch-20260831/static/rejected.d
 ros2 node list | tee \
-  /tmp/so101-debug-text-agent-e2e-launch-20260831/static/domain-240-nodes.log
+  /tmp/so101-debug-text-agent-e2e-launch-20260831/static/domain-221-nodes.log
 ```
 
-Expected: launch exits nonzero with `skip_confirmation:=true`, creates no evidence run directory, and domain 240 has no nodes.
+Expected: launch exits nonzero with `skip_confirmation:=true`, creates no evidence run directory, and domain 221 has no nodes.
 
 - [ ] **Step 5: Record the static checkpoint and commit it**
 
@@ -606,7 +606,7 @@ ollama list | grep 'qwen3.5:4b' | \
   tee /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/preflight/ollama-model.log
 ```
 
-Do not stop the previously observed PID 79408 tree unless current parent/session evidence proves it belongs to this task. The four new runs use isolated domains 241–244, so an unrelated stack in another domain is preserved.
+Do not stop the previously observed PID 79408 tree unless current parent/session evidence proves it belongs to this task. The four new runs use isolated domains 222–225, so an unrelated stack in another domain is preserved. Fast DDS on this Mac rejects domain IDs above 232.
 
 - [ ] **Step 2: Run `task_start` as a fresh owned stack**
 
@@ -614,7 +614,7 @@ Run the launch in terminal A. Use terminal B for window inventory and capture wh
 
 ```zsh
 set -o pipefail
-export ROS_DOMAIN_ID=241
+export ROS_DOMAIN_ID=222
 export ROS_HOME=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start/ros-home
 export ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start/ros-log
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR" \
@@ -648,7 +648,7 @@ Set `MUJOCO_WINDOW_ID` only after the inventory shows one unambiguous current Mu
 
 ```zsh
 set -o pipefail
-export ROS_DOMAIN_ID=242
+export ROS_DOMAIN_ID=223
 export ROS_HOME=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_forward_5cm/ros-home
 export ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_forward_5cm/ros-log
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR" \
@@ -669,7 +669,7 @@ List windows again, resolve the new Viewer ID, and capture it under `macos/cup_t
 
 ```zsh
 set -o pipefail
-export ROS_DOMAIN_ID=243
+export ROS_DOMAIN_ID=224
 export ROS_HOME=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_left_5cm/ros-home
 export ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_left_5cm/ros-log
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR" \
@@ -690,7 +690,7 @@ List windows again, resolve the new Viewer ID, and capture it under `macos/cup_t
 
 ```zsh
 set -o pipefail
-export ROS_DOMAIN_ID=244
+export ROS_DOMAIN_ID=225
 export ROS_HOME=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_right_5cm/ros-home
 export ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-launch-20260831/macos/cup_test_right_5cm/ros-log
 mkdir -p "$ROS_HOME" "$ROS_LOG_DIR" \
