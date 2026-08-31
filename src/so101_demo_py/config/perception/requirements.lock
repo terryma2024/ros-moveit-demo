@@ -1,0 +1,7 @@
+# Cross-platform application pins for V5-T004. Install only in an isolated venv.
+torch==2.13.0
+torchvision==0.28.0
+ultralytics==8.4.115
+mujoco==3.12.0
+PyYAML==6.0.2
+Pillow==12.3.0

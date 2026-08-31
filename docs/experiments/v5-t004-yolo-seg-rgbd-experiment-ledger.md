@@ -8,7 +8,9 @@ worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
 current_commit: a2c5e03
-evidence_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
+evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
+development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
+migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
 confirmed_conclusions:
   - CONF-001 现有颜色阈值加最大 DBSCAN 聚类没有实例类别语义，来自设计文档与 f09cf88 源码检查
   - CONF-002 当前 macOS 与 ai-station Python 环境均未安装 torch/ultralytics/mujoco Python binding，来自 2026-08-31 双平台 import probe
@@ -19,11 +21,29 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-003
-next_experiment: EXP-003
+latest_checkpoint: CP-004
+next_experiment: EXP-005
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-004
+current_hypothesis: HYP-001
+working_tree_status: Task 1-6 已提交；Task 7 依赖锁、训练配置和 overlay 标签已通过聚焦测试，待 Linux driver gate 与训练
+owned_processes: NONE
+preserved_processes: ai-station Xorg/GNOME/hiddify 与 codex/codex-cua tmux 会话；主 checkout 和本地 development source root 未删除
+confirmed_conclusions:
+  - CONF-010 开发证据 15 个 payload、36945 bytes 已迁移到正式根并逐文件核对 SHA256 与大小，源根保留
+  - CONF-011 macOS 精确应用版本安装成功；沙箱外 torch MPS built=true available=true
+  - CONF-012 MuJoCo 3.12.0 编译 fixture 成功，12 张真实 smoke 样本为 3 个零杯、6 个单杯、3 个双杯，已 checksum 同步到正式根
+  - CONF-013 Linux torch 2.13.0+cu130 在 RTX 5080 上完成 CUDA 张量计算，但 nvidia-smi 仍因 595.84/595.71.05 mismatch 失败
+open_risks:
+  - Linux 正式 gate 要求 nvidia-smi 和 torch.cuda 同时通过；共享主机重启需要用户授权与会话协调
+  - 1200 张正式数据和训练尚未开始
+next_command: 经用户授权后协调 ai-station 重启，再运行 nvidia-smi 与 CUDA tensor gate
+```
 
 ```yaml
 checkpoint_id: CP-003
@@ -85,6 +105,40 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-004
+status: PARTIAL_PASS
+scope: pinned dependency and accelerator smoke
+macos:
+  python: 3.11.15
+  torch: 2.13.0
+  torchvision: 0.28.0
+  ultralytics: 8.4.115
+  mujoco: 3.12.0
+  mps_built: true
+  mps_available_outside_sandbox: true
+linux:
+  python: 3.12.3
+  torch: 2.13.0+cu130
+  torchvision: 0.28.0+cu130
+  ultralytics: 8.4.115
+  mujoco: 3.12.0
+  cuda_tensor_smoke: RTX 5080 sum=140.0
+  nvidia_smi: FAIL driver/library version mismatch
+decision: 不训练；正式 Linux gate 未满足
+```
+
+```yaml
+experiment_id: EXP-003
+status: PASS
+scope: development evidence migration
+source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
+destination_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
+payload_file_count: 15
+payload_byte_size: 36945
+verification: every relative path SHA256 and byte size matched remotely; source root and excluded symlinks retained
+```
 
 ```yaml
 experiment_id: EXP-002

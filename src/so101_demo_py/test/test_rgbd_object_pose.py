@@ -21,7 +21,10 @@ from so101_demo.core.detection import (
     DetectionQuery,
     LocalizedObject,
 )
-from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
+from so101_demo.runtime.perception_evidence import (
+    PerceptionEvidenceWriter,
+    render_detection_overlay,
+)
 from so101_demo.ros.rgbd_object_pose_node import FreshFrameGate, RgbdObjectPoseOptions
 
 
@@ -57,6 +60,39 @@ def _batch(*candidates: DetectionCandidate) -> DetectionBatch:
         image_height=4,
         candidates=tuple(candidates),
     )
+
+
+def test_overlay_draws_visible_class_and_confidence_label() -> None:
+    rgb = np.full((80, 160, 3), 120, dtype=np.uint8)
+    frame = DetectionFrame(rgb, 7, "task_camera_frame")
+    mask = np.zeros((80, 160), dtype=bool)
+    mask[30:65, 35:95] = True
+    candidate = DetectionCandidate(
+        instance_id="cup",
+        class_id="plastic_cup",
+        confidence=0.91,
+        bbox_xyxy=(35.0, 30.0, 95.0, 65.0),
+        mask=mask,
+        source_stamp_ns=7,
+        source_frame_id="task_camera_frame",
+        image_width=160,
+        image_height=80,
+    )
+
+    batch = DetectionBatch(
+        model_id="plastic-cup-yolo11n-seg-v1",
+        weights_sha256="a" * 64,
+        runtime_device="mps",
+        inference_latency_ms=12.0,
+        image_width=160,
+        image_height=80,
+        candidates=(candidate,),
+    )
+    overlay = render_detection_overlay(frame, batch)
+    label_region = overlay[16:30, 35:140]
+
+    assert (label_region.max(axis=2) < 40).any(), "label background is missing"
+    assert (label_region.min(axis=2) > 220).any(), "label glyphs are missing"
 
 
 def _request(run_directory: Path) -> ObjectPoseRequest:
