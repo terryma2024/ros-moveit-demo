@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+current_commit: b06333b0e8ef4316f2d3b943866a5956fe18951b
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-020
+latest_checkpoint: CP-021
 next_experiment: EXP-017
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-021
+last_valid_experiment: EXP-016
+current_hypothesis: EXP-017 可在干净 domain 221 的真实 RGB-D 上以 TARGET_NOT_FOUND 拒绝橙色瓶子
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 stack 尚未启动
+preserved_processes: 历史证据与用户文件均未触碰
+confirmed_conclusions:
+  - CONF-045 Mac install prefix、入口、v5 scene、MPS 与锁定依赖已回读；domain 221、两端 output 与任务进程均为空
+open_risks:
+  - visible stack、真实 payload、not-found、GUI 与 cleanup 尚未观察
+next_command: 启动 v5_no_cup visible stack、静态 TF、payload observer 与一次性 rgbd_object_pose
+```
 
 ```yaml
 checkpoint_id: CP-020
@@ -361,7 +375,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-017
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-016
 hypothesis: macOS MPS 的 bottle_only 场景不会把橙色瓶子误判为 plastic_cup，也不会发布新 /cup_pose
 prediction: TARGET_NOT_FOUND；matching_count=0；无新 pose；真实 RGB-D 与 cleanup 全部合格
@@ -387,7 +401,9 @@ provenance:
 commands:
   - command: fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
     exit_code: PENDING
-observed: [NONE]
+observed:
+  - source f732afc、Mac install prefix、入口/scene hash、weight hash 与 MPS available=true 已核验
+  - ROS_DOMAIN_ID 221 无节点；本地和正式 output 不存在；无本任务感知或 MuJoCo 进程
 inferred: [NONE]
 conclusion: PENDING
 evidence:
