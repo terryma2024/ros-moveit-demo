@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 190c44b01742c783383fb1711211034781ce0291
+current_commit: bc23ddad22e485696eab161bd806d0657c347827
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-022
+latest_checkpoint: CP-023
 next_experiment: EXP-025
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-023
+last_valid_experiment: EXP-016
+current_hypothesis: EXP-025 的唯一环境修正可让 v5_no_cup stack进入真实 RGB-D 与模型边界
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 stack 尚未启动
+preserved_processes: EXP-017 无效证据已持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-048 domain 225、两端 output与任务进程为空；锁定 dylib farm dlopen、Mac install与 MPS gate通过
+open_risks:
+  - 真实 stack/payload/not-found/GUI/cleanup 尚未观察
+next_command: 以显式 DYLD_LIBRARY_PATH 启动 EXP-025 visible stack
+```
 
 ```yaml
 checkpoint_id: CP-022
@@ -694,7 +708,7 @@ next_experiment: EXP-025
 
 ```yaml
 experiment_id: EXP-025
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-017
 hypothesis: 显式加载锁定 macOS dylib farm 后，bottle_only 可进入真实 MuJoCo/RGB-D 边界并以 TARGET_NOT_FOUND 拒绝瓶子
 prediction: MuJoCo/控制器启动；真实 RGB-D 有效；runtime_device=mps；matching_count=0；无新 /cup_pose
@@ -720,7 +734,9 @@ provenance:
 commands:
   - command: export locked dylib farm; fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
     exit_code: PENDING
-observed: [NONE]
+observed:
+  - domain 225、local/remote output 与 task process为空；Mac install、weight hash、MPS available=true 已回读
+  - 锁定 dylib farm 文件存在，显式 DYLD_LIBRARY_PATH 下 libmujoco_ros2_control.dylib dlopen gate通过
 inferred: [NONE]
 conclusion: PENDING
 evidence:
