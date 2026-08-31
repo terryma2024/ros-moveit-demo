@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 8932725a8ecbade50e73f556cbca98f63a1ed590
+current_commit: b3c53f9bef6b1b08fa9c95b1217d6be1ad43f8a5
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-034
+latest_checkpoint: CP-035
 next_experiment: EXP-031
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-035
+last_valid_experiment: EXP-016
+current_hypothesis: 已隔离且保持完整overlay DYLD闭包的 EXP-031 可进入真实产品边界
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 EXP-031 尚未启动
+preserved_processes: 所有无效运行证据已持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-065 domain 231、两端output与任务进程为空；完整主安装DYLD闭包已回读
+open_risks:
+  - UI握手、Viewer/controller/payload/not-found/视觉/cleanup尚未观察
+next_command: 以前台tty=true、自动DYLD闭包后接farm启动 EXP-031
+```
 
 ```yaml
 checkpoint_id: CP-034
@@ -1133,7 +1147,7 @@ next_experiment: EXP-031
 
 ```yaml
 experiment_id: EXP-031
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-030
 hypothesis: 保留overlay生成的完整DYLD依赖闭包并把共享farm追加到末尾，可让前台PTY Aqua完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: core/msgs/plugins/dispatcher同属主安装；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
