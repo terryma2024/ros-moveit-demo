@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from builtins import __import__ as builtin_import
 from dataclasses import dataclass
 from unittest.mock import ANY
@@ -592,3 +593,83 @@ def test_cli_uses_requested_id_or_generates_one(monkeypatch, capsys) -> None:
     assert text_pick_agent.main(["--instruction", "帮我拿杯子"], _agent=agent) == 0
     assert agent.requests[0].request_id == "generated-id"
     assert output(capsys)["request_id"] == "generated-id"
+
+
+def test_cli_profiling_defaults_are_disabled() -> None:
+    from so101_demo.cli import text_pick_agent
+
+    options = text_pick_agent.build_parser().parse_args(["--instruction", "pick"])
+
+    assert options.profiling == "off"
+    assert options.profiling_output_root is None
+    assert options.profiling_session_id is None
+
+
+def test_cli_enabled_profiling_writes_correlated_agent_stream(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    monkeypatch.setattr(
+        text_pick_agent,
+        "DeepSeekPlanner",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        text_pick_agent,
+        "OllamaPlanner",
+        lambda **_kwargs: object(),
+    )
+    candidate = PlannerCandidate(
+        {
+            "outcome": "supported",
+            "command": {
+                "target_object": "plastic_cup",
+                "action": "pick",
+                "constraints": {},
+            },
+        },
+        PlannerMetadata("deepseek", "model", 1, None, None, None, False),
+    )
+
+    class Planner:
+        def plan(self, instruction: str) -> PlannerCandidate:
+            return candidate
+
+    monkeypatch.setattr(text_pick_agent, "PlannerChain", lambda *_args: Planner())
+    profiling_root = tmp_path / "profiling"
+
+    assert text_pick_agent.main(
+        [
+            "--instruction",
+            "pick the cup",
+            "--request-id",
+            "request-1",
+            "--profiling",
+            "trace",
+            "--profiling-output-root",
+            str(profiling_root),
+            "--profiling-session-id",
+            "session-1",
+        ]
+    ) == 0
+
+    assert output(capsys)["status"] == "DISPATCH_PREVIEW"
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/text-agent.events.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+    ]
+    assert events[0]["session_id"] == "session-1"
+    assert events[0]["request_id"] == "request-1"
+    assert events[-1]["event_type"] == "process_close"
+    assert {event.get("name") for event in events} >= {
+        "agent.total",
+        "agent.validate_input",
+        "agent.plan",
+        "agent.validate_command",
+        "agent.dispatch",
+    }
