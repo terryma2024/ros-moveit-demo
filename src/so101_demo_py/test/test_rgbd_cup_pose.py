@@ -403,6 +403,180 @@ def test_frame_processor_profiles_first_frame_wait_and_each_estimate(
     ]
 
 
+def test_profiled_startup_timeout_finishes_frame_wait_as_timeout(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        CupPoseFrameProcessor,
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    processor = CupPoseFrameProcessor(
+        estimate=lambda _aligned: _valid_frame(),
+        publish=lambda _frame: None,
+        on_error=lambda _error: None,
+        profiler=profiler,
+    )
+
+    class Runtime:
+        first_valid_published = False
+
+        def ok(self) -> bool:
+            return True
+
+        def spin_once(self, _timeout_s: float) -> None:
+            return None
+
+        def finish_wait_span(self, outcome: str) -> None:
+            processor.finish_wait(outcome)
+
+        def close(self) -> None:
+            return None
+
+    runtime = Runtime()
+    monotonic_values = iter((0.0, 0.0, 0.0, 0.0, 1.0))
+
+    assert run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda *_args: runtime,
+        monotonic=lambda: next(monotonic_values),
+        open3d_preflight=lambda _remaining: None,
+        profiler=profiler,
+    ) == 1
+    profiler.close()
+
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+        and '"name":"perception.wait_synchronized_frame"' in line
+    ]
+    assert [event["outcome"] for event in complete] == ["timeout"]
+
+
+def test_profiled_runtime_construction_failure_finishes_frame_wait_as_error(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        _create_ros_runtime,
+    )
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    ros_api, _rclpy, _node, _listener = _fake_ros_api(
+        fail_subscription_number=1
+    )
+
+    with pytest.raises(RuntimeError, match="subscription construction failed"):
+        _create_ros_runtime(
+            RgbdCupPoseOptions(),
+            startup_deadline=1.0,
+            monotonic=lambda: 0.0,
+            ros_api=ros_api,
+            profiler=profiler,
+        )
+    profiler.close()
+
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+        and '"name":"perception.wait_synchronized_frame"' in line
+    ]
+    assert [event["outcome"] for event in complete] == ["error"]
+
+
+def test_profiled_shutdown_before_first_frame_finishes_wait_as_interrupted(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        CupPoseFrameProcessor,
+        RgbdCupPoseOptions,
+        run_rgbd_cup_pose,
+    )
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    processor = CupPoseFrameProcessor(
+        estimate=lambda _aligned: _valid_frame(),
+        publish=lambda _frame: None,
+        on_error=lambda _error: None,
+        profiler=profiler,
+    )
+
+    class Runtime:
+        first_valid_published = False
+
+        def ok(self) -> bool:
+            return False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            raise AssertionError("shutdown runtime must not spin")
+
+        def finish_wait_span(self, outcome: str) -> None:
+            processor.finish_wait(outcome)
+
+        def close(self) -> None:
+            return None
+
+    runtime = Runtime()
+    monotonic_values = iter((0.0, 0.0, 0.0, 0.0))
+
+    assert run_rgbd_cup_pose(
+        RgbdCupPoseOptions(startup_timeout_s=1.0),
+        runtime_factory=lambda *_args: runtime,
+        monotonic=lambda: next(monotonic_values),
+        open3d_preflight=lambda _remaining: None,
+        profiler=profiler,
+    ) == 1
+    profiler.close()
+
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+        and '"name":"perception.wait_synchronized_frame"' in line
+    ]
+    assert [event["outcome"] for event in complete] == ["interrupted"]
+
+
 def test_fresh_frame_gate_rejects_duplicate_and_out_of_order_stamps() -> None:
     from so101_demo.ros.rgbd_cup_pose_node import FreshFrameGate
 
@@ -1423,6 +1597,61 @@ def test_cli_enabled_profiling_passes_and_closes_perception_profiler(
         ).read_text().splitlines()
     ]
     assert events[-1]["event_type"] == "process_close"
+
+
+def test_cli_profiling_sink_initialization_error_runs_perception_unprofiled(
+    monkeypatch,
+) -> None:
+    from so101_demo.cli import rgbd_cup_pose
+    from so101_demo.profiling import session as profiling_session
+    from so101_demo.ros import rgbd_cup_pose_node
+
+    calls = []
+
+    def run(options, **kwargs) -> int:
+        calls.append((options, kwargs))
+        return 23
+
+    monkeypatch.setattr(rgbd_cup_pose_node, "run_rgbd_cup_pose", run)
+    monkeypatch.setattr(
+        profiling_session,
+        "build_profiler",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    assert rgbd_cup_pose.main(
+        [
+            "--profiling",
+            "summary",
+            "--profiling-output-root",
+            "/tmp/profiling",
+            "--profiling-session-id",
+            "session-1",
+        ]
+    ) == 23
+
+    assert len(calls) == 1
+    assert calls[0][1] == {}
+
+
+def test_cli_invalid_profiling_configuration_still_exits_before_perception(
+    monkeypatch,
+) -> None:
+    from so101_demo.cli import rgbd_cup_pose
+    from so101_demo.ros import rgbd_cup_pose_node
+
+    calls = []
+    monkeypatch.setattr(
+        rgbd_cup_pose_node,
+        "run_rgbd_cup_pose",
+        lambda options, **kwargs: calls.append((options, kwargs)) or 0,
+    )
+
+    with pytest.raises(SystemExit) as error:
+        rgbd_cup_pose.main(["--profiling", "summary"])
+
+    assert error.value.code == 2
+    assert calls == []
 
 
 def test_package_registers_rgbd_cup_pose_executable() -> None:

@@ -53,11 +53,18 @@ class SemanticProfiler:
         self._closed = False
         self._disabled_by_error = False
         self._warnings: list[str] = []
+        self._lock = threading.RLock()
 
         process_dir = config.output_root / "processes"
         process_dir.mkdir(parents=True, exist_ok=True)
         stream_path = process_dir / f"{config.process_role}.events.jsonl"
-        self._sink: TextIO | None = sink_factory(stream_path)
+        try:
+            self._sink: TextIO | None = sink_factory(stream_path)
+        except FileExistsError:
+            stream_path = process_dir / (
+                f"{config.process_role}.{self._pid}.{uuid.uuid4().hex}.events.jsonl"
+            )
+            self._sink = sink_factory(stream_path)
         self._emit(
             {
                 "schema_version": 1,
@@ -92,19 +99,20 @@ class SemanticProfiler:
         name: str,
         attributes: Mapping[str, object] | None = None,
     ) -> SpanToken:
-        if not self._available:
-            return SpanToken("", name, 0, active=False)
-        now = self._monotonic_ns()
-        token = SpanToken(uuid.uuid4().hex, name, now)
-        self._emit(
-            self._event_base("span_start", now)
-            | {
-                "span_id": token.span_id,
-                "name": name,
-                "attributes": validate_attributes(attributes or {}),
-            }
-        )
-        return token
+        with self._lock:
+            if not self._available:
+                return SpanToken("", name, 0, active=False)
+            now = self._monotonic_ns()
+            token = SpanToken(uuid.uuid4().hex, name, now)
+            self._emit(
+                self._event_base("span_start", now)
+                | {
+                    "span_id": token.span_id,
+                    "name": name,
+                    "attributes": validate_attributes(attributes or {}),
+                }
+            )
+            return token
 
     def finish_span(
         self,
@@ -113,50 +121,54 @@ class SemanticProfiler:
         outcome: str,
         attributes: Mapping[str, object] | None = None,
     ) -> None:
-        if not token.active or not self._available:
-            return
-        now = self._monotonic_ns()
-        self._emit(
-            self._event_base("span_complete", now)
-            | {
-                "span_id": token.span_id,
-                "name": token.name,
-                "duration_ns": max(0, now - token.start_monotonic_ns),
-                "outcome": outcome,
-                "attributes": validate_attributes(attributes or {}),
-            }
-        )
+        with self._lock:
+            if not token.active or not self._available:
+                return
+            now = self._monotonic_ns()
+            self._emit(
+                self._event_base("span_complete", now)
+                | {
+                    "span_id": token.span_id,
+                    "name": token.name,
+                    "duration_ns": max(0, now - token.start_monotonic_ns),
+                    "outcome": outcome,
+                    "attributes": validate_attributes(attributes or {}),
+                }
+            )
 
     def instant(
         self,
         name: str,
         attributes: Mapping[str, object] | None = None,
     ) -> None:
-        if not self._available:
-            return
-        now = self._monotonic_ns()
-        self._emit(
-            self._event_base("instant", now)
-            | {
-                "name": name,
-                "attributes": validate_attributes(attributes or {}),
-            }
-        )
+        with self._lock:
+            if not self._available:
+                return
+            now = self._monotonic_ns()
+            self._emit(
+                self._event_base("instant", now)
+                | {
+                    "name": name,
+                    "attributes": validate_attributes(attributes or {}),
+                }
+            )
 
     def close(self) -> None:
-        if self._closed:
-            return
-        if self._available:
-            now = self._monotonic_ns()
-            self._emit(self._event_base("process_close", now))
-        self._closed = True
-        sink, self._sink = self._sink, None
-        if sink is None:
-            return
-        try:
-            sink.close()
-        except OSError as error:
-            self._remember_error(error)
+        with self._lock:
+            if self._closed:
+                return
+            if self._available:
+                now = self._monotonic_ns()
+                self._emit(self._event_base("process_close", now))
+            self._closed = True
+            sink, self._sink = self._sink, None
+            if sink is None:
+                return
+            try:
+                sink.close()
+            except Exception as error:
+                self._disabled_by_error = True
+                self._remember_error(error)
 
     @property
     def _available(self) -> bool:
@@ -184,36 +196,38 @@ class SemanticProfiler:
         return sequence
 
     def _emit(self, event: Mapping[str, object]) -> None:
-        if not self._available:
-            return
-        assert self._sink is not None
-        try:
-            self._sink.write(
-                json.dumps(
-                    event,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
+        with self._lock:
+            if not self._available:
+                return
+            assert self._sink is not None
+            try:
+                self._sink.write(
+                    json.dumps(
+                        event,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-            self._sink.flush()
-        except OSError as error:
-            sink, self._sink = self._sink, None
-            self._disabled_by_error = True
-            self._remember_error(error)
-            if sink is not None:
-                try:
-                    sink.close()
-                except OSError as close_error:
-                    self._remember_error(close_error)
+                self._sink.flush()
+            except Exception as error:
+                sink, self._sink = self._sink, None
+                self._disabled_by_error = True
+                self._remember_error(error)
+                if sink is not None:
+                    try:
+                        sink.close()
+                    except Exception as close_error:
+                        self._remember_error(close_error)
 
-    def _remember_error(self, error: OSError) -> None:
+    def _remember_error(self, error: Exception) -> None:
         self._warnings.append(f"{type(error).__name__}: {error}")
 
 
 def _open_text(path: Path) -> TextIO:
-    return path.open("a", encoding="utf-8")
+    return path.open("x", encoding="utf-8")
 
 
 def build_profiler(

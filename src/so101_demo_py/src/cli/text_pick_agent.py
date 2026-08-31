@@ -379,7 +379,12 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
                 process_role="dynamic-runtime",
             )
             context = replace(context, profiler=runtime_profiler)
-    except (OSError, TypeError, ValueError):
+    except OSError:
+        if profiler is not None:
+            profiler.close()
+        profiler = None
+        runtime_profiler = None
+    except (TypeError, ValueError):
         if profiler is not None:
             profiler.close()
         _write_document(_rejection(request_id, "PROFILING_CONFIGURATION_INVALID"))
