@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 93de1dbd630ac629556c725dbe1976067ee52347
+current_commit: e84f84cca9ad2812dd2b4f06c50956d8d47118db
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-031
-next_experiment: EXP-029
+latest_checkpoint: CP-032
+next_experiment: EXP-030
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-032
+last_valid_experiment: EXP-016
+current_hypothesis: 当前主安装的 core/plugin/support dylib优先于共享farm后，单一dispatcher可完成main-thread UI握手
+working_tree_status: 仅本账本 INVALID/替代计划待提交；源/测试 clean
+owned_processes: NONE；EXP-029 前台 owner与全部child已Ctrl-C退出，domain 229无节点
+preserved_processes: EXP-029 ROS日志已同步正式 evidence root；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-060 EXP-029 前台PTY仍超时，排除PTY为当前第一坏边界
+  - CONF-061 当前 executable来自主安装，但farm首位的libmujoco_ros2_control.dylib符号链接到旧 ws_mujoco_ros2_control_fork，形成dispatcher二进制分裂
+disproven_routes:
+  - DISPROVED-013 不得只用 package prefix或可执行文件路径证明 macOS MuJoCo runtime provenance；必须回读已加载core dylib优先级
+open_risks:
+  - EXP-030 仍须实际观察单一dispatcher、Viewer、controllers、真实RGB-D、MPS not-found、GUI证据与干净退出
+next_command: 预登记 EXP-030；保留前台PTY，仅把主安装core/plugin/support dylib排在farm前
+```
 
 ```yaml
 checkpoint_id: CP-031
@@ -573,10 +590,10 @@ next_experiment: EXP-025
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-029
+prior_experiment: EXP-030
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对替代 bottle-only EXP-029 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-030 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -1000,7 +1017,7 @@ next_experiment: EXP-029
 
 ```yaml
 experiment_id: EXP-029
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-028
 hypothesis: launchctl asuser 501 的前台 PTY 宿主可执行 macOS process-main-thread UI task，并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
@@ -1025,13 +1042,56 @@ provenance:
   gz_partition: v5t004-mac-exp029
 commands:
   - command: launchctl asuser 501 Aqua foreground tty=true; launch v5_no_cup, then payload/perception/visual/cleanup observers
+    exit_code: 1
+observed:
+  - 前台 PTY owner PID 27680进入ros2 launch；可执行文件来自主安装并等待process main-thread UI task
+  - 仍两次出现10秒渲染握手超时；没有Submitting/Running UI task、Viewer、controllers或RGB-D
+  - farm首位libmujoco_ros2_control.dylib实际链接旧 ws_mujoco_ros2_control_fork，而可执行文件链接主安装dispatcher；二进制全局状态不一致
+  - Ctrl-C后所有分进程cleanly退出，domain 229无节点；ROS日志已同步正式 evidence root
+inferred: [NONE]
+conclusion: INVALID；动态库 provenance污染，未执行单一dispatcher产品路径
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-029-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-029-bottle-only
+decision: PRESERVE；以新 ID EXP-030 仅修正主安装dylib优先级，其他参数不变
+next_experiment: EXP-030
+```
+
+```yaml
+experiment_id: EXP-030
+status: PLANNED
+prior_experiment: EXP-029
+hypothesis: 当前主安装的 core/plugin/support dylib优先于共享farm后，前台PTY Aqua宿主可完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
+prediction: 主安装core与dispatcher一致；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
+single_variable: 相对 INVALID EXP-029 仅调整 DYLD_LIBRARY_PATH，把当前主安装core/plugin/support目录置于共享farm前
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - gui/501 foreground PTY；ROS_DOMAIN_ID=230、GZ_PARTITION=v5t004-mac-exp030 与两端output为空
+  - 主安装 libmujoco_ros2_control.dylib 与 dispatcher存在；farm core symlink的旧fork污染已显式记录
+success_criteria:
+  - 日志出现Submitting/Running UI task、主安装core provenance、Viewer、三controllers；真实同stamp 640x480 rgb8/32FC1/CameraInfo与finite positive depth
+  - runtime_device=mps、TARGET_NOT_FOUND、matching_count=0、latency<=2000、无新 /cup_pose
+  - exact-window MuJoCo和overlay/truth、安装态 provenance、退出后零 owned process/publisher完整
+failure_criteria:
+  - 单一dispatcher/Viewer/controller/payload/not-found/device/latency/GUI/cleanup任一失败
+invalid_criteria:
+  - foreground PTY/Aqua/dylib/domain/partition/output/source/install provenance污染或非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: current so101_demo_py plus primary project mujoco runtime
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 230
+  gz_partition: v5t004-mac-exp030
+commands:
+  - command: launchctl asuser 501 Aqua foreground tty=true with primary dylibs first; launch v5_no_cup, then payload/perception/visual/cleanup observers
     exit_code: PENDING
 observed: [NONE]
 inferred: [NONE]
 conclusion: PENDING
 evidence:
-  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-029-bottle-only
-  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-029-bottle-only
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-030-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-030-bottle-only
 decision: PENDING
 next_experiment: EXP-018
 ```
