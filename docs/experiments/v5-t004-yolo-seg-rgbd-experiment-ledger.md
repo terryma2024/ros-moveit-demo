@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 5765716e07ac3d584c0be96ee3cf0476163f3ed3
+current_commit: c42b9c96d1dbfd345e22a52a730df17fa0078bc4
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -22,11 +22,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-012
-next_experiment: EXP-010
+latest_checkpoint: CP-013
+next_experiment: EXP-011
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-007
+current_hypothesis: 预置 hash 锁定的本机 TTF 可满足 Ultralytics 无条件 check_font 而不联网
+working_tree_status: 本地仅有 EXP-010 结论与 EXP-011 计划待提交；远端 source clean at 35db5f5
+owned_processes: NONE；EXP-010 已中断且没有训练进程
+preserved_processes: 114688-byte Arial.ttf partial 已移入 EXP-010 目录并哈希；不删除
+confirmed_conclusions:
+  - CONF-032 YOLO_OFFLINE=true 禁止 PyPI update check，但 Ultralytics check_det_dataset 仍无条件调用 check_font 并下载 Arial.ttf
+  - CONF-033 本机 DejaVuSans.ttf 为 759720 bytes，SHA256 ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280b，可作为显式预置绘图字体
+disproven_routes:
+  - DISPROVED-005 YOLO_OFFLINE=true 单独不能保证训练零下载，因为字体路径不遵守 offline gate
+open_risks:
+  - 预置本机字体后是否完成零下载训练仍未验证
+next_command: 预登记 EXP-011，复制并哈希本机 DejaVuSans.ttf 为 config Arial.ttf，再用独立 output root复验
+```
 
 ```yaml
 checkpoint_id: CP-012
@@ -232,8 +249,55 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ## Experiments
 
 ```yaml
+experiment_id: EXP-011
+status: PLANNED
+prior_experiment: EXP-010
+hypothesis: 将本机 DejaVuSans.ttf 以锁定 SHA 预置为 Ultralytics USER_CONFIG_DIR/Arial.ttf，可满足无条件字体检查并让 amp=false、YOLO_OFFLINE=true smoke 零下载完成
+prediction: 预置字体 SHA 与系统源一致；1 epoch、fraction 0.05 日志无 Downloading/yolo26n/PyPI update，exit-code.txt 精确为 0，关键训练工件非空
+single_variable: 相对 INVALID EXP-010 仅预置已哈希的本机字体资产；模型、数据、seed、amp/offline、GPU和训练参数不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source 35db5f54c1d2516fbe752afbe7380d38522a2a19，GPU gate 与 Linux focused 16/16 通过
+  - /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf SHA256 为 ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280b
+  - Ultralytics config 中没有 Arial.ttf，且 output smoke-exp-011 不存在
+  - 没有其他训练进程
+success_criteria:
+  - 预置 Arial.ttf 与系统 DejaVuSans.ttf SHA 完全一致
+  - runtime config/dataset validation 通过，amp=false
+  - 日志明确 CUDA:0 RTX 5080，不含 Downloading、yolo26n.pt 或 New https://pypi.org
+  - exit-code.txt 精确为单行 0
+  - smoke/weights/best.pt、last.pt、results.csv、args.yaml 非空并有 SHA256
+failure_criteria:
+  - 仍自动下载、训练非零、CUDA 未使用或工件缺失
+invalid_criteria:
+  - 字体/source/model/dataset/output provenance 不匹配，退出码污染或外部训练进程干扰
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/yolo
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf .../ultralytics-config/Ultralytics/Arial.ttf && sha256sum source target
+    exit_code: PENDING
+  - command: prepare_training_run(..., output_root=.../training/smoke-exp-011, run_name=smoke, epochs_override=1, fraction=0.05)
+    exit_code: PENDING
+  - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-011/training-config.yaml
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-011
+decision: PENDING
+next_experiment: EXP-012
+```
+
+```yaml
 experiment_id: EXP-010
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-009
 hypothesis: 使用 YOLO_OFFLINE=true 并修正退出码 capture 后，同一 35db5f5 amp=false 配置可产生无自动下载且退出证据完整的 CUDA smoke
 prediction: 1 epoch、fraction 0.05 训练退出 0；日志无 Downloading、yolo26n.pt 或 PyPI update 提示；exit-code.txt 内容精确为单行 0；关键工件非空
@@ -262,15 +326,19 @@ commands:
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-010, run_name=smoke, epochs_override=1, fraction=0.05)
     exit_code: PENDING
   - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-010/training-config.yaml
-    exit_code: PENDING
+    exit_code: NOT_CAPTURED_AFTER_AUTHORIZED_INTERRUPT
 observed:
   - source、GPU、dataset、base model、进程所有权与独立 output root 已核验，实验进入 RUNNING
+  - YOLO_OFFLINE=true 消除了 PyPI update 提示，但在 check_det_dataset 的无条件 check_font 边界仍下载 https://ultralytics.com/assets/Arial.ttf
+  - 下载在 114688 bytes 时中断并移入本实验目录；训练 epoch 未开始，且无残留训练进程
 inferred:
-  - NONE
-conclusion: PENDING
+  - EXP-010 证明 offline 环境变量不覆盖字体 helper，必须显式提供本地字体资产
+conclusion: INVALID；自动下载命中失败判据，未进入训练
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-010
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-010/prohibited-auto-download-Arial.partial.ttf
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-010/prohibited-auto-download-font.sha256
+decision: REPEAT
 next_experiment: EXP-011
 ```
 
