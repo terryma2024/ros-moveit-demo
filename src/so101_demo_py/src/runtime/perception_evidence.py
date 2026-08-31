@@ -99,7 +99,40 @@ def render_detection_overlay(frame: DetectionFrame, batch: DetectionBatch) -> np
         result[bottom, left : right + 1] = byte_color
         result[top : bottom + 1, left] = byte_color
         result[top : bottom + 1, right] = byte_color
-    return result
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.fromarray(result, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    for index, candidate in enumerate(batch.candidates):
+        color = tuple(int(value) for value in colors[index % len(colors)])
+        left = max(0, min(candidate.image_width - 1, int(np.floor(candidate.bbox_xyxy[0]))))
+        top = max(0, min(candidate.image_height - 1, int(np.floor(candidate.bbox_xyxy[1]))))
+        label = f"{candidate.class_id} {candidate.confidence:.2f}"
+        text_left, text_top, text_right, text_bottom = draw.textbbox(
+            (0, 0), label, font=font
+        )
+        label_width = text_right - text_left + 4
+        label_height = text_bottom - text_top + 4
+        label_left = min(left, max(0, candidate.image_width - label_width))
+        label_top = max(0, top - label_height)
+        draw.rectangle(
+            (
+                label_left,
+                label_top,
+                label_left + label_width - 1,
+                label_top + label_height - 1,
+            ),
+            fill=(16, 16, 16),
+            outline=color,
+        )
+        draw.text(
+            (label_left + 2, label_top + 2 - text_top),
+            label,
+            fill=(255, 255, 255),
+            font=font,
+        )
+    return np.asarray(image, dtype=np.uint8)
 
 
 def _candidate_document(candidate: DetectionCandidate) -> dict[str, object]:
