@@ -37,6 +37,12 @@ from launch import LaunchDescription
 
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
+from ..profiling.launch_support import (
+    LaunchProfilingSession,
+    profiling_event_handlers,
+    resolve_launch_profiling,
+    validate_launch_profiling_values,
+)
 from .camera_tf import camera_static_transform_nodes
 from .composition import backend_capabilities
 from .provenance import (
@@ -607,9 +613,15 @@ def _mujoco_text_pick_agent_execute_actions(
     cup_pose_timeout: str,
     execution_identity: InstalledExecutionIdentity,
     exit_status: PerceptionLaunchExitStatus,
+    profiling_session: LaunchProfilingSession | None = None,
 ):
     stack = _mujoco_stack_actions(context, share, session_id)
     camera_transforms = tuple(camera_static_transform_nodes())
+    profiling_arguments = (
+        list(profiling_session.child_arguments)
+        if profiling_session is not None
+        else []
+    )
     perception = Node(
         package="so101_demo_py",
         executable="rgbd_cup_pose",
@@ -622,6 +634,7 @@ def _mujoco_text_pick_agent_execute_actions(
             str(evidence_paths.perception / "cup.ply"),
             "--evidence-json",
             str(evidence_paths.perception / "summary.json"),
+            *profiling_arguments,
         ],
         parameters=[{"use_sim_time": True}],
         output="both",
@@ -654,6 +667,7 @@ def _mujoco_text_pick_agent_execute_actions(
             execution_identity.source_commit,
             "--installed-prefix",
             execution_identity.package_prefix,
+            *profiling_arguments,
         ],
         output="both",
     )
@@ -678,8 +692,19 @@ def _mujoco_text_pick_agent_execute_actions(
         exit_status=exit_status,
         workflow_label="Text Agent RGB-D workflow",
     )
+    profiling_handlers = (
+        profiling_event_handlers(
+            profiling_session,
+            scene_setup=stack.scene_setup,
+            perception=perception,
+            workflow=workflow,
+        )
+        if profiling_session is not None
+        else ()
+    )
     return [
         *handlers,
+        *profiling_handlers,
         *camera_transforms,
         *stack.actions,
     ]
@@ -1154,6 +1179,11 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
     skip_confirmation = LaunchConfiguration("skip_confirmation").perform(context)
     headless = LaunchConfiguration("headless").perform(context)
     sensor_rendering = LaunchConfiguration("sensor_rendering").perform(context)
+    profiling_mode = LaunchConfiguration("profiling").perform(context)
+    profiling_output_root = LaunchConfiguration("profiling_output_root").perform(context)
+    profiling_require_system_trace = LaunchConfiguration(
+        "profiling_require_system_trace"
+    ).perform(context)
     if not instruction.strip():
         raise RuntimeError("instruction must be non-empty")
     if run_mode != "execute":
@@ -1166,6 +1196,11 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
         raise RuntimeError("text-agent launch requires sensor_rendering=true")
     if headless not in {"true", "false"}:
         raise RuntimeError("headless must be true or false")
+    validate_launch_profiling_values(
+        mode_value=profiling_mode,
+        output_root_value=profiling_output_root,
+        require_system_trace_value=profiling_require_system_trace,
+    )
 
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
@@ -1198,6 +1233,15 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
     execution_identity = resolve_installed_execution_identity()
     share = Path(get_package_share_directory("so101_demo_py"))
     evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
+    profiling_session = resolve_launch_profiling(
+        mode_value=profiling_mode,
+        output_root_value=profiling_output_root,
+        require_system_trace_value=profiling_require_system_trace,
+        run_root=evidence_paths.run_root,
+        session_id=session_id,
+        source_commit=execution_identity.source_commit,
+        installed_prefix=execution_identity.package_prefix,
+    )
     return _mujoco_text_pick_agent_execute_actions(
         context,
         share,
@@ -1208,6 +1252,7 @@ def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunc
         cup_pose_timeout=cup_pose_timeout,
         execution_identity=execution_identity,
         exit_status=exit_status,
+        profiling_session=profiling_session,
     )
 
 
@@ -1370,6 +1415,17 @@ def build_text_pick_agent_launch_description(
             ),
             DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
             DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
+            DeclareLaunchArgument(
+                "profiling",
+                default_value="off",
+                choices=("off", "summary", "trace"),
+            ),
+            DeclareLaunchArgument("profiling_output_root", default_value=""),
+            DeclareLaunchArgument(
+                "profiling_require_system_trace",
+                default_value="false",
+                choices=("true", "false"),
+            ),
             OpaqueFunction(
                 function=_configured_text_pick_agent_actions,
                 kwargs={"exit_status": exit_status},
