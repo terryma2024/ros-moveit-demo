@@ -188,7 +188,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-008
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-007
 hypothesis: 25680ad 生成的 runtime training/dataset 配置可被 Ultralytics 8.4.115 接受，并能从本地锁定 yolo11n-seg.pt 在 RTX 5080 上完成一次短训练
 prediction: get_cfg 与 check_det_dataset 均通过且指向正式 dataset；1 epoch、fraction 0.05 训练使用 CUDA、退出 0，并生成非空 best.pt 和训练指标
@@ -216,11 +216,13 @@ provenance:
   gz_partition: NONE
 commands:
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-008, run_name=smoke, epochs_override=1, fraction=0.05)
-    exit_code: PENDING
+    exit_code: 0
   - command: yolo segment train cfg=.../training/smoke-exp-008/training-config.yaml
     exit_code: PENDING
 observed:
-  - NONE
+  - Linux 25680ad 聚焦训练配置测试 16/16 通过；训练 venv 不安装 pytest，源码测试使用系统 pytest，运行时仍固定锁定 venv
+  - runtime config 已剥离 class_names，get_cfg 接受；dataset path 精确解析到正式 evidence dataset 的 train/val/test
+  - provenance、GPU 进程和唯一 output root 已核验，实验进入 RUNNING
 inferred:
   - NONE
 conclusion: PENDING
