@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+current_commit: 5765716e07ac3d584c0be96ee3cf0476163f3ed3
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -22,11 +22,26 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-011
-next_experiment: EXP-009
+latest_checkpoint: CP-012
+next_experiment: EXP-010
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-007
+current_hypothesis: YOLO_OFFLINE=true 加正确退出码 wrapper 可形成合格的 amp=false CUDA smoke
+working_tree_status: 本地仅有 EXP-009 结论与 EXP-010 计划待提交；ai-station source 仍 clean at 35db5f5
+owned_processes: NONE；EXP-009 tmux 已自然结束且没有 yolo 训练进程
+preserved_processes: EXP-009 完整权重、指标、日志和哈希保留；不覆盖、不删除
+confirmed_conclusions:
+  - CONF-030 EXP-009 实际以 amp=False、CUDA:0 RTX 5080 完成 1 epoch 并生成 5982884-byte best.pt/last.pt，日志无 Downloading
+  - CONF-031 Ultralytics 支持 YOLO_OFFLINE=true；EXP-009 wrapper 将真实 code 0 错写为 n 0，不能作为严格退出码证据
+open_risks:
+  - 修正后的 offline wrapper 尚未复验；EXP-009 因预登记判据与 exit-code 污染不能计数
+next_command: 准备独立 smoke-exp-010，使用 YOLO_OFFLINE=true 与 echo 精确写 exit-code.txt 后复验
+```
 
 ```yaml
 checkpoint_id: CP-011
@@ -217,8 +232,51 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ## Experiments
 
 ```yaml
+experiment_id: EXP-010
+status: PLANNED
+prior_experiment: EXP-009
+hypothesis: 使用 YOLO_OFFLINE=true 并修正退出码 capture 后，同一 35db5f5 amp=false 配置可产生无自动下载且退出证据完整的 CUDA smoke
+prediction: 1 epoch、fraction 0.05 训练退出 0；日志无 Downloading、yolo26n.pt 或 PyPI update 提示；exit-code.txt 内容精确为单行 0；关键工件非空
+single_variable: 消除 INVALID EXP-009 的执行 envelope 污染：增加官方 YOLO_OFFLINE=true 并用 echo 写精确退出码；训练配置、数据、模型、seed与 GPU 不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 35db5f54c1d2516fbe752afbe7380d38522a2a19，amp=false，Linux focused 16/16
+  - 没有其他训练进程；正式 dataset/base model SHA 不变
+  - output root /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-010 不存在
+success_criteria:
+  - runtime config 与 dataset validation 通过，amp=false
+  - 日志明确 CUDA:0 RTX 5080，且不含 Downloading、yolo26n.pt 或 New https://pypi.org
+  - exit-code.txt 精确为单行 0
+  - smoke/weights/best.pt、last.pt、results.csv、args.yaml 非空并写 SHA256
+failure_criteria:
+  - 自动下载/更新检查仍出现、训练非零、CUDA 未使用或工件缺失
+invalid_criteria:
+  - provenance/output 冲突、退出码未严格捕获或外部训练进程污染
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/yolo
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: prepare_training_run(..., output_root=.../training/smoke-exp-010, run_name=smoke, epochs_override=1, fraction=0.05)
+    exit_code: PENDING
+  - command: YOLO_OFFLINE=true yolo segment train cfg=.../training/smoke-exp-010/training-config.yaml
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-010
+decision: PENDING
+next_experiment: EXP-011
+```
+
+```yaml
 experiment_id: EXP-009
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-008
 hypothesis: 35db5f5 冻结 amp=false 后，Ultralytics 不再执行需要外部 yolo26n.pt 的 AMP check，并可从本地锁定 base model 完成 CUDA smoke
 prediction: 日志显示 amp=False、CUDA:0 RTX 5080，不出现 Downloading/http；1 epoch、fraction 0.05 退出 0并生成非空 best.pt/last.pt/results.csv/args.yaml
@@ -248,16 +306,21 @@ commands:
   - command: prepare_training_run(..., output_root=.../training/smoke-exp-009, run_name=smoke, epochs_override=1, fraction=0.05)
     exit_code: 0
   - command: yolo segment train cfg=.../training/smoke-exp-009/training-config.yaml
-    exit_code: PENDING
+    exit_code: CAPTURE_CORRUPTED_n_0
 observed:
   - runtime config get_cfg 通过并明确 amp=false；dataset train/val/test 均解析到正式 evidence dataset
   - source、base model、dataset、GPU 与唯一 output root已核验，实验进入 RUNNING
+  - amp=False、CUDA:0 RTX 5080；40 train images、200 val images，1 epoch 完成且日志没有 Downloading 或 yolo26n.pt
+  - best.pt 与 last.pt 各 5982884 bytes；best SHA256=db33532c9c80ec43e106bcd5f425a870b9d0a348d5d66e2906541baf2da0b43d
+  - 日志包含 Ultralytics PyPI 更新提示和静态 docs URL；wrapper 把 code 0 写成字符串 n 0，违反本轮严格判据
+  - 无残留训练进程；全部工件和 artifacts.sha256 保留
 inferred:
-  - NONE
-conclusion: PENDING
+  - amp=false 已排除 AMP model auto-download，但本轮证据 envelope 不满足预登记成功与有效性门槛
+conclusion: INVALID；训练本体完成但不能计为合格 smoke，需用 offline/exit-code 修正后的新实验复验
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-009
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/smoke-exp-009/artifacts.sha256
+decision: REPEAT
 next_experiment: EXP-010
 ```
 
