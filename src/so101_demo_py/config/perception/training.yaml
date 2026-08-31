@@ -1,8 +1,10 @@
 task: segment
 model: yolo11n-seg.pt
 data: dataset.yaml
-classes:
+class_names:
   - plastic_cup
+classes:
+  - 0
 imgsz: 640
 epochs: 100
 batch: 32
