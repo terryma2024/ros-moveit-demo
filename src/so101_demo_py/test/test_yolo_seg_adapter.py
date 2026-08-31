@@ -246,3 +246,41 @@ def test_detector_loads_local_weights_warms_up_and_records_actual_device(
     assert [call["device"] for call in predict_calls] == ["mps", "mps"]
     assert predict_calls[0]["source"].shape == (640, 640, 3)
     assert predict_calls[1]["source"].shape == (4, 6, 3)
+
+
+def test_detector_sets_a_candidate_floor_on_every_model_prediction(
+    tmp_path: Path,
+) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    predict_calls: list[dict[str, object]] = []
+
+    class FakeModel:
+        names = {0: "plastic_cup"}
+
+        def predict(self, **kwargs):
+            predict_calls.append(kwargs)
+            return [
+                _result(
+                    boxes=np.array([[0.0, 0.0, 3.0, 2.0]]),
+                    classes=np.array([0.0]),
+                    confidences=np.array([0.8]),
+                    masks=np.array(
+                        [[[1.0, 1.0, 0.0], [0.0, 0.0, 0.0]]]
+                    ),
+                )
+            ]
+
+    detector = YoloSegDetector(
+        weights_path=weights,
+        expected_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        requested_device="mps",
+        allow_cpu_fallback=False,
+        model_id="plastic-cup-yolo11n-seg-v1",
+        imgsz=640,
+        torch_api=_torch_api(cuda=False, mps=True),
+        model_factory=lambda _: FakeModel(),
+    )
+    detector.detect(_frame(), DetectionQuery("plastic_cup"))
+
+    assert [call["conf"] for call in predict_calls] == [0.25, 0.25]
