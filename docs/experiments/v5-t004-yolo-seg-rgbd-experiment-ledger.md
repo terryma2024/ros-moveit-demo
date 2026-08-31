@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 0e738f1040888b1bfda4a20483733bd5ce974038
+current_commit: 5864f837752360eb60689874f548e5c00a6e2129
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -24,11 +24,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-015
-next_experiment: EXP-013
+latest_checkpoint: CP-016
+next_experiment: EXP-015
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-012
+current_hypothesis: 生产 selector 在 confidence 0.50 后可从 raw YOLO candidates 唯一选出 plastic_cup
+working_tree_status: 本地仅有 EXP-013/014 无效结论与修正后计划待提交；remote source clean at 35db5f5
+owned_processes: NONE；Linux probe 已退出
+preserved_processes: EXP-013 98629-byte raw result 与 SHA 保留；不覆盖原 platform-smoke/linux
+confirmed_conclusions:
+  - CONF-038 seed 300001 raw batch 为 296 candidates，但只有 1 个 confidence>=0.50，confidence=0.970513、mask_pixels=5053
+disproven_routes:
+  - DISPROVED-006 不能在 DetectorPort raw batch 边界断言 candidate_count=1；唯一性属于 TargetSelector 阈值后边界
+open_risks:
+  - 修正探针尚未调用 TargetSelector 并在 CUDA/MPS 双平台正式通过
+next_command: 用预创建输出目录的 EXP-015 Linux probe 记录 raw/eligible/selected 三层，再执行 EXP-016 Mac MPS
+```
 
 ```yaml
 checkpoint_id: CP-015
@@ -281,8 +297,86 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ## Experiments
 
 ```yaml
-experiment_id: EXP-014
+experiment_id: EXP-016
 status: PLANNED
+prior_experiment: EXP-015
+hypothesis: 同一 best.pt 与 seed 300001 在 Mac MPS 上经 confidence 0.50 TargetSelector 后可唯一选出 plastic_cup，且与 Linux selected mask 结论一致
+prediction: runtime_device=mps、raw_count>=1、eligible_count=1、selected class=plastic_cup、mask 480x640非空、latency<=2000、weight SHA一致
+single_variable: 相对 EXP-015 仅平台/device 从 Linux CUDA 变为 Mac MPS
+lifecycle: ISOLATED_STACK
+preconditions:
+  - MPS available=true；本地 best/image SHA 与正式 evidence root一致
+  - source 35db5f5、threshold 0.50、imgsz640、seed300001固定；Mac/remote输出均不存在
+success_criteria:
+  - 不允许 CPU fallback，batch runtime_device=mps 与 weight SHA正确
+  - eligible_count=1，TargetSelector 返回 plastic_cup；mask 480x640非空；inference<=2000ms
+  - 本地结果与hash同步到正式 platform-smoke/macos-exp016 且逐文件一致
+failure_criteria:
+  - MPS/权重/eligible/selected/mask/latency任一失败
+invalid_criteria:
+  - source/input/output/sync provenance 污染
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /tmp/so101-v5-t004-perception-macos/bin/python
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: copy and verify best.pt/image, run detector plus TargetSelector at 0.50, sync result/hash to remote
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/macos-exp016
+decision: PENDING
+next_experiment: EXP-017
+```
+
+```yaml
+experiment_id: EXP-015
+status: PLANNED
+prior_experiment: EXP-013
+hypothesis: seed 300001 的 raw candidates 经生产 TargetSelector(confidence_threshold=0.50) 后在 Linux CUDA 上唯一选择真实 plastic_cup
+prediction: raw_count>=1、eligible_count=1、selected confidence约0.9705、mask 480x640且非空、runtime_device=cuda、latency<=2000
+single_variable: 修正 INVALID EXP-013 探针层级与输出目录顺序；模型、图像、device、source、threshold不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source 35db5f5、weight SHA f281d252...40781、seed300001 truth=1、CUDA gate有效
+  - 新 output platform-smoke/linux-exp015 不存在；无其他 inference进程
+success_criteria:
+  - batch runtime_device=cuda、weight SHA正确；raw_count仅记录不作唯一性断言
+  - eligible_count=1，TargetSelector 返回唯一 plastic_cup；mask 480x640非空、inference<=2000ms
+  - 预创建输出目录后命令 exit 0，result 与 SHA非空
+failure_criteria:
+  - CUDA/权重/eligible/selector/mask/latency失败
+invalid_criteria:
+  - source/input/output provenance或命令退出码污染
+provenance:
+  source_commit: 35db5f54c1d2516fbe752afbe7380d38522a2a19
+  install_overlay: /data/work/ws_moveit-v5-t004/install
+  runtime_executable: /data/work/venvs/so101-v5-t004-perception/bin/python
+  ros_domain_id: 0
+  gz_partition: NONE
+commands:
+  - command: precreate platform-smoke/linux-exp015; run YoloSegDetector plus TargetSelector at 0.50; write result and SHA
+    exit_code: PENDING
+observed:
+  - NONE
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/linux-exp015
+decision: PENDING
+next_experiment: EXP-016
+```
+
+```yaml
+experiment_id: EXP-014
+status: INVALID
 prior_experiment: EXP-013
 hypothesis: 从正式 evidence root 拷贝并核对相同 SHA 的 best.pt 可在 Mac MPS YoloSegDetector 上对 seed 300001 输出唯一 plastic_cup 与非空 full-resolution mask
 prediction: runtime_device=mps、weights SHA=f281d252...40781、candidate_count=1、class=plastic_cup、mask非空且 inference_latency_ms<=2000
@@ -309,23 +403,23 @@ provenance:
   gz_partition: NONE
 commands:
   - command: scp ai-station:.../full-exp-012/best.pt and dataset/images/test/000300001.png to registered Mac staging; verify SHA
-    exit_code: PENDING
+    exit_code: NOT_RUN
   - command: instantiate YoloSegDetector(requested_device=mps, allow_cpu_fallback=false) and detect seed 300001
-    exit_code: PENDING
+    exit_code: NOT_RUN
 observed:
-  - NONE
+  - 在执行前由 EXP-013 证明 candidate_count=1 写在错误的 raw DetectorPort 边界；本实验未启动、未创建输出
 inferred:
-  - NONE
-conclusion: PENDING
+  - 必须用新实验在 TargetSelector confidence 0.50 后断言唯一性
+conclusion: INVALID BEFORE RUN；计划判据层级错误
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/macos
-decision: PENDING
-next_experiment: EXP-015
+decision: ABANDON
+next_experiment: EXP-016
 ```
 
 ```yaml
 experiment_id: EXP-013
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-012
 hypothesis: full-exp-012 best.pt 可在 Linux CUDA YoloSegDetector 上对固定 seed 300001 输出唯一 plastic_cup 与非空 full-resolution mask
 prediction: runtime_device=cuda、weights SHA=f281d252...40781、candidate_count=1、class=plastic_cup、mask非空且 inference_latency_ms<=2000
@@ -352,16 +446,19 @@ provenance:
   gz_partition: NONE
 commands:
   - command: instantiate YoloSegDetector(requested_device=cuda, allow_cpu_fallback=false) and detect dataset/images/test/000300001.png
-    exit_code: PENDING
+    exit_code: 1
 observed:
   - source、CUDA、best.pt hash、seed 300001 image/truth与独立 Linux output 已核验，实验进入 RUNNING
+  - raw DetectionBatch 为 296 candidates；仅 1 个 confidence>=0.50，top confidence=0.970513、mask=480x640、5053 pixels
+  - probe 没有调用 TargetSelector，且 tee 在 Python 创建 output 目录前打开导致 pipeline exit 1；result.json 仍保存并哈希
 inferred:
-  - NONE
-conclusion: PENDING
+  - 模型与阈值后的唯一候选看起来正确，但本轮 probe/exit evidence 污染，不能计为 adapter smoke
+conclusion: INVALID；断言层级与输出顺序错误
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/linux
-decision: PENDING
-next_experiment: EXP-014
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/platform-smoke/linux/invalid-probe.sha256
+decision: REPEAT
+next_experiment: EXP-015
 ```
 
 ```yaml
