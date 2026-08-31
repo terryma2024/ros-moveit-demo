@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import builtins
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -331,3 +332,26 @@ def test_runner_result_must_be_an_exact_integer(
     assert captured.value.code == "DYNAMIC_RUNTIME_RESULT_INVALID"
     assert captured.value.__cause__ is None
     assert captured.value.__context__ is None
+
+
+def test_default_runtime_receives_context_profiler(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[object, object]] = []
+    profiler = object()
+    runtime_module = ModuleType("so101_demo.ros.dynamic_runtime")
+
+    def run_dynamic_execute(options: object, *, profiler: object) -> int:
+        calls.append((options, profiler))
+        return 0
+
+    runtime_module.run_dynamic_execute = run_dynamic_execute  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "so101_demo.ros.dynamic_runtime", runtime_module)
+    context = replace(_context(tmp_path), profiler=profiler)
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request())
+
+    assert result.exit_code == 0
+    assert calls[0][1] is profiler
+    assert calls[0][0].session_id == "text-agent-session"
