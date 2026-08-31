@@ -124,15 +124,23 @@ def convert_yolo_result(
         boxes = _to_numpy(result.boxes.xyxy)
         classes = _to_numpy(result.boxes.cls)
         confidences = _to_numpy(result.boxes.conf)
-        masks = _to_numpy(result.masks.data)
     except AttributeError as error:
-        raise YoloResultError("boxes, classes, confidence, and masks are required") from error
+        raise YoloResultError("boxes, classes, and confidence are required") from error
 
     if boxes.ndim != 2 or boxes.shape[1:] != (4,):
         raise YoloResultError("bbox array must have shape (count, 4)")
-    if classes.ndim != 1 or confidences.ndim != 1 or masks.ndim != 3:
-        raise YoloResultError("classes, confidence, or mask dimensions are invalid")
+    if classes.ndim != 1 or confidences.ndim != 1:
+        raise YoloResultError("classes or confidence dimensions are invalid")
     count = len(boxes)
+    if result.masks is None and count == 0:
+        masks = np.empty((0, frame.image_height, frame.image_width), dtype=bool)
+    else:
+        try:
+            masks = _to_numpy(result.masks.data)
+        except AttributeError as error:
+            raise YoloResultError("masks are required for detected instances") from error
+    if masks.ndim != 3:
+        raise YoloResultError("mask dimensions are invalid")
     if not (len(classes) == len(confidences) == len(masks) == count):
         raise YoloResultError("YOLO output counts differ")
 

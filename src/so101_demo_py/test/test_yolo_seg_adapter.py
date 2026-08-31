@@ -181,6 +181,27 @@ def test_converter_accepts_a_frame_with_no_detections() -> None:
     assert batch.candidates == ()
 
 
+def test_converter_accepts_ultralytics_no_detection_result_without_masks() -> None:
+    result = _result(
+        boxes=np.empty((0, 4)),
+        classes=np.empty((0,)),
+        confidences=np.empty((0,)),
+    )
+    result.masks = None
+
+    batch = convert_yolo_result(
+        result,
+        _frame(),
+        model_id="plastic-cup-yolo11n-seg-v1",
+        weights_sha256="a" * 64,
+        runtime_device="mps",
+        inference_latency_ms=12.0,
+        class_names={0: "plastic_cup"},
+    )
+
+    assert batch.candidates == ()
+
+
 @pytest.mark.parametrize(
     ("result", "message"),
     [
