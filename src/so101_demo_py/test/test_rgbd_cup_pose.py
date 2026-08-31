@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -260,6 +261,55 @@ def test_frame_estimator_uses_exact_source_stamp_and_bounded_tf_lookup() -> None
     assert frame.stamp_ns == 20_000_000
 
 
+def test_frame_estimator_profiles_exact_stamp_world_transform(tmp_path: Path) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import (
+        RgbdCupPoseOptions,
+        estimate_cup_pose_frame,
+    )
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    source_stamp = SimpleNamespace(sec=0, nanosec=20_000_000)
+    aligned = (
+        SimpleNamespace(header=SimpleNamespace(stamp=source_stamp)),
+        object(),
+        object(),
+    )
+
+    estimate_cup_pose_frame(
+        aligned,
+        RgbdCupPoseOptions(),
+        build_cloud=lambda *_args, **_kwargs: _cloud(stamp_ns=20_000_000),
+        lookup_transform=lambda *_args: _transform(
+            translation=(0.0, 0.0, 0.0),
+            rotation_xyzw=(0.0, 0.0, 0.0, 1.0),
+        ),
+        stamp_to_time=lambda stamp: (stamp.sec, stamp.nanosec),
+        tf_timeout_budget=lambda: 0.07,
+        profiler=profiler,
+    )
+    profiler.close()
+
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+    ]
+    assert [event["name"] for event in complete] == ["perception.transform_world"]
+    assert complete[0]["outcome"] == "accepted"
+
+
 def test_prevalid_tf_timeout_is_capped_by_remaining_startup_budget() -> None:
     from so101_demo.ros.rgbd_cup_pose_node import bounded_tf_timeout_s
 
@@ -298,6 +348,59 @@ def test_failed_frame_never_republishes_last_valid_pose() -> None:
     assert not processor.process(object())
     assert len(published) == 1
     assert [str(error) for error in errors] == ["fitted radius is outside tolerance"]
+
+
+def test_frame_processor_profiles_first_frame_wait_and_each_estimate(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import CupPoseFrameProcessor
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    valid = object()
+
+    def estimate(aligned):
+        if aligned is valid:
+            return _valid_frame()
+        raise ValueError("bad radius")
+
+    processor = CupPoseFrameProcessor(
+        estimate=estimate,
+        publish=lambda _frame: None,
+        on_error=lambda _error: None,
+        profiler=profiler,
+    )
+
+    assert processor.process(valid)
+    assert not processor.process(object())
+    profiler.close()
+
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+    ]
+    assert [event["name"] for event in complete] == [
+        "perception.wait_synchronized_frame",
+        "perception.estimate_cup_pose",
+        "perception.estimate_cup_pose",
+    ]
+    assert [event["outcome"] for event in complete] == [
+        "available",
+        "accepted",
+        "rejected",
+    ]
 
 
 def test_fresh_frame_gate_rejects_duplicate_and_out_of_order_stamps() -> None:
@@ -463,6 +566,54 @@ def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsy
     assert result != 0
     assert len(errors) == 2
     assert "RGBD_CUP_POSE_TIMEOUT" in capsys.readouterr().out
+
+
+def test_run_profiles_total_without_changing_success_result(tmp_path: Path) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, run_rgbd_cup_pose
+
+    class FakeRuntime:
+        first_valid_published = True
+
+        def ok(self) -> bool:
+            return False
+
+        def spin_once(self, _timeout_s: float) -> None:
+            raise AssertionError("stopped runtime spun")
+
+        def close(self) -> None:
+            pass
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.SUMMARY,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+
+    result = run_rgbd_cup_pose(
+        RgbdCupPoseOptions(),
+        runtime_factory=lambda *_args: FakeRuntime(),
+        monotonic=lambda: 10.0,
+        open3d_preflight=lambda _remaining: None,
+        profiler=profiler,
+    )
+    profiler.close()
+
+    assert result == 0
+    complete = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+        if '"event_type":"span_complete"' in line
+    ]
+    assert complete[-1]["name"] == "perception.total"
+    assert complete[-1]["outcome"] == "published"
 
 
 def test_startup_budget_begins_before_preflight_and_runtime_construction(capsys) -> None:
@@ -1234,6 +1385,44 @@ def test_cli_still_rejects_unknown_application_argument(capsys) -> None:
         main(["--unknown-application-option"])
     assert error.value.code == 2
     assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_cli_enabled_profiling_passes_and_closes_perception_profiler(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from so101_demo.cli import rgbd_cup_pose
+    from so101_demo.ros import rgbd_cup_pose_node
+
+    calls = []
+
+    def run(options, *, profiler) -> int:
+        calls.append((options, profiler))
+        return 0
+
+    monkeypatch.setattr(rgbd_cup_pose_node, "run_rgbd_cup_pose", run)
+    profiling_root = tmp_path / "profiling"
+
+    assert rgbd_cup_pose.main(
+        [
+            "--profiling",
+            "trace",
+            "--profiling-output-root",
+            str(profiling_root),
+            "--profiling-session-id",
+            "session-1",
+        ]
+    ) == 0
+
+    assert len(calls) == 1
+    assert calls[0][1].config.process_role == "perception"
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/perception.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    assert events[-1]["event_type"] == "process_close"
 
 
 def test_package_registers_rgbd_cup_pose_executable() -> None:
