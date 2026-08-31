@@ -16,6 +16,7 @@ from ament_index_python.packages import get_package_prefix, get_package_share_di
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
+    ExecuteProcess,
     IncludeLaunchDescription,
     LogInfo,
     OpaqueFunction,
@@ -497,10 +498,14 @@ def _mujoco_text_pick_agent_execute_actions(
         parameters=[{"use_sim_time": True}],
         output="both",
     )
-    workflow = Node(
-        package="so101_demo_py",
-        executable="text_pick_agent",
-        arguments=[
+    workflow = ExecuteProcess(
+        cmd=[
+            str(
+                Path(execution_identity.package_prefix)
+                / "lib"
+                / "so101_demo_py"
+                / "text_pick_agent"
+            ),
             "--instruction",
             instruction,
             "--mode",

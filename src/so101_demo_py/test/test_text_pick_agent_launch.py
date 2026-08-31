@@ -8,6 +8,7 @@ import pytest
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
+    ExecuteProcess,
     OpaqueFunction,
     RegisterEventHandler,
 )
@@ -89,11 +90,26 @@ def _node(actions, executable: str) -> Node:
     return matches[0]
 
 
-def _dispatch_process_exit(actions, target: Node, returncode: int, context: LaunchContext):
+def _plain_process(actions) -> ExecuteProcess:
+    matches = [
+        action
+        for action in actions
+        if isinstance(action, ExecuteProcess) and not isinstance(action, Node)
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _plain_process_command(process: ExecuteProcess, context: LaunchContext) -> list[str]:
+    return [perform_substitutions(context, part) for part in process.cmd]
+
+
+def _dispatch_process_exit(actions, target, returncode: int, context: LaunchContext):
+    executable = getattr(target, "node_executable", "text_pick_agent")
     event = ProcessExited(
         action=target,
-        name=str(target.node_executable),
-        cmd=[str(target.node_executable)],
+        name=str(executable),
+        cmd=[str(executable)],
         cwd=None,
         env=None,
         pid=101,
@@ -206,6 +222,17 @@ def test_valid_preflight_creates_exclusive_session_evidence_directories(
     assert isinstance(actions, list)
 
 
+def test_text_agent_uses_plain_process_without_ros_cli_arguments(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context, actions, _exit_status = _materialize(monkeypatch, tmp_path)
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    command = _plain_process_command(_plain_process(started), context)
+    assert command[0] == "/tmp/so101-text-agent-install/lib/so101_demo_py/text_pick_agent"
+    assert "--ros-args" not in command
+
+
 def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -222,10 +249,7 @@ def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
     assert "dynamic_cup_pick_place" not in initial_executables
 
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
-    assert [node.node_executable for node in _nodes(started)] == [
-        "rgbd_cup_pose",
-        "text_pick_agent",
-    ]
+    assert [node.node_executable for node in _nodes(started)] == ["rgbd_cup_pose"]
 
     perception = _node(started, "rgbd_cup_pose")
     assert perception._Node__arguments == [
@@ -242,8 +266,8 @@ def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
         {"use_sim_time": True},
     )
 
-    workflow = _node(started, "text_pick_agent")
-    assert workflow._Node__arguments == [
+    workflow = _plain_process(started)
+    assert _plain_process_command(workflow, context)[1:] == [
         "--instruction",
         INSTRUCTION,
         "--mode",
@@ -268,7 +292,7 @@ def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
 
     all_executables = initial_executables + [
         node.node_executable for node in _nodes(started)
-    ]
+    ] + [Path(_plain_process_command(workflow, context)[0]).name]
     assert all_executables.count("rgbd_cup_pose") == 1
     assert all_executables.count("text_pick_agent") == 1
     assert "dynamic_cup_pick_place" not in all_executables
@@ -312,7 +336,7 @@ def test_clean_text_agent_exit_owns_shutdown_and_suppresses_teardown(
 ) -> None:
     context, actions, exit_status = _materialize(monkeypatch, tmp_path)
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
-    workflow = _node(started, "text_pick_agent")
+    workflow = _plain_process(started)
     perception = _node(started, "rgbd_cup_pose")
 
     workflow_emitted = _dispatch_process_exit(actions, workflow, 0, context)
@@ -333,7 +357,7 @@ def test_failed_text_agent_exit_preserves_failure_and_suppresses_teardown(
 ) -> None:
     context, actions, exit_status = _materialize(monkeypatch, tmp_path)
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
-    workflow = _node(started, "text_pick_agent")
+    workflow = _plain_process(started)
     perception = _node(started, "rgbd_cup_pose")
 
     workflow_emitted = _dispatch_process_exit(actions, workflow, 23, context)

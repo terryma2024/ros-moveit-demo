@@ -7,7 +7,7 @@ success_contract: Four independent FULL_RESTART runs at task_start, cup_test_for
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
 branch: main
 base_commit: 03887b424797a2f644156725742077b970100a0f
-current_commit: b7518e6f99a11269a6e4b3f9b83ee95a1426520b
+current_commit: 15ab84162083c591b0e531222434a4c85243d0ec
 evidence_root: /tmp/so101-debug-text-agent-e2e-launch-20260831
 confirmed_conclusions:
   - DESIGN-001: The existing perception launch already owns MuJoCo, controllers, MoveIt, camera TF, RGB-D perception, and dynamic pick-place; the approved design adds a separate public launch that substitutes text_pick_agent for the direct dynamic workflow.
@@ -17,15 +17,15 @@ confirmed_conclusions:
   - PROV-001: ai-station remains at e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4 with its untracked RGB-D ledger and codex/codex-cua sessions preserved.
   - CP-STATIC-GREEN: Focused source tests passed 90/90, the full package suite passed 792/792, and the installed overlay exposes the new launch with all 13 arguments.
   - CP-STATIC-GREEN: Missing skip_confirmation fails before evidence creation, leaves domain 221 empty, and returns launch status 1.
+  - CP-MAC-VISIBLE-BLOCKED: The current macOS login context reports CGMainDisplayID=0 and zero active CoreGraphics displays; every visible launch reaches the MuJoCo main-thread UI boundary and then exits -11 in glfwGetVideoMode before Text Agent or motion starts.
 disproven_routes:
   - DESIGN-001: A shell wrapper is rejected because it splits process ownership, exit status, and evidence provenance.
   - DESIGN-001: Adding workflow selection to the existing perception launch is rejected to preserve its public contract.
   - CP-STATIC-GREEN: ROS_DOMAIN_ID values 240 through 244 are invalid on the local Fast DDS configuration because domain IDs above 232 overflow its port calculation; static and live domains were changed to 221 through 225.
 open_hypotheses:
-  - The dedicated launch can preserve existing fail-closed semantics while passing installed provenance to text_pick_agent automatically.
-  - Each of the four FULL_RESTART runs can complete the full natural-language-to-physical chain on the local Mac.
-latest_checkpoint: CP-STATIC-GREEN
-next_experiment: Run the task_start FULL_RESTART acceptance in ROS domain 222 after provider and process-ownership preflight.
+  - Each of the four FULL_RESTART runs can complete the full natural-language-to-physical chain on the local Mac with headless=true and sensor_rendering=true while the visible-only gate remains environment-blocked.
+latest_checkpoint: CP-MAC-VISIBLE-BLOCKED
+next_experiment: Run a fresh task_start FULL_RESTART functional acceptance in ROS domain 222 with headless=true and sensor_rendering=true.
 ```
 
 ## DESIGN-001
@@ -133,6 +133,61 @@ evidence_disposition:
   retained:
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/design
     - /tmp/so101-debug-text-agent-e2e-launch-20260831/static
+  archived: NONE
+  deletion_candidates: NONE
+```
+
+## EXP-MAC-VISIBLE-PREFLIGHT and CP-MAC-VISIBLE-BLOCKED
+
+```yaml
+checkpoint_id: CP-MAC-VISIBLE-BLOCKED
+date: 2026-08-31
+source_commit: 15ab84162083c591b0e531222434a4c85243d0ec
+installed_prefix: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/so101_demo_py
+ros_domain_id: 222
+lifecycle: FULL_RESTART_PREFLIGHT
+status: INVALID_ENVIRONMENT
+attempts:
+  - id: task_start
+    result: INVALID_ENVIRONMENT
+    first_bad_boundary: libmujoco.3.4.0.dylib was unavailable because the first runner did not load the repository direnv environment.
+  - id: task_start_run2
+    result: INVALID_ENVIRONMENT
+    first_bad_boundary: visible MuJoCo exited -11 in glfwGetVideoMode before hardware initialization completed.
+  - id: task_start_run3
+    result: INVALID_RUNNER
+    first_bad_boundary: the new Ghostty app instance restored windows but did not execute the supplied runner; no ROS process started.
+  - id: task_start_run4
+    result: INVALID_RUNNER
+    first_bad_boundary: Terminal opened the runner in /tmp, so direnv did not load the repository environment and ros2 was unavailable; no ROS process started.
+  - id: task_start_run5
+    result: INVALID_ENVIRONMENT
+    first_bad_boundary: after explicit checkout cd and complete environment loading, visible MuJoCo again exited -11 in glfwGetVideoMode before Text Agent, RGB-D perception, or motion started.
+observed:
+  - Both a Codex PTY and a task-owned Terminal GUI process reached the same glfwGetVideoMode failure.
+  - system_profiler reports the Apple M5 GPU but no display entry.
+  - CoreGraphics reports CGMainDisplayID=0 and CGActiveDisplayCount=0.
+  - Domain 222 is empty after every failed preflight; no task-owned ROS process remains.
+inferred:
+  - The visible-only gate is blocked by the current no-active-display macOS environment rather than by the launch responsibility chain.
+  - A headless functional matrix can still exercise Text Agent, rendered RGB-D, MoveIt, controllers, and MuJoCo physical outcome, but cannot satisfy the pre-registered exact-window gate.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run2
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run3
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run4
+  - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run5
+preserved_processes:
+  - Pre-existing PIDs 79408, 79419, 79423, 80039, and 80040 remain untouched.
+decision: KEEP_INVALID_AND_RUN_HEADLESS_FUNCTIONAL_MATRIX
+next_experiment: Fresh task_start session in domain 222 with headless=true and sensor_rendering=true.
+evidence_disposition:
+  retained:
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run2
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run3
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run4
+    - /tmp/so101-debug-text-agent-e2e-launch-20260831/macos/task_start_run5
   archived: NONE
   deletion_candidates: NONE
 ```
