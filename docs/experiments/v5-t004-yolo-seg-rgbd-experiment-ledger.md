@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: e84f84cca9ad2812dd2b4f06c50956d8d47118db
+current_commit: 3d9a279e7a7268c527ea2c5c13701b5161eafe10
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,25 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-032
+latest_checkpoint: CP-033
 next_experiment: EXP-030
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-033
+last_valid_experiment: EXP-016
+current_hypothesis: 主安装core/plugin/support dylib优先的前台PTY Aqua宿主可让 EXP-030 完成UI握手
+working_tree_status: 仅本账本 RUNNING 转换待提交；源/测试 clean
+owned_processes: NONE；正式 EXP-030 尚未启动
+preserved_processes: 所有无效运行证据已持久化；用户进程/文件未触碰
+confirmed_conclusions:
+  - CONF-062 主安装core、dispatcher、camera plugin与support目录均存在；domain 230及两端output为空
+open_risks:
+  - 主安装dylib优先下的dispatcher握手、Viewer/controller/payload/not-found/视觉/cleanup尚未观察
+next_command: 以前台 tty=true 和主安装dylib优先启动 EXP-030
+```
 
 ```yaml
 checkpoint_id: CP-032
@@ -1059,7 +1073,7 @@ next_experiment: EXP-030
 
 ```yaml
 experiment_id: EXP-030
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-029
 hypothesis: 当前主安装的 core/plugin/support dylib优先于共享farm后，前台PTY Aqua宿主可完成main-thread UI并让 bottle_only 到达真实 RGB-D/MPS not-found边界
 prediction: 主安装core与dispatcher一致；Viewer可见、controllers active、RGB-D有效；MPS TARGET_NOT_FOUND且无 /cup_pose
