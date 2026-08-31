@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: a03bcd89d6b2bfbefd4500053ee9583073626061
+current_commit: 6bb16778d053a8bd9bb67c71fd0a1430b94ba2aa
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -15,18 +15,34 @@ confirmed_conclusions:
   - CONF-001 现有颜色阈值加最大 DBSCAN 聚类没有实例类别语义，来自设计文档与 f09cf88 源码检查
   - CONF-002 当前 macOS 与 ai-station Python 环境均未安装 torch/ultralytics/mujoco Python binding，来自 2026-08-31 双平台 import probe
   - CONF-003 ai-station NVIDIA 用户态 595.84 与已加载内核模块 595.71.05 不一致，nvidia-smi 当前失败
+  - CONF-022 EXP-007 授权重启后 NVIDIA 内核模块、NVML 与磁盘模块统一为 595.84，nvidia-smi 与 RTX 5080 CUDA 张量 gate 通过
 disproven_routes:
   - DISPROVED-001 不允许用最大同色聚类或 MuJoCo truth ID 作为生产目标分类器
   - DISPROVED-002 不允许用 CPU smoke 代替 macOS MPS 或 Linux CUDA 正式验收
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-  - HYP-003 ai-station 完整重启后会加载磁盘上的 NVIDIA 595.84 内核模块并恢复 NVML
-latest_checkpoint: CP-007
-next_experiment: EXP-007
+latest_checkpoint: CP-008
+next_experiment: EXP-008
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-007
+current_hypothesis: HYP-001
+working_tree_status: 本地任务分支仅有本轮 EXP-007 结论待提交；ai-station 主 checkout 用户账本和隔离 worktree均保持原样
+owned_processes: NONE；重启后没有遗留 Gazebo、MoveIt、RViz 或 ROS pick-place stack
+preserved_processes: 重启前 codex/codex-cua 窗格快照已保留；重启后旧 tmux server 不存在，不伪造续接；GNOME/Xorg 已恢复
+confirmed_conclusions:
+  - CONF-022 新 boot 为 2026-08-31 20:40:08，NVIDIA kernel/modinfo/NVML 均为 595.84，nvidia-smi exit 0
+  - CONF-023 torch 2.13.0+cu130 在 RTX 5080 上 cuda_available=true，实际张量 sum=140.0
+  - CONF-024 主 checkout 用户账本、隔离 worktree、migration manifest 与全部重启前证据 SHA 均保留
+open_risks:
+  - 训练参数能否被 Ultralytics 8.4.115 接受、best.pt 是否达到四场景 IoU/延迟门槛仍未观察
+next_command: 在不启动训练的前提下校验 training.yaml、dataset.yaml 与 Ultralytics 8.4.115 参数契约
+```
 
 ```yaml
 checkpoint_id: CP-007
@@ -156,7 +172,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-007
-status: RUNNING
+status: VALID
 prior_experiment: EXP-004
 hypothesis: ai-station 完整重启将以磁盘上的 NVIDIA 595.84 替换当前已加载的 595.71.05，从而消除 NVML driver/library version mismatch
 prediction: 重启后 /proc/driver/nvidia/version 与 modinfo 均为 595.84，nvidia-smi 退出 0，锁定 venv 中 torch.cuda 可用且 RTX 5080 张量计算得到 sum=140.0
@@ -186,21 +202,29 @@ provenance:
   gz_partition: NONE
 commands:
   - command: ssh ai-station 'sudo -n systemctl reboot'
-    exit_code: PENDING
+    exit_code: 0
 observed:
   - 2026-08-31T20:35:50+08:00 重启前 uptime 19 days 23:52；加载 NVIDIA 595.71.05、磁盘模块 595.84、NVML 595.84
   - 重启前主 checkout 唯一 dirty path 为 docs/experiments/ai-station-linux-headless-rgbd-four-point-upgrade-experiment-ledger.md
   - 重启前 tmux 恢复快照保存在正式 evidence root
   - 重启命令执行前已核验 source commit、venv、证据根、sudo、进程所有权与用户 dirty path，实验进入 RUNNING
+  - 2026-08-31T20:43:19+08:00 uptime 3 min，boot time 为 2026-08-31 20:40:08
+  - /proc/driver/nvidia/version 与 modinfo 均为 595.84；nvidia-smi exit 0，识别 NVIDIA GeForce RTX 5080
+  - torch 2.13.0+cu130 报 cuda_available=true，RTX 5080 上 arange(8) 平方和为 140.0
+  - 主 checkout 用户账本、隔离 worktree、migration manifest 与重启前 3 个证据文件 SHA 校验全部通过
+  - 重启后旧 tmux server 不存在；这符合重启语义，恢复所需的两个窗格快照已保留，未冒充自动续接
 inferred:
-  - 当前 mismatch 很可能由驱动包升级后尚未重启造成，但必须由重启后的版本与 CUDA gate 验证
-conclusion: PENDING
+  - 重启后首先在驱动加载边界消除了 595.71.05/595.84 分叉，且 NVML 与 CUDA 同时恢复，支持“驱动包升级后未重启”为已确认根因
+conclusion: CONFIRMED；完整重启加载 595.84 并恢复了 nvidia-smi 与 CUDA 正式训练 gate
 evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/pre-reboot-state.txt
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/pre-reboot-sha256.txt
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/tmux-codex-pre-reboot.txt
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/tmux-codex-cua-pre-reboot.txt
-decision: PENDING
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/post-reboot-state.txt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/cuda-tensor-post-reboot.txt
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/reboot/exp-007/post-reboot-sha256.txt
+decision: KEEP
 next_experiment: EXP-008
 ```
 
