@@ -673,6 +673,58 @@ def test_cli_enabled_profiling_writes_correlated_agent_stream(
         "agent.validate_command",
         "agent.dispatch",
     }
+    dispatch_complete = [
+        event
+        for event in events
+        if event.get("event_type") == "span_complete"
+        and event.get("name") == "agent.dispatch"
+    ]
+    assert [event["outcome"] for event in dispatch_complete] == ["resolved"]
+
+
+def test_cli_sink_initialization_error_falls_back_to_unprofiled_agent(
+    monkeypatch,
+    capsys,
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+    monkeypatch.setattr(
+        text_pick_agent,
+        "_build_semantic_profiler",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    assert text_pick_agent.main(
+        [
+            "--instruction",
+            "pick the cup",
+            "--profiling",
+            "summary",
+            "--profiling-output-root",
+            "/tmp/profiling",
+            "--profiling-session-id",
+            "session-1",
+        ],
+        _agent=agent,
+    ) == 0
+
+    assert len(agent.requests) == 1
+    assert output(capsys)["status"] == "DISPATCH_PREVIEW"
+
+
+def test_cli_invalid_profiling_configuration_still_fails_before_agent(capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "pick the cup", "--profiling", "summary"],
+        _agent=agent,
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "PROFILING_CONFIGURATION_INVALID"
 
 
 def test_cli_can_build_a_separate_dynamic_runtime_stream(tmp_path: Path) -> None:

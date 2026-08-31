@@ -14,7 +14,11 @@ from launch.event_handlers import OnProcessExit, OnShutdown
 from .artifacts import FinalizationResult, finalize_profiling
 from .model import ProfilingConfig, ProfilingMode
 from .session import SemanticProfiler, SpanToken, build_profiler
-from .system_trace import SystemTraceResult, build_system_trace
+from .system_trace import (
+    SystemTraceResult,
+    build_system_trace,
+    validate_profiling_session_id,
+)
 
 
 @dataclass(slots=True)
@@ -58,7 +62,15 @@ class LaunchProfilingSession:
 
     @property
     def warnings(self) -> tuple[str, ...]:
-        return tuple(self._warnings) + self.profiler.warnings
+        warnings = list(self._warnings)
+        if self.system_trace.status == "unavailable":
+            warning = (
+                "ros2_tracing unavailable "
+                f"({self.system_trace.error or 'UnknownError'})"
+            )
+            if warning not in warnings:
+                warnings.append(warning)
+        return tuple(warnings) + self.profiler.warnings
 
     def record_scene_exit(self, returncode: int) -> None:
         if not self._scene_finished:
@@ -134,6 +146,7 @@ class LaunchProfilingSession:
                 self.profiling_root,
                 mode=self.mode,
                 backend=self._backend_manifest(),
+                expected_session_id=self.profiler.config.session_id,
             )
         except (OSError, RuntimeError, ValueError) as error:
             self._warnings.append(f"{type(error).__name__}: {error}")
@@ -173,6 +186,10 @@ def resolve_launch_profiling(
         output_root_value=output_root_value,
         require_system_trace_value=require_system_trace_value,
     )
+    try:
+        validate_profiling_session_id(session_id)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
     if mode is ProfilingMode.OFF:
         return None
 

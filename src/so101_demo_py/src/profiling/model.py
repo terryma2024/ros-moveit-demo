@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 from pathlib import Path
 from typing import Mapping, TypeAlias
 
@@ -67,5 +68,7 @@ def validate_attributes(values: Mapping[str, object]) -> dict[str, Scalar]:
             raise TypeError(
                 f"profiling attribute {key!r} must be a scalar JSON value"
             )
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(f"profiling attribute {key!r} must be finite")
         validated[key] = value
     return validated

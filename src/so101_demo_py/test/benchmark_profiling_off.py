@@ -72,7 +72,7 @@ def _text_agent_scenario() -> _Scenario:
     disabled_agent = TextAgent(_Planner(), _Executor(), profiler=None)
     return _Scenario(
         "text_agent_preview",
-        lambda: baseline_agent.handle(request),
+        lambda: baseline_agent._handle(request),
         lambda: disabled_agent.handle(request),
     )
 
