@@ -7,7 +7,7 @@ success_contract: Profiling off preserves business results and bounded overhead;
 worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/so101-cross-platform-profiling
 branch: codex/so101-cross-platform-profiling
 base_commit: e7e0299cf8115214a0daf483cc40da6b09309091
-current_commit: d88774bb9ecb7e004d2e66bdabd26593b7b4f3b8
+current_commit: 1a00ce20167ef3fcac53fc45c74ca6c7a0fba4ba (verified implementation; this checkpoint is a subsequent ledger-only update)
 evidence_root: /tmp/so101-debug-cross-platform-profiling-design-20260831
 remote_platform_evidence: /data/work/so101-evidence/so101-cross-platform-profiling/20260831T052807Z-7583857
 confirmed_conclusions:
@@ -17,9 +17,9 @@ disproven_routes:
   - EXP-002A ExecuteProcess talker did not satisfy clean-shutdown acceptance.
   - EXP-002B A missing smoke-fixture environment variable invalidated the first final trace attempt.
 open_hypotheses:
-  - Code review findings may expose fail-open, event-schema, and execute-time tracing gaps not covered by the original tests.
-latest_checkpoint: CP-003
-next_experiment: EXP-003
+  - Production SO-101 launch integration is still covered by composition tests rather than a non-physical run of the full MuJoCo launch.
+latest_checkpoint: CP-004
+next_experiment: NONE
 ```
 
 ## Imported experiment checkpoints
@@ -74,7 +74,7 @@ next_experiment: EXP-003
 
 ```yaml
 experiment_id: EXP-003
-status: RUNNING
+status: VALID
 prior_experiment: EXP-002
 hypothesis: Independent subagent review can reproduce gaps in business fail-open behavior, semantic artifact integrity, and Linux execute-time backend truthfulness.
 prediction: Focused RED tests fail on the reviewed boundaries and pass only after minimal fixes, without starting a robot or simulator stack.
@@ -100,32 +100,43 @@ provenance:
   gz_partition: so101-prof-7583857-052807
 commands:
   - command: Three scoped subagent reviews followed by non-overlapping TDD remediation tasks.
-    exit_code: PENDING
+    exit_code: 0
+  - command: Direct macOS package pytest after integration.
+    exit_code: 0
+  - command: ai-station candidate build, direct package pytest, disabled benchmark, and bounded official Trace smoke.
+    exit_code: 0
 observed:
   - Reviews returned no Critical findings and identified reproducible Important fail-open, artifact integrity, dispatch labeling, and Trace lifecycle risks.
+  - Focused RED tests reproduced the accepted defects before implementation; the merged focused suite passed 187 tests.
+  - The final macOS package gate passed 874 tests, and the corrected disabled benchmark stayed within its 2 percent or 100 ns allowance.
+  - ai-station rebuilt commit 1a00ce2 and passed 874 tests; its corrected disabled benchmark passed.
+  - Session linux-final3-1a00ce2 produced complete portable artifacts plus 162 Babeltrace-readable ROS UST events; both child processes exited cleanly and no recording session or owned process remained.
 inferred:
-  - The original 842-test gates were insufficient for these boundary cases.
-conclusion: PENDING
+  - The original 842-test gates were insufficient for the reviewed boundary cases; the added tests now cover them without expanding robot execution authority.
+conclusion: Review remediation is accepted for the semantic core, child-process fail-open behavior, and official Linux Trace lifecycle wrapper.
 evidence:
   - /tmp/so101-debug-cross-platform-profiling-design-20260831/task-ledger.md
-decision: PENDING
+  - /tmp/so101-debug-cross-platform-profiling-design-20260831/post-review-full.xml
+  - /data/work/so101-evidence/so101-cross-platform-profiling/20260831T052807Z-7583857/review-remediation/linux-full-1a00ce2.xml
+  - /data/work/so101-evidence/so101-cross-platform-profiling/20260831T052807Z-7583857/review-remediation/final-trace-3
+decision: KEEP
 next_experiment: NONE
 ```
 
 ## Checkpoint
 
 ```yaml
-checkpoint_id: CP-003
-last_valid_experiment: EXP-002
-current_hypothesis: Review findings require focused TDD remediation before integration.
-working_tree_status: clean at d88774b before this ledger and remediation edits
+checkpoint_id: CP-004
+last_valid_experiment: EXP-003
+current_hypothesis: NONE
+working_tree_status: tracked ledger update pending after clean commit 1a00ce2
 owned_processes: NONE
 preserved_processes: ai-station tmux codex and codex-cua; pre-existing system lttng-sessiond
 confirmed_conclusions:
-  - Original macOS and bounded Linux gates passed at d88774b.
+  - Review remediation passed macOS and Linux package gates plus the bounded official Trace smoke at 1a00ce2.
 disproven_routes:
   - Failed/preflight Linux harness runs do not count as acceptance.
 open_risks:
-  - Production launch Trace execute-time failure and artifact lifecycle truthfulness.
-next_command: Wait for scoped TDD subagents, inspect diffs, and run focused then full package tests.
+  - The bounded Linux harness does not execute the full SO-101 MuJoCo production launch; composition and action-ordering remain automated-test evidence.
+next_command: NONE
 ```
