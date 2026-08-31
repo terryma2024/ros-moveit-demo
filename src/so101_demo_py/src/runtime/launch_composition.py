@@ -122,11 +122,16 @@ def _render_mujoco_robot_description(
     *,
     headless: bool,
     sensor_rendering: bool | None = None,
+    sim_speed_factor: float = -1.0,
     initial_keyframe: str = "task_start",
     platform_name: str | None = None,
 ) -> str:
     if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
         raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
+    if not isfinite(sim_speed_factor) or (
+        sim_speed_factor != -1.0 and sim_speed_factor <= 0.0
+    ):
+        raise RuntimeError("sim_speed_factor must be -1.0 or finite and positive")
     description = (share / "assets/mujoco/so101.urdf").read_text(encoding="utf-8")
     description = description.replace("@SO101_MUJOCO_SCENE@", scene)
     description = description.replace("@SO101_MUJOCO_INITIAL_KEYFRAME@", initial_keyframe)
@@ -138,6 +143,9 @@ def _render_mujoco_robot_description(
     disable_rendering = not sensor_rendering
     description = description.replace(
         "@SO101_MUJOCO_DISABLE_RENDERING@", str(disable_rendering).lower()
+    )
+    description = description.replace(
+        "@SO101_MUJOCO_SIM_SPEED_FACTOR@", str(sim_speed_factor)
     )
     if "@SO101_" in description:
         raise RuntimeError("unresolved SO-101 URDF launch token")
@@ -178,7 +186,13 @@ def _advance_on_success(event, action, operation: str):
     ]
 
 
-def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStackActions:
+def _mujoco_stack_actions(
+    context,
+    share: Path,
+    session_id: str,
+    *,
+    sim_speed_factor: float = -1.0,
+) -> _MujocoStackActions:
     scene = LaunchConfiguration("mujoco_scene").perform(context)
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     headless = LaunchConfiguration("headless").perform(context).lower() == "true"
@@ -195,6 +209,7 @@ def _mujoco_stack_actions(context, share: Path, session_id: str) -> _MujocoStack
         scene,
         headless=headless,
         sensor_rendering=sensor_rendering,
+        sim_speed_factor=sim_speed_factor,
         initial_keyframe=initial_keyframe,
     )
     config = share / "config/mujoco"
@@ -409,7 +424,7 @@ def _mujoco_perception_execute_actions(
     perception_allow_cpu_fallback: bool,
     exit_status: PerceptionLaunchExitStatus,
 ):
-    stack = _mujoco_stack_actions(context, share, session_id)
+    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     camera_transforms = tuple(camera_static_transform_nodes())
     if perception_backend == "color_geometry":
         perception = Node(

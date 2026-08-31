@@ -603,6 +603,7 @@
       <param name="initial_keyframe">@SO101_MUJOCO_INITIAL_KEYFRAME@</param>
       <param name="headless">@SO101_MUJOCO_HEADLESS@</param>
       <param name="disable_rendering">@SO101_MUJOCO_DISABLE_RENDERING@</param>
+      <param name="sim_speed_factor">@SO101_MUJOCO_SIM_SPEED_FACTOR@</param>
     </hardware>
     <joint name="1">
       <command_interface name="position">
