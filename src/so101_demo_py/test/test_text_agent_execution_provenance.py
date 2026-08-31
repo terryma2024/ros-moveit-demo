@@ -24,6 +24,28 @@ def _head() -> str:
     ).stdout.strip()
 
 
+def test_resolve_installed_execution_identity_is_cwd_independent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.application import text_agent as runtime_module
+    from so101_demo.runtime.provenance import resolve_installed_execution_identity
+
+    monkeypatch.chdir(tmp_path)
+    identity = resolve_installed_execution_identity()
+
+    module_path = Path(runtime_module.__file__).resolve(strict=True)
+    expected_commit = subprocess.run(
+        ["git", "-C", str(module_path.parent), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip().lower()
+    assert identity.source_commit == expected_commit
+    assert identity.package_prefix == str(
+        Path(get_package_prefix("so101_demo_py")).resolve(strict=True)
+    )
+
+
 def _options(
     evidence_root: Path,
     *,
