@@ -58,3 +58,4 @@ def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
         for source in sources
     }
     assert "launch/so101_mujoco_perception_pick_place.launch.py" in installed_files
+    assert "launch/so101_mujoco_text_pick_agent.launch.py" in installed_files

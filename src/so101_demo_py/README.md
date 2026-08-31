@@ -16,7 +16,8 @@ gate applies, and where to find the detailed architecture and source guides.
 | Run the fixed-waypoint cup workflow | `so101_mujoco_pick_place.launch.py` | Fixed policy planning or execution | [Python architecture](../../docs/pick-place-python-architecture.md) |
 | Consume a supplied `/cup_pose` | `dynamic_cup_pick_place` | Dynamic target calculation and planning/execution | [Dynamic cup source guide](../../docs/so101-dynamic-cup-pick-place-source-guide.md) |
 | Detect the cup from RGB-D and pick it | `so101_mujoco_perception_pick_place` | Camera-to-pose-to-motion integration | [RGB-D source guide](../../docs/so101-rgbd-perception-pick-place-source-guide.md) |
-| Convert natural language into a bounded cup task | `text_pick_agent` | Planner validation and, when authorized, dispatch | [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md) |
+| Preview a bounded natural-language cup task | `text_pick_agent` | Planner and command validation without starting a ROS stack | [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md) |
+| Run natural language, RGB-D perception, and dynamic pick-place in one owned stack | `so101_mujoco_text_pick_agent.launch.py` | Full Text Agent to MuJoCo integration | [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md) |
 | Keep one visible MuJoCo environment alive for multiple points | `so101_mujoco_task_station.launch.py` or `so101_mujoco_rgbd_batch` | `RESET_WORLD` task-station workflow | [RGB-D task-station guide](../../docs/so101-rgbd-perception-pick-place-source-guide.md) |
 | Compare the shared workflow on Gazebo | `so101_gazebo_pick_place.launch.py` | Functional comparison, not MuJoCo qualification | [Shared architecture](../../docs/pick-place-architecture.md) |
 
@@ -74,13 +75,14 @@ validates, authorizes, claims, and dispatches it.
 
 ## Launch-file catalog
 
-The package installs six launch files.
+The package installs seven launch files.
 
 | Launch file | Purpose | Safe default | Typical use |
 |---|---|---|---|
 | `so101_mujoco.launch.py` | MuJoCo stack without a pick-place workflow | `headless:=true` | Bring up simulator, controllers, MoveIt, and scene ownership |
 | `so101_mujoco_pick_place.launch.py` | MuJoCo stack plus fixed-waypoint workflow | `run_mode:=dry_run execute:=false` | Fixed-policy dry-run or explicitly authorized execution |
 | `so101_mujoco_perception_pick_place.launch.py` | MuJoCo stack, RGB-D perception, and dynamic workflow | `run_mode:=dry_run execute:=false` | Full RGB-D integration; prefer the status-preserving executable for automation |
+| `so101_mujoco_text_pick_agent.launch.py` | MuJoCo stack, RGB-D perception, and Text Agent workflow | Three execution controls default to disabled | One-command natural-language simulation with explicit confirmation bypass |
 | `so101_mujoco_task_station.launch.py` | Persistent visible RGB-D task station | Visible viewer and sensor rendering are mandatory | Manual observation, Teleop task page, and attached batch runs |
 | `so101_gazebo.launch.py` | Gazebo stack without a workflow | `headless:=true` | Gazebo readiness and operator-command testing |
 | `so101_gazebo_pick_place.launch.py` | Gazebo stack plus shared fixed workflow | `run_mode:=dry_run execute:=false` | Functional comparison; not a qualification backend |
@@ -168,6 +170,36 @@ The integrated graph starts the dynamic consumer before accepting a cup pose,
 starts perception only after scene setup succeeds, and fails closed if a
 required long-lived component exits early.
 
+### Natural-language RGB-D launch
+
+Load `DEEPSEEK_API_KEY` into the current environment or make sure the local
+Ollama service has `qwen3.5:4b`. Then start the whole ROS and MuJoCo chain with
+one launch command:
+
+```bash
+ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
+  instruction:="Pick the plastic cup. Apply no constraints." \
+  run_mode:=execute \
+  execute:=true \
+  skip_confirmation:=true \
+  headless:=false \
+  sensor_rendering:=true \
+  mujoco_initial_keyframe:=task_start \
+  session_id:=text-rgbd-task-start-001 \
+  evidence_file:="$SO101_EVIDENCE_ROOT/text-rgbd-task-start-001.json"
+```
+
+This launch owns MuJoCo, the controllers, MoveIt, Planning Scene setup, camera
+TF, RGB-D perception, the Text Agent process, and their shutdown. DeepSeek and
+Ollama remain external services. The launch inherits their configuration but
+does not start or stop them.
+
+The command is intentionally limited to direct Execute with
+`skip_confirmation:=true`. Use the two-step `text_pick_agent` CLI when an
+operator must inspect a Preview digest before execution. Missing any of
+`run_mode:=execute`, `execute:=true`, or `skip_confirmation:=true` rejects the
+launch before it starts ROS nodes.
+
 ### Persistent task station
 
 ```bash
@@ -207,7 +239,9 @@ installed keyframes are:
 
 The perception launch defaults to `headless:=false` and
 `sensor_rendering:=true`, and adds `perception_startup_timeout_s` and
-`cup_pose_timeout_s`. The task-station launch permits only
+`cup_pose_timeout_s`. The Text Agent launch has the same RGB-D controls and
+adds required `instruction` plus `skip_confirmation`; its sensor rendering is
+fixed to `true`. The task-station launch permits only
 `headless:=false` and `sensor_rendering:=true`; it adds
 `task_evidence_root`, `include_teleop`, and `teleop_port`.
 
