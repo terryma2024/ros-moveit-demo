@@ -57,6 +57,8 @@ setup(
             "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main",
             "rgbd_cup_pose = so101_demo.cli.rgbd_cup_pose:main",
             "rgbd_object_pose = so101_demo.cli.rgbd_object_pose:main",
+            "generate_yolo_seg_dataset = "
+            "so101_demo.cli.generate_yolo_seg_dataset:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
             "so101_demo.cli.perception_pick_place_launch:main",

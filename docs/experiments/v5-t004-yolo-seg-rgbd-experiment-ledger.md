@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 23cc6e1
+current_commit: a2c5e03
 evidence_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 confirmed_conclusions:
   - CONF-001 现有颜色阈值加最大 DBSCAN 聚类没有实例类别语义，来自设计文档与 f09cf88 源码检查
@@ -19,11 +19,29 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-002
-next_experiment: EXP-002
+latest_checkpoint: CP-003
+next_experiment: EXP-003
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: EXP-002
+current_hypothesis: HYP-001
+working_tree_status: Task 1-5 已提交；Task 6 object-ID 数据生成器、CLI、fixture 与配置通过源码测试，待提交
+owned_processes: NONE
+preserved_processes: ai-station codex 与 codex-cua tmux 会话；主 checkout 与 ai-station 未跟踪实验账本未修改
+confirmed_conclusions:
+  - CONF-007 固定 seed 范围 train=100000、val=200000、test=300000 起始且互不重叠
+  - CONF-008 标签由 geom ID 经 geom_bodyid 映射到 plastic_cup body，改变 RGB 材质颜色不改变 polygon
+  - CONF-009 相同配置和 fake renderer 两次生成的 manifest、PNG、label 与 truth 工件逐字节一致
+open_risks:
+  - MuJoCo Python binding 尚未安装，真实 fixture compile 和 12 样本 renderer smoke 尚未执行
+  - prediction overlay 仍需在验收前加入可见类别与置信度文字
+  - Linux CUDA 仍受 driver/library mismatch 阻塞
+next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest src/so101_demo_py/test/test_perception_dependency_lock.py -q
+```
 
 ```yaml
 checkpoint_id: CP-002
@@ -67,6 +85,20 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-002
+status: PASS_WITH_DEFERRED_RUNTIME
+scope: Task 6 deterministic dataset source contracts on macOS
+result: 11 dataset tests plus XML syntax and 3 source-layout tests passed; compileall passed
+evidence:
+  - seed plans are disjoint
+  - 0/1/2 target instances are retained separately
+  - RGB color changes do not affect object-ID polygons
+  - repeated fake-renderer datasets are byte-identical
+deferred: real MuJoCo model compile and 12-sample render wait for Task 7 isolated dependency install
+artifacts: source tests only; no real rendered sample or trained model claimed
+```
 
 ```yaml
 experiment_id: EXP-001
