@@ -21,11 +21,27 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-004
-next_experiment: EXP-005
+latest_checkpoint: CP-005
+next_experiment: EXP-006
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-005
+current_hypothesis: HYP-001
+working_tree_status: Task 1-6 和 Task 7 配置已提交；完整数据集与 Mac package gate 通过，待提交账本/配置小修并推送
+owned_processes: NONE
+preserved_processes: ai-station 未重启；Xorg/GNOME/hiddify、codex/codex-cua tmux 与主 checkout 保持原状
+confirmed_conclusions:
+  - CONF-014 正式数据集精确包含 800 train、200 val、200 test，3602 个文件、58528703 bytes，checksum dry-run 无差异
+  - CONF-015 正式数据集 0/1/2 可见实例分布为 300/600/300，类别实例总数 1200
+  - CONF-016 锁定子模块作为隔离 worktree 物化后，Mac package gate 为 885 passed、2 个第三方 deprecation warnings
+open_risks:
+  - 用户仅授权推送选项 1，未授权 ai-station 重启；Linux driver gate 和训练继续等待
+next_command: 推送 codex/v5-t004-yolo-seg-rgbd 到 Gitee origin，随后在 ai-station 创建隔离 worktree 并跑 Linux source tests
+```
 
 ```yaml
 checkpoint_id: CP-004
@@ -105,6 +121,26 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 ```
 
 ## Experiments
+
+```yaml
+experiment_id: EXP-005
+status: PASS
+scope: full dataset generation and macOS package gate
+dataset:
+  generator_commit: 2be8df09302feabffc7f028b16c90d06867f8055
+  sample_count: 1200
+  split_counts: {train: 800, val: 200, test: 200}
+  visible_instance_distribution: {zero: 300, one: 600, two: 300}
+  class_instance_total: 1200
+  remote_file_count: 3602
+  remote_byte_size: 58528703
+  checksum_sync: PASS
+mac_package_gate:
+  result: 885 passed
+  warnings: 2 third-party deprecation warnings
+  junit: /tmp/so101-v5-t004-package-gate-macos/so101_demo_py-pytest.xml
+  initial_false_failures: 4 failures from unmaterialized locked submodule; all passed after isolated submodule worktree at 71bc934
+```
 
 ```yaml
 experiment_id: EXP-004

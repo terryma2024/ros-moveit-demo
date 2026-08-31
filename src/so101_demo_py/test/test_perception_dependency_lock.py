@@ -44,7 +44,8 @@ def test_training_contract_uses_local_segmentation_base_and_fixed_seed() -> None
     assert document["imgsz"] == 640
     assert document["seed"] == 20260831
     assert document["deterministic"] is True
-    assert document["classes"] == ["plastic_cup"]
+    assert document["class_names"] == ["plastic_cup"]
+    assert document["classes"] == [0]
     assert document["data"] == "dataset.yaml"
     assert document["epochs"] > 0
     assert document["device"] == "cuda"
