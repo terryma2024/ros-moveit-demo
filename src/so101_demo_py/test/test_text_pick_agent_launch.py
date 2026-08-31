@@ -158,6 +158,9 @@ def test_public_text_agent_launch_is_thin_and_declares_contract() -> None:
         "mujoco_initial_keyframe",
         "perception_startup_timeout_s",
         "cup_pose_timeout_s",
+        "profiling",
+        "profiling_output_root",
+        "profiling_require_system_trace",
     }
     assert declared["instruction"].default_value is None
     assert _default(declared["run_mode"]) == "dry_run"
@@ -168,6 +171,9 @@ def test_public_text_agent_launch_is_thin_and_declares_contract() -> None:
     assert _default(declared["mujoco_initial_keyframe"]) == "task_start"
     assert _default(declared["perception_startup_timeout_s"]) == "30.0"
     assert _default(declared["cup_pose_timeout_s"]) == "45.0"
+    assert _default(declared["profiling"]) == "off"
+    assert _default(declared["profiling_output_root"]) == ""
+    assert _default(declared["profiling_require_system_trace"]) == "false"
 
     assert LAUNCH_PATH.is_file()
     source = LAUNCH_PATH.read_text(encoding="utf-8")
@@ -196,6 +202,12 @@ def test_public_text_agent_launch_is_thin_and_declares_contract() -> None:
         ({"session_id": "../escape"}, "session_id"),
         ({"evidence_file": "relative.json"}, "evidence_file"),
         ({"mujoco_scene": "relative.xml"}, "mujoco_scene"),
+        ({"profiling": "enabled"}, "profiling"),
+        ({"profiling": "trace", "profiling_output_root": "relative"}, "absolute"),
+        (
+            {"profiling": "trace", "profiling_require_system_trace": "yes"},
+            "profiling_require_system_trace",
+        ),
     ),
 )
 def test_invalid_text_agent_inputs_fail_before_nodes_or_evidence(
@@ -219,6 +231,7 @@ def test_valid_preflight_creates_exclusive_session_evidence_directories(
     assert run_root.stat().st_mode & 0o777 == 0o700
     assert (run_root / "perception").is_dir()
     assert (run_root / "dynamic").is_dir()
+    assert not (run_root / "profiling").exists()
     assert isinstance(actions, list)
 
 
@@ -298,6 +311,39 @@ def test_scene_success_starts_only_rgbd_and_text_agent_with_exact_args(
     assert "dynamic_cup_pick_place" not in all_executables
     assert "cup_pose_tf_demo" not in all_executables
     assert "mujoco_cup_pose_bridge" not in all_executables
+
+
+def test_enabled_trace_passes_correlated_child_arguments_and_finalizes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    context, actions, _exit_status = _materialize(
+        monkeypatch,
+        tmp_path,
+        profiling="trace",
+    )
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    profiling_root = tmp_path / "run.d/text-e2e-session-001/profiling"
+    common = [
+        "--profiling",
+        "trace",
+        "--profiling-output-root",
+        str(profiling_root),
+        "--profiling-session-id",
+        "text-e2e-session-001",
+    ]
+
+    perception = _node(started, "rgbd_cup_pose")
+    assert perception._Node__arguments[-6:] == common
+    workflow = _plain_process(started)
+    assert _plain_process_command(workflow, context)[-6:] == common
+
+    _dispatch_process_exit(actions, workflow, 0, context)
+    _dispatch_process_exit(actions, perception, -15, context)
+
+    assert (profiling_root / "manifest.json").is_file()
+    assert (profiling_root / "summary.json").is_file()
+    assert (profiling_root / "trace.json").is_file()
 
 
 def test_scene_failure_starts_no_sensor_or_text_agent_and_fails_launch(
