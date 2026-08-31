@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: 1354eda55adbd4d08d225cdabaf4dac2d659e8ca
+current_commit: 4b73da881e7a6b0fc2e482290c71121e1428e5cb
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -313,7 +313,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-016
-status: PLANNED
+status: RUNNING
 prior_experiment: EXP-015
 hypothesis: 同一 best.pt 与 seed 300001 在 Mac MPS 上经 confidence 0.50 TargetSelector 后可唯一选出 plastic_cup，且与 Linux selected mask 结论一致
 prediction: runtime_device=mps、raw_count>=1、eligible_count=1、selected class=plastic_cup、mask 480x640非空、latency<=2000、weight SHA一致
@@ -340,7 +340,9 @@ commands:
   - command: copy and verify best.pt/image, run detector plus TargetSelector at 0.50, sync result/hash to remote
     exit_code: PENDING
 observed:
-  - NONE
+  - remote 与 Mac output 均预先不存在；best.pt 与输入图像已复制到独立 Mac staging
+  - best.pt SHA256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781；图像 SHA256=4462803146c9e5abeaca5a05a7615557eb8b51817fc5dc2a82c03d2b9753d909，均与正式 evidence root 一致
+  - sandbox 内 mps_available=false 属于执行环境限制；正式探针将以受控的 sandbox 外命令重新核验并强制 mps、禁止 CPU fallback
 inferred:
   - NONE
 conclusion: PENDING
