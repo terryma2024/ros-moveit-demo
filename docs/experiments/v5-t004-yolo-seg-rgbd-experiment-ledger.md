@@ -7,7 +7,7 @@ success_contract: 同一 best.pt 在两平台通过四场景感知矩阵，随�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: f09cf88cf55352f4bf618d44a8ff6c6885419c8d
-current_commit: b06333b0e8ef4316f2d3b943866a5956fe18951b
+current_commit: 190c44b01742c783383fb1711211034781ce0291
 evidence_root: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88
 development_source_root: /tmp/so101-debug-v5-t004-yolo-seg-20260831
 migration_manifest: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/migration-manifest.json
@@ -27,11 +27,28 @@ disproven_routes:
 open_hypotheses:
   - HYP-001 object-ID 合成数据训练的 yolo11n-seg 可在四场景达到 mask IoU 0.80
   - HYP-002 新鲜 YOLO /cup_pose 可直接复用现有 dynamic pick-place consumer
-latest_checkpoint: CP-021
-next_experiment: EXP-017
+latest_checkpoint: CP-022
+next_experiment: EXP-025
 ```
 
 ## Checkpoints
+
+```yaml
+checkpoint_id: CP-022
+last_valid_experiment: EXP-016
+current_hypothesis: 在原命令增加已验证的锁定 DYLD_LIBRARY_PATH 后，替代实验 EXP-025 可进入真实 MuJoCo/RGB-D 边界
+working_tree_status: 仅本账本 INVALID/替代计划待提交；源/测试 clean
+owned_processes: NONE；domain 221 清空，PID 17610-17616 均退出
+preserved_processes: EXP-017 完整 ROS 日志已同步正式 evidence root；未删除任何无效工件
+confirmed_conclusions:
+  - CONF-046 EXP-017 首个坏边界是 libmujoco_ros2_control.dylib 找不到 @rpath/libmujoco.3.4.0.dylib，未创建 MuJoCo UI、真实 RGB-D 或模型请求
+  - CONF-047 /Users/matianyi/ros2_jazzy/macos_dylib_farm/current 含锁定 3.4.0 dylib；加入 DYLD_LIBRARY_PATH 后同一插件 ctypes dlopen 成功
+disproven_routes:
+  - DISPROVED-008 未加载 repository dylib farm 的普通 shell 不能作为 macOS MuJoCo 正式运行环境
+open_risks:
+  - 修正环境后的 visible stack 尚未启动，EXP-025 仍须重新做全部 preflight
+next_command: 预检并启动 EXP-025，命令唯一变化为显式导出 dylib farm
+```
 
 ```yaml
 checkpoint_id: CP-021
@@ -375,7 +392,7 @@ next_command: PYTHONPATH=src/so101_demo_py/src /Users/matianyi/ros2_jazzy/.venv/
 
 ```yaml
 experiment_id: EXP-017
-status: RUNNING
+status: INVALID
 prior_experiment: EXP-016
 hypothesis: macOS MPS 的 bottle_only 场景不会把橙色瓶子误判为 plastic_cup，也不会发布新 /cup_pose
 prediction: TARGET_NOT_FOUND；matching_count=0；无新 pose；真实 RGB-D 与 cleanup 全部合格
@@ -400,26 +417,29 @@ provenance:
   gz_partition: v5t004-mac-exp017
 commands:
   - command: fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
-    exit_code: PENDING
+    exit_code: SIGINT_AFTER_INVALID_BOUNDARY
 observed:
   - source f732afc、Mac install prefix、入口/scene hash、weight hash 与 MPS available=true 已核验
   - ROS_DOMAIN_ID 221 无节点；本地和正式 output 不存在；无本任务感知或 MuJoCo 进程
+  - ros2_control_node PID 17611 在硬件初始化时无法 dlopen libmujoco_ros2_control.dylib，因为 @rpath/libmujoco.3.4.0.dylib 不在 loader path
+  - MuJoCo UI 未创建、控制器未启动、没有 RGB-D 或 rgbd_object_pose 请求；确认坏边界后 SIGINT 清理
+  - 清理后 domain 221 为空且无 owned process；32691-byte launch.log 与分进程日志已同步正式 evidence root
 inferred: [NONE]
-conclusion: PENDING
+conclusion: INVALID；运行环境缺少已知的 macOS dylib farm，不支持任何感知结论
 evidence:
   - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-017-bottle-only
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-017-bottle-only
-decision: PENDING
-next_experiment: EXP-018
+decision: PRESERVE；以新 ID EXP-025 仅修正 DYLD_LIBRARY_PATH 后重跑
+next_experiment: EXP-025
 ```
 
 ```yaml
 experiment_id: EXP-018
 status: PLANNED
-prior_experiment: EXP-017
+prior_experiment: EXP-025
 hypothesis: macOS MPS 的 one_cup_distractors 场景唯一选择 plastic_cup 并从真实 Depth 发布准确 /cup_pose
 prediction: matching_count=1；mask IoU>=0.80；world error<0.01m；新鲜 pose
-single_variable: 相对 EXP-017 仅 keyframe=task_start 与期望目标数从0变1
+single_variable: 相对替代 bottle-only EXP-025 仅 keyframe=task_start 与期望目标数从0变1
 lifecycle: FULL_RESTART
 preconditions:
   - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
@@ -670,6 +690,44 @@ evidence:
   - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/linux/exp-024-cup-adjacent-bottle
 decision: PENDING
 next_experiment: EXP-025
+```
+
+```yaml
+experiment_id: EXP-025
+status: PLANNED
+prior_experiment: EXP-017
+hypothesis: 显式加载锁定 macOS dylib farm 后，bottle_only 可进入真实 MuJoCo/RGB-D 边界并以 TARGET_NOT_FOUND 拒绝瓶子
+prediction: MuJoCo/控制器启动；真实 RGB-D 有效；runtime_device=mps；matching_count=0；无新 /cup_pose
+single_variable: 相对 INVALID EXP-017 仅增加 DYLD_LIBRARY_PATH=/Users/matianyi/ros2_jazzy/macos_dylib_farm/current
+lifecycle: FULL_RESTART
+preconditions:
+  - source/install=f732afc、weight SHA=f281d252...40781、device=mps、threshold=0.50、imgsz=640
+  - dylib farm 文件存在且同一插件 dlopen gate通过；ROS_DOMAIN_ID=225、GZ_PARTITION=v5t004-mac-exp025 与 output为空
+success_criteria:
+  - 640x480 rgb8/32FC1/CameraInfo 同一非零 stamp，frame ID与 finite positive depth有效；runtime_device=mps
+  - TARGET_NOT_FOUND、matching_count=0、无新 /cup_pose；request_latency_ms<=2000；瓶子不产生 cup mask
+  - exact-window MuJoCo 与 overlay/truth、安装态 provenance、退出后零 owned inference 与零 /cup_pose publisher完整
+failure_criteria:
+  - 误选瓶子、发布 pose、payload/device/latency/GUI/cleanup 任一失败
+invalid_criteria:
+  - domain/partition/output/source/install/input provenance 污染、dylib加载失败或进程图非 FULL_RESTART
+provenance:
+  source_commit: f732afc4b9a569009864df65b766d7f3cdcaaf21
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  runtime_executable: install/so101_demo_py/lib/so101_demo_py/rgbd_object_pose
+  ros_domain_id: 225
+  gz_partition: v5t004-mac-exp025
+commands:
+  - command: export locked dylib farm; fresh visible MuJoCo v5_no_cup stack plus one-shot rgbd_object_pose and acceptance observers
+    exit_code: PENDING
+observed: [NONE]
+inferred: [NONE]
+conclusion: PENDING
+evidence:
+  - /tmp/so101-debug-v5-t004-yolo-seg-20260831/perception-matrix/macos/exp-025-bottle-only
+  - /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/perception-matrix/macos/exp-025-bottle-only
+decision: PENDING
+next_experiment: EXP-018
 ```
 
 ```yaml
