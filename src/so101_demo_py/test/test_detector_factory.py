@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,28 @@ class _FakeGroundedSamDetector:
     model_id = "grounding-dino-tiny+sam2.1-hiera-tiny"
 
 
+class _FakeYoloDetector:
+    runtime_device = "mps"
+    cold_start_latency_ms = 4.0
+
+
+def _concurrent_provenance_write(
+    root: str,
+    document: dict[str, str],
+    barrier: Any,
+    result_queue: Any,
+) -> None:
+    try:
+        barrier.wait()
+        PerceptionEvidenceWriter().write_model_provenance(Path(root), document)
+    except FileExistsError:
+        result_queue.put(("exists", document["backend"]))
+    except BaseException as error:
+        result_queue.put(("error", repr(error)))
+    else:
+        result_queue.put(("written", document["backend"]))
+
+
 def _grounded_options(tmp_path: Path) -> DetectorFactoryOptions:
     root, digest, _document = _grounded_bundle(tmp_path)
     return DetectorFactoryOptions(
@@ -99,6 +122,48 @@ def test_factory_builds_grounded_sam_from_verified_bundle(tmp_path: Path) -> Non
     assert built.provenance_document["pipeline_id"] == "grounding-dino-tiny+sam2.1-hiera-tiny"
     assert built.provenance_document["manifest_sha256"] == calls[0]["bundle"].manifest_sha256
     assert built.provenance_document["manifest"] == calls[0]["bundle"].manifest
+
+
+def test_factory_builds_yolo_with_verified_weight_provenance(tmp_path: Path) -> None:
+    """Catch losing the verified YOLO digest or caller-selected model settings."""
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"verified-yolo-weights")
+    calls: list[dict[str, Any]] = []
+
+    def fake_yolo_detector_factory(**kwargs: Any) -> _FakeYoloDetector:
+        calls.append(kwargs)
+        return _FakeYoloDetector()
+
+    built = build_detector(
+        DetectorFactoryOptions(
+            backend="yolo_seg",
+            requested_device="mps",
+            allow_cpu_fallback=False,
+            yolo_weights_path=weights,
+            yolo_weights_sha256=_sha256(b"verified-yolo-weights"),
+            yolo_model_id="plastic-cup-yolo11s-seg-v2",
+            yolo_imgsz=512,
+        ),
+        yolo_detector_factory=fake_yolo_detector_factory,
+    )
+
+    assert isinstance(built.detector, _FakeYoloDetector)
+    assert calls == [
+        {
+            "weights_path": weights,
+            "expected_sha256": _sha256(b"verified-yolo-weights"),
+            "requested_device": "mps",
+            "allow_cpu_fallback": False,
+            "model_id": "plastic-cup-yolo11s-seg-v2",
+            "imgsz": 512,
+        }
+    ]
+    assert built.provenance_document == {
+        "backend": "yolo_seg",
+        "model_id": "plastic-cup-yolo11s-seg-v2",
+        "weights_sha256": _sha256(b"verified-yolo-weights"),
+    }
 
 
 @pytest.mark.parametrize("backend", ["yolo_seg", "grounded_sam"])
@@ -137,3 +202,36 @@ def test_model_provenance_is_atomic_and_never_overwritten(tmp_path: Path) -> Non
     with pytest.raises(FileExistsError, match="model provenance path already exists"):
         writer.write_model_provenance(root, {"backend": "yolo_seg"})
     assert json.loads(Path(path).read_text(encoding="utf-8")) == {"backend": "grounded_sam"}
+
+
+def test_concurrent_model_provenance_writers_preserve_the_first_document(
+    tmp_path: Path,
+) -> None:
+    """Catch a second concurrent provenance writer replacing the winner's document."""
+
+    context = multiprocessing.get_context("fork")
+    root = (tmp_path / "evidence").resolve()
+    documents = [{"backend": f"backend-{index}"} for index in range(4)]
+    barrier = context.Barrier(len(documents) + 1)
+    result_queue = context.Queue()
+    processes = [
+        context.Process(
+            target=_concurrent_provenance_write,
+            args=(str(root), document, barrier, result_queue),
+        )
+        for document in documents
+    ]
+    for process in processes:
+        process.start()
+    barrier.wait()
+    results = [result_queue.get(timeout=5.0) for _document in documents]
+    for process in processes:
+        process.join(timeout=5.0)
+        assert process.exitcode == 0
+
+    winners = [backend for status, backend in results if status == "written"]
+    assert len(winners) == 1
+    assert [status for status, _detail in results].count("exists") == 3
+    assert json.loads((root / "model-provenance.json").read_text(encoding="utf-8")) == {
+        "backend": winners[0]
+    }
