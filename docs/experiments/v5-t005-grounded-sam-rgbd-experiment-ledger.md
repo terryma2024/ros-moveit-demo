@@ -33,8 +33,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-009
-next_experiment: EXP-036 linux-matrix-r3-1-task_start
+latest_checkpoint: CP-010
+next_experiment: EXP-054 linux-matrix-r4-1-task_start
 ```
 
 ## Checkpoints
@@ -1568,11 +1568,11 @@ replacement_common:
   no_highest_score_force_selection: true
   task10_smokes_count: false
 replacement_experiments:
-  - {experiment_id: EXP-036, status: PLANNED, platform: linux, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r3-1-task_start, session_id: linux-matrix-r3-1-task_start, ros_domain_id: 201, partition: v5-t005-linux-matrix-r3-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-1-task_start, prior: EXP-035, next: EXP-037}
+  - {experiment_id: EXP-036, status: INVALID, platform: linux, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r3-1-task_start, session_id: linux-matrix-r3-1-task_start, ros_domain_id: 201, partition: v5-t005-linux-matrix-r3-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-1-task_start, prior: EXP-035, next: EXP-037}
   - {experiment_id: EXP-037, status: PLANNED, platform: linux, phase: four_scene, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r3-2-v5_no_cup, session_id: linux-matrix-r3-2-v5_no_cup, ros_domain_id: 202, partition: v5-t005-linux-matrix-r3-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-2-v5_no_cup, prior: EXP-036_VALID_success, next: EXP-038}
   - {experiment_id: EXP-038, status: PLANNED, platform: linux, phase: four_scene, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r3-3-v5_two_cups, session_id: linux-matrix-r3-3-v5_two_cups, ros_domain_id: 203, partition: v5-t005-linux-matrix-r3-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-3-v5_two_cups, prior: EXP-037_VALID_success, next: EXP-039}
   - {experiment_id: EXP-039, status: PLANNED, platform: linux, phase: four_scene, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r3-4-v5_cup_near_bottle, session_id: linux-matrix-r3-4-v5_cup_near_bottle, ros_domain_id: 204, partition: v5-t005-linux-matrix-r3-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-4-v5_cup_near_bottle, prior: EXP-038_VALID_success, next: EXP-040}
-  - {experiment_id: EXP-040, status: PLANNED, platform: mac, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', headless: false, request_id: mac-matrix-r3-1-task_start, session_id: mac-matrix-r3-1-task_start, ros_domain_id: 205, partition: v5-t005-mac-matrix-r3-01-task-start, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-1-task_start, prior: EXP-039_VALID_success, next: EXP-041}
+  - {experiment_id: EXP-040, status: PLANNED, platform: mac, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', headless: false, request_id: mac-matrix-r3-1-task_start, session_id: mac-matrix-r3-1-task_start, ros_domain_id: 205, partition: v5-t005-mac-matrix-r3-01-task-start, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-1-task_start, prior: EXP-057_VALID_success, next: EXP-041}
   - {experiment_id: EXP-041, status: PLANNED, platform: mac, phase: four_scene, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, headless: false, request_id: mac-matrix-r3-2-v5_no_cup, session_id: mac-matrix-r3-2-v5_no_cup, ros_domain_id: 206, partition: v5-t005-mac-matrix-r3-02-no-cup, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-2-v5_no_cup, prior: EXP-040_VALID_success, next: EXP-042}
   - {experiment_id: EXP-042, status: PLANNED, platform: mac, phase: four_scene, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', headless: false, request_id: mac-matrix-r3-3-v5_two_cups, session_id: mac-matrix-r3-3-v5_two_cups, ros_domain_id: 207, partition: v5-t005-mac-matrix-r3-03-two-cups, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-3-v5_two_cups, prior: EXP-041_VALID_success, next: EXP-043}
   - {experiment_id: EXP-043, status: PLANNED, platform: mac, phase: four_scene, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, headless: false, request_id: mac-matrix-r3-4-v5_cup_near_bottle, session_id: mac-matrix-r3-4-v5_cup_near_bottle, ros_domain_id: 208, partition: v5-t005-mac-matrix-r3-04-near-bottle, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-4-v5_cup_near_bottle, prior: EXP-042_VALID_success, next: EXP-044}
@@ -1618,4 +1618,51 @@ deletion_candidates:
   - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11-v4
 next_command: 将 EXP-036 更新为 RUNNING；确认 domain 201/partition/session 无 owned graph 后，以唯一 stack 启动 Linux task_start
 decision: RUN_EXP_036_ONLY
+```
+
+## Task 11 Linux matrix r3 invalidation and r4 replacement
+
+EXP-036 的生产 runtime、observer 与 simulation truth 均正常完成，launch rc=0、dynamic
+PickPlace `status=DONE`；perception 为 `status=OK`、raw=3、eligible=1、request `268.912224 ms`、
+inference `180.981874 ms`、source/consumer stamp `11840000000`。retained mask 的只读审计得到
+truth IoU `0.9863858753456711`，world pose error `0.0005067077374595199 m`。但验收 validator
+把 observer artifact 写成不存在的 `observer/source-rgb.png`，实际文件是
+`observer/observed-source-rgb.png`，因此没有生成 acceptance；cleanup 又通过默认 ROS2 CLI daemon
+读到了已经退出的陈旧 MoveIt graph。该轮满足 `missing_required_evidence`，判为 `INVALID`，不进
+分母，r3 批次 EXP-037～EXP-039 全部不得运行。
+
+验收工具只改两个点：读取实际 observer artifact 名；设置 `ROS2CLI_DISABLE_DAEMON=1`。没有修改
+生产 source/config、模型、bundle、prompt、阈值、device、freshness、motion 或场景。修复后独立
+回读 domain 201 无 node，session/partition 与通用 runtime pattern 均无进程。Linux 新批次使用
+全新 request/session/domain/partition/evidence path，从场景1重新计数。
+
+```yaml
+linux_matrix_r4_replacement:
+  common: replacement_common.four_scene_success / replacement_common.four_scene_invalid / replacement_common.four_scene_stop
+  source_commit: 70675004e3ed66ce6bd5811a8f922565e08f668d
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v5
+  runtime_device: cuda
+  lifecycle: FULL_RESTART
+  experiments:
+    - {experiment_id: EXP-054, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r4-1-task_start, session_id: linux-matrix-r4-1-task_start, ros_domain_id: 231, partition: v5-t005-linux-matrix-r4-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r4-1-task_start, prior: EXP-036_INVALID_and_clean_owned_graph, next: EXP-055}
+    - {experiment_id: EXP-055, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r4-2-v5_no_cup, session_id: linux-matrix-r4-2-v5_no_cup, ros_domain_id: 232, partition: v5-t005-linux-matrix-r4-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r4-2-v5_no_cup, prior: EXP-054_VALID_success, next: EXP-056}
+    - {experiment_id: EXP-056, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r4-3-v5_two_cups, session_id: linux-matrix-r4-3-v5_two_cups, ros_domain_id: 233, partition: v5-t005-linux-matrix-r4-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r4-3-v5_two_cups, prior: EXP-055_VALID_success, next: EXP-057}
+    - {experiment_id: EXP-057, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r4-4-v5_cup_near_bottle, session_id: linux-matrix-r4-4-v5_cup_near_bottle, ros_domain_id: 234, partition: v5-t005-linux-matrix-r4-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r4-4-v5_cup_near_bottle, prior: EXP-056_VALID_success, next: EXP-040}
+```
+
+## Checkpoint CP-010
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-035
+last_invalid_experiment: EXP-036
+current_hypothesis: EXP-036 已显示 freshness 修复后的业务链路可完成，但必须用已修正的 observer artifact/daemon-free cleanup 在 EXP-054 从场景1生成完整 acceptance 才能计数
+working_tree_status: 生产 HEAD 与 install overlay 未变；仅 /tmp Task 11 validator/runner 修改；ledger 记录 r3 INVALID 并预写 r4
+owned_processes: NONE；ROS2CLI_DISABLE_DAEMON=1 独立回读 domain 201 无 node；session/partition 与 runtime pattern 无进程
+retained_runs:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-1-task_start
+archived_runs: []
+deletion_candidates: [CP-009 已登记的 invalid build/test outputs]
+next_command: 将 EXP-054 更新为 RUNNING；核验 domain 231/partition/session/root 后启动唯一 Linux task_start stack
+decision: RUN_EXP_054_ONLY
 ```
