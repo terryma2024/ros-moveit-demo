@@ -15,7 +15,7 @@ ledger_record_commit: 本文件不自指提交 SHA；本次 ledger 提交完成�
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869
 development_source_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901
 design: docs/superpowers/specs/2026-09-01-v5-t005-grounded-dino-sam2-rgbd-perception-design.md
-confirmed_result: exact 7067500 已在隔离 ai-station checkout 通过 corrected 1053-test package gate；Task 11 Linux EXP-054 业务门禁通过但 cleanup 图证据未在固定快照时收敛，判为 INVALID 且不计数
+confirmed_result: exact 7067500 与单变量 box threshold 0.70 仍不能同时通过 no-cup 与 two-cup 合同；Task 11 结论为 MODEL_CAPABILITY_NOT_MET，Mac matrix 与双方 5/5 未启动
 confirmed_conclusions:
   - CONF-001 设计固定使用 IDEA-Research/grounding-dino-tiny 与 facebook/sam2.1-hiera-tiny
   - CONF-002 首版采用 Transformers 进程内推理，逐帧无状态，不启用 SAM 2.1 视频跟踪
@@ -31,12 +31,13 @@ confirmed_conclusions:
   - CONF-012 最终 Mac exact 16d56fc 批次已按 53 项（49 regular、4 symlink）完整 inventory 复制到 durable root 并逐项 read-back；inventory、archive、verify log SHA256 分别为 4049e685881ee4b6aa54f2f302c79b7c578cdc58ceec10002805a3839d057d8e、a81069e24f8c26314743354890683b2b3e7fa1fecf446877ea39b517f68cdd34、26c232170d1323ae713555a5f7007d80a651e1c0e268420d571e02fdb2028ac7
   - CONF-013 用户授权的 14 KiB minimal incremental bundle 已在本地与 ai-station 逐字节 SHA 回读为 2baf41e16463ab65fa4c60f3a58515224e43bddfd905b12f80dffd21fb3b47c1；required base 为 16d56fc，advertised ref 为 7067500，不含 datasets/LFS/model/credentials
   - CONF-014 隔离 checkout /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2 的 source HEAD 为 exact 7067500、tracked/index clean，install-task11-v5 使用已授权 venv Python entrypoint；corrected Linux package gate 为 1053 tests、0 errors、0 failures
+  - CONF-015 固定 box threshold 0.35 在 no-cup 场景产生两个 false plastic_cup；唯一单变量 0.70 虽通过 task_start/no-cup，却在 two-cup 只保留一个实例并错误发布 pose，因此 MODEL_CAPABILITY_NOT_MET
 open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-015
-next_experiment: EXP-074 linux-matrix-r9-1-task_start
+latest_checkpoint: CP-016
+next_experiment: BLOCKED_MODEL_CAPABILITY_NOT_MET
 ```
 
 ## Checkpoints
@@ -1902,8 +1903,8 @@ linux_matrix_r9_single_variable:
   experiments:
     - {experiment_id: EXP-074, status: VALID_SUCCESS, order: 1, scene: task_start, raw: 1, eligible: 1, confidence: 0.721530556678772, source_age_s: 0.36400000000000005, truth_iou: 0.9863858753456711, pose_error_m: 0.0005099875133604954, request_latency_ms: 342.554425, inference_latency_ms: 230.355705, source_consumer_stamp_ns: 9385999999, cleanup_converged_attempt: 15, request_id: linux-matrix-r9-1-task_start, session_id: linux-matrix-r9-1-task_start, ros_domain_id: 110, partition: v5-t005-linux-matrix-r9-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-1-task_start, inventory_sha256: 57514aa1739ec6fd9164faca497bbe6805b4de4c8dba2bce1bbb3faaed25ff7e, prior: EXP-071_VALID_FAILURE_and_clean_graph, next: EXP-075}
     - {experiment_id: EXP-075, status: VALID_SUCCESS, order: 2, scene: v5_no_cup, status_code: TARGET_NOT_FOUND, raw: 0, eligible: 0, pose_count: 0, request_latency_ms: 206.202534, inference_latency_ms: 113.455338, source_stamp_ns: 10620000000, cleanup_converged_attempt: 14, request_id: linux-matrix-r9-2-v5_no_cup, session_id: linux-matrix-r9-2-v5_no_cup, ros_domain_id: 111, partition: v5-t005-linux-matrix-r9-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-2-v5_no_cup, inventory_sha256: 4d0d834d336858117d502164eee2f5e1eab0158c3c2ce122f47fbe8e1424752d, prior: EXP-074_VALID_success, next: EXP-076}
-    - {experiment_id: EXP-076, status: RUNNING, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, request_id: linux-matrix-r9-3-v5_two_cups, session_id: linux-matrix-r9-3-v5_two_cups, ros_domain_id: 112, partition: v5-t005-linux-matrix-r9-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-3-v5_two_cups, prior: EXP-075_VALID_success, next: EXP-077}
-    - {experiment_id: EXP-077, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, request_id: linux-matrix-r9-4-v5_cup_near_bottle, session_id: linux-matrix-r9-4-v5_cup_near_bottle, ros_domain_id: 113, partition: v5-t005-linux-matrix-r9-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-4-v5_cup_near_bottle, prior: EXP-076_VALID_success, next: EXP-040}
+    - {experiment_id: EXP-076, status: VALID_FAILURE, order: 3, scene: v5_two_cups, observed: one_candidate_OK_and_new_pose_instead_of_TARGET_AMBIGUOUS_no_pose, raw: 1, eligible: 1, confidence: 0.7670135498046875, best_iou: 0.9600505689001264, source_age_s: 0.28, request_latency_ms: 260.067819, inference_latency_ms: 175.347078, source_stamp_ns: 9429999999, cleanup_converged_attempt: 14, request_id: linux-matrix-r9-3-v5_two_cups, session_id: linux-matrix-r9-3-v5_two_cups, ros_domain_id: 112, partition: v5-t005-linux-matrix-r9-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-3-v5_two_cups, inventory_sha256: 367dcd3310e11c632ca0d34a50abe9c92c133847aa807696730a837b17ec57d8, prior: EXP-075_VALID_success, next: STOP_MODEL_CAPABILITY_NOT_MET}
+    - {experiment_id: EXP-077, status: NOT_RUN_MODEL_CAPABILITY_STOP, order: 4, scene: v5_cup_near_bottle, request_id: linux-matrix-r9-4-v5_cup_near_bottle, session_id: linux-matrix-r9-4-v5_cup_near_bottle, ros_domain_id: 113, partition: v5-t005-linux-matrix-r9-04-near-bottle, evidence: NONE, prior: EXP-076_VALID_FAILURE, next: NONE}
 ```
 
 ## Checkpoint CP-015
@@ -1932,4 +1933,34 @@ archived_runs: []
 deletion_candidates: [CP-014 deletion candidates, r8 runs after explicit user authorization only]
 next_command: 限定提交 CP-015 r9 preflight PASS；标记 EXP-074 RUNNING 后只启动 linux-matrix-r9-1-task_start
 decision: RUN_EXP_074_ONLY
+```
+
+## Checkpoint CP-016 — MODEL_CAPABILITY_NOT_MET
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-075
+last_valid_failure: EXP-076
+conclusion: MODEL_CAPABILITY_NOT_MET
+evidence_chain:
+  fixed_threshold_0_35: EXP-070 task_start VALID_SUCCESS; EXP-071 no-cup VALID_FAILURE with false scores 0.6970663071 and 0.5767329931
+  single_variable_0_70: EXP-074 task_start VALID_SUCCESS; EXP-075 no-cup VALID_SUCCESS; EXP-076 two-cup VALID_FAILURE with only one score 0.7670135498, status OK and forbidden new pose
+reason: safe box threshold must exceed the observed no-cup false score 0.6970663071, but the tested 0.70 gate removes one true cup in two-cup; the approved fixed and one-variable qualification route cannot satisfy both fail-closed contracts
+source_install_runtime: exact source 70675004e3ed66ce6bd5811a8f922565e08f668d; install-task11-v5; corrected Linux package gate 1053/0/0; Mac package gate 1053 passed from EXP-035; immutable bundle 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+owned_processes: NONE；EXP-076 cleanup attempt 14 node/process empty；independent domain 112 node/process empty
+retained_runs:
+  - all CP-015 retained runs
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-1-task_start
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-2-v5_no_cup
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-3-v5_two_cups
+archived_runs: []
+deletion_candidates:
+  - prior invalid/failed build overlays and matrix batches, only after explicit user authorization
+  - no evidence is deleted by Task 11
+remaining_boundary:
+  - Linux four-scene matrix is not 4/4; Mac matrix and both 5/5 batches were not started
+  - Task 10 smoke and incidental PickPlace in matrix runs do not count toward Task 11 5/5
+  - all evidence is MuJoCo simulation only and does not prove real SO-101 safety or success
+next_command: user decision required for model/data/prompt architecture improvement beyond the approved fixed plus one-variable threshold route; no further Task 11 experiment authorized
+decision: STOP_MODEL_CAPABILITY_NOT_MET
 ```
