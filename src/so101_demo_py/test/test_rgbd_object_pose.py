@@ -184,11 +184,30 @@ def test_overlay_draws_visible_class_and_confidence_label() -> None:
     assert (label_region.min(axis=2) > 220).any(), "label glyphs are missing"
 
 
-def test_overlay_appends_sam_quality_only_when_available() -> None:
+def test_overlay_writes_exact_yolo_and_sam_quality_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from PIL import ImageDraw
+
     rgb = np.full((80, 160, 3), 120, dtype=np.uint8)
     frame = DetectionFrame(rgb, 7, "task_camera_frame")
     mask = np.zeros((80, 160), dtype=bool)
     mask[30:65, 35:95] = True
+    labels: list[str] = []
+    original_draw = ImageDraw.Draw
+
+    class CapturingDraw:
+        def __init__(self, image: object) -> None:
+            self._draw = original_draw(image)
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._draw, name)
+
+        def text(self, xy: object, text: str, **kwargs: object) -> None:
+            labels.append(text)
+            self._draw.text(xy, text, **kwargs)
+
+    monkeypatch.setattr(ImageDraw, "Draw", CapturingDraw)
 
     def batch_for(quality: float | None) -> DetectionBatch:
         return DetectionBatch(
@@ -214,10 +233,10 @@ def test_overlay_appends_sam_quality_only_when_available() -> None:
             ),
         )
 
-    yolo_overlay = render_detection_overlay(frame, batch_for(None))
-    sam_overlay = render_detection_overlay(frame, batch_for(0.82))
+    render_detection_overlay(frame, batch_for(None))
+    render_detection_overlay(frame, batch_for(0.82))
 
-    assert not np.array_equal(sam_overlay, yolo_overlay)
+    assert labels == ["plastic_cup 0.91", "plastic_cup 0.91 sam=0.820"]
 
 
 def _request(run_directory: Path) -> ObjectPoseRequest:
@@ -242,6 +261,17 @@ def test_detection_evidence_records_segmentation_quality(tmp_path: Path) -> None
 
     assert document["candidates"][0]["segmentation_quality"] == 0.82
     assert artifacts
+
+
+def test_detection_evidence_normalizes_numpy_quality_to_json_float(tmp_path: Path) -> None:
+    PerceptionEvidenceWriter().write_detection(
+        _request(tmp_path),
+        _batch(_candidate("cup", segmentation_quality=np.float32(0.82))),
+    )
+    document = json.loads((tmp_path / "detections.json").read_text())
+
+    assert document["candidates"][0]["segmentation_quality"] == pytest.approx(0.82)
+    assert type(document["candidates"][0]["segmentation_quality"]) is float
 
 
 def test_detection_evidence_records_null_quality_for_yolo_candidates(

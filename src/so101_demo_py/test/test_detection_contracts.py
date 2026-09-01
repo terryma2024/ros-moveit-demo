@@ -81,9 +81,16 @@ def test_candidate_accepts_optional_segmentation_quality() -> None:
     candidate = _candidate(segmentation_quality=0.82)
 
     assert candidate.segmentation_quality == 0.82
-    for invalid in (float("nan"), 1.01):
+    for invalid in (True, float("nan"), 1.01):
         with pytest.raises(ValueError, match="segmentation_quality"):
             _candidate(segmentation_quality=invalid)
+
+
+def test_candidate_normalizes_numpy_segmentation_quality_to_native_float() -> None:
+    candidate = _candidate(segmentation_quality=np.float32(0.82))
+
+    assert candidate.segmentation_quality == pytest.approx(0.82)
+    assert type(candidate.segmentation_quality) is float
 
 
 def test_candidate_rejects_mask_with_wrong_image_shape() -> None:
