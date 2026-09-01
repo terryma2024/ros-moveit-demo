@@ -114,7 +114,17 @@ class _FakeSamProcessor:
             "reshaped_input_sizes": size,
         }
 
-    def post_process_masks(self, masks: object, *_: object, **__: object) -> list[np.ndarray]:
+    def post_process_masks(
+        self,
+        masks: object,
+        original_sizes: object,
+        mask_threshold: float = 0.0,
+        binarize: bool = True,
+        pad_size: object | None = None,
+    ) -> list[np.ndarray]:
+        del original_sizes, binarize, pad_size
+        if isinstance(mask_threshold, bool) or not isinstance(mask_threshold, (int, float)):
+            raise TypeError("mask_threshold must be a numeric threshold")
         return [np.asarray(masks)[0]]
 
 
