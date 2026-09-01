@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -120,9 +121,19 @@ class _FakeSamProcessor:
         original_sizes: object,
         mask_threshold: float = 0.0,
         binarize: bool = True,
-        pad_size: object | None = None,
+        max_hole_area: float = 0.0,
+        max_sprinkle_area: float = 0.0,
+        apply_non_overlapping_constraints: bool = False,
+        **kwargs: object,
     ) -> list[np.ndarray]:
-        del original_sizes, binarize, pad_size
+        del (
+            original_sizes,
+            binarize,
+            max_hole_area,
+            max_sprinkle_area,
+            apply_non_overlapping_constraints,
+            kwargs,
+        )
         if isinstance(mask_threshold, bool) or not isinstance(mask_threshold, (int, float)):
             raise TypeError("mask_threshold must be a numeric threshold")
         return [np.asarray(masks)[0]]
@@ -156,6 +167,35 @@ class _FakeSamModel:
             pred_masks=masks,
             iou_scores=quality,
         )
+
+
+def test_fake_sam_processor_matches_transformers_4562_mask_postprocess_contract() -> None:
+    """Catch the fake drifting from SAM2's public post-process keyword contract."""
+
+    assert tuple(inspect.signature(_FakeSamProcessor.post_process_masks).parameters) == (
+        "self",
+        "masks",
+        "original_sizes",
+        "mask_threshold",
+        "binarize",
+        "max_hole_area",
+        "max_sprinkle_area",
+        "apply_non_overlapping_constraints",
+        "kwargs",
+    )
+    masks = np.ones((1, 1, 3, 2, 3), dtype=np.float32)
+    processed = _FakeSamProcessor().post_process_masks(
+        masks,
+        np.array([[2, 3]], dtype=np.int64),
+        mask_threshold=0.25,
+        binarize=False,
+        max_hole_area=1.0,
+        max_sprinkle_area=2.0,
+        apply_non_overlapping_constraints=True,
+        future_transformers_option="accepted-by-kwargs",
+    )
+
+    np.testing.assert_array_equal(processed[0], masks[0])
 
 
 def _recording_loader(
