@@ -8,7 +8,7 @@ import math
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import numpy as np
 
@@ -19,15 +19,11 @@ from so101_demo.core.detection import (
     DetectionQuery,
     RuntimeDevice,
 )
-
-RequestedDevice = Literal["auto", "cuda", "mps", "cpu"]
-
-
-class ModelSetupError(RuntimeError):
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(f"{code}: {detail}")
-        self.code = code
-        self.detail = detail
+from so101_demo.adapters.perception.model_runtime import (
+    ModelSetupError,
+    RequestedDevice,
+    select_runtime_device,
+)
 
 
 class YoloResultError(ValueError):
@@ -44,35 +40,6 @@ def verify_weights(path: Path, expected_sha256: str) -> str:
             f"expected {expected_sha256}, observed {digest}",
         )
     return digest
-
-
-def select_runtime_device(
-    requested: str,
-    allow_cpu_fallback: bool,
-    torch_api: Any,
-) -> RuntimeDevice:
-    if requested == "cpu":
-        return "cpu"
-    if requested == "cuda":
-        if bool(torch_api.cuda.is_available()):
-            return "cuda"
-        raise ModelSetupError("DEVICE_UNAVAILABLE", "requested CUDA is unavailable")
-    if requested == "mps":
-        if bool(torch_api.backends.mps.is_available()):
-            return "mps"
-        raise ModelSetupError("DEVICE_UNAVAILABLE", "requested MPS is unavailable")
-    if requested != "auto":
-        raise ModelSetupError("DEVICE_UNAVAILABLE", f"unknown device request: {requested}")
-    if bool(torch_api.cuda.is_available()):
-        return "cuda"
-    if bool(torch_api.backends.mps.is_available()):
-        return "mps"
-    if allow_cpu_fallback:
-        return "cpu"
-    raise ModelSetupError(
-        "DEVICE_UNAVAILABLE",
-        "auto found no accelerator and CPU fallback was not authorized",
-    )
 
 
 def _to_numpy(value: Any) -> np.ndarray:
