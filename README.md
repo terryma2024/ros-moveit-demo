@@ -199,8 +199,8 @@ ros2 launch fixed_pose_goal fixed_pose_goal.launch.py
 ## 文档索引
 
 - [统一 SO-101 Python 包](src/so101_demo_py/README.md)
-- [RGB-D 感知 PickPlace 教学与源码导读](docs/so101-rgbd-perception-pick-place-source-guide.md)
-- [动态杯位 PickPlace 源码导读](docs/so101-dynamic-cup-pick-place-source-guide.md)
+- [RGB-D 感知 PickPlace 教学与源码导读](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
+- [动态杯位 PickPlace 源码导读](docs/guides/so101-dynamic-cup-pick-place-source-guide.md)
 - [Apple Silicon ROS 2 Jazzy 与 SO-101 MuJoCo](docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md)
 - [Python pick-place 架构](docs/pick-place-python-architecture.md)
 - [SO-101 MuJoCo ROS 2 集成指南](docs/guides/so101-mujoco-ros2-integration-guide.md)

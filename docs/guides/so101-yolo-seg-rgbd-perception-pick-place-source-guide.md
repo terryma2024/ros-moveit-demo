@@ -56,7 +56,7 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place ...
 ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py ...
 ```
 
-console script 在 [`setup.py`](../src/so101_demo_py/setup.py) 中注册。`ros2 run` 最终进入 [`perception_pick_place_launch.py`](../src/so101_demo_py/src/cli/perception_pick_place_launch.py)，由它创建 `LaunchService`，并保留真正失败子进程的退出码。公开 launch 文件与这个入口共用 [`build_perception_pick_place_launch_description()`](../src/so101_demo_py/src/runtime/launch_composition.py)。
+console script 在 [`setup.py`](../../src/so101_demo_py/setup.py) 中注册。`ros2 run` 最终进入 [`perception_pick_place_launch.py`](../../src/so101_demo_py/src/cli/perception_pick_place_launch.py)，由它创建 `LaunchService`，并保留真正失败子进程的退出码。公开 launch 文件与这个入口共用 [`build_perception_pick_place_launch_description()`](../../src/so101_demo_py/src/runtime/launch_composition.py)。
 
 ### 2.2 实际启动的组件
 
@@ -73,7 +73,7 @@ console script 在 [`setup.py`](../src/so101_demo_py/setup.py) 中注册。`ros2
 | 本地 YOLO-Seg 感知 | `so101_demo_py/rgbd_object_pose` | 发布后等待统一关停 | 加载本地模型，处理一帧 RGB-D，发布检测结果、overlay 和 `/cup_pose` |
 | 动态抓放 | `so101_demo_py/dynamic_cup_pick_place` | 一次任务 | 消费 `/cup_pose`，调用 MoveIt 与 controller，验证物理抓放结果 |
 
-组件清单主要来自 [`_mujoco_stack_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py) 和 [`_mujoco_perception_execute_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py)。
+组件清单主要来自 [`_mujoco_stack_actions()`](../../src/so101_demo_py/src/runtime/launch_composition.py) 和 [`_mujoco_perception_execute_actions()`](../../src/so101_demo_py/src/runtime/launch_composition.py)。
 
 ### 2.3 组件如何通信
 
@@ -141,19 +141,19 @@ flowchart LR
 
 | 层 | 主要文件 | 只负责什么 |
 |---|---|---|
-| 核心数据契约 | [`detection.py`](../src/so101_demo_py/src/core/detection.py) | 定义不可变的 frame、candidate、batch 和 localized object |
-| 检测端口 | [`object_detector.py`](../src/so101_demo_py/src/ports/object_detector.py) | 约束 `detect(frame, query)` 接口，不依赖 Ultralytics |
-| YOLO adapter | [`yolo_seg.py`](../src/so101_demo_py/src/adapters/perception/yolo_seg.py) | 校验权重与 device，运行 YOLO，转换输出 |
-| 应用规则 | [`object_pose.py`](../src/so101_demo_py/src/application/object_pose.py) | 目标选择、深度定位和一次请求编排 |
-| ROS adapter | [`rgbd_object_pose_node.py`](../src/so101_demo_py/src/ros/rgbd_object_pose_node.py) | 订阅、tf2、消息转换、publish 与 lifecycle |
-| 证据写入 | [`perception_evidence.py`](../src/so101_demo_py/src/runtime/perception_evidence.py) | 原子写入 RGB、mask、overlay、点云和结果 JSON |
-| 启动编排 | [`launch_composition.py`](../src/so101_demo_py/src/runtime/launch_composition.py) | 参数门禁、组件启动顺序、退出与清理 |
+| 核心数据契约 | [`detection.py`](../../src/so101_demo_py/src/core/detection.py) | 定义不可变的 frame、candidate、batch 和 localized object |
+| 检测端口 | [`object_detector.py`](../../src/so101_demo_py/src/ports/object_detector.py) | 约束 `detect(frame, query)` 接口，不依赖 Ultralytics |
+| YOLO adapter | [`yolo_seg.py`](../../src/so101_demo_py/src/adapters/perception/yolo_seg.py) | 校验权重与 device，运行 YOLO，转换输出 |
+| 应用规则 | [`object_pose.py`](../../src/so101_demo_py/src/application/object_pose.py) | 目标选择、深度定位和一次请求编排 |
+| ROS adapter | [`rgbd_object_pose_node.py`](../../src/so101_demo_py/src/ros/rgbd_object_pose_node.py) | 订阅、tf2、消息转换、publish 与 lifecycle |
+| 证据写入 | [`perception_evidence.py`](../../src/so101_demo_py/src/runtime/perception_evidence.py) | 原子写入 RGB、mask、overlay、点云和结果 JSON |
+| 启动编排 | [`launch_composition.py`](../../src/so101_demo_py/src/runtime/launch_composition.py) | 参数门禁、组件启动顺序、退出与清理 |
 
 这种拆法的直接好处是：`TargetSelector` 和 `RgbdLocalizer` 可以用假检测器测试，不需要每次测试都加载 PyTorch；YOLO adapter 也不用知道 ROS publisher 和 MoveIt。
 
 ## 4. 检测契约为什么要先定义
 
-[`DetectionFrame`](../src/so101_demo_py/src/core/detection.py) 保存一张 RGB 图及其来源：
+[`DetectionFrame`](../../src/so101_demo_py/src/core/detection.py) 保存一张 RGB 图及其来源：
 
 ```text
 rgb8
@@ -161,7 +161,7 @@ source_stamp_ns
 source_frame_id
 ```
 
-[`DetectionCandidate`](../src/so101_demo_py/src/core/detection.py) 表示一个实例：
+[`DetectionCandidate`](../../src/so101_demo_py/src/core/detection.py) 表示一个实例：
 
 ```text
 instance_id
@@ -177,7 +177,7 @@ image_height
 
 其中 mask 必须是与原图同尺寸的布尔数组，并且至少包含一个像素。候选自己的 stamp、frame 和尺寸不能与本批次冲突。
 
-[`DetectionBatch`](../src/so101_demo_py/src/core/detection.py) 再补上模型 provenance：
+[`DetectionBatch`](../../src/so101_demo_py/src/core/detection.py) 再补上模型 provenance：
 
 ```text
 model_id
@@ -191,13 +191,13 @@ batch 会把 `weights_sha256` 和 `runtime_device` 与本轮推理结果一起�
 
 ## 5. RGB-D 输入为什么仍要严格对齐
 
-YOLO 只看 RGB，但三维定位还需要 Depth 和 CameraInfo。`rgbd_object_pose` 复用了 [`AlignedRgbdBuffer`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py)，只有三条消息的 source stamp 完全相同才接受：
+YOLO 只看 RGB，但三维定位还需要 Depth 和 CameraInfo。`rgbd_object_pose` 复用了 [`AlignedRgbdBuffer`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py)，只有三条消息的 source stamp 完全相同才接受：
 
 ```text
 camera_info.stamp == color.stamp == depth.stamp
 ```
 
-节点还会检查 frame、尺寸和编码。RGB 必须是 `rgb8`，Depth 必须是 `32FC1`。[`FreshFrameGate`](../src/so101_demo_py/src/ros/rgbd_object_pose_node.py) 只接受门禁之后的新帧，避免启动时误用队列中的旧消息。
+节点还会检查 frame、尺寸和编码。RGB 必须是 `rgb8`，Depth 必须是 `32FC1`。[`FreshFrameGate`](../../src/so101_demo_py/src/ros/rgbd_object_pose_node.py) 只接受门禁之后的新帧，避免启动时误用队列中的旧消息。
 
 这一点和是否使用 YOLO 无关。第 N 帧的 mask 配上第 N+1 帧的深度，杯子边缘就会落到别的三维位置。静止画面可能暂时看不出问题，运动时误差会明显放大。
 
@@ -220,9 +220,9 @@ YOLO-Seg 多输出一张实例 mask：
 
 ### 7.1 多物体 MJCF
 
-训练和验收场景位于 [`v5_multi_object_scene.xml`](../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)。它包含两个杯子实例、瓶子干扰物、桌面、目标区域和 `task_camera`。
+训练和验收场景位于 [`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)。它包含两个杯子实例、瓶子干扰物、桌面、目标区域和 `task_camera`。
 
-数据生成配置 [`plastic_cup_yolo_seg.yaml`](../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml) 固定：
+数据生成配置 [`plastic_cup_yolo_seg.yaml`](../../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml) 固定：
 
 ```yaml
 mjcf_path: ../../assets/mujoco/v5_multi_object_scene.xml
@@ -237,7 +237,7 @@ split_counts:
 
 ### 7.2 四种场景分布
 
-[`DatasetScenario`](../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 定义四种场景：
+[`DatasetScenario`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 定义四种场景：
 
 | 场景 | 杯子数量 | 用来学习什么 |
 |---|---:|---|
@@ -258,7 +258,7 @@ test:  300000 ...
 
 ### 7.3 每个 seed 随机化什么
 
-[`MuJoCoDatasetRenderer._prepare()`](../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 会在受控范围内改变：
+[`MuJoCoDatasetRenderer._prepare()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 会在受控范围内改变：
 
 - 两个杯子和瓶子的 XY 位置；
 - 相机位置的小幅扰动；
@@ -271,7 +271,7 @@ test:  300000 ...
 
 ### 8.1 RGB 和标签来自两次同位渲染
 
-[`MuJoCoDatasetRenderer.render()`](../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 对同一个仿真状态执行两次渲染：
+[`MuJoCoDatasetRenderer.render()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 对同一个仿真状态执行两次渲染：
 
 1. 普通 RGB rendering，得到模型输入图片；
 2. segmentation rendering，得到每个像素所属的 MuJoCo geom ID。
@@ -282,7 +282,7 @@ geom ID 再通过 `model.geom_bodyid` 映射到 body ID，body ID 对应 `plasti
 
 训练时杯子和瓶子的颜色会随机变化。如果标签来自颜色阈值，换色后真值就会跟着坏掉。object-ID 属于模拟器场景结构，同一个 body 无论渲染成红色、绿色还是灰色，实例身份都不会变。
 
-[`build_labeled_sample()`](../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 只把 body 名为 `plastic_cup` 或以 `plastic_cup_` 开头的实例加入标签。每个 body 单独生成 mask，所以两个杯子会得到两条标签。
+[`build_labeled_sample()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 只把 body 名为 `plastic_cup` 或以 `plastic_cup_` 开头的实例加入标签。每个 body 单独生成 mask，所以两个杯子会得到两条标签。
 
 ### 8.3 mask 如何写成 YOLO polygon
 
@@ -302,7 +302,7 @@ class_id x1 y1 x2 y2 ... xn yn
 
 ## 9. 如何生成数据集
 
-生成入口注册为 `generate_yolo_seg_dataset`，CLI 源码在 [`generate_yolo_seg_dataset.py`](../src/so101_demo_py/src/cli/generate_yolo_seg_dataset.py)。先 source 正确的 ROS 与包 overlay，然后运行：
+生成入口注册为 `generate_yolo_seg_dataset`，CLI 源码在 [`generate_yolo_seg_dataset.py`](../../src/so101_demo_py/src/cli/generate_yolo_seg_dataset.py)。先 source 正确的 ROS 与包 overlay，然后运行：
 
 ```bash
 CONFIG="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml"
@@ -344,7 +344,7 @@ plastic-cup-dataset/
 
 如果从随机权重开始训练，1200 张合成图通常太少；使用预训练权重能把训练重点放在“这个任务里的杯子实例长什么样”。这就是微调与从零训练的区别。
 
-训练契约在 [`training.yaml`](../src/so101_demo_py/config/perception/training.yaml)：
+训练契约在 [`training.yaml`](../../src/so101_demo_py/config/perception/training.yaml)：
 
 ```yaml
 task: segment
@@ -374,7 +374,7 @@ amp: false
 
 ## 11. 训练前如何冻结配置
 
-仓库里的 `training.yaml` 是人能审阅的契约，不应直接被训练命令随意改写。[`prepare_training_run()`](../src/so101_demo_py/src/adapters/perception/yolo_training.py) 会做这些检查：
+仓库里的 `training.yaml` 是人能审阅的契约，不应直接被训练命令随意改写。[`prepare_training_run()`](../../src/so101_demo_py/src/adapters/perception/yolo_training.py) 会做这些检查：
 
 1. 数据集与训练配置中的 class names 必须一致；
 2. 基础模型必须是本地普通文件，不能是 symlink；
@@ -405,7 +405,7 @@ print(prepared.training_config)
 
 ## 12. 如何执行离线 CUDA 微调
 
-依赖版本固定在 [`requirements.lock`](../src/so101_demo_py/config/perception/requirements.lock)：
+依赖版本固定在 [`requirements.lock`](../../src/so101_demo_py/config/perception/requirements.lock)：
 
 ```text
 torch==2.13.0
@@ -637,7 +637,7 @@ Linux 使用 `perception_device:=cuda`。无头运行仍要显式 `sensor_render
 
 ## 20. `YoloSegDetector` 内部做了什么
 
-构造阶段在 [`YoloSegDetector.__init__()`](../src/so101_demo_py/src/adapters/perception/yolo_seg.py) 完成：
+构造阶段在 [`YoloSegDetector.__init__()`](../../src/so101_demo_py/src/adapters/perception/yolo_seg.py) 完成：
 
 1. 权重必须是本地普通文件；
 2. 计算 SHA-256，并与启动参数逐字比较；
@@ -660,11 +660,11 @@ model.predict(
 
 `conf=0.25` 是检测器保留 raw candidate 的下限。应用层 `TargetSelector` 还会使用默认 `0.50` 阈值决定哪些杯子有资格成为任务目标。两层阈值用途不同：低阈值保留可观察候选，高阈值控制执行资格。
 
-[`convert_yolo_result()`](../src/so101_demo_py/src/adapters/perception/yolo_seg.py) 会校验 boxes、classes、confidence 和 masks 数量一致，把低分辨率 mask 用 nearest-neighbor 恢复到原图大小，并对边界做两层十字邻域收缩。这个小处理用于移除贴近瓶子时偶发的一像素 mask 泄漏；如果 mask 很小，收缩会在变空前停止。
+[`convert_yolo_result()`](../../src/so101_demo_py/src/adapters/perception/yolo_seg.py) 会校验 boxes、classes、confidence 和 masks 数量一致，把低分辨率 mask 用 nearest-neighbor 恢复到原图大小，并对边界做两层十字邻域收缩。这个小处理用于移除贴近瓶子时偶发的一像素 mask 泄漏；如果 mask 很小，收缩会在变空前停止。
 
 ## 21. `TargetSelector` 为什么保持简单
 
-[`TargetSelector.select()`](../src/so101_demo_py/src/application/object_pose.py) 的逻辑可以完整写成：
+[`TargetSelector.select()`](../../src/so101_demo_py/src/application/object_pose.py) 的逻辑可以完整写成：
 
 ```python
 matches = [
@@ -681,7 +681,7 @@ selector 故意写得很短，规则因而一眼可见。将来若要支持“�
 
 ## 22. mask 如何结合 Depth 变成三维点
 
-[`RgbdLocalizer.localize()`](../src/so101_demo_py/src/application/object_pose.py) 只把 selected mask 中的有效深度像素反投影。针孔模型仍是：
+[`RgbdLocalizer.localize()`](../../src/so101_demo_py/src/application/object_pose.py) 只把 selected mask 中的有效深度像素反投影。针孔模型仍是：
 
 ```text
 x = (u - cx) * z / fx
@@ -740,7 +740,7 @@ center_z = 0.12 + 0.09 / 2 = 0.165 m
 
 ## 25. `/cup_pose` 何时才会发布
 
-[`detect_once()`](../src/so101_demo_py/src/application/object_pose.py) 的顺序是：
+[`detect_once()`](../../src/so101_demo_py/src/application/object_pose.py) 的顺序是：
 
 ```text
 detect
@@ -770,7 +770,7 @@ pose:
 
 ## 26. 感知证据目录里有什么
 
-[`PerceptionEvidenceWriter`](../src/so101_demo_py/src/runtime/perception_evidence.py) 写出：
+[`PerceptionEvidenceWriter`](../../src/so101_demo_py/src/runtime/perception_evidence.py) 写出：
 
 ```text
 source-rgb.png
@@ -852,17 +852,17 @@ result.json
 
 按数据流读，比从 launch 或最长的 ROS node 开始更容易：
 
-1. [`v5_multi_object_scene.xml`](../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)：两个杯子、瓶子和相机；
-2. [`plastic_cup_yolo_seg.yaml`](../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml)：数据规模与 MJCF；
-3. [`mujoco_dataset.py`](../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py)：object-ID 标签与数据生成；
-4. [`training.yaml`](../src/so101_demo_py/config/perception/training.yaml)：微调契约；
-5. [`yolo_training.py`](../src/so101_demo_py/src/adapters/perception/yolo_training.py)：训练配置冻结；
-6. [`detection.py`](../src/so101_demo_py/src/core/detection.py)：candidate 和 batch 契约；
-7. [`yolo_seg.py`](../src/so101_demo_py/src/adapters/perception/yolo_seg.py)：本地模型加载和结果转换；
-8. [`object_pose.py`](../src/so101_demo_py/src/application/object_pose.py)：0/1/2+ 选择与深度定位；
-9. [`rgbd_object_pose_node.py`](../src/so101_demo_py/src/ros/rgbd_object_pose_node.py)：ROS 输入输出、tf2 和生命周期；
-10. [`perception_evidence.py`](../src/so101_demo_py/src/runtime/perception_evidence.py)：每轮证据；
-11. [`launch_composition.py`](../src/so101_demo_py/src/runtime/launch_composition.py)：组件、时序和 fail-closed；
+1. [`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)：两个杯子、瓶子和相机；
+2. [`plastic_cup_yolo_seg.yaml`](../../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml)：数据规模与 MJCF；
+3. [`mujoco_dataset.py`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py)：object-ID 标签与数据生成；
+4. [`training.yaml`](../../src/so101_demo_py/config/perception/training.yaml)：微调契约；
+5. [`yolo_training.py`](../../src/so101_demo_py/src/adapters/perception/yolo_training.py)：训练配置冻结；
+6. [`detection.py`](../../src/so101_demo_py/src/core/detection.py)：candidate 和 batch 契约；
+7. [`yolo_seg.py`](../../src/so101_demo_py/src/adapters/perception/yolo_seg.py)：本地模型加载和结果转换；
+8. [`object_pose.py`](../../src/so101_demo_py/src/application/object_pose.py)：0/1/2+ 选择与深度定位；
+9. [`rgbd_object_pose_node.py`](../../src/so101_demo_py/src/ros/rgbd_object_pose_node.py)：ROS 输入输出、tf2 和生命周期；
+10. [`perception_evidence.py`](../../src/so101_demo_py/src/runtime/perception_evidence.py)：每轮证据；
+11. [`launch_composition.py`](../../src/so101_demo_py/src/runtime/launch_composition.py)：组件、时序和 fail-closed；
 12. [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md)：Pose 之后的执行闭环。
 
 ## 32. 一个适合初学者的最小观察练习

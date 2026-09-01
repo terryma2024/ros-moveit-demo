@@ -35,7 +35,7 @@ dynamic_cup_pick_place
 
 ## 2. 两个 executable 的边界
 
-console script 注册在 [`setup.py`](../src/so101_demo_py/setup.py)：
+console script 注册在 [`setup.py`](../../src/so101_demo_py/setup.py)：
 
 ```text
 fixed_cup_pick_place   -> so101_demo.cli.fixed_cup_pick_place:main
@@ -44,13 +44,13 @@ dynamic_cup_pick_place -> so101_demo.cli.dynamic_cup_pick_place:main
 
 ### 2.1 V1：固定位置策略
 
-[`fixed_cup_pick_place.py`](../src/so101_demo_py/src/cli/fixed_cup_pick_place.py) 只是给原有 `pick_place.py` 提供明确的 public 名称。它继续读取 V1 固定 waypoint，不依赖 `/cup_pose`。
+[`fixed_cup_pick_place.py`](../../src/so101_demo_py/src/cli/fixed_cup_pick_place.py) 只是给原有 `pick_place.py` 提供明确的 public 名称。它继续读取 V1 固定 waypoint，不依赖 `/cup_pose`。
 
 原有 launch composition 也显式调用 `fixed_cup_pick_place`，所以现有 launch 不会因为 V2 出现而悄悄改变行为。
 
 ### 2.2 V2：感知位置策略
 
-[`dynamic_cup_pick_place.py`](../src/so101_demo_py/src/cli/dynamic_cup_pick_place.py) 是独立入口。当前模式矩阵是：
+[`dynamic_cup_pick_place.py`](../../src/so101_demo_py/src/cli/dynamic_cup_pick_place.py) 是独立入口。当前模式矩阵是：
 
 | Backend | `plan_only` | `execute` |
 |---|---:|---:|
@@ -79,7 +79,7 @@ geometry_msgs/msg/PoseStamped
 
 ### 3.1 持续诊断订阅器
 
-[`cup_pose_subscriber.py`](../src/so101_demo_py/src/cli/cup_pose_subscriber.py) 面向人类观察：
+[`cup_pose_subscriber.py`](../../src/so101_demo_py/src/cli/cup_pose_subscriber.py) 面向人类观察：
 
 - 合法 Pose 输出一行 JSON；
 - 非法 Pose 输出一行 `CUP_POSE_INVALID`，然后继续监听；
@@ -90,7 +90,7 @@ geometry_msgs/msg/PoseStamped
 
 ### 3.2 状态机的一次性输入
 
-[`RosCupPoseSource`](../src/so101_demo_py/src/ros/cup_pose_source.py) 面向一次 pick-place 任务。它调用 [`acquire_one()`](../src/so101_demo_py/src/ports/cup_pose_source.py)：
+[`RosCupPoseSource`](../../src/so101_demo_py/src/ros/cup_pose_source.py) 面向一次 pick-place 任务。它调用 [`acquire_one()`](../../src/so101_demo_py/src/ports/cup_pose_source.py)：
 
 ```text
 开始等待
@@ -128,7 +128,7 @@ camera-frame Pose
 
 ## 4. 为什么只冻结一条感知结果
 
-[`CupPoseSample`](../src/so101_demo_py/src/core/dynamic_pick.py) 保存：
+[`CupPoseSample`](../../src/so101_demo_py/src/core/dynamic_pick.py) 保存：
 
 - `frame_id`；
 - `source_stamp_ns`；
@@ -155,7 +155,7 @@ frame 3: cup.x = 0.023
 
 ## 5. DynamicPickTemplate 到底是什么
 
-[`DynamicPickTemplate`](../src/so101_demo_py/src/core/dynamic_pick.py) 描述：
+[`DynamicPickTemplate`](../../src/so101_demo_py/src/core/dynamic_pick.py) 描述：
 
 > 已知杯子在哪里之后，应该如何接近、抓取、抬升、放置和验证。
 
@@ -169,9 +169,9 @@ frame 3: cup.x = 0.023
 | place | 固定 place TCP、approach、retreat clearance |
 | safety | workspace、消息新鲜度、场景位置和姿态容差 |
 
-实际 MuJoCo 参数在 [`config/policies/dynamic_cup_pick/v1/mujoco.yaml`](../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)。
+实际 MuJoCo 参数在 [`config/policies/dynamic_cup_pick/v1/mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)。
 
-[`dynamic_pick_policy.py`](../src/so101_demo_py/src/core/dynamic_pick_policy.py) 使用严格 schema 加载配置：
+[`dynamic_pick_policy.py`](../../src/so101_demo_py/src/core/dynamic_pick_policy.py) 使用严格 schema 加载配置：
 
 - 未知字段和缺失字段都拒绝；
 - backend 和 execute allowance 必须一致；
@@ -199,9 +199,9 @@ T_cup_tcp_grasp
 - `T_cup_tcp_grasp`：模板中标定的“相对杯子，TCP 应该在哪里”；
 - `T_world_tcp_grasp`：机械臂真正需要到达的 world Pose。
 
-[`compose_pose()`](../src/so101_demo_py/src/core/dynamic_pick.py) 会旋转 child translation、组合四元数并归一化。不能把两个 Pose 的位置和四元数逐分量相加。
+[`compose_pose()`](../../src/so101_demo_py/src/core/dynamic_pick.py) 会旋转 child translation、组合四元数并归一化。不能把两个 Pose 的位置和四元数逐分量相加。
 
-[`resolve_motion_targets()`](../src/so101_demo_py/src/core/dynamic_pick.py) 进一步生成所有运动状态的目标：
+[`resolve_motion_targets()`](../../src/so101_demo_py/src/core/dynamic_pick.py) 进一步生成所有运动状态的目标：
 
 | State | 目标来源 |
 |---|---|
@@ -220,7 +220,7 @@ T_cup_tcp_grasp
 
 ## 7. 为什么要比较三份杯子 Pose
 
-收到合法 topic 仍然不代表场景正确。执行前，[`validate_cup_scene()`](../src/so101_demo_py/src/application/cup_pose_preflight.py) 比较三个事实源：
+收到合法 topic 仍然不代表场景正确。执行前，[`validate_cup_scene()`](../../src/so101_demo_py/src/application/cup_pose_preflight.py) 比较三个事实源：
 
 ```text
 Topic 感知 Pose
@@ -248,7 +248,7 @@ CUP_POSE_SCENE_DIVERGENCE
 
 ## 8. V1 和 V2 为什么共用状态机
 
-[`build_dynamic_actions()`](../src/so101_demo_py/src/application/dynamic_execute.py) 为现有 `SO101_WORKFLOW` 的每个 action state 安装一个 `DynamicStateAction`。
+[`build_dynamic_actions()`](../../src/so101_demo_py/src/application/dynamic_execute.py) 为现有 `SO101_WORKFLOW` 的每个 action state 安装一个 `DynamicStateAction`。
 
 职责被分成两部分：
 
@@ -329,7 +329,7 @@ J: 6 x 5
 
 > 机械臂能够到达很多位置和姿态组合，但不能保证精确实现任意给定的 6D Pose。
 
-因此 [`UnderactuatedPoseIk`](../src/so101_demo_py/src/control/moveit/underactuated_ik.py) 不是承诺“任何 Pose 都能解”，而是：
+因此 [`UnderactuatedPoseIk`](../../src/so101_demo_py/src/control/moveit/underactuated_ik.py) 不是承诺“任何 Pose 都能解”，而是：
 
 1. 在当前姿态附近寻找关节解；
 2. 在 joint limit 内尽量同时减小位置和姿态误差；
@@ -622,7 +622,7 @@ raise DYNAMIC_IK_RESIDUAL_EXCEEDED
 
 ## 10. 物理抓取和 MoveIt attachment 是两回事
 
-动态 MuJoCo 执行器是 [`RosDynamicMujocoExecution`](../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)。
+动态 MuJoCo 执行器是 [`RosDynamicMujocoExecution`](../../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)。
 
 正确的抓取顺序是：
 
@@ -684,7 +684,7 @@ DETACH_MOVEIT
 -> RETREAT
 ```
 
-[`make_cup_collision_object()`](../src/so101_demo_py/src/control/planning_scene/cup.py) 使用 12 个杯壁 BOX 和一个杯底 CYLINDER，重建 canonical `plastic_cup` 碰撞体。最终 readback 必须满足：
+[`make_cup_collision_object()`](../../src/so101_demo_py/src/control/planning_scene/cup.py) 使用 12 个杯壁 BOX 和一个杯底 CYLINDER，重建 canonical `plastic_cup` 碰撞体。最终 readback 必须满足：
 
 - attached object 中没有 `plastic_cup`；
 - world object 中存在完整的 `plastic_cup`；
@@ -707,7 +707,7 @@ jaw/gripper <-> plastic_cup
 
 ## 13. `plan_only` 路径解决什么问题
 
-[`dynamic_plan_only.py`](../src/so101_demo_py/src/application/dynamic_plan_only.py) 和 [`dynamic_planner.py`](../src/so101_demo_py/src/ros/dynamic_planner.py) 可以对单个动态 state 做 Pose 规划，但不执行轨迹。
+[`dynamic_plan_only.py`](../../src/so101_demo_py/src/application/dynamic_plan_only.py) 和 [`dynamic_planner.py`](../../src/so101_demo_py/src/ros/dynamic_planner.py) 可以对单个动态 state 做 Pose 规划，但不执行轨迹。
 
 它用于回答：
 
@@ -756,7 +756,7 @@ MoveIt/controller 执行了什么？
 
 ## 15. MuJoCo cup pose bridge 的边界
 
-[`mujoco_cup_pose_bridge.py`](../src/so101_demo_py/src/ros/mujoco_cup_pose_bridge.py) 把 MuJoCo lossless truth 转换成 `/cup_pose`，用于本地端到端验证。
+[`mujoco_cup_pose_bridge.py`](../../src/so101_demo_py/src/ros/mujoco_cup_pose_bridge.py) 把 MuJoCo lossless truth 转换成 `/cup_pose`，用于本地端到端验证。
 
 它证明：
 
@@ -783,15 +783,15 @@ ROS topic
 
 不要一开始从 600 多行执行器顺序向下读。按数据流阅读更容易形成机器人直觉：
 
-1. [`dynamic_cup_pick_place.py`](../src/so101_demo_py/src/cli/dynamic_cup_pick_place.py)：模式和执行门禁；
-2. [`cup_pose_source.py`](../src/so101_demo_py/src/ros/cup_pose_source.py)：ROS 消息如何变成 `CupPoseSample`；
-3. [`dynamic_pick.py`](../src/so101_demo_py/src/core/dynamic_pick.py)：刚体变换和目标解析；
-4. [`mujoco.yaml`](../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)：抓取模板中的标定参数；
-5. [`cup_pose_preflight.py`](../src/so101_demo_py/src/application/cup_pose_preflight.py)：三份 Pose 为什么必须一致；
-6. [`dynamic_execute.py`](../src/so101_demo_py/src/application/dynamic_execute.py)：动态 action 如何复用唯一状态机；
-7. [`underactuated_ik.py`](../src/so101_demo_py/src/control/moveit/underactuated_ik.py)：5-DoF IK、FK 和 residual；
-8. [`dynamic_mujoco_execution.py`](../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)：规划、controller、物理和 Planning Scene 如何闭环；
-9. [`dynamic_runtime.py`](../src/so101_demo_py/src/ros/dynamic_runtime.py)：以上组件如何组装成一次任务。
+1. [`dynamic_cup_pick_place.py`](../../src/so101_demo_py/src/cli/dynamic_cup_pick_place.py)：模式和执行门禁；
+2. [`cup_pose_source.py`](../../src/so101_demo_py/src/ros/cup_pose_source.py)：ROS 消息如何变成 `CupPoseSample`；
+3. [`dynamic_pick.py`](../../src/so101_demo_py/src/core/dynamic_pick.py)：刚体变换和目标解析；
+4. [`mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)：抓取模板中的标定参数；
+5. [`cup_pose_preflight.py`](../../src/so101_demo_py/src/application/cup_pose_preflight.py)：三份 Pose 为什么必须一致；
+6. [`dynamic_execute.py`](../../src/so101_demo_py/src/application/dynamic_execute.py)：动态 action 如何复用唯一状态机；
+7. [`underactuated_ik.py`](../../src/so101_demo_py/src/control/moveit/underactuated_ik.py)：5-DoF IK、FK 和 residual；
+8. [`dynamic_mujoco_execution.py`](../../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)：规划、controller、物理和 Planning Scene 如何闭环；
+9. [`dynamic_runtime.py`](../../src/so101_demo_py/src/ros/dynamic_runtime.py)：以上组件如何组装成一次任务。
 
 ## 17. 当前实现的明确限制
 
