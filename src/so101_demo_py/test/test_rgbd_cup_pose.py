@@ -108,12 +108,14 @@ class _FakeNode:
         self.publisher_calls.append((message_type, topic, qos, publisher))
         return publisher
 
-    def create_subscription(self, message_type, topic, callback, qos):
+    def create_subscription(self, message_type, topic, callback, qos, **kwargs):
         number = len(self.subscription_calls) + 1
         if number == self.fail_subscription_number:
             raise RuntimeError("subscription construction failed")
         subscription = object()
-        self.subscription_calls.append((message_type, topic, callback, qos, subscription))
+        self.subscription_calls.append(
+            (message_type, topic, callback, qos, subscription, kwargs)
+        )
         return subscription
 
     def destroy_publisher(self, publisher) -> None:
@@ -152,6 +154,7 @@ def _fake_ros_api(*, fail_subscription_number: int | None = None):
         DurabilityPolicy=SimpleNamespace(VOLATILE="volatile"),
         QoSProfile=lambda **kwargs: SimpleNamespace(**kwargs),
         ReliabilityPolicy=SimpleNamespace(RELIABLE="reliable"),
+        SubscriptionEventCallbacks=lambda **kwargs: SimpleNamespace(**kwargs),
         qos_profile_sensor_data=object(),
         Time=SimpleNamespace(from_msg=lambda stamp: stamp),
         CameraInfo=type("CameraInfo", (), {}),
@@ -1112,6 +1115,112 @@ def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
             assert qos.depth == 1
             assert qos.reliability == "reliable"
             assert qos.durability == "volatile"
+    finally:
+        runtime.close()
+
+
+def test_profiled_ros_runtime_records_matched_first_callbacks_and_common_stamp(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=tmp_path / "profiling",
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    api, _rclpy, node, _listener = _fake_ros_api()
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+        profiler=profiler,
+    )
+    runtime._process_aligned = lambda _aligned: None
+
+    for call in node.subscription_calls:
+        call[5]["event_callbacks"].matched(
+            SimpleNamespace(current_count=1, current_count_change=1, total_count=1)
+        )
+
+    stamp = SimpleNamespace(sec=7, nanosec=123)
+    for call in node.subscription_calls:
+        call[2](SimpleNamespace(header=SimpleNamespace(stamp=stamp)))
+
+    runtime.close()
+    profiler.close()
+    events = [
+        json.loads(line)
+        for line in (
+            tmp_path / "profiling/processes/perception.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    instant_events = [event for event in events if event["event_type"] == "instant"]
+    assert [event["name"] for event in instant_events] == [
+        "perception.subscription_matched",
+        "perception.subscription_matched",
+        "perception.subscription_matched",
+        "perception.first_callback",
+        "perception.first_callback",
+        "perception.first_callback",
+        "perception.common_stamp",
+    ]
+    assert [event["attributes"]["topic"] for event in instant_events[:3]] == [
+        "/task_camera/camera_info",
+        "/task_camera/color",
+        "/task_camera/depth",
+    ]
+    assert [event["attributes"]["topic"] for event in instant_events[3:6]] == [
+        "/task_camera/camera_info",
+        "/task_camera/color",
+        "/task_camera/depth",
+    ]
+    assert all(
+        event["attributes"]["source_stamp_ns"] == 7_000_000_123
+        for event in instant_events[3:]
+    )
+
+    complete = [
+        event for event in events if event["event_type"] == "span_complete"
+    ]
+    milestones = {
+        event["name"]: event
+        for event in complete
+        if event["name"].startswith("perception.wait_all_")
+        or event["name"] == "perception.wait_common_stamp"
+    }
+    assert set(milestones) == {
+        "perception.wait_all_subscriptions_matched",
+        "perception.wait_all_first_callbacks",
+        "perception.wait_common_stamp",
+    }
+    assert all(event["outcome"] == "available" for event in milestones.values())
+
+
+def test_unprofiled_ros_runtime_constructs_no_subscription_event_callbacks() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    api, _rclpy, node, _listener = _fake_ros_api()
+
+    def reject_event_callbacks(**_kwargs):
+        raise AssertionError("profiling-off path constructed QoS event callbacks")
+
+    api.SubscriptionEventCallbacks = reject_event_callbacks
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+    )
+    try:
+        assert [call[5] for call in node.subscription_calls] == [{}, {}, {}]
     finally:
         runtime.close()
 
