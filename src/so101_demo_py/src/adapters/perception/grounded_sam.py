@@ -169,7 +169,6 @@ class GroundedSamDetector:
         self._sam_processor.post_process_masks(
             sam_outputs.pred_masks,
             sam_inputs["original_sizes"],
-            sam_inputs["reshaped_input_sizes"],
         )
 
     def _grounding_proposals(
@@ -237,18 +236,14 @@ class GroundedSamDetector:
         )
         try:
             original_sizes = sam_inputs["original_sizes"]
-            reshaped_input_sizes = sam_inputs["reshaped_input_sizes"]
         except (KeyError, TypeError) as error:
-            raise _contract_error(
-                "SAM processor inputs must include original_sizes and reshaped_input_sizes"
-            ) from error
+            raise _contract_error("SAM processor inputs must include original_sizes") from error
         with self._torch.inference_mode():
             sam_outputs = self._sam_model(**sam_inputs, multimask_output=True)
         try:
             masks = self._sam_processor.post_process_masks(
                 sam_outputs.pred_masks,
                 original_sizes,
-                reshaped_input_sizes,
             )
             quality_scores = _to_numpy(sam_outputs.iou_scores)
         except AttributeError as error:
