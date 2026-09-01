@@ -36,3 +36,14 @@ def test_auto_prefers_cuda_then_mps_and_requires_cpu_authorization() -> None:
 def test_explicit_accelerator_never_falls_back() -> None:
     with pytest.raises(ModelSetupError, match="requested MPS is unavailable"):
         select_runtime_device("mps", True, fake_torch(cuda=False, mps=False))
+
+
+def test_model_setup_error_exposes_read_only_code_and_detail() -> None:
+    error = ModelSetupError("DEVICE_UNAVAILABLE", "requested CUDA is unavailable")
+
+    assert error.code == "DEVICE_UNAVAILABLE"
+    assert error.detail == "requested CUDA is unavailable"
+    with pytest.raises(AttributeError):
+        error.code = "MODEL_UNAVAILABLE"
+    with pytest.raises(AttributeError):
+        error.detail = "weights are unavailable"
