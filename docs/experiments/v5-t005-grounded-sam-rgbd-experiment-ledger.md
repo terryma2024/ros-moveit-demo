@@ -35,8 +35,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-012
-next_experiment: EXP-062 linux-matrix-r6-1-task_start
+latest_checkpoint: CP-013
+next_experiment: EXP-066 linux-matrix-r7-1-task_start
 ```
 
 ## Checkpoints
@@ -1751,10 +1751,10 @@ linux_matrix_r6_replacement:
   additional_precondition:
     - remote runner full SHA is bea5d69f6916524fd5080d5246c4ccf19b3bafc3ad47adc2264741cb848542b9 and executable mode is 0755 before RUNNING
   experiments:
-    - {experiment_id: EXP-062, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r6-1-task_start, session_id: linux-matrix-r6-1-task_start, ros_domain_id: 251, partition: v5-t005-linux-matrix-r6-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-1-task_start, prior: EXP-058_INVALID_PRESTART_and_clean_readback, next: EXP-063}
-    - {experiment_id: EXP-063, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r6-2-v5_no_cup, session_id: linux-matrix-r6-2-v5_no_cup, ros_domain_id: 252, partition: v5-t005-linux-matrix-r6-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-2-v5_no_cup, prior: EXP-062_VALID_success, next: EXP-064}
-    - {experiment_id: EXP-064, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r6-3-v5_two_cups, session_id: linux-matrix-r6-3-v5_two_cups, ros_domain_id: 253, partition: v5-t005-linux-matrix-r6-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-3-v5_two_cups, prior: EXP-063_VALID_success, next: EXP-065}
-    - {experiment_id: EXP-065, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r6-4-v5_cup_near_bottle, session_id: linux-matrix-r6-4-v5_cup_near_bottle, ros_domain_id: 254, partition: v5-t005-linux-matrix-r6-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-4-v5_cup_near_bottle, prior: EXP-064_VALID_success, next: EXP-040}
+    - {experiment_id: EXP-062, status: INVALID, order: 1, scene: task_start, observed: FastDDS_domain_251_port_overflow_before_payload, request_id: linux-matrix-r6-1-task_start, session_id: linux-matrix-r6-1-task_start, ros_domain_id: 251, partition: v5-t005-linux-matrix-r6-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-1-task_start, inventory_sha256: 28df183e85f292710a6374d0f72887ee16dc34346ffe6ea3305cb6a16719dfb3, prior: EXP-058_INVALID_PRESTART_and_clean_readback, next: STOP_R6_BATCH}
+    - {experiment_id: EXP-063, status: NOT_RUN_BATCH_STOPPED, order: 2, scene: v5_no_cup, request_id: linux-matrix-r6-2-v5_no_cup, session_id: linux-matrix-r6-2-v5_no_cup, ros_domain_id: 252, partition: v5-t005-linux-matrix-r6-02-no-cup, evidence: NONE, prior: EXP-062_INVALID, next: NONE}
+    - {experiment_id: EXP-064, status: NOT_RUN_BATCH_STOPPED, order: 3, scene: v5_two_cups, request_id: linux-matrix-r6-3-v5_two_cups, session_id: linux-matrix-r6-3-v5_two_cups, ros_domain_id: 253, partition: v5-t005-linux-matrix-r6-03-two-cups, evidence: NONE, prior: EXP-062_INVALID, next: NONE}
+    - {experiment_id: EXP-065, status: NOT_RUN_BATCH_STOPPED, order: 4, scene: v5_cup_near_bottle, request_id: linux-matrix-r6-4-v5_cup_near_bottle, session_id: linux-matrix-r6-4-v5_cup_near_bottle, ros_domain_id: 254, partition: v5-t005-linux-matrix-r6-04-near-bottle, evidence: NONE, prior: EXP-062_INVALID, next: NONE}
 ```
 
 ## Checkpoint CP-012
@@ -1771,4 +1771,51 @@ archived_runs: []
 deletion_candidates: [CP-011 deletion candidates]
 next_command: 限定提交 CP-012 ledger；设置 remote runner mode 0755 并回读 SHA/mode；核验 domain 251/session/partition/root 后仅启动 EXP-062
 decision: RUN_EXP_062_ONLY_AFTER_LEDGER_COMMIT
+```
+
+## Task 11 Linux matrix r6 invalidation and r7 replacement
+
+EXP-062 使用的 domain 251 超过本机 FastDDS 可构造范围；所有 participant 在 payload 前以
+`Calculated port number is too high. Probably the domainId is over 232` 退出。没有 perception
+result、TF、age、IoU 或 pose，判为 `INVALID`，r6 后续未运行。cleanup 最终无 owned process；
+node output 只有同一 participant construction error，不是活动图。r7 改用未占用且小于 232 的
+domains 101～104。除此以外 source/runtime/bundle/threshold 与 acceptance tool 内容不变。
+
+```yaml
+linux_matrix_r7_replacement:
+  common: linux_matrix_r5_replacement.success_criteria / linux_matrix_r5_replacement.invalid_criteria / linux_matrix_r5_replacement.stop_criteria
+  source_commit: 70675004e3ed66ce6bd5811a8f922565e08f668d
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v5
+  runtime_device: cuda
+  lifecycle: FULL_RESTART
+  mandatory_runner_preflight:
+    - runner mode 0755 and executable; all three tool content SHAs equal the CP-011 pinned values
+    - each planned ROS_DOMAIN_ID is <= 232 and a sourced daemon-free `ros2 node list` constructs successfully with rc 0 and empty output
+    - exact checkout HEAD/clean, overlay package prefixes, runtime entrypoint path/shebang/executable, CUDA/offline bundle provenance all read back
+    - each evidence target is absent and request/session/partition has no owned process before its run
+    - observer writes `observed-source-rgb.png` plus exact pose age; validator reads those exact keys/paths and gates age <= 2.0 s
+    - runner exports ROS2CLI_DISABLE_DAEMON=1 and bounded graph cleanup is exactly attempts 1..30 with final process/node snapshots
+  experiments:
+    - {experiment_id: EXP-066, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r7-1-task_start, session_id: linux-matrix-r7-1-task_start, ros_domain_id: 101, partition: v5-t005-linux-matrix-r7-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r7-1-task_start, prior: EXP-062_INVALID_and_no_owned_process, next: EXP-067}
+    - {experiment_id: EXP-067, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r7-2-v5_no_cup, session_id: linux-matrix-r7-2-v5_no_cup, ros_domain_id: 102, partition: v5-t005-linux-matrix-r7-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r7-2-v5_no_cup, prior: EXP-066_VALID_success, next: EXP-068}
+    - {experiment_id: EXP-068, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r7-3-v5_two_cups, session_id: linux-matrix-r7-3-v5_two_cups, ros_domain_id: 103, partition: v5-t005-linux-matrix-r7-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r7-3-v5_two_cups, prior: EXP-067_VALID_success, next: EXP-069}
+    - {experiment_id: EXP-069, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r7-4-v5_cup_near_bottle, session_id: linux-matrix-r7-4-v5_cup_near_bottle, ros_domain_id: 104, partition: v5-t005-linux-matrix-r7-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r7-4-v5_cup_near_bottle, prior: EXP-068_VALID_success, next: EXP-040}
+```
+
+## Checkpoint CP-013
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-035
+last_invalid_experiment: EXP-062
+current_hypothesis: r6 失败是可预检的 FastDDS domain construction 错误；r7 必须先完成并落盘全部 mandatory_runner_preflight 才能启动 EXP-066
+working_tree_status: 生产/工具内容未变；ledger 结算 r6 INVALID 并预写 r7
+owned_processes: NONE
+retained_runs:
+  - CP-011 retained runs
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-1-task_start
+archived_runs: []
+deletion_candidates: [CP-012 deletion candidates, EXP-062 invalid run after explicit user authorization only]
+next_command: 限定提交 CP-013 ledger；执行完整 r7 runner preflight 并将结果/SHA 落盘到 /tmp/so101-v5-t005-task11-tools/r7-preflight；仅全部通过后标记 EXP-066 RUNNING
+decision: RUN_EXP_066_ONLY_AFTER_COMMITTED_PREFLIGHT_PASS
 ```
