@@ -206,6 +206,50 @@ def test_builder_removes_only_its_staging_directory_after_snapshot_failure(
     assert list(tmp_path.glob(".bundle.staging-*")) == []
 
 
+def test_builder_refuses_a_destination_created_during_snapshot_download(
+    tmp_path: Path,
+) -> None:
+    """Catch an atomic install that replaces an empty concurrent destination."""
+
+    destination = tmp_path / "bundle"
+    calls: list[tuple[str, str]] = []
+    download = _fake_snapshot_download(tmp_path, calls)
+
+    def racing_download(*, repo_id: str, revision: str) -> str:
+        if not destination.exists():
+            destination.mkdir()
+        return download(repo_id=repo_id, revision=revision)
+
+    with pytest.raises(FileExistsError):
+        build_model_bundle(CONFIG_PATH, destination, racing_download)
+    assert destination.is_dir()
+    assert calls == [
+        ("IDEA-Research/grounding-dino-tiny", "a2bb814dd30d776dcf7e30523b00659f4f141c71"),
+        ("facebook/sam2.1-hiera-tiny", "de431c4043854a71d8101e17995dfe596bf101a5"),
+    ]
+    assert list(tmp_path.glob(".bundle.staging-*")) == []
+
+
+def test_builder_preserves_a_marked_destination_created_during_snapshot_download(
+    tmp_path: Path,
+) -> None:
+    """Catch a race handler that removes data owned by a concurrent destination creator."""
+
+    destination = tmp_path / "bundle"
+    download = _fake_snapshot_download(tmp_path, [])
+
+    def racing_download(*, repo_id: str, revision: str) -> str:
+        if not destination.exists():
+            destination.mkdir()
+            (destination / "concurrent-owner.txt").write_text("preserve", encoding="utf-8")
+        return download(repo_id=repo_id, revision=revision)
+
+    with pytest.raises(FileExistsError):
+        build_model_bundle(CONFIG_PATH, destination, racing_download)
+    assert (destination / "concurrent-owner.txt").read_text(encoding="utf-8") == "preserve"
+    assert list(tmp_path.glob(".bundle.staging-*")) == []
+
+
 def test_cli_accepts_only_absolute_config_and_output_paths(monkeypatch, tmp_path: Path) -> None:
     """Catch the CLI accepting a working-directory-dependent bundle location."""
 
@@ -222,6 +266,8 @@ def test_cli_accepts_only_absolute_config_and_output_paths(monkeypatch, tmp_path
     assert calls == [(CONFIG_PATH, tmp_path / "bundle")]
     with pytest.raises(SystemExit):
         main(["--config", "relative.yaml", "--output", str(tmp_path / "bundle")])
+    with pytest.raises(SystemExit):
+        main(["--config", str(CONFIG_PATH), "--output", "relative-bundle"])
 
 
 def test_setup_registers_the_prepare_grounded_sam_bundle_command(monkeypatch) -> None:
