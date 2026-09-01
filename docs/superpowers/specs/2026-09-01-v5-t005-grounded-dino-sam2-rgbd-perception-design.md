@@ -141,6 +141,7 @@ SAM 2.1 对当前帧只计算一次图像特征。全部合格候选框作为一
 
 - `class_id` 是 `plastic_cup`；
 - `confidence` 是 Grounding DINO 的 grounding score；
+- `segmentation_quality` 是可选的模型无关分割质量，Grounded SAM 写入 SAM predicted IoU，YOLO 保持 `None`；
 - `bbox_xyxy` 是原图像素坐标；
 - `mask` 是与原 RGB 同尺寸的 bool 数组；
 - source stamp 和 frame ID 原样保留。
@@ -227,7 +228,7 @@ model_id: grounding-dino-tiny+sam2.1-hiera-tiny
 weights_sha256: sha256(manifest.json bytes)
 ```
 
-运行证据同时展开记录两个模型 revision 和文件 SHA，不能只写 bundle digest。
+运行证据同时展开记录两个模型 revision 和文件 SHA，不能只写 bundle digest。`detections.json` 和 overlay 还要记录每个 Grounded SAM 候选的 `segmentation_quality`，便于回查 mask 选择；`TargetSelector` 不读取这个字段。
 
 ## 7. 设备与精度
 
@@ -356,6 +357,7 @@ fake processor 和 fake model 覆盖：
 - Grounding DINO 后处理、排序和去重；
 - 多候选框批量送入 SAM 2.1；
 - 多 mask 质量排序和原尺寸恢复；
+- `segmentation_quality` 进入候选 JSON 与 overlay，但不改变目标选择；
 - NaN、空 mask、维度错误与候选超限；
 - 错误路径没有 publisher 调用；
 - fake detector 驱动完整 application flow；
