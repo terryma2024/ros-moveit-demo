@@ -35,8 +35,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-014
-next_experiment: EXP-070 linux-matrix-r8-1-task_start
+latest_checkpoint: CP-015
+next_experiment: EXP-074 linux-matrix-r9-1-task_start
 ```
 
 ## Checkpoints
@@ -1849,9 +1849,9 @@ linux_matrix_r8_replacement:
   lifecycle: FULL_RESTART
   experiments:
     - {experiment_id: EXP-070, status: VALID_SUCCESS, order: 1, scene: task_start, raw: 3, eligible: 1, source_age_s: 0.28600000000000003, truth_iou: 0.9863858753456711, pose_error_m: 0.0005067077374595199, request_latency_ms: 266.372382, inference_latency_ms: 161.341619, source_consumer_stamp_ns: 9035999999, cleanup_converged_attempt: 15, request_id: linux-matrix-r8-1-task_start, session_id: linux-matrix-r8-1-task_start, ros_domain_id: 106, partition: v5-t005-linux-matrix-r8-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-1-task_start, inventory_sha256: 5f91fe791ec9bd7e553fc69f140885be44aa70a0698a5fef7c3bb03db78bbfb6, prior: EXP-066_INVALID_and_clean_owned_graph, next: EXP-071}
-    - {experiment_id: EXP-071, status: RUNNING, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r8-2-v5_no_cup, session_id: linux-matrix-r8-2-v5_no_cup, ros_domain_id: 107, partition: v5-t005-linux-matrix-r8-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-2-v5_no_cup, prior: EXP-070_VALID_success, next: EXP-072}
-    - {experiment_id: EXP-072, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r8-3-v5_two_cups, session_id: linux-matrix-r8-3-v5_two_cups, ros_domain_id: 108, partition: v5-t005-linux-matrix-r8-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-3-v5_two_cups, prior: EXP-071_VALID_success, next: EXP-073}
-    - {experiment_id: EXP-073, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r8-4-v5_cup_near_bottle, session_id: linux-matrix-r8-4-v5_cup_near_bottle, ros_domain_id: 109, partition: v5-t005-linux-matrix-r8-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-4-v5_cup_near_bottle, prior: EXP-072_VALID_success, next: EXP-040}
+    - {experiment_id: EXP-071, status: VALID_FAILURE, order: 2, scene: v5_no_cup, observed: TARGET_AMBIGUOUS_two_false_plastic_cup_candidates_no_pose, raw: 2, eligible: 2, candidate_confidences: [0.6970663070678711, 0.5767329931259155], request_latency_ms: 268.158024, inference_latency_ms: 198.510007, request_id: linux-matrix-r8-2-v5_no_cup, session_id: linux-matrix-r8-2-v5_no_cup, ros_domain_id: 107, partition: v5-t005-linux-matrix-r8-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-2-v5_no_cup, inventory_sha256: c8a0d82a9abdd0438133482e278fede5392a93547fd1f0daeea9fc45b7304daa, prior: EXP-070_VALID_success, next: STOP_R8_BATCH}
+    - {experiment_id: EXP-072, status: NOT_RUN_BATCH_STOPPED, order: 3, scene: v5_two_cups, request_id: linux-matrix-r8-3-v5_two_cups, session_id: linux-matrix-r8-3-v5_two_cups, ros_domain_id: 108, partition: v5-t005-linux-matrix-r8-03-two-cups, evidence: NONE, prior: EXP-071_VALID_FAILURE, next: NONE}
+    - {experiment_id: EXP-073, status: NOT_RUN_BATCH_STOPPED, order: 4, scene: v5_cup_near_bottle, request_id: linux-matrix-r8-4-v5_cup_near_bottle, session_id: linux-matrix-r8-4-v5_cup_near_bottle, ros_domain_id: 109, partition: v5-t005-linux-matrix-r8-04-near-bottle, evidence: NONE, prior: EXP-071_VALID_FAILURE, next: NONE}
 ```
 
 ## Checkpoint CP-014
@@ -1877,4 +1877,51 @@ archived_runs: []
 deletion_candidates: [CP-013 deletion candidates, EXP-066 invalid run after explicit user authorization only]
 next_command: 限定提交 CP-014 r8 preflight PASS；标记 EXP-070 RUNNING 后只启动 linux-matrix-r8-1-task_start
 decision: RUN_EXP_070_ONLY
+```
+
+## Task 11 Linux matrix r8 threshold failure and r9 single-variable experiment
+
+EXP-071 是 `VALID_FAILURE`：`v5_no_cup` 没有发布 pose，但 detector 产生两个
+`plastic_cup` candidates，scores `0.6970663071` 与 `0.5767329931`，selector 因此返回
+`TARGET_AMBIGUOUS`，而合同要求 `TARGET_NOT_FOUND`。r8 立即停止。唯一阈值变量为现有 launch 已
+暴露的 `grounding_box_threshold`，从 `0.35` 提高到 `0.70`；EXP-070 真杯 score
+`0.7200909257` 仍高于新门槛。模型、prompt、text/duplicate/SAM/target-confidence、FP32/offline、
+device/fallback、freshness、motion/source/config 全部不变。r9 必须从场景1重新计数；任一失败即
+`MODEL_CAPABILITY_NOT_MET` 并停止，不进入 5/5。
+
+```yaml
+linux_matrix_r9_single_variable:
+  variable: grounding_box_threshold
+  old_value: 0.35
+  new_value: 0.70
+  all_other_values: frozen_as_CP-014
+  source_commit: 70675004e3ed66ce6bd5811a8f922565e08f668d
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v5
+  runtime_device: cuda
+  lifecycle: FULL_RESTART
+  experiments:
+    - {experiment_id: EXP-074, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, request_id: linux-matrix-r9-1-task_start, session_id: linux-matrix-r9-1-task_start, ros_domain_id: 110, partition: v5-t005-linux-matrix-r9-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-1-task_start, prior: EXP-071_VALID_FAILURE_and_clean_graph, next: EXP-075}
+    - {experiment_id: EXP-075, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r9-2-v5_no_cup, session_id: linux-matrix-r9-2-v5_no_cup, ros_domain_id: 111, partition: v5-t005-linux-matrix-r9-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-2-v5_no_cup, prior: EXP-074_VALID_success, next: EXP-076}
+    - {experiment_id: EXP-076, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, request_id: linux-matrix-r9-3-v5_two_cups, session_id: linux-matrix-r9-3-v5_two_cups, ros_domain_id: 112, partition: v5-t005-linux-matrix-r9-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-3-v5_two_cups, prior: EXP-075_VALID_success, next: EXP-077}
+    - {experiment_id: EXP-077, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, request_id: linux-matrix-r9-4-v5_cup_near_bottle, session_id: linux-matrix-r9-4-v5_cup_near_bottle, ros_domain_id: 113, partition: v5-t005-linux-matrix-r9-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r9-4-v5_cup_near_bottle, prior: EXP-076_VALID_success, next: EXP-040}
+```
+
+## Checkpoint CP-015
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-070
+last_invalid_experiment: EXP-066
+last_valid_failure: EXP-071
+current_hypothesis: box threshold 0.70 可删除 no-cup false positives，同时保留已观察到的 task_start 真杯；必须以 r9 四场景验证
+working_tree_status: 生产 source/config 未变；将仅修改 /tmp runner 的一个 launch threshold literal，并重新执行完整 preflight
+owned_processes: NONE；EXP-071 cleanup attempt 14 与 independent domain 107 readback node/process empty
+retained_runs:
+  - CP-014 retained runs
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-1-task_start
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-2-v5_no_cup
+archived_runs: []
+deletion_candidates: [CP-014 deletion candidates, r8 runs after explicit user authorization only]
+next_command: 限定提交 CP-015；只改 runner grounding_box_threshold:=0.70；完整 r9 preflight PASS 落盘并提交后才启动 EXP-074
+decision: RUN_EXP_074_ONLY_AFTER_COMMITTED_SINGLE_VARIABLE_PREFLIGHT
 ```
