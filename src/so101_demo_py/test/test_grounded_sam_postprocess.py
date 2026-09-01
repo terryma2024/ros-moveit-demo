@@ -57,6 +57,20 @@ def test_prompt_rejects_a_bypassed_unknown_query_before_any_model_boundary() -> 
     assert _error_code(lambda: prompt_for_query(unknown)) == "QUERY_UNSUPPORTED"
 
 
+def test_threshold_defaults_are_the_fixed_grounded_sam_profile() -> None:
+    """Catch constructing a pipeline whose deployed score or mask gates differ from the profile."""
+
+    assert GroundedSamThresholds.defaults() == GroundedSamThresholds(
+        box_threshold=0.35,
+        text_threshold=0.25,
+        duplicate_iou=0.85,
+        max_candidates=16,
+        sam_quality=0.75,
+        min_mask_pixels=64,
+        max_mask_area_ratio=0.50,
+    )
+
+
 def test_grounding_conversion_clips_sorts_and_deduplicates() -> None:
     """Catch retaining an inferior overlapping box or emitting out-of-frame coordinates."""
 
@@ -92,6 +106,42 @@ def test_grounding_keeps_two_separate_cups_and_breaks_equal_scores_by_box() -> N
     assert [proposal.bbox_xyxy for proposal in proposals] == [
         (10.0, 20.0, 50.0, 80.0),
         (90.0, 20.0, 130.0, 80.0),
+    ]
+
+
+def test_grounding_suppresses_a_duplicate_at_the_exact_iou_threshold() -> None:
+    """Catch retaining a second box when its 34/40 IoU equals the configured 0.85 limit."""
+
+    proposals = convert_grounding_results(
+        boxes=np.array([[0.0, 0.0, 37.0, 1.0], [3.0, 0.0, 40.0, 1.0]]),
+        scores=np.array([0.90, 0.80]),
+        labels=["plastic cup", "plastic cup"],
+        frame=_frame(),
+        query=DetectionQuery("plastic_cup"),
+        thresholds=_thresholds(duplicate_iou=0.85),
+    )
+
+    assert [(proposal.confidence, proposal.bbox_xyxy) for proposal in proposals] == [
+        (0.90, (0.0, 0.0, 37.0, 1.0)),
+    ]
+
+
+def test_grounding_keeps_only_the_exact_cup_label_below_the_count_limit() -> None:
+    """Catch dropping the exact-label filter while the detector result remains structurally valid."""
+
+    proposals = convert_grounding_results(
+        boxes=np.array(
+            [[10.0, 10.0, 40.0, 50.0], [60.0, 10.0, 90.0, 50.0], [110.0, 10.0, 140.0, 50.0]]
+        ),
+        scores=np.array([0.91, 0.82, 0.73]),
+        labels=["plastic cup", "coffee cup", "plastic cup."],
+        frame=_frame(),
+        query=DetectionQuery("plastic_cup"),
+        thresholds=_thresholds(max_candidates=16),
+    )
+
+    assert [(proposal.confidence, proposal.bbox_xyxy) for proposal in proposals] == [
+        (0.91, (10.0, 10.0, 40.0, 50.0)),
     ]
 
 
@@ -145,6 +195,21 @@ def test_grounding_filters_scores_below_the_configured_gate() -> None:
     )
 
     assert proposals == ()
+
+
+def test_grounding_accepts_a_score_at_the_configured_gate() -> None:
+    """Catch changing the box gate from inclusive to exclusive comparison."""
+
+    proposals = convert_grounding_results(
+        boxes=np.array([[10.0, 10.0, 50.0, 70.0]]),
+        scores=np.array([0.35]),
+        labels=["plastic cup"],
+        frame=_frame(),
+        query=DetectionQuery("plastic_cup"),
+        thresholds=_thresholds(box_threshold=0.35),
+    )
+
+    assert proposals == (GroundingProposal((10.0, 10.0, 50.0, 70.0), 0.35),)
 
 
 @pytest.mark.parametrize(
@@ -224,6 +289,29 @@ def test_sam_rejects_an_oversized_mask_even_when_it_is_inside_its_box() -> None:
     )
 
     assert candidates == ()
+
+
+def test_sam_accepts_every_inclusive_quality_and_geometry_boundary() -> None:
+    """Catch making quality, pixel, area, or box-overlap rejection comparisons exclusive."""
+
+    mask = np.zeros((1, 1, 8, 20), dtype=bool)
+    mask[0, 0, :, :8] = True
+    mask[0, 0, :, 8:10] = True
+    candidates = convert_sam_results(
+        proposals=(GroundingProposal((0.0, 0.0, 8.0, 8.0), 0.61),),
+        masks=mask,
+        quality_scores=np.array([[0.75]]),
+        frame=_frame(width=20, height=8),
+        thresholds=_thresholds(
+            sam_quality=0.75,
+            min_mask_pixels=80,
+            max_mask_area_ratio=0.50,
+        ),
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].segmentation_quality == 0.75
+    assert int(candidates[0].mask.sum()) == 80
 
 
 def test_sam_rejects_structural_array_mismatches() -> None:
