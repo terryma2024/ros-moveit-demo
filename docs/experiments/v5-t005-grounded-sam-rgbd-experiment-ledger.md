@@ -1697,6 +1697,7 @@ linux_matrix_r5_replacement:
   lifecycle: FULL_RESTART
   acceptance_tool_shas:
     matrix_observer_py: 6882f0aec2823b2c48f1e78778fb1f2eed42ea0796f77e4c1794ccf8cd28d14d
+    validate_matrix_py: ec5d686da1646b3f4e916aa0184c118f189b0388ca1de18ae922da8478ccb312
     linux_runner_zsh: bea5d69f6916524fd5080d5246c4ccf19b3bafc3ad47adc2264741cb848542b9
   success_criteria:
     - scene-specific semantic contract, warmed latency <= 2000 ms, truth IoU >= 0.80, unique-scene world pose error < 0.01 m
