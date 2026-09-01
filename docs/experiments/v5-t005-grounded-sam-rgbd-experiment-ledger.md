@@ -33,8 +33,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-008
-next_experiment: BLOCKED_PENDING_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
+latest_checkpoint: CP-009
+next_experiment: EXP-036 linux-matrix-r3-1-task_start
 ```
 
 ## Checkpoints
@@ -1528,4 +1528,94 @@ authorization_boundary:
 blocked_reason: 审批系统拒绝向 ai-station 发送完整 Git 历史，并明确禁止使用替代传输规避；尚无源码传输明确授权
 next_command: NONE；等待用户明确授权最小增量 bundle 传输与 ai-station 新隔离 checkout
 decision: BLOCKED_PENDING_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
+```
+
+## Task 11 exact 7067500 deployment and replacement acceptance plan
+
+用户明确授权把最小增量 bundle 传到 ai-station。Mac 与远端文件 SHA256 均为
+`2baf41e16463ab65fa4c60f3a58515224e43bddfd905b12f80dffd21fb3b47c1`；bundle requires
+`16d56fc1c129b5bb8b45d201db38dd2ab70e62ca`，advertises
+`70675004e3ed66ce6bd5811a8f922565e08f668d`。它不含 datasets、LFS payload、模型或凭据。
+ai-station 新隔离 checkout 为
+`/data/work/so101-v5-t005-grounded-sam-task11-7067500-v2`，main HEAD exact `7067500`，pinned
+submodule exact `71bc9346cf93d6227a6678fcacf63f3e18acfcba`，tracked/index clean。正式 runtime overlay
+固定为 `install-task11-v5`；前三次 build 因 build-time Python/header provenance 失败，v4 虽构建
+成功但 entrypoint 为 system Python，均为 `INVALID` 且保留。v5 由固定 task venv Python 启动
+colcon，两个包构建成功，entrypoint shebang 指向 task venv。
+
+首次 v5 full gate 因错误设置 `SO101_DEMO_EXPECTED_PREFIX` 且新 clone 尚未初始化 gitlink，得到
+`1048 passed, 5 failed`，属于验收环境 `INVALID`。初始化 exact gitlink 并移除错误变量后，新证据
+目录的 full gate 为 `1053 tests, 0 errors, 0 failures`；JUnit SHA256
+`645b36a0dfb35818e6e81125db2fb371f25479398464216cc30d6199ab185967`，pytest log SHA256
+`06abb7149af5939d746cab67a1c8fcc166389bce2754afad9b8265835e43c4a2`。
+
+下列 replacement experiments 在任何 runtime 启动前统一预写。所有运行固定 exact `7067500`、
+bundle manifest `838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3`、prompt
+`plastic cup.`、box/text/duplicate/max/SAM/min-pixels/max-ratio/target-confidence 阈值
+`0.35/0.25/0.85/16/0.75/64/0.50/0.50`、FP32、offline、CPU fallback `false`、freshness
+`2.0 s`、`sim_speed_factor=1.0`。Linux device=`cuda`；Mac device=`mps`。每项都有独立
+request/session/domain/partition/evidence path，生命周期为 `FULL_RESTART`，绝不并行 stack。
+
+```yaml
+replacement_common:
+  four_scene_success: warmed_request_ms<=2000 AND all_source_stamps_exact AND model_runtime_provenance_exact AND cleanup_clean AND scene_specific_success
+  four_scene_invalid: missing_or_mismatched_payload OR observer_or_truth_missing OR provenance_mismatch OR stale_input_before_inference OR infrastructure_failure
+  four_scene_stop: 任一 VALID failure 或 INVALID 立即终止平台批次；修复后从该平台场景1重新计数；INVALID 不进分母
+  pick_success: payload_exact AND semantic_unique_plastic_cup AND mask_depth_tf_source_stamp_exact AND consumer_stamp_exact AND bilateral_grasp AND micro_lift AND place_detach_world_sync_table_support AND final_xy_tilt_gate AND visual_gate AND provenance_exact AND cleanup_clean
+  pick_invalid: missing_required_evidence OR provenance_mismatch OR infrastructure_failure OR observer_not_bound OR stale_input_before_inference
+  pick_stop: 任一 VALID failure 或 INVALID 立即终止平台5轮批次；修复后从第1轮重新计数；INVALID 不进分母
+  no_truth_or_color_dispatch: true
+  no_highest_score_force_selection: true
+  task10_smokes_count: false
+replacement_experiments:
+  - {experiment_id: EXP-036, status: PLANNED, platform: linux, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r3-01-task-start, session_id: linux-matrix-r3-1-task_start, ros_domain_id: 201, partition: v5-t005-linux-matrix-r3-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-1-task_start, prior: EXP-035, next: EXP-037}
+  - {experiment_id: EXP-037, status: PLANNED, platform: linux, phase: four_scene, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r3-02-no-cup, session_id: linux-matrix-r3-2-v5_no_cup, ros_domain_id: 202, partition: v5-t005-linux-matrix-r3-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-2-v5_no_cup, prior: EXP-036_VALID_success, next: EXP-038}
+  - {experiment_id: EXP-038, status: PLANNED, platform: linux, phase: four_scene, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r3-03-two-cups, session_id: linux-matrix-r3-3-v5_two_cups, ros_domain_id: 203, partition: v5-t005-linux-matrix-r3-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-3-v5_two_cups, prior: EXP-037_VALID_success, next: EXP-039}
+  - {experiment_id: EXP-039, status: PLANNED, platform: linux, phase: four_scene, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r3-04-near-bottle, session_id: linux-matrix-r3-4-v5_cup_near_bottle, ros_domain_id: 204, partition: v5-t005-linux-matrix-r3-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r3-4-v5_cup_near_bottle, prior: EXP-038_VALID_success, next: EXP-040}
+  - {experiment_id: EXP-040, status: PLANNED, platform: mac, phase: four_scene, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', headless: false, request_id: mac-matrix-r3-01-task-start, session_id: mac-matrix-r3-1-task_start, ros_domain_id: 205, partition: v5-t005-mac-matrix-r3-01-task-start, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-1-task_start, prior: EXP-039_VALID_success, next: EXP-041}
+  - {experiment_id: EXP-041, status: PLANNED, platform: mac, phase: four_scene, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, headless: false, request_id: mac-matrix-r3-02-no-cup, session_id: mac-matrix-r3-2-v5_no_cup, ros_domain_id: 206, partition: v5-t005-mac-matrix-r3-02-no-cup, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-2-v5_no_cup, prior: EXP-040_VALID_success, next: EXP-042}
+  - {experiment_id: EXP-042, status: PLANNED, platform: mac, phase: four_scene, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', headless: false, request_id: mac-matrix-r3-03-two-cups, session_id: mac-matrix-r3-3-v5_two_cups, ros_domain_id: 207, partition: v5-t005-mac-matrix-r3-03-two-cups, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-3-v5_two_cups, prior: EXP-041_VALID_success, next: EXP-043}
+  - {experiment_id: EXP-043, status: PLANNED, platform: mac, phase: four_scene, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, headless: false, request_id: mac-matrix-r3-04-near-bottle, session_id: mac-matrix-r3-4-v5_cup_near_bottle, ros_domain_id: 208, partition: v5-t005-mac-matrix-r3-04-near-bottle, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/perception-matrix/mac/mac-matrix-r3-4-v5_cup_near_bottle, prior: EXP-042_VALID_success, next: EXP-044}
+  - {experiment_id: EXP-044, status: PLANNED, platform: linux, phase: pick_5_of_5, run: 1, scene: task_start, request_id: linux-pick-r2-01, session_id: linux-pick-final-r2-1, ros_domain_id: 211, partition: v5-t005-linux-pick-final-r2-01, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-r2-1, prior: EXP-043_VALID_success, next: EXP-045}
+  - {experiment_id: EXP-045, status: PLANNED, platform: linux, phase: pick_5_of_5, run: 2, scene: task_start, request_id: linux-pick-r2-02, session_id: linux-pick-final-r2-2, ros_domain_id: 212, partition: v5-t005-linux-pick-final-r2-02, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-r2-2, prior: EXP-044_VALID_success, next: EXP-046}
+  - {experiment_id: EXP-046, status: PLANNED, platform: linux, phase: pick_5_of_5, run: 3, scene: task_start, request_id: linux-pick-r2-03, session_id: linux-pick-final-r2-3, ros_domain_id: 213, partition: v5-t005-linux-pick-final-r2-03, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-r2-3, prior: EXP-045_VALID_success, next: EXP-047}
+  - {experiment_id: EXP-047, status: PLANNED, platform: linux, phase: pick_5_of_5, run: 4, scene: task_start, request_id: linux-pick-r2-04, session_id: linux-pick-final-r2-4, ros_domain_id: 214, partition: v5-t005-linux-pick-final-r2-04, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-r2-4, prior: EXP-046_VALID_success, next: EXP-048}
+  - {experiment_id: EXP-048, status: PLANNED, platform: linux, phase: pick_5_of_5, run: 5, scene: task_start, request_id: linux-pick-r2-05, session_id: linux-pick-final-r2-5, ros_domain_id: 215, partition: v5-t005-linux-pick-final-r2-05, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-r2-5, prior: EXP-047_VALID_success, next: EXP-049}
+  - {experiment_id: EXP-049, status: PLANNED, platform: mac, phase: pick_5_of_5, run: 1, scene: task_start, headless: false, request_id: mac-pick-r2-01, session_id: mac-pick-final-r2-1, ros_domain_id: 221, partition: v5-t005-mac-pick-final-r2-01, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/pick-place/mac/mac-pick-final-r2-1, prior: EXP-048_VALID_success, next: EXP-050}
+  - {experiment_id: EXP-050, status: PLANNED, platform: mac, phase: pick_5_of_5, run: 2, scene: task_start, headless: false, request_id: mac-pick-r2-02, session_id: mac-pick-final-r2-2, ros_domain_id: 222, partition: v5-t005-mac-pick-final-r2-02, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/pick-place/mac/mac-pick-final-r2-2, prior: EXP-049_VALID_success, next: EXP-051}
+  - {experiment_id: EXP-051, status: PLANNED, platform: mac, phase: pick_5_of_5, run: 3, scene: task_start, headless: false, request_id: mac-pick-r2-03, session_id: mac-pick-final-r2-3, ros_domain_id: 223, partition: v5-t005-mac-pick-final-r2-03, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/pick-place/mac/mac-pick-final-r2-3, prior: EXP-050_VALID_success, next: EXP-052}
+  - {experiment_id: EXP-052, status: PLANNED, platform: mac, phase: pick_5_of_5, run: 4, scene: task_start, headless: false, request_id: mac-pick-r2-04, session_id: mac-pick-final-r2-4, ros_domain_id: 224, partition: v5-t005-mac-pick-final-r2-04, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/pick-place/mac/mac-pick-final-r2-4, prior: EXP-051_VALID_success, next: EXP-053}
+  - {experiment_id: EXP-053, status: PLANNED, platform: mac, phase: pick_5_of_5, run: 5, scene: task_start, headless: false, request_id: mac-pick-r2-05, session_id: mac-pick-final-r2-5, ros_domain_id: 225, partition: v5-t005-mac-pick-final-r2-05, evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/pick-place/mac/mac-pick-final-r2-5, prior: EXP-052_VALID_success, next: FINAL_PACKAGE_GATES}
+```
+
+## Checkpoint CP-009
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-035
+current_hypothesis: exact 7067500 v5 overlay 已通过 Linux package gate，可以从 EXP-036 全新 Linux 场景1开始验证 freshness 修复
+working_tree_status: 本地 source/test fix=7067500，ledger prior checkpoint=9091d9d；远端 main/submodule tracked clean，v1-v4 invalid build outputs 与 v5 qualification outputs 均未删除
+owned_processes: NONE；package gate 未启动 ROS/MuJoCo runtime；Linux matrix scene1 尚未启动
+retained_runs:
+  - /tmp/so101-v5-t005-task11-tools/linux-package-7067500-v5
+  - /tmp/so101-v5-t005-task11-tools/linux-package-7067500-v5-r2
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/build-task11-v5
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v5
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11-v5
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/build-task11
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/build-task11-v2
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v2
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11-v2
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/build-task11-v3
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v3
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11-v3
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/build-task11-v4
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v4
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/log-task11-v4
+next_command: 将 EXP-036 更新为 RUNNING；确认 domain 201/partition/session 无 owned graph 后，以唯一 stack 启动 Linux task_start
+decision: RUN_EXP_036_ONLY
 ```
