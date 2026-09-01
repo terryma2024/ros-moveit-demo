@@ -127,6 +127,39 @@ def test_one_shot_outputs_wait_for_discovery_and_ack_before_cleanup() -> None:
     ]
 
 
+def test_output_discovery_watermark_is_sampled_after_the_wait() -> None:
+    """Catch spending the optional discovery timeout after freezing an RGB-D frame."""
+
+    from so101_demo.ros import rgbd_object_pose_node
+
+    current_clock_ns = [10]
+    monotonic_clock = [0.0]
+
+    class Publisher:
+        discovered = False
+
+        def get_subscription_count(self) -> int:
+            return int(self.discovered)
+
+    publishers = (Publisher(), Publisher(), Publisher())
+
+    def spin_once(duration: float) -> None:
+        monotonic_clock[0] += duration
+        current_clock_ns[0] = 20
+        for publisher in publishers:
+            publisher.discovered = True
+
+    watermark = rgbd_object_pose_node._output_discovery_watermark(
+        publishers,
+        now_ns=lambda: current_clock_ns[0],
+        spin_once=spin_once,
+        timeout_s=1.0,
+        monotonic=lambda: monotonic_clock[0],
+    )
+
+    assert watermark == 20
+
+
 def test_one_shot_waits_for_exact_source_transform_before_request() -> None:
     clock = [0.0]
     calls: list[tuple[str, str, int]] = []
