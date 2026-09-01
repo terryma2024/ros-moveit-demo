@@ -635,23 +635,74 @@ def test_grounded_sam_rejects_a_symlinked_model_root_before_nodes(tmp_path: Path
 @pytest.mark.parametrize(
     ("argument", "value"),
     [
-        ("grounding_box_threshold", "-0.01"),
-        ("grounding_text_threshold", "1.01"),
-        ("grounding_duplicate_iou", "nan"),
-        ("grounding_max_candidates", "0"),
-        ("sam_mask_quality_threshold", "1.01"),
-        ("sam_min_mask_pixels", "0"),
-        ("sam_max_mask_area_ratio", "0"),
+        ("grounding_box_threshold", "0"),
+        ("grounding_box_threshold", "1"),
+        ("grounding_text_threshold", "0"),
+        ("grounding_text_threshold", "1"),
+        ("grounding_duplicate_iou", "0"),
+        ("grounding_duplicate_iou", "1"),
+        ("sam_mask_quality_threshold", "0"),
+        ("sam_mask_quality_threshold", "1"),
+        ("sam_max_mask_area_ratio", "1"),
+        ("grounding_max_candidates", "1"),
+        ("sam_min_mask_pixels", "1"),
     ],
 )
-def test_grounded_sam_rejects_out_of_range_thresholds_before_nodes(
+def test_grounded_sam_accepts_threshold_contract_boundaries(
+    tmp_path: Path, argument: str, value: str
+) -> None:
+    bundle = _grounded_bundle(tmp_path)
+
+    _context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / f"accepted-{argument}-{value}.json",
+        perception_backend="grounded_sam",
+        perception_model_root=bundle,
+        perception_model_manifest_sha256="a" * 64,
+        **{argument: value},
+    )
+    assert _node(actions, "scene_setup")
+
+
+@pytest.mark.parametrize(
+    ("argument", "value"),
+    [
+        ("grounding_box_threshold", "-0.01"),
+        ("grounding_box_threshold", "1.01"),
+        ("grounding_box_threshold", "nan"),
+        ("grounding_box_threshold", "inf"),
+        ("grounding_text_threshold", "-0.01"),
+        ("grounding_text_threshold", "1.01"),
+        ("grounding_text_threshold", "nan"),
+        ("grounding_text_threshold", "inf"),
+        ("grounding_duplicate_iou", "-0.01"),
+        ("grounding_duplicate_iou", "1.01"),
+        ("grounding_duplicate_iou", "nan"),
+        ("grounding_duplicate_iou", "inf"),
+        ("sam_mask_quality_threshold", "-0.01"),
+        ("sam_mask_quality_threshold", "1.01"),
+        ("sam_mask_quality_threshold", "nan"),
+        ("sam_mask_quality_threshold", "inf"),
+        ("sam_max_mask_area_ratio", "-0.01"),
+        ("sam_max_mask_area_ratio", "0"),
+        ("sam_max_mask_area_ratio", "1.01"),
+        ("sam_max_mask_area_ratio", "nan"),
+        ("sam_max_mask_area_ratio", "inf"),
+        ("grounding_max_candidates", "0"),
+        ("grounding_max_candidates", "-1"),
+        ("grounding_max_candidates", "1.5"),
+        ("sam_min_mask_pixels", "0"),
+        ("sam_min_mask_pixels", "-1"),
+        ("sam_min_mask_pixels", "1.5"),
+    ],
+)
+def test_grounded_sam_rejects_threshold_values_outside_the_contract(
     tmp_path: Path, argument: str, value: str
 ) -> None:
     bundle = _grounded_bundle(tmp_path)
 
     with pytest.raises(RuntimeError, match=argument):
         _materialize(
-            evidence_file=tmp_path / "result.json",
+            evidence_file=tmp_path / f"rejected-{argument}-{value}.json",
             perception_backend="grounded_sam",
             perception_model_root=bundle,
             perception_model_manifest_sha256="a" * 64,
@@ -665,13 +716,13 @@ def test_grounded_sam_rejects_out_of_range_thresholds_before_nodes(
     [
         ("perception_model_root", "/tmp/grounded-sam-bundle"),
         ("perception_model_manifest_sha256", "a" * 64),
-        ("grounding_box_threshold", "0.35"),
-        ("grounding_text_threshold", "0.25"),
-        ("grounding_duplicate_iou", "0.85"),
-        ("grounding_max_candidates", "16"),
-        ("sam_mask_quality_threshold", "0.75"),
-        ("sam_min_mask_pixels", "64"),
-        ("sam_max_mask_area_ratio", "0.50"),
+        ("grounding_box_threshold", "0.36"),
+        ("grounding_text_threshold", "0.26"),
+        ("grounding_duplicate_iou", "0.84"),
+        ("grounding_max_candidates", "17"),
+        ("sam_mask_quality_threshold", "0.76"),
+        ("sam_min_mask_pixels", "65"),
+        ("sam_max_mask_area_ratio", "0.51"),
     ],
 )
 def test_non_grounded_backends_reject_grounded_sam_only_arguments(
@@ -688,6 +739,34 @@ def test_non_grounded_backends_reject_grounded_sam_only_arguments(
 
     with pytest.raises(RuntimeError, match=argument):
         _materialize(evidence_file=tmp_path / "result.json", **overrides)
+
+
+@pytest.mark.parametrize("backend", ("color_geometry", "yolo_seg"))
+def test_non_grounded_backends_accept_explicit_grounded_sam_default_thresholds(
+    tmp_path: Path, backend: str
+) -> None:
+    overrides: dict[str, object] = {
+        "perception_backend": backend,
+        "grounding_box_threshold": "0.35",
+        "grounding_text_threshold": "0.25",
+        "grounding_duplicate_iou": "0.85",
+        "grounding_max_candidates": "16",
+        "sam_mask_quality_threshold": "0.75",
+        "sam_min_mask_pixels": "64",
+        "sam_max_mask_area_ratio": "0.50",
+    }
+    if backend == "yolo_seg":
+        weights = tmp_path / "best.pt"
+        weights.write_bytes(b"weights-v1")
+        overrides.update(
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        )
+
+    _context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "result.json", **overrides
+    )
+    assert _node(actions, "scene_setup")
 
 
 @pytest.mark.parametrize(
