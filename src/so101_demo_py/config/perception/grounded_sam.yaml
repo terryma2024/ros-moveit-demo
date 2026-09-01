@@ -1,0 +1,21 @@
+schema_version: 1
+pipeline_id: grounding-dino-tiny+sam2.1-hiera-tiny
+models:
+  detector:
+    model_id: IDEA-Research/grounding-dino-tiny
+    revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+    directory: grounding-dino-tiny
+  segmenter:
+    model_id: facebook/sam2.1-hiera-tiny
+    revision: de431c4043854a71d8101e17995dfe596bf101a5
+    directory: sam2.1-hiera-tiny
+prompts:
+  plastic_cup: "plastic cup."
+thresholds:
+  grounding_box: 0.35
+  grounding_text: 0.25
+  duplicate_iou: 0.85
+  max_candidates: 16
+  sam_quality: 0.75
+  min_mask_pixels: 64
+  max_mask_area_ratio: 0.50
