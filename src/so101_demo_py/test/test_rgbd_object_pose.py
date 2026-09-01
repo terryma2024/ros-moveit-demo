@@ -186,6 +186,38 @@ def test_one_shot_waits_for_exact_source_transform_before_request() -> None:
     ]
 
 
+def test_source_watermark_is_refreshed_after_transform_discovery() -> None:
+    """Catch freezing an RGB-D frame while the new tf2 listener is still discovering static TF."""
+
+    from so101_demo.ros import rgbd_object_pose_node
+
+    clock_ns = [10]
+    monotonic_clock = [0.0]
+    calls: list[int] = []
+
+    def can_transform(_target: str, _source: str, stamp_ns: int) -> bool:
+        calls.append(stamp_ns)
+        return len(calls) >= 2
+
+    def spin_once(timeout_s: float) -> None:
+        monotonic_clock[0] += timeout_s
+        clock_ns[0] = 20
+
+    watermark = rgbd_object_pose_node._transform_discovery_watermark(
+        can_transform,
+        target_frame="world",
+        source_frame="task_camera_frame",
+        discovery_stamp_ns=10,
+        now_ns=lambda: clock_ns[0],
+        spin_once=spin_once,
+        timeout_s=0.5,
+        monotonic=lambda: monotonic_clock[0],
+    )
+
+    assert calls == [10, 10]
+    assert watermark == 20
+
+
 def test_overlay_draws_visible_class_and_confidence_label() -> None:
     rgb = np.full((80, 160, 3), 120, dtype=np.uint8)
     frame = DetectionFrame(rgb, 7, "task_camera_frame")
