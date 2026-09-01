@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -155,6 +156,30 @@ def _candidate_document(
     }
 
 
+def _atomic_json_no_replace(path: Path, document: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    payload = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
+    published = False
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError as error:
+            raise FileExistsError("model provenance path already exists") from error
+        published = True
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    if published:
+        _fsync_directory(path.parent)
+
+
 class PerceptionEvidenceWriter:
     def write_model_provenance(
         self, root: Path, document: Mapping[str, object]
@@ -162,7 +187,7 @@ class PerceptionEvidenceWriter:
         path = root / "model-provenance.json"
         if path.exists():
             raise FileExistsError("model provenance path already exists")
-        atomic_json(path, document)
+        _atomic_json_no_replace(path, document)
         return str(path)
 
     def write_detection(

@@ -585,6 +585,20 @@ def test_grounded_sam_cli_constructs_backend_specific_options(
             str(tmp_path / "bundle"),
             "--model-manifest-sha256",
             "a" * 64,
+            "--grounding-box-threshold",
+            "0.40",
+            "--grounding-text-threshold",
+            "0.30",
+            "--duplicate-iou",
+            "0.80",
+            "--max-candidates",
+            "8",
+            "--sam-quality-threshold",
+            "0.70",
+            "--min-mask-pixels",
+            "80",
+            "--max-mask-area-ratio",
+            "0.45",
             "--device",
             "mps",
             "--request-id",
@@ -603,13 +617,49 @@ def test_grounded_sam_cli_constructs_backend_specific_options(
     assert factory_options.backend == "grounded_sam"
     assert factory_options.grounded_model_root == tmp_path / "bundle"
     assert factory_options.grounded_thresholds is not None
-    assert factory_options.grounded_thresholds.box_threshold == 0.35
-    assert factory_options.grounded_thresholds.text_threshold == 0.25
-    assert factory_options.grounded_thresholds.duplicate_iou == 0.85
-    assert factory_options.grounded_thresholds.max_candidates == 16
-    assert factory_options.grounded_thresholds.sam_quality == 0.75
-    assert factory_options.grounded_thresholds.min_mask_pixels == 64
-    assert factory_options.grounded_thresholds.max_mask_area_ratio == 0.50
+    assert factory_options.grounded_thresholds.box_threshold == 0.40
+    assert factory_options.grounded_thresholds.text_threshold == 0.30
+    assert factory_options.grounded_thresholds.duplicate_iou == 0.80
+    assert factory_options.grounded_thresholds.max_candidates == 8
+    assert factory_options.grounded_thresholds.sam_quality == 0.70
+    assert factory_options.grounded_thresholds.min_mask_pixels == 80
+    assert factory_options.grounded_thresholds.max_mask_area_ratio == 0.45
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [("--model-id", "yolo-only-id"), ("--imgsz", "512")],
+)
+def test_grounded_sam_cli_rejects_explicit_yolo_only_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: str, value: str
+) -> None:
+    """Catch Grounded SAM silently accepting a caller's YOLO-only setting."""
+
+    from so101_demo.cli import rgbd_object_pose
+    from so101_demo.ros import rgbd_object_pose_node
+
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "run_rgbd_object_pose",
+        lambda _options: pytest.fail("invalid Grounded-SAM options reached the runner"),
+    )
+    with pytest.raises(SystemExit, match="2"):
+        rgbd_object_pose.main(
+            [
+                "--backend",
+                "grounded_sam",
+                "--model-root",
+                str(tmp_path / "bundle"),
+                "--model-manifest-sha256",
+                "a" * 64,
+                flag,
+                value,
+                "--request-id",
+                "req-001",
+                "--evidence-root",
+                str(tmp_path / "evidence"),
+            ]
+        )
 
 
 @pytest.mark.parametrize(

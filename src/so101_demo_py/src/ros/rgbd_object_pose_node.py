@@ -60,8 +60,8 @@ class RgbdObjectPoseOptions:
     model_manifest_sha256: str | None = None
     device: str = "auto"
     allow_cpu_fallback: bool = False
-    model_id: str = "plastic-cup-yolo11n-seg-v1"
-    imgsz: int = 640
+    model_id: str | None = None
+    imgsz: int | None = None
     grounding_box_threshold: float | None = None
     grounding_text_threshold: float | None = None
     duplicate_iou: float | None = None
@@ -121,12 +121,17 @@ class RgbdObjectPoseOptions:
                 raise ValueError("weights_path must be a regular file")
             if _SHA256.fullmatch(self.weights_sha256) is None:
                 raise ValueError("weights_sha256 must be a lowercase SHA256 digest")
-            if not self.model_id:
+            if self.model_id is not None and not self.model_id:
                 raise ValueError("model_id must be non-empty")
-            if self.imgsz <= 0:
+            if self.imgsz is not None and self.imgsz <= 0:
                 raise ValueError("imgsz must be positive")
         else:
-            if self.weights_path is not None or self.weights_sha256 is not None:
+            if (
+                self.weights_path is not None
+                or self.weights_sha256 is not None
+                or self.model_id is not None
+                or self.imgsz is not None
+            ):
                 raise ValueError("backend configuration mixes YOLO and Grounded SAM artifacts")
             if self.model_root is None:
                 raise ValueError("model_root is required for grounded_sam")
@@ -160,7 +165,11 @@ class RgbdObjectPoseOptions:
             0.0 <= self.confidence_threshold <= 1.0
         ):
             raise ValueError("confidence_threshold must be finite and in [0, 1]")
-        if self.imgsz <= 0 or self.minimum_cup_points <= 0 or self.cluster_min_points <= 0:
+        if (
+            (self.imgsz is not None and self.imgsz <= 0)
+            or self.minimum_cup_points <= 0
+            or self.cluster_min_points <= 0
+        ):
             raise ValueError("image size and point counts must be positive")
         topics = {
             "camera_info_topic": self.camera_info_topic,
@@ -219,8 +228,8 @@ class RgbdObjectPoseOptions:
                 allow_cpu_fallback=self.allow_cpu_fallback,
                 yolo_weights_path=self.weights_path,
                 yolo_weights_sha256=self.weights_sha256,
-                yolo_model_id=self.model_id,
-                yolo_imgsz=self.imgsz,
+                yolo_model_id=self.model_id or "plastic-cup-yolo11n-seg-v1",
+                yolo_imgsz=640 if self.imgsz is None else self.imgsz,
             )
         return DetectorFactoryOptions(
             backend="grounded_sam",
