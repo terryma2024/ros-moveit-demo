@@ -7,14 +7,15 @@ success_contract: 两个平台以同一 commit、模型包 SHA 和阈值通过�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: b55c869c919cd673bf84be8b125cc55a8e6eb98f
-current_qualification_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+current_qualification_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca
 guide_fix_commit: 9450fd77504e4719ca9b6b351cbb4068f81eeb0d
 ledger_baseline_commit: c777f58fc29c6b1e0f7493f3d98032499b4b8052
-repository_head_at_fix_round_2_qualification: 6242fe967c0574e9175965a7e5790aecb9d427f5
-ledger_record_commit: 本字段所在提交；提交完成后的精确 SHA 记录在 Task 9 report，不将 guide commit 或资格 commit 冒充 ledger commit
+ledger_parent_before_fix_round_2_record: f52b8b14e361ed0c85fc2f17ae2e6e43776dc0db
+ledger_record_commit: 本文件不自指提交 SHA；本次 ledger 提交完成后的精确 SHA 记录在 task-10-report.md 的 Commits 段
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869
 development_source_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901
 design: docs/superpowers/specs/2026-09-01-v5-t005-grounded-dino-sam2-rgbd-perception-design.md
+confirmed_result: exact 16d56fc 在 Linux CUDA 与 macOS MPS 上以同一 immutable bundle 完成 actual offline Task 10 smoke 与模拟 PickPlace；本 smoke 不计入 Task 11 四场景或 5/5
 confirmed_conclusions:
   - CONF-001 设计固定使用 IDEA-Research/grounding-dino-tiny 与 facebook/sam2.1-hiera-tiny
   - CONF-002 首版采用 Transformers 进程内推理，逐帧无状态，不启用 SAM 2.1 视频跟踪
@@ -26,14 +27,14 @@ confirmed_conclusions:
   - CONF-008 EXP-004 修正固定错误码、依赖锁、离线环境门禁和 Linux ros2 前缀测试后，macOS 与 ai-station 分别通过 229 项定向测试和 1044 项整包测试
   - CONF-009 EXP-005 删除 verifier 的调用方依赖覆盖入口后，macOS 与 ai-station 分别通过 230 项定向测试和 1045 项整包测试
   - CONF-010 EXP-006 以 exact revisions 构建同一 immutable bundle，Linux/Mac manifest SHA 均为 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
-  - CONF-011 EXP-010 的 Linux CUDA offline one-cup smoke 与模拟 PickPlace 通过；EXP-008 的 Mac MPS 感知成功，但 3851.778834 ms 推理超过 2.0 s source-age gate，动态执行 fail-closed
+  - CONF-011 EXP-012 的 Linux CUDA 与 macOS MPS actual offline one-cup smoke 及模拟 PickPlace 均通过；Mac source age 为 1.626 s，未放宽 2.0 s gate；本 smoke 不计入 Task 11
+  - CONF-012 最终 Mac exact 16d56fc 批次已按 53 项（49 regular、4 symlink）完整 inventory 复制到 durable root 并逐项 read-back；inventory、archive、verify log SHA256 分别为 4049e685881ee4b6aa54f2f302c79b7c578cdc58ceec10002805a3839d057d8e、a81069e24f8c26314743354890683b2b3e7fa1fecf446877ea39b517f68cdd34、26c232170d1323ae713555a5f7007d80a651e1c0e268420d571e02fdb2028ac7
 open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
-  - HYP-003 两阶段 warmed request latency 在两个平台都能 <= 2000 ms
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-005
-next_experiment: Task 11 暂停；先以新实验解决 Mac MPS 3851.778834 ms > 2000 ms 的能力缺口，禁止放宽 source-age safety gate
+latest_checkpoint: CP-006
+next_experiment: Task 11 Step 1 — 预写四场景实验矩阵；首个运行 linux-matrix-1-task_start
 ```
 
 ## Checkpoints
@@ -903,12 +904,14 @@ observed:
   - OBSERVED Mac exact 16d56fc full stack 在 MPS FP32、CPU fallback false、offline、同 bundle/阈值下通过：inference_latency_ms=1506.458875，request_latency_ms=1575.570042，3 raw/1 eligible、640x480/4651px mask、Depth/TF 与源时间戳 /cup_pose；observer 记录 source=19.938 s、consumer=21.564 s、age=1.626 s < 2.0 s
   - OBSERVED Mac dynamic workflow DONE/19 transitions；VERIFY_PHYSICAL_GRASP left=1/right=1、table_contact=false、lift 约 0.004069 m、max force=0.5652395 N；final_xy_error_m=0.002020139、tilt=0.004522784 rad、table_contact=true
   - OBSERVED Mac RED/GREEN freshness tests 均保留；最终 directed 151/151、full 1052/1052。源码测试提交依次为 157c8f0、ec125ec、16d56fc
-  - OBSERVED ai-station exact 16d56fc checkout clean，submodule 71bc934；install-task10-v5 的 rgbd_object_pose shebang 指向 `/data/work/venvs/so101-grounded-sam/bin/python`，package prefix/module 指向该隔离 checkout，rclpy 仍来自 `/opt/ros/jazzy`，torch 2.13.0+cu130/CUDA true/RTX 5080
+  - OBSERVED ai-station exact 16d56fc tracked source clean，submodule 71bc934；当前未跟踪生成目录为 build-task10-v4、install-task10-v4、log-task10-v4、build-task10-v5、install-task10-v5、log-task10-v5。v4 三项作为 deletion candidates 保留，v5 三项作为本次资格 overlay/log 保留，均未清理；install-task10-v5 的 rgbd_object_pose shebang 指向 `/data/work/venvs/so101-grounded-sam/bin/python`，package prefix/module 指向该隔离 checkout，rclpy 仍来自 `/opt/ros/jazzy`，torch 2.13.0+cu130/CUDA true/RTX 5080
   - OBSERVED Linux directed 151/151、仓库根 full 1052/1052（4 个既有 fork warnings）；保留一次未 ignore third_party dependency 的 build failure，以及一次 colcon package-cwd 下 11 个旧相对仓库根测试失败的无效批次
   - OBSERVED Linux exact 16d56fc actual offline smoke 为 status=OK、runtime_device=cuda、fallback false、inference=155.56822 ms、request=276.020068 ms、cold=8624.091031 ms、3 raw/1 eligible、640x480/4643px mask、非空 176016-byte cloud、Depth/TF center_world_xyz=[0.02009484,-0.28046013,0.165]，/cup_pose 与 dynamic input source_stamp_ns 均为 13444000000
   - OBSERVED Linux dynamic DONE/19 transitions；bilateral=true、micro_lift=0.003951946 m、table_contact=false、verify left/right=1/1、max force=0.577346792 N；final_xy_error_m=0.002044364、tilt=0.004583883 rad、table_contact=true
   - OBSERVED 两端 manifest SHA 均为 838c5154...8b3，detector revision a2bb814...、segmenter revision de431c4...；actual smoke 均设置 HF_HUB_OFFLINE=1 与 TRANSFORMERS_OFFLINE=1，loader 继续强制 local_files_only=True；两端 cleanup 为 owned processes/domain NONE
-  - OBSERVED Linux validation.json SHA256=7af2d2833108d319a4c0e47afb44b2fb0f7355fb7da885ce6a8f0366e40c62d3；Mac final log/result/dynamic/observer SHA256 分别为 4eacd19d...073e、1ab15acc...787、cb8157a9...25c4、29c262b9...70df
+  - OBSERVED Linux validation.json SHA256=7af2d2833108d319a4c0e47afb44b2fb0f7355fb7da885ce6a8f0366e40c62d3；Mac final log/result/dynamic/observer SHA256 分别为 4eacd19d9ad3c81b8dab82f17c032c94d3f1159329c21ca9fb0a3831a23e073e、1ab15acc0c1e00f432bdf2666b5e2a7b6067ceb6adbd3f30870947c4dba26787、cb8157a9ed56449ba28fd85ccfa7a5a81a20348a8c8938b0a91f8d9c28c825c4、29c262b94d6eef2153d87ab6755e1e82bfadf00252b34bdafb802d75937170df
+  - OBSERVED Mac 最终批次 `/tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-output-discovery/` 的 immutable inventory 登记 53 项：49 regular、4 symlink；symlink 只登记 link target 且不跟随，权威批次无 `._*` AppleDouble sidecar。inventory SHA256=4049e685881ee4b6aa54f2f302c79b7c578cdc58ceec10002805a3839d057d8e，archive SHA256=a81069e24f8c26314743354890683b2b3e7fa1fecf446877ea39b517f68cdd34
+  - OBSERVED durable read-back 位于 ai-station `/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/macos/fix-round-1-output-discovery-readback/`；逐项核对 path/type/size/SHA/count 全部通过，readback-verify.log SHA256=26c232170d1323ae713555a5f7007d80a651e1c0e268420d571e02fdb2028ac7
 inferred:
   - INFERRED 原 3851.778834 ms 是正式 shape/batch 首次调度和错误的帧生命周期排序共同造成，不能判定 MPS 模型能力不足；正式 warm-up 加 post-discovery 新帧门禁后，未放宽 2.0 s freshness 即能完成 actual full stack
   - INFERRED 修复没有改变逐帧无状态、scene/model/revisions/prompt/thresholds/FP32/fallback 或 freshness；它只使 READY 和采帧边界与既有接口语义一致
@@ -920,8 +923,9 @@ evidence:
   - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-output-discovery/
   - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-round-1-formal-warmup/
   - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-round-1-output-discovery/linux/
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/macos/fix-round-1-output-discovery-readback/
 decision: KEEP
-next_experiment: Task 10 independent review; Task 11 remains separate and uncounted
+next_experiment: Task 11 Step 1 — 预写四场景实验矩阵；首个运行 linux-matrix-1-task_start；Task 10 smoke 保持 separate and uncounted
 ```
 
 ## Checkpoint CP-006
@@ -930,7 +934,7 @@ next_experiment: Task 10 independent review; Task 11 remains separate and uncoun
 checkpoint_id: CP-006
 last_valid_experiment: EXP-012
 current_hypothesis: exact 16d56fc 的 formal-shape/multi-box warm-up 与 post-discovery freshness watermark 已使同 bundle Mac MPS/Linux CUDA actual offline smoke 都在既有安全门内完成
-working_tree_status: 三个源码/测试修复已分别提交为 157c8f0、ec125ec、16d56fc；本 checkpoint 仅包含 ledger 更新，SDD report/progress 为 ignored local orchestration
+working_tree_status: 三个源码/测试修复已分别提交为 157c8f0、ec125ec、16d56fc；Mac tracked worktree 与 ai-station exact 16d56fc tracked source 均 clean。ai-station 未跟踪生成目录 v4/v5 的 disposition 见 retained_runs/deletion_candidates；本 checkpoint 仅包含 ledger 更新，SDD report/progress 为 ignored local orchestration
 owned_processes: NONE on Mac final domain and ai-station ROS_DOMAIN_ID=157
 preserved_processes: canonical `/data/work/ws_moveit` 只读且其用户未跟踪文档保持不变；未运行真实机械臂
 retained_runs:
@@ -940,6 +944,10 @@ retained_runs:
   - /Users/matianyi/Models/so101/grounded-sam-v1
   - /data/work/so101-v5-t005-grounded-sam-task10-16d56fc
   - /data/work/so101-v5-t005-grounded-sam-task10-157c8f0
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/macos/fix-round-1-output-discovery-readback
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/build-task10-v5
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/log-task10-v5
 archived_runs: []
 deletion_candidates:
   - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-d870113
@@ -952,6 +960,6 @@ deletion_candidates:
   - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-task10-watermark-v2
   - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2
   - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/log-task10-watermark-v2
-decision: TASK10_FIX_ROUND_1_VALID
-next_command: independent review Task 10；不得把本 smoke 计入 Task 11 5/5
+decision: TASK10_FIX_ROUND_2_VALID
+next_command: Task 11 Step 1 — 预写四场景实验矩阵；首个运行 linux-matrix-1-task_start；不得把 Task 10 smoke 计入 Task 11 5/5
 ```
