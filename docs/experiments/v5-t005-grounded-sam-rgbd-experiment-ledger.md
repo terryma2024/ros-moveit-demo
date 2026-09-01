@@ -35,8 +35,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-011
-next_experiment: EXP-058 linux-matrix-r5-1-task_start
+latest_checkpoint: CP-012
+next_experiment: EXP-062 linux-matrix-r6-1-task_start
 ```
 
 ## Checkpoints
@@ -1709,10 +1709,10 @@ linux_matrix_r5_replacement:
   stop_criteria:
     - any VALID failure or INVALID stops r5 immediately; after correction restart from EXP-058 with new IDs/roots
   experiments:
-    - {experiment_id: EXP-058, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r5-1-task_start, session_id: linux-matrix-r5-1-task_start, ros_domain_id: 241, partition: v5-t005-linux-matrix-r5-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r5-1-task_start, prior: EXP-054_INVALID_and_independent_clean_readback, next: EXP-059}
-    - {experiment_id: EXP-059, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r5-2-v5_no_cup, session_id: linux-matrix-r5-2-v5_no_cup, ros_domain_id: 242, partition: v5-t005-linux-matrix-r5-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r5-2-v5_no_cup, prior: EXP-058_VALID_success, next: EXP-060}
-    - {experiment_id: EXP-060, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r5-3-v5_two_cups, session_id: linux-matrix-r5-3-v5_two_cups, ros_domain_id: 243, partition: v5-t005-linux-matrix-r5-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r5-3-v5_two_cups, prior: EXP-059_VALID_success, next: EXP-061}
-    - {experiment_id: EXP-061, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r5-4-v5_cup_near_bottle, session_id: linux-matrix-r5-4-v5_cup_near_bottle, ros_domain_id: 244, partition: v5-t005-linux-matrix-r5-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r5-4-v5_cup_near_bottle, prior: EXP-060_VALID_success, next: EXP-040}
+    - {experiment_id: EXP-058, status: INVALID_PRESTART, order: 1, scene: task_start, observed: remote_runner_mode_0644_direct_execution_rc_126_before_root_or_stack, request_id: linux-matrix-r5-1-task_start, session_id: linux-matrix-r5-1-task_start, ros_domain_id: 241, partition: v5-t005-linux-matrix-r5-01-task-start, evidence: NONE_ROOT_ABSENT, prior: EXP-054_INVALID_and_independent_clean_readback, next: STOP_R5_BATCH}
+    - {experiment_id: EXP-059, status: NOT_RUN_BATCH_STOPPED, order: 2, scene: v5_no_cup, request_id: linux-matrix-r5-2-v5_no_cup, session_id: linux-matrix-r5-2-v5_no_cup, ros_domain_id: 242, partition: v5-t005-linux-matrix-r5-02-no-cup, evidence: NONE, prior: EXP-058_INVALID_PRESTART, next: NONE}
+    - {experiment_id: EXP-060, status: NOT_RUN_BATCH_STOPPED, order: 3, scene: v5_two_cups, request_id: linux-matrix-r5-3-v5_two_cups, session_id: linux-matrix-r5-3-v5_two_cups, ros_domain_id: 243, partition: v5-t005-linux-matrix-r5-03-two-cups, evidence: NONE, prior: EXP-058_INVALID_PRESTART, next: NONE}
+    - {experiment_id: EXP-061, status: NOT_RUN_BATCH_STOPPED, order: 4, scene: v5_cup_near_bottle, request_id: linux-matrix-r5-4-v5_cup_near_bottle, session_id: linux-matrix-r5-4-v5_cup_near_bottle, ros_domain_id: 244, partition: v5-t005-linux-matrix-r5-04-near-bottle, evidence: NONE, prior: EXP-058_INVALID_PRESTART, next: NONE}
 ```
 
 ## Checkpoint CP-011
@@ -1731,4 +1731,44 @@ archived_runs: []
 deletion_candidates: [CP-009 已登记的 invalid build/test outputs, invalid r3/r4 acceptance batches after explicit user authorization only]
 next_command: 限定提交 CP-011 ledger；复制并回读新 acceptance tools SHA；核验 domain 241/session/partition/root 后仅启动 EXP-058
 decision: RUN_EXP_058_ONLY_AFTER_LEDGER_COMMIT
+```
+
+## Task 11 Linux matrix r5 pre-start invalidation and r6 replacement
+
+EXP-058 的 direct runner invocation 在远端 shell 层返回 `126 permission denied`。`scp` 保留了
+文件内容 SHA，但远端 mode 是 `0644`，所以 ROS/MuJoCo 未启动，目标 durable root 未创建，domain
+241 daemon-free 回读无 node，owned runtime process 为 NONE。按 precondition evidence 缺失判为
+`INVALID_PRESTART`，r5 批次终止，不复用 EXP-058。r6 唯一变化是把 runner executable mode `0755`
+及其 readback 加入 precondition；生产与 acceptance tool 内容 SHA 均不变。
+
+```yaml
+linux_matrix_r6_replacement:
+  common: linux_matrix_r5_replacement.success_criteria / linux_matrix_r5_replacement.invalid_criteria / linux_matrix_r5_replacement.stop_criteria
+  source_commit: 70675004e3ed66ce6bd5811a8f922565e08f668d
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2/install-task11-v5
+  runtime_device: cuda
+  lifecycle: FULL_RESTART
+  additional_precondition:
+    - remote runner full SHA is bea5d69f6916524fd5080d5246c4ccf19b3bafc3ad47adc2264741cb848542b9 and executable mode is 0755 before RUNNING
+  experiments:
+    - {experiment_id: EXP-062, status: PLANNED, order: 1, scene: task_start, expected: exactly_one_eligible_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', request_id: linux-matrix-r6-1-task_start, session_id: linux-matrix-r6-1-task_start, ros_domain_id: 251, partition: v5-t005-linux-matrix-r6-01-task-start, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-1-task_start, prior: EXP-058_INVALID_PRESTART_and_clean_readback, next: EXP-063}
+    - {experiment_id: EXP-063, status: PLANNED, order: 2, scene: v5_no_cup, expected: TARGET_NOT_FOUND_and_no_new_or_stale_pose, request_id: linux-matrix-r6-2-v5_no_cup, session_id: linux-matrix-r6-2-v5_no_cup, ros_domain_id: 252, partition: v5-t005-linux-matrix-r6-02-no-cup, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-2-v5_no_cup, prior: EXP-062_VALID_success, next: EXP-064}
+    - {experiment_id: EXP-064, status: PLANNED, order: 3, scene: v5_two_cups, expected: TARGET_AMBIGUOUS_exactly_two_eligible_and_no_new_or_stale_pose, truth_iou_each: '>=0.80', request_id: linux-matrix-r6-3-v5_two_cups, session_id: linux-matrix-r6-3-v5_two_cups, ros_domain_id: 253, partition: v5-t005-linux-matrix-r6-03-two-cups, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-3-v5_two_cups, prior: EXP-063_VALID_success, next: EXP-065}
+    - {experiment_id: EXP-065, status: PLANNED, order: 4, scene: v5_cup_near_bottle, expected: unique_cup_mask_zero_bottle_pixels_and_source_stamped_pose, truth_iou: '>=0.80', pose_error_m: '<0.01', bottle_overlap_pixels: 0, request_id: linux-matrix-r6-4-v5_cup_near_bottle, session_id: linux-matrix-r6-4-v5_cup_near_bottle, ros_domain_id: 254, partition: v5-t005-linux-matrix-r6-04-near-bottle, evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-4-v5_cup_near_bottle, prior: EXP-064_VALID_success, next: EXP-040}
+```
+
+## Checkpoint CP-012
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-035
+last_invalid_experiment: EXP-058
+current_hypothesis: r5 pre-start failure only来自 remote file mode；在内容 SHA 不变且 0755 readback 后，r6 可从新场景1运行
+working_tree_status: 生产和 acceptance tool 内容未变；ledger 结算 r5 INVALID_PRESTART 并预写 r6
+owned_processes: NONE；domain 241 daemon-free node list empty；r5 evidence root ABSENT
+retained_runs: [CP-011 retained runs]
+archived_runs: []
+deletion_candidates: [CP-011 deletion candidates]
+next_command: 限定提交 CP-012 ledger；设置 remote runner mode 0755 并回读 SHA/mode；核验 domain 251/session/partition/root 后仅启动 EXP-062
+decision: RUN_EXP_062_ONLY_AFTER_LEDGER_COMMIT
 ```
