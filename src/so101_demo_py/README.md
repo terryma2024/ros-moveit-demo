@@ -14,11 +14,11 @@ gate applies, and where to find the detailed architecture and source guides.
 |---|---|---|---|
 | Start MuJoCo, controllers, MoveIt, and the Planning Scene | `so101_mujoco.launch.py` | Stack readiness only | [Launch parameters](../../docs/pick-place-launch-parameters.md) |
 | Run the fixed-waypoint cup workflow | `so101_mujoco_pick_place.launch.py` | Fixed policy planning or execution | [Python architecture](../../docs/pick-place-python-architecture.md) |
-| Consume a supplied `/cup_pose` | `dynamic_cup_pick_place` | Dynamic target calculation and planning/execution | [Dynamic cup source guide](../../docs/so101-dynamic-cup-pick-place-source-guide.md) |
-| Detect the cup from RGB-D and pick it | `so101_mujoco_perception_pick_place` | Camera-to-pose-to-motion integration | [RGB-D source guide](../../docs/so101-rgbd-perception-pick-place-source-guide.md) |
-| Preview a bounded natural-language cup task | `text_pick_agent` | Planner and command validation without starting a ROS stack | [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md) |
-| Run natural language, RGB-D perception, and dynamic pick-place in one owned stack | `so101_mujoco_text_pick_agent.launch.py` | Full Text Agent to MuJoCo integration | [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md) |
-| Keep one visible MuJoCo environment alive for multiple points | `so101_mujoco_task_station.launch.py` or `so101_mujoco_rgbd_batch` | `RESET_WORLD` task-station workflow | [RGB-D task-station guide](../../docs/so101-rgbd-perception-pick-place-source-guide.md) |
+| Consume a supplied `/cup_pose` | `dynamic_cup_pick_place` | Dynamic target calculation and planning/execution | [Dynamic cup source guide](../../docs/guides/so101-dynamic-cup-pick-place-source-guide.md) |
+| Detect the cup from RGB-D and pick it | `so101_mujoco_perception_pick_place` | Camera-to-pose-to-motion integration | [RGB-D source guide](../../docs/guides/so101-rgbd-perception-pick-place-source-guide.md) |
+| Preview a bounded natural-language cup task | `text_pick_agent` | Planner and command validation without starting a ROS stack | [Text Pick Agent source guide](../../docs/guides/so101-text-pick-agent-source-guide.md) |
+| Run natural language, RGB-D perception, and dynamic pick-place in one owned stack | `so101_mujoco_text_pick_agent.launch.py` | Full Text Agent to MuJoCo integration | [Text Pick Agent source guide](../../docs/guides/so101-text-pick-agent-source-guide.md) |
+| Keep one visible MuJoCo environment alive for multiple points | `so101_mujoco_task_station.launch.py` or `so101_mujoco_rgbd_batch` | `RESET_WORLD` task-station workflow | [RGB-D task-station guide](../../docs/guides/so101-rgbd-perception-pick-place-source-guide.md) |
 | Compare the shared workflow on Gazebo | `so101_gazebo_pick_place.launch.py` | Functional comparison, not MuJoCo qualification | [Shared architecture](../../docs/pick-place-architecture.md) |
 
 ## Quick start and installed-runtime provenance
@@ -433,7 +433,7 @@ within that window. Increasing the timeout does not replay a volatile
 `/cup_pose` sample that was published before the subscriber became ready.
 
 Do not copy session, epoch, digest, or provenance values from an old run. See
-the [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md)
+the [Text Pick Agent source guide](../../docs/guides/so101-text-pick-agent-source-guide.md)
 for provider boundaries, confirmation construction, request claiming, and
 evidence interpretation.
 
@@ -511,12 +511,12 @@ process.
   provenance.
 - [SO-101 Python architecture](../../docs/pick-place-python-architecture.md):
   package layers, ports, adapters, runtime composition, and execution flow.
-- [Dynamic Cup Pick Place source guide](../../docs/so101-dynamic-cup-pick-place-source-guide.md):
+- [Dynamic Cup Pick Place source guide](../../docs/guides/so101-dynamic-cup-pick-place-source-guide.md):
   `/cup_pose`, dynamic target generation, IK, MoveIt, attachment, and evidence.
-- [RGB-D Perception PickPlace source guide](../../docs/so101-rgbd-perception-pick-place-source-guide.md):
+- [RGB-D Perception PickPlace source guide](../../docs/guides/so101-rgbd-perception-pick-place-source-guide.md):
   RGB-D synchronization, point clouds, TF, pose estimation, task station, and
   batch validation.
-- [Text Pick Agent source guide](../../docs/so101-text-pick-agent-source-guide.md):
+- [Text Pick Agent source guide](../../docs/guides/so101-text-pick-agent-source-guide.md):
   DeepSeek/Ollama planning, closed schemas, reviewed or explicitly bypassed
   confirmation, dispatch, and provider/runtime evidence.
 

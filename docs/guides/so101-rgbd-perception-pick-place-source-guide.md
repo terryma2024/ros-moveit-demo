@@ -47,7 +47,7 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place ...
 ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py ...
 ```
 
-console script 注册在 [`setup.py`](../src/so101_demo_py/setup.py)。`ros2 run` 入口由 [`perception_pick_place_launch.py`](../src/so101_demo_py/src/cli/perception_pick_place_launch.py) 创建 `LaunchService`，并保留失败子进程的退出码；公开 launch 文件只是把工作委托给同一个 [`build_perception_pick_place_launch_description()`](../src/so101_demo_py/src/runtime/launch_composition.py)。
+console script 注册在 [`setup.py`](../../src/so101_demo_py/setup.py)。`ros2 run` 入口由 [`perception_pick_place_launch.py`](../../src/so101_demo_py/src/cli/perception_pick_place_launch.py) 创建 `LaunchService`，并保留失败子进程的退出码；公开 launch 文件只是把工作委托给同一个 [`build_perception_pick_place_launch_description()`](../../src/so101_demo_py/src/runtime/launch_composition.py)。
 
 执行模式会启动以下组件：
 
@@ -62,7 +62,7 @@ console script 注册在 [`setup.py`](../src/so101_demo_py/setup.py)。`ros2 run
 | RGB-D 感知 | `so101_demo_py/rgbd_cup_pose` | 发布后等待统一关停 | 读取一帧有效 RGB-D，生成点云和 `world` 杯子 Pose，写感知证据 |
 | 动态抓放 | `so101_demo_py/dynamic_cup_pick_place` | 一次任务 | 消费 `/cup_pose`，规划、执行并验证完整 pick-place |
 
-组件清单的源码入口是 [`_mujoco_stack_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py) 和 [`_mujoco_perception_execute_actions()`](../src/so101_demo_py/src/runtime/launch_composition.py)。
+组件清单的源码入口是 [`_mujoco_stack_actions()`](../../src/so101_demo_py/src/runtime/launch_composition.py) 和 [`_mujoco_perception_execute_actions()`](../../src/so101_demo_py/src/runtime/launch_composition.py)。
 
 本文后半部分还会使用第二个入口 `so101_mujoco_task_station.launch.py`。它只启动一次
 MuJoCo、MoveIt、controller、相机 TF 和可选 Teleop，然后由批处理器在这个长驻环境里逐点
@@ -134,17 +134,17 @@ flowchart LR
 | `/get_planning_scene` | `moveit_msgs/srv/GetPlanningScene` | MoveIt | `scene_setup`、动态执行器 | 独立回读 world/attached 状态 |
 | `/so101/simulation/evidence` | `mujoco_ros2_control_msgs/msg/SimulationEvidence` | SimulationEvidencePlugin | 动态执行器 | 杯子物理 Pose、接触、支撑、session 和 reset epoch |
 
-控制器定义见 [`ros2_controllers.yaml`](../src/so101_demo_py/config/mujoco/ros2_controllers.yaml)，MoveIt 到 controller 的映射见 [`moveit_controllers.yaml`](../src/so101_demo_py/config/mujoco/moveit_controllers.yaml)，相机和物理证据插件配置见 [`mujoco_plugins.yaml`](../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)。
+控制器定义见 [`ros2_controllers.yaml`](../../src/so101_demo_py/config/mujoco/ros2_controllers.yaml)，MoveIt 到 controller 的映射见 [`moveit_controllers.yaml`](../../src/so101_demo_py/config/mujoco/moveit_controllers.yaml)，相机和物理证据插件配置见 [`mujoco_plugins.yaml`](../../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)。
 
 ## 4. RGB-D 数据从哪里来
 
-MJCF 场景 [`scene.xml`](../src/so101_demo_py/assets/mujoco/scene.xml) 定义了：
+MJCF 场景 [`scene.xml`](../../src/so101_demo_py/assets/mujoco/scene.xml) 定义了：
 
 ```xml
 <camera name="task_camera" resolution="640 480" .../>
 ```
 
-CameraPlugin 以 10 Hz streaming policy 发布三条相机 topic，frame 都是 `task_camera_frame`。插件为 RGB、Depth 和 CameraInfo 写入同一个 source stamp；深度编码是 `32FC1`，单位为米。插件实现位于 [`camera_plugin.cpp`](../third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp)。
+CameraPlugin 以 10 Hz streaming policy 发布三条相机 topic，frame 都是 `task_camera_frame`。插件为 RGB、Depth 和 CameraInfo 写入同一个 source stamp；深度编码是 `32FC1`，单位为米。插件实现位于 [`camera_plugin.cpp`](../../third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp)。
 
 一体化感知依赖渲染，所以 production launch 默认：
 
@@ -156,7 +156,7 @@ headless:=false
 
 ## 5. 为什么必须严格对齐三条消息
 
-[`AlignedRgbdBuffer`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 分别缓存 CameraInfo、RGB 和 Depth，并只返回 source stamp 完全相同的三元组：
+[`AlignedRgbdBuffer`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 分别缓存 CameraInfo、RGB 和 Depth，并只返回 source stamp 完全相同的三元组：
 
 ```text
 camera_info.stamp == color.stamp == depth.stamp
@@ -184,7 +184,7 @@ cx = K[2]
 cy = K[5]
 ```
 
-对像素 `(u, v)` 和深度 `z`，[`back_project_depth()`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 使用针孔相机模型：
+对像素 `(u, v)` 和深度 `z`，[`back_project_depth()`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 使用针孔相机模型：
 
 ```text
 x = (u - cx) * z / fx
@@ -200,7 +200,7 @@ z = depth[v, u]
 
 ### 7.1 颜色候选
 
-[`orange_cup_mask()`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 针对当前 MuJoCo 橙色杯子使用固定 RGB 阈值：
+[`orange_cup_mask()`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 针对当前 MuJoCo 橙色杯子使用固定 RGB 阈值：
 
 ```text
 R >= 140
@@ -221,7 +221,7 @@ eps = 0.02 m
 min_points = 5
 ```
 
-[`largest_cluster_indices()`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 丢弃 noise label，只保留最大的非噪声 cluster。最终 cluster 少于 50 个点时整帧失败，不会发布一个低置信度 fallback Pose。
+[`largest_cluster_indices()`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py) 丢弃 noise label，只保留最大的非噪声 cluster。最终 cluster 少于 50 个点时整帧失败，不会发布一个低置信度 fallback Pose。
 
 `rgbd_point_cloud` 可单独观察这一阶段：
 
@@ -231,13 +231,13 @@ ros2 run so101_demo_py rgbd_point_cloud \
   --output-ply /tmp/so101-cup-cloud.ply
 ```
 
-它会等待一帧对齐样本、保存 PLY，并用三轴中位数输出一个相机 frame 的调试中心。生产 launch 不启动这个进程；[`rgbd_cup_pose_node.py`](../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py) 直接复用同一个 `build_cup_point_cloud()`，避免通过文件或第二条 ROS topic 中转点云。
+它会等待一帧对齐样本、保存 PLY，并用三轴中位数输出一个相机 frame 的调试中心。生产 launch 不启动这个进程；[`rgbd_cup_pose_node.py`](../../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py) 直接复用同一个 `build_cup_point_cloud()`，避免通过文件或第二条 ROS topic 中转点云。
 
 ## 8. tf2 如何把相机点变成世界点
 
 ### 8.1 TF Tree
 
-机器人 URDF [`so101.urdf`](../src/so101_demo_py/assets/mujoco/so101.urdf) 定义固定 `world -> base`。感知 launch 再从 [`camera_tf.py`](../src/so101_demo_py/src/runtime/camera_tf.py) 启动两条静态外参：
+机器人 URDF [`so101.urdf`](../../src/so101_demo_py/assets/mujoco/so101.urdf) 定义固定 `world -> base`。感知 launch 再从 [`camera_tf.py`](../../src/so101_demo_py/src/runtime/camera_tf.py) 启动两条静态外参：
 
 ```text
 world
@@ -268,7 +268,7 @@ ros2 run tf2_ros static_transform_publisher \
 
 ### 8.2 必须查询图像原始时间戳
 
-[`estimate_cup_pose_frame()`](../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py) 请求：
+[`estimate_cup_pose_frame()`](../../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py) 请求：
 
 ```text
 lookup_transform(
@@ -282,7 +282,7 @@ lookup_transform(
 
 ### 8.3 刚体变换
 
-[`transform_points()`](../src/so101_demo_py/src/cli/rgbd_cup_pose.py) 先归一化 tf2 四元数，再应用：
+[`transform_points()`](../../src/so101_demo_py/src/cli/rgbd_cup_pose.py) 先归一化 tf2 四元数，再应用：
 
 ```text
 p_world = R_world_camera * p_camera + t_world_camera
@@ -301,7 +301,7 @@ p_world = R_world_camera * p_camera + t_world_camera
   -> 最小二乘拟合圆
 ```
 
-[`fit_circle_xy()`](../src/so101_demo_py/src/cli/rgbd_cup_pose.py) 求解：
+[`fit_circle_xy()`](../../src/so101_demo_py/src/cli/rgbd_cup_pose.py) 求解：
 
 ```text
 2*x*cx + 2*y*cy + c = x^2 + y^2
@@ -354,7 +354,7 @@ pose:
 
 ## 11. 动态抓取如何消费这条 Pose
 
-[`RosCupPoseSource`](../src/so101_demo_py/src/ros/cup_pose_source.py) 等待 `/cup_pose`，并校验：
+[`RosCupPoseSource`](../../src/so101_demo_py/src/ros/cup_pose_source.py) 等待 `/cup_pose`，并校验：
 
 - `frame_id == world`；
 - source stamp 非零；
@@ -364,7 +364,7 @@ pose:
 
 它冻结第一条完全合法的样本，然后销毁 subscription。后续状态不会每帧追逐视觉噪声。
 
-[`dynamic_runtime.py`](../src/so101_demo_py/src/ros/dynamic_runtime.py) 随后依次：
+[`dynamic_runtime.py`](../../src/so101_demo_py/src/ros/dynamic_runtime.py) 随后依次：
 
 1. 从 MuJoCo 原子证据读取杯子真值；
 2. 从 MoveIt Planning Scene 回读杯子对象；
@@ -377,7 +377,7 @@ pose:
 
 ## 12. MoveIt、controller 和 MuJoCo 如何闭环
 
-[`RosDynamicMujocoExecution`](../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py) 对手臂动作执行以下闭环：
+[`RosDynamicMujocoExecution`](../../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py) 对手臂动作执行以下闭环：
 
 ```text
 感知 cup Pose
@@ -501,7 +501,7 @@ evidence_file:=/tmp/so101-debug-rgbd-tutorial-001/forward.json
 
 不要把四个 keyframe 在同一个未重启 stack 中的结果混算成四次 `FULL_RESTART`。
 
-当前 macOS 资格批次记录在 [`macos-four-preset-post-reconcile-experiment-ledger.md`](experiments/macos-four-preset-post-reconcile-experiment-ledger.md)。固定源码为 `main@b6adf1b`，`mujoco_ros2_control` 为 `0.1.0`、child commit `5e9d67c`。四次独立完整重启结果是：
+当前 macOS 资格批次记录在 [`macos-four-preset-post-reconcile-experiment-ledger.md`](../experiments/macos-four-preset-post-reconcile-experiment-ledger.md)。固定源码为 `main@b6adf1b`，`mujoco_ros2_control` 为 `0.1.0`、child commit `5e9d67c`。四次独立完整重启结果是：
 
 | Keyframe | 感知位置误差 | 最大 TCP 终点误差 | 最终放置 XY 误差 | 结果 |
 |---|---:|---:|---:|---|
@@ -516,7 +516,7 @@ evidence_file:=/tmp/so101-debug-rgbd-tutorial-001/forward.json
 
 ### 15.2 新工作站：一次启动、逐点 RESET_WORLD
 
-日常观察和批量回归使用 [`so101_mujoco_rgbd_batch`](../src/so101_demo_py/src/cli/mujoco_rgbd_batch.py)。它把生命周期改为：
+日常观察和批量回归使用 [`so101_mujoco_rgbd_batch`](../../src/so101_demo_py/src/cli/mujoco_rgbd_batch.py)。它把生命周期改为：
 
 ```text
 prepare persistent environment once
@@ -591,7 +591,7 @@ points:
 ```
 
 解析器拒绝未知字段、重复或空 ID、非有限数和策略 workspace 之外的坐标。在真正 reset 之前，
-[`task_reachability`](../src/so101_demo_py/src/cli/task_reachability.py) 会按顺序从杯子位置推导每个
+[`task_reachability`](../../src/so101_demo_py/src/cli/task_reachability.py) 会按顺序从杯子位置推导每个
 抓取 TCP phase，使用真实 MoveIt 做 plan-only 校验。只有 `REACHABLE` 才会执行；明确不可达的点
 记为 `SKIPPED_UNREACHABLE`，不会移动机器人，批次继续检查后面的点。
 
@@ -717,16 +717,16 @@ cup_pose_position_xyz 为有限值
 
 按数据流阅读，比直接打开最长的执行器更容易建立系统直觉：
 
-1. [`scene.xml`](../src/so101_demo_py/assets/mujoco/scene.xml)：相机、杯子和四个 keyframe；
-2. [`mujoco_plugins.yaml`](../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)：相机 topic 和物理证据配置；
-3. [`rgbd_point_cloud.py`](../src/so101_demo_py/src/cli/rgbd_point_cloud.py)：对齐、反投影、颜色筛选和 DBSCAN；
-4. [`camera_tf.py`](../src/so101_demo_py/src/runtime/camera_tf.py)：外参与 TF Tree；
-5. [`rgbd_cup_pose.py`](../src/so101_demo_py/src/cli/rgbd_cup_pose.py)：点变换、圆拟合和杯子中心；
-6. [`rgbd_cup_pose_node.py`](../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py)：精确时间 TF、证据优先和 `/cup_pose` 发布；
-7. [`cup_pose_source.py`](../src/so101_demo_py/src/ros/cup_pose_source.py)：下游如何校验并冻结一条 Pose；
-8. [`launch_composition.py`](../src/so101_demo_py/src/runtime/launch_composition.py)：组件、启动顺序和退出策略；
-9. [`task_batch.py`](../src/so101_demo_py/src/application/task_batch.py)：RESET_WORLD 批次、失败继续与安全中止策略；
-10. [`task_gateway.py`](../src/so101_teleop/so101_teleop/task_gateway.py)：Teleop 对批次、截图和证据的 owner 边界；
+1. [`scene.xml`](../../src/so101_demo_py/assets/mujoco/scene.xml)：相机、杯子和四个 keyframe；
+2. [`mujoco_plugins.yaml`](../../src/so101_demo_py/config/mujoco/mujoco_plugins.yaml)：相机 topic 和物理证据配置；
+3. [`rgbd_point_cloud.py`](../../src/so101_demo_py/src/cli/rgbd_point_cloud.py)：对齐、反投影、颜色筛选和 DBSCAN；
+4. [`camera_tf.py`](../../src/so101_demo_py/src/runtime/camera_tf.py)：外参与 TF Tree；
+5. [`rgbd_cup_pose.py`](../../src/so101_demo_py/src/cli/rgbd_cup_pose.py)：点变换、圆拟合和杯子中心；
+6. [`rgbd_cup_pose_node.py`](../../src/so101_demo_py/src/ros/rgbd_cup_pose_node.py)：精确时间 TF、证据优先和 `/cup_pose` 发布；
+7. [`cup_pose_source.py`](../../src/so101_demo_py/src/ros/cup_pose_source.py)：下游如何校验并冻结一条 Pose；
+8. [`launch_composition.py`](../../src/so101_demo_py/src/runtime/launch_composition.py)：组件、启动顺序和退出策略；
+9. [`task_batch.py`](../../src/so101_demo_py/src/application/task_batch.py)：RESET_WORLD 批次、失败继续与安全中止策略；
+10. [`task_gateway.py`](../../src/so101_teleop/so101_teleop/task_gateway.py)：Teleop 对批次、截图和证据的 owner 边界；
 11. [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md)：动态目标、IK、MoveIt、状态机和物理闭环。
 
 ## 21. 自检问题

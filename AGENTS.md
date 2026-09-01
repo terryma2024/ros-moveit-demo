@@ -7,6 +7,8 @@
   prose and `$humanizer` for English prose. Do not apply these skills to ledgers, logs, generated
   evidence, temporary notes, or other audit- or machine-oriented records. Preserve technical facts,
   commands, identifiers, paths, API names, code, data, citations, and link targets unchanged.
+- Store all persistent teaching guides and source walkthroughs under `docs/guides/`. Do not add new
+  teaching-guide files directly under `docs/`.
 - When developing, modifying, debugging, testing, or visually validating any SO-101 application in
   this repository, you must use the project-local `$so101-dev` skill at
   `.agents/skills/so101-dev/SKILL.md` before taking task actions and follow its workflow and evidence

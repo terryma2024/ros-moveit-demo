@@ -50,7 +50,7 @@ Pose、关节、轨迹、ROS 名称和执行授权不在模型输出范围内。
 
 ## 2. 一个 `text_pick_agent` 进程里有什么
 
-公开入口注册在 [`setup.py`](../src/so101_demo_py/setup.py)：
+公开入口注册在 [`setup.py`](../../src/so101_demo_py/setup.py)：
 
 ```bash
 ros2 run so101_demo_py text_pick_agent ...
@@ -63,13 +63,13 @@ ros2 run so101_demo_py text_pick_agent ...
 
 | 组件 | 源码 | 生命周期 | 作用 |
 |---|---|---|---|
-| CLI composition | [`text_pick_agent.py`](../src/so101_demo_py/src/cli/text_pick_agent.py) | 短生命周期 | 参数校验、provider 组装、JSON 输出 |
-| DeepSeek adapter | [`deepseek.py`](../src/so101_demo_py/src/adapters/planner/deepseek.py) | 一次 HTTP 请求 | 调用固定 DeepSeek endpoint/model |
-| Ollama adapter | [`ollama.py`](../src/so101_demo_py/src/adapters/planner/ollama.py) | 最多一次 HTTP 请求 | provider failure 时调用 loopback `qwen3.5:4b` |
-| PlannerChain | [`planner_chain.py`](../src/so101_demo_py/src/application/planner_chain.py) | 进程内对象 | 控制 primary/fallback 规则 |
-| TextAgent | [`text_agent.py`](../src/so101_demo_py/src/application/text_agent.py) | 进程内对象 | outcome、确认摘要、双授权和 request claim |
-| TaskDispatcher | [`task_dispatch.py`](../src/so101_demo_py/src/application/task_dispatch.py) | 进程内对象 | 把闭合命令映射到 capability |
-| Preview executor | [`text_pick_agent.py`](../src/so101_demo_py/src/cli/text_pick_agent.py) | 进程内拒绝桩 | 保证 Preview 不能调用 live runtime |
+| CLI composition | [`text_pick_agent.py`](../../src/so101_demo_py/src/cli/text_pick_agent.py) | 短生命周期 | 参数校验、provider 组装、JSON 输出 |
+| DeepSeek adapter | [`deepseek.py`](../../src/so101_demo_py/src/adapters/planner/deepseek.py) | 一次 HTTP 请求 | 调用固定 DeepSeek endpoint/model |
+| Ollama adapter | [`ollama.py`](../../src/so101_demo_py/src/adapters/planner/ollama.py) | 最多一次 HTTP 请求 | provider failure 时调用 loopback `qwen3.5:4b` |
+| PlannerChain | [`planner_chain.py`](../../src/so101_demo_py/src/application/planner_chain.py) | 进程内对象 | 控制 primary/fallback 规则 |
+| TextAgent | [`text_agent.py`](../../src/so101_demo_py/src/application/text_agent.py) | 进程内对象 | outcome、确认摘要、双授权和 request claim |
+| TaskDispatcher | [`task_dispatch.py`](../../src/so101_demo_py/src/application/task_dispatch.py) | 进程内对象 | 把闭合命令映射到 capability |
+| Preview executor | [`text_pick_agent.py`](../../src/so101_demo_py/src/cli/text_pick_agent.py) | 进程内拒绝桩 | 保证 Preview 不能调用 live runtime |
 
 Preview 不依赖 `rclpy`、MuJoCo、MoveIt、controller 或 `/cup_pose`，可以单独用来练习语言规划
 和安全门禁。
@@ -80,13 +80,13 @@ Execute 会额外创建：
 
 | 组件 | 源码/节点 | 作用 |
 |---|---|---|
-| DynamicCupPickPlaceExecutor | [`pick_place_executor.py`](../src/so101_demo_py/src/adapters/pick_place_executor.py) | 把 typed request 转成现有 dynamic runtime options |
-| dynamic runtime | [`dynamic_runtime.py`](../src/so101_demo_py/src/ros/dynamic_runtime.py) | 创建 `so101_dynamic_cup_pick_place` ROS node，消费 `/cup_pose` 并执行状态机 |
-| MuJoCo execution adapter | [`dynamic_mujoco_execution.py`](../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py) | 调用 MoveIt、controller、Planning Scene 和仿真证据接口 |
+| DynamicCupPickPlaceExecutor | [`pick_place_executor.py`](../../src/so101_demo_py/src/adapters/pick_place_executor.py) | 把 typed request 转成现有 dynamic runtime options |
+| dynamic runtime | [`dynamic_runtime.py`](../../src/so101_demo_py/src/ros/dynamic_runtime.py) | 创建 `so101_dynamic_cup_pick_place` ROS node，消费 `/cup_pose` 并执行状态机 |
+| MuJoCo execution adapter | [`dynamic_mujoco_execution.py`](../../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py) | 调用 MoveIt、controller、Planning Scene 和仿真证据接口 |
 
 `text_pick_agent` 不负责启动仿真环境。执行前，操作者要准备好一套由明确 owner 启动、已经通过
 readiness 检查，并且使用同一 ROS domain/session 的 stack。当前
-[`so101_mujoco.launch.py`](../src/so101_demo_py/launch/so101_mujoco.launch.py) 的 composition 包含：
+[`so101_mujoco.launch.py`](../../src/so101_demo_py/launch/so101_mujoco.launch.py) 的 composition 包含：
 
 | 组件 | 进程/节点 | 作用 |
 |---|---|---|
@@ -98,7 +98,7 @@ readiness 检查，并且使用同一 ROS domain/session 的 stack。当前
 
 Execute 只允许存在一个 `/cup_pose` producer。本指南使用生产感知节点 `rgbd_cup_pose`，由真实的
 CameraInfo、彩色图、深度图和 tf2 计算杯子位姿。仓库中的
-[`mujoco_cup_pose_bridge.py`](../src/so101_demo_py/src/ros/mujoco_cup_pose_bridge.py)
+[`mujoco_cup_pose_bridge.py`](../../src/so101_demo_py/src/ros/mujoco_cup_pose_bridge.py)
 只供隔离诊断；它直接读取仿真真值，绕过 RGB-D，因此不在本指南的 Execute 流程中启动。
 
 ## 3. 组件之间如何通信
@@ -168,7 +168,7 @@ flowchart LR
 
 ## 4. CLI 的组装顺序
 
-[`main()`](../src/so101_demo_py/src/cli/text_pick_agent.py) 按下面顺序工作：
+[`main()`](../../src/so101_demo_py/src/cli/text_pick_agent.py) 按下面顺序工作：
 
 ```text
 parse arguments
@@ -196,7 +196,7 @@ ROS。
 
 ## 5. PlannerOutcome：先判断任务能不能做
 
-[`planner_outcome.py`](../src/so101_demo_py/src/core/planner_outcome.py) 定义了三种互斥形状：
+[`planner_outcome.py`](../../src/so101_demo_py/src/core/planner_outcome.py) 定义了三种互斥形状：
 
 ```json
 {"outcome":"supported","command":{"target_object":"plastic_cup","action":"pick","constraints":{}}}
@@ -224,7 +224,7 @@ ROS。
 
 ## 6. `TaskCommand`：模型输出还不能直接使用
 
-[`task_command.py`](../src/so101_demo_py/src/core/task_command.py) 当前只认识：
+[`task_command.py`](../../src/so101_demo_py/src/core/task_command.py) 当前只认识：
 
 ```yaml
 target_object: plastic_cup
@@ -239,7 +239,7 @@ constraints:
 
 这里要区分 schema 和实际能力。schema 认识 `spatial_relation` 和 `speed`，但当前 V5-T003
 Dispatcher 没有消费这些字段的实现，所以
-[`TaskDispatcher.resolve()`](../src/so101_demo_py/src/application/task_dispatch.py) 只接受空
+[`TaskDispatcher.resolve()`](../../src/so101_demo_py/src/application/task_dispatch.py) 只接受空
 constraints：
 
 ```text
@@ -254,7 +254,7 @@ plastic_cup + pick + {}
 
 ## 7. Fallback 只处理 provider failure
 
-[`PlannerChain.plan()`](../src/so101_demo_py/src/application/planner_chain.py) 只捕获
+[`PlannerChain.plan()`](../../src/so101_demo_py/src/application/planner_chain.py) 只捕获
 `PlannerProviderError`：
 
 ```text
@@ -280,7 +280,7 @@ Fallback 只在 primary provider 不可用时寻找另一个合格 provider。�
 
 ### 8.1 DeepSeek
 
-[`DeepSeekPlanner`](../src/so101_demo_py/src/adapters/planner/deepseek.py) 固定使用：
+[`DeepSeekPlanner`](../../src/so101_demo_py/src/adapters/planner/deepseek.py) 固定使用：
 
 ```text
 endpoint = https://api.deepseek.com/chat/completions
@@ -291,12 +291,12 @@ max_tokens = 128
 ```
 
 Authorization header 只在 adapter 内根据环境变量生成。
-[`http_json.py`](../src/so101_demo_py/src/adapters/planner/http_json.py) 的 redirect handler 不会把
+[`http_json.py`](../../src/so101_demo_py/src/adapters/planner/http_json.py) 的 redirect handler 不会把
 带 Authorization 的请求重定向到不同 origin，避免 key 被跨域转发。
 
 ### 8.2 Ollama `qwen3.5:4b`
 
-[`OllamaPlanner`](../src/so101_demo_py/src/adapters/planner/ollama.py) 只连接 loopback，发送：
+[`OllamaPlanner`](../../src/so101_demo_py/src/adapters/planner/ollama.py) 只连接 loopback，发送：
 
 ```json
 {
@@ -314,7 +314,7 @@ Authorization header 只在 adapter 内根据环境变量生成。
 
 ### 8.3 共享 Prompt
 
-[`prompt.py`](../src/so101_demo_py/src/adapters/planner/prompt.py) 明确禁止模型输出：
+[`prompt.py`](../../src/so101_demo_py/src/adapters/planner/prompt.py) 明确禁止模型输出：
 
 - 坐标、Pose、关节角和轨迹；
 - shell 命令和 ROS 名称；
@@ -356,7 +356,7 @@ Preview 说明语言结果已经通过静态门禁，并展示程序准备调度
 
 ## 10. `confirmation_digest` 绑定了哪些内容
 
-[`build_confirmation_digest()`](../src/so101_demo_py/src/application/text_agent.py) 将下面字段编码成
+[`build_confirmation_digest()`](../../src/so101_demo_py/src/application/text_agent.py) 将下面字段编码成
 canonical JSON，再计算 SHA-256：
 
 ```yaml
@@ -399,7 +399,7 @@ provider 输出不稳定时，不能忽略 mismatch 继续执行。此时得到�
    `--confirmation-digest`，或显式提供 `--skip-confirmation`；两者同时出现会被拒绝；
 4. `request_id` 必须尚未被当前 resident `TextAgent` 实例 claim。
 
-[`TextAgent`](../src/so101_demo_py/src/application/text_agent.py) 用同一把 lock 完成 request ID 的
+[`TextAgent`](../../src/so101_demo_py/src/application/text_agent.py) 用同一把 lock 完成 request ID 的
 membership check 和 claim，避免常驻实例中的并发竞态。claim 一旦发生，即使 runtime 受控失败
 或抛异常也不会释放，防止同一实例自动重复调度。
 
@@ -411,7 +411,7 @@ set 不能提供全局 exactly-once 语义。
 ## 12. Execute provenance 怎样核对代码身份
 
 Execute 在调用 provider 之前，先由
-[`verify_execution_provenance()`](../src/so101_demo_py/src/runtime/provenance.py) 核验：
+[`verify_execution_provenance()`](../../src/so101_demo_py/src/runtime/provenance.py) 核验：
 
 1. `--source-commit` 是完整 40-hex；
 2. 它等于当前 imported `text_agent` module 所在 Git checkout 的真实 HEAD；
@@ -435,8 +435,8 @@ dispatch 前，外层 document 先记录 `confirmation_mode=digest|skipped`，�
 
 ## 13. Dispatcher 与 Executor 之间使用 typed request
 
-[`TaskDispatcher`](../src/so101_demo_py/src/application/task_dispatch.py) 生成 frozen
-[`DynamicCupPickPlaceRequest`](../src/so101_demo_py/src/ports/pick_place_executor.py)，字段固定为：
+[`TaskDispatcher`](../../src/so101_demo_py/src/application/task_dispatch.py) 生成 frozen
+[`DynamicCupPickPlaceRequest`](../../src/so101_demo_py/src/ports/pick_place_executor.py)，字段固定为：
 
 ```yaml
 capability: dynamic_cup_pick_place
@@ -446,7 +446,7 @@ target_object: plastic_cup
 action: pick
 ```
 
-[`DynamicCupPickPlaceExecutor`](../src/so101_demo_py/src/adapters/pick_place_executor.py) 检查 typed
+[`DynamicCupPickPlaceExecutor`](../../src/so101_demo_py/src/adapters/pick_place_executor.py) 检查 typed
 request 和 runtime context 后，在同一 Python 进程调用 `run_dynamic_execute(options)`。模型输出
 不会被拼成 shell 命令，模型也不能选择模块名、ROS node、topic 或 arbitrary options。
 
@@ -455,7 +455,7 @@ ROS runtime 而导入失败。
 
 ## 14. Dynamic runtime 接入抓放链的顺序
 
-[`run_dynamic_execute()`](../src/so101_demo_py/src/ros/dynamic_runtime.py) 的顺序是：
+[`run_dynamic_execute()`](../../src/so101_demo_py/src/ros/dynamic_runtime.py) 的顺序是：
 
 ```text
 加载合格 MuJoCo dynamic policy 和任务几何
@@ -806,7 +806,7 @@ runtime provenance、原子 claim request，最后进入同一个 Executor。省
 
 ### 19.3 用一个 launch 启动整条链路
 
-[`so101_mujoco_text_pick_agent.launch.py`](../src/so101_demo_py/launch/so101_mujoco_text_pick_agent.launch.py)
+[`so101_mujoco_text_pick_agent.launch.py`](../../src/so101_demo_py/launch/so101_mujoco_text_pick_agent.launch.py)
 适合明确授权跳过人工确认的一次性仿真。它会启动 MuJoCo、controller、MoveIt、Planning Scene、
 相机 TF、`rgbd_cup_pose` 和 `text_pick_agent`，工作流结束后再清理这些本轮进程。
 
@@ -830,7 +830,7 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
 ```
 
 操作者仍要给出 instruction、三重执行授权、keyframe、session 和 evidence file。
-[`build_text_pick_agent_launch_description()`](../src/so101_demo_py/src/runtime/launch_composition.py)
+[`build_text_pick_agent_launch_description()`](../../src/so101_demo_py/src/runtime/launch_composition.py)
 从已安装模块和 ament index 解析 source commit 与 package prefix，并固定 fresh stack 的 reset
 epoch 为 `0`。它还会把派生的 dynamic evidence root 传给 Text Agent，避免手工拼接 provenance
 参数。
@@ -915,7 +915,7 @@ runtime 的分层证据流程，不要在 prompt 中塞入坐标补丁。
 
 最终文档和实验 checkpoint 合并在本地 main
 `1a1241803441b8836a1caffb7d803d4313cff23c`。完整来源、旧候选边界和清理记录见
-[`v5-t003-text-agent-experiment-ledger.md`](experiments/v5-t003-text-agent-experiment-ledger.md)。
+[`v5-t003-text-agent-experiment-ledger.md`](../experiments/v5-t003-text-agent-experiment-ledger.md)。
 
 这些实验支持最终候选上的自然语言受控调度和仿真诊断结论。实验没有触碰真实硬件，也不支持
 V5-T005 physical acceptance 声明。
@@ -924,21 +924,21 @@ V5-T005 physical acceptance 声明。
 
 建议沿着“外部输入 → 结构化语义 → 授权 → runtime”阅读：
 
-1. [`setup.py`](../src/so101_demo_py/setup.py)：`text_pick_agent` console entrypoint；
-2. [`text_pick_agent.py`](../src/so101_demo_py/src/cli/text_pick_agent.py)：CLI composition、provider 配置和 execute context；
-3. [`prompt.py`](../src/so101_demo_py/src/adapters/planner/prompt.py)：模型允许表达什么、禁止表达什么；
-4. [`deepseek.py`](../src/so101_demo_py/src/adapters/planner/deepseek.py)：Cloud request/response envelope；
-5. [`ollama.py`](../src/so101_demo_py/src/adapters/planner/ollama.py)：本地结构化响应和 loopback 门禁；
-6. [`http_json.py`](../src/so101_demo_py/src/adapters/planner/http_json.py)：HTTP 错误归一化和 Authorization redirect 边界；
-7. [`planner_chain.py`](../src/so101_demo_py/src/application/planner_chain.py)：provider-only fallback；
-8. [`planner_outcome.py`](../src/so101_demo_py/src/core/planner_outcome.py)：三种闭合 outcome；
-9. [`task_command.py`](../src/so101_demo_py/src/core/task_command.py)：严格 schema 和 immutable command；
-10. [`text_agent.py`](../src/so101_demo_py/src/application/text_agent.py)：Preview、digest、双授权和 claim；
-11. [`task_dispatch.py`](../src/so101_demo_py/src/application/task_dispatch.py)：能力映射和 constraint consumer 门禁；
-12. [`provenance.py`](../src/so101_demo_py/src/runtime/provenance.py)：source/install/runtime 身份核验；
-13. [`pick_place_executor.py`](../src/so101_demo_py/src/adapters/pick_place_executor.py)：typed request 到 dynamic runtime；
-14. [`dynamic_runtime.py`](../src/so101_demo_py/src/ros/dynamic_runtime.py)：`/cup_pose`、truth、scene、reachability 和状态机组合；
-15. [`dynamic_mujoco_execution.py`](../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)：MoveIt、controller、Planning Scene 与物理证据闭环；
+1. [`setup.py`](../../src/so101_demo_py/setup.py)：`text_pick_agent` console entrypoint；
+2. [`text_pick_agent.py`](../../src/so101_demo_py/src/cli/text_pick_agent.py)：CLI composition、provider 配置和 execute context；
+3. [`prompt.py`](../../src/so101_demo_py/src/adapters/planner/prompt.py)：模型允许表达什么、禁止表达什么；
+4. [`deepseek.py`](../../src/so101_demo_py/src/adapters/planner/deepseek.py)：Cloud request/response envelope；
+5. [`ollama.py`](../../src/so101_demo_py/src/adapters/planner/ollama.py)：本地结构化响应和 loopback 门禁；
+6. [`http_json.py`](../../src/so101_demo_py/src/adapters/planner/http_json.py)：HTTP 错误归一化和 Authorization redirect 边界；
+7. [`planner_chain.py`](../../src/so101_demo_py/src/application/planner_chain.py)：provider-only fallback；
+8. [`planner_outcome.py`](../../src/so101_demo_py/src/core/planner_outcome.py)：三种闭合 outcome；
+9. [`task_command.py`](../../src/so101_demo_py/src/core/task_command.py)：严格 schema 和 immutable command；
+10. [`text_agent.py`](../../src/so101_demo_py/src/application/text_agent.py)：Preview、digest、双授权和 claim；
+11. [`task_dispatch.py`](../../src/so101_demo_py/src/application/task_dispatch.py)：能力映射和 constraint consumer 门禁；
+12. [`provenance.py`](../../src/so101_demo_py/src/runtime/provenance.py)：source/install/runtime 身份核验；
+13. [`pick_place_executor.py`](../../src/so101_demo_py/src/adapters/pick_place_executor.py)：typed request 到 dynamic runtime；
+14. [`dynamic_runtime.py`](../../src/so101_demo_py/src/ros/dynamic_runtime.py)：`/cup_pose`、truth、scene、reachability 和状态机组合；
+15. [`dynamic_mujoco_execution.py`](../../src/so101_demo_py/src/ros/dynamic_mujoco_execution.py)：MoveIt、controller、Planning Scene 与物理证据闭环；
 16. [`so101-rgbd-perception-pick-place-source-guide.md`](so101-rgbd-perception-pick-place-source-guide.md)：上游感知如何生成 `/cup_pose`；
 17. [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md)：下游动态抓放如何完成物理链路。
 
