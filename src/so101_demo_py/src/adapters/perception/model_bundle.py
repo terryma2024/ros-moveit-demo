@@ -23,6 +23,18 @@ from so101_demo.adapters.perception.model_runtime import ModelSetupError
 
 _PIPELINE_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
 _PROMPT_PROFILE = {"plastic_cup": "plastic cup."}
+_LOCKED_DEPENDENCIES = {
+    "Pillow": "12.3.0",
+    "PyYAML": "6.0.2",
+    "huggingface-hub": "0.34.4",
+    "mujoco": "3.12.0",
+    "safetensors": "0.6.2",
+    "tokenizers": "0.22.0",
+    "torch": "2.13.0",
+    "torchvision": "0.28.0",
+    "transformers": "4.56.2",
+    "ultralytics": "8.4.115",
+}
 _MODELS = {
     "detector": {
         "model_id": "IDEA-Research/grounding-dino-tiny",
@@ -44,6 +56,10 @@ _MANIFEST_FIELDS = {
     "dependencies",
 }
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_DEPENDENCY_PIN = re.compile(
+    r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)=="
+    r"(?P<version>[A-Za-z0-9][A-Za-z0-9._+!-]*)\Z"
+)
 _AT_FDCWD = -100
 _RENAME_EXCL = 0x00000004
 _RENAME_NOREPLACE = 1
@@ -90,7 +106,9 @@ def _relative_path(value: object) -> PurePosixPath:
     return path
 
 
-def _manifest_files(document: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
+def _manifest_files(
+    document: Mapping[str, Any], expected_dependencies: Mapping[str, str]
+) -> dict[str, tuple[int, str]]:
     if set(document) != _MANIFEST_FIELDS:
         raise _invalid("manifest has unsupported or missing fields")
     if document.get("schema_version") != 1:
@@ -101,8 +119,8 @@ def _manifest_files(document: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
         raise _invalid("manifest prompt_profile is not the fixed prompt")
     if document.get("models") != _MODELS:
         raise _invalid("manifest models do not match the fixed revisions")
-    if not isinstance(document.get("dependencies"), Mapping):
-        raise _invalid("manifest dependencies must be a mapping")
+    if document.get("dependencies") != dict(expected_dependencies):
+        raise _invalid("manifest dependencies do not match the fixed dependency pins")
     entries = document.get("files")
     if not isinstance(entries, list) or not entries:
         raise _invalid("manifest files must be a non-empty list")
@@ -148,7 +166,12 @@ def _regular_files(root: Path) -> set[str]:
     return files
 
 
-def verify_model_bundle(root: Path, expected_manifest_sha256: str) -> VerifiedModelBundle:
+def verify_model_bundle(
+    root: Path,
+    expected_manifest_sha256: str,
+    *,
+    expected_dependencies: Mapping[str, str] = _LOCKED_DEPENDENCIES,
+) -> VerifiedModelBundle:
     """Verify a bundle before allowing it to enter the perception runtime."""
 
     root = Path(root)
@@ -173,7 +196,7 @@ def verify_model_bundle(root: Path, expected_manifest_sha256: str) -> VerifiedMo
     if manifest_bytes != _canonical_manifest(document):
         raise _invalid("manifest is not canonically encoded")
 
-    expected_files = _manifest_files(document)
+    expected_files = _manifest_files(document, expected_dependencies)
     actual_files = _regular_files(root)
     if actual_files != set(expected_files) | {"manifest.json"}:
         raise _invalid("bundle regular-file set does not match manifest")
@@ -196,7 +219,34 @@ def verify_model_bundle(root: Path, expected_manifest_sha256: str) -> VerifiedMo
     )
 
 
-def _load_fixed_config(config_path: Path) -> None:
+def _parse_dependency_lock(lock_path: Path) -> dict[str, str]:
+    if lock_path.is_symlink() or not lock_path.is_file():
+        raise ValueError("dependency lock must be a regular file")
+    dependencies: dict[str, str] = {}
+    normalized_names: set[str] = set()
+    for line_number, raw_line in enumerate(
+        lock_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _DEPENDENCY_PIN.fullmatch(line)
+        if match is None:
+            raise ValueError(
+                f"dependency lock line {line_number} must be an exact name==version pin"
+            )
+        name = match.group("name")
+        normalized_name = re.sub(r"[-_.]+", "-", name).lower()
+        if normalized_name in normalized_names:
+            raise ValueError(f"duplicate dependency pin: {name}")
+        normalized_names.add(normalized_name)
+        dependencies[name] = match.group("version")
+    if dependencies != _LOCKED_DEPENDENCIES:
+        raise ValueError("dependency lock does not match the fixed dependency set")
+    return dependencies
+
+
+def _load_fixed_config(config_path: Path) -> dict[str, str]:
     if config_path.is_symlink() or not config_path.is_file():
         raise ValueError("config must be a regular file")
     document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
@@ -208,6 +258,7 @@ def _load_fixed_config(config_path: Path) -> None:
         raise ValueError("config model IDs or revisions are not fixed values")
     if document.get("prompts") != _PROMPT_PROFILE:
         raise ValueError("config prompt is not the fixed plastic-cup prompt")
+    return _parse_dependency_lock(config_path.with_name("requirements.lock"))
 
 
 def _copy_snapshot(source: Path, destination: Path) -> list[dict[str, object]]:
@@ -300,7 +351,7 @@ def build_model_bundle(
 
     config_path = Path(config_path)
     destination = Path(destination)
-    _load_fixed_config(config_path)
+    dependencies = _load_fixed_config(config_path)
     parent = destination.parent
     if not parent.is_dir():
         raise FileNotFoundError(f"bundle destination parent does not exist: {parent}")
@@ -321,12 +372,12 @@ def build_model_bundle(
             "prompt_profile": _PROMPT_PROFILE,
             "models": _MODELS,
             "files": sorted(files, key=lambda entry: str(entry["path"])),
-            "dependencies": {},
+            "dependencies": dependencies,
         }
         manifest_bytes = _canonical_manifest(document)
         (staging / "manifest.json").write_bytes(manifest_bytes)
         digest = hashlib.sha256(manifest_bytes).hexdigest()
-        verify_model_bundle(staging, digest)
+        verify_model_bundle(staging, digest, expected_dependencies=dependencies)
         try:
             _rename_exclusive(staging, destination)
         except OSError as error:

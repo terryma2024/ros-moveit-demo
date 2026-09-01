@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -38,6 +39,19 @@ _MODEL_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
 _WARMUP_RGB = np.zeros((8, 8, 3), dtype=np.uint8)
 _WARMUP_BOXES = np.array([[[2.0, 2.0, 6.0, 6.0]]], dtype=np.float32)
 _LOGGER = logging.getLogger(__name__)
+_OFFLINE_ENVIRONMENT = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+
+
+def _force_offline_environment() -> None:
+    """Make the process-wide Hugging Face loaders fail closed to local files."""
+
+    for name in _OFFLINE_ENVIRONMENT:
+        os.environ[name] = "1"
+    if any(os.environ.get(name) != "1" for name in _OFFLINE_ENVIRONMENT):
+        raise ModelSetupError(
+            "OFFLINE_MODE_REQUIRED",
+            "HF_HUB_OFFLINE and TRANSFORMERS_OFFLINE must both equal 1",
+        )
 
 
 def _load_grounding_processor(path: Path, *, local_files_only: bool) -> Any:
@@ -109,6 +123,7 @@ class GroundedSamDetector:
     ) -> None:
         self._monotonic_ns = monotonic_ns
         start_ns = monotonic_ns()
+        _force_offline_environment()
         if torch_api is None:
             torch_api = importlib.import_module("torch")
         self._torch = torch_api

@@ -18,6 +18,19 @@ from so101_demo.cli.prepare_grounded_sam_bundle import main
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG_PATH = (PACKAGE_ROOT / "config/perception/grounded_sam.yaml").resolve()
+LOCK_PATH = CONFIG_PATH.with_name("requirements.lock")
+LOCKED_DEPENDENCIES = {
+    "Pillow": "12.3.0",
+    "PyYAML": "6.0.2",
+    "huggingface-hub": "0.34.4",
+    "mujoco": "3.12.0",
+    "safetensors": "0.6.2",
+    "tokenizers": "0.22.0",
+    "torch": "2.13.0",
+    "torchvision": "0.28.0",
+    "transformers": "4.56.2",
+    "ultralytics": "8.4.115",
+}
 
 
 def _sha256(content: bytes) -> str:
@@ -42,7 +55,7 @@ def _write_manifest(root: Path, files: list[dict[str, object]]) -> str:
             },
         },
         "files": files,
-        "dependencies": {},
+        "dependencies": LOCKED_DEPENDENCIES,
     }
     payload = json.dumps(
         document, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -163,9 +176,73 @@ def test_builder_copies_fixed_snapshots_without_symlinks(tmp_path: Path) -> None
         ("IDEA-Research/grounding-dino-tiny", "a2bb814dd30d776dcf7e30523b00659f4f141c71"),
         ("facebook/sam2.1-hiera-tiny", "de431c4043854a71d8101e17995dfe596bf101a5"),
     ]
-    assert verify_model_bundle(destination, digest).manifest_sha256 == digest
+    bundle = verify_model_bundle(destination, digest)
+    assert bundle.manifest_sha256 == digest
+    assert bundle.manifest["dependencies"] == LOCKED_DEPENDENCIES
     assert not any(path.is_symlink() for path in destination.rglob("*"))
     assert not (destination / "grounding-dino-tiny/.cache").exists()
+
+
+@pytest.mark.parametrize(
+    ("fault", "expected_message"),
+    [
+        ("missing_pin", "fixed dependency set"),
+        ("duplicate_pin", "duplicate dependency pin"),
+        ("illegal_pin", "exact name==version pin"),
+    ],
+)
+def test_builder_rejects_incomplete_or_malformed_dependency_locks_before_download(
+    tmp_path: Path, fault: str, expected_message: str
+) -> None:
+    """Catch bundle provenance being inferred from an incomplete or ambiguous lock."""
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_path = config_dir / "grounded_sam.yaml"
+    config_path.write_text(CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    lock_lines = LOCK_PATH.read_text(encoding="utf-8").splitlines()
+    if fault == "missing_pin":
+        lock_lines = [line for line in lock_lines if not line.startswith("torch==")]
+    elif fault == "duplicate_pin":
+        lock_lines.append("torch==2.13.0")
+    else:
+        lock_lines = [
+            "torch>=2.13.0" if line.startswith("torch==") else line
+            for line in lock_lines
+        ]
+    (config_dir / "requirements.lock").write_text(
+        "\n".join(lock_lines) + "\n", encoding="utf-8"
+    )
+    calls: list[tuple[str, str]] = []
+
+    with pytest.raises(ValueError, match=expected_message):
+        build_model_bundle(
+            config_path,
+            tmp_path / "bundle",
+            _fake_snapshot_download(tmp_path, calls),
+        )
+
+    assert calls == []
+    assert not (tmp_path / "bundle").exists()
+
+
+def test_verifier_rejects_a_rehashed_manifest_with_dependency_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Catch a valid manifest digest being used to bless an unexpected runtime pin."""
+
+    root, _digest = fake_bundle(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["dependencies"]["transformers"] = "4.56.3"
+    payload = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ) + "\n"
+    (root / "manifest.json").write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ModelSetupError) as error:
+        verify_model_bundle(root, _sha256(payload.encode("utf-8")))
+
+    assert error.value.code == "MODEL_BUNDLE_INVALID"
 
 
 def test_builder_refuses_existing_destination_and_missing_parent(tmp_path: Path) -> None:
