@@ -298,15 +298,62 @@ test:  300000 ...
 1. 普通 RGB rendering，得到模型输入图片；
 2. segmentation rendering，得到每个像素所属的 MuJoCo geom ID。
 
-geom ID 再通过 `model.geom_bodyid` 映射到 body ID，body ID 对应 `plastic_cup`、`plastic_cup_b` 或瓶子。
+[`MuJoCoDatasetRenderer._prepare()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 先根据 seed 放置物体、扰动相机和材质，再调用 `mj_forward()` 更新场景。随后执行两次 render：
 
-### 8.2 为什么不用颜色生成标签
+```python
+self._renderer.disable_segmentation_rendering()
+self._renderer.update_scene(self._data, camera=self._config.camera_name)
+rgb = np.array(self._renderer.render(), dtype=np.uint8, copy=True)
+
+self._renderer.enable_segmentation_rendering()
+self._renderer.update_scene(self._data, camera=self._config.camera_name)
+segmentation = np.array(self._renderer.render(), copy=True)
+```
+
+两次 render 之间没有 `mj_step()`，使用的也是同一个 `MjData` 和 `task_camera`。因此，RGB 与标签来自同一物体姿态和相机视角，而不是两张时间相邻但可能错位的画面。
+
+### 8.2 segmentation buffer 里存了什么
+
+`enable_segmentation_rendering()` 不会直接返回 `plastic_cup` 这样的语义类别。MuJoCo 3.12.0 的 Classic Renderer 会打开 `mjRND_SEGMENT` 和 `mjRND_IDCOLOR`，以唯一的 24-bit ID 颜色渲染可见 geom，再把 framebuffer 中的颜色解码为整数 ID。最后一层映射把每个像素转换为：
+
+```text
+(object_id, object_type)
+```
+
+背景是 `(-1, -1)`。当 `object_type == mujoco.mjtObj.mjOBJ_GEOM` 时，`object_id` 才是 `MjModel` 中的 geom 索引。这里的 `object_id` 是 MuJoCo renderer 的通用字段，不是本任务的 `plastic_cup` 对象名。具体转换过程可对照 [MuJoCo 3.12.0 Renderer 源码](https://github.com/google-deepmind/mujoco/blob/3.12.0/python/mujoco/rendering/classic/renderer.py)。
+
+[`MuJoCoDatasetRenderer._geom_ids()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 检查输出必须为 `H x W x 2`，再识别哪个通道保存 `mujoco.mjtObj.mjOBJ_GEOM`。按当前 MuJoCo 输出顺序，两个通道分别是 geom ID 和 object type。代码生成一张 `H x W` 的 `int32` 数组，只保留 geom 像素，其余位置填 `-1`：
+
+```text
+segmentation render: H x W x 2
+  -> 过滤 object_type == mjOBJ_GEOM
+  -> geom_ids: H x W
+```
+
+### 8.3 geom ID 如何合成杯子实例
+
+一个杯子由多个 geom 组成。[`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml) 中的 `plastic_cup` 有杯壁和杯底，`plastic_cup_b` 也有自己的一组 geom。`model.geom_bodyid` 提供从 geom 到所属 body 的映射：
+
+```text
+geom ID -> model.geom_bodyid[geom_id] -> body ID -> body name
+```
+
+[`build_labeled_sample()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 只接受 body 名为 `plastic_cup` 或以 `plastic_cup_` 开头的实例。对每个目标 body，代码先找出它拥有的全部 geom，再合并这些 geom 的可见像素：
+
+```python
+target_geoms = np.flatnonzero(render.geom_body_ids == body_id)
+mask = np.isin(render.geom_ids, target_geoms)
+```
+
+同一个 body 的杯壁和杯底会合成一张实例 mask；`plastic_cup` 与 `plastic_cup_b` 属于两个 body，因此会生成两张 mask。被其他物体遮挡的部分不会凭空补齐，mask 只包含当前相机实际看到的像素。瓶子即使颜色与杯子相同，也不会通过 body name 过滤。
+
+### 8.4 为什么不用颜色生成标签
 
 训练时杯子和瓶子的颜色会随机变化。如果标签来自颜色阈值，换色后真值就会跟着坏掉。object-ID 属于模拟器场景结构，同一个 body 无论渲染成红色、绿色还是灰色，实例身份都不会变。
 
 [`build_labeled_sample()`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py) 只把 body 名为 `plastic_cup` 或以 `plastic_cup_` 开头的实例加入标签。每个 body 单独生成 mask，所以两个杯子会得到两条标签。
 
-### 8.3 mask 如何写成 YOLO polygon
+### 8.5 mask 如何写成 YOLO polygon
 
 YOLO segmentation label 的一行格式是：
 
@@ -320,7 +367,15 @@ class_id x1 y1 x2 y2 ... xn yn
 0 0.421875000 0.366666667 0.425000000 0.358333333 ...
 ```
 
+凸包是对像素 mask 的简化表示。它会填平凹边界和内部孔洞，不会逐像素复刻原始轮廓。当前杯子外形接近凸形，这种表示足够直接；若以后加入带把手、明显凹槽或复杂遮挡的目标，应评估轮廓提取或多 polygon 标注，不能默认凸包仍能保持所需精度。
+
 一张无杯图片的 label 文件为空。它不是坏样本，反而用于教模型在只有干扰物时不要输出杯子。
+
+### 8.6 不要和运行时 overlay 混淆
+
+MuJoCo segmentation rendering 只在合成数据生成阶段提供标签真值，不会发布到 ROS，也不参与部署后的类别判断。运行时的 `/perception/overlay` 是另一条路径：[`render_detection_overlay()`](../../src/so101_demo_py/src/runtime/perception_evidence.py) 把 YOLO 输出的 `DetectionCandidate.mask` 以半透明颜色叠加到 RGB 上，再绘制 bbox、class ID 和 confidence。
+
+overlay 供人快速检查，深度定位不会把它重新读回来。`RgbdLocalizer` 直接使用进程内的布尔 mask、对齐 Depth 和 CameraInfo，避免可视化压缩或颜色混合损伤定位输入。
 
 ## 9. 如何生成数据集
 
