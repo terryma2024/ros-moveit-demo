@@ -2,9 +2,9 @@ task_id: so101-yolo-docker-cache-optimization-20260901
 goal: minimize repeated YOLO training and inference Docker build downloads while preserving immutable release images and adding an explicit Linux source-mount development mode
 success_contract: script tests prove optional pull and external cache arguments; launch tests prove release and development mounts remain isolated; both optimized images build on ai-station and pass their existing import/CUDA gates
 worktree: /Users/matianyi/.codex/worktrees/78474e78-2991-4c4b-9d35-ac0495fbd06b/moveit-demo
-branch: codex/yolo-seg-docker-platform-split
+branch: main (local integration target)
 base_commit: 9c8a90b87ad60be281199dbeb038c2cdf581de6c
-current_commit: 9c8a90b87ad60be281199dbeb038c2cdf581de6c
+current_commit: 804e75344c32e75d87839c11a31ad3cf7cb57980
 evidence_root: /tmp/so101-debug-docker-cache-optimization-20260901
 confirmed_conclusions:
   - Existing ai-station images put CUDA, PyTorch, and Python dependencies before the approximately 65 MB application layers
@@ -16,7 +16,7 @@ disproven_routes:
   - Reusing either current YOLO image unchanged as a complete MuJoCo runtime
 open_hypotheses:
   - A dedicated simulator image with ROS, MoveIt, MuJoCo support, EGL/GLFW libraries, and explicit display profiles can support both modes
-latest_checkpoint: CP-005
+latest_checkpoint: CP-006
 next_experiment: NONE
 
 experiment_id: EXP-001
@@ -333,3 +333,28 @@ archived_runs:
 deletion_candidates:
   - /tmp/so101-debug-docker-cache-optimization-20260901 after review
 next_command: Commit the explicit task scope on codex/yolo-seg-docker-platform-split, then merge it into local main without pushing
+
+checkpoint_id: CP-006
+last_valid_experiment: EXP-005
+current_hypothesis: NONE
+working_tree_status: Local main contains implementation commit 804e75344c32e75d87839c11a31ad3cf7cb57980; the post-merge source and install provenance gates are complete
+owned_processes: NONE
+preserved_processes: The externally managed Codex worktree is retained; no local or ai-station ROS, MuJoCo, GUI, training, or task-owned container process is running
+confirmed_conclusions:
+  - Local main fast-forwarded from 9c8a90b87ad60be281199dbeb038c2cdf581de6c to implementation commit 804e75344c32e75d87839c11a31ad3cf7cb57980 without contacting or updating the remote
+  - The merged tree exactly matched the validated integration branch tree
+  - The local main source rebuilt so101_demo_py and so101_mujoco_support into the isolated postmerge install under the registered evidence root
+  - Post-merge targeted Docker and launch contracts pass 64 tests
+  - Post-merge complete so101_demo_py package gate passes 913 tests with source commit 804e75344c32e75d87839c11a31ad3cf7cb57980
+disproven_routes:
+  - Reusing the pre-merge installed package as the only merged-result proof
+open_risks:
+  - Local main is intentionally ahead of origin/main and has not been pushed
+  - Containerized MuJoCo remains outside this change and requires a dedicated simulator image
+retained_runs:
+  - /tmp/so101-debug-docker-cache-optimization-20260901
+archived_runs:
+  - NONE
+deletion_candidates:
+  - /tmp/so101-debug-docker-cache-optimization-20260901 after review
+next_command: NONE
