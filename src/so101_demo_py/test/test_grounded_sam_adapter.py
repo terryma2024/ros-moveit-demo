@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -200,10 +201,20 @@ def test_fake_sam_processor_matches_transformers_4562_mask_postprocess_contract(
 
 
 def _recording_loader(
-    calls: list[tuple[str, Path, bool]], kind: str, value: object
+    calls: list[tuple[str, Path, bool, str | None, str | None]],
+    kind: str,
+    value: object,
 ):
     def load(path: Path, *, local_files_only: bool) -> object:
-        calls.append((kind, path, local_files_only))
+        calls.append(
+            (
+                kind,
+                path,
+                local_files_only,
+                os.environ.get("HF_HUB_OFFLINE"),
+                os.environ.get("TRANSFORMERS_OFFLINE"),
+            )
+        )
         return value
 
     return load
@@ -241,10 +252,14 @@ def _fake_detector(
     return detector, grounding_model, sam_model
 
 
-def test_detector_loads_both_local_models_offline_and_warms_them(tmp_path: Path) -> None:
+def test_detector_loads_both_local_models_offline_and_warms_them(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Catch bypassing verified local paths or omitting either warm-up model call."""
 
-    calls: list[tuple[str, Path, bool]] = []
+    monkeypatch.setenv("HF_HUB_OFFLINE", "0")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "0")
+    calls: list[tuple[str, Path, bool, str | None, str | None]] = []
     grounding_model = _FakeGroundingModel()
     sam_model = _FakeSamModel()
     detector = GroundedSamDetector(
@@ -262,17 +277,24 @@ def test_detector_loads_both_local_models_offline_and_warms_them(tmp_path: Path)
         monotonic_ns=iter([0, 5_000_000]).__next__,
     )
 
-    assert {kind for kind, _path, _offline in calls} == {
+    assert {kind for kind, _path, _offline, _hf, _transformers in calls} == {
         "grounding-processor",
         "grounding-model",
         "sam-processor",
         "sam-model",
     }
-    assert {path for _kind, path, _offline in calls} == {
+    assert {path for _kind, path, _offline, _hf, _transformers in calls} == {
         tmp_path / "grounding-dino-tiny",
         tmp_path / "sam2.1-hiera-tiny",
     }
-    assert all(local_files_only for _kind, _path, local_files_only in calls)
+    assert all(
+        local_files_only
+        for _kind, _path, local_files_only, _hf, _transformers in calls
+    )
+    assert all(
+        hf_offline == transformers_offline == "1"
+        for _kind, _path, _local, hf_offline, transformers_offline in calls
+    )
     assert detector.runtime_device == "mps"
     assert detector.cold_start_latency_ms == 5.0
     assert grounding_model.call_count == 1

@@ -16,6 +16,20 @@ from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamT
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
 
 
+LOCKED_DEPENDENCIES = {
+    "Pillow": "12.3.0",
+    "PyYAML": "6.0.2",
+    "huggingface-hub": "0.34.4",
+    "mujoco": "3.12.0",
+    "safetensors": "0.6.2",
+    "tokenizers": "0.22.0",
+    "torch": "2.13.0",
+    "torchvision": "0.28.0",
+    "transformers": "4.56.2",
+    "ultralytics": "8.4.115",
+}
+
+
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
@@ -56,7 +70,7 @@ def _grounded_bundle(tmp_path: Path) -> tuple[Path, str, dict[str, object]]:
                 "sha256": _sha256(b"segmenter-weights"),
             },
         ],
-        "dependencies": {},
+        "dependencies": LOCKED_DEPENDENCIES,
     }
     payload = json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n"
     (root / "manifest.json").write_text(payload, encoding="utf-8")
