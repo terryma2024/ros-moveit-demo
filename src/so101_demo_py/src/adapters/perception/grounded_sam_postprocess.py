@@ -145,7 +145,9 @@ def convert_grounding_results(
         raise _contract_error("scores must have shape (object_count,)")
     count = int(box_array.shape[0])
     if count > thresholds.max_candidates:
-        raise _contract_error("object_count exceeds max_candidates")
+        raise GroundedSamResultError(
+            "CANDIDATE_LIMIT_EXCEEDED", "object_count exceeds max_candidates"
+        )
     if len(score_array) != count or len(labels) != count:
         raise _contract_error("boxes, scores, and labels must have the same object_count")
     if any(not isinstance(label, str) for label in labels):
