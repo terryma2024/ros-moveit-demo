@@ -1,7 +1,17 @@
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-import subprocess
+import pytest
+
+
+def _ros2_arguments(argv: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    command = tuple(argv)
+    if command[:1] == ("ros2",):
+        return command[1:]
+    if len(command) >= 2 and Path(command[1]).name == "ros2":
+        return command[2:]
+    raise AssertionError(f"unsupported ros2 command prefix: {command!r}")
 
 
 def _ros2_arguments(argv) -> tuple[str, ...]:
@@ -40,9 +50,19 @@ def test_cli_exit_is_nonzero_when_any_point_failed() -> None:
     assert result_exit_code(SimpleNamespace(status=BatchStatus.CANCELLED)) == 1
 
 
-def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() -> None:
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe(
+    monkeypatch: pytest.MonkeyPatch, platform: str
+) -> None:
+    from so101_demo.application import qualification_stack
     from so101_demo.cli.mujoco_rgbd_batch import _wait_for_task_station
 
+    monkeypatch.setattr(qualification_stack.sys, "platform", platform)
+    monkeypatch.setattr(
+        qualification_stack.shutil,
+        "which",
+        lambda _name: "/opt/ros/jazzy/bin/ros2",
+    )
     calls = []
 
     def runner(argv, **kwargs):
@@ -72,8 +92,19 @@ def test_task_station_readiness_requires_graph_joint_sample_and_scene_observe() 
     assert ("run", "so101_demo_py", "scene_setup", "--backend", "mujoco", "observe") in commands
 
 
-def test_task_station_readiness_reports_the_failed_stage() -> None:
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_task_station_readiness_reports_the_failed_stage(
+    monkeypatch: pytest.MonkeyPatch, platform: str
+) -> None:
+    from so101_demo.application import qualification_stack
     from so101_demo.cli.mujoco_rgbd_batch import _wait_for_task_station
+
+    monkeypatch.setattr(qualification_stack.sys, "platform", platform)
+    monkeypatch.setattr(
+        qualification_stack.shutil,
+        "which",
+        lambda _name: "/opt/ros/jazzy/bin/ros2",
+    )
 
     def runner(argv, **kwargs):
         del kwargs
