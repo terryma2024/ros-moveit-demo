@@ -225,8 +225,8 @@ class GroundedSamDetector:
                 "grounding result requires boxes, scores, and text_labels"
             ) from error
         return convert_grounding_results(
-            boxes,
-            scores,
+            _to_numpy(boxes),
+            _to_numpy(scores),
             labels,
             frame,
             query,
