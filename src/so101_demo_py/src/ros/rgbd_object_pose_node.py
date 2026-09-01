@@ -331,6 +331,26 @@ def _wait_for_output_subscribers(
         spin_once(min(0.05, remaining))
 
 
+def _output_discovery_watermark(
+    publishers: tuple[Any, ...],
+    *,
+    now_ns: Callable[[], int],
+    spin_once: Callable[[float], None],
+    timeout_s: float,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> int | None:
+    """Sample the source watermark after optional output discovery has settled."""
+
+    _wait_for_output_subscribers(
+        publishers,
+        spin_once=spin_once,
+        timeout_s=timeout_s,
+        monotonic=monotonic,
+    )
+    current_ns = int(now_ns())
+    return current_ns if current_ns > 0 else None
+
+
 def _wait_for_transform(
     can_transform: Callable[[str, str, int], bool],
     *,
@@ -432,14 +452,14 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             "rgbd_object_pose",
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
-        source_watermark_ns = _wait_for_positive_clock(
+        initial_clock_ns = _wait_for_positive_clock(
             now_ns=lambda: int(node.get_clock().now().nanoseconds),
             spin_once=lambda timeout_s: rclpy.spin_once(
                 node, timeout_sec=timeout_s
             ),
             timeout_s=options.startup_timeout_s,
         )
-        if source_watermark_ns is None:
+        if initial_clock_ns is None:
             print(
                 json.dumps(
                     {"status": "ERROR", "failure": "SIM_CLOCK_UNAVAILABLE"},
@@ -453,6 +473,22 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         overlay_publisher = node.create_publisher(Image, options.overlay_topic, 10)
         pose_publisher = node.create_publisher(PoseStamped, options.output_topic, 10)
         publishers = [detections_publisher, overlay_publisher, pose_publisher]
+        source_watermark_ns = _output_discovery_watermark(
+            tuple(publishers),
+            now_ns=lambda: int(node.get_clock().now().nanoseconds),
+            spin_once=lambda timeout_s: rclpy.spin_once(
+                node, timeout_sec=timeout_s
+            ),
+            timeout_s=1.0,
+        )
+        if source_watermark_ns is None:
+            print(
+                json.dumps(
+                    {"status": "ERROR", "failure": "SIM_CLOCK_UNAVAILABLE"},
+                    sort_keys=True,
+                )
+            )
+            return 1
         tf_buffer = Buffer()
         listener = TransformListener(tf_buffer, node)
         buffer = AlignedRgbdBuffer()
@@ -499,13 +535,6 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             _decode_rgb(color_message),
             message_stamp_ns(color_message),
             color_message.header.frame_id,
-        )
-        _wait_for_output_subscribers(
-            (detections_publisher, overlay_publisher, pose_publisher),
-            spin_once=lambda timeout_s: rclpy.spin_once(
-                node, timeout_sec=timeout_s
-            ),
-            timeout_s=1.0,
         )
         if not _wait_for_transform(
             lambda target, source, stamp_ns: bool(
