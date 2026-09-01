@@ -179,7 +179,7 @@ def test_grounding_limits_original_proposal_count_before_filtering() -> None:
             DetectionQuery("plastic_cup"),
             _thresholds(max_candidates=16),
         )
-    ) == "RESULT_CONTRACT_INVALID"
+    ) == "CANDIDATE_LIMIT_EXCEEDED"
 
 
 def test_grounding_filters_scores_below_the_configured_gate() -> None:
