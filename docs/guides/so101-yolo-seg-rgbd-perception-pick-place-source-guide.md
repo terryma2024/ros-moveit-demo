@@ -218,6 +218,28 @@ YOLO-Seg 多输出一张实例 mask：
 
 ## 7. 合成训练数据从哪里来
 
+如果只想复现微调，可以直接下载[本次训练使用的完整合成数据集](https://github.com/terryma2024/ros-moveit-demo/tree/f0d2e9feb6d929214e7130b1e5e7298c1421e1a7/datasets/so101-v5-t004-yolo-seg-synthetic)，不必先生成 1200 张图片。目录中有压缩包和同名 `.sha256` 文件。链接固定在提交 `f0d2e9feb6d929214e7130b1e5e7298c1421e1a7`，因此不会随着 `main` 分支继续更新而改变内容。
+
+在 macOS 或 Linux 上可以这样下载、校验和解压：
+
+```bash
+DATASET_BASE="https://github.com/terryma2024/ros-moveit-demo/raw/f0d2e9feb6d929214e7130b1e5e7298c1421e1a7/datasets/so101-v5-t004-yolo-seg-synthetic"
+ARCHIVE="so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+
+curl --fail --location --output "$ARCHIVE" "$DATASET_BASE/$ARCHIVE"
+curl --fail --location --output "$ARCHIVE.sha256" "$DATASET_BASE/$ARCHIVE.sha256"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c "$ARCHIVE.sha256"
+else
+  shasum -a 256 -c "$ARCHIVE.sha256"
+fi
+
+tar -xzf "$ARCHIVE"
+```
+
+校验结果应为 `OK`。解压后得到 `dataset/`，其中包含 800 张训练图片、200 张验证图片、200 张测试图片，以及对应的实例分割标签和逐样本 truth 文件。压缩包的 SHA256 是 `c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1`。
+
 ### 7.1 多物体 MJCF
 
 训练和验收场景位于 [`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)。它包含两个杯子实例、瓶子干扰物、桌面、目标区域和 `task_camera`。
