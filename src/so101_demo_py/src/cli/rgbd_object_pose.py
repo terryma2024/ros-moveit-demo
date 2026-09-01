@@ -59,12 +59,22 @@ def main(arguments: list[str] | None = None) -> int:
         prog="rgbd_object_pose",
         description="Detect one plastic_cup instance and localize it from aligned RGB-D",
     )
-    parser.add_argument("--weights", required=True, type=_absolute_path)
-    parser.add_argument("--weights-sha256", required=True)
+    parser.add_argument("--backend", choices=("yolo_seg", "grounded_sam"), default="yolo_seg")
+    parser.add_argument("--weights", type=_absolute_path)
+    parser.add_argument("--weights-sha256")
+    parser.add_argument("--model-root", type=_absolute_path)
+    parser.add_argument("--model-manifest-sha256")
     parser.add_argument("--device", choices=("auto", "cuda", "mps", "cpu"), default="auto")
     parser.add_argument("--allow-cpu-fallback", action="store_true")
     parser.add_argument("--model-id", default="plastic-cup-yolo11n-seg-v1")
     parser.add_argument("--imgsz", type=_positive_integer, default=640)
+    parser.add_argument("--grounding-box-threshold", type=_probability)
+    parser.add_argument("--grounding-text-threshold", type=_probability)
+    parser.add_argument("--duplicate-iou", type=_probability)
+    parser.add_argument("--max-candidates", type=_positive_integer)
+    parser.add_argument("--sam-quality-threshold", type=_probability)
+    parser.add_argument("--min-mask-pixels", type=_positive_integer)
+    parser.add_argument("--max-mask-area-ratio", type=_probability)
     parser.add_argument("--request-id", default=f"request-{uuid.uuid4().hex}")
     parser.add_argument("--evidence-root", required=True, type=_absolute_path)
     parser.add_argument("--once", action="store_true")
@@ -106,12 +116,22 @@ def main(arguments: list[str] | None = None) -> int:
 
     try:
         options = RgbdObjectPoseOptions(
+            backend=parsed.backend,
             weights_path=parsed.weights,
             weights_sha256=parsed.weights_sha256,
+            model_root=parsed.model_root,
+            model_manifest_sha256=parsed.model_manifest_sha256,
             device=parsed.device,
             allow_cpu_fallback=parsed.allow_cpu_fallback,
             model_id=parsed.model_id,
             imgsz=parsed.imgsz,
+            grounding_box_threshold=parsed.grounding_box_threshold,
+            grounding_text_threshold=parsed.grounding_text_threshold,
+            duplicate_iou=parsed.duplicate_iou,
+            max_candidates=parsed.max_candidates,
+            sam_quality_threshold=parsed.sam_quality_threshold,
+            min_mask_pixels=parsed.min_mask_pixels,
+            max_mask_area_ratio=parsed.max_mask_area_ratio,
             request_id=parsed.request_id,
             evidence_root=parsed.evidence_root,
             once=parsed.once,
