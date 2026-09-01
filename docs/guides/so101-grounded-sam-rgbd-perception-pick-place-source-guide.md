@@ -336,6 +336,7 @@ pose:
 ```text
 ROS executable
   -> verify immutable bundle
+  -> force HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1
   -> import torch + transformers
   -> select mps/cuda
   -> load both snapshots with local_files_only=True
@@ -360,9 +361,11 @@ prepare CLI 下载这两个 revision，把普通文件复制到一个新目录�
 - pipeline ID 和受控 prompt；
 - 两个模型的 ID、revision 和目录；
 - 每个普通文件的相对路径、大小和 SHA-256；
-- 构建环境中的锁定依赖版本。
+- 从同目录 `requirements.lock` 解析出的完整 `name==version` 映射。
 
-运行时要同时提供 bundle 根目录和 manifest SHA-256。`verify_model_bundle()` 会拒绝 symlink、路径逃逸、缺文件、多文件、大小变化、文件 SHA 变化和 manifest SHA 变化。校验完成后，Transformers 仍使用 `local_files_only=True`，运行阶段不会联网补文件。
+prepare CLI 不会调用 `pip freeze`，也不读取当前 venv 来猜版本。它先逐行解析 [`requirements.lock`](../../src/so101_demo_py/config/perception/requirements.lock)：缺 pin、重复 pin、`>=` 一类非精确写法都会在下载模型前失败。运行时要同时提供 bundle 根目录和 manifest SHA-256。`verify_model_bundle()` 除了检查 symlink、路径逃逸、文件集合、大小和逐文件 SHA，还会把 manifest 的依赖映射与固定预期逐项比较；即使有人改过版本并重新计算 manifest SHA，也不能通过这层校验。
+
+校验完成后，Transformers 仍使用 `local_files_only=True`。进程还会在任何 Hugging Face loader 调用前，把 `HF_HUB_OFFLINE` 和 `TRANSFORMERS_OFFLINE` 强制设为 `1` 并回读确认。调用方原先传入 `0` 时，以本进程的离线策略为准，不会带着冲突值继续加载。
 
 bundle 输出目录必须不存在。prepare 不会覆盖同名目录，也不会把一次失败下载混进已经验收的模型包。
 
@@ -460,6 +463,8 @@ python -c 'import torch, transformers; print(torch.__version__); print(transform
 source /opt/ros/jazzy/setup.zsh
 source /absolute/path/to/candidate/install/setup.zsh
 export PYTHONPATH=/tmp/so101-grounded-sam-macos/lib/python3.11/site-packages${PYTHONPATH:+:$PYTHONPATH}
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 ros2 pkg prefix so101_demo_py
 python -c 'import rclpy, torch, transformers; print(rclpy.__file__); print(torch.__file__); print(transformers.__file__)'
@@ -497,6 +502,8 @@ python -c 'import torch, transformers; print(torch.__version__); print(transform
 
 ```zsh
 export PYTHONPATH=/data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages${PYTHONPATH:+:$PYTHONPATH}
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 python -c 'import rclpy, torch, transformers; print(rclpy.__file__); print(torch.__file__); print(transformers.__file__)'
 ```
 
@@ -587,6 +594,7 @@ MuJoCo、RSP、MoveIt、静态 TF 或感知节点在 workflow 完成前退出，
 | `DEVICE_UNAVAILABLE` | MPS/CUDA probe、wheel 和驱动 | 不要静默启用 CPU fallback |
 | `WARMUP_FAILED` | 两个模型能否在同一 device 完成一次调用 | 不要只 warm DINO 或只 warm SAM |
 | `UNSUPPORTED_DETECTION_QUERY` | query 是否为 `plastic_cup` | 不要把任意自然语言直接传入模型 |
+| `CANDIDATE_LIMIT_EXCEEDED` | DINO 原始 proposal 数是否超过 `grounding_max_candidates` | 不要在 score/label 过滤后偷偷截断原始输出 |
 | `RESULT_CONTRACT_INVALID` | boxes、scores、labels、masks 和 quality shape | 不要猜测或截断不一致数组 |
 | `MASK_REJECTED` | predicted IoU、像素数、面积占比、框内占比 | 不要先放宽全部阈值 |
 | `TARGET_NOT_FOUND` | overlay、DINO label/score、SAM rejection 日志 | 不要发布默认 Pose |
