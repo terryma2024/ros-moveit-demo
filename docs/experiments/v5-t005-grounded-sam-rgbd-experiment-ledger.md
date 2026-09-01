@@ -7,7 +7,7 @@ success_contract: 两个平台以同一 commit、模型包 SHA 和阈值通过�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: b55c869c919cd673bf84be8b125cc55a8e6eb98f
-current_qualification_commit: 6242fe967c0574e9175965a7e5790aecb9d427f5
+current_qualification_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
 guide_fix_commit: 9450fd77504e4719ca9b6b351cbb4068f81eeb0d
 ledger_baseline_commit: c777f58fc29c6b1e0f7493f3d98032499b4b8052
 repository_head_at_fix_round_2_qualification: 6242fe967c0574e9175965a7e5790aecb9d427f5
@@ -25,13 +25,15 @@ confirmed_conclusions:
   - CONF-007 EXP-002/EXP-003 在 ai-station exact commit 隔离 checkout 上完成构建和 225 项 V5-T005 定向测试；Linux 整包门禁仍有与 V5-T005 无关的既有可移植性失败，不能记为通过
   - CONF-008 EXP-004 修正固定错误码、依赖锁、离线环境门禁和 Linux ros2 前缀测试后，macOS 与 ai-station 分别通过 229 项定向测试和 1044 项整包测试
   - CONF-009 EXP-005 删除 verifier 的调用方依赖覆盖入口后，macOS 与 ai-station 分别通过 230 项定向测试和 1045 项整包测试
+  - CONF-010 EXP-006 以 exact revisions 构建同一 immutable bundle，Linux/Mac manifest SHA 均为 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+  - CONF-011 EXP-010 的 Linux CUDA offline one-cup smoke 与模拟 PickPlace 通过；EXP-008 的 Mac MPS 感知成功，但 3851.778834 ms 推理超过 2.0 s source-age gate，动态执行 fail-closed
 open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-003 两阶段 warmed request latency 在两个平台都能 <= 2000 ms
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-004
-next_experiment: EXP-006 由 Task 10 在获准安装锁定依赖后构建真实 bundle，并运行 MPS/CUDA 离线 smoke
+latest_checkpoint: CP-005
+next_experiment: Task 11 暂停；先以新实验解决 Mac MPS 3851.778834 ms > 2000 ms 的能力缺口，禁止放宽 source-age safety gate
 ```
 
 ## Checkpoints
@@ -455,4 +457,353 @@ deletion_candidates:
   - mac:/tmp/v5-t005-6242fe9.bundle
 next_command: Task 10 获得依赖安装授权后，按 requirements.lock 建隔离环境并构建真实 immutable bundle；随后在 Mac MPS 与 Linux CUDA 运行 offline smoke
 decision: TASK_9_FIX_ROUND_2_COMPLETE_REAL_MODEL_PENDING
+```
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+prior_experiment: EXP-005
+hypothesis: 锁定依赖可以在 ai-station CUDA 任务 venv 与 Mac ROS Python 中保持精确版本和 ROS provenance，并由 exact d870113 隔离 checkout 构建一份可由两平台共同验证的不可变 Grounded SAM 模型包
+prediction: 两端依赖与 requirements.lock 完全一致，Linux torch.cuda.is_available() 为 True、Mac torch.backends.mps.is_available() 为 True；Linux builder 下载两个固定 revision 后生成无 symlink、无额外文件且逐文件 SHA/size 全部通过的 bundle，Mac 复制件与 Linux manifest SHA 完全相同
+single_variable: 从仅软件契约资格进入获授权的锁定依赖安装和两个 exact revision 模型包构建；模型、配置、prompt、阈值与生产源码保持不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - canonical /data/work/ws_moveit 保持 main@e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4，保留用户未跟踪文档且全程只读
+  - source commit 固定为 d870113ff0db11dd30461ab5450e79b131b73aa6，Linux 使用新隔离 checkout /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2
+  - /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2、/data/work/venvs/so101-grounded-sam、/data/work/so101-models/grounded-sam-v1 与 /Users/matianyi/Models/so101/grounded-sam-v1 在启动前均不存在
+  - 用户已明确授权锁定 Python 依赖安装、两个 exact revision 下载、Linux bundle 创建和同 bundle 复制到 Mac，但未授权覆盖、删除、修改 canonical checkout 或真实机械臂
+success_criteria:
+  - Linux entrypoint shebang 指向 /data/work/venvs/so101-grounded-sam/bin/python，Mac entrypoint 继续指向 /Users/matianyi/ros2_jazzy/.venv/bin/python
+  - 两端 rclpy 路径保持 ROS Jazzy provenance，requirements.lock 十个版本精确一致，Linux CUDA 与 Mac MPS 分别可用且 CPU fallback 不参与
+  - bundle manifest 记录两个固定 model ID/revision、固定依赖和全部普通文件的相对路径、字节数、SHA-256
+  - verifier 通过，bundle 内没有 symlink、未登记文件或 path escape；archive SHA 与 Mac transfer SHA 一致
+  - Linux 与 Mac manifest.json SHA-256 完全相同，Mac 相对路径/字节数/SHA 清单与 Linux read-back 完全相同
+failure_criteria:
+  - 锁定依赖无法安装、rclpy provenance 漂移、CUDA/MPS 不可用、固定 revision 无法由 pinned loader 加载，或任一 bundle/transfer 校验失败
+invalid_criteria:
+  - 任一已存在目标被覆盖、canonical checkout 状态变化、使用非 d870113 源构建、使用第二次 Mac Hub 下载替代同包复制，或证据路径越出登记根
+provenance:
+  source_commit: d870113ff0db11dd30461ab5450e79b131b73aa6
+  linux_checkout: /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2
+  linux_install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10
+  linux_python: /data/work/venvs/so101-grounded-sam/bin/python
+  mac_install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  mac_dependency_underlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  mac_python: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  runtime_executable: ros2 run so101_demo_py prepare_grounded_sam_bundle
+  ros_domain_id: UNSET_BUNDLE_BUILD_NO_ROS_GRAPH
+  gz_partition: UNSET_BUNDLE_BUILD_NO_GAZEBO
+commands:
+  - command: GIT_LFS_SKIP_SMUDGE=1 git clone --no-checkout /tmp/v5-t005-d870113-task10.bundle /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2; cd /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2; GIT_LFS_SKIP_SMUDGE=1 git checkout --detach d870113ff0db11dd30461ab5450e79b131b73aa6
+    exit_code: 0
+  - command: /usr/bin/python3 -m venv /data/work/venvs/so101-grounded-sam; /home/lenovo/.local/bin/uv pip install --python /data/work/venvs/so101-grounded-sam/bin/python --default-index https://pypi.tuna.tsinghua.edu.cn/simple -r /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/src/so101_demo_py/config/perception/requirements.lock
+    exit_code: 0
+  - command: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon --log-base log-task10 build --packages-select so101_mujoco_support so101_demo_py --packages-ignore mujoco_3d_lidar mujoco_ros2_control_msgs mujoco_vendor so101_teleop mujoco_ros2_control_plugins mujoco_ros2_control --allow-overriding so101_mujoco_support so101_demo_py --symlink-install --build-base build-task10 --install-base install-task10 --event-handlers console_direct+
+    exit_code: 0
+  - command: /Users/matianyi/.local/bin/uv pip install --python /Users/matianyi/ros2_jazzy/.venv/bin/python3 --default-index https://pypi.tuna.tsinghua.edu.cn/simple -r /Users/matianyi/.codex/worktrees/5b15/moveit-demo/src/so101_demo_py/config/perception/requirements.lock
+    exit_code: 0
+  - command: ros2 run so101_demo_py prepare_grounded_sam_bundle --config /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/src/so101_demo_py/config/perception/grounded_sam.yaml --output /data/work/so101-models/grounded-sam-v1
+    exit_code: 0
+  - command: tar -C /data/work/so101-models -czf /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-bundle/grounded-sam-v1.tar.gz grounded-sam-v1
+    exit_code: 0
+  - command: scp Linux archive/inventory to /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-transfer; verify tar SHA, safe member types, manifest, 21 relative paths/sizes/SHA; install with _rename_exclusive to /Users/matianyi/Models/so101/grounded-sam-v1
+    exit_code: 0
+correction:
+  - time: 2026-09-01T18:10:28+08:00
+    reason: 初次 precondition checkout /data/work/so101-v5-t005-grounded-sam-task10-d870113 的 bundle clone 没有 remote HEAD，随后 detached checkout 未继承 GIT_LFS_SKIP_SMUDGE=1 而失败；该路径保持原状，不删除、不覆盖、不用于 runtime
+    replacement: 使用仍不存在的新路径 /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2，以 git clone --no-checkout 后显式 GIT_LFS_SKIP_SMUDGE=1 checkout exact SHA；模型、依赖、commit 与验收变量不变
+observed:
+  - OBSERVED 首次 checkout setup 失败目录已保留；canonical /data/work/ws_moveit 复核仍为原 HEAD 和原用户未跟踪文档
+  - OBSERVED replacement checkout HEAD 为 d870113ff0db11dd30461ab5450e79b131b73aa6，git status 为空；EXP-006 已在依赖安装前进入 RUNNING
+  - OBSERVED Linux 十个 requirements.lock pin 全部精确一致；torch 2.13.0+cu130、torch.cuda.is_available()=True、torch.version.cuda=13.0、设备为 NVIDIA GeForce RTX 5080，rclpy 来自 /opt/ros/jazzy/lib/python3.12/site-packages
+  - OBSERVED Linux exact runtime package prefix 为 /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10/so101_demo_py，prepare_grounded_sam_bundle 与 rgbd_object_pose shebang 均为 /data/work/venvs/so101-grounded-sam/bin/python
+  - OBSERVED Mac 十个 pin 全部精确一致，PyYAML 从 6.0.3 收敛为 6.0.2；rclpy 仍来自 /opt/ros/jazzy/rclpy，两个 entrypoint shebang 仍为 /Users/matianyi/ros2_jazzy/.venv/bin/python；MPS available=True 且实际 tensor device 为 mps:0
+  - OBSERVED ai-station Hugging Face 直连 TCP 443 超时；一次性 SSH reverse tunnel 到 Mac 现有 Xray 后 Hub 可达，未修改持久路由。Xet 与两个并发 HTTP attempt 均因连接中断失败，失败日志和一个未完成 staging 保留
+  - OBSERVED 四个 LFS 权重最终以 exact official resolve URL 做有界 Range resume，并在进入官方 builder 前逐个达到 Hub files_metadata size 与 LFS SHA；model IDs/revisions 未改变
+  - OBSERVED 官方 builder 最终成功，manifest SHA 为 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3；独立 offline verifier 通过，manifest 登记 20 个模型文件，bundle 连同 manifest 共 21 个普通文件、无 symlink
+  - OBSERVED grounded-sam-v1.tar.gz 为 1568494067 bytes，SHA256=014787b1b643a6f46dda3680ab5d29fd49a9f7c31c1a0a14f9085580deb8699c；Mac tar member 安全检查为 24 members、0 bad
+  - OBSERVED Mac 解包件与 Linux 的 21 条相对路径、字节数和 SHA 清单在 LC_ALL=C 规范化后逐项一致；atomic no-clobber 安装后 verifier 再次通过，同一 manifest SHA 保持不变
+inferred:
+  - INFERRED 同一不可变 bundle 已具备 Linux CUDA 与 Mac MPS 离线 actual-model smoke 的 provenance 前置条件；EXP-006 不证明推理、mask、Depth、TF 或 /cup_pose
+conclusion: 双平台锁定依赖、设备 provenance、Linux immutable bundle 构建及同包 Mac 复制全部通过；真实模型推理仍由 EXP-007/EXP-008 验证
+evidence:
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/dependency-install/linux/provenance.json sha256=a83f99478258f8ee586512a5506ba62223ac7516dc0c19015c213fba92163441
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/dependency-install/linux/runtime-provenance.json sha256=14254f1e2eb6c7871dd529cf9414c5084720a2b4fd4fd0650de2801fc835d29c
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/dependency-install/macos/provenance.json sha256=7d9e29bd2cc3a73c476282b4ee9d1cd4eefc6da2ac1b3519fcb7197437432d45
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-bundle/verifier.json sha256=dac7b073c3c4d4c34874941a405575082cbed866f56ae2e076b1884f85cd0f0c
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-bundle/grounded-sam-v1.tar.gz sha256=014787b1b643a6f46dda3680ab5d29fd49a9f7c31c1a0a14f9085580deb8699c
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-transfer/mac-final-verifier.json sha256=763a927f40eb51a22ebee165e1af9dbae97814194eeb73a0eebdedb2fc9ee9c7
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-transfer/mac-bundle-files.sha256.sorted sha256=1c9a07fbd071d2cd1c01465226c3be1992f826dc12d1fe8381bbef44cbe04f2f
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-transfer/mac-bundle-files.size.sorted sha256=cffc3b9da6c6f67a86c67d26eb0ea06fd4efa3e84a08496af1df889b4a6738a3
+decision: KEEP
+next_experiment: EXP-007
+```
+
+```yaml
+experiment_id: EXP-007
+status: VALID
+prior_experiment: EXP-006
+hypothesis: ai-station 能在强制离线、显式 CUDA 且禁止 CPU fallback 的条件下，从 EXP-006 的真实 bundle 对 one-cup 多物体 RGB-D 帧生成唯一 plastic_cup、非空原尺寸 mask 和源时间戳 /cup_pose
+prediction: actual Grounding DINO Tiny 与 SAM 2.1 Hiera Tiny 联合 warm-up 成功，runtime device 为 cuda；candidate_count 唯一、mask 非空且为 full resolution，/cup_pose stamp 与 RGB-D 源 stamp 相同，证据展开记录 model revisions、manifest/file SHA、latency 和 cleanup
+single_variable: 平台固定为 ai-station CUDA；commit、bundle、prompt、阈值和 one-cup 场景固定
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-006 为 VALID，Linux bundle verifier 与 CUDA provenance 已通过
+  - ROS_DOMAIN_ID=141，GZ_PARTITION=v5-t005-grounded-sam-linux-smoke-001，没有重复同域 stack
+  - HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1、perception_device=cuda、perception_allow_cpu_fallback=false
+success_criteria:
+  - actual model 完成联合 warm-up 和一次请求，证据 device 为 cuda 且没有 Hub 请求
+  - 唯一 plastic_cup 候选具有非空 full-resolution mask，TargetSelector 不按分数消歧
+  - 对齐 Depth/CameraInfo 和精确 tf2 成功，发布本轮源时间戳 /cup_pose；evidence 写入成功
+  - 记录 cold/warm latency、candidate/mask/device/revisions/provenance，退出后 owned processes 为 NONE
+failure_criteria:
+  - DEVICE_UNAVAILABLE、MODEL_LOAD_FAILED、WARMUP_FAILED、INFERENCE_FAILED、TARGET_NOT_FOUND、TARGET_AMBIGUOUS、DEPTH_INVALID、TF_UNAVAILABLE、EVIDENCE_WRITE_FAILED 或 CLEANUP_FAILED
+invalid_criteria:
+  - 旧 topic、重复 node、错误 overlay/commit/bundle、非真实 payload、缺失源 stamp 或 evidence 污染
+provenance:
+  source_commit: d870113ff0db11dd30461ab5450e79b131b73aa6
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10
+  runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10/so101_demo_py
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: 141
+  gz_partition: v5-t005-grounded-sam-linux-smoke-001
+commands:
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=141 GZ_PARTITION=v5-t005-grounded-sam-linux-smoke-001 timeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=true sensor_rendering:=true session_id:=linux-grounded-sam-smoke-001 evidence_file:=/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/linux-grounded-sam-smoke-001.json mujoco_scene:=/data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/data/work/so101-models/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=cuda perception_allow_cpu_fallback:=false
+    exit_code: 1
+observed:
+  - OBSERVED 启动前 ROS_DOMAIN_ID=141 node list 为空，相关 process probe 只命中检查 shell；package prefix、manifest SHA 与 launch 参数 provenance 通过，EXP-007 在 launch 前进入 RUNNING
+  - OBSERVED 强制 offline 下 actual Grounding DINO + SAM2 加载和 CUDA warm-up 成功，READY runtime_device=cuda，cold_start_latency_ms=9303.099296；无 CPU fallback
+  - OBSERVED 首张真实 MuJoCo RGB-D 帧进入 detector 后返回 INFERENCE_FAILED，request_latency_ms=125.741059，candidate_count=0，source_frame_id=task_camera_frame，source_stamp_ns=13040000000
+  - OBSERVED 本轮没有发布 /cup_pose，launch exit=1；失败 result 与 model provenance 已写入登记 durable root，未被后续试验覆盖
+  - OBSERVED launch 已终止 owned child process；立即的 ROS graph probe 仍见 /move_group* discovery 缓存，而 pgrep 未发现对应存活进程，后续需在新 domain 中独立重试
+inferred:
+  - INFERRED bundle、offline 门禁、CUDA 选择与联合 warm-up 未失败；故障已缩小到真实尺寸帧的 detector inference/postprocess 边界，仍需从 chained exception 取回根因
+conclusion: 本次 smoke 有效地证明 actual model 离线加载与 CUDA warm-up，但真实首帧 INFERENCE_FAILED，未达成候选、mask、Depth/TF 或 /cup_pose 成功准则
+evidence:
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/launch.log
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/linux-grounded-sam-smoke-001.d/linux-grounded-sam-smoke-001/perception/result.json
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/linux-grounded-sam-smoke-001.d/linux-grounded-sam-smoke-001/perception/model-provenance.json
+decision: KEEP
+next_experiment: EXP-009
+```
+
+```yaml
+experiment_id: EXP-008
+status: VALID
+prior_experiment: EXP-010
+hypothesis: Mac 能在强制离线、显式 MPS 且禁止 CPU fallback 的条件下，使用与 Linux 相同 manifest SHA 对同一 one-cup 多物体 RGB-D 场景生成相同语义结果和新鲜 /cup_pose
+prediction: actual Grounding DINO Tiny 与 SAM 2.1 Hiera Tiny 联合 warm-up 成功，runtime device 为 mps；候选唯一、mask 非空且为 full resolution，/cup_pose stamp 与 RGB-D 源 stamp 相同，结果复制到 durable evidence 后远端 read-back 完整
+single_variable: 平台从 Linux CUDA 切换为 Mac MPS；commit、bundle SHA、prompt、阈值和场景保持固定
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-006、EXP-009 与 EXP-010 为 VALID；Mac bundle verifier、MPS provenance、f55074e 两端包级回归及 Linux actual-model smoke 已通过
+  - ROS_DOMAIN_ID=142，GZ_PARTITION=v5-t005-grounded-sam-mac-smoke-fix-001，没有重复同域 stack
+  - HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1、perception_device=mps、perception_allow_cpu_fallback=false
+success_criteria:
+  - actual model 完成联合 warm-up 和一次请求，证据 device 为 mps 且没有 Hub 请求
+  - 唯一 plastic_cup 候选具有非空 full-resolution mask，发布本轮源时间戳 /cup_pose
+  - 与 Linux 使用同一 manifest SHA、model revisions、prompt 和阈值；本地 evidence 逐文件核验后复制到 durable root 并远端 read-back
+  - 记录 cold/warm latency、candidate/mask/device/revisions/provenance，退出后 owned processes 为 NONE
+failure_criteria:
+  - DEVICE_UNAVAILABLE、MODEL_LOAD_FAILED、WARMUP_FAILED、INFERENCE_FAILED、TARGET_NOT_FOUND、TARGET_AMBIGUOUS、DEPTH_INVALID、TF_UNAVAILABLE、EVIDENCE_WRITE_FAILED 或 CLEANUP_FAILED
+invalid_criteria:
+  - 旧 topic、重复 node、错误 overlay/commit/bundle、非真实 payload、缺失源 stamp、使用在线 Hub 或 evidence 污染
+provenance:
+  source_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  dependency_underlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py
+  python: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: 149
+  gz_partition: v5-t005-grounded-sam-mac-smoke-fix-004
+commands:
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=142 GZ_PARTITION=v5-t005-grounded-sam-mac-smoke-fix-001 gtimeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=false sensor_rendering:=true session_id:=mac-grounded-sam-smoke-fix-001 evidence_file:=/tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e/mac-grounded-sam-smoke-fix-001.json mujoco_scene:=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/Users/matianyi/Models/so101/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=mps perception_allow_cpu_fallback:=false
+    exit_code: 1
+  - command: DYLD_LIBRARY_PATH=/Users/matianyi/ros2_jazzy/macos_dylib_farm/current HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=147 GZ_PARTITION=v5-t005-grounded-sam-mac-smoke-fix-002 gtimeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=false sensor_rendering:=true session_id:=mac-grounded-sam-smoke-fix-002 evidence_file:=/tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-dylib/mac-grounded-sam-smoke-fix-002.json mujoco_scene:=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/Users/matianyi/Models/so101/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=mps perception_allow_cpu_fallback:=false
+    exit_code: 1
+  - command: DYLD_LIBRARY_PATH=/Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control/lib:/Users/matianyi/ros2_jazzy/macos_dylib_farm/current HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=148 GZ_PARTITION=v5-t005-grounded-sam-mac-smoke-fix-003 gtimeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=false sensor_rendering:=true session_id:=mac-grounded-sam-smoke-fix-003 evidence_file:=/tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-dispatcher/mac-grounded-sam-smoke-fix-003.json mujoco_scene:=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/Users/matianyi/Models/so101/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=mps perception_allow_cpu_fallback:=false
+    exit_code: 130
+  - command: DYLD_LIBRARY_PATH=/Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control/lib:/Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control_msgs/lib:/Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_ros2_control_plugins/lib:/Users/matianyi/ros2_jazzy/macos_dylib_farm/current HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=149 GZ_PARTITION=v5-t005-grounded-sam-mac-smoke-fix-004 gtimeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=false sensor_rendering:=true session_id:=mac-grounded-sam-smoke-fix-004 evidence_file:=/tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-runtime-set/mac-grounded-sam-smoke-fix-004.json mujoco_scene:=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/Users/matianyi/Models/so101/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=mps perception_allow_cpu_fallback:=false
+    exit_code: 1
+observed:
+  - OBSERVED 本轮在执行前已转为 RUNNING；命令固定 f55074e、同一 manifest SHA、同一 prompt/config/thresholds，Mac 仅将 device 切换为 mps 并要求 headless=false
+  - OBSERVED 批次 001 的 Grounding DINO + SAM2 在强制 offline 下完成 MPS warm-up 并 READY，但 base project 的 libmujoco_ros2_control.dylib 因缺少既有 dylib farm 环境而无法解析 @rpath/libmujoco.3.4.0.dylib；无 RGB-D 帧，最终 CUP_POSE_TIMEOUT，launch exit=1
+  - OBSERVED 按项目现有 macOS 部署指南加入 /Users/matianyi/ros2_jazzy/macos_dylib_farm/current 后，source/install/package prefix 不变，ctypes 对同一 libmujoco_ros2_control.dylib 的 dlopen probe 通过
+  - OBSERVED 批次 002 解析了 MuJoCo 3.4.0，但仍两次 Timed out waiting to start simulation rendering；otool/hash 证明 symlink-install 的 ros2_control_node 从 build rpath 加载 dispatcher SHA 3338a148…，而 install plugin 的 @loader_path 加载另一个 dispatcher SHA 1e588890…，两个进程内 singleton 状态不共享，主线程因而看不到 plugin 提交的 UI task
+  - OBSERVED 批次 003 的 node 已统一加载 install dispatcher，但 farm 中 stale sibling overlay 的 mujoco_ros2_control_msgs typesupport 缺 SetFreeJointState 符号；确认根因后主动 SIGINT，exit=130，cleanup 后 owned process NONE
+  - OBSERVED parent install 的 core/messages/plugins 三组 lib 置于 farm 之前后，RTLD_NOW 对 exact libmujoco_ros2_control.dylib 成功；parent messages typesupport SHA ff26d5f6… 与 stale sibling SHA 71f4fcb1… 明确不同
+  - OBSERVED 批次 004 的可见 MuJoCo、控制器与 RGB-D 启动成功；actual offline MPS detector 返回 3 个 full-resolution 非空 mask，DINO confidence 为 0.7196819、0.4888311、0.3704001，SAM quality 为 0.9404030、0.9535543、0.9366040
+  - OBSERVED 固定 selector confidence_threshold=0.50 后仅 1 个 eligible plastic_cup；selected mask 为 640x480、4651 pixels，Depth/TF center_world_xyz=[0.02009680,-0.28045558,0.165]
+  - OBSERVED runtime_device=mps，inference_latency_ms=3851.778834，cold_start_latency_ms=10060.106833，source_stamp_ns=59804000000，/cup_pose 使用该源时间戳发布；overlay 人工查看确认 selected mask 覆盖左侧杯
+  - OBSERVED dynamic consumer 按 maximum_source_age_s=2.0 拒绝已超过 freshness gate 的 pose，CUP_POSE_STALE 后 launch exit=1；没有放宽 freshness、CPU fallback、truth/color 或最高分强选
+  - OBSERVED cleanup 后 ROS_DOMAIN_ID=149 node list 与 owned process 清单均为空；本地 33 regular files/1 symlink read-back 的逐文件 SHA 通过
+  - OBSERVED sanitized archive SHA b78d749f2fc35d2b2b5626c134a4feaf32e799022ed6629f96fa4168e49c905c；durable read-back inventory SHA c5abefd834239e0ffe7314f4b7108b71f596e967deacb4ae5730d9f06c9e8784
+inferred:
+  - INFERRED Mac actual-model perception smoke 达成唯一 eligible cup、full-resolution mask、Depth/TF、源时间戳 /cup_pose 与 offline/MPS provenance，但 3.85 s warmed latency 不满足现有 2.0 s 下游 freshness safety contract
+conclusion: VALID failure — MODEL_CAPABILITY_NOT_MET；Mac 感知 payload 成功但执行链按设计 fail-closed，不能进入 Task 11 四场景/5-of-5
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-dylib/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-dispatcher/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/model-smoke/retry-f55074e-runtime-set/
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/macos/
+decision: KEEP
+next_experiment: 新实验评估不放宽 freshness gate 的 Mac 推理延迟改进；未获成功前暂停 Task 11
+correction:
+  - time: 2026-09-01T20:20:00+08:00
+    reason: 原计划 source_commit=d870113 在 EXP-007 actual CUDA 首帧暴露 device tensor 转 NumPy 的源码缺陷；EXP-009 已按 TDD 最小修复并以独立提交 f55074e 通过两端包级回归，EXP-010 actual Linux full stack 通过
+    replacement: Mac smoke 使用 exact f55074e 重建 overlay；bundle、model revisions、prompt、thresholds、scene、offline 门禁和禁止 CPU fallback 均保持不变
+  - time: 2026-09-01T20:33:00+08:00
+    reason: 批次 001 启动 shell 未导出项目既有 macOS dylib farm，导致已安装控制插件无法解析其构建时 MuJoCo 3.4.0 runtime；模型已 READY，但仿真未产生 RGB-D payload
+    replacement: 保留批次 001；在新 ROS_DOMAIN_ID=147、新 GZ_PARTITION/session/evidence 路径中仅补回部署指南要求的 DYLD_LIBRARY_PATH=/Users/matianyi/ros2_jazzy/macos_dylib_farm/current，不更换 package prefix、锁版本、模型 revision、bundle、scene、prompt 或阈值
+  - time: 2026-09-01T20:42:00+08:00
+    reason: 批次 002 证明单独加入 farm 仍让 symlink-install node 与 install plugin 分别加载不同 SHA 的 macOS UI dispatcher，UI task 的进程内 singleton 被拆成两份
+    replacement: 保留批次 002；在新 ROS_DOMAIN_ID=148、新 GZ_PARTITION/session/evidence 路径中把同一 install/mujoco_ros2_control/lib 放在 farm 前，使 node 和 plugin 解析到同一个已安装 dispatcher；source/install/package prefix 以及模型与感知变量均不变
+  - time: 2026-09-01T20:48:00+08:00
+    reason: 批次 003 只前置 core lib，farm 仍为 messages typesupport 选择 stale sibling overlay，缺少当前 parent install 已提供的 SetFreeJointState symbol
+    replacement: 保留并主动清理批次 003；在新 ROS_DOMAIN_ID=149、新 GZ_PARTITION/session/evidence 路径中把同一 parent install 的 core、msgs、plugins 三组 lib 一起置于 farm 前；RTLD_NOW 预检必须先通过，其他变量不变
+```
+
+```yaml
+experiment_id: EXP-009
+status: VALID
+prior_experiment: EXP-007
+hypothesis: EXP-007 的 INFERENCE_FAILED 可以在同一 exact checkout、bundle、CUDA 和 offline 环境中由直接 detector 调用稳定复现，并用完整 chained traceback 定位到单一输入或 postprocess 契约差异
+prediction: 直接调用会保留 GroundedSamResultError.__cause__ 的完整类型、消息和栈，且失败层与 EXP-007 首帧一致；若确认为本任务源码缺陷，才进入 TDD 最小修复和新 smoke
+single_variable: 用直接 detector 可观测调用取代 ROS application 对异常细节的 fail-closed 折叠；model revisions、bundle SHA、pins、prompt、thresholds、offline 和 CUDA 不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-007 已 VALID 结算并保留失败批次；EXP-008 仍为 PLANNED，Mac smoke 未启动
+  - 使用 /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10 和 /data/work/venvs/so101-grounded-sam/bin/python
+  - HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1、requested_device=cuda、allow_cpu_fallback=false；调试输出只写入同一 registered durable root
+success_criteria:
+  - 完整 traceback 稳定复现且指出失败边界、实际数据 shape/type 和 pinned API 期望形状
+  - 形成单一根因假设，不通过更换 pin/revision、放宽 CPU fallback、改阈值或强选候选规避
+  - 若为源码缺陷，先产生最小 RED 回归测试，再修复并在两端重建/复验 source-install-runtime provenance
+failure_criteria:
+  - 不能稳定复现、traceback 仍丢失根因、发现模型能力不足或需要改变未授权边界
+invalid_criteria:
+  - 覆盖 EXP-007 证据、联网加载、修改 canonical checkout、更换 model revision/pin，或未经 RED 测试直接修码
+provenance:
+  source_commit: d870113ff0db11dd30461ab5450e79b131b73aa6
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2/install-task10
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  bundle_manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+commands:
+  - command: scp capture_frame.zsh and direct_detector_traceback.py to ai-station registered durable debug-exp-009; timeout 300s zsh capture_frame.zsh
+    exit_code: 127
+  - command: scp capture_frame_v2.zsh and direct_detector_traceback_v2.py to ai-station registered durable debug-exp-009; timeout 300s zsh capture_frame_v2.zsh
+    exit_code: 1
+  - command: scp capture_rgb_only_v3.py, capture_frame_v3.zsh and direct_detector_traceback_v3.py to ai-station registered durable debug-exp-009; timeout 300s zsh capture_frame_v3.zsh
+    exit_code: 0
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 timeout --signal=TERM --kill-after=20s 180s /data/work/venvs/so101-grounded-sam/bin/python direct_detector_traceback.py
+    exit_code: 1 before fix; 0 at fix commit f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+  - command: Mac RED/GREEN directed tests, Mac rebuild/full package gate; exact f55074e bundle checkout/build on ai-station; Linux directed/full package gate
+    exit_code: valid RED=1; GREEN=0; Mac full=0; Linux build=0; Linux directed=0; Linux full=0
+observed:
+  - OBSERVED EXP-007 已 VALID 结算；调试脚本已在 Mac debug root 以 apply_patch 创建，待复制到 registered durable root，运行前未修改生产源码
+  - OBSERVED 诊断批次 001 在进入 ROS 前失败；zsh nounset 在 source overlay 时命中 AMENT_TRACE_SETUP_FILES/COLCON_TRACE 未定义，capture_exit=127、launch_exit=127，该批次保留且未触发模型调用
+  - OBSERVED 诊断批次 002 再次在 actual CUDA 首帧稳定触发 INFERENCE_FAILED，但 rgbd_sensor_capture 在保存 RGB 前因锁定环境不含 Open3D 而 exit=1；未安装额外依赖
+  - OBSERVED 诊断批次 003 用锁定 rclpy/NumPy/Pillow 从 /task_camera/color 无损保存 640x480 rgb8 真实帧，launch 再次 INFERENCE_FAILED 而 RGB capture exit=0
+  - OBSERVED direct actual detector traceback 稳定定位到 convert_grounding_results 将 CUDA boxes tensor 直接 np.asarray；底层 TypeError 为 can't convert cuda:0 device type tensor to numpy
+  - OBSERVED 有效 RED 在旧代码上因 device tensor 直接 NumPy 转换失败；最小修复仅在 adapter 边界对 boxes/scores 使用已有 _to_numpy，GREEN 1 passed，定向 39 passed
+  - OBSERVED 修复提交为 f55074e5d9806304955df1a0d2beadbd8e4a1ecc；Mac 重建后 1046 passed，Linux exact f55074e checkout 重建后定向 39 passed、整包 1046 passed/4 warnings
+  - OBSERVED 修复后同一真实 RGB 帧的 offline CUDA direct detector exit=0，inference_latency_ms=158.163672，产生 3 个 full-resolution 非空 mask，不再是 INFERENCE_FAILED
+correction:
+  - time: 2026-09-01T19:45:00+08:00
+    reason: 诊断脚本在 source ROS/colcon overlay 前启用 set -u，破坏了 overlay 允许未定义 trace 变量的初始化语义
+    replacement: 保留批次 001，以新 v2 脚本先 source overlays、再启用 nounset；改用 ROS_DOMAIN_ID=144、新 session/evidence 路径，不覆盖任何已有文件
+  - time: 2026-09-01T19:48:00+08:00
+    reason: 现有 rgbd_sensor_capture 会在产出 RGB 前引入 Open3D 点云处理，而 Task 10 锁文件未包含 Open3D；为调试额外安装将扩大变量并破坏 exact pin 边界
+    replacement: 保留批次 002，以新 v3 诊断脚本只订阅 /task_camera/color，用已锁定的 rclpy、NumPy 和 Pillow 无损保存首帧；使用 ROS_DOMAIN_ID=145 和新 evidence 名称
+inferred:
+  - INFERRED 根因是 adapter 丢失 device-to-host 转换，而不是 model revision、bundle、pin、offline 或 CUDA 可用性；f55074e 已修复该契约缺陷
+  - INFERRED direct detector 的 3 个候选不证明 full stack 能选出唯一目标；必须由 TargetSelector 的 fail-closed 契约在新 experiment 中决定
+conclusion: 根因已用真实帧定位并经 TDD 最小修复，两端包级回归通过；actual CUDA 推理已从 INFERENCE_FAILED 转为 3 个候选，唯一目标和 /cup_pose 尚未通过
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-device-tensor/red-device-tensor-v3.xml
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-device-tensor/green-device-tensor.xml
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-device-tensor/mac-full-v3.xml
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/debug-exp-009/direct-detector-traceback-v3.log
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/debug-exp-009/direct-detector-fixed-f55074e.log
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-device-tensor/linux/directed.xml
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-device-tensor/linux/full.xml
+decision: KEEP
+next_experiment: EXP-010
+```
+
+```yaml
+experiment_id: EXP-010
+status: VALID
+prior_experiment: EXP-009
+hypothesis: f55074e 修复后的 ai-station full stack 会在同一 one-cup 多物体场景中产生可审计候选和 mask，然后仅在候选唯一时进入 Depth/TF 并发布 /cup_pose
+prediction: 推理不再 INFERENCE_FAILED；若 actual model 仍返回 3 个 matching plastic_cup，TargetSelector 必须返回 TARGET_AMBIGUOUS 且不发布 /cup_pose，该结果标记 MODEL_CAPABILITY_NOT_MET，不用 truth/color/最高分强选
+single_variable: 从 direct detector 进入 f55074e exact full ROS/MuJoCo stack；bundle、model revisions、prompt、thresholds、scene、offline 和 CUDA 不变
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-009 为 VALID，f55074e 两端包级回归通过，Linux exact runtime 重建成功
+  - ROS_DOMAIN_ID=146，GZ_PARTITION=v5-t005-grounded-sam-linux-smoke-fix-001，本域无重复 stack
+  - HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1、perception_device=cuda、perception_allow_cpu_fallback=false
+success_criteria:
+  - actual detector 产生唯一 plastic_cup、非空 full-resolution mask、成功 Depth/TF 与源时间戳 /cup_pose
+  - candidate/mask/device/revisions/manifest/latency/source stamp 证据完整，cleanup 后 owned process 为 NONE
+failure_criteria:
+  - 任何稳定失败码，特别是 TARGET_AMBIGUOUS，或没有发布新鲜 /cup_pose
+invalid_criteria:
+  - 修改阈值/revision/pin/scene，使用 truth/color/最高分强选，覆盖旧 evidence，或不是 f55074e exact runtime
+provenance:
+  source_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+  install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-f55074e/install-task10
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  bundle_manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+  ros_domain_id: 146
+  gz_partition: v5-t005-grounded-sam-linux-smoke-fix-001
+commands:
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=146 GZ_PARTITION=v5-t005-grounded-sam-linux-smoke-fix-001 timeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=true sensor_rendering:=true session_id:=linux-grounded-sam-smoke-fix-001 evidence_file:=/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/retry-f55074e/linux-grounded-sam-smoke-fix-001.json mujoco_scene:=/data/work/so101-v5-t005-grounded-sam-task10-f55074e/install-task10/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/data/work/so101-models/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=cuda perception_allow_cpu_fallback:=false
+    exit_code: 0
+observed:
+  - OBSERVED source/install/runtime 指向 exact f55074e，rgbd_object_pose shebang 为任务 venv；启动前 ROS_DOMAIN_ID=146 无 node，相关 process probe 只命中检查 shell
+  - OBSERVED actual offline CUDA detector 返回 3 个 full-resolution 非空 mask，DINO confidence 分别为 0.7201325、0.4777547、0.3535068，SAM quality 分别为 0.9401684、0.9536868、0.9346478
+  - OBSERVED TargetSelector 固定 confidence_threshold=0.50；只有 1 个 matching plastic_cup，因此不是按最高分在多个 eligible 候选中强选，选中 mask 为 640x480、4643 pixels
+  - OBSERVED perception status=OK，runtime_device=cuda，inference_latency_ms=161.977643，cold_start_latency_ms=3654.74695，source_stamp_ns=7159999999，/cup_pose 使用同一源时间戳发布
+  - OBSERVED Depth/CameraInfo/tf2 定位 center_world_xyz=[0.02009484,-0.28046013,0.165]；dynamic workflow 从该 pose 完成 19 个状态迁移并 DONE
+  - OBSERVED 物理门记录抓取后双侧接触、杯子离桌 0.0039722m；终态 final_xy_error_m=0.0020481、final_upright_tilt_rad=0.00467438、table_contact=true，本 smoke 的模拟 Pick&Place 成功
+  - OBSERVED source-rgb 与 overlay 已取回并实际查看；画面中绿色 selected mask 覆盖左侧橙色杯，两个低于 0.50 的框覆盖其他干扰物
+  - OBSERVED launch exit=0，复查 ROS node list 为空，pgrep 无存活 owned process
+inferred:
+  - INFERRED one-cup smoke 达成唯一 eligible plastic_cup、非空 full-resolution mask、Depth/TF、源时间戳 /cup_pose 和数值/物理 Pick&Place 成功；3 个 raw candidates 中只有 1 个达到固定 selector gate
+conclusion: f55074e Linux CUDA actual-model offline smoke 通过；这是 Task 10 单次 smoke，不计入 Task 11 最终连续 5/5
+evidence:
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/linux/retry-f55074e/
+decision: KEEP
+next_experiment: EXP-008
+```
+
+## Checkpoint CP-005
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-008
+current_hypothesis: 同一 immutable bundle 已在 CUDA/MPS 离线运行；Linux 全栈通过，Mac 模型语义/实例/mask/Depth/TF 通过但 warmed latency 仍需在不放宽 2.0 s freshness gate 的前提下降低
+working_tree_status: source fix 已独立提交为 f55074e；本 checkpoint 仅待提交 ledger、Task 10 report 与 progress
+owned_processes: NONE on Mac ROS_DOMAIN_ID=149 and ai-station ROS_DOMAIN_ID=146
+preserved_processes: 用户进程与 canonical /data/work/ws_moveit 均未触碰
+retained_runs:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901
+  - /data/work/so101-models/grounded-sam-v1
+  - /Users/matianyi/Models/so101/grounded-sam-v1
+  - /data/work/so101-v5-t005-grounded-sam-task10-d870113-v2
+  - /data/work/so101-v5-t005-grounded-sam-task10-f55074e
+archived_runs: []
+deletion_candidates:
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-d870113
+  - ai-station:/data/work/so101-models/.grounded-sam-v1.staging-8rjn6_lm
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/model-smoke/macos/retry-f55074e-runtime-set
+  - /tmp/v5-t005-d870113-task10.bundle
+  - /tmp/v5-t005-f55074e-task10.bundle
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/f55074e.bundle
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/mac-grounded-sam-smoke-f55074e-runtime-set.tar.gz
+decision: PARTIAL_TASK10_MODEL_CAPABILITY_NOT_MET_ON_MAC
+next_command: 设计并预写一个只改变 Mac inference latency 的实验；不得放宽 source-age gate，不得进入 Task 11 正式计数
 ```
