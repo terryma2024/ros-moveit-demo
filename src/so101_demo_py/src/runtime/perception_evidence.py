@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 import numpy as np
 
@@ -156,6 +156,15 @@ def _candidate_document(
 
 
 class PerceptionEvidenceWriter:
+    def write_model_provenance(
+        self, root: Path, document: Mapping[str, object]
+    ) -> str:
+        path = root / "model-provenance.json"
+        if path.exists():
+            raise FileExistsError("model provenance path already exists")
+        atomic_json(path, document)
+        return str(path)
+
     def write_detection(
         self,
         request: ObjectPoseRequest,

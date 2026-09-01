@@ -30,6 +30,12 @@ from so101_demo.core.detection import (
     DetectionQuery,
     LocalizedObject,
 )
+from so101_demo.adapters.perception.detector_factory import (
+    DetectorFactoryOptions,
+    build_detector,
+)
+from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
+from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -45,14 +51,24 @@ def _validate_topic(name: str, value: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class RgbdObjectPoseOptions:
-    weights_path: Path
-    weights_sha256: str
     request_id: str
     evidence_root: Path
+    backend: str = "yolo_seg"
+    weights_path: Path | None = None
+    weights_sha256: str | None = None
+    model_root: Path | None = None
+    model_manifest_sha256: str | None = None
     device: str = "auto"
     allow_cpu_fallback: bool = False
     model_id: str = "plastic-cup-yolo11n-seg-v1"
     imgsz: int = 640
+    grounding_box_threshold: float | None = None
+    grounding_text_threshold: float | None = None
+    duplicate_iou: float | None = None
+    max_candidates: int | None = None
+    sam_quality_threshold: float | None = None
+    min_mask_pixels: int | None = None
+    max_mask_area_ratio: float | None = None
     once: bool = False
     startup_timeout_s: float = 30.0
     tf_timeout_s: float = 0.2
@@ -73,16 +89,54 @@ class RgbdObjectPoseOptions:
     output_topic: str = "/cup_pose"
 
     def __post_init__(self) -> None:
-        if not self.weights_path.is_absolute():
-            raise ValueError("weights_path must be absolute")
-        if self.weights_path.is_symlink() or not self.weights_path.is_file():
-            raise ValueError("weights_path must be a regular file")
-        if _SHA256.fullmatch(self.weights_sha256) is None:
-            raise ValueError("weights_sha256 must be a lowercase SHA256 digest")
+        if self.backend not in {"yolo_seg", "grounded_sam"}:
+            raise ValueError("backend must be yolo_seg or grounded_sam")
         if self.device not in {"auto", "cuda", "mps", "cpu"}:
             raise ValueError("device must be auto, cuda, mps, or cpu")
-        if not self.model_id:
-            raise ValueError("model_id must be non-empty")
+        if self.backend == "yolo_seg":
+            if (
+                self.model_root is not None
+                or self.model_manifest_sha256 is not None
+                or any(
+                    value is not None
+                    for value in (
+                        self.grounding_box_threshold,
+                        self.grounding_text_threshold,
+                        self.duplicate_iou,
+                        self.max_candidates,
+                        self.sam_quality_threshold,
+                        self.min_mask_pixels,
+                        self.max_mask_area_ratio,
+                    )
+                )
+            ):
+                raise ValueError("backend configuration mixes YOLO and Grounded SAM artifacts")
+            if self.weights_path is None:
+                raise ValueError("weights_path is required for yolo_seg")
+            if self.weights_sha256 is None:
+                raise ValueError("weights_sha256 is required for yolo_seg")
+            if not self.weights_path.is_absolute():
+                raise ValueError("weights_path must be absolute")
+            if self.weights_path.is_symlink() or not self.weights_path.is_file():
+                raise ValueError("weights_path must be a regular file")
+            if _SHA256.fullmatch(self.weights_sha256) is None:
+                raise ValueError("weights_sha256 must be a lowercase SHA256 digest")
+            if not self.model_id:
+                raise ValueError("model_id must be non-empty")
+            if self.imgsz <= 0:
+                raise ValueError("imgsz must be positive")
+        else:
+            if self.weights_path is not None or self.weights_sha256 is not None:
+                raise ValueError("backend configuration mixes YOLO and Grounded SAM artifacts")
+            if self.model_root is None:
+                raise ValueError("model_root is required for grounded_sam")
+            if self.model_manifest_sha256 is None:
+                raise ValueError("model_manifest_sha256 is required for grounded_sam")
+            if not self.model_root.is_absolute() or self.model_root.is_symlink():
+                raise ValueError("model_root must be an absolute non-symlink path")
+            if _SHA256.fullmatch(self.model_manifest_sha256) is None:
+                raise ValueError("model_manifest_sha256 must be a lowercase SHA256 digest")
+            self._grounded_thresholds()
         if _REQUEST_ID.fullmatch(self.request_id) is None:
             raise ValueError("request_id must be path-safe")
         if not self.evidence_root.is_absolute():
@@ -120,6 +174,62 @@ class RgbdObjectPoseOptions:
             _validate_topic(name, value)
         if len(set(topics.values())) != len(topics):
             raise ValueError("RGB-D perception topics must be distinct")
+
+    def _grounded_thresholds(self) -> GroundedSamThresholds:
+        defaults = GroundedSamThresholds.defaults()
+        return GroundedSamThresholds(
+            box_threshold=(
+                defaults.box_threshold
+                if self.grounding_box_threshold is None
+                else self.grounding_box_threshold
+            ),
+            text_threshold=(
+                defaults.text_threshold
+                if self.grounding_text_threshold is None
+                else self.grounding_text_threshold
+            ),
+            duplicate_iou=(
+                defaults.duplicate_iou if self.duplicate_iou is None else self.duplicate_iou
+            ),
+            max_candidates=(
+                defaults.max_candidates if self.max_candidates is None else self.max_candidates
+            ),
+            sam_quality=(
+                defaults.sam_quality
+                if self.sam_quality_threshold is None
+                else self.sam_quality_threshold
+            ),
+            min_mask_pixels=(
+                defaults.min_mask_pixels
+                if self.min_mask_pixels is None
+                else self.min_mask_pixels
+            ),
+            max_mask_area_ratio=(
+                defaults.max_mask_area_ratio
+                if self.max_mask_area_ratio is None
+                else self.max_mask_area_ratio
+            ),
+        )
+
+    def to_detector_factory_options(self) -> DetectorFactoryOptions:
+        if self.backend == "yolo_seg":
+            return DetectorFactoryOptions(
+                backend="yolo_seg",
+                requested_device=self.device,  # type: ignore[arg-type]
+                allow_cpu_fallback=self.allow_cpu_fallback,
+                yolo_weights_path=self.weights_path,
+                yolo_weights_sha256=self.weights_sha256,
+                yolo_model_id=self.model_id,
+                yolo_imgsz=self.imgsz,
+            )
+        return DetectorFactoryOptions(
+            backend="grounded_sam",
+            requested_device=self.device,  # type: ignore[arg-type]
+            allow_cpu_fallback=self.allow_cpu_fallback,
+            grounded_model_root=self.model_root,
+            grounded_manifest_sha256=self.model_manifest_sha256,
+            grounded_thresholds=self._grounded_thresholds(),
+        )
 
 
 class FreshFrameGate:
@@ -246,17 +356,9 @@ def _publish_and_confirm(publisher: Any, message: Any, *, ack_timeout: Any) -> N
 
 
 def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
-    from so101_demo.adapters.perception.yolo_seg import ModelSetupError, YoloSegDetector
-
     try:
-        detector = YoloSegDetector(
-            weights_path=options.weights_path,
-            expected_sha256=options.weights_sha256,
-            requested_device=options.device,  # type: ignore[arg-type]
-            allow_cpu_fallback=options.allow_cpu_fallback,
-            model_id=options.model_id,
-            imgsz=options.imgsz,
-        )
+        built = build_detector(options.to_detector_factory_options())
+        detector = built.detector
         localizer = RgbdLocalizer(
             depth_trunc_m=options.depth_trunc_m,
             minimum_cup_points=options.minimum_cup_points,
@@ -268,7 +370,11 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             radius_tolerance_m=options.radius_tolerance,
         )
         localization_warm_up_ms = localizer.warm_up()
-    except (ImportError, ModelSetupError, RuntimeError) as error:
+        evidence_writer = PerceptionEvidenceWriter()
+        evidence_writer.write_model_provenance(
+            options.evidence_root, built.provenance_document
+        )
+    except (ImportError, ModelSetupError, RuntimeError, ValueError, OSError) as error:
         print(json.dumps({"status": "ERROR", "failure": str(error)}, sort_keys=True))
         return 1
 
@@ -420,13 +526,13 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 confidence_threshold=options.confidence_threshold,
                 run_directory=options.evidence_root,
                 cold_start_latency_ms=(
-                    detector.cold_start_latency_ms + localization_warm_up_ms
+                    built.cold_start_latency_ms + localization_warm_up_ms
                 ),
             ),
             detector=detector,
             selector=TargetSelector(),
             localizer=localizer,
-            evidence_writer=PerceptionEvidenceWriter(),
+            evidence_writer=evidence_writer,
             pose_publisher=lambda localized: _publish_and_confirm(
                 pose_publisher,
                 _pose_message(localized, PoseStamped),
