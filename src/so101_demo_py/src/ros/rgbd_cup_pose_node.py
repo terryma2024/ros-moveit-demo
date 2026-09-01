@@ -187,6 +187,92 @@ class CupPoseFrameProcessor:
         self._wait_token = None
 
 
+class RgbdSubscriptionMilestones:
+    """Record first-sample DDS milestones only for an enabled profiler."""
+
+    def __init__(self, profiler: SemanticProfiler, topics: tuple[str, ...]) -> None:
+        self._profiler = profiler
+        self._topic_count = len(topics)
+        self._unmatched_topics = set(topics)
+        self._topics_without_callback = set(topics)
+        self._common_stamp_recorded = False
+        self._matched_token = profiler.start_span(
+            "perception.wait_all_subscriptions_matched"
+        )
+        self._callback_token = profiler.start_span(
+            "perception.wait_all_first_callbacks"
+        )
+        self._common_stamp_token = profiler.start_span(
+            "perception.wait_common_stamp"
+        )
+
+    def subscription_matched(self, topic: str, status: Any) -> None:
+        if topic not in self._unmatched_topics:
+            return
+        current_count = int(getattr(status, "current_count", 0))
+        if current_count <= 0:
+            return
+        self._unmatched_topics.remove(topic)
+        self._profiler.instant(
+            "perception.subscription_matched",
+            {"topic": topic, "current_count": current_count},
+        )
+        if not self._unmatched_topics:
+            self._profiler.finish_span(
+                self._matched_token,
+                outcome="available",
+                attributes={"topic_count": self._topic_count},
+            )
+            self._matched_token = None
+
+    def first_callback(self, topic: str, message: Any) -> None:
+        if topic not in self._topics_without_callback:
+            return
+        self._topics_without_callback.remove(topic)
+        self._profiler.instant(
+            "perception.first_callback",
+            {"topic": topic, "source_stamp_ns": message_stamp_ns(message)},
+        )
+        if not self._topics_without_callback:
+            self._profiler.finish_span(
+                self._callback_token,
+                outcome="available",
+                attributes={"topic_count": self._topic_count},
+            )
+            self._callback_token = None
+
+    def common_stamp(self, stamp_ns: int) -> None:
+        if self._common_stamp_recorded:
+            return
+        self._common_stamp_recorded = True
+        self._profiler.instant(
+            "perception.common_stamp", {"source_stamp_ns": stamp_ns}
+        )
+        self._profiler.finish_span(
+            self._common_stamp_token,
+            outcome="available",
+            attributes={"source_stamp_ns": stamp_ns},
+        )
+        self._common_stamp_token = None
+
+    def finish_pending(self, outcome: str) -> None:
+        pending = (
+            (self._matched_token, len(self._unmatched_topics)),
+            (self._callback_token, len(self._topics_without_callback)),
+            (self._common_stamp_token, int(not self._common_stamp_recorded)),
+        )
+        for token, pending_count in pending:
+            if token is not None:
+                self._profiler.finish_span(
+                    token,
+                    outcome=outcome,
+                    attributes={"pending_count": pending_count},
+                )
+        self._matched_token = None
+        self._callback_token = None
+        self._common_stamp_token = None
+
+
 class FreshFrameGate:
     """Accept only strictly newer source stamps, whether prior frames passed or failed."""
 
@@ -468,6 +554,13 @@ def _load_ros_api() -> Any:
     )
 
 
+def _load_subscription_event_callbacks() -> Any:
+    """Import QoS event support only when profiling is enabled."""
+    from rclpy.event_handler import SubscriptionEventCallbacks
+
+    return SubscriptionEventCallbacks
+
+
 @dataclass(frozen=True, slots=True)
 class CleanupFailure:
     resource: str
@@ -571,6 +664,7 @@ def _create_ros_runtime(
     publisher = None
     subscriptions: list[Any] = []
     frame_processor: CupPoseFrameProcessor | None = None
+    subscription_milestones: RgbdSubscriptionMilestones | None = None
     cleanup = RosResourceCleanup(
         ros_api=ros,
         initialized_here=initialized_here,
@@ -604,6 +698,15 @@ def _create_ros_runtime(
             ros.PoseStamped, options.output_topic, pose_qos
         )
         cleanup.publisher = publisher
+        if profiler is not None:
+            subscription_milestones = RgbdSubscriptionMilestones(
+                profiler,
+                (
+                    options.camera_info_topic,
+                    options.color_topic,
+                    options.depth_topic,
+                ),
+            )
 
         class RosRuntime:
             def __init__(self) -> None:
@@ -656,30 +759,74 @@ def _create_ros_runtime(
                 )
                 frame_processor = self._processor
 
-                self._subscriptions.append(
-                    node.create_subscription(
-                        ros.CameraInfo,
-                        options.camera_info_topic,
-                        self._on_camera_info,
-                        camera_qos,
+                if subscription_milestones is None:
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.CameraInfo,
+                            options.camera_info_topic,
+                            self._on_camera_info,
+                            camera_qos,
+                        )
                     )
-                )
-                self._subscriptions.append(
-                    node.create_subscription(
-                        ros.Image,
-                        options.color_topic,
-                        self._on_color,
-                        camera_qos,
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.Image,
+                            options.color_topic,
+                            self._on_color,
+                            camera_qos,
+                        )
                     )
-                )
-                self._subscriptions.append(
-                    node.create_subscription(
-                        ros.Image,
-                        options.depth_topic,
-                        self._on_depth,
-                        camera_qos,
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.Image,
+                            options.depth_topic,
+                            self._on_depth,
+                            camera_qos,
+                        )
                     )
-                )
+                else:
+                    event_callbacks = getattr(
+                        ros, "SubscriptionEventCallbacks", None
+                    ) or _load_subscription_event_callbacks()
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.CameraInfo,
+                            options.camera_info_topic,
+                            self._profiled_on_camera_info,
+                            camera_qos,
+                            event_callbacks=event_callbacks(
+                                matched=lambda status: subscription_milestones.subscription_matched(
+                                    options.camera_info_topic, status
+                                )
+                            ),
+                        )
+                    )
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.Image,
+                            options.color_topic,
+                            self._profiled_on_color,
+                            camera_qos,
+                            event_callbacks=event_callbacks(
+                                matched=lambda status: subscription_milestones.subscription_matched(
+                                    options.color_topic, status
+                                )
+                            ),
+                        )
+                    )
+                    self._subscriptions.append(
+                        node.create_subscription(
+                            ros.Image,
+                            options.depth_topic,
+                            self._profiled_on_depth,
+                            camera_qos,
+                            event_callbacks=event_callbacks(
+                                matched=lambda status: subscription_milestones.subscription_matched(
+                                    options.depth_topic, status
+                                )
+                            ),
+                        )
+                    )
 
             @property
             def first_valid_published(self) -> bool:
@@ -799,6 +946,32 @@ def _create_ros_runtime(
                 if aligned is not None:
                     self._process_aligned(aligned)
 
+            def _profiled_on_camera_info(self, message: Any) -> None:
+                assert subscription_milestones is not None
+                subscription_milestones.first_callback(
+                    options.camera_info_topic, message
+                )
+                aligned = self._buffer.add_camera_info(message)
+                if aligned is not None:
+                    subscription_milestones.common_stamp(message_stamp_ns(aligned[0]))
+                    self._process_aligned(aligned)
+
+            def _profiled_on_color(self, message: Any) -> None:
+                assert subscription_milestones is not None
+                subscription_milestones.first_callback(options.color_topic, message)
+                aligned = self._buffer.add_color(message)
+                if aligned is not None:
+                    subscription_milestones.common_stamp(message_stamp_ns(aligned[0]))
+                    self._process_aligned(aligned)
+
+            def _profiled_on_depth(self, message: Any) -> None:
+                assert subscription_milestones is not None
+                subscription_milestones.first_callback(options.depth_topic, message)
+                aligned = self._buffer.add_depth(message)
+                if aligned is not None:
+                    subscription_milestones.common_stamp(message_stamp_ns(aligned[0]))
+                    self._process_aligned(aligned)
+
             def spin_once(self, timeout_s: float) -> None:
                 try:
                     ros.rclpy.spin_once(node, timeout_sec=timeout_s)
@@ -818,6 +991,8 @@ def _create_ros_runtime(
 
             def finish_wait_span(self, outcome: str) -> None:
                 self._processor.finish_wait(outcome)
+                if subscription_milestones is not None:
+                    subscription_milestones.finish_pending(outcome)
 
             def close(self) -> None:
                 self.finish_wait_span("interrupted")
@@ -827,6 +1002,8 @@ def _create_ros_runtime(
     except BaseException as primary:
         if frame_processor is not None:
             frame_processor.finish_wait("error")
+        if subscription_milestones is not None:
+            subscription_milestones.finish_pending("error")
         try:
             cleanup.close()
         except CleanupError as cleanup_error:
