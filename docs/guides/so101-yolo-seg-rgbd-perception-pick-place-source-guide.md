@@ -480,7 +480,7 @@ print(prepared.training_config)
 
 先用 `epochs=1`、`fraction=0.05` 验证数据路径、CUDA、离线资产和输出工件。smoke 失败时继续跑 100 epochs 只会浪费时间。
 
-## 12. 如何执行离线 CUDA 微调
+## 12. 如何用 Docker 执行离线 CUDA 微调
 
 依赖版本固定在 [`requirements.lock`](../../src/so101_demo_py/config/perception/requirements.lock)：
 
@@ -493,29 +493,66 @@ PyYAML==6.0.2
 Pillow==12.3.0
 ```
 
-在独立虚拟环境中安装，不要把这套模型依赖混进系统 Python：
+训练环境由 [`Dockerfile`](../../src/so101_demo_py/docker/yolo-training/Dockerfile) 构建。镜像固定 Ubuntu 24.04、CUDA 13.0.2、Python 3.12、PyTorch `2.13.0+cu130` 和 Ultralytics `8.4.115`；宿主机不再创建训练 venv，也不直接运行 `yolo`。普通 Python 包默认从清华 TUNA 源安装，PyTorch 的 CUDA wheel 则保留官方 `cu130` 索引。两类依赖分层构建，修改项目依赖时可以继续复用已经完成的 CUDA/PyTorch 层。
+
+先在仓库根目录构建镜像：
 
 ```bash
-python3 -m venv /absolute/path/to/so101-perception-venv
-source /absolute/path/to/so101-perception-venv/bin/activate
-python -m pip install -r src/so101_demo_py/config/perception/requirements.lock
+scripts/yolo-seg-training-container.sh build
 ```
 
-Linux 上还要确认安装的是与当前驱动匹配的 CUDA build，不能因为 `import torch` 成功就认为 GPU 可用：
+默认镜像名是 `so101-yolo11n-seg-train:torch2.13.0-cu130-ultralytics8.4.115`。构建会核对 Torch、torchvision 和 Ultralytics 版本；基础镜像同时固定了 amd64 digest，避免同名 tag 被更新后悄悄换掉环境。
+
+普通构建不会主动拉取基础镜像。只改 Python 源码时，Docker 只重做源码复制和本地包安装；修改 `requirements.lock` 时，CUDA/PyTorch 层仍可复用。apt 和 pip 下载目录使用 BuildKit cache mount，即使某个安装层失效，相同的 deb 或 wheel 也不必重新下载。需要重新检查固定 digest 对应的基础镜像时，再显式执行：
+
+```bash
+scripts/yolo-seg-training-container.sh build --refresh-base
+```
+
+多台构建机或 CI 之间不能共享 ai-station 的本地缓存。此时可以把 BuildKit cache 放进已登录的镜像仓库：
+
+```bash
+scripts/yolo-seg-training-container.sh build \
+  --cache-from type=registry,ref=registry.example/so101/yolo-train:buildcache \
+  --cache-to type=registry,ref=registry.example/so101/yolo-train:buildcache,mode=max
+```
+
+传入任一 cache 参数后，wrapper 会使用 `docker buildx build --load`，构建结果仍写入当前 Docker host 的本地 image store。`registry.example/...` 只是示例，实际使用前要先在执行构建的 Docker host 上完成仓库登录。
+
+训练前先确认 NVIDIA Container Toolkit 能把 GPU 传进容器：
 
 ```bash
 nvidia-smi
-python -c 'import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
+docker run --rm --gpus all \
+  --entrypoint python \
+  so101-yolo11n-seg-train:torch2.13.0-cu130-ultralytics8.4.115 \
+  -c 'import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
 ```
 
-正式训练从本地 `yolo11n-seg.pt` 启动：
+smoke 训练只跑 1 epoch 和 5% 的训练集。`--output` 指向一个尚不存在的目录，但它的父目录必须已经创建：
 
 ```bash
-export YOLO_OFFLINE=true
-yolo segment train cfg=/absolute/path/to/training-config.yaml
+mkdir -p /absolute/path/to/training-runs
+scripts/yolo-seg-training-container.sh train \
+  --dataset /absolute/path/to/dataset/dataset.yaml \
+  --model /absolute/path/to/yolo11n-seg.pt \
+  --output /absolute/path/to/training-runs/smoke-001 \
+  --run-name smoke \
+  --epochs 1 \
+  --fraction 0.05
 ```
 
-`YOLO_OFFLINE=true` 会关闭一部分在线检查，但它不等于“任何情况下都不会下载”。Ultralytics 的字体检查曾绕过 offline gate，因此完全离线训练还要预置本地字体，并扫描日志中是否出现 `Downloading`、外部 URL 或额外模型名。基础模型、字体和数据集都应在开跑前准备好。
+smoke 通过后，去掉覆盖参数即可恢复 [`training.yaml`](../../src/so101_demo_py/config/perception/training.yaml) 中的 100 epochs 配置：
+
+```bash
+scripts/yolo-seg-training-container.sh train \
+  --dataset /absolute/path/to/dataset/dataset.yaml \
+  --model /absolute/path/to/yolo11n-seg.pt \
+  --output /absolute/path/to/training-runs/full-001 \
+  --run-name train
+```
+
+runner 会显式申请 `--gpus all`，以只读方式挂载数据集和 `yolo11n-seg.pt`，训练输出则挂载为可写目录。容器使用当前用户的 UID/GID 写文件，退出后无需再处理 root 所有权。训练时网络固定为 `none`；字体已经装进镜像，`YOLO_OFFLINE=true` 也由 runner 注入，因此缺少本地模型或数据时会直接失败，不会临时下载替代品。
 
 训练结束后保存：
 
@@ -556,19 +593,16 @@ f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
 
 不要用高 mAP 替代 ROS topic、深度定位或物理结果。
 
-## 14. 本地推理部署是什么形态
+## 14. 推理部署是什么形态
 
-当前实现没有 HTTP 模型服务器，也不调用云端 API。`rgbd_object_pose` 是本机 ROS 进程，`YoloSegDetector` 在这个进程里直接加载本地 `best.pt`：
+当前实现没有 HTTP 模型服务器，也不调用云端 API。macOS 直接在宿主机 ROS 进程中运行 `rgbd_object_pose`，这样才能使用 MPS；Linux 则由 launch 启动 Docker 容器，容器中的同一入口使用 CUDA。两边都会先核对本地 `best.pt` 的 SHA-256。
 
 ```text
-ROS installed executable
-  -> import torch + ultralytics from isolated perception environment
-  -> verify best.pt SHA-256
-  -> select mps/cuda
-  -> YOLO(best.pt)
-  -> warm-up
-  -> subscribe aligned RGB-D
-  -> publish ROS outputs
+macOS launch -> host rgbd_object_pose -> MPS
+Linux launch -> docker run -> container rgbd_object_pose -> CUDA
+
+both paths -> verify best.pt SHA-256 -> warm-up
+           -> subscribe aligned RGB-D -> publish ROS outputs
 ```
 
 称它为“本地推理服务”时，服务指它在 ROS graph 中提供持续可发现的感知能力，不表示另外部署了 Triton、TorchServe 或 HTTP endpoint。
@@ -626,42 +660,43 @@ python -c 'import torch, ultralytics, rclpy; print(torch.__file__); print(ultral
 
 正式参数使用 `perception_device:=mps` 和 `perception_allow_cpu_fallback:=false`。如果 MPS 不可用，程序返回 `DEVICE_UNAVAILABLE`，不会悄悄改用 CPU。
 
-## 17. Linux CUDA 本地部署
+## 17. Linux CUDA Docker 部署
 
-ai-station 上先确认当前确实位于目标主机，再加载 zsh overlay：
+Linux 不再为模型依赖创建宿主机 venv。先在仓库根目录构建固定的 ROS Jazzy 推理镜像：
 
-```zsh
-hostname
-pwd
-source /opt/ros/jazzy/setup.zsh
-source /data/work/ws_moveit/install/setup.zsh
-source /path/to/candidate/install/setup.zsh
+```bash
+scripts/yolo-seg-inference-container.sh build
 ```
 
-创建独立 venv：
+默认镜像名是 `so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115`。它固定 ROS 2 Jazzy 基础镜像 digest、PyTorch `2.13.0+cu130`、torchvision `0.28.0+cu130`、Ultralytics `8.4.115` 和 Open3D `0.19.0`。普通 Python 包使用清华 TUNA 源，CUDA wheel 使用 PyTorch 官方 `cu130` 索引。
 
-```zsh
-python3.12 -m venv /data/work/venvs/so101-perception
-source /data/work/venvs/so101-perception/bin/activate
-python -m pip install -r src/so101_demo_py/config/perception/requirements.lock
+默认构建沿用本地固定基础镜像，不带 `--pull`。需要主动刷新时使用 `--refresh-base`：
+
+```bash
+scripts/yolo-seg-inference-container.sh build --refresh-base
 ```
 
-CUDA 预检：
+推理镜像也支持外部 BuildKit cache：
 
-```zsh
+```bash
+scripts/yolo-seg-inference-container.sh build \
+  --cache-from type=registry,ref=registry.example/so101/yolo-inference:buildcache \
+  --cache-to type=registry,ref=registry.example/so101/yolo-inference:buildcache,mode=max
+```
+
+训练和推理镜像共享 Python 3.12/CUDA 13.0 wheel cache，但 apt cache 分开保存。两种基础镜像配置的 ROS/NVIDIA 软件源不同，拆开 apt 元数据可以避免仓库状态互相污染。
+
+启动完整 launch 前先做镜像与 GPU 预检：
+
+```bash
 nvidia-smi
-python -c 'import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
+docker run --rm --gpus all \
+  --entrypoint /ros_entrypoint.sh \
+  so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115 \
+  python -c 'import rclpy, torch, ultralytics, open3d; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
 ```
 
-把模型依赖接到 ROS entrypoint：
-
-```zsh
-export PYTHONPATH=/data/work/venvs/so101-perception/lib/python3.12/site-packages${PYTHONPATH:+:$PYTHONPATH}
-export YOLO_CONFIG_DIR=/absolute/path/to/owned-ultralytics-config
-export MUJOCO_GL=egl
-```
-
-正式参数使用 `perception_device:=cuda` 和 `perception_allow_cpu_fallback:=false`。`nvidia-smi`、`torch.cuda.is_available()` 和一次真实 CUDA tensor 运算都应通过；CPU smoke 不能替代 Linux CUDA 验收。
+launch 使用 `--network host` 和 `--ipc host` 接入宿主机 ROS graph，传入 `ROS_DOMAIN_ID`、`RMW_IMPLEMENTATION` 和 `ROS_LOCALHOST_ONLY`。权重只读挂载到 `/models/best.pt`，本轮感知 evidence 目录挂载到 `/evidence`。容器进程使用当前 UID/GID 写文件，退出时由 `--rm` 清理容器。`nvidia-smi`、`torch.cuda.is_available()` 和一次真实 CUDA tensor 运算都应通过；CPU smoke 不能替代 Linux CUDA 验收。
 
 ## 18. 单独启动本地 YOLO 推理节点
 
@@ -706,11 +741,28 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place \
   perception_backend:=yolo_seg \
   perception_weights:=/absolute/path/to/best.pt \
   perception_weights_sha256:=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 \
-  perception_device:=mps \
+  perception_runtime:=auto \
+  perception_device:=auto \
   perception_allow_cpu_fallback:=false
 ```
 
-Linux 使用 `perception_device:=cuda`。无头运行仍要显式 `sensor_rendering:=true`，否则 Viewer 虽然不显示，相机也可能停止产生 RGB-D。感知组合栈把 MuJoCo 仿真速度固定为实时 `1.0`，防止无头快速仿真让合法 source stamp 在墙钟下变成陈旧 Pose。
+`perception_runtime:=auto` 在 macOS 选择宿主机并把 `auto` 设备收敛为 `mps`，在 Linux 选择 Docker 并把容器设备收敛为 `cuda`。调试时可以显式指定 `perception_runtime:=host`；`perception_runtime:=docker` 只接受 Linux，且拒绝 `mps` 和 `cpu`。如果使用自定义镜像，通过 `perception_container_image:=<image>` 传入。
+
+Linux 上频繁修改容器内推理 Python 代码时，可以显式启用开发模式：
+
+```bash
+ros2 run so101_demo_py so101_mujoco_perception_pick_place \
+  ... \
+  perception_runtime:=docker_dev \
+  perception_source_root:="$(pwd)/src/so101_demo_py/src" \
+  perception_device:=cuda
+```
+
+`perception_source_root` 必须指向绝对、非符号链接的物理源码目录，也就是包含 `__init__.py` 和 `runtime/` 的 `src/so101_demo_py/src`。launch 会把它只读挂载到容器的 `/workspace/so101-source/so101_demo`，并用 `PYTHONPATH` 覆盖镜像内已安装的同名包。默认的 `auto` 和 `docker` 不挂载源码，发布运行仍使用镜像中的不可变代码。
+
+这个开发挂载只覆盖 Python 包源码。修改依赖锁、`setup.py`、入口点、配置、资源或 Dockerfile 后仍要重建镜像；修改宿主机 launch composition 后，也要重新构建并 source 对应的 ROS 2 overlay。macOS 不支持 `docker_dev`，因为 Docker Desktop 容器不能使用 MPS，macOS 仍走宿主机 `mps` 分支。
+
+无头运行仍要显式 `sensor_rendering:=true`，否则 Viewer 虽然不显示，相机也可能停止产生 RGB-D。感知组合栈把 MuJoCo 仿真速度固定为实时 `1.0`，防止无头快速仿真让合法 source stamp 在墙钟下变成陈旧 Pose。
 
 ## 20. `YoloSegDetector` 内部做了什么
 
