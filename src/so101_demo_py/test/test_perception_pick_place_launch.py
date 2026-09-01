@@ -131,6 +131,12 @@ def _assert_failure_status(actions, context: LaunchContext, pattern: str) -> Non
         failure_actions[0].execute(context)
 
 
+def _grounded_bundle(tmp_path: Path) -> Path:
+    bundle = tmp_path / "grounded-sam-bundle"
+    bundle.mkdir()
+    return bundle
+
+
 def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
     description = _builder()()
     declared = _declared(description)
@@ -149,11 +155,20 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
         "perception_backend",
         "perception_weights",
         "perception_weights_sha256",
+        "perception_model_root",
+        "perception_model_manifest_sha256",
         "perception_device",
         "perception_allow_cpu_fallback",
         "perception_runtime",
         "perception_container_image",
         "perception_source_root",
+        "grounding_box_threshold",
+        "grounding_text_threshold",
+        "grounding_duplicate_iou",
+        "grounding_max_candidates",
+        "sam_mask_quality_threshold",
+        "sam_min_mask_pixels",
+        "sam_max_mask_area_ratio",
     } <= declared.keys()
     assert _default(declared["headless"]) == "false"
     assert _default(declared["mujoco_initial_keyframe"]) == "task_start"
@@ -494,6 +509,185 @@ def test_macos_rejects_explicit_docker_yolo_runtime_before_processes(
             perception_runtime="docker",
             perception_device="cuda",
         )
+
+
+def test_grounded_sam_backend_starts_the_object_pose_cli_with_default_thresholds(
+    tmp_path: Path,
+) -> None:
+    bundle = _grounded_bundle(tmp_path)
+    digest = "a" * 64
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="grounded_sam",
+        perception_model_root=bundle,
+        perception_model_manifest_sha256=digest,
+        perception_device="mps",
+        perception_runtime="host",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    assert [node.node_executable for node in _nodes(started)] == [
+        "rgbd_object_pose",
+        "dynamic_cup_pick_place",
+    ]
+    perception = _node(started, "rgbd_object_pose")
+    assert perception._Node__arguments == [
+        "--startup-timeout-s",
+        "30.0",
+        "--output-topic",
+        "/cup_pose",
+        "--detections-topic",
+        "/perception/detections",
+        "--overlay-topic",
+        "/perception/overlay",
+        "--backend",
+        "grounded_sam",
+        "--model-root",
+        str(bundle),
+        "--model-manifest-sha256",
+        digest,
+        "--device",
+        "mps",
+        "--grounding-box-threshold",
+        "0.35",
+        "--grounding-text-threshold",
+        "0.25",
+        "--duplicate-iou",
+        "0.85",
+        "--max-candidates",
+        "16",
+        "--sam-quality-threshold",
+        "0.75",
+        "--min-mask-pixels",
+        "64",
+        "--max-mask-area-ratio",
+        "0.50",
+        "--request-id",
+        "session-123",
+        "--evidence-root",
+        str(tmp_path / "launch-run.d/session-123/perception"),
+    ]
+    assert "--allow-cpu-fallback" not in perception._Node__arguments
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {
+                "perception_backend": "grounded_sam",
+                "perception_model_root": "",
+                "perception_model_manifest_sha256": "a" * 64,
+            },
+            "perception_model_root",
+        ),
+        (
+            {
+                "perception_backend": "grounded_sam",
+                "perception_model_root": "relative-bundle",
+                "perception_model_manifest_sha256": "a" * 64,
+            },
+            "perception_model_root",
+        ),
+        (
+            {
+                "perception_backend": "grounded_sam",
+                "perception_model_manifest_sha256": "A" * 64,
+            },
+            "perception_model_manifest_sha256",
+        ),
+        (
+            {
+                "perception_backend": "grounded_sam",
+                "perception_weights": __file__,
+                "perception_weights_sha256": "a" * 64,
+            },
+            "perception_weights",
+        ),
+    ],
+)
+def test_grounded_sam_rejects_missing_or_mixed_backend_artifacts(
+    tmp_path: Path, overrides: dict[str, object], message: str
+) -> None:
+    bundle = _grounded_bundle(tmp_path)
+    overrides.setdefault("perception_model_root", bundle)
+    overrides.setdefault("perception_model_manifest_sha256", "a" * 64)
+
+    with pytest.raises(RuntimeError, match=message):
+        _materialize(evidence_file=tmp_path / "result.json", **overrides)
+
+
+def test_grounded_sam_rejects_a_symlinked_model_root_before_nodes(tmp_path: Path) -> None:
+    bundle = _grounded_bundle(tmp_path)
+    linked_bundle = tmp_path / "linked-grounded-sam-bundle"
+    linked_bundle.symlink_to(bundle, target_is_directory=True)
+
+    with pytest.raises(RuntimeError, match="perception_model_root"):
+        _materialize(
+            evidence_file=tmp_path / "result.json",
+            perception_backend="grounded_sam",
+            perception_model_root=linked_bundle,
+            perception_model_manifest_sha256="a" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("argument", "value"),
+    [
+        ("grounding_box_threshold", "-0.01"),
+        ("grounding_text_threshold", "1.01"),
+        ("grounding_duplicate_iou", "nan"),
+        ("grounding_max_candidates", "0"),
+        ("sam_mask_quality_threshold", "1.01"),
+        ("sam_min_mask_pixels", "0"),
+        ("sam_max_mask_area_ratio", "0"),
+    ],
+)
+def test_grounded_sam_rejects_out_of_range_thresholds_before_nodes(
+    tmp_path: Path, argument: str, value: str
+) -> None:
+    bundle = _grounded_bundle(tmp_path)
+
+    with pytest.raises(RuntimeError, match=argument):
+        _materialize(
+            evidence_file=tmp_path / "result.json",
+            perception_backend="grounded_sam",
+            perception_model_root=bundle,
+            perception_model_manifest_sha256="a" * 64,
+            **{argument: value},
+        )
+
+
+@pytest.mark.parametrize("backend", ("color_geometry", "yolo_seg"))
+@pytest.mark.parametrize(
+    ("argument", "value"),
+    [
+        ("perception_model_root", "/tmp/grounded-sam-bundle"),
+        ("perception_model_manifest_sha256", "a" * 64),
+        ("grounding_box_threshold", "0.35"),
+        ("grounding_text_threshold", "0.25"),
+        ("grounding_duplicate_iou", "0.85"),
+        ("grounding_max_candidates", "16"),
+        ("sam_mask_quality_threshold", "0.75"),
+        ("sam_min_mask_pixels", "64"),
+        ("sam_max_mask_area_ratio", "0.50"),
+    ],
+)
+def test_non_grounded_backends_reject_grounded_sam_only_arguments(
+    tmp_path: Path, backend: str, argument: str, value: str
+) -> None:
+    overrides: dict[str, object] = {"perception_backend": backend, argument: value}
+    if backend == "yolo_seg":
+        weights = tmp_path / "best.pt"
+        weights.write_bytes(b"weights-v1")
+        overrides.update(
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        )
+
+    with pytest.raises(RuntimeError, match=argument):
+        _materialize(evidence_file=tmp_path / "result.json", **overrides)
 
 
 @pytest.mark.parametrize(
