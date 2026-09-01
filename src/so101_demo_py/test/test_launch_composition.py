@@ -177,6 +177,32 @@ def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> N
     assert sensor_rendering.default_value[0].perform(LaunchContext()) == "true"
 
 
+def test_perception_launch_declares_the_grounded_sam_backend_contract() -> None:
+    description = launch_composition.build_perception_pick_place_launch_description()
+    arguments = {
+        action.name: action
+        for action in description.entities
+        if isinstance(action, DeclareLaunchArgument)
+    }
+
+    assert arguments["perception_backend"].choices == (
+        "color_geometry",
+        "yolo_seg",
+        "grounded_sam",
+    )
+    assert {
+        "perception_model_root",
+        "perception_model_manifest_sha256",
+        "grounding_box_threshold",
+        "grounding_text_threshold",
+        "grounding_duplicate_iou",
+        "grounding_max_candidates",
+        "sam_mask_quality_threshold",
+        "sam_min_mask_pixels",
+        "sam_max_mask_area_ratio",
+    } <= arguments.keys()
+
+
 def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
     description = build_launch_description(backend="mujoco", pick_place=False)
     declared = _declared(description)
