@@ -109,6 +109,8 @@ def render_detection_overlay(frame: DetectionFrame, batch: DetectionBatch) -> np
         left = max(0, min(candidate.image_width - 1, int(np.floor(candidate.bbox_xyxy[0]))))
         top = max(0, min(candidate.image_height - 1, int(np.floor(candidate.bbox_xyxy[1]))))
         label = f"{candidate.class_id} {candidate.confidence:.2f}"
+        if candidate.segmentation_quality is not None:
+            label += f" sam={candidate.segmentation_quality:.3f}"
         text_left, text_top, text_right, text_bottom = draw.textbbox(
             (0, 0), label, font=font
         )
@@ -144,6 +146,7 @@ def _candidate_document(
         "instance_id": candidate.instance_id,
         "class_id": candidate.class_id,
         "confidence": candidate.confidence,
+        "segmentation_quality": candidate.segmentation_quality,
         "bbox_xyxy": list(candidate.bbox_xyxy),
         "mask_pixel_count": int(candidate.mask.sum()),
         "mask_artifact": str(mask_artifact),

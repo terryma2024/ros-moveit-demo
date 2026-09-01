@@ -72,6 +72,7 @@ class DetectionCandidate:
     source_frame_id: str
     image_width: int
     image_height: int
+    segmentation_quality: float | None = None
 
     def __post_init__(self) -> None:
         if not self.instance_id:
@@ -79,6 +80,11 @@ class DetectionCandidate:
         _validate_class_id(self.class_id)
         if not math.isfinite(self.confidence) or not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be finite and in [0, 1]")
+        if self.segmentation_quality is not None and (
+            not math.isfinite(self.segmentation_quality)
+            or not 0.0 <= self.segmentation_quality <= 1.0
+        ):
+            raise ValueError("segmentation_quality must be finite and in [0, 1]")
         if self.image_width <= 0 or self.image_height <= 0:
             raise ValueError("image dimensions must be positive")
         if len(self.bbox_xyxy) != 4 or not all(
