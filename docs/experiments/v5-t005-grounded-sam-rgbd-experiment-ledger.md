@@ -1916,12 +1916,20 @@ last_valid_failure: EXP-071
 current_hypothesis: box threshold 0.70 可删除 no-cup false positives，同时保留已观察到的 task_start 真杯；必须以 r9 四场景验证
 working_tree_status: 生产 source/config 未变；将仅修改 /tmp runner 的一个 launch threshold literal，并重新执行完整 preflight
 owned_processes: NONE；EXP-071 cleanup attempt 14 与 independent domain 107 readback node/process empty
+r9_runner_preflight:
+  status: PASS
+  runner_sha256: eb535aebf54626e69d89565381ffe77026e9f32677eb312237bf48dcaf5976e7
+  script: /tmp/so101-v5-t005-task11-tools/preflight_r9.zsh
+  script_sha256: fdbaecb265f707aa0d567f4a75b81e0e7be98f5fbd9dfd697ae7d0bdd5170f2f
+  log: /tmp/so101-v5-t005-task11-tools/r9-preflight/preflight.log
+  log_sha256: 0c845c05e71b6c6057ddd00339ad9fd317a69a0f8ce04dd4d97b0c6536d671b1
+  verified: runner 0755 and exactly one threshold override grounding_box_threshold:=0.70; exact source/overlay/model/offline/CUDA; domains 110-113 constructible empty; roots/owned patterns absent; observer/validator/cleanup contracts unchanged
 retained_runs:
   - CP-014 retained runs
   - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-1-task_start
   - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r8-2-v5_no_cup
 archived_runs: []
 deletion_candidates: [CP-014 deletion candidates, r8 runs after explicit user authorization only]
-next_command: 限定提交 CP-015；只改 runner grounding_box_threshold:=0.70；完整 r9 preflight PASS 落盘并提交后才启动 EXP-074
-decision: RUN_EXP_074_ONLY_AFTER_COMMITTED_SINGLE_VARIABLE_PREFLIGHT
+next_command: 限定提交 CP-015 r9 preflight PASS；标记 EXP-074 RUNNING 后只启动 linux-matrix-r9-1-task_start
+decision: RUN_EXP_074_ONLY
 ```
