@@ -36,8 +36,22 @@ from so101_demo.core.detection import (
 
 
 _MODEL_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
-_WARMUP_RGB = np.zeros((8, 8, 3), dtype=np.uint8)
-_WARMUP_BOXES = np.array([[[2.0, 2.0, 6.0, 6.0]]], dtype=np.float32)
+_WARMUP_RGB = np.zeros((480, 640, 3), dtype=np.uint8)
+_WARMUP_BOXES = np.asarray(
+    [
+        [
+            [
+                float(column * 160 + 16),
+                float(row * 120 + 12),
+                float(column * 160 + 144),
+                float(row * 120 + 108),
+            ]
+            for row in range(4)
+            for column in range(4)
+        ]
+    ],
+    dtype=np.float32,
+)
 _LOGGER = logging.getLogger(__name__)
 _OFFLINE_ENVIRONMENT = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
 
