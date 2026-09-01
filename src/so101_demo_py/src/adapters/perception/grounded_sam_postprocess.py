@@ -179,7 +179,7 @@ def convert_grounding_results(
     )
     deduplicated: list[GroundingProposal] = []
     for proposal in normalized:
-        if all(_iou(proposal.bbox_xyxy, kept.bbox_xyxy) <= thresholds.duplicate_iou for kept in deduplicated):
+        if all(_iou(proposal.bbox_xyxy, kept.bbox_xyxy) < thresholds.duplicate_iou for kept in deduplicated):
             deduplicated.append(proposal)
     return tuple(deduplicated)
 
