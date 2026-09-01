@@ -33,8 +33,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-006
-next_experiment: Task 11 Step 1 — 预写四场景实验矩阵；首个运行 linux-matrix-1-task_start
+latest_checkpoint: CP-007
+next_experiment: EXP-013 linux-matrix-1-task_start
 ```
 
 ## Checkpoints
@@ -962,4 +962,394 @@ deletion_candidates:
   - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/log-task10-watermark-v2
 decision: TASK10_FIX_ROUND_2_VALID
 next_command: Task 11 Step 1 — 预写四场景实验矩阵；首个运行 linux-matrix-1-task_start；不得把 Task 10 smoke 计入 Task 11 5/5
+```
+
+## Task 11 frozen contract and planned experiments
+
+以下实验均冻结 `source_commit=16d56fc1c129b5bb8b45d201db38dd2ab70e62ca`、
+`bundle_manifest_sha256=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3`、
+`prompt="plastic cup."`、Grounding DINO/SAM 阈值
+`box=0.35,text=0.25,duplicate_iou=0.85,max_candidates=16,sam_quality=0.75,min_mask_pixels=64,max_mask_area_ratio=0.50`、
+`target_confidence_threshold=0.50`、FP32、`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`、
+`perception_allow_cpu_fallback=false`、`maximum_source_age_s=2.0` 与 `sim_speed_factor=1.0`。
+Linux 固定 CUDA，Mac 固定 MPS。每条记录都有独立 request/session/domain/partition，生命周期为
+`FULL_RESTART`。每轮结束后必须确认本轮 owned process、ROS node、domain 与 partition 均为空；
+`VALID` 失败或 `INVALID` 都立即终止该平台当前批次，修复后从新 experiment ID 的场景 1 或
+5/5 第 1 轮重新计数。Task 10 smoke 不进入任何 Task 11 分母。
+
+四场景共同成功条件：真实 CameraInfo/RGB/Depth 在同一 stamp、frame 与 640x480 尺寸对齐；
+模型、device、revision、prompt、阈值与 bundle provenance 匹配；warmed request `<=2000 ms`；
+每个杯子 mask truth IoU `>=0.80`；唯一杯子 world error `<0.01 m`；错误场景没有新或旧
+`/cup_pose`；近瓶场景 bottle overlap 为 0；候选、mask、overlay、DINO/SAM 分数、source stamp、
+TF、observer 与 cleanup 证据完整。共同有效失败条件是运行前提全部成立但任一业务门槛不满足。
+共同无效条件是旧 topic、重复 node、错误 overlay/commit/device/bundle、未对齐 payload、缺 truth、
+证据写失败、observer 污染、非独立 domain/partition 或 cleanup 失败。
+
+5/5 共同成功条件：感知 payload/语义/mask/Depth/TF 与 source-stamped `/cup_pose` 全部来自本轮；
+执行器消费同一 stamp/XYZ；双侧抓持、物理 micro-lift、搬运、place、MoveIt detach/world sync、
+松爪分离、桌面稳定支撑、最终 XY `<=0.01 m`、upright tilt `<=0.10 rad`、新鲜可见证据与 cleanup
+全部通过。共同有效失败条件是干净前提下任一业务或物理门槛失败；共同无效条件与四场景相同，
+另加视觉证据非本轮、缺少 FULL_RESTART 或生命周期污染。
+
+```yaml
+- experiment_id: EXP-013
+  status: PLANNED
+  prior_experiment: EXP-012
+  hypothesis: Linux CUDA 固定模型能从 task_start 唯一选择 plastic_cup 并完成 source-stamped /cup_pose
+  prediction: matching=1, IoU>=0.80, world_error<0.01m, request<=2000ms, pose stamp与源stamp相同
+  single_variable: platform=linux; keyframe=task_start; expected=unique
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, clean_owned_graph, initial_keyframe_task_start]
+  success_criteria: [four_scene_common, exactly_one_eligible, new_source_stamped_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 161, gz_partition: v5-t005-linux-matrix-01-task-start}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-1-task_start]
+  decision: PENDING
+  next_experiment: EXP-014
+- experiment_id: EXP-014
+  status: PLANNED
+  prior_experiment: EXP-013
+  hypothesis: Linux CUDA 在 v5_no_cup 会 fail-closed
+  prediction: TARGET_NOT_FOUND, matching=0, no new /cup_pose, request<=2000ms
+  single_variable: platform=linux; keyframe=v5_no_cup; expected=not_found
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-013_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_NOT_FOUND, no_new_or_stale_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 162, gz_partition: v5-t005-linux-matrix-02-no-cup}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-2-v5_no_cup]
+  decision: PENDING
+  next_experiment: EXP-015
+- experiment_id: EXP-015
+  status: PLANNED
+  prior_experiment: EXP-014
+  hypothesis: Linux CUDA 在 v5_two_cups 会保留两个合格实例并 fail-closed
+  prediction: TARGET_AMBIGUOUS, matching=2, 两个IoU>=0.80, no new /cup_pose
+  single_variable: platform=linux; keyframe=v5_two_cups; expected=ambiguous
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-014_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_AMBIGUOUS, exactly_two_eligible, no_new_or_stale_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 163, gz_partition: v5-t005-linux-matrix-03-two-cups}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-3-v5_two_cups]
+  decision: PENDING
+  next_experiment: EXP-016
+- experiment_id: EXP-016
+  status: PLANNED
+  prior_experiment: EXP-015
+  hypothesis: Linux CUDA 在 v5_cup_near_bottle 保留唯一杯子 mask 且不吞并 bottle pixels
+  prediction: matching=1, IoU>=0.80, bottle_overlap=0, world_error<0.01m, new /cup_pose
+  single_variable: platform=linux; keyframe=v5_cup_near_bottle; expected=unique_adjacent
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-015_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, exactly_one_eligible, zero_bottle_overlap, new_source_stamped_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 164, gz_partition: v5-t005-linux-matrix-04-near-bottle}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-4-v5_cup_near_bottle]
+  decision: PENDING
+  next_experiment: EXP-017
+- experiment_id: EXP-017
+  status: PLANNED
+  prior_experiment: EXP-016
+  hypothesis: Mac MPS 固定模型能从 task_start 唯一选择 plastic_cup
+  prediction: matching=1, IoU>=0.80, world_error<0.01m, request<=2000ms, fresh exact-window evidence
+  single_variable: platform=macos; keyframe=task_start; expected=unique
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, Linux_matrix_4_of_4_PASS, clean_owned_graph]
+  success_criteria: [four_scene_common, exactly_one_eligible, new_source_stamped_cup_pose, fresh_exact_window_capture]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 165, gz_partition: v5-t005-mac-matrix-01-task-start}
+  commands: [{command: exact Task 11 Mac matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/perception-matrix/macos/mac-matrix-1-task_start]
+  decision: PENDING
+  next_experiment: EXP-018
+- experiment_id: EXP-018
+  status: PLANNED
+  prior_experiment: EXP-017
+  hypothesis: Mac MPS 在 v5_no_cup 会 fail-closed
+  prediction: TARGET_NOT_FOUND, matching=0, no new /cup_pose, fresh exact-window evidence
+  single_variable: platform=macos; keyframe=v5_no_cup; expected=not_found
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-017_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_NOT_FOUND, no_new_or_stale_cup_pose, fresh_exact_window_capture]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 166, gz_partition: v5-t005-mac-matrix-02-no-cup}
+  commands: [{command: exact Task 11 Mac matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/perception-matrix/macos/mac-matrix-2-v5_no_cup]
+  decision: PENDING
+  next_experiment: EXP-019
+- experiment_id: EXP-019
+  status: PLANNED
+  prior_experiment: EXP-018
+  hypothesis: Mac MPS 在 v5_two_cups 会保留两个合格实例并 fail-closed
+  prediction: TARGET_AMBIGUOUS, matching=2, 两个IoU>=0.80, no new /cup_pose
+  single_variable: platform=macos; keyframe=v5_two_cups; expected=ambiguous
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-018_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_AMBIGUOUS, exactly_two_eligible, no_new_or_stale_cup_pose, fresh_exact_window_capture]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 167, gz_partition: v5-t005-mac-matrix-03-two-cups}
+  commands: [{command: exact Task 11 Mac matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/perception-matrix/macos/mac-matrix-3-v5_two_cups]
+  decision: PENDING
+  next_experiment: EXP-020
+- experiment_id: EXP-020
+  status: PLANNED
+  prior_experiment: EXP-019
+  hypothesis: Mac MPS 在 v5_cup_near_bottle 保留唯一杯子 mask 且不吞并 bottle pixels
+  prediction: matching=1, IoU>=0.80, bottle_overlap=0, world_error<0.01m, new /cup_pose
+  single_variable: platform=macos; keyframe=v5_cup_near_bottle; expected=unique_adjacent
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-019_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, exactly_one_eligible, zero_bottle_overlap, new_source_stamped_cup_pose, fresh_exact_window_capture]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 168, gz_partition: v5-t005-mac-matrix-04-near-bottle}
+  commands: [{command: exact Task 11 Mac matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/perception-matrix/macos/mac-matrix-4-v5_cup_near_bottle]
+  decision: PENDING
+  next_experiment: EXP-021
+- experiment_id: EXP-021
+  status: PLANNED
+  prior_experiment: EXP-020
+  hypothesis: Linux FULL_RESTART fixed configuration run 1 succeeds
+  prediction: all 5_of_5_common gates PASS
+  single_variable: NONE; linux consecutive batch run=1
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, dual_platform_matrix_8_of_8_PASS, clean_owned_graph]
+  success_criteria: [five_of_five_common]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 171, gz_partition: v5-t005-linux-pick-final-1}
+  commands: [{command: exact Task 11 Linux pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-1]
+  decision: PENDING
+  next_experiment: EXP-022
+- experiment_id: EXP-022
+  status: PLANNED
+  prior_experiment: EXP-021
+  hypothesis: Linux FULL_RESTART fixed configuration run 2 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS
+  single_variable: NONE; linux consecutive batch run=2
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-021_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 172, gz_partition: v5-t005-linux-pick-final-2}
+  commands: [{command: exact Task 11 Linux pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-2]
+  decision: PENDING
+  next_experiment: EXP-023
+- experiment_id: EXP-023
+  status: PLANNED
+  prior_experiment: EXP-022
+  hypothesis: Linux FULL_RESTART fixed configuration run 3 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS
+  single_variable: NONE; linux consecutive batch run=3
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-022_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 173, gz_partition: v5-t005-linux-pick-final-3}
+  commands: [{command: exact Task 11 Linux pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-3]
+  decision: PENDING
+  next_experiment: EXP-024
+- experiment_id: EXP-024
+  status: PLANNED
+  prior_experiment: EXP-023
+  hypothesis: Linux FULL_RESTART fixed configuration run 4 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS
+  single_variable: NONE; linux consecutive batch run=4
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-023_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 174, gz_partition: v5-t005-linux-pick-final-4}
+  commands: [{command: exact Task 11 Linux pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-4]
+  decision: PENDING
+  next_experiment: EXP-025
+- experiment_id: EXP-025
+  status: PLANNED
+  prior_experiment: EXP-024
+  hypothesis: Linux FULL_RESTART fixed configuration run 5 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS and Linux consecutive result is 5/5
+  single_variable: NONE; linux consecutive batch run=5
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-024_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common, linux_consecutive_5_of_5]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 175, gz_partition: v5-t005-linux-pick-final-5}
+  commands: [{command: exact Task 11 Linux pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/pick-place/linux/linux-pick-final-5]
+  decision: PENDING
+  next_experiment: EXP-026
+- experiment_id: EXP-026
+  status: PLANNED
+  prior_experiment: EXP-025
+  hypothesis: Mac FULL_RESTART fixed configuration run 1 succeeds
+  prediction: all 5_of_5_common gates PASS with fresh exact-window evidence
+  single_variable: NONE; macos consecutive batch run=1
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, linux_consecutive_5_of_5, clean_owned_graph]
+  success_criteria: [five_of_five_common, fresh_exact_window_capture]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 181, gz_partition: v5-t005-mac-pick-final-1}
+  commands: [{command: exact Task 11 Mac pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/pick-place/macos/mac-pick-final-1]
+  decision: PENDING
+  next_experiment: EXP-027
+- experiment_id: EXP-027
+  status: PLANNED
+  prior_experiment: EXP-026
+  hypothesis: Mac FULL_RESTART fixed configuration run 2 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS with fresh exact-window evidence
+  single_variable: NONE; macos consecutive batch run=2
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-026_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common, fresh_exact_window_capture]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 182, gz_partition: v5-t005-mac-pick-final-2}
+  commands: [{command: exact Task 11 Mac pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/pick-place/macos/mac-pick-final-2]
+  decision: PENDING
+  next_experiment: EXP-028
+- experiment_id: EXP-028
+  status: PLANNED
+  prior_experiment: EXP-027
+  hypothesis: Mac FULL_RESTART fixed configuration run 3 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS with fresh exact-window evidence
+  single_variable: NONE; macos consecutive batch run=3
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-027_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common, fresh_exact_window_capture]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 183, gz_partition: v5-t005-mac-pick-final-3}
+  commands: [{command: exact Task 11 Mac pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/pick-place/macos/mac-pick-final-3]
+  decision: PENDING
+  next_experiment: EXP-029
+- experiment_id: EXP-029
+  status: PLANNED
+  prior_experiment: EXP-028
+  hypothesis: Mac FULL_RESTART fixed configuration run 4 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS with fresh exact-window evidence
+  single_variable: NONE; macos consecutive batch run=4
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-028_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common, fresh_exact_window_capture]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 184, gz_partition: v5-t005-mac-pick-final-4}
+  commands: [{command: exact Task 11 Mac pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/pick-place/macos/mac-pick-final-4]
+  decision: PENDING
+  next_experiment: EXP-030
+- experiment_id: EXP-030
+  status: PLANNED
+  prior_experiment: EXP-029
+  hypothesis: Mac FULL_RESTART fixed configuration run 5 succeeds consecutively
+  prediction: all 5_of_5_common gates PASS and Mac consecutive result is 5/5
+  single_variable: NONE; macos consecutive batch run=5
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-029_VALID_success, clean_owned_graph]
+  success_criteria: [five_of_five_common, fresh_exact_window_capture, macos_consecutive_5_of_5]
+  failure_criteria: [five_of_five_valid_failure]
+  invalid_criteria: [five_of_five_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2, runtime_executable: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 185, gz_partition: v5-t005-mac-pick-final-5}
+  commands: [{command: exact Task 11 Mac pick launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/tmp/so101-debug-v5-t005-grounded-sam-20260901/pick-place/macos/mac-pick-final-5]
+  decision: PENDING
+  next_experiment: NONE
+```
+
+## Checkpoint CP-007
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-012
+current_hypothesis: 固定 exact 16d56fc 与同一 immutable bundle 可以先通过 Linux CUDA 四场景，再通过 Mac MPS 四场景，最后分别完成 FULL_RESTART 连续 5/5
+working_tree_status: ledger 在 b5940f7 基线上预写 Task 11；本地仅有已登记的 build/install/log-task10-watermark-v2 生成目录，ai-station exact checkout 仅有 CP-006 已登记的 v4/v5 生成目录
+owned_processes: NONE；Mac domain 159 与 ai-station domain 157 均无 ROS node
+preserved_processes: canonical /data/work/ws_moveit 及其用户未跟踪文档保持只读；未运行真实机械臂
+confirmed_conclusions:
+  - EXP-012 exact 16d56fc 双端 actual offline smoke 与模拟 PickPlace 通过，但不计入 Task 11
+disproven_routes:
+  - Task 10 首张冷正式帧不能代表 warmed 模型能力；EXP-011/EXP-012 已证伪
+open_risks:
+  - 四场景 truth IoU、错误场景无 pose 与双端连续 5/5 尚未实测
+next_command: 将 EXP-013 更新为 RUNNING，核验 exact Linux provenance 后启动唯一一套 linux-matrix-1-task_start stack
 ```
