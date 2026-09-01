@@ -375,6 +375,33 @@ def _wait_for_transform(
         spin_once(min(0.05, remaining))
 
 
+def _transform_discovery_watermark(
+    can_transform: Callable[[str, str, int], bool],
+    *,
+    target_frame: str,
+    source_frame: str,
+    discovery_stamp_ns: int,
+    now_ns: Callable[[], int],
+    spin_once: Callable[[float], None],
+    timeout_s: float,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> int | None:
+    """Wait for the new tf2 listener, then freeze a fresh RGB-D watermark."""
+
+    if not _wait_for_transform(
+        can_transform,
+        target_frame=target_frame,
+        source_frame=source_frame,
+        source_stamp_ns=discovery_stamp_ns,
+        spin_once=spin_once,
+        timeout_s=timeout_s,
+        monotonic=monotonic,
+    ):
+        return None
+    current_ns = int(now_ns())
+    return current_ns if current_ns > 0 else None
+
+
 def _wait_for_positive_clock(
     *,
     now_ns: Callable[[], int],
@@ -473,7 +500,7 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         overlay_publisher = node.create_publisher(Image, options.overlay_topic, 10)
         pose_publisher = node.create_publisher(PoseStamped, options.output_topic, 10)
         publishers = [detections_publisher, overlay_publisher, pose_publisher]
-        source_watermark_ns = _output_discovery_watermark(
+        discovery_watermark_ns = _output_discovery_watermark(
             tuple(publishers),
             now_ns=lambda: int(node.get_clock().now().nanoseconds),
             spin_once=lambda timeout_s: rclpy.spin_once(
@@ -481,7 +508,7 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             ),
             timeout_s=1.0,
         )
-        if source_watermark_ns is None:
+        if discovery_watermark_ns is None:
             print(
                 json.dumps(
                     {"status": "ERROR", "failure": "SIM_CLOCK_UNAVAILABLE"},
@@ -491,6 +518,32 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             return 1
         tf_buffer = Buffer()
         listener = TransformListener(tf_buffer, node)
+        source_watermark_ns = _transform_discovery_watermark(
+            lambda target, source, stamp_ns: bool(
+                tf_buffer.can_transform(
+                    target,
+                    source,
+                    Time(nanoseconds=stamp_ns),
+                    timeout=Duration(seconds=0.0),
+                )
+            ),
+            target_frame="world",
+            source_frame="task_camera_frame",
+            discovery_stamp_ns=discovery_watermark_ns,
+            now_ns=lambda: int(node.get_clock().now().nanoseconds),
+            spin_once=lambda timeout_s: rclpy.spin_once(
+                node, timeout_sec=timeout_s
+            ),
+            timeout_s=options.startup_timeout_s,
+        )
+        if source_watermark_ns is None:
+            print(
+                json.dumps(
+                    {"status": "ERROR", "failure": "TF_UNAVAILABLE"},
+                    sort_keys=True,
+                )
+            )
+            return 1
         buffer = AlignedRgbdBuffer()
         gate = FreshFrameGate(source_watermark_ns)
         aligned: tuple[Any, Any, Any] | None = None
