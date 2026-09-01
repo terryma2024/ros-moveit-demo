@@ -7,7 +7,7 @@ success_contract: 两个平台以同一 commit、模型包 SHA 和阈值通过�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: b55c869c919cd673bf84be8b125cc55a8e6eb98f
-current_qualification_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca
+current_qualification_commit: 70675004e3ed66ce6bd5811a8f922565e08f668d
 guide_fix_commit: 9450fd77504e4719ca9b6b351cbb4068f81eeb0d
 ledger_baseline_commit: c777f58fc29c6b1e0f7493f3d98032499b4b8052
 ledger_parent_before_fix_round_2_record: f52b8b14e361ed0c85fc2f17ae2e6e43776dc0db
@@ -33,8 +33,8 @@ open_hypotheses:
   - HYP-001 Grounding DINO Tiny 对受控提示词 plastic cup. 能在四个 MuJoCo 场景中满足候选数量与类别门槛
   - HYP-002 SAM 2.1 Hiera Tiny 的框提示 mask 在两个平台都能达到 truth IoU >= 0.80
   - HYP-004 新 detector 接入后，两个平台可以分别完成 FULL_RESTART 连续 5/5 pick&place
-latest_checkpoint: CP-007
-next_experiment: EXP-013 linux-matrix-1-task_start
+latest_checkpoint: CP-008
+next_experiment: BLOCKED_PENDING_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
 ```
 
 ## Checkpoints
@@ -993,7 +993,7 @@ TF、observer 与 cleanup 证据完整。共同有效失败条件是运行前提
 
 ```yaml
 - experiment_id: EXP-013
-  status: PLANNED
+  status: INVALID
   prior_experiment: EXP-012
   hypothesis: Linux CUDA 固定模型能从 task_start 唯一选择 plastic_cup 并完成 source-stamped /cup_pose
   prediction: matching=1, IoU>=0.80, world_error<0.01m, request<=2000ms, pose stamp与源stamp相同
@@ -1004,13 +1004,17 @@ TF、observer 与 cleanup 证据完整。共同有效失败条件是运行前提
   failure_criteria: [four_scene_valid_failure]
   invalid_criteria: [four_scene_common_invalid]
   provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 161, gz_partition: v5-t005-linux-matrix-01-task-start}
-  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
-  observed: [PENDING]
+  commands: [{command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=161 GZ_PARTITION=v5-t005-linux-matrix-01-task-start timeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=true sensor_rendering:=true session_id:=linux-matrix-1-task_start evidence_file:=/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-1-task_start/launch.json mujoco_scene:=/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/data/work/so101-models/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=cuda perception_allow_cpu_fallback:=false, exit_code: 127}]
+  observed:
+    - OBSERVED runner 的 `set -u` 使 `/opt/ros/jazzy/setup.zsh` 在读取未设置的 AMENT_TRACE_SETUP_FILES/COLCON_TRACE 时中断，ros2 未进入 PATH，launch_rc=127
+    - OBSERVED 模型、ROS stack 与 MuJoCo 控制均未启动；独立 acceptance-only truth renderer 成功
+    - OBSERVED observer/truth observer 因同一缺失 rclpy 环境退出；validation 无业务输入
+    - OBSERVED cleanup 文件误收 runner 自身 PID；结束后的独立回读证明 domain 161 无 node，session 无 owned process
   inferred: [NONE]
-  conclusion: PENDING
+  conclusion: INVALID environment bootstrap；未进入模型或业务边界，不计入矩阵
   evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-1-task_start]
-  decision: PENDING
-  next_experiment: EXP-014
+  decision: REPEAT
+  next_experiment: EXP-031
 - experiment_id: EXP-014
   status: PLANNED
   prior_experiment: EXP-013
@@ -1352,4 +1356,176 @@ disproven_routes:
 open_risks:
   - 四场景 truth IoU、错误场景无 pose 与双端连续 5/5 尚未实测
 next_command: 将 EXP-013 更新为 RUNNING，核验 exact Linux provenance 后启动唯一一套 linux-matrix-1-task_start stack
+```
+
+## Task 11 batch correction after EXP-013
+
+`2026-09-01` correction：EXP-013 在 ROS setup 阶段即为 `INVALID`，所以原 Linux 批次
+EXP-014～EXP-016 全部未运行且不得计数。修正只删除验收 runner 的 `set -u`，并在 cleanup
+检查中排除 runner 自身 PID；没有改 source commit、模型、bundle、prompt、阈值、FP32、offline、
+device、freshness、场景或 motion policy。新批次从 EXP-031 开始，使用新 domain、partition、
+session、request 与 evidence 路径，原 EXP-013 证据保留且不覆盖。EXP-017 之后的 Mac/5-of-5
+计划只有在新 Linux 四场景 4/4 后才允许进入。
+
+```yaml
+- experiment_id: EXP-031
+  status: VALID
+  prior_experiment: EXP-013
+  hypothesis: 修正 shell bootstrap 后，Linux CUDA 固定模型能从 task_start 唯一选择 plastic_cup
+  prediction: ROS环境完整；matching=1, IoU>=0.80, world_error<0.01m, request<=2000ms, source-stamped pose
+  single_variable: 仅验收 runner 在 source ROS setup 时不启用 nounset；生产配置 NONE
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-013_INVALID_no_business_execution, clean_owned_graph]
+  success_criteria: [four_scene_common, exactly_one_eligible, new_source_stamped_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 191, gz_partition: v5-t005-linux-matrix-r2-01-task-start}
+  commands: [{command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=191 GZ_PARTITION=v5-t005-linux-matrix-r2-01-task-start timeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=true sensor_rendering:=true session_id:=linux-matrix-r2-1-task_start evidence_file:=/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-1-task_start/launch.json mujoco_scene:=/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/data/work/so101-models/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=cuda perception_allow_cpu_fallback:=false, exit_code: 1}]
+  observed:
+    - raw_candidates=3; target-eligible candidates=1; DINO confidences=[0.7210858464,0.4792901576,0.3530465066]; SAM qualities=[0.9401747,0.9536808,0.9346505]
+    - selected plastic_cup truth IoU=0.9863858753; world pose error=0.0004925639m; inference=197.203623ms; request=294.371973ms
+    - observed RGB、Depth、CameraInfo、detections、overlay 与 /cup_pose 的 source stamp 全部为 9323999999；Depth 307200/307200 像素有限且为正；生产 source-rgb 与 observer source-rgb 解码像素逐点一致
+    - detector/localizer 已发布满足数值门禁的新 pose，但动态 consumer 返回 CUP_POSE_STALE，launch exit=1；这是业务链路内可复现失败，故本轮 VALID 但不成功
+    - cleanup.exit=0；cleanup-nodes.txt 与 cleanup-processes.txt 都为空；随后独立回读 ROS_DOMAIN_ID=191 也无 node；进程核验只匹配到核验命令自身，不存在 owned runtime process
+    - acceptance.json SHA256=3d7d8f472531655a8948b1cced0c199b8c633f359af9276963f751fc4d154c51；inventory.sha256 SHA256=4c54fe05d9ffb5f591cfabcc930590ad35d8afac26b2a47fe989333a66fe6e57
+  inferred:
+    - 新建 tf2 listener 在冻结 source watermark 后等待静态 TF discovery 约 1.7s，消耗 2.0s freshness 预算；模型、mask、深度与世界定位不是本次失败根因
+  conclusion: VALID_FAILURE_CUP_POSE_STALE; 按批次规则立即终止 EXP-032～EXP-034，修复后必须从 Linux 场景1重新计数
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-1-task_start]
+  decision: FIX_SOURCE_WITH_TDD_THEN_RESTART_NEW_BATCH_FROM_SCENE_1
+  next_experiment: BLOCKED_PENDING_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
+- experiment_id: EXP-032
+  status: PLANNED
+  prior_experiment: EXP-031
+  hypothesis: Linux CUDA 新批次在 v5_no_cup fail-closed
+  prediction: TARGET_NOT_FOUND, matching=0, no new /cup_pose, request<=2000ms
+  single_variable: keyframe=v5_no_cup; expected=not_found
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-031_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_NOT_FOUND, no_new_or_stale_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 192, gz_partition: v5-t005-linux-matrix-r2-02-no-cup}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-2-v5_no_cup]
+  decision: PENDING
+  next_experiment: EXP-033
+- experiment_id: EXP-033
+  status: PLANNED
+  prior_experiment: EXP-032
+  hypothesis: Linux CUDA 新批次在 v5_two_cups 保留两个合格实例并 fail-closed
+  prediction: TARGET_AMBIGUOUS, matching=2, 两个IoU>=0.80, no new /cup_pose
+  single_variable: keyframe=v5_two_cups; expected=ambiguous
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-032_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, TARGET_AMBIGUOUS, exactly_two_eligible, no_new_or_stale_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 193, gz_partition: v5-t005-linux-matrix-r2-03-two-cups}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-3-v5_two_cups]
+  decision: PENDING
+  next_experiment: EXP-034
+- experiment_id: EXP-034
+  status: PLANNED
+  prior_experiment: EXP-033
+  hypothesis: Linux CUDA 新批次在 v5_cup_near_bottle 保留唯一杯子且 bottle overlap=0
+  prediction: matching=1, IoU>=0.80, bottle_overlap=0, world_error<0.01m, new /cup_pose
+  single_variable: keyframe=v5_cup_near_bottle; expected=unique_adjacent
+  lifecycle: FULL_RESTART
+  preconditions: [frozen_contract, EXP-033_VALID_success, clean_owned_graph]
+  success_criteria: [four_scene_common, exactly_one_eligible, zero_bottle_overlap, new_source_stamped_cup_pose]
+  failure_criteria: [four_scene_valid_failure]
+  invalid_criteria: [four_scene_common_invalid]
+  provenance: {source_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca, install_overlay: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5, runtime_executable: /data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/lib/so101_demo_py/so101_mujoco_perception_pick_place, ros_domain_id: 194, gz_partition: v5-t005-linux-matrix-r2-04-near-bottle}
+  commands: [{command: exact Task 11 Linux matrix launch recorded before RUNNING, exit_code: PENDING}]
+  observed: [PENDING]
+  inferred: [NONE]
+  conclusion: PENDING
+  evidence: [/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-4-v5_cup_near_bottle]
+  decision: PENDING
+  next_experiment: EXP-017
+```
+
+## Task 11 freshness defect correction and authorization boundary
+
+`EXP-031` 证明 detector、SAM mask、Depth、TF 数值定位与 source stamp 本身均达标，但动态
+consumer 在同一有效业务运行中返回 `CUP_POSE_STALE`。根因是新建 tf2 listener 在冻结 source
+watermark 后才等待静态 TF discovery，约 `1.7 s` 的 discovery 等待占用了固定 `2.0 s`
+freshness 预算。修复没有修改模型、bundle、prompt、任何阈值、FP32、offline、device、CPU
+fallback、freshness 或 motion policy；它只把生命周期顺序改为：先确认 source stamp 的静态 TF
+可发现，再刷新 source watermark，最后订阅并冻结 RGB-D。修复采用 TDD：新增回归测试先得到
+`AttributeError` RED，再与两个既有 watermark/transform 测试一起 `3 passed` GREEN；精确源码提交
+为 `70675004e3ed66ce6bd5811a8f922565e08f668d`。
+
+由于源码发生变化，EXP-032～EXP-034 以及原计划的 Mac 四场景和双平台 5/5 均不得沿用或计数。
+下一批必须以 exact `7067500` 在 Linux 新 checkout/install overlay 通过 package gate 后，从 Linux
+场景1重新预写和计数；Linux 4/4 通过后才能预写 Mac 4/4，双端矩阵通过后才能分别预写 5/5。
+
+```yaml
+- experiment_id: EXP-035
+  status: VALID
+  prior_experiment: EXP-031
+  hypothesis: 把 TF discovery 放到 source freeze 前可以保留固定 freshness 门禁并覆盖 EXP-031 根因
+  prediction: 新回归测试 RED；最小生产修复后该测试与既有 transform/watermark 测试 GREEN；Mac 新 overlay 整包 gate 全绿
+  single_variable: RGB-D source freeze 相对静态 TF discovery 的生命周期顺序
+  lifecycle: ISOLATED_TEST_AND_BUILD
+  preconditions: [EXP-031_VALID_failure, no_threshold_change, no_model_change, owned_processes_NONE]
+  commands:
+    - {command: pytest focused regression before production helper, exit_code: 1}
+    - {command: pytest focused regression plus exact-source transform and output watermark regressions, exit_code: 0}
+    - {command: build so101_demo_py into install-task11-tf-discovery then run full package pytest, exit_code: 1}
+    - {command: build so101_mujoco_support into the same new overlay then rerun full package pytest, exit_code: 0}
+  observed:
+    - RED tf-discovery-red.xml errors=0 failures=1; SHA256=02cc02ea53d773679061a4dd19fa61c8f6472aa9190849709d27b396a7b0a7fa
+    - GREEN tf-discovery-green.xml tests=3 errors=0 failures=0; SHA256=ae142cad47510de5e86c18f6d21ca27c20a3c421d93bb0b65405cdafd7c5d72f
+    - source/test commit=70675004e3ed66ce6bd5811a8f922565e08f668d
+    - 首次 Mac full gate 为 1052 passed,1 failed；失败仅因 so101_mujoco_support 仍解析到旧 project overlay；该 gate INVALID，证据保留且不计数
+    - 补建 support package 后 Mac exact candidate overlay full gate=1053 passed in 10.75s；JUnit SHA256=f47a1a047a32f3f23a9685e78c23b95dbc81b9d3e6aadfd69ea99e6e2eaee1d3；pytest.log SHA256=9634cde8c59390f4449fc69292d63e2dba00a011676d81fc160d4c3ad68e74b3
+  inferred: Mac 源码、demo package、support plugin 与测试 gate 已绑定新 overlay；这不替代 Linux package gate 或任一 Task 11 运行
+  conclusion: TDD_AND_MAC_PACKAGE_GATE_PASS; LINUX_EXACT_OVERLAY_NOT_YET_AUTHORIZED
+  evidence:
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/tdd
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/mac-package
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/mac-package-r2
+    - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-task11-tf-discovery
+    - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task11-tf-discovery
+  decision: WAIT_FOR_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
+  next_experiment: NONE_UNTIL_AUTHORIZED
+```
+
+## Checkpoint CP-008
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-035
+current_hypothesis: exact 7067500 修复了 EXP-031 的 TF discovery/freshness 生命周期缺陷，但必须先在 ai-station 新隔离 overlay 完成 Linux package gate，才可从新 Linux 矩阵场景1重新计数
+working_tree_status: source/test fix 已提交为 7067500；Task 11 ledger 与 task-11-report.md 正在结算；本地 Task 10/11 build/install/log 生成目录保留且未删除
+owned_processes: NONE；ai-station ROS_DOMAIN_ID=191 独立回读无 node；进程核验只匹配核验命令自身；Mac 未运行 Task 11 stack
+preserved_processes: 用户进程、canonical /data/work/ws_moveit 及其用户文档未触碰；未运行真实机械臂
+retained_runs:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r2-1-task_start
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/tdd
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/mac-package
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/mac-package-r2
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-v5-t005-grounded-sam-task11-7067500
+  - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-task11-tf-discovery
+  - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task11-tf-discovery
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-11/7067500-full.bundle
+  - 既有 CP-006 登记的 Task 10 生成目录
+authorization_boundary:
+  requested_primary: 允许把 7067500-incremental.bundle 从 Mac 传到 ai-station:/tmp/so101-v5-t005-task11-7067500-incremental.bundle；bundle 为 14 KiB，SHA256=2baf41e16463ab65fa4c60f3a58515224e43bddfd905b12f80dffd21fb3b47c1，只含 16d56fc..7067500 的 Git objects，要求 ai-station 已有 base 16d56fc；不含 datasets、LFS payload、model 或 credentials
+  requested_target: 在新目录 /data/work/so101-v5-t005-grounded-sam-task11-7067500-v2 检出 exact 7067500，并生成独立 build-task11/install-task11/log-task11
+  fallback_only_if_explicitly_chosen: 17 MiB 完整历史 bundle，SHA256=c0b5e4abc7be7ca1c74e2aaf1c0dd6c27602065922ae29b32b4c972145645524
+blocked_reason: 审批系统拒绝向 ai-station 发送完整 Git 历史，并明确禁止使用替代传输规避；尚无源码传输明确授权
+next_command: NONE；等待用户明确授权最小增量 bundle 传输与 ai-station 新隔离 checkout
+decision: BLOCKED_PENDING_EXPLICIT_SOURCE_TRANSFER_AUTHORIZATION
 ```
