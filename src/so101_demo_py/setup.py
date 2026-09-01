@@ -69,6 +69,8 @@ setup(
             "task_reachability = so101_demo.cli.task_reachability:main",
             "so101_mujoco_rgbd_batch = so101_demo.cli.mujoco_rgbd_batch:main",
             "text_pick_agent = so101_demo.cli.text_pick_agent:main",
+            "prepare_grounded_sam_bundle = "
+            "so101_demo.cli.prepare_grounded_sam_bundle:main",
         ]
     },
 )
