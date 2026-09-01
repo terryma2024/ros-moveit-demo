@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -756,3 +757,40 @@ def test_run_refuses_evidence_failure_before_ros_setup(
 
     assert result == 1
     assert json.loads(capsys.readouterr().out)["status"] == "ERROR"
+
+
+def test_run_refuses_warmup_failure_before_ros_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Catch a detector warm-up failure creating ROS publishers or subscriptions."""
+
+    from so101_demo.adapters.perception.model_runtime import ModelSetupError
+    from so101_demo.ros import rgbd_object_pose_node
+
+    class ForbiddenRclpy:
+        def __getattr__(self, name: str) -> object:
+            pytest.fail(f"warm-up failure reached rclpy.{name}")
+
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "build_detector",
+        lambda _options: (_ for _ in ()).throw(
+            ModelSetupError("WARMUP_FAILED", "formal-shape warm-up failed")
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "rclpy", ForbiddenRclpy())
+
+    result = rgbd_object_pose_node.run_rgbd_object_pose(
+        RgbdObjectPoseOptions(
+            backend="grounded_sam",
+            model_root=tmp_path / "bundle",
+            model_manifest_sha256="a" * 64,
+            request_id="req-warmup-failure",
+            evidence_root=tmp_path / "evidence",
+        )
+    )
+
+    document = json.loads(capsys.readouterr().out)
+    assert result == 1
+    assert document["status"] == "ERROR"
+    assert document["failure"].startswith("WARMUP_FAILED:")
