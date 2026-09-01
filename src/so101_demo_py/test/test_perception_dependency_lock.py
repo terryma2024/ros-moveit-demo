@@ -34,6 +34,10 @@ def test_perception_application_dependencies_are_exactly_pinned() -> None:
     assert packages["torchvision"] == "0.28.0"
     assert packages["ultralytics"] == "8.4.115"
     assert packages["mujoco"] == "3.12.0"
+    assert packages["transformers"] == "4.56.2"
+    assert packages["huggingface-hub"] == "0.34.4"
+    assert packages["safetensors"] == "0.6.2"
+    assert packages["tokenizers"] == "0.22.0"
 
 
 def test_training_contract_uses_local_segmentation_base_and_fixed_seed() -> None:
