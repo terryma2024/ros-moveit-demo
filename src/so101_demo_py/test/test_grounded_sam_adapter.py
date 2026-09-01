@@ -12,6 +12,7 @@ import pytest
 from so101_demo.adapters.perception.grounded_sam import GroundedSamDetector
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.adapters.perception.model_bundle import VerifiedModelBundle
+from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 
 
@@ -89,8 +90,10 @@ class _FakeGroundingProcessor:
         self._empty = empty
         self._malformed = malformed
         self._device_results = device_results
+        self.image_shapes: list[tuple[int, ...]] = []
 
-    def __call__(self, **_: object) -> dict[str, object]:
+    def __call__(self, *, images: np.ndarray, **_: object) -> dict[str, object]:
+        self.image_shapes.append(images.shape)
         return {"input_ids": np.array([[1]], dtype=np.int64)}
 
     def post_process_grounded_object_detection(
@@ -141,9 +144,15 @@ class _FakeGroundingModel:
 
 
 class _FakeSamProcessor:
+    def __init__(self) -> None:
+        self.image_shapes: list[tuple[int, ...]] = []
+        self.input_box_shapes: list[tuple[int, ...]] = []
+
     def __call__(
         self, *, images: np.ndarray, input_boxes: object, **_: object
     ) -> dict[str, object]:
+        self.image_shapes.append(images.shape)
+        self.input_box_shapes.append(np.asarray(input_boxes).shape)
         size = np.array([[images.shape[0], images.shape[1]]], dtype=np.int64)
         return {
             "input_boxes": np.asarray(input_boxes),
@@ -203,6 +212,14 @@ class _FakeSamModel:
             pred_masks=masks,
             iou_scores=quality,
         )
+
+
+class _RejectMultiBoxSamModel(_FakeSamModel):
+    def __call__(self, **inputs: object) -> SimpleNamespace:
+        input_boxes = np.asarray(inputs["input_boxes"])
+        if input_boxes.shape[1] > 1:
+            raise RuntimeError("multi-box warm-up failed")
+        return super().__call__(**inputs)
 
 
 def test_fake_sam_processor_matches_transformers_4562_mask_postprocess_contract() -> None:
@@ -337,6 +354,52 @@ def test_detector_loads_both_local_models_offline_and_warms_them(
     assert detector.cold_start_latency_ms == 5.0
     assert grounding_model.call_count == 1
     assert sam_model.call_count == 1
+
+
+def test_detector_construction_warms_formal_rgb_shape_and_max_candidate_sam_batch(
+    tmp_path: Path,
+) -> None:
+    """Catch READY construction omitting the real image shape or multi-box SAM batch."""
+
+    grounding_processor = _FakeGroundingProcessor()
+    sam_processor = _FakeSamProcessor()
+    GroundedSamDetector(
+        bundle=_verified_bundle(tmp_path),
+        thresholds=GroundedSamThresholds.defaults(),
+        requested_device="mps",
+        allow_cpu_fallback=False,
+        torch_api=_fake_torch(mps=True),
+        grounding_processor_loader=lambda *_args, **_kwargs: grounding_processor,
+        grounding_model_loader=lambda *_args, **_kwargs: _FakeGroundingModel(),
+        sam_processor_loader=lambda *_args, **_kwargs: sam_processor,
+        sam_model_loader=lambda *_args, **_kwargs: _FakeSamModel(),
+        monotonic_ns=iter([0, 5_000_000]).__next__,
+    )
+
+    assert grounding_processor.image_shapes == [(480, 640, 3)]
+    assert sam_processor.image_shapes == [(480, 640, 3)]
+    assert sam_processor.input_box_shapes == [(1, 16, 4)]
+
+
+def test_multi_box_formal_warmup_failure_fails_closed(tmp_path: Path) -> None:
+    """Catch a failed multi-box warm-up returning a detector that could become READY."""
+
+    with pytest.raises(ModelSetupError) as raised:
+        GroundedSamDetector(
+            bundle=_verified_bundle(tmp_path),
+            thresholds=GroundedSamThresholds.defaults(),
+            requested_device="mps",
+            allow_cpu_fallback=False,
+            torch_api=_fake_torch(mps=True),
+            grounding_processor_loader=lambda *_args, **_kwargs: _FakeGroundingProcessor(),
+            grounding_model_loader=lambda *_args, **_kwargs: _FakeGroundingModel(),
+            sam_processor_loader=lambda *_args, **_kwargs: _FakeSamProcessor(),
+            sam_model_loader=lambda *_args, **_kwargs: _RejectMultiBoxSamModel(),
+            monotonic_ns=iter([0, 5_000_000]).__next__,
+        )
+
+    assert raised.value.code == "WARMUP_FAILED"
+    assert "multi-box warm-up failed" in raised.value.detail
 
 
 def test_detect_runs_grounding_then_one_batched_sam_call() -> None:
