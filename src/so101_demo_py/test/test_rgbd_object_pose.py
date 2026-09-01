@@ -477,6 +477,43 @@ def test_fresh_frame_gate_rejects_cached_or_misaligned_samples() -> None:
     assert gate.accept((_stamped(14), _stamped(14), _stamped(14))) is fresh
 
 
+def test_source_watermark_waits_for_a_positive_simulation_clock() -> None:
+    """Catch accepting a queued RGB-D frame before simulated time is established."""
+
+    from so101_demo.ros import rgbd_object_pose_node
+
+    clock_values = iter([0, 0, 13])
+    monotonic_values = iter([0.0, 0.1, 0.2, 0.3])
+    spins: list[float] = []
+
+    watermark = rgbd_object_pose_node._wait_for_positive_clock(
+        now_ns=lambda: next(clock_values),
+        spin_once=spins.append,
+        timeout_s=1.0,
+        monotonic=lambda: next(monotonic_values),
+    )
+
+    assert watermark == 13
+    assert spins == [0.05, 0.05]
+
+
+def test_source_watermark_fails_closed_when_simulation_clock_never_starts() -> None:
+    """Catch falling back to a zero watermark when /clock is unavailable."""
+
+    from so101_demo.ros import rgbd_object_pose_node
+
+    monotonic_values = iter([0.0, 0.4, 1.0])
+
+    watermark = rgbd_object_pose_node._wait_for_positive_clock(
+        now_ns=lambda: 0,
+        spin_once=lambda _duration: None,
+        timeout_s=1.0,
+        monotonic=lambda: next(monotonic_values),
+    )
+
+    assert watermark is None
+
+
 def test_rgbd_object_pose_options_require_local_weight_and_absolute_evidence(
     tmp_path: Path,
 ) -> None:
