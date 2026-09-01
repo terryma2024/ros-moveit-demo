@@ -807,3 +807,151 @@ deletion_candidates:
 decision: PARTIAL_TASK10_MODEL_CAPABILITY_NOT_MET_ON_MAC
 next_command: 设计并预写一个只改变 Mac inference latency 的实验；不得放宽 source-age gate，不得进入 Task 11 正式计数
 ```
+
+```yaml
+experiment_id: EXP-011
+status: VALID
+prior_experiment: EXP-008
+hypothesis: Mac 首个正式 640x480 请求的 3851.778834 ms 包含 8x8 warm-up 未触发的正式形状与多框 batch 图编译成本；在同一 detector 内复用同一真实帧后，第 2至 6 次将稳定降至 2000 ms 内
+prediction: 若现有 warm-up 仅缺少正式 shape/batch，第 2至 6 次的 MPS 同步总延迟均低于 2000 ms；若这些 warmed 请求仍超过 2000 ms，则多次数据确认 MODEL_CAPABILITY_NOT_MET
+single_variable: 从一个 detector 的首个正式帧扩展为同 detector、同帧连续 6 次 detect；bundle、revision、prompt、thresholds、MPS FP32、CPU fallback false 和 offline 不变
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source behavior 为 exact f55074e，当前 HEAD 4ab5315 仅增加 ledger checkpoint，Mac overlay 已指向该源码
+  - 使用同一 bundle manifest 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 和先前 smoke 的 source-rgb.png SHA256 3881885fe5bcc69fa03c007aff0c8251f7eb214dedb0ff56f0f1bde62bd15953
+  - HF_HUB_OFFLINE=1、TRANSFORMERS_OFFLINE=1、requested_device=mps、allow_cpu_fallback=false；计时前后执行 torch.mps.synchronize()
+  - 诊断批次只写 registered Mac debug root，不启动 ROS/MuJoCo/Task 11
+success_criteria:
+  - 只构造一个 actual detector，连续完成 6 次同帧 detect，保存每次 DINO proposal、detector raw candidate、固定 0.50 gate eligible candidate 和 full-resolution mask hash/图像
+  - 保存 Grounding DINO processor/model/postprocess、SAM processor/model/mask postprocess、device transfer/host conversion/adapter conversion 和 MPS 同步总延迟
+  - 6 次语义和 mask 不变，第 2至 6 次每次单独按 2000 ms 门禁判定，不挑最快值
+failure_criteria:
+  - MPS/FP32/offline 或 exact bundle/image/source provenance 不成立，候选/mask 在重复请求中不稳定，或任一 detect 异常
+invalid_criteria:
+  - 修改生产源码、模型、阈值、freshness、prompt、precision 或 fallback；联网加载；每次新建 detector；不同步 MPS；覆盖旧 evidence
+provenance:
+  source_behavior_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+  current_ledger_head: 4ab531553205c9ac686cabca10dfd78c68dd662f
+  install_overlay: /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install
+  python: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  bundle_manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+  source_rgb_sha256: 3881885fe5bcc69fa03c007aff0c8251f7eb214dedb0ff56f0f1bde62bd15953
+commands:
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 same_detector_phase_diagnostic.py --iterations 6 --output <new Mac debug batch>
+    exit_code: 0
+  - command: TASK10_PHASE_RESULT=<result.json> /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -q -p no:launch_testing -p no:launch_ros -p no:launch_pytest test_same_detector_phase_results.py --junitxml=<diagnostic-validation.xml>
+    exit_code: 0
+observed:
+  - OBSERVED 只构造 1 个 detector，现有 8x8 warm-up 后同一真实 640x480 RGB 连续 6 次 detect 的 MPS 同步总延迟为 1185.302708、975.335333、973.731292、974.600042、973.230708、966.972000 ms
+  - OBSERVED 第 2 至 6 次每次都低于 2000 ms，975.335333 ms 至 966.972000 ms，不在门禁边缘，无需挑选最快值
+  - OBSERVED warmed 五次 DINO model 为 754.736041、751.819167、752.916958、752.554416、748.063250 ms；SAM model 为 195.915375、197.848167、198.692625、196.790458、196.502042 ms；adapter conversion 为 5.438915、5.110040、4.738167、5.189168、4.548125 ms
+  - OBSERVED 6 次均为 3 个 raw candidate、1 个固定 0.50 gate eligible candidate、640x480/4651px mask；confidence、quality、bbox 和所有 mask SHA 完全一致
+  - OBSERVED MPS FP32、CPU fallback false、offline env、exact bundle/image SHA 全部由 artifact 自验；诊断 JUnit 1 passed
+  - OBSERVED diagnostic log SHA256=3f13077c94943a9a30a65159ddfac15e4206dc5f9fef4bb77a5f6e1f8658bbbb，result JSON SHA256=9d90879625c2fbbecaf40de093d6f1d6c4d176cdaf1e2cd2e080883be8406fcb，JUnit SHA256=346a269aa76daa69d693c74628a2a08886ea9c1357de6a7a4f0f6f4805e24179
+inferred:
+  - INFERRED 原 Mac 3851.778834 ms 不能代表 warmed capability；同 detector 正式形状稳定推理在 2 s 内，应修复的是启动 warm-up 形状与多框 batch 覆盖，不是模型、阈值或 freshness
+conclusion: 诊断支持 FORMAL_SHAPE_WARMUP_NEEDED，进入 EXP-012 的 TDD 最小修复
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-mac-warmed-diagnostic/
+decision: KEEP
+next_experiment: EXP-012
+```
+
+```yaml
+experiment_id: EXP-012
+status: VALID
+prior_experiment: EXP-011
+hypothesis: 在 detector READY 之前用静态零图执行一次 640x480 Grounding DINO 和一次有效多框 SAM batch warm-up，可将首个真实帧的 MPS 延迟稳定降到 2000 ms 内
+prediction: 新 detector 首个真实 640x480 请求不再承担 8x8 aspect-ratio 之外的 DINO 正式 shape 和 SAM multi-box 首次调度成本；Mac full stack 会在未放宽 2.0 s freshness 的情况下实际执行
+single_variable: 只把 detector 启动 warm-up 从 8x8/单框替换为 640x480/确定性多框 batch；逐帧无状态、bundle、revision、prompt、thresholds、FP32、offline、CPU fallback false 和 2.0 s freshness 不变
+lifecycle: FULL_RESTART
+preconditions:
+  - EXP-011 VALID，第 2 至 6 次实际 MPS warmed 请求全部低于 2000 ms
+  - 先用测试固定 640x480 DINO 输入和大于 1 的 SAM box batch，观察旧实现 RED；然后才修改生产代码
+  - 启动 timeout 继续使用已验证的 120 s，warm-up 在 detector 构造中完成后才能 READY
+success_criteria:
+  - CUDA/MPS 共用同一确定性正式 shape/multi-box warm-up，warm-up 不使用 scene truth，不调用 detect 且不发布候选、mask 或 pose
+  - 测试证明正式 shape/multi-box 在 READY 前完成；该 warm-up 失败映射 WARMUP_FAILED 且 ROS 副作用为 0
+  - Mac 与 Linux 任务 package gate 通过，新 exact commit 两端 actual offline smoke 通过，Mac 首个 full-stack 正式帧小于 2000 ms 并实际 PickPlace DONE
+failure_criteria:
+  - 测试/包门失败，首帧 Mac 仍超 2000 ms，任一端设备/fallback/offline/provenance 不成立，或 full-stack 缺 payload/semantic/mask/Depth/TF/source stamp/physical/cleanup 证据
+invalid_criteria:
+  - 更换模型/revision/pin/threshold/prompt/precision，放宽 freshness，使用 truth/color/最高分强选，发布 warm-up 结果，覆盖证据，修改 canonical checkout 或系统库
+provenance:
+  base_source_behavior_commit: f55074e5d9806304955df1a0d2beadbd8e4a1ecc
+  current_ledger_head: 4ab531553205c9ac686cabca10dfd78c68dd662f
+  formal_warmup_commit: 157c8f09ba12519d926cb1b947254c96ab5ececf
+  ready_clock_watermark_commit: ec125ecc9879205e5d86506dfceb10540871395d
+  post_discovery_subscription_commit: 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca
+  bundle_manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+commands:
+  - command: 在 f55074e 下用同一个 actual detector、同一真实 640x480 RGB 连续执行 6 次 MPS detect，并用临时 wrapper 记录 DINO/SAM/adapter 各阶段 monotonic latency
+    exit_code: 0; diagnostic validation 1 passed
+  - command: 旧实现运行 formal-shape/multi-box warm-up RED；实现后运行 GREEN、定向与 Mac 整包测试
+    exit_code: RED=1; GREEN=0; Mac directed=0; Mac full=0
+  - command: 先在 Mac full stack 启动只读 observer，记录首个 /cup_pose 的 source stamp、consumer ROS clock 与精确 age；依次验证 8x8 替换、READY clock watermark 与 output discovery 前移，不改变 2.0 s freshness
+    exit_code: stale diagnostics=1; final exact 16d56fc full stack=0
+  - command: 在 ai-station 创建并重建 exact 16d56fc1c129b5bb8b45d201db38dd2ab70e62ca 隔离 checkout，任务 venv entrypoint 与 CUDA provenance gate；仓库根定向/整包测试
+    exit_code: build=0; directed=0; full=0
+  - command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 ROS_DOMAIN_ID=157 GZ_PARTITION=v5-t005-grounded-sam-linux-fix-r1-final-001 timeout --signal=TERM --kill-after=20s 600s ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py run_mode:=execute execute:=true headless:=true sensor_rendering:=true session_id:=linux-grounded-sam-final-smoke-001 evidence_file:=/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-round-1-output-discovery/linux/linux-smoke-001.json mujoco_scene:=/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v5/so101_demo_py/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml mujoco_initial_keyframe:=task_start perception_startup_timeout_s:=120.0 cup_pose_timeout_s:=45.0 perception_backend:=grounded_sam perception_model_root:=/data/work/so101-models/grounded-sam-v1 perception_model_manifest_sha256:=838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3 perception_device:=cuda perception_allow_cpu_fallback:=false
+    exit_code: 0
+observed:
+  - OBSERVED 同 detector 诊断的 6 次 MPS 总延迟为 1185.302708、975.335333、973.731292、974.600042、973.230708、966.972000 ms；第 2 至 6 次每次均低于 2000 ms，不在门禁边缘
+  - OBSERVED 第 2 至 6 次 DINO model 为 754.736041、751.819167、752.916958、752.554416、748.063250 ms，SAM model 为 195.915375、197.848167、198.692625、196.790458、196.502042 ms，adapter conversion 为 5.438915、5.110040、4.738167、5.189168、4.548125 ms；每次均为 3 raw/1 eligible/4651px mask
+  - OBSERVED 157c8f0 将 warm-up 固定为 480x640 零图和 16 个确定性网格框；测试证明其在 READY 前完成、失败 fail-closed，且不调用 detect、不发布候选/mask/pose。启动成本增加到 Mac 约 8.16 s、Linux 约 8.62 s，均在 120 s timeout 内
+  - OBSERVED 第一轮 Mac full stack 暴露两段非模型 freshness 消耗：`FreshFrameGate(0)` 可冻结 READY 前排队帧，且在冻结帧后等待无订阅者的 detection/overlay discovery 约 1 s。ec125ec 只使用已有 `use_sim_time=true` ROS clock 等待非零且失败为 `SIM_CLOCK_UNAVAILABLE`，不回退 wall clock；16d56fc 将 output discovery 放在创建 RGB-D subscriptions 前，随后采样 watermark，第一张 `stamp > watermark` 的真正新帧可通过
+  - OBSERVED Mac exact 16d56fc full stack 在 MPS FP32、CPU fallback false、offline、同 bundle/阈值下通过：inference_latency_ms=1506.458875，request_latency_ms=1575.570042，3 raw/1 eligible、640x480/4651px mask、Depth/TF 与源时间戳 /cup_pose；observer 记录 source=19.938 s、consumer=21.564 s、age=1.626 s < 2.0 s
+  - OBSERVED Mac dynamic workflow DONE/19 transitions；VERIFY_PHYSICAL_GRASP left=1/right=1、table_contact=false、lift 约 0.004069 m、max force=0.5652395 N；final_xy_error_m=0.002020139、tilt=0.004522784 rad、table_contact=true
+  - OBSERVED Mac RED/GREEN freshness tests 均保留；最终 directed 151/151、full 1052/1052。源码测试提交依次为 157c8f0、ec125ec、16d56fc
+  - OBSERVED ai-station exact 16d56fc checkout clean，submodule 71bc934；install-task10-v5 的 rgbd_object_pose shebang 指向 `/data/work/venvs/so101-grounded-sam/bin/python`，package prefix/module 指向该隔离 checkout，rclpy 仍来自 `/opt/ros/jazzy`，torch 2.13.0+cu130/CUDA true/RTX 5080
+  - OBSERVED Linux directed 151/151、仓库根 full 1052/1052（4 个既有 fork warnings）；保留一次未 ignore third_party dependency 的 build failure，以及一次 colcon package-cwd 下 11 个旧相对仓库根测试失败的无效批次
+  - OBSERVED Linux exact 16d56fc actual offline smoke 为 status=OK、runtime_device=cuda、fallback false、inference=155.56822 ms、request=276.020068 ms、cold=8624.091031 ms、3 raw/1 eligible、640x480/4643px mask、非空 176016-byte cloud、Depth/TF center_world_xyz=[0.02009484,-0.28046013,0.165]，/cup_pose 与 dynamic input source_stamp_ns 均为 13444000000
+  - OBSERVED Linux dynamic DONE/19 transitions；bilateral=true、micro_lift=0.003951946 m、table_contact=false、verify left/right=1/1、max force=0.577346792 N；final_xy_error_m=0.002044364、tilt=0.004583883 rad、table_contact=true
+  - OBSERVED 两端 manifest SHA 均为 838c5154...8b3，detector revision a2bb814...、segmenter revision de431c4...；actual smoke 均设置 HF_HUB_OFFLINE=1 与 TRANSFORMERS_OFFLINE=1，loader 继续强制 local_files_only=True；两端 cleanup 为 owned processes/domain NONE
+  - OBSERVED Linux validation.json SHA256=7af2d2833108d319a4c0e47afb44b2fb0f7355fb7da885ce6a8f0366e40c62d3；Mac final log/result/dynamic/observer SHA256 分别为 4eacd19d...073e、1ab15acc...787、cb8157a9...25c4、29c262b9...70df
+inferred:
+  - INFERRED 原 3851.778834 ms 是正式 shape/batch 首次调度和错误的帧生命周期排序共同造成，不能判定 MPS 模型能力不足；正式 warm-up 加 post-discovery 新帧门禁后，未放宽 2.0 s freshness 即能完成 actual full stack
+  - INFERRED 修复没有改变逐帧无状态、scene/model/revisions/prompt/thresholds/FP32/fallback 或 freshness；它只使 READY 和采帧边界与既有接口语义一致
+conclusion: exact 16d56fc 在 Mac MPS 与 Linux CUDA 上使用同一 immutable bundle 的 actual offline full-stack smoke 均通过；Task 10 Fix Round 1 VALID，smoke 不计入 Task 11 最终 5/5
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-mac-warmed-diagnostic/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-formal-warmup/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-freshness-watermark/
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/fix-round-1-output-discovery/
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-round-1-formal-warmup/
+  - ai-station:/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/fix-round-1-output-discovery/linux/
+decision: KEEP
+next_experiment: Task 10 independent review; Task 11 remains separate and uncounted
+```
+
+## Checkpoint CP-006
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-012
+current_hypothesis: exact 16d56fc 的 formal-shape/multi-box warm-up 与 post-discovery freshness watermark 已使同 bundle Mac MPS/Linux CUDA actual offline smoke 都在既有安全门内完成
+working_tree_status: 三个源码/测试修复已分别提交为 157c8f0、ec125ec、16d56fc；本 checkpoint 仅包含 ledger 更新，SDD report/progress 为 ignored local orchestration
+owned_processes: NONE on Mac final domain and ai-station ROS_DOMAIN_ID=157
+preserved_processes: canonical `/data/work/ws_moveit` 只读且其用户未跟踪文档保持不变；未运行真实机械臂
+retained_runs:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901
+  - /data/work/so101-models/grounded-sam-v1
+  - /Users/matianyi/Models/so101/grounded-sam-v1
+  - /data/work/so101-v5-t005-grounded-sam-task10-16d56fc
+  - /data/work/so101-v5-t005-grounded-sam-task10-157c8f0
+archived_runs: []
+deletion_candidates:
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-d870113
+  - ai-station:/data/work/so101-models/.grounded-sam-v1.staging-8rjn6_lm
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/build-task10-v4
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/install-task10-v4
+  - ai-station:/data/work/so101-v5-t005-grounded-sam-task10-16d56fc/log-task10-v4
+  - /tmp/task10-16d56fc.bundle
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/task-10/f55074e.bundle
+  - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-task10-watermark-v2
+  - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-task10-watermark-v2
+  - /Users/matianyi/.codex/worktrees/5b15/moveit-demo/log-task10-watermark-v2
+decision: TASK10_FIX_ROUND_1_VALID
+next_command: independent review Task 10；不得把本 smoke 计入 Task 11 5/5
+```
