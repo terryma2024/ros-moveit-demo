@@ -54,7 +54,7 @@ def test_prompt_rejects_a_bypassed_unknown_query_before_any_model_boundary() -> 
     unknown = object.__new__(DetectionQuery)
     object.__setattr__(unknown, "class_id", "coffee_mug")
 
-    assert _error_code(lambda: prompt_for_query(unknown)) == "QUERY_UNSUPPORTED"
+    assert _error_code(lambda: prompt_for_query(unknown)) == "UNSUPPORTED_DETECTION_QUERY"
 
 
 def test_threshold_defaults_are_the_fixed_grounded_sam_profile() -> None:
