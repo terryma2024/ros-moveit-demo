@@ -31,6 +31,31 @@ class _InferenceMode:
         return None
 
 
+class _DeviceTensor:
+    """Mirror the host-transfer boundary of a CUDA/MPS torch tensor."""
+
+    def __init__(self, value: np.ndarray, *, on_host: bool = False) -> None:
+        self._value = value
+        self._on_host = on_host
+
+    def detach(self) -> "_DeviceTensor":
+        return self
+
+    def cpu(self) -> "_DeviceTensor":
+        return _DeviceTensor(self._value, on_host=True)
+
+    def numpy(self) -> np.ndarray:
+        if not self._on_host:
+            raise TypeError("device tensor must be copied to host before numpy conversion")
+        return self._value
+
+    def __len__(self) -> int:
+        return len(self._value)
+
+    def __array__(self, *_: object, **__: object) -> np.ndarray:
+        raise TypeError("device tensor cannot be converted directly with numpy.asarray")
+
+
 def _fake_torch(*, mps: bool) -> SimpleNamespace:
     return SimpleNamespace(
         cuda=_DeviceAvailability(False),
@@ -53,11 +78,17 @@ def _verified_bundle(tmp_path: Path) -> VerifiedModelBundle:
 
 class _FakeGroundingProcessor:
     def __init__(
-        self, *, two_boxes: bool = False, empty: bool = False, malformed: bool = False
+        self,
+        *,
+        two_boxes: bool = False,
+        empty: bool = False,
+        malformed: bool = False,
+        device_results: bool = False,
     ) -> None:
         self._two_boxes = two_boxes
         self._empty = empty
         self._malformed = malformed
+        self._device_results = device_results
 
     def __call__(self, **_: object) -> dict[str, object]:
         return {"input_ids": np.array([[1]], dtype=np.int64)}
@@ -76,6 +107,9 @@ class _FakeGroundingProcessor:
                 [[1.0, 1.0, 9.0, 9.0], [10.0, 2.0, 18.0, 10.0]], dtype=np.float32
             )
             scores = np.array([0.9, 0.8], dtype=np.float32)
+        if self._device_results:
+            boxes = _DeviceTensor(boxes)
+            scores = _DeviceTensor(scores)
         return [
             {
                 "boxes": boxes,
@@ -229,6 +263,7 @@ def _fake_detector(
     two_boxes: bool,
     empty: bool = False,
     malformed: bool = False,
+    device_results: bool = False,
     second_quality: float = 0.9,
 ) -> tuple[GroundedSamDetector, _FakeGroundingModel, _FakeSamModel]:
     grounding_model = _FakeGroundingModel()
@@ -240,7 +275,10 @@ def _fake_detector(
         allow_cpu_fallback=False,
         torch_api=_fake_torch(mps=True),
         grounding_processor_loader=lambda *_args, **_kwargs: _FakeGroundingProcessor(
-            two_boxes=two_boxes, empty=empty, malformed=malformed
+            two_boxes=two_boxes,
+            empty=empty,
+            malformed=malformed,
+            device_results=device_results,
         ),
         grounding_model_loader=lambda *_args, **_kwargs: grounding_model,
         sam_processor_loader=lambda *_args, **_kwargs: _FakeSamProcessor(),
@@ -313,6 +351,21 @@ def test_detect_runs_grounding_then_one_batched_sam_call() -> None:
     assert len(batch.candidates) == 2
     assert batch.model_id == "grounding-dino-tiny+sam2.1-hiera-tiny"
     assert batch.weights_sha256 == "a" * 64
+
+
+def test_detect_copies_grounding_device_tensors_to_host_before_numpy_conversion() -> None:
+    """Catch passing CUDA/MPS postprocess tensors directly into NumPy conversion."""
+
+    detector, _grounding_model, _sam_model = _fake_detector(
+        two_boxes=False,
+        device_results=True,
+    )
+
+    batch = detector.detect(_frame(), DetectionQuery("plastic_cup"))
+
+    assert len(batch.candidates) == 1
+    assert batch.candidates[0].bbox_xyxy == (1.0, 1.0, 9.0, 9.0)
+    assert batch.candidates[0].confidence == pytest.approx(0.9)
 
 
 def test_empty_grounding_result_skips_sam_and_returns_empty_batch() -> None:
