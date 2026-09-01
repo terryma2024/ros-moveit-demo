@@ -191,6 +191,28 @@ def test_perception_launch_declares_the_grounded_sam_backend_contract() -> None:
         "grounded_sam",
     )
     assert {
+        "grounding_box_threshold": "0.35",
+        "grounding_text_threshold": "0.25",
+        "grounding_duplicate_iou": "0.85",
+        "grounding_max_candidates": "16",
+        "sam_mask_quality_threshold": "0.75",
+        "sam_min_mask_pixels": "64",
+        "sam_max_mask_area_ratio": "0.50",
+    } == {
+        name: argument.default_value[0].perform(LaunchContext())
+        for name, argument in arguments.items()
+        if name
+        in {
+            "grounding_box_threshold",
+            "grounding_text_threshold",
+            "grounding_duplicate_iou",
+            "grounding_max_candidates",
+            "sam_mask_quality_threshold",
+            "sam_min_mask_pixels",
+            "sam_max_mask_area_ratio",
+        }
+    }
+    assert {
         "perception_model_root",
         "perception_model_manifest_sha256",
         "grounding_box_threshold",
