@@ -21,6 +21,7 @@ from so101_demo.core.detection import (
     DetectionQuery,
     LocalizedObject,
 )
+from so101_demo.adapters.perception.detector_factory import BuiltDetector
 from so101_demo.runtime.perception_evidence import (
     PerceptionEvidenceWriter,
     render_detection_overlay,
@@ -559,3 +560,149 @@ def test_rgbd_object_pose_cli_constructs_explicit_once_request(
     assert len(calls) == 1
     assert calls[0].device == "mps"
     assert calls[0].once
+
+
+def test_grounded_sam_cli_constructs_backend_specific_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Catch CLI forwarding Grounded SAM arguments into the legacy YOLO fields."""
+
+    from so101_demo.cli import rgbd_object_pose
+    from so101_demo.ros import rgbd_object_pose_node
+
+    calls: list[RgbdObjectPoseOptions] = []
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "run_rgbd_object_pose",
+        lambda options: calls.append(options) or 17,
+    )
+
+    result = rgbd_object_pose.main(
+        [
+            "--backend",
+            "grounded_sam",
+            "--model-root",
+            str(tmp_path / "bundle"),
+            "--model-manifest-sha256",
+            "a" * 64,
+            "--device",
+            "mps",
+            "--request-id",
+            "req-001",
+            "--evidence-root",
+            str(tmp_path / "evidence"),
+            "--once",
+        ]
+    )
+
+    assert result == 17
+    assert calls[0].backend == "grounded_sam"
+    assert calls[0].model_root == tmp_path / "bundle"
+    assert calls[0].weights_path is None
+    factory_options = calls[0].to_detector_factory_options()
+    assert factory_options.backend == "grounded_sam"
+    assert factory_options.grounded_model_root == tmp_path / "bundle"
+    assert factory_options.grounded_thresholds is not None
+    assert factory_options.grounded_thresholds.box_threshold == 0.35
+    assert factory_options.grounded_thresholds.text_threshold == 0.25
+    assert factory_options.grounded_thresholds.duplicate_iou == 0.85
+    assert factory_options.grounded_thresholds.max_candidates == 16
+    assert factory_options.grounded_thresholds.sam_quality == 0.75
+    assert factory_options.grounded_thresholds.min_mask_pixels == 64
+    assert factory_options.grounded_thresholds.max_mask_area_ratio == 0.50
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--backend", "grounded_sam"], "model_root"),
+        (["--backend", "yolo_seg"], "weights_path"),
+        (
+            [
+                "--backend",
+                "grounded_sam",
+                "--weights",
+                "/tmp/best.pt",
+                "--weights-sha256",
+                "a" * 64,
+                "--model-root",
+                "/tmp/bundle",
+                "--model-manifest-sha256",
+                "a" * 64,
+            ],
+            "backend configuration",
+        ),
+    ],
+)
+def test_options_reject_missing_and_cross_backend_artifacts(
+    tmp_path: Path, arguments: list[str], message: str
+) -> None:
+    """Catch a request reaching ROS setup with incomplete backend selection."""
+
+    del tmp_path
+    with pytest.raises(ValueError, match=message):
+        RgbdObjectPoseOptions(
+            backend="grounded_sam" if "grounded_sam" in arguments else "yolo_seg",
+            weights_path=Path("/tmp/best.pt") if "--weights" in arguments else None,
+            weights_sha256="a" * 64 if "--weights" in arguments else None,
+            model_root=Path("/tmp/bundle") if "--model-root" in arguments else None,
+            model_manifest_sha256=("a" * 64 if "--model-manifest-sha256" in arguments else None),
+            request_id="req-001",
+            evidence_root=Path("/tmp/evidence"),
+        )
+
+
+def test_yolo_options_reject_grounded_sam_thresholds(tmp_path: Path) -> None:
+    """Catch activating a Grounded-SAM-only threshold in the YOLO request path."""
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights")
+    with pytest.raises(ValueError, match="backend configuration"):
+        RgbdObjectPoseOptions(
+            weights_path=weights,
+            weights_sha256=hashlib.sha256(b"weights").hexdigest(),
+            grounding_box_threshold=0.35,
+            request_id="req-001",
+            evidence_root=tmp_path / "evidence",
+        )
+
+
+def test_run_refuses_evidence_failure_before_ros_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Catch opening ROS subscriptions after immutable model provenance cannot be retained."""
+
+    from so101_demo.ros import rgbd_object_pose_node
+
+    class Detector:
+        runtime_device = "mps"
+        cold_start_latency_ms = 1.0
+
+    class FailedWriter:
+        def write_model_provenance(self, _root: Path, _document: object) -> str:
+            raise OSError("disk full")
+
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "build_detector",
+        lambda _options: BuiltDetector(
+            detector=Detector(),
+            cold_start_latency_ms=1.0,
+            provenance_document={"backend": "yolo_seg"},
+        ),
+    )
+    monkeypatch.setattr(rgbd_object_pose_node, "PerceptionEvidenceWriter", FailedWriter)
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights")
+
+    result = rgbd_object_pose_node.run_rgbd_object_pose(
+        RgbdObjectPoseOptions(
+            weights_path=weights,
+            weights_sha256=hashlib.sha256(b"weights").hexdigest(),
+            request_id="req-001",
+            evidence_root=tmp_path / "evidence",
+        )
+    )
+
+    assert result == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "ERROR"
