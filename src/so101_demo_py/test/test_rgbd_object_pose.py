@@ -40,7 +40,12 @@ def _frame() -> DetectionFrame:
     return DetectionFrame(rgb, 7, "task_camera_frame")
 
 
-def _candidate(instance_id: str, *, confidence: float = 0.9) -> DetectionCandidate:
+def _candidate(
+    instance_id: str,
+    *,
+    confidence: float = 0.9,
+    segmentation_quality: float | None = None,
+) -> DetectionCandidate:
     mask = np.zeros((4, 6), dtype=bool)
     mask[1:3, 2:5] = True
     return DetectionCandidate(
@@ -53,6 +58,7 @@ def _candidate(instance_id: str, *, confidence: float = 0.9) -> DetectionCandida
         source_frame_id="task_camera_frame",
         image_width=6,
         image_height=4,
+        segmentation_quality=segmentation_quality,
     )
 
 
@@ -178,6 +184,42 @@ def test_overlay_draws_visible_class_and_confidence_label() -> None:
     assert (label_region.min(axis=2) > 220).any(), "label glyphs are missing"
 
 
+def test_overlay_appends_sam_quality_only_when_available() -> None:
+    rgb = np.full((80, 160, 3), 120, dtype=np.uint8)
+    frame = DetectionFrame(rgb, 7, "task_camera_frame")
+    mask = np.zeros((80, 160), dtype=bool)
+    mask[30:65, 35:95] = True
+
+    def batch_for(quality: float | None) -> DetectionBatch:
+        return DetectionBatch(
+            model_id="plastic-cup-yolo11n-seg-v1",
+            weights_sha256="a" * 64,
+            runtime_device="mps",
+            inference_latency_ms=12.0,
+            image_width=160,
+            image_height=80,
+            candidates=(
+                DetectionCandidate(
+                    instance_id="cup",
+                    class_id="plastic_cup",
+                    confidence=0.91,
+                    bbox_xyxy=(35.0, 30.0, 95.0, 65.0),
+                    mask=mask,
+                    source_stamp_ns=7,
+                    source_frame_id="task_camera_frame",
+                    image_width=160,
+                    image_height=80,
+                    segmentation_quality=quality,
+                ),
+            ),
+        )
+
+    yolo_overlay = render_detection_overlay(frame, batch_for(None))
+    sam_overlay = render_detection_overlay(frame, batch_for(0.82))
+
+    assert not np.array_equal(sam_overlay, yolo_overlay)
+
+
 def _request(run_directory: Path) -> ObjectPoseRequest:
     return ObjectPoseRequest(
         request_id="req-001",
@@ -189,6 +231,26 @@ def _request(run_directory: Path) -> ObjectPoseRequest:
         run_directory=run_directory,
         cold_start_latency_ms=25.0,
     )
+
+
+def test_detection_evidence_records_segmentation_quality(tmp_path: Path) -> None:
+    writer = PerceptionEvidenceWriter()
+    artifacts = writer.write_detection(
+        _request(tmp_path), _batch(_candidate("cup", segmentation_quality=0.82))
+    )
+    document = json.loads((tmp_path / "detections.json").read_text())
+
+    assert document["candidates"][0]["segmentation_quality"] == 0.82
+    assert artifacts
+
+
+def test_detection_evidence_records_null_quality_for_yolo_candidates(
+    tmp_path: Path,
+) -> None:
+    PerceptionEvidenceWriter().write_detection(_request(tmp_path), _batch(_candidate("cup")))
+    document = json.loads((tmp_path / "detections.json").read_text())
+
+    assert document["candidates"][0]["segmentation_quality"] is None
 
 
 class _Detector:
