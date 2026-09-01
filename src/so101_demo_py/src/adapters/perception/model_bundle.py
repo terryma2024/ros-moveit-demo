@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import tempfile
@@ -41,6 +44,9 @@ _MANIFEST_FIELDS = {
     "dependencies",
 }
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_AT_FDCWD = -100
+_RENAME_EXCL = 0x00000004
+_RENAME_NOREPLACE = 1
 
 
 @dataclass(frozen=True)
@@ -247,6 +253,44 @@ def _copy_snapshot(source: Path, destination: Path) -> list[dict[str, object]]:
     return files
 
 
+def _rename_exclusive(source: Path, destination: Path) -> None:
+    """Atomically install a directory only when its destination does not exist."""
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_bytes = os.fsencode(source)
+    destination_bytes = os.fsencode(destination)
+    system = platform.system()
+    if system == "Darwin":
+        renamex_np = libc.renamex_np
+        renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        renamex_np.restype = ctypes.c_int
+        result = renamex_np(source_bytes, destination_bytes, _RENAME_EXCL)
+    elif system == "Linux":
+        try:
+            renameat2 = libc.renameat2
+        except AttributeError as error:
+            raise OSError(errno.ENOTSUP, "renameat2 is unavailable") from error
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            _AT_FDCWD,
+            source_bytes,
+            _AT_FDCWD,
+            destination_bytes,
+            _RENAME_NOREPLACE,
+        )
+    else:
+        raise OSError(errno.ENOTSUP, f"no exclusive directory rename for {system}")
+    if result != 0:
+        raise OSError(ctypes.get_errno(), "exclusive directory rename failed")
+
+
 def build_model_bundle(
     config_path: Path,
     destination: Path,
@@ -283,7 +327,14 @@ def build_model_bundle(
         (staging / "manifest.json").write_bytes(manifest_bytes)
         digest = hashlib.sha256(manifest_bytes).hexdigest()
         verify_model_bundle(staging, digest)
-        os.replace(staging, destination)
+        try:
+            _rename_exclusive(staging, destination)
+        except OSError as error:
+            if error.errno == errno.EEXIST:
+                raise FileExistsError(
+                    f"bundle destination already exists: {destination}"
+                ) from error
+            raise
         return digest
     except BaseException:
         if staging.exists():
