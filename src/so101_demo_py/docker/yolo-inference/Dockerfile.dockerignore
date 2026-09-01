@@ -1,0 +1,14 @@
+**
+!src/
+!src/so101_demo_py/
+!src/so101_demo_py/assets/
+!src/so101_demo_py/config/
+!src/so101_demo_py/docker/
+!src/so101_demo_py/docker/yolo-inference/
+!src/so101_demo_py/docker/yolo-inference/Dockerfile
+!src/so101_demo_py/launch/
+!src/so101_demo_py/package.xml
+!src/so101_demo_py/resource/
+!src/so101_demo_py/setup.cfg
+!src/so101_demo_py/setup.py
+!src/so101_demo_py/src/
