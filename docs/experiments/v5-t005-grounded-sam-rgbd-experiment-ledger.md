@@ -1863,11 +1863,18 @@ last_invalid_experiment: EXP-066
 current_hypothesis: observer 启用 ROS simulation clock 后，r8 可在不修改生产链的前提下持久化真实 source age 并从场景1重新计数
 working_tree_status: 生产/validator/runner 未变；仅 /tmp observer 与其 regression test 变化；ledger 结算 r7 INVALID 并预写 r8
 owned_processes: NONE；domain 101 independent node list empty；r7 cleanup attempt 16 node/process empty
+r8_runner_preflight:
+  status: PASS
+  script: /tmp/so101-v5-t005-task11-tools/preflight_r8.zsh
+  script_sha256: f4a6b67ae3b8655d42f58c1bd4d6387a008ba0408dedbae26724839aa1d8a741
+  log: /tmp/so101-v5-t005-task11-tools/r8-preflight/preflight.log
+  log_sha256: bf9dafa2b722458ab8913d15e4d25b6b1f0cf0a0d0d07d8cb0151aee744dc11c
+  verified: updated observer SHA plus unchanged validator/runner SHAs; runner 0755; exact clean checkout/overlay/entrypoint; CUDA/offline/bundle; domains 106-109 constructible rc0/empty; r8 roots absent and owned patterns empty; observer/output/age, daemon-free and bounded cleanup literals present
 retained_runs:
   - CP-013 retained runs
   - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r7-1-task_start
 archived_runs: []
 deletion_candidates: [CP-013 deletion candidates, EXP-066 invalid run after explicit user authorization only]
-next_command: 限定提交 CP-014 ledger；执行并提交完整 r8 preflight PASS；仅随后启动 EXP-070
-decision: RUN_EXP_070_ONLY_AFTER_COMMITTED_PREFLIGHT_PASS
+next_command: 限定提交 CP-014 r8 preflight PASS；标记 EXP-070 RUNNING 后只启动 linux-matrix-r8-1-task_start
+decision: RUN_EXP_070_ONLY
 ```
