@@ -106,9 +106,7 @@ def _relative_path(value: object) -> PurePosixPath:
     return path
 
 
-def _manifest_files(
-    document: Mapping[str, Any], expected_dependencies: Mapping[str, str]
-) -> dict[str, tuple[int, str]]:
+def _manifest_files(document: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
     if set(document) != _MANIFEST_FIELDS:
         raise _invalid("manifest has unsupported or missing fields")
     if document.get("schema_version") != 1:
@@ -119,7 +117,7 @@ def _manifest_files(
         raise _invalid("manifest prompt_profile is not the fixed prompt")
     if document.get("models") != _MODELS:
         raise _invalid("manifest models do not match the fixed revisions")
-    if document.get("dependencies") != dict(expected_dependencies):
+    if document.get("dependencies") != _LOCKED_DEPENDENCIES:
         raise _invalid("manifest dependencies do not match the fixed dependency pins")
     entries = document.get("files")
     if not isinstance(entries, list) or not entries:
@@ -169,8 +167,6 @@ def _regular_files(root: Path) -> set[str]:
 def verify_model_bundle(
     root: Path,
     expected_manifest_sha256: str,
-    *,
-    expected_dependencies: Mapping[str, str] = _LOCKED_DEPENDENCIES,
 ) -> VerifiedModelBundle:
     """Verify a bundle before allowing it to enter the perception runtime."""
 
@@ -196,7 +192,7 @@ def verify_model_bundle(
     if manifest_bytes != _canonical_manifest(document):
         raise _invalid("manifest is not canonically encoded")
 
-    expected_files = _manifest_files(document, expected_dependencies)
+    expected_files = _manifest_files(document)
     actual_files = _regular_files(root)
     if actual_files != set(expected_files) | {"manifest.json"}:
         raise _invalid("bundle regular-file set does not match manifest")
@@ -377,7 +373,7 @@ def build_model_bundle(
         manifest_bytes = _canonical_manifest(document)
         (staging / "manifest.json").write_bytes(manifest_bytes)
         digest = hashlib.sha256(manifest_bytes).hexdigest()
-        verify_model_bundle(staging, digest, expected_dependencies=dependencies)
+        verify_model_bundle(staging, digest)
         try:
             _rename_exclusive(staging, destination)
         except OSError as error:

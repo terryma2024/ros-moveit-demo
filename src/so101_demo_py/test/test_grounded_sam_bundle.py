@@ -245,6 +245,27 @@ def test_verifier_rejects_a_rehashed_manifest_with_dependency_mismatch(
     assert error.value.code == "MODEL_BUNDLE_INVALID"
 
 
+def test_verifier_api_cannot_override_the_fixed_dependency_mapping(
+    tmp_path: Path,
+) -> None:
+    """Catch callers weakening the verifier by supplying their own expected pins."""
+
+    root, _digest = fake_bundle(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["dependencies"]["transformers"] = "4.56.3"
+    payload = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ) + "\n"
+    (root / "manifest.json").write_text(payload, encoding="utf-8")
+
+    with pytest.raises(TypeError, match="expected_dependencies"):
+        verify_model_bundle(
+            root,
+            _sha256(payload.encode("utf-8")),
+            expected_dependencies=manifest["dependencies"],
+        )
+
+
 def test_builder_refuses_existing_destination_and_missing_parent(tmp_path: Path) -> None:
     """Catch a builder change that can overwrite bundles or stage in another location."""
 
