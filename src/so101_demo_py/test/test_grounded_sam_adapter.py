@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -343,8 +344,16 @@ def test_detect_logs_each_mask_rejection_with_observable_thresholds(
         two_boxes=True, second_quality=0.5
     )
 
-    with caplog.at_level("WARNING"):
-        batch = detector.detect(_frame(), DetectionQuery("plastic_cup"))
+    logger = logging.getLogger(GroundedSamDetector.__module__)
+    attach_capture_handler = not logger.propagate
+    if attach_capture_handler:
+        logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level("WARNING", logger=logger.name):
+            batch = detector.detect(_frame(), DetectionQuery("plastic_cup"))
+    finally:
+        if attach_capture_handler:
+            logger.removeHandler(caplog.handler)
 
     assert len(batch.candidates) == 1
     messages = [
