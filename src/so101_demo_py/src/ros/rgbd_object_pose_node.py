@@ -355,6 +355,28 @@ def _wait_for_transform(
         spin_once(min(0.05, remaining))
 
 
+def _wait_for_positive_clock(
+    *,
+    now_ns: Callable[[], int],
+    spin_once: Callable[[float], None],
+    timeout_s: float,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> int | None:
+    """Return a nonzero simulation-time watermark or fail closed at timeout."""
+
+    if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+        raise ValueError("simulation clock timeout must be finite and positive")
+    deadline = monotonic() + timeout_s
+    while True:
+        current_ns = int(now_ns())
+        if current_ns > 0:
+            return current_ns
+        remaining = deadline - monotonic()
+        if remaining <= 0.0:
+            return None
+        spin_once(min(0.05, remaining))
+
+
 def _publish_and_confirm(publisher: Any, message: Any, *, ack_timeout: Any) -> None:
     publisher.publish(message)
     if (
@@ -410,6 +432,21 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             "rgbd_object_pose",
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
+        source_watermark_ns = _wait_for_positive_clock(
+            now_ns=lambda: int(node.get_clock().now().nanoseconds),
+            spin_once=lambda timeout_s: rclpy.spin_once(
+                node, timeout_sec=timeout_s
+            ),
+            timeout_s=options.startup_timeout_s,
+        )
+        if source_watermark_ns is None:
+            print(
+                json.dumps(
+                    {"status": "ERROR", "failure": "SIM_CLOCK_UNAVAILABLE"},
+                    sort_keys=True,
+                )
+            )
+            return 1
         detections_publisher = node.create_publisher(
             Detection2DArray, options.detections_topic, 10
         )
@@ -419,7 +456,7 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         tf_buffer = Buffer()
         listener = TransformListener(tf_buffer, node)
         buffer = AlignedRgbdBuffer()
-        gate = FreshFrameGate(0)
+        gate = FreshFrameGate(source_watermark_ns)
         aligned: tuple[Any, Any, Any] | None = None
 
         def accept(value: tuple[Any, Any, Any] | None) -> None:
