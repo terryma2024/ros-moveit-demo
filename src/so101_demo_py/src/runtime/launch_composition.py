@@ -1064,6 +1064,12 @@ def _forbidden_backend_arguments(context, names: tuple[str, ...]) -> None:
             raise RuntimeError(f"{name} is only valid for its matching perception backend")
 
 
+def _reject_nondefault_grounded_sam_thresholds(context) -> None:
+    for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS:
+        if LaunchConfiguration(name).perform(context) != default:
+            raise RuntimeError(f"{name} is only valid for the grounded_sam perception backend")
+
+
 def _owned_directory(path: Path, label: str) -> Path:
     try:
         path.mkdir(mode=0o700)
@@ -1223,7 +1229,6 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     cpu_fallback_value = LaunchConfiguration("perception_allow_cpu_fallback").perform(context)
     if cpu_fallback_value not in {"true", "false"}:
         raise RuntimeError("perception_allow_cpu_fallback must be true or false")
-    grounded_argument_names = tuple(name for name, _default in _GROUNDED_SAM_THRESHOLD_DEFAULTS)
     if perception_backend == "color_geometry":
         _forbidden_backend_arguments(
             context,
@@ -1232,18 +1237,18 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
                 "perception_weights_sha256",
                 "perception_model_root",
                 "perception_model_manifest_sha256",
-                *grounded_argument_names,
             ),
         )
+        _reject_nondefault_grounded_sam_thresholds(context)
     elif perception_backend == "yolo_seg":
         _forbidden_backend_arguments(
             context,
             (
                 "perception_model_root",
                 "perception_model_manifest_sha256",
-                *grounded_argument_names,
             ),
         )
+        _reject_nondefault_grounded_sam_thresholds(context)
         perception_weights = Path(
             LaunchConfiguration("perception_weights").perform(context)
         )
@@ -1530,8 +1535,8 @@ def build_perception_pick_place_launch_description(
             ),
             DeclareLaunchArgument("perception_source_root", default_value=""),
             *(
-                DeclareLaunchArgument(name, default_value="")
-                for name, _default in _GROUNDED_SAM_THRESHOLD_DEFAULTS
+                DeclareLaunchArgument(name, default_value=default)
+                for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS
             ),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
