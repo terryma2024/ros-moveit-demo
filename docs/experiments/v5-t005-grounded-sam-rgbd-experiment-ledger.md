@@ -1811,11 +1811,18 @@ last_invalid_experiment: EXP-062
 current_hypothesis: r6 失败是可预检的 FastDDS domain construction 错误；r7 必须先完成并落盘全部 mandatory_runner_preflight 才能启动 EXP-066
 working_tree_status: 生产/工具内容未变；ledger 结算 r6 INVALID 并预写 r7
 owned_processes: NONE
+runner_preflight:
+  status: PASS
+  script: /tmp/so101-v5-t005-task11-tools/preflight_r7.zsh
+  script_sha256: badff582e2a6ccbbc77a8c3f6f45a8321d4f5525cc6cda3793efc5db5f509f37
+  log: /tmp/so101-v5-t005-task11-tools/r7-preflight/preflight.log
+  log_sha256: 7ee586cddab656e5b4deff36e907f86d5eb18760dc2683cfa19174d25efa7463
+  verified: runner 0755/executable and three pinned tool SHAs; exact clean 7067500 checkout/submodule; exact v5 demo/support prefixes and venv shebang; CUDA RTX 5080; fixed bundle SHA/offline env; domains 101-104 constructible rc0/empty; four roots absent and owned patterns empty; observer/output/age literals aligned; daemon-free and bounded attempts 1..30 cleanup literals present
 retained_runs:
   - CP-011 retained runs
   - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/perception-matrix/linux/linux-matrix-r6-1-task_start
 archived_runs: []
 deletion_candidates: [CP-012 deletion candidates, EXP-062 invalid run after explicit user authorization only]
-next_command: 限定提交 CP-013 ledger；执行完整 r7 runner preflight 并将结果/SHA 落盘到 /tmp/so101-v5-t005-task11-tools/r7-preflight；仅全部通过后标记 EXP-066 RUNNING
-decision: RUN_EXP_066_ONLY_AFTER_COMMITTED_PREFLIGHT_PASS
+next_command: 限定提交 CP-013 preflight PASS；标记 EXP-066 RUNNING 后只启动 linux-matrix-r7-1-task_start
+decision: RUN_EXP_066_ONLY
 ```
