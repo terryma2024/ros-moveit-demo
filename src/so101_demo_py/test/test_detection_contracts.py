@@ -77,6 +77,15 @@ def test_candidate_owns_read_only_boolean_mask_copy() -> None:
     assert not candidate.mask.flags.writeable
 
 
+def test_candidate_accepts_optional_segmentation_quality() -> None:
+    candidate = _candidate(segmentation_quality=0.82)
+
+    assert candidate.segmentation_quality == 0.82
+    for invalid in (float("nan"), 1.01):
+        with pytest.raises(ValueError, match="segmentation_quality"):
+            _candidate(segmentation_quality=invalid)
+
+
 def test_candidate_rejects_mask_with_wrong_image_shape() -> None:
     with pytest.raises(ValueError, match="mask shape"):
         _candidate(mask=np.ones((2, 2), dtype=bool))
