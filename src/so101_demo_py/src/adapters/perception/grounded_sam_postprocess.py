@@ -101,7 +101,9 @@ def _contract_error(detail: str) -> GroundedSamResultError:
 
 def prompt_for_query(query: DetectionQuery) -> str:
     if not isinstance(query, DetectionQuery) or query.class_id != "plastic_cup":
-        raise GroundedSamResultError("QUERY_UNSUPPORTED", "only plastic_cup is supported")
+        raise GroundedSamResultError(
+            "UNSUPPORTED_DETECTION_QUERY", "only plastic_cup is supported"
+        )
     return "plastic cup."
 
 
