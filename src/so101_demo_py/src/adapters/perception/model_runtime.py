@@ -12,8 +12,16 @@ RequestedDevice = Literal["auto", "cuda", "mps", "cpu"]
 class ModelSetupError(RuntimeError):
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(f"{code}: {detail}")
-        self.code = code
-        self.detail = detail
+        self._code = code
+        self._detail = detail
+
+    @property
+    def code(self) -> str:
+        return self._code
+
+    @property
+    def detail(self) -> str:
+        return self._detail
 
 
 def select_runtime_device(
