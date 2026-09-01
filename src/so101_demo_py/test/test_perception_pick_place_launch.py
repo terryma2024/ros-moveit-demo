@@ -10,6 +10,7 @@ import pytest
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
+    ExecuteProcess,
     OpaqueFunction,
     RegisterEventHandler,
 )
@@ -81,6 +82,20 @@ def _node(actions, executable: str) -> Node:
     return matches[0]
 
 
+def _plain_process(actions) -> ExecuteProcess:
+    matches = [
+        action
+        for action in actions
+        if isinstance(action, ExecuteProcess) and not isinstance(action, Node)
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _plain_process_command(process: ExecuteProcess, context: LaunchContext) -> list[str]:
+    return [perform_substitutions(context, part) for part in process.cmd]
+
+
 def _dispatch_process_exit(actions, target: Node, returncode: int, context: LaunchContext):
     event = ProcessExited(
         action=target,
@@ -136,12 +151,21 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
         "perception_weights_sha256",
         "perception_device",
         "perception_allow_cpu_fallback",
+        "perception_runtime",
+        "perception_container_image",
+        "perception_source_root",
     } <= declared.keys()
     assert _default(declared["headless"]) == "false"
     assert _default(declared["mujoco_initial_keyframe"]) == "task_start"
     assert _default(declared["perception_startup_timeout_s"]) == "30.0"
     assert _default(declared["cup_pose_timeout_s"]) == "45.0"
     assert _default(declared["perception_backend"]) == "color_geometry"
+    assert _default(declared["perception_runtime"]) == "auto"
+    assert _default(declared["perception_source_root"]) == ""
+    assert (
+        _default(declared["perception_container_image"])
+        == "so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
+    )
 
     assert LAUNCH_PATH.is_file()
     source = LAUNCH_PATH.read_text(encoding="utf-8")
@@ -266,6 +290,7 @@ def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
         perception_weights_sha256=digest,
         perception_device="mps",
         perception_allow_cpu_fallback="false",
+        perception_runtime="host",
     )
 
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
@@ -296,6 +321,179 @@ def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
         str(tmp_path / "launch-run.d/session-123/perception"),
     ]
     assert all(node.node_executable != "rgbd_cup_pose" for node in _nodes(started))
+
+
+def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    monkeypatch.setenv("ROS_DOMAIN_ID", "191")
+    monkeypatch.setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=digest,
+        perception_device="auto",
+        perception_runtime="auto",
+        perception_container_image="registry.example/so101-yolo:locked",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    assert [node.node_executable for node in _nodes(started)] == [
+        "dynamic_cup_pick_place"
+    ]
+    command = _plain_process_command(_plain_process(started), context)
+    assert command[:13] == [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "so101-yolo-seg-session-123",
+        "--gpus",
+        "all",
+        "--network",
+        "host",
+        "--ipc",
+        "host",
+        "--user",
+        f"{os.geteuid()}:{os.getegid()}",
+    ]
+    assert ["--env", "ROS_DOMAIN_ID=191"] == command[
+        command.index("--env") : command.index("--env") + 2
+    ]
+    assert "RMW_IMPLEMENTATION=rmw_fastrtps_cpp" in command
+    assert (
+        f"type=bind,src={weights},dst=/models/best.pt,readonly" in command
+    )
+    evidence_root = tmp_path / "launch-run.d/session-123/perception"
+    assert f"type=bind,src={evidence_root},dst=/evidence" in command
+    assert "registry.example/so101-yolo:locked" in command
+    assert "PYTHONPATH=/workspace/so101-source" not in command
+    assert not any("dst=/workspace/so101-source" in part for part in command)
+    image_index = command.index("registry.example/so101-yolo:locked")
+    assert command[image_index + 1 :] == [
+        "--startup-timeout-s",
+        "30.0",
+        "--output-topic",
+        "/cup_pose",
+        "--detections-topic",
+        "/perception/detections",
+        "--overlay-topic",
+        "/perception/overlay",
+        "--weights",
+        "/models/best.pt",
+        "--weights-sha256",
+        digest,
+        "--device",
+        "cuda",
+        "--request-id",
+        "session-123",
+        "--evidence-root",
+        "/evidence",
+    ]
+
+
+def test_linux_docker_dev_mounts_only_the_explicit_python_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    source_root = tmp_path / "python-source"
+    (source_root / "runtime").mkdir(parents=True)
+    (source_root / "__init__.py").write_text("", encoding="utf-8")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=digest,
+        perception_runtime="docker_dev",
+        perception_source_root=source_root,
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    command = _plain_process_command(_plain_process(started), context)
+    assert "PYTHONPATH=/workspace/so101-source" in command
+    assert (
+        f"type=bind,src={source_root},"
+        "dst=/workspace/so101-source/so101_demo,readonly" in command
+    )
+
+
+@pytest.mark.parametrize("source_root", ["", "relative/source"])
+def test_linux_docker_dev_rejects_missing_or_relative_source(
+    tmp_path: Path, monkeypatch, source_root: str
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+
+    with pytest.raises(RuntimeError, match="perception_source_root"):
+        _materialize(
+            evidence_file=tmp_path / "launch-run.json",
+            perception_backend="yolo_seg",
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+            perception_runtime="docker_dev",
+            perception_source_root=source_root,
+        )
+
+
+def test_macos_auto_yolo_backend_keeps_host_process_and_resolves_mps(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Darwin")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=digest,
+        perception_device="auto",
+        perception_runtime="auto",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+
+    assert [
+        action.node_executable
+        for action in _nodes(started)
+    ] == ["rgbd_object_pose", "dynamic_cup_pick_place"]
+    perception = _node(started, "rgbd_object_pose")
+    device_index = perception._Node__arguments.index("--device") + 1
+    assert perception._Node__arguments[device_index] == "mps"
+    assert not [
+        action
+        for action in started
+        if isinstance(action, ExecuteProcess) and not isinstance(action, Node)
+    ]
+
+
+def test_macos_rejects_explicit_docker_yolo_runtime_before_processes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Darwin")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+
+    with pytest.raises(RuntimeError, match="supported only on Linux"):
+        _materialize(
+            evidence_file=tmp_path / "launch-run.json",
+            perception_backend="yolo_seg",
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+            perception_runtime="docker",
+            perception_device="cuda",
+        )
 
 
 @pytest.mark.parametrize(

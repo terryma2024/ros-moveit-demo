@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import re
 import stat
 import uuid
@@ -68,6 +69,10 @@ MUJOCO_CUP_KEYFRAMES = (
 )
 
 _SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_DEFAULT_YOLO_INFERENCE_IMAGE = (
+    "so101-yolo11n-seg-inference:"
+    "ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,6 +427,9 @@ def _mujoco_perception_execute_actions(
     perception_weights_sha256: str | None,
     perception_device: str,
     perception_allow_cpu_fallback: bool,
+    perception_runtime: str,
+    perception_container_image: str,
+    perception_source_root: Path | None,
     exit_status: PerceptionLaunchExitStatus,
 ):
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
@@ -468,13 +476,77 @@ def _mujoco_perception_execute_actions(
         ]
         if perception_allow_cpu_fallback:
             arguments.append("--allow-cpu-fallback")
-        perception = Node(
-            package="so101_demo_py",
-            executable="rgbd_object_pose",
-            arguments=arguments,
-            parameters=[{"use_sim_time": True}],
-            output="both",
-        )
+        if perception_runtime in {"docker", "docker_dev"}:
+            container_arguments = list(arguments)
+            container_arguments[container_arguments.index(str(perception_weights))] = (
+                "/models/best.pt"
+            )
+            container_arguments[
+                container_arguments.index(str(evidence_paths.perception))
+            ] = "/evidence"
+            device_index = container_arguments.index("--device") + 1
+            container_arguments[device_index] = "cuda"
+            container_command = [
+                "docker",
+                "run",
+                "--rm",
+                "--name",
+                f"so101-yolo-seg-{session_id}",
+                "--gpus",
+                "all",
+                "--network",
+                "host",
+                "--ipc",
+                "host",
+                "--user",
+                f"{os.geteuid()}:{os.getegid()}",
+                "--env",
+                f"ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '0')}",
+                "--env",
+                "RMW_IMPLEMENTATION="
+                + os.environ.get("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp"),
+                "--env",
+                f"ROS_LOCALHOST_ONLY={os.environ.get('ROS_LOCALHOST_ONLY', '0')}",
+                "--env",
+                "HOME=/tmp/yolo-home",
+                "--env",
+                "YOLO_CONFIG_DIR=/opt/ultralytics",
+                "--env",
+                "TORCH_HOME=/opt/torch-cache",
+            ]
+            if perception_runtime == "docker_dev":
+                container_command.extend(
+                    [
+                        "--env",
+                        "PYTHONPATH=/workspace/so101-source",
+                        "--mount",
+                        "type=bind,"
+                        f"src={perception_source_root},"
+                        "dst=/workspace/so101-source/so101_demo,readonly",
+                    ]
+                )
+            container_command.extend(
+                [
+                    "--mount",
+                    f"type=bind,src={perception_weights},dst=/models/best.pt,readonly",
+                    "--mount",
+                    f"type=bind,src={evidence_paths.perception},dst=/evidence",
+                    perception_container_image,
+                    *container_arguments,
+                ]
+            )
+            perception = ExecuteProcess(
+                cmd=container_command,
+                output="both",
+            )
+        else:
+            perception = Node(
+                package="so101_demo_py",
+                executable="rgbd_object_pose",
+                arguments=arguments,
+                parameters=[{"use_sim_time": True}],
+                output="both",
+            )
     workflow = Node(
         package="so101_demo_py",
         executable="dynamic_cup_pick_place",
@@ -960,6 +1032,61 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     perception_device = LaunchConfiguration("perception_device").perform(context)
     if perception_device not in {"auto", "cuda", "mps", "cpu"}:
         raise RuntimeError("perception_device must be auto, cuda, mps, or cpu")
+    perception_runtime = LaunchConfiguration("perception_runtime").perform(context)
+    if perception_runtime not in {"auto", "host", "docker", "docker_dev"}:
+        raise RuntimeError(
+            "perception_runtime must be auto, host, docker, or docker_dev"
+        )
+    host_platform = platform.system()
+    if perception_runtime == "auto":
+        if host_platform == "Darwin":
+            perception_runtime = "host"
+            if perception_device == "auto":
+                perception_device = "mps"
+        elif host_platform == "Linux":
+            perception_runtime = "docker"
+        else:
+            raise RuntimeError(
+                f"perception_runtime auto does not support platform {host_platform}"
+            )
+    docker_runtimes = {"docker", "docker_dev"}
+    if perception_runtime in docker_runtimes and host_platform != "Linux":
+        raise RuntimeError("YOLO inference Docker runtime is supported only on Linux")
+    if perception_runtime in docker_runtimes and perception_device not in {
+        "auto",
+        "cuda",
+    }:
+        raise RuntimeError("YOLO inference Docker runtime requires CUDA")
+    perception_container_image = LaunchConfiguration(
+        "perception_container_image"
+    ).perform(context)
+    if not perception_container_image or any(
+        character.isspace() for character in perception_container_image
+    ):
+        raise RuntimeError("perception_container_image must be a non-empty image reference")
+    source_root_value = LaunchConfiguration("perception_source_root").perform(
+        context
+    )
+    perception_source_root: Path | None = None
+    if perception_runtime == "docker_dev":
+        candidate_source_root = Path(source_root_value)
+        if (
+            not candidate_source_root.is_absolute()
+            or candidate_source_root.is_symlink()
+            or not candidate_source_root.is_dir()
+            or not (candidate_source_root / "__init__.py").is_file()
+            or not (candidate_source_root / "runtime").is_dir()
+            or "," in source_root_value
+        ):
+            raise RuntimeError(
+                "perception_source_root must be an absolute, non-symlink Python "
+                "source directory for so101_demo"
+            )
+        perception_source_root = candidate_source_root.resolve(strict=True)
+    elif source_root_value:
+        raise RuntimeError(
+            "perception_source_root is accepted only with perception_runtime=docker_dev"
+        )
     cpu_fallback_value = LaunchConfiguration("perception_allow_cpu_fallback").perform(context)
     if cpu_fallback_value not in {"true", "false"}:
         raise RuntimeError("perception_allow_cpu_fallback must be true or false")
@@ -1013,6 +1140,9 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         perception_weights_sha256=perception_weights_sha256,
         perception_device=perception_device,
         perception_allow_cpu_fallback=cpu_fallback_value == "true",
+        perception_runtime=perception_runtime,
+        perception_container_image=perception_container_image,
+        perception_source_root=perception_source_root,
         exit_status=exit_status,
     )
 
@@ -1183,6 +1313,16 @@ def build_perception_pick_place_launch_description(
                 default_value="false",
                 choices=("true", "false"),
             ),
+            DeclareLaunchArgument(
+                "perception_runtime",
+                default_value="auto",
+                choices=("auto", "host", "docker", "docker_dev"),
+            ),
+            DeclareLaunchArgument(
+                "perception_container_image",
+                default_value=_DEFAULT_YOLO_INFERENCE_IMAGE,
+            ),
+            DeclareLaunchArgument("perception_source_root", default_value=""),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
                 kwargs={"exit_status": exit_status},
