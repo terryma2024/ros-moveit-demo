@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 import hashlib
 import json
@@ -10,7 +11,21 @@ from PIL import Image
 import pytest
 
 import so101_demo.perception_benchmark.dataset as dataset_module
-from so101_demo.perception_benchmark.adapters import CollectionMode, RawDetectionResult
+from so101_demo.core.detection import DetectionBatch, DetectionCandidate
+from so101_demo.perception_benchmark.adapters import (
+    CollectionMode,
+    ProductionObservation,
+    RawDetectionResult,
+    ResourceSamplingError,
+)
+from so101_demo.perception_benchmark.calibration import (
+    GroundedSamBenchmarkThresholds,
+    ObjectiveCalibrationMetrics,
+    PlatformCalibrationMetrics,
+    ThresholdLock,
+    YoloThresholds,
+    write_threshold_lock,
+)
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     canonical_json_bytes,
@@ -22,8 +37,13 @@ from so101_demo.perception_benchmark.contracts import (
     RawCandidate,
     RunKind,
     RunStatus,
+    RuntimeProvenance,
 )
-from so101_demo.perception_benchmark.dataset import DatasetInventory, DatasetSampleRef
+from so101_demo.perception_benchmark.dataset import (
+    DatasetInventory,
+    DatasetSampleRef,
+    append_test_access_event,
+)
 from so101_demo.perception_benchmark.runner import (
     DetectorBenchmarkRunner,
     RunCheckpoint,
@@ -39,6 +59,7 @@ from so101_demo.perception_benchmark.timing import (
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
+SHA_C = "c" * 64
 SOURCE_COMMIT = "deadbeef" * 5
 
 
@@ -64,6 +85,7 @@ def _resource_sample(*, temperature: float | None = None) -> ResourceSample:
 
 def _inventory_document(
     inventory: DatasetInventory,
+    test_access: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": inventory.schema_version,
@@ -71,7 +93,7 @@ def _inventory_document(
         "archive_sha256": inventory.archive_sha256,
         "sample_count": inventory.sample_count,
         "scenario_counts": dict(inventory.scenario_counts),
-        "test_access": None,
+        "test_access": test_access,
         "samples": [
             {
                 "formal_sample_index": sample.formal_sample_index,
@@ -88,9 +110,15 @@ def _inventory_document(
     }
 
 
-def _synthetic_inventory(root: Path, count: int = 8) -> DatasetInventory:
+def _synthetic_inventory(
+    root: Path,
+    count: int = 8,
+    *,
+    split: str = "val",
+    test_access: dict[str, object] | None = None,
+) -> DatasetInventory:
     dataset_root = root / "dataset"
-    image_root = dataset_root / "images" / "val"
+    image_root = dataset_root / "images" / split
     image_root.mkdir(parents=True)
     payloads: list[tuple[str, bytes]] = []
     for index in range(count):
@@ -102,17 +130,17 @@ def _synthetic_inventory(root: Path, count: int = 8) -> DatasetInventory:
 
     samples: list[DatasetSampleRef] = []
     for formal_index, (digest, payload) in enumerate(sorted(payloads)):
-        image_relpath = f"images/val/sample-{formal_index:03d}.png"
+        image_relpath = f"images/{split}/sample-{formal_index:03d}.png"
         image_path = dataset_root / image_relpath
         image_path.write_bytes(payload)
         samples.append(
             DatasetSampleRef(
                 formal_sample_index=formal_index,
-                split="val",
+                split=split,
                 scenario="fixture",
                 image_relpath=image_relpath,
-                label_relpath=f"labels/val/sample-{formal_index:03d}.txt",
-                truth_relpath=f"truth/val/sample-{formal_index:03d}.json",
+                label_relpath=f"labels/{split}/sample-{formal_index:03d}.txt",
+                truth_relpath=f"truth/{split}/sample-{formal_index:03d}.json",
                 image_sha256=digest,
                 truth_count=1,
             )
@@ -120,21 +148,25 @@ def _synthetic_inventory(root: Path, count: int = 8) -> DatasetInventory:
 
     provisional = DatasetInventory(
         schema_version="so101-perception-benchmark/v1",
-        split="val",
+        split=split,
         archive_sha256=SHA_A,
         inventory_sha256=SHA_A,
         dataset_root=dataset_root,
         sample_count=count,
         scenario_counts={"fixture": count},
         samples=tuple(samples),
-        test_access_event_sha256=None,
+        test_access_event_sha256=(
+            None if test_access is None else str(test_access["event_sha256"])
+        ),
     )
-    document = _inventory_document(provisional)
+    document = _inventory_document(provisional, test_access)
     payload = canonical_json_bytes(document)
     inventory = replace(
         provisional, inventory_sha256=hashlib.sha256(payload).hexdigest()
     )
-    atomic_write_json(dataset_root / "inventory.json", _inventory_document(inventory))
+    atomic_write_json(
+        dataset_root / "inventory.json", _inventory_document(inventory, test_access)
+    )
     (dataset_root / "inventory.sha256").write_text(
         f"{inventory.inventory_sha256}  inventory.json\n", encoding="ascii"
     )
@@ -177,7 +209,7 @@ class SyntheticAdapter:
             mask = np.zeros((16, 20), dtype=bool)
             mask[2 + candidate_index : 8 + candidate_index, 3:10] = True
             candidate_id = f"yolo-{candidate_index:03d}"
-            relative = f"masks/{index:06d}/{candidate_id}.rle.json"
+            relative = f"adapter-masks/{index:06d}/{candidate_id}.rle.json"
             atomic_write_json(
                 self.evidence_root / relative, encode_mask_rle(mask)
             )
@@ -228,8 +260,16 @@ class SyntheticAdapter:
         )
 
 
-class ResourceSamplerFailure(RuntimeError):
-    pass
+def _runtime_provenance(
+    *, device: str = "mps", weights_sha256: str = SHA_B
+) -> RuntimeProvenance:
+    return RuntimeProvenance(
+        runtime_device=device,  # type: ignore[arg-type]
+        runtime_name="synthetic-runtime",
+        runtime_version="fixture-1",
+        weights_sha256=weights_sha256,
+        environment={"fixture": "runner", "torch": "2.8.0"},
+    )
 
 
 def _spec(
@@ -247,9 +287,11 @@ def _spec(
         "inventory": inventory,
         "config_sha256": SHA_A,
         "threshold_lock_sha256": None,
+        "threshold_lock_path": None,
         "source_commit": SOURCE_COMMIT,
         "output_root": output_root,
         "collection_mode": CollectionMode.LOW_FLOOR,
+        "runtime_provenance": _runtime_provenance(),
     }
     values.update(overrides)
     return RunSpec(**values)  # type: ignore[arg-type]
@@ -267,6 +309,100 @@ def _checkpoint(root: Path) -> RunCheckpoint:
     document["run_kind"] = RunKind(document["run_kind"])
     document["collection_mode"] = CollectionMode(document["collection_mode"])
     return RunCheckpoint(**document)
+
+
+def _record_inventory_digest(root: Path) -> str:
+    rows = [
+        {
+            "formal_sample_index": int(path.stem),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in sorted((root / "records").glob("*.json"))
+    ]
+    return hashlib.sha256(canonical_json_bytes({"records": rows})).hexdigest()
+
+
+def _formal_yolo_lock(*, formal: bool = True, model: str = "yolo_seg") -> ThresholdLock:
+    metrics = PlatformCalibrationMetrics(
+        sample_count=200,
+        error_count=0,
+        macro_f1=0.9,
+        mask_ap50_95=0.8,
+        unsafe_unique_count=0,
+        unsafe_unique_denominator=100,
+        unsafe_unique_rate=0.0,
+        two_cup_both_matched_recall=0.9,
+    )
+    lock = ThresholdLock(
+        schema_version="so101-threshold-lock/v1",
+        model=model,  # type: ignore[arg-type]
+        grid_version=(
+            "yolo-seg-grid/v1"
+            if model == "yolo_seg"
+            else "grounded-sam-grid/v1"
+        ),
+        objective_version="joint-platform-val/v1",
+        tie_break_version="joint-platform-seven-level/v1",
+        val_inventory_sha256=SHA_A,
+        mac_prediction_inventory_sha256=SHA_B,
+        linux_prediction_inventory_sha256=SHA_C,
+        formal=formal,
+        platform_sample_counts={"macos": 200, "linux": 200},
+        selected=(
+            YoloThresholds(
+                Decimal("0.50"), Decimal("0.50"), Decimal("0.50"), 640
+            )
+            if model == "yolo_seg"
+            else GroundedSamBenchmarkThresholds(
+                Decimal("0.50"),
+                Decimal("0.50"),
+                Decimal("0.50"),
+                Decimal("0.50"),
+                Decimal("0.85"),
+                64,
+                Decimal("0.50"),
+            )
+        ),
+        outcome="SAFE_CALIBRATED",
+        deployable=True,
+        source_commit=SOURCE_COMMIT,
+        objective_metrics=ObjectiveCalibrationMetrics(0.9, 0.9, 0.8, 0.9),
+        platform_metrics={"macos": metrics, "linux": metrics},
+        lock_sha256="0" * 64,
+    )
+    return lock.with_recomputed_sha256()
+
+
+def _locked_inventory(
+    root: Path,
+    lock: ThresholdLock,
+    *,
+    write_lock_before_access: bool = True,
+) -> tuple[DatasetInventory, Path, Path]:
+    lock_path = root / "locks" / "yolo.json"
+    lock_path.parent.mkdir(parents=True)
+    if write_lock_before_access:
+        write_threshold_lock(lock_path, lock)
+    access_log = root / "test-access.jsonl"
+    grant = append_test_access_event(
+        access_log,
+        SHA_A,
+        (lock.lock_sha256, SHA_C),
+    )
+    if not write_lock_before_access:
+        write_threshold_lock(lock_path, lock)
+    test_access = {
+        "event_sha256": grant.event_sha256,
+        "sealed_member_inventory_sha256": grant.sealed_member_inventory_sha256,
+        "threshold_lock_sha256s": list(grant.threshold_lock_sha256s),
+        "granted_at": grant.granted_at,
+        "access_log_path": str(access_log),
+    }
+    return (
+        _synthetic_inventory(root, 1, split="test", test_access=test_access),
+        lock_path,
+        access_log,
+    )
 
 
 def test_inference_exception_writes_error_record_and_continues_full_inventory(
@@ -436,6 +572,18 @@ def test_val_raw_rejects_lock_and_changed_image_before_any_model_call(
         "dtype",
         "run-kind",
         "lock",
+        "run-id",
+        "platform",
+        "model-id",
+        "weights",
+        "collection-mode",
+        "runtime-name",
+        "runtime-version",
+        "runtime-environment",
+        "thermal-limit",
+        "record-count",
+        "record-inventory",
+        "inventory",
     ),
 )
 def test_resume_rejects_any_noncontiguous_tampered_or_changed_identity(
@@ -484,8 +632,32 @@ def test_resume_rejects_any_noncontiguous_tampered_or_changed_identity(
         checkpoint = replace(checkpoint, dtype="float16")
     elif mutation == "run-kind":
         checkpoint = replace(checkpoint, run_kind=RunKind.TEST_RAW_FROZEN)
-    else:
+    elif mutation == "lock":
         checkpoint = replace(checkpoint, threshold_lock_sha256=SHA_B)
+    elif mutation == "run-id":
+        checkpoint = replace(checkpoint, run_id="other-run")
+    elif mutation == "platform":
+        checkpoint = replace(checkpoint, platform="linux")
+    elif mutation == "model-id":
+        checkpoint = replace(checkpoint, model_id="other-yolo")
+    elif mutation == "weights":
+        checkpoint = replace(checkpoint, weights_sha256=SHA_C)
+    elif mutation == "collection-mode":
+        checkpoint = replace(checkpoint, collection_mode=None)
+    elif mutation == "runtime-name":
+        checkpoint = replace(checkpoint, runtime_name="other-runtime")
+    elif mutation == "runtime-version":
+        checkpoint = replace(checkpoint, runtime_version="fixture-2")
+    elif mutation == "runtime-environment":
+        checkpoint = replace(checkpoint, runtime_environment={"fixture": "changed"})
+    elif mutation == "thermal-limit":
+        checkpoint = replace(checkpoint, max_gpu_temperature_celsius=90.0)
+    elif mutation == "record-count":
+        checkpoint = replace(checkpoint, record_count=3)
+    elif mutation == "record-inventory":
+        checkpoint = replace(checkpoint, record_inventory_sha256=SHA_C)
+    else:
+        checkpoint = replace(checkpoint, inventory_sha256=SHA_C)
 
     with pytest.raises(RunIntegrityError):
         verify_resume(
@@ -559,7 +731,7 @@ def test_checkpoint_crash_never_advances_past_durable_record_and_resume_fails_cl
 @pytest.mark.parametrize(
     ("adapter_kwargs", "thermal_limit", "reason", "retained"),
     (
-        ({"failures": {2: ResourceSamplerFailure("sensor failed")}}, None, "RESOURCE_EVIDENCE_FAILED", 2),
+        ({"failures": {2: ResourceSamplingError("sensor failed")}}, None, "RESOURCE_EVIDENCE_FAILED", 2),
         ({"empty_resources_at": 2}, None, "RESOURCE_STREAM_EMPTY", 2),
         ({"temperatures": {2: 91.0}}, 80.0, "THERMAL_LIMIT_EXCEEDED", 2),
     ),
@@ -680,3 +852,533 @@ def test_preexisting_record_or_symlink_output_is_never_overwritten(
     assert linked_manifest.status is RunStatus.INVALID
     assert linked_adapter.calls == []
     assert list(outside.iterdir()) == []
+
+
+def _production_candidate(
+    frame: object,
+    *,
+    instance_id: str = "0",
+    confidence: float = 0.9,
+    mask_offset: int = 0,
+) -> DetectionCandidate:
+    mask = np.zeros((16, 20), dtype=bool)
+    mask[2 + mask_offset : 8 + mask_offset, 3:10] = True
+    return DetectionCandidate(
+        instance_id=instance_id,
+        class_id="plastic_cup",
+        confidence=confidence,
+        bbox_xyxy=(3.0, 2.0, 10.0, 10.0),
+        mask=mask,
+        source_stamp_ns=frame.source_stamp_ns,  # type: ignore[attr-defined]
+        source_frame_id=frame.source_frame_id,  # type: ignore[attr-defined]
+        image_width=20,
+        image_height=16,
+    )
+
+
+def _production_batch(
+    frame: object, candidates: tuple[DetectionCandidate, ...]
+) -> DetectionBatch:
+    return DetectionBatch(
+        model_id=SyntheticAdapter.model_id,
+        weights_sha256=SHA_B,
+        runtime_device="mps",
+        inference_latency_ms=1.0,
+        image_width=20,
+        image_height=16,
+        candidates=candidates,
+    )
+
+
+def test_production_local_id_maps_to_canonical_raw_id_and_subset_evidence(
+    tmp_path: Path,
+) -> None:
+    """Catch production-local YOLO IDs being copied into low-floor record IDs."""
+
+    lock = _formal_yolo_lock()
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, candidate_counts={0: 2})
+
+    def observe(frame: object) -> ProductionObservation:
+        batch = _production_batch(frame, (_production_candidate(frame),))
+        return ProductionObservation(
+            DecisionOutput.UNIQUE, batch, "0", None, None, None, 0.25
+        )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            run_id="production-id-map",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is RunStatus.VALID
+    record = _record(output_root, 0)
+    assert record["selected_candidate_id"] == "yolo-000"
+    assert [item["candidate_id"] for item in record["raw_candidates"]] == [
+        "yolo-000"
+    ]
+    assert record["raw_candidates"][0]["class_confidence"] == 0.9
+
+
+@pytest.mark.parametrize("mapping_failure", ("ambiguous", "non-injective"))
+def test_production_mapping_requires_one_to_one_unambiguous_evidence(
+    tmp_path: Path, mapping_failure: str
+) -> None:
+    """Catch best-effort matching when batch/raw evidence is not bijective."""
+
+    class AmbiguousRawAdapter(SyntheticAdapter):
+        def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+            result = super().collect(frame, mode)
+            first, second = result.raw_candidates
+            return replace(
+                result,
+                raw_candidates=(
+                    first,
+                    replace(
+                        second,
+                        mask=first.mask,
+                        ranking_score=first.ranking_score,
+                        class_confidence=first.class_confidence,
+                    ),
+                ),
+            )
+
+    lock = _formal_yolo_lock()
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter: SyntheticAdapter
+    if mapping_failure == "ambiguous":
+        adapter = AmbiguousRawAdapter(output_root, candidate_counts={0: 2})
+    else:
+        adapter = SyntheticAdapter(output_root, candidate_counts={0: 1})
+
+    def observe(frame: object) -> ProductionObservation:
+        first = _production_candidate(frame, instance_id="0")
+        values = (
+            (first,)
+            if mapping_failure == "ambiguous"
+            else (first, _production_candidate(frame, instance_id="1"))
+        )
+        batch = _production_batch(frame, values)
+        return ProductionObservation(
+            DecisionOutput.AMBIGUOUS,
+            batch,
+            None,
+            "TARGET_AMBIGUOUS",
+            None,
+            None,
+            0.25,
+        )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            run_id=f"production-{mapping_failure}",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "PRODUCTION_CANDIDATE_MAPPING_INVALID"
+    assert not (output_root / "records/000000.json").exists()
+
+
+def test_production_error_preserves_raw_evidence_and_observer_type_flags(
+    tmp_path: Path,
+) -> None:
+    """Catch detector ERROR discarding low-floor evidence or erasing its type."""
+
+    def observe(_frame: object) -> ProductionObservation:
+        return ProductionObservation(
+            DecisionOutput.ERROR,
+            None,
+            None,
+            None,
+            "DETECTOR_ERROR",
+            "TimeoutError: detector timed out",
+            None,
+        )
+
+    # Directly exercise record construction through a synthetic locked inventory in the
+    # combined lock-chain test once the runner accepts only verified lock capabilities.
+    lock = _formal_yolo_lock()
+    test_inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "locked-run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, candidate_counts={0: 2})
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            test_inventory,
+            output_root,
+            run_id="production-error",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is RunStatus.VALID
+    record = _record(output_root, 0)
+    assert record["record_status"] == "ERROR"
+    assert record["error_type"] == "DETECTOR_ERROR"
+    assert record["timed_out"] is True
+    assert record["oom"] is False
+    assert len(record["raw_candidates"]) == 2
+    assert record["timing_breakdown"]["dino_or_yolo_ms"] == 1.0
+    assert len(record["resource_samples"]) == 1
+
+
+def test_selector_error_batch_preserves_mapped_subset_and_derives_oom(
+    tmp_path: Path,
+) -> None:
+    lock = _formal_yolo_lock()
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, candidate_counts={0: 2})
+
+    def observe(frame: object) -> ProductionObservation:
+        batch = _production_batch(frame, (_production_candidate(frame),))
+        return ProductionObservation(
+            DecisionOutput.ERROR,
+            batch,
+            None,
+            None,
+            "SELECTOR_ERROR",
+            "CUDAOutOfMemoryError",
+            0.5,
+        )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            run_id="production-selector-error",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is RunStatus.VALID
+    record = _record(output_root, 0)
+    assert record["error_type"] == "SELECTOR_ERROR"
+    assert record["oom"] is True
+    assert record["timed_out"] is False
+    assert [item["candidate_id"] for item in record["raw_candidates"]] == [
+        "yolo-000"
+    ]
+
+
+@pytest.mark.parametrize(
+    "variant", ("bare", "wrong-model", "fixture", "posthoc", "unregistered")
+)
+def test_formal_test_requires_verified_pre_access_model_lock_without_log_mutation(
+    tmp_path: Path, variant: str
+) -> None:
+    """Catch a hex digest, fixture/post-hoc lock, or unregistered lock opening test."""
+
+    formal = _formal_yolo_lock(
+        formal=variant != "fixture",
+        model="grounded_sam" if variant == "wrong-model" else "yolo_seg",
+    )
+    inventory, lock_path, access_log = _locked_inventory(
+        tmp_path,
+        formal,
+        write_lock_before_access=variant != "posthoc",
+    )
+    selected_lock = formal
+    if variant == "unregistered":
+        selected_lock = replace(formal, lock_sha256="0" * 64).with_recomputed_sha256()
+        write_threshold_lock(lock_path, selected_lock)
+    before = access_log.read_bytes()
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+    spec = _spec(
+        inventory,
+        output_root,
+        run_id=f"locked-{variant}",
+        run_kind=RunKind.TEST_RAW_FROZEN,
+        threshold_lock_sha256=(
+            formal.lock_sha256 if variant == "bare" else selected_lock.lock_sha256
+        ),
+        threshold_lock_path=None if variant == "bare" else lock_path,
+    )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(spec)
+
+    assert manifest.status is RunStatus.INVALID
+    assert adapter.calls == []
+    assert access_log.read_bytes() == before
+
+
+def test_verified_registered_lock_runs_without_touching_access_log(
+    tmp_path: Path,
+) -> None:
+    lock = _formal_yolo_lock()
+    inventory, lock_path, access_log = _locked_inventory(tmp_path, lock)
+    before = access_log.read_bytes()
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            run_id="locked-valid",
+            run_kind=RunKind.TEST_RAW_FROZEN,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+        )
+    )
+
+    assert manifest.status is RunStatus.VALID
+    assert adapter.calls == [0]
+    assert access_log.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("platform", "device"), (("macos", "cuda"), ("linux", "mps"))
+)
+def test_platform_device_pair_is_fail_closed_before_model_call(
+    tmp_path: Path, platform: str, device: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+    adapter.runtime_device = device  # type: ignore[assignment]
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            platform=platform,
+            device=device,
+            runtime_provenance=_runtime_provenance(device=device),
+        )
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "PLATFORM_DEVICE_MISMATCH"
+    assert adapter.calls == []
+
+
+def test_adapter_asset_digest_must_match_supplied_runtime_provenance(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+    adapter._weights_sha256 = SHA_C
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "RUNTIME_WEIGHTS_PROVENANCE_MISMATCH"
+    assert adapter.calls == []
+
+
+def test_resource_failure_is_typed_not_message_classified(tmp_path: Path) -> None:
+    inventory = _synthetic_inventory(tmp_path, 2)
+    typed_root = tmp_path / "typed"
+    typed_root.mkdir()
+    typed = SyntheticAdapter(
+        typed_root, failures={0: ResourceSamplingError("telemetry failed")}
+    )
+    typed_manifest = DetectorBenchmarkRunner(typed, typed_root).run(
+        _spec(inventory, typed_root)
+    )
+    assert typed_manifest.status is RunStatus.INVALID
+    assert typed_manifest.invalid_reason == "RESOURCE_EVIDENCE_FAILED"
+
+    ordinary_root = tmp_path / "ordinary"
+    ordinary_root.mkdir()
+    ordinary = SyntheticAdapter(
+        ordinary_root, failures={0: RuntimeError("resource sampler failed")}
+    )
+    ordinary_manifest = DetectorBenchmarkRunner(ordinary, ordinary_root).run(
+        _spec(inventory, ordinary_root)
+    )
+    assert ordinary_manifest.status is RunStatus.VALID
+    assert ordinary_manifest.record_count == 2
+    assert ordinary_manifest.error_count == 1
+
+
+def test_record_masks_are_republished_to_exact_canonical_layout(tmp_path: Path) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.VALID
+    mask = _record(output_root, 0)["raw_candidates"][0]["mask"]
+    assert mask["relative_path"] == "masks/000000/yolo-000.rle.json"
+    assert (output_root / mask["relative_path"]).is_file()
+    assert (output_root / "adapter-masks/000000/yolo-000.rle.json").is_file()
+
+
+@pytest.mark.parametrize("occupied", ("file", "symlink"))
+def test_canonical_mask_target_is_never_overwritten_or_followed(
+    tmp_path: Path, occupied: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if occupied == "file":
+        target = output_root / "masks/000000/yolo-000.rle.json"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"user-owned\n")
+    else:
+        (output_root / "masks").symlink_to(outside, target_is_directory=True)
+    adapter = SyntheticAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    records_dir = output_root / "records"
+    assert not records_dir.exists() or list(records_dir.iterdir()) == []
+    if occupied == "file":
+        assert target.read_bytes() == b"user-owned\n"
+    else:
+        assert list(outside.iterdir()) == []
+
+
+def test_prior_manifest_detects_last_record_and_checkpoint_rewrite(
+    tmp_path: Path,
+) -> None:
+    """Catch coordinated tail/checkpoint tamper being laundered by a new manifest."""
+
+    inventory = _synthetic_inventory(tmp_path, 2)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    manifest_path = output_root / "manifest.json"
+    prior = json.loads(manifest_path.read_text())
+    running = dict(prior)
+    running["status"] = "RUNNING"
+    running["ended_at"] = None
+    running["invalid_reason"] = None
+    atomic_write_json(manifest_path, running)
+
+    record_path = output_root / "records/000001.json"
+    record = json.loads(record_path.read_text())
+    record["timing_breakdown"]["dino_or_yolo_ms"] = 2.0
+    record["timing_breakdown"]["total_ms"] = 2.0
+    atomic_write_json(record_path, record)
+    changed_record_sha = hashlib.sha256(record_path.read_bytes()).hexdigest()
+    checkpoint_path = output_root / "checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_text())
+    checkpoint["last_record_sha256"] = changed_record_sha
+    if "record_inventory_sha256" in checkpoint:
+        checkpoint["record_inventory_sha256"] = _record_inventory_digest(output_root)
+    atomic_write_json(checkpoint_path, checkpoint)
+
+    resumed = SyntheticAdapter(output_root)
+    invalid = DetectorBenchmarkRunner(resumed, output_root).run(spec)
+
+    assert invalid.status is RunStatus.INVALID
+    assert invalid.started_at == prior["started_at"]
+    assert invalid.record_count == prior["record_count"]
+    assert invalid.record_inventory_sha256 == prior["record_inventory_sha256"]
+    assert resumed.calls == []
+
+
+def test_invalid_resume_preserves_original_manifest_identity_and_counts(
+    tmp_path: Path,
+) -> None:
+    """Catch a changed resume spec rewriting the prior run's frozen metadata."""
+
+    inventory = _synthetic_inventory(tmp_path, 2)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    original_spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        original_spec
+    )
+    manifest_path = output_root / "manifest.json"
+    prior = json.loads(manifest_path.read_text())
+    prior["status"] = "RUNNING"
+    prior["ended_at"] = None
+    atomic_write_json(manifest_path, prior)
+    changed_provenance = RuntimeProvenance(
+        runtime_device="mps",
+        runtime_name="synthetic-runtime",
+        runtime_version="fixture-1",
+        weights_sha256=SHA_B,
+        environment={"fixture": "changed", "torch": "2.8.0"},
+    )
+    adapter = SyntheticAdapter(output_root)
+
+    invalid = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            config_sha256=SHA_C,
+            runtime_provenance=changed_provenance,
+        )
+    )
+
+    assert invalid.status is RunStatus.INVALID
+    assert invalid.started_at == prior["started_at"]
+    assert invalid.config_sha256 == SHA_A
+    assert invalid.runtime_environment == {"fixture": "runner", "torch": "2.8.0"}
+    assert invalid.record_count == prior["record_count"]
+    assert invalid.record_inventory_sha256 == prior["record_inventory_sha256"]
+    assert adapter.calls == []
+
+
+def test_running_manifest_tracks_safe_checkpoint_before_process_interrupt(
+    tmp_path: Path,
+) -> None:
+    """Catch RUNNING metadata remaining at fabricated zero counts after a safe commit."""
+
+    inventory = _synthetic_inventory(tmp_path, 3)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, failures={1: KeyboardInterrupt()})
+
+    with pytest.raises(KeyboardInterrupt):
+        DetectorBenchmarkRunner(adapter, output_root).run(
+            _spec(inventory, output_root)
+        )
+
+    running = json.loads((output_root / "manifest.json").read_text())
+    first_sha = hashlib.sha256(
+        (output_root / "records/000000.json").read_bytes()
+    ).hexdigest()
+    assert running["status"] == "RUNNING"
+    assert running["record_count"] == 1
+    assert running["error_count"] == 0
+    assert running["record_chain_head_sha256"] == first_sha
+    assert running["record_inventory_sha256"] == _record_inventory_digest(output_root)
+    assert running["ended_at"] is None
