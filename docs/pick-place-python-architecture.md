@@ -1,367 +1,633 @@
-# SO-101 Python Pick-Place 架构
+# SO-101 Python pick-place architecture
 
-本文描述 `so101_demo_py` 当前代码的结构、依赖方向和运行语义。它的核心设计是：控制意图与
-结果模型只有一套，MuJoCo/Gazebo 的仿真细节留在 adapter 和显式 launcher 中；未来接入真实
-SO-101 时实现同一组 ports，但在安全设计通过前始终 fail closed。
+This document describes the current structure, dependency direction, and
+runtime semantics of `so101_demo_py`. The package has one control vocabulary,
+while MuJoCo, Gazebo, ROS 2, model providers, and perception libraries remain
+behind explicit adapters and launch compositions. The physical SO-101 boundary
+stays fail closed.
 
-## 1. 包与源码布局
+The architecture now covers four related paths:
 
-| 名称 | 当前值 | 作用 |
+1. fixed-waypoint pick-place on MuJoCo or Gazebo;
+2. dynamic pick-place from a fresh `/cup_pose`;
+3. bounded natural-language planning followed by the dynamic MuJoCo runtime;
+4. one-shot YOLO-Seg instance detection and RGB-D object localization.
+
+Portable profiling observes the Text Agent path without gaining task or motion
+authority.
+
+## 1. Package identity and source layout
+
+| Name | Current value | Responsibility |
 |---|---|---|
-| ROS package | `so101_demo_py` | ament index、launch、config、assets、console scripts 的 owner |
-| Python namespace | `so101_demo` | 业务代码的 import 根 |
-| Python source root | `src/so101_demo_py/src/` | 直接映射到 `so101_demo`，不再嵌套同名目录 |
-| package entry | `src/so101_demo_py/setup.py` | 声明 resources 与七个 console scripts |
-| package metadata | `src/so101_demo_py/package.xml` | ROS 2 runtime/build dependencies |
+| ROS package | `so101_demo_py` | Owner of ament resources, launch files, configuration, assets, and console scripts |
+| Python namespace | `so101_demo` | Import root for application code |
+| Python source root | `src/so101_demo_py/src/` | Maps directly to `so101_demo` |
+| Package entry | `src/so101_demo_py/setup.py` | Installs resources and 21 console scripts |
+| Package metadata | `src/so101_demo_py/package.xml` | Declares ROS 2 build and runtime dependencies |
 
-`setup.py` 使用 `package_dir={python_package: "src"}`，因此文件
-`src/so101_demo_py/src/core/domain.py` 的 import 是 `so101_demo.core.domain`。
+`setup.py` uses `package_dir={python_package: "src"}`. For example,
+`src/so101_demo_py/src/core/domain.py` is imported as
+`so101_demo.core.domain`.
 
-四个 launcher 强制调用方选择后端：
+The package installs seven launch files:
 
-- `so101_mujoco.launch.py`：MuJoCo 栈，不自动执行任务；
-- `so101_mujoco_pick_place.launch.py`：MuJoCo 栈加 pick-place；
-- `so101_gazebo.launch.py`：Gazebo 栈，不自动执行任务；
-- `so101_gazebo_pick_place.launch.py`：Gazebo 栈加 bounded execute。
+- `so101_mujoco.launch.py`
+- `so101_mujoco_pick_place.launch.py`
+- `so101_mujoco_perception_pick_place.launch.py`
+- `so101_mujoco_text_pick_agent.launch.py`
+- `so101_mujoco_task_station.launch.py`
+- `so101_gazebo.launch.py`
+- `so101_gazebo_pick_place.launch.py`
 
-不存在“自动选择可用 simulator”的 fallback。这个约束保证一次结果的 backend、policy、模型、
-install prefix 和 evidence authority 不会在运行中漂移。
+Each launch file selects its backend and ownership model explicitly. The
+runtime never searches for an available simulator and switches to it. This
+keeps the backend, policy, model, installed prefix, process ownership, and
+evidence authority stable for the whole run.
 
-## 2. 分层与依赖方向
+## 2. Layers and dependency direction
 
 ```mermaid
 flowchart TB
-  CLI["CLI / launch"] --> RT["runtime composition"]
+  ENTRY["CLI and launch"] --> RT["runtime composition"]
   RT --> APP["application use cases"]
   RT --> BE["backend adapters"]
-  APP --> CORE["core domain + workflow"]
+  RT --> PER["planner and perception adapters"]
+  APP --> CORE["core domain and workflow"]
   APP --> PORTS["ports"]
   CTRL["shared control adapters"] --> PORTS
   BE --> PORTS
   BE --> CTRL
-  RT --> POLICY["backend policy variants + bundle"]
-  CORE -. "no ROS imports" .-> PURE["Python stdlib/value objects"]
+  PER --> PORTS
+  PROF["optional profiling"] -. "injected observers" .-> ENTRY
+  PROF -. "injected observers" .-> APP
+  CORE -. "no ROS or simulator imports" .-> PURE["Python and value objects"]
 ```
 
-允许的依赖方向是外层指向内层：
+Dependencies point inward:
 
-1. `core/` 不知道 ROS、MuJoCo、Gazebo、MoveIt concrete client；
-2. `ports/` 用 Protocol 和 immutable data class 定义能力边界；
-3. `application/` 编排用例，只依赖 core/ports 和注入的能力；
-4. `control/`、`backends/` 实现 ports，封装 ROS/client/simulator 差异；
-5. `runtime/` 是唯一 composition root，绑定 backend、policy、adapter、capability 和 provenance；
-6. `cli/`、`launch/` 只解析输入和构建进程图，不拥有控制规则。
+1. `core/` owns stable values and deterministic rules. It does not import ROS,
+   MoveIt, MuJoCo, Gazebo, model SDKs, or Ultralytics.
+2. `ports/` defines capability boundaries with Protocols and immutable values.
+3. `application/` coordinates use cases through core values and injected ports.
+4. `control/`, `backends/`, and `adapters/` implement those ports.
+5. `runtime/` is the composition root. It binds the backend, policy, adapters,
+   launch ownership, capabilities, and provenance.
+6. `cli/` and `launch/` parse input and construct process graphs. They do not
+   own motion policy.
+7. `profiling/` is optional and injected. A disabled profiler is represented by
+   `None`, so the business objects remain unchanged.
 
-测试 `test_core_import_boundaries.py`、`test_runtime_composition.py` 和 contracts tests 用来防止
-simulator/ROS 类型反向渗入 core。
+Import-boundary and composition tests reject ROS or simulator types that leak
+into the core.
 
-## 3. Core：统一控制语义
+## 3. Core contracts
 
-### 3.1 Domain model
+### 3.1 Motion domain and workflow
 
-`src/core/domain.py` 定义稳定的跨后端词汇：
+`src/core/domain.py` defines the vocabulary shared by both simulators:
 
-- `State`：从 `IDLE`、预开夹爪、接近、下降、抓取验证、搬运、释放到恢复和终态；
-- `RunMode`：`dry_run`、`plan_only`、`execute`；
-- `ActionStatus` / `ActionResult`：单动作结果；
-- `FailureCategory` / `Failure`：配置、观测、规划、执行、碰撞、TF、gripper、scene 等失败；
-- `RunStatus` 与 `ExecutionRunStatus`：状态机结果和对外运行分类分开。
+- `State` covers preparation, approach, grasp verification, transport, release,
+  recovery, and terminal states.
+- `RunMode` distinguishes `dry_run`, `plan_only`, and `execute`.
+- `ActionStatus` and `ActionResult` describe a single action.
+- `FailureCategory` and `Failure` normalize configuration, observation,
+  planning, execution, collision, TF, gripper, and scene failures.
+- `RunStatus` and `ExecutionRunStatus` keep state-machine completion separate
+  from the externally reported execution class.
 
-后端必须把自己的错误翻译到这套模型，而不是让 Gazebo error code、MuJoCo struct 或 ROS action
-result 成为 application 的公共 API。
+`src/core/workflow.py` contains the explicit transition table. Every
+nonterminal state has a success and failure destination. Failures enter bounded
+recovery instead of continuing from an unknown state. `VALIDATION_FAILED` can
+be crossed only through the explicit `force_continue` path.
 
-### 3.2 Workflow 与 runner
+`src/core/runner.py` provides the ROS-free runner and checkpoint contract. A
+checkpoint records the run identity, sequence, phase, original failure, next
+state, policy bundle hash, and simulation session. Resume compares current TCP,
+joint, gripper, Planning Scene, simulator pose, and contact state before any
+side effect. Session, policy, or world mismatches fail closed.
 
-`src/core/workflow.py` 是显式状态转移表。每个非终态有成功/失败两个 destination；失败路径会进入
-有界 recovery，而不是从中间状态静默继续。`VALIDATION_FAILED` 只有在显式
-`force_continue` 时才允许越过。
+### 3.2 Policies and physical outcomes
 
-`src/core/runner.py` 提供 ROS-free 的 deterministic runner、checkpoint schema 与 resume 校验：
-
-- checkpoint 原子写入，含 run ID、sequence、phase、原失败、下一个状态；
-- 保存 policy bundle hash 和 simulation session ID；
-- resume 时比较 TCP、joint、gripper、MoveIt world/attachment、simulator object pose/contact；
-- 任何 session、policy 或 world mismatch 都 fail closed；
-- dry-run/plan-only/single-step 与 live execute 共享结果语义，但不会混成资格证据。
-
-### 3.3 Policy 与 outcome
-
-`src/core/policy.py` 把动作参数解析成 `TaskPolicy`；`src/core/policy_registry.py` 只接受完整的
-`policy_id/version/backend` variant，并验证 manifest/hash。policy 文件位于：
+`src/core/policy.py` parses action parameters into `TaskPolicy`.
+`src/core/policy_registry.py` accepts only a complete
+`policy_id/version/backend` variant and checks its manifest and hash:
 
 ```text
 config/policies/<policy-id>/<version>/<backend>.yaml
 ```
 
-MuJoCo 与 Gazebo 可以有不同 variant；当前 `light_cup_wall_pick/v1` 两个 simulator variant
-字节相同，是受保护的合格基线。以后调 Gazebo policy 应创建清晰的新版本或独立 variant，不能
-覆盖 MuJoCo 合格字节。
+MuJoCo and Gazebo may have different variants. A qualified MuJoCo policy cannot
+be overwritten with a Gazebo tuning change without a new, explicit variant or
+version.
 
-`core/contact_policy.py`、`core/grasp_outcome.py` 和 `core/outcome.py` 把“动作返回成功”与“杯子
-真的被抓起并稳定放下”分开：接触、支撑、速度、pose envelope、release epoch 和连续采样窗口
-共同决定物理结果。
+`contact_policy.py`, `grasp_outcome.py`, and `outcome.py` keep controller or
+action success separate from physical success. Contact, support, velocity,
+pose envelopes, release epochs, and consecutive samples determine whether the
+cup was lifted, carried, released, and left in a valid final pose.
 
-## 4. Ports：后端必须提供的能力
+### 3.3 Task-command contracts
 
-| Port | 文件 | 关键职责 |
+The natural-language layer uses closed values from `core/task_command.py` and
+`core/planner_outcome.py`. A provider can return a proposal, an ambiguous
+outcome, or an unsupported outcome. It cannot add a new backend, capability,
+action, or execution mode.
+
+`TaskCommand` validation happens before dispatch. The confirmation digest binds
+the normalized instruction, command, capability, provider, and model. A request
+ID can be claimed only once by one `TextAgent` instance.
+
+### 3.4 Detection contracts
+
+`src/core/detection.py` defines model-independent values:
+
+- `DetectionFrame` owns one RGB image and its source identity.
+- `DetectionQuery` names the requested class.
+- `DetectionCandidate` binds class, confidence, bounding box, instance mask,
+  source stamp, frame, and image dimensions.
+- `DetectionBatch` records model identity, weights SHA256, device, latency, and
+  all candidates.
+- `LocalizedObject` records the selected world-frame cloud and center.
+
+NumPy arrays are copied into owned, read-only values at the core boundary. The
+core does not import `torch` or `ultralytics`.
+
+## 4. Ports
+
+| Port | Source | Responsibility |
 |---|---|---|
-| `RobotControlPort` | `src/ports/robot_control.py` | joint/TCP plan、execute、gripper、stop、fresh joint state |
-| `PlanningScenePort` | `src/ports/planning_scene.py` | world object、attach/detach shadow、pose sync、临时 ACM |
-| `Reset*Port` | `src/ports/reset.py` | backend-neutral 事务 reset 的观测、取消、scene、robot 与最终验证边界 |
-| `WorldPort` | `src/ports/world.py` | 原子 world snapshot、带 receipt 的 snapshot、reset epoch receipt |
-| `LifecyclePort` | `src/ports/lifecycle.py` | readiness、pause、shutdown 等生命周期控制 |
-| `PhaseEvidencePort` | `src/ports/phase_evidence.py` | 开始/完成 phase evidence window |
-| evidence types | `src/ports/evidence.py` | pose/contact/velocity/session/sequence 等不可变证据值 |
-| capabilities | `src/ports/capabilities.py` | 后端能力声明与 execute/qualification 前置校验 |
+| `RobotControlPort` | `src/ports/robot_control.py` | Joint and TCP planning, execution, gripper, stop, and fresh joint state |
+| `PlanningScenePort` | `src/ports/planning_scene.py` | World objects, planning shadows, pose synchronization, and temporary ACM updates |
+| `Reset*Port` | `src/ports/reset.py` | Transactional observation, cancellation, scene, robot, and final reset verification |
+| `WorldPort` | `src/ports/world.py` | Atomic snapshots, snapshot receipts, and reset-epoch receipts |
+| `LifecyclePort` | `src/ports/lifecycle.py` | Readiness, pause, shutdown, and lifecycle ownership |
+| `PhaseEvidencePort` | `src/ports/phase_evidence.py` | Opens and closes phase evidence windows |
+| evidence values | `src/ports/evidence.py` | Immutable pose, contact, velocity, session, and sequence evidence |
+| capabilities | `src/ports/capabilities.py` | Declares what a backend can prove before execute or qualification |
+| `PlannerPort` | `src/ports/task_planner.py` | Converts an instruction into a provider result without dispatch authority |
+| `PickPlaceExecutorPort` | `src/ports/pick_place_executor.py` | Starts the allowed runtime with explicit execution provenance |
+| `DetectorPort` | `src/ports/object_detector.py` | Maps one detection frame and query to a model-independent batch |
 
-能力是显式值，不靠 `hasattr` 或“调用失败后再猜”。当前 composition 声明：
+Capabilities are explicit values. The runtime does not use `hasattr` or a failed
+call to guess what a backend supports.
 
-| 能力 | MuJoCo | Gazebo | real stub |
+| Capability | MuJoCo | Gazebo | real stub |
 |---|---:|---:|---:|
-| atomic snapshot | 是 | 否 | 否 |
-| snapshot with receipt | 是 | 是 | 否 |
-| reset epoch | 是 | 是 | 否 |
-| pause | 是 | 否 | 否 |
-| viewer/GUI camera preset | 是 | 是 | 否 |
-| physical contact force | 是 | 是 | 否 |
-| lossless physics-step trace | 是 | 否 | 否 |
+| Atomic snapshot | Yes | No | No |
+| Snapshot with receipt | Yes | Yes | No |
+| Reset epoch | Yes | Yes | No |
+| Pause | Yes | No | No |
+| Viewer or GUI camera preset | Yes | Yes | No |
+| Physical contact force | Yes | Yes | No |
+| Lossless physics-step trace | Yes | No | No |
 
-`CapabilityRequirements.mujoco_qualification()` 除基本 execute 能力外还要求 lossless trace，
-因此 Gazebo 的正常执行失败不会被误标为资格化结果。
+`CapabilityRequirements.mujoco_qualification()` requires the lossless trace in
+addition to ordinary execute capabilities. A valid Gazebo run can report
+`SUCCEEDED`, but it cannot be relabeled as a MuJoCo qualification result.
 
-## 5. Application：用例编排
+## 5. Application use cases
 
-Application 层分成两类执行路径。
+### 5.1 Backend execution and MuJoCo qualification
 
-### 5.1 通用结果与控制阶段
+`src/application/backend_execute.py` converts a backend `ExecuteBoundary` into
+a stable `RunResultManifest`. Action status and evidence validity are separate:
 
-`src/application/backend_execute.py` 把任一后端的 `ExecuteBoundary` 转成稳定的
-`RunResultManifest`。证据有效性和动作成功是两个正交维度：
+- invalid evidence produces `INVALID`;
+- valid evidence with an action failure produces `FAILED` and keeps
+  `first_failed_phase`;
+- valid evidence with action success produces `SUCCEEDED`;
+- only an additional qualification gate can produce `QUALIFIED`.
 
-- evidence 无效 → `INVALID`；
-- evidence 有效且动作失败 → `FAILED`，保留 `first_failed_phase`；
-- evidence 有效且动作成功 → `SUCCEEDED`；
-- 只有额外通过 qualification gate 才是 `QUALIFIED`。
+`src/application/phases/` expresses staged approach, contact hold, micro lift,
+transport, descend, place alignment, release settle, and retreat through ports.
 
-`src/application/phases/` 以 ports 表达 staged approach、contact hold、micro lift、transport、
-descend、place alignment 和 release-retreat 等阶段。`staged_approach.py`、
-`place_alignment.py`、`release_settle.py` 等模块提供可组合的细分 use case。
-
-### 5.2 MuJoCo qualified workflow
-
-`src/application/pick_place.py` 是当前物理验证过的 MuJoCo production orchestration。它按顺序运行：
+`src/application/pick_place.py` owns the physically validated MuJoCo sequence:
 
 ```text
-staged_approach → contact_hold → micro_lift → policy_lift_waypoint1
-→ remaining_lift → transport → descend → place_alignment → release_retreat
+staged_approach -> contact_hold -> micro_lift -> policy_lift_waypoint1
+-> remaining_lift -> transport -> descend -> place_alignment -> release_retreat
 ```
 
-每个阶段由 `src/backends/mujoco/qualified_phases/` 的 adapter 产生独立 evidence JSON，application
-逐项验证 expected status、simulation session、reset epoch 和 policy/contact fingerprint。任何阶段
-subprocess 非零、证据缺失、status 不符或 provenance 不一致都会在当阶段停止，并写完整 manifest。
+Adapters under `src/backends/mujoco/qualified_phases/` write independent phase
+evidence. The application checks expected status, simulation session, reset
+epoch, policy fingerprint, and contact fingerprint. A nonzero child status,
+missing evidence, status mismatch, or provenance mismatch stops the sequence at
+that phase.
 
-`src/application/qualification.py` 在更外层管理 `FULL_RESTART` 与 `RESET_WORLD` 两种 batch。
-它区分 `SUCCESS`、`VALID_FAILURE`、`INVALID`，要求 artifact hashes、物理 outcome 和 clean
-shutdown，且不同 lifecycle 不混计。
+`src/application/qualification.py` keeps `FULL_RESTART` and `RESET_WORLD`
+batches separate. Results from different lifecycle classes never share a
+denominator.
+
+### 5.2 Dynamic RGB-D pick-place
+
+The current integrated RGB-D path is:
+
+```text
+/task_camera/{camera_info,color,depth}
+  -> exact-stamp synchronization
+  -> cup estimation in the camera frame
+  -> exact-stamp tf2 lookup
+  -> source-stamped world /cup_pose
+  -> freeze one fresh sample
+  -> dynamic target policy and 5-DoF IK
+  -> MoveIt planning and controller execution
+  -> simulator and Planning Scene evidence
+```
+
+The integrated perception launch selects either the resident
+`rgbd_cup_pose` color-geometry producer or the one-shot `rgbd_object_pose`
+YOLO-Seg producer. The dynamic runtime subscribes before the launch accepts the
+pose, so a volatile sample published before readiness is not treated as a
+current request. A supplied `/cup_pose` is an input claim, not proof that
+perception, planning, motion, or physical placement succeeded.
+
+### 5.3 Text Pick Agent
+
+`src/application/text_agent.py` coordinates the model-facing path:
+
+```text
+instruction
+  -> PlannerPort
+  -> planner outcome and TaskCommand validation
+  -> allowlisted TaskDispatcher resolution
+  -> preview digest or explicit confirmation bypass
+  -> backend and dual-execute checks
+  -> one-time request claim
+  -> PickPlaceExecutorPort
+  -> dynamic MuJoCo runtime
+```
+
+DeepSeek is the primary provider in the current CLI configuration. The planner
+chain can try local Ollama with `qwen3.5:4b` once after a provider failure. The
+result records the selected provider, model, latency, token counts, cache-hit
+tokens, and whether fallback was used.
+
+The model proposes intent only. Python owns schema validation, capability
+selection, the MuJoCo-only execution boundary, confirmation, request claiming,
+runtime provenance, and dispatch. `skip_confirmation` removes human review of
+the digest; it does not weaken any of the deterministic checks.
+
+### 5.4 YOLO-Seg object pose
+
+The one-shot object path is available as a standalone executable and as the
+`yolo_seg` backend of `so101_mujoco_perception_pick_place.launch.py`. It remains
+separate from the current Text Agent launch:
+
+```text
+fresh aligned RGB-D
+  -> DetectorPort
+  -> all YOLO-Seg candidates and masks
+  -> TargetSelector
+  -> selected-mask point cloud
+  -> outlier and cluster filtering
+  -> exact source-stamp world transform
+  -> /cup_pose + detections + overlay + request evidence
+```
+
+`TargetSelector` accepts exactly one matching `plastic_cup` candidate above the
+configured threshold. Zero matches return `TARGET_NOT_FOUND`; multiple matches
+return `TARGET_AMBIGUOUS`. The application does not choose the highest score to
+hide ambiguity.
+
+`detect_once()` writes detection evidence before selection, then writes the
+selected mask, world-frame cloud, and result. It publishes the pose only after
+the required artifacts exist. Failure results keep the candidate count, model
+identity, weights hash, device, and latency when those values are available.
 
 ## 6. Shared control
 
-`src/control/robot_control.py` 的 `SharedRobotControl` 是注入式 `RobotControlPort` 实现：
+`src/control/robot_control.py` implements `RobotControlPort` through injected
+callables:
 
-- 在 plan 前读取 fresh joint state；
-- joint/TCP planner 只接收 port request 与 start state；
-- execute 前再次读状态，超过 start-state tolerance 就拒绝旧 plan；
-- gripper 与 stop 也是注入 callable，不绑定具体 simulator。
+- it reads a fresh joint state before planning;
+- joint and TCP planners receive the request and explicit start state;
+- it reads state again before execution and rejects a stale plan when the start
+  state exceeds tolerance;
+- gripper and stop use the same injected boundary and do not depend on a
+  simulator type.
 
-具体 ROS 能力拆在：
+ROS-specific clients are split by responsibility:
 
-- `control/moveit/`：motion-plan request、robot state、MoveIt client；
-- `control/trajectory/`：trajectory planner/executor、calibration 和执行证据；
-- `control/gripper/`：夹爪 action client；
-- `control/planning_scene/`：collision objects、ACM、attach/detach shadow 与 read-back。
+- `control/moveit/` handles planning requests, robot state, and MoveIt clients;
+- `control/trajectory/` handles planning, execution, calibration, and endpoint
+  evidence;
+- `control/gripper/` owns the gripper action client;
+- `control/planning_scene/` owns collision objects, ACM updates, planning
+  shadows, and read-back.
 
-这里的“shared”表示控制合同与 safety check 复用，不表示两个仿真器必须使用相同通信 topic、
-reset service 或证据来源。
+Shared control means that the contract and safety checks are reused. It does not
+require both simulators to use the same topics, reset services, or evidence
+sources.
 
 ## 7. Backend adapters
 
 ### 7.1 MuJoCo
 
-`src/backends/mujoco/` 提供：
+`src/backends/mujoco/` provides:
 
-- `world.py` / `observer.py`：读取原子 simulation evidence；
-- `phase_evidence.py` / `transport_observer.py`：逐 physics-step 窗口与搬运连续性；
-- `lifecycle.py` / `reset.py`：pause、reset epoch、feedback convergence；
-- `client.py`：fork services；
-- `camera_presets.py` / `viewer.py`：viewer camera；
-- `qualified_phases/`：经过物理验证的九阶段 live adapter。
+- atomic world observation and receipts;
+- lossless phase and transport evidence;
+- pause, reset epochs, and feedback convergence;
+- fork service clients;
+- viewer camera control;
+- physically validated phase adapters.
 
-MuJoCo 是资格后端，因为 fork r6 能在每个成功 physics step 后、simulation mutex 内提供
-authoritative hook。Planning Scene attachment 只供 MoveIt 碰撞规划；抓取成立仍由杯子的真实接触、
-pose、速度和支撑证据证明。
+The pinned fork publishes authoritative evidence after each successful physics
+step while holding the simulation mutex. This is why MuJoCo can satisfy the
+qualification capability set. Planning Scene attachment remains a MoveIt
+collision-planning shadow. Cup pose, support, velocity, and contact establish
+the physical result.
 
 ### 7.2 Gazebo
 
-`src/backends/gazebo/` 提供 world/observer/lifecycle/reset/camera/transport adapter 和 runtime SDF
-materialization。`execute.py` 执行完整的有界策略链：
+`src/backends/gazebo/` implements world observation, lifecycle, reset, camera,
+transport, and runtime SDF materialization. Its bounded execute path waits for
+joint state, Gazebo state, controllers, and MoveIt before running the complete
+approach, grasp, attach, transport, place, detach, and retreat sequence.
 
-1. 等待 joint state、Gazebo pose/stats、arm/gripper controller 与 MoveIt readiness；
-2. 执行 `PREPARE_OPEN_GRIPPER`；
-3. 依次执行 approach、grasp、attach、lift、transport、place、detach、retreat 全部阶段；
-4. 写 `gazebo-execute-evidence.json` 和统一 result manifest；
-5. 失败时报告当前 phase 与真实 error code。
+Gazebo writes `gazebo-execute-evidence.json` and a standard result manifest. A
+valid success is `SUCCEEDED/NOT_QUALIFIED`; an action failure is
+`FAILED/NOT_QUALIFIED` at the observed phase. Evidence-infrastructure failure is
+`INVALID`.
 
-成功返回 `SUCCEEDED/NOT_QUALIFIED`；任何有效产品失败在实际首个失败阶段返回
-`FAILED/NOT_QUALIFIED`，只有证据基础设施本身失败才是 `INVALID`。Gazebo 不被默认拒绝、不被
-跳过，也不作为 MuJoCo 五连胜的 RED→GREEN 门。
-
-`assets/common/geometry-manifest.yaml` 是 table、pedestal、plastic_cup 的唯一几何合同；MoveIt
-builder 与 Gazebo SDF parity test 共同约束 ID、尺寸、局部/世界 6D pose、颜色和 `1/1/13` primitive
-counts。公共 `scene_setup`、`camera_preset`、`teleop_reset` CLI 以 `--backend mujoco|gazebo` 分派，
-Gazebo adapter 独立实现，不读取或调用 C++ demo 的 executable/config。
-
-Gazebo reset 由 application 的十三阶段 transaction 编排。任何阶段失败都会停止后续动作，并输出
-稳定 phase、failure code 与累积 evidence；只有杯子 Gazebo/Planning Scene pose 与 attachment、world
-membership、`1/1/13`、controller、joint position/velocity 和 TF 全部收敛才提交成功 receipt。
+`assets/common/geometry-manifest.yaml` is the common contract for table,
+pedestal, and plastic-cup geometry. Gazebo SDF materialization and the MoveIt
+builder consume the same IDs, dimensions, local and world poses, colors, and
+primitive counts.
 
 ### 7.3 Real stub
 
-`src/backends/real_stub/backend.py` 实现 ports 的同形方法，但全部返回
-`REJECTED / REAL_HARDWARE_NOT_CONFIGURED`。它不 discovery 设备、不打开 serial/socket、不创建
-硬件 publisher/client、不 plan 或 execute，也没有 real launcher。这是未来扩展 seam，不是隐藏的
-实机开关。
+`src/backends/real_stub/backend.py` implements the port shapes but returns
+`REJECTED / REAL_HARDWARE_NOT_CONFIGURED` for every operation. It performs no
+device discovery, serial or socket access, publisher or client creation,
+planning, execution, gripper command, reset, stop, or recovery. There is no real
+launcher.
 
-## 8. Runtime composition 与启动图
+## 8. Planner and perception adapters
 
-`src/runtime/composition.py` 是唯一 backend composition point：
+`src/adapters/planner/` isolates provider transport and structured-output
+handling from the application. Provider errors are translated to
+`PlannerProviderError`; provider responses still pass through the closed core
+schema before they can reach dispatch.
 
-1. 接收明确的 backend、policy ID/version、package share、source commit 和 installed prefix；
-2. 读取 backend capability；
-3. 加载严格的 policy variant；
-4. 注入 `BackendAdapters`；
-5. lossless backend 缺 phase-evidence adapter 时拒绝 composition；
-6. 生成包含 source/install/policy/runtime inputs 的 qualification bundle。
+`src/adapters/perception/yolo_seg.py` isolates Ultralytics and PyTorch behind
+`DetectorPort`. It verifies that weights are a regular file with the expected
+SHA256 digest. Device selection is explicit:
 
-`src/runtime/launch_composition.py` 构建两套显式进程图：
+- `cuda` and `mps` fail if the requested accelerator is unavailable;
+- `cpu` is accepted only when requested;
+- `auto` prefers CUDA, then MPS, and uses CPU only with explicit fallback
+  authorization.
+
+The adapter warms the model once, preserves every returned instance mask, and
+converts the result into core detection values. The dataset and training tools
+under `adapters/perception/` generate synthetic labels and run the pinned
+YOLO-Seg training workflow. Synthetic MuJoCo identity is a training and
+evaluation source, not a production `/cup_pose` or runtime perception input.
+
+## 9. Runtime composition and launch ownership
+
+`src/runtime/composition.py` is the backend composition point. It receives the
+backend, policy identity, package share, source commit, and installed prefix;
+checks declared capabilities; loads the policy variant; injects adapters; and
+builds the provenance bundle.
+
+`src/runtime/launch_composition.py` constructs the public process graphs:
+
+| Launch file | Owned graph | Safe boundary |
+|---|---|---|
+| `so101_mujoco.launch.py` | MuJoCo, controllers, MoveIt, and scene setup | Stack readiness only |
+| `so101_mujoco_pick_place.launch.py` | MuJoCo stack plus fixed workflow | `run_mode:=dry_run execute:=false` |
+| `so101_mujoco_perception_pick_place.launch.py` | MuJoCo stack, camera TF, selectable `color_geometry` or `yolo_seg` perception, and dynamic workflow | Live path requires dual execute authorization |
+| `so101_mujoco_text_pick_agent.launch.py` | MuJoCo stack, camera TF, `rgbd_cup_pose`, Text Agent, and dynamic workflow | Requires `run_mode:=execute execute:=true skip_confirmation:=true` |
+| `so101_mujoco_task_station.launch.py` | Persistent visible MuJoCo stack and optional Teleop | One owner for repeated `RESET_WORLD` tasks |
+| `so101_gazebo.launch.py` | Gazebo, bridge, controllers, MoveIt, and scene setup | Stack readiness only |
+| `so101_gazebo_pick_place.launch.py` | Gazebo stack plus fixed workflow | Functional execution, never MuJoCo qualification |
+
+The Text Agent process graph is:
 
 ```mermaid
 flowchart LR
-  subgraph M["MuJoCo launcher"]
-    M1["robot_state_publisher"] --> M2["mujoco_ros2_control"]
-    M2 --> M3["controllers"]
-    M3 --> M4["graceful_shutdown_move_group"]
-    M4 --> M5["scene_setup"]
-    M5 --> M6["pick_place"]
-  end
-  subgraph G["Gazebo launcher"]
-    G1["gz_sim"] --> G2["materialized SDF"]
-    G2 --> G3["ros_gz_bridge + controllers"]
-    G3 --> G4["move_group"]
-    G4 --> G5["motion_stack_ready"]
-    G5 --> G6["scene_setup --backend gazebo"]
-    G6 --> G7["gazebo_execute"]
-  end
+  M["mujoco_ros2_control"] --> C["controllers"]
+  C --> MG["graceful_shutdown_move_group"]
+  MG --> SC["scene_setup"]
+  SC --> P["rgbd_cup_pose"]
+  TF["static camera TF"] --> P
+  P --> CP["/cup_pose"]
+  SC --> A["text_pick_agent"]
+  A --> D["dynamic runtime"]
+  CP --> D
 ```
 
-共同 launch 参数包括 `run_mode`、`execute`、`headless`、policy ID/version、session ID、
-evidence file 和 readiness timeout。只有 `run_mode:=execute execute:=true` 同时成立才会进入 live
-路径；backend 由具体 launcher 固定。
+The launch owner starts the dynamic consumer before accepting a pose and starts
+perception only after scene setup succeeds. A required long-lived component
+that exits early fails the owned workflow. DeepSeek and Ollama remain external
+services; the launch inherits their configuration but does not own their
+lifecycle.
 
-`src/runtime/provenance.py` 计算 bundle；`src/runtime/result_manifest.py` 以原子 rename 写稳定的
-`so101-run-result-v1`，字段含 backend、session、reset epoch、source commit、installed prefix、
-policy/bundle SHA、first failed phase、failure category 和 evidence refs。
+`runtime/provenance.py` records source and install identity.
+`runtime/result_manifest.py` uses atomic rename for `so101-run-result-v1`, which
+includes backend, session, reset epoch, source commit, installed prefix, policy
+and bundle hashes, first failed phase, failure category, and evidence references.
 
-## 9. 一次 execute 的控制与证据流
+## 10. Portable profiling and Linux system tracing
+
+Profiling is exposed on `so101_mujoco_text_pick_agent.launch.py` through three
+launch arguments:
+
+- `profiling:=off|summary|trace`
+- `profiling_output_root:=<absolute-path>`
+- `profiling_require_system_trace:=true|false`
+
+| Mode | Semantic JSONL | `summary.json` | `trace.json` | Linux system trace |
+|---|---:|---:|---:|---:|
+| `off` | No | No | No | No |
+| `summary` | Yes | Yes | No | No |
+| `trace` | Yes | Yes | Yes | Attempted when available |
+
+The off path resolves to `None`. It does not add child arguments, wrappers,
+clocks, output directories, ROS entities, or a `Trace` action. The package has a
+benchmark that compares this disabled path with direct calls.
+
+Enabled profiling uses `SemanticProfiler` to append process-local JSONL events.
+Each stream records a wall-clock anchor and monotonic timestamps, so events from
+launch, perception, the Text Agent, and the dynamic runtime can be placed on one
+timeline. Events also include the session, request, process role, PID, thread,
+sequence, source commit, and installed prefix where applicable.
+
+Representative span groups are:
+
+- `launch.*` for total workflow, stack startup, and scene setup;
+- `perception.*` for subscription matching, first callbacks, common source
+  stamp, pose estimation, TF, and total perception time;
+- `agent.*` for input validation, provider planning, command validation,
+  dispatch, and total request time;
+- `runtime.*` for setup, state actions, executor dispatch, and cleanup.
+
+The RGB-D discovery milestones start at the same subscription-creation boundary
+and end at distinct cumulative conditions:
+
+```text
+perception.wait_all_subscriptions_matched
+perception.wait_all_first_callbacks
+perception.wait_common_stamp
+```
+
+They are cumulative and must not be added together. Differences between adjacent
+milestones separate endpoint matching, first message delivery, and exact-stamp
+alignment.
+
+At launch shutdown, `finalize_profiling()` validates stream schemas and sessions,
+then writes:
+
+```text
+<run-session-root>/profiling/
+├── processes/*.events.jsonl
+├── manifest.json
+├── summary.json
+├── trace.json                 # trace mode only
+└── ros2-tracing/              # Linux CTF when available
+```
+
+An explicit `profiling_output_root` must remain under the registered run evidence
+root and cannot be a symlink. Existing output is not overwritten.
+
+On Linux, trace mode can construct `tracetools_launch.action.Trace` and write
+LTTng CTF. If `profiling_require_system_trace:=true`, an unavailable system
+backend fails the request. With `false`, portable profiling remains valid and
+the manifest records the unavailable backend. macOS always uses the portable
+layer and does not attempt to start LTTng.
+
+Profiling measures boundaries. It does not prove a grasp, authorize motion,
+replace the result manifest, or make incomplete physical evidence valid.
+
+## 11. Execution and evidence flow
 
 ```mermaid
 sequenceDiagram
-  participant U as Launcher/CLI
+  participant U as Launcher or CLI
   participant R as Runtime composition
   participant A as Application phase
   participant C as RobotControlPort
   participant S as PlanningScenePort
-  participant W as World/PhaseEvidencePort
+  participant W as World or PhaseEvidencePort
   participant B as Simulator backend
   participant O as Result manifest
+  participant P as Optional profiler
 
-  U->>R: explicit backend + policy + session + execute
-  R->>R: validate capabilities and bundle
-  R->>A: injected ports and immutable policy
-  A->>W: open evidence window / snapshot receipt
-  A->>C: read start state and plan
-  C->>C: validate fresh start state
-  A->>C: execute trajectory / gripper
-  C->>B: ROS action/service boundary
-  B-->>W: authoritative pose/contact/step evidence
-  A->>S: attach/detach planning shadow as needed
-  A->>W: close and validate evidence window
+  U->>R: backend + policy + session + authorization
+  R->>R: validate capabilities and provenance
+  R->>A: inject ports and immutable policy
+  A->>P: start semantic span if enabled
+  A->>W: open evidence window or snapshot receipt
+  A->>C: read fresh start state and plan
+  C->>C: validate start-state freshness
+  A->>C: execute trajectory or gripper command
+  C->>B: ROS action or service boundary
+  B-->>W: pose, contact, velocity, and step evidence
+  A->>S: update and read back the planning shadow
+  A->>W: close and validate the evidence window
+  A->>P: complete semantic span if enabled
   alt valid success
-    A->>O: SUCCEEDED plus evidence refs
-  else valid action/policy failure
+    A->>O: SUCCEEDED plus evidence references
+  else valid action or policy failure
     A->>O: FAILED plus first_failed_phase
-  else missing/stale/mismatched evidence
+  else missing, stale, or mismatched evidence
     A->>O: INVALID
   end
 ```
 
-“物理世界”和“规划 shadow”必须分别 read back。attach/detach API 成功只说明 MoveIt scene 更新，
-不能替代 simulator object pose/contact；同理 simulator 中杯子被抓住也不代表 MoveIt collision world
-已经同步。
+Simulator physics and the MoveIt Planning Scene have different ownership.
+Planning Scene attach or detach success does not prove that the simulated cup is
+held or released. Simulator contact and pose do not prove that MoveIt collision
+state is synchronized. Both sides require read-back.
 
-## 10. CLI 面
+## 12. CLI surface
 
-`setup.py` 安装以下 entry points：
+`setup.py` installs 21 console scripts in three groups.
 
-| Executable | 用途 |
-|---|---|
-| `pick_place` | dry-run/plan/checkpoint 与 MuJoCo qualified live workflow |
-| `run_qualification` | 生命周期隔离的重复性资格化 |
-| `scene_setup` | MuJoCo Planning Scene 初始化 |
-| `gazebo_execute` | Gazebo bounded execute 与真实失败报告 |
-| `camera_preset` | MuJoCo viewer camera |
-| `teleop_reset` | MuJoCo transactional reset owner |
-| `teleop_workflow` | Teleop 调用的 MuJoCo qualified workflow owner |
+Workflow and orchestration:
 
-CLI 只接受参数并打印稳定状态。业务判断留在 core/application/runtime；launch 只负责进程顺序、
-readiness delay 和失败时 shutdown。
+- `fixed_cup_pick_place`
+- `dynamic_cup_pick_place`
+- `run_qualification`
+- `gazebo_execute`
+- `so101_mujoco_perception_pick_place`
+- `teleop_workflow`
+- `so101_mujoco_rgbd_batch`
+- `text_pick_agent`
 
-## 11. 未来真实 SO-101 接入规则
+Perception, data, and ROS interfaces:
 
-真实机械臂接入应新增 `backends/real/` adapter 和独立 launcher，不修改 core 状态语义，也不让
-serial/SDK 类型进入 ports。建议按以下顺序演进：
+- `cup_pose_subscriber`
+- `cup_pose_tf_demo`
+- `rgbd_point_cloud`
+- `rgbd_cup_pose`
+- `rgbd_object_pose`
+- `generate_yolo_seg_dataset`
+- `train_yolo_seg`
+- `rgbd_sensor_capture`
 
-1. **Read-only adapter**：只实现 device identity、joint state、fault/e-stop/temperature/voltage
-   read-back；所有 motion capability 仍 false。
-2. **Plan-only**：接入 MoveIt planning 和 real joint limits，但 `execute`、gripper、reset 继续拒绝。
-3. **Bounded motion**：在独立安全审批后实现低速单段执行、start-state freshness、joint/velocity/
-   effort limits、watchdog、cancel/stop 和 operator enable。
-4. **Gripper 与场景**：区分真实 gripper feedback、感知得到的物体 pose 与 MoveIt shadow；不得用
-   attachment 假装真实抓取。
-5. **Physical outcome**：把相机/力/电流等真实传感器映射为新的 evidence adapter，重新标定阈值；
-   仿真 policy 不能未经验证直接获得 real qualification。
-6. **独立资格化**：real lifecycle、failure taxonomy、e-stop/recovery、证据保留和 operator
-   authorization 单独定义，不复用 simulator 五连胜结论。
+Operator, reset, and diagnostics:
 
-Real adapter 至少要保持以下安全不变量：
+- `scene_setup`
+- `motion_stack_ready`
+- `camera_preset`
+- `teleop_reset`
+- `task_reachability`
 
-- backend 必须显式选择，无环境探测 fallback；
-- execute 需要独立的人类授权与硬件 enable，不由 `run_mode` 单一参数隐式开启；
-- 每次 plan 执行前重新比较 fresh real joint state；
-- command timeout、通信丢失、limit/fault 触发 deterministic stop；
-- stop/recovery 是一级 port，不是 exception handler 里的 best effort；
-- hardware identity、calibration、firmware、policy、source、operator 与 evidence 同时进入 manifest。
+The CLI parses inputs and returns stable status. Business decisions remain in
+core, application, and runtime code. Launch composition owns process order,
+readiness, and shutdown.
 
-## 12. 架构验收清单
+## 13. Physical SO-101 extension rules
 
-变更控制链时至少验证：
+A real implementation must add `backends/real/` and a separate launcher. It
+must not modify core state meanings or allow SDK and serial types into ports.
+A safe progression is:
 
-- core 仍可在无 ROS 环境导入和测试；
-- ports 未泄露 simulator-specific message/type；
-- backend selection 和 launcher 仍显式；
-- policy variant 与 manifest hash 匹配，受保护的 MuJoCo v1 bytes 未变；
-- Gazebo failure 仍保留真实 `first_failed_phase`，没有被 skip 或伪装成 qualification；
-- MuJoCo phase evidence 保持 session/epoch/step/sequence 连续；
-- Planning Scene 与 simulator truth 分层 read-back；
-- real stub 仍零 I/O、无 launcher、全操作 fail closed；
-- result manifest 完整记录 source/install/policy/bundle/evidence provenance；
-- fresh install 后包、executables、launchers 和 assets 均从本次 prefix 解析。
+1. Implement read-only identity, joint, fault, emergency-stop, temperature, and
+   voltage observation while all motion capabilities remain false.
+2. Add MoveIt plan-only support with real joint limits. Execution, gripper, and
+   reset continue to reject requests.
+3. After a separate safety review, add low-speed bounded segments, fresh start
+   state checks, joint, velocity, and effort limits, watchdogs, cancellation,
+   deterministic stop, and operator enable.
+4. Keep physical gripper feedback, perceived object pose, and MoveIt planning
+   shadows separate.
+5. Map real camera, force, or current sensors into a new evidence adapter and
+   calibrate new thresholds. Simulation policy qualification does not transfer.
+6. Define real lifecycle, recovery, evidence retention, and operator
+   authorization independently from simulation batches.
+
+At minimum, a real adapter must preserve explicit backend selection, independent
+human motion authorization, fresh state checks before execution, deterministic
+stop on timeout or fault, first-class recovery ports, and complete hardware and
+operator provenance.
+
+## 14. Architecture acceptance checklist
+
+When the control or perception chain changes, verify that:
+
+- core still imports and tests without ROS, simulator, provider, or ML runtime;
+- ports expose no simulator, provider SDK, or Ultralytics types;
+- backend selection and launch ownership remain explicit;
+- policy variants match their manifests and protected MuJoCo bytes are unchanged;
+- Gazebo keeps the observed `first_failed_phase` and never reports MuJoCo
+  qualification;
+- MuJoCo phase evidence keeps session, epoch, step, and sequence continuity;
+- Planning Scene state and simulator truth are read back separately;
+- Text Agent validation, confirmation, request claiming, provenance, and
+  allowlisted dispatch remain deterministic;
+- object detection keeps every candidate and fails closed for zero or multiple
+  matches;
+- weights identity, source stamp, TF stamp, artifacts, and published pose refer
+  to the same perception request;
+- profiling off remains free of profiling objects and output, while enabled
+  profiles keep session and process completeness checks;
+- the real stub still performs zero I/O, has no launcher, and rejects every
+  operation;
+- result manifests record source, install, policy, bundle, and evidence
+  provenance;
+- a fresh install exposes the documented packages, executables, launch files,
+  configuration, and assets from the selected prefix.
