@@ -14,6 +14,7 @@ from so101_demo.perception_benchmark.calibration import (
     CalibrationResult,
     GroundedSamBenchmarkThresholds,
     PlatformCalibrationMetrics,
+    ThresholdLock,
     YoloThresholds,
     calibration_key,
     calibrate_joint_platform_val,
@@ -354,20 +355,32 @@ def test_grids_have_exact_decimal_counts_endpoints_and_fixed_values() -> None:
     )
 
     assert len(grounded) == 32400
+    assert {point.box_threshold for point in grounded} == {
+        Decimal(f"{value / 100:.2f}") for value in range(5, 91, 5)
+    }
+    assert {point.text_threshold for point in grounded} == {
+        Decimal(f"{value / 100:.2f}") for value in range(5, 51, 5)
+    }
+    assert {point.sam_quality for point in grounded} == {
+        Decimal(f"{value / 100:.2f}") for value in range(50, 96, 5)
+    }
+    assert {point.target_confidence_threshold for point in grounded} == {
+        Decimal(f"{value / 100:.2f}") for value in range(5, 91, 5)
+    }
     assert grounded[0] == GroundedSamBenchmarkThresholds(
-        Decimal("0.10"),
+        Decimal("0.05"),
         Decimal("0.05"),
         Decimal("0.50"),
-        Decimal("0.10"),
+        Decimal("0.05"),
         Decimal("0.85"),
         64,
         Decimal("0.50"),
     )
     assert grounded[-1] == GroundedSamBenchmarkThresholds(
-        Decimal("0.95"),
+        Decimal("0.90"),
         Decimal("0.50"),
         Decimal("0.95"),
-        Decimal("0.95"),
+        Decimal("0.90"),
         Decimal("0.85"),
         64,
         Decimal("0.50"),
@@ -392,6 +405,27 @@ def test_configs_are_immutable_and_normalize_decimal_json_without_float_drift() 
         yolo.conf = Decimal("0.55")  # type: ignore[misc]
     with pytest.raises(ValueError, match="two decimal"):
         _yolo_thresholds(conf=Decimal("0.501"))
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "value"),
+    [
+        ("yolo_seg", "imgsz", 640.0),
+        ("yolo_seg", "imgsz", True),
+        ("grounded_sam", "min_mask_pixels", 64.0),
+        ("grounded_sam", "min_mask_pixels", True),
+    ],
+)
+def test_fixed_integer_config_fields_reject_equal_floats_and_booleans(
+    model: str,
+    field: str,
+    value: object,
+) -> None:
+    with pytest.raises(ValueError, match="fixed integer"):
+        if model == "yolo_seg":
+            _yolo_thresholds(**{field: value})
+        else:
+            _grounded_thresholds(**{field: value})
 
 
 def test_yolo_filter_applies_class_gate_before_deterministic_nms_and_selector() -> None:
@@ -808,6 +842,20 @@ def _rehash(document: dict[str, object]) -> None:
     ).hexdigest()
 
 
+def _formalized_lock(lock: ThresholdLock) -> ThresholdLock:
+    platform_metrics = {
+        platform: replace(metrics, sample_count=200)
+        for platform, metrics in lock.platform_metrics.items()
+    }
+    return replace(
+        lock,
+        formal=True,
+        platform_sample_counts={"macos": 200, "linux": 200},
+        platform_metrics=platform_metrics,
+        lock_sha256="0" * 64,
+    ).with_recomputed_sha256()
+
+
 def test_threshold_lock_is_canonical_reproducible_and_binds_all_inputs(
     tmp_path: Path,
 ) -> None:
@@ -818,9 +866,98 @@ def test_threshold_lock_is_canonical_reproducible_and_binds_all_inputs(
     assert first.source_commit == SOURCE_COMMIT
     assert first.mac_prediction_inventory_sha256 == SHA_B
     assert first.linux_prediction_inventory_sha256 == SHA_C
+    assert first.formal is False
+    assert first.platform_sample_counts == {"macos": 3, "linux": 3}
     path = write_threshold_lock(tmp_path / "lock.json", first)
     assert path.read_bytes() == canonical_json_bytes(json.loads(path.read_bytes()))
     assert verify_threshold_lock(path) == first
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("formal", True, "THRESHOLD_LOCK_FORMALITY_INVALID"),
+        (
+            "platform_sample_counts",
+            {"macos": 4, "linux": 3},
+            "THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID",
+        ),
+        (
+            "platform_sample_counts",
+            {"macos": 3.0, "linux": 3},
+            "THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID",
+        ),
+        (
+            "platform_sample_counts",
+            {"macos": True, "linux": 3},
+            "THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID",
+        ),
+    ],
+)
+def test_threshold_lock_verifier_rejects_formality_or_actual_count_mismatch(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    error: str,
+) -> None:
+    path = write_threshold_lock(
+        tmp_path / "lock.json", _calibrate(tmp_path / "run", "yolo_seg")
+    )
+    document = json.loads(path.read_text())
+    document[field] = value
+    _rehash(document)
+    path.write_bytes(canonical_json_bytes(document))
+
+    with pytest.raises(CalibrationError, match=error):
+        verify_threshold_lock(path)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["box_threshold", "target_confidence_threshold"],
+)
+def test_threshold_lock_verifier_rejects_old_grounded_grid_endpoints(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    path = write_threshold_lock(
+        tmp_path / "lock.json",
+        _calibrate(tmp_path / "run", "grounded_sam"),
+    )
+    document = json.loads(path.read_text())
+    document["selected"][field] = "0.95"
+    _rehash(document)
+    path.write_bytes(canonical_json_bytes(document))
+
+    with pytest.raises(CalibrationError, match="THRESHOLD_LOCK_SELECTED_INVALID"):
+        verify_threshold_lock(path)
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "value"),
+    [
+        ("yolo_seg", "imgsz", 640.0),
+        ("yolo_seg", "imgsz", True),
+        ("grounded_sam", "min_mask_pixels", 64.0),
+        ("grounded_sam", "min_mask_pixels", True),
+    ],
+)
+def test_threshold_lock_verifier_rejects_non_integer_fixed_config_fields(
+    tmp_path: Path,
+    model: str,
+    field: str,
+    value: object,
+) -> None:
+    path = write_threshold_lock(
+        tmp_path / "lock.json", _calibrate(tmp_path / "run", model)
+    )
+    document = json.loads(path.read_text())
+    document["selected"][field] = value
+    _rehash(document)
+    path.write_bytes(canonical_json_bytes(document))
+
+    with pytest.raises(CalibrationError, match="THRESHOLD_LOCK_SELECTED_INVALID"):
+        verify_threshold_lock(path)
 
 
 def test_threshold_lock_verifier_rejects_changed_selected_and_bound_inventory(
@@ -885,7 +1022,7 @@ def test_threshold_lock_verifier_rejects_noncanonical_or_inconsistent_metrics(
         verify_threshold_lock(path)
 
 
-def test_test_seal_unlock_verifies_distinct_model_locks_before_access_event(
+def test_test_seal_rejects_fixture_locks_before_access_event(
     tmp_path: Path,
 ) -> None:
     yolo_path = write_threshold_lock(
@@ -896,12 +1033,51 @@ def test_test_seal_unlock_verifies_distinct_model_locks_before_access_event(
         _calibrate(tmp_path / "grounded", "grounded_sam"),
     )
     access_log = tmp_path / "test-access.jsonl"
-    seal = DatasetTestSeal("d" * 64, access_log)
+    caught: CalibrationError | None = None
+    try:
+        unlock_test_seal(
+            DatasetTestSeal("d" * 64, access_log),
+            yolo_path,
+            grounded_path,
+        )
+    except CalibrationError as error:
+        caught = error
 
-    unlocked = unlock_test_seal(seal, yolo_path, grounded_path)
+    assert not access_log.exists()
+    assert caught is not None
+    assert "TEST_SEAL_LOCK_NONFORMAL" in str(caught)
+
+    access_log.write_bytes(canonical_json_bytes({"event": "PREEXISTING"}))
+    existing = access_log.read_bytes()
+    with pytest.raises(CalibrationError, match="TEST_SEAL_LOCK_NONFORMAL"):
+        unlock_test_seal(
+            DatasetTestSeal("d" * 64, access_log),
+            yolo_path,
+            grounded_path,
+        )
+    assert access_log.read_bytes() == existing
+
+
+def test_test_seal_unlocks_two_consistent_formal_model_locks_before_access_event(
+    tmp_path: Path,
+) -> None:
+    yolo_path = write_threshold_lock(
+        tmp_path / "yolo-lock.json",
+        _formalized_lock(_calibrate(tmp_path / "yolo", "yolo_seg")),
+    )
+    grounded_path = write_threshold_lock(
+        tmp_path / "grounded-lock.json",
+        _formalized_lock(_calibrate(tmp_path / "grounded", "grounded_sam")),
+    )
+    access_log = tmp_path / "test-access.jsonl"
+
+    unlocked = unlock_test_seal(
+        DatasetTestSeal("d" * 64, access_log),
+        yolo_path,
+        grounded_path,
+    )
 
     assert unlocked.access_grant is not None
-    assert access_log.is_file()
     assert access_log.read_text().count("TEST_ACCESS_GRANTED") == 1
     assert unlocked.access_grant.threshold_lock_sha256s == (
         verify_threshold_lock(yolo_path).lock_sha256,
@@ -913,9 +1089,12 @@ def test_test_seal_rejects_two_yolo_locks_before_appending_access_event(
     tmp_path: Path,
 ) -> None:
     first = write_threshold_lock(
-        tmp_path / "first.json", _calibrate(tmp_path / "first", "yolo_seg")
+        tmp_path / "first.json",
+        _formalized_lock(_calibrate(tmp_path / "first", "yolo_seg")),
     )
-    second_lock = _calibrate(tmp_path / "second", "yolo_seg")
+    second_lock = _formalized_lock(
+        _calibrate(tmp_path / "second", "yolo_seg")
+    )
     second_lock = replace(
         second_lock,
         linux_prediction_inventory_sha256="e" * 64,
@@ -952,9 +1131,12 @@ def test_test_seal_requires_shared_val_inventory_and_source_before_access_event(
     error: str,
 ) -> None:
     yolo_path = write_threshold_lock(
-        tmp_path / "yolo.json", _calibrate(tmp_path / "yolo", "yolo_seg")
+        tmp_path / "yolo.json",
+        _formalized_lock(_calibrate(tmp_path / "yolo", "yolo_seg")),
     )
-    grounded_lock = _calibrate(tmp_path / "grounded", "grounded_sam")
+    grounded_lock = _formalized_lock(
+        _calibrate(tmp_path / "grounded", "grounded_sam")
+    )
     grounded_lock = replace(
         grounded_lock,
         **{field: value, "lock_sha256": "0" * 64},
