@@ -680,8 +680,9 @@ def _verify_inventory(
         except OSError as error:
             raise RunIntegrityError("INVENTORY_CANONICAL_INVALID") from error
     else:
-        if pinned_root.path != root:
+        if pinned_root.path != Path(os.path.realpath(root)):
             raise RunIntegrityError("INVENTORY_DATASET_ROOT_INVALID")
+        root = pinned_root.path
         document, payload = _read_pinned_canonical_json(
             pinned_root, "inventory.json", "INVENTORY_CANONICAL_INVALID"
         )
@@ -801,8 +802,10 @@ def _read_verified_image(
         except OSError as error:
             raise RunIntegrityError("INPUT_IMAGE_UNREADABLE") from error
     else:
-        if pinned_root.path != root:
+        if pinned_root.path != Path(os.path.realpath(root)):
             raise RunIntegrityError("INVENTORY_DATASET_ROOT_INVALID")
+        root = pinned_root.path
+        path = root.joinpath(*PurePosixPath(sample.image_relpath).parts)
         try:
             payload = pinned_root.read_file(sample.image_relpath)
         except _PinnedFileError as error:
@@ -1385,13 +1388,19 @@ def _candidate_from_document(document: object) -> RawCandidate:
     if not isinstance(document, Mapping) or set(document) != _CANDIDATE_KEYS:
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     mask = document.get("mask")
-    if not isinstance(mask, Mapping) or set(mask) != _MASK_KEYS:
+    bbox = document.get("bbox_xyxy")
+    if (
+        not isinstance(mask, Mapping)
+        or set(mask) != _MASK_KEYS
+        or not isinstance(bbox, list)
+        or len(bbox) != 4
+    ):
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     try:
         return RawCandidate(
             candidate_id=document["candidate_id"],
             label=document["label"],
-            bbox_xyxy=tuple(document["bbox_xyxy"]),
+            bbox_xyxy=tuple(bbox),
             mask=MaskRef(
                 relative_path=mask["relative_path"],
                 sha256=mask["sha256"],
@@ -1414,12 +1423,21 @@ def _record_from_document(document: Mapping[str, object]) -> PredictionRecord:
     runtime = document.get("runtime_provenance")
     phases = document.get("phase_timings")
     candidates = document.get("raw_candidates")
+    environment = runtime.get("environment") if isinstance(runtime, Mapping) else None
     if (
         not isinstance(runtime, Mapping)
         or set(runtime) != _RUNTIME_PROVENANCE_KEYS
         or not isinstance(phases, Mapping)
         or set(phases) != _PHASE_TIMING_KEYS
         or not isinstance(candidates, list)
+        or not isinstance(environment, Mapping)
+        or not all(
+            isinstance(key, str)
+            and key
+            and isinstance(value, str)
+            and value
+            for key, value in environment.items()
+        )
     ):
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     try:
@@ -1428,7 +1446,7 @@ def _record_from_document(document: Mapping[str, object]) -> PredictionRecord:
             runtime_name=runtime["runtime_name"],
             runtime_version=runtime["runtime_version"],
             weights_sha256=runtime["weights_sha256"],
-            environment=runtime["environment"],
+            environment=environment,
         )
         return PredictionRecord(
             run_id=document["run_id"],
@@ -1485,6 +1503,27 @@ def _verify_extended_record(document: Mapping[str, object]) -> None:
         raise RunIntegrityError("RECORD_RESOURCE_INVALID")
     for raw in resources:
         if not isinstance(raw, Mapping) or set(raw) != _RESOURCE_SAMPLE_KEYS:
+            raise RunIntegrityError("RECORD_RESOURCE_INVALID")
+        unavailable_reasons = raw.get("unavailable_reasons")
+        tool_versions = raw.get("tool_versions")
+        if (
+            not isinstance(unavailable_reasons, Mapping)
+            or not isinstance(tool_versions, Mapping)
+            or not all(
+                isinstance(key, str)
+                and key
+                and isinstance(value, str)
+                and value
+                for key, value in unavailable_reasons.items()
+            )
+            or not all(
+                isinstance(key, str)
+                and key
+                and isinstance(value, str)
+                and value
+                for key, value in tool_versions.items()
+            )
+        ):
             raise RunIntegrityError("RECORD_RESOURCE_INVALID")
         try:
             ResourceSample(**raw)
