@@ -2,44 +2,42 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
-from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 import hashlib
 import hmac
-from io import BytesIO
 import json
 import math
 import os
-from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shutil
 import stat
 import tarfile
 import tempfile
+from collections import Counter
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from io import BytesIO
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Literal
 
+import numpy as np
 import PIL
 from PIL import Image, ImageDraw
-import numpy as np
-
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     canonical_json_bytes,
     encode_mask_rle,
 )
 from so101_demo.perception_benchmark.contracts import (
-    MaskRef,
     SCHEMA_VERSION,
+    MaskRef,
     TruthInstance,
     TruthSample,
 )
-
 
 Split = Literal["val", "test"]
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -82,6 +80,17 @@ _SAMPLE_KEYS = {
     "truth_count",
 }
 _CAPABILITY_KEY = secrets.token_bytes(32)
+_CAPABILITY_GENERATION_NONCE = secrets.token_bytes(32)
+
+
+def _rotate_capability_generation() -> None:
+    global _CAPABILITY_GENERATION_NONCE, _CAPABILITY_KEY
+    _CAPABILITY_KEY = secrets.token_bytes(32)
+    _CAPABILITY_GENERATION_NONCE = secrets.token_bytes(32)
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_rotate_capability_generation)
 
 
 class DatasetVerificationError(ValueError):
@@ -301,7 +310,14 @@ def append_test_access_event(
 
 
 def _capability_digest(kind: str, *parts: object) -> str:
-    payload = canonical_json_bytes({"kind": kind, "parts": [str(part) for part in parts]})
+    payload = canonical_json_bytes(
+        {
+            "kind": kind,
+            "pid": os.getpid(),
+            "generation_nonce": _CAPABILITY_GENERATION_NONCE.hex(),
+            "parts": [str(part) for part in parts],
+        }
+    )
     return hmac.new(_CAPABILITY_KEY, payload, hashlib.sha256).hexdigest()
 
 
@@ -381,6 +397,188 @@ def _safe_member_path(name: str) -> bool:
     return not path.is_absolute() and all(
         part not in {"", ".", ".."} for part in path.parts
     )
+
+
+class _PinnedFileError(ValueError):
+    """A descriptor-pinned file or directory failed the safety contract."""
+
+
+_OPEN_BASE_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
+_OPEN_DIRECTORY_FLAGS = _OPEN_BASE_FLAGS | getattr(os, "O_DIRECTORY", 0)
+
+
+def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_nlink,
+    )
+
+
+class _PinnedDirectory:
+    """Pin one directory and access descendants only through no-follow fds."""
+
+    __slots__ = ("path", "_descriptor")
+
+    def __init__(self, path: Path, descriptor: int) -> None:
+        self.path = path
+        self._descriptor = descriptor
+
+    @classmethod
+    def open(cls, path: Path) -> "_PinnedDirectory":
+        absolute = Path(os.path.abspath(os.fspath(Path(path))))
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(os.path.sep, _OPEN_DIRECTORY_FLAGS)
+            for part in absolute.parts[1:]:
+                next_descriptor = os.open(
+                    part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor
+                )
+                metadata = os.fstat(next_descriptor)
+                if not stat.S_ISDIR(metadata.st_mode):
+                    os.close(next_descriptor)
+                    raise _PinnedFileError("pinned root component is not a directory")
+                os.close(descriptor)
+                descriptor = next_descriptor
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise _PinnedFileError("pinned root is not a directory")
+            return cls(absolute, descriptor)
+        except _PinnedFileError:
+            if descriptor is not None:
+                os.close(descriptor)
+            raise
+        except OSError as error:
+            if descriptor is not None:
+                os.close(descriptor)
+            raise _PinnedFileError("pinned directory cannot be opened") from error
+
+    def close(self) -> None:
+        descriptor, self._descriptor = self._descriptor, -1
+        if descriptor >= 0:
+            os.close(descriptor)
+
+    def __enter__(self) -> "_PinnedDirectory":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def _open_descendant_directory(self, relative_path: str) -> int:
+        if relative_path and not _safe_member_path(relative_path):
+            raise _PinnedFileError("directory path is unsafe")
+        descriptor = os.dup(self._descriptor)
+        try:
+            for part in PurePosixPath(relative_path).parts if relative_path else ():
+                next_descriptor = os.open(
+                    part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor
+                )
+                metadata = os.fstat(next_descriptor)
+                if not stat.S_ISDIR(metadata.st_mode):
+                    os.close(next_descriptor)
+                    raise _PinnedFileError("path component is not a directory")
+                os.close(descriptor)
+                descriptor = next_descriptor
+            return descriptor
+        except _PinnedFileError:
+            os.close(descriptor)
+            raise
+        except OSError as error:
+            os.close(descriptor)
+            raise _PinnedFileError("descendant directory cannot be opened") from error
+
+    def read_file(self, relative_path: str) -> bytes:
+        if not _safe_member_path(relative_path):
+            raise _PinnedFileError("file path is unsafe")
+        parts = PurePosixPath(relative_path).parts
+        parent = self._open_descendant_directory("/".join(parts[:-1]))
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(parts[-1], _OPEN_BASE_FLAGS, dir_fd=parent)
+            before = os.fstat(descriptor)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise _PinnedFileError("file is not a single-link regular file")
+            chunks: list[bytes] = []
+            while True:
+                chunk = os.read(descriptor, 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            payload = b"".join(chunks)
+            after = os.fstat(descriptor)
+            if (
+                _stable_file_identity(before) != _stable_file_identity(after)
+                or after.st_nlink != 1
+                or len(payload) != after.st_size
+            ):
+                raise _PinnedFileError("file changed during pinned read")
+            return payload
+        except _PinnedFileError:
+            raise
+        except OSError as error:
+            raise _PinnedFileError("file cannot be read safely") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            os.close(parent)
+
+    def tree(self, relative_path: str = "") -> tuple[set[str], set[str]]:
+        start = self._open_descendant_directory(relative_path)
+        files: set[str] = set()
+        directories: set[str] = set()
+
+        def visit(descriptor: int, prefix: str) -> None:
+            before = os.fstat(descriptor)
+            try:
+                names = sorted(os.listdir(descriptor))
+            except OSError as error:
+                raise _PinnedFileError("directory cannot be enumerated") from error
+            for name in names:
+                child: int | None = None
+                child_path = f"{prefix}/{name}" if prefix else name
+                try:
+                    child = os.open(name, _OPEN_BASE_FLAGS, dir_fd=descriptor)
+                    metadata = os.fstat(child)
+                    if stat.S_ISDIR(metadata.st_mode):
+                        directories.add(child_path)
+                        visit(child, child_path)
+                    elif stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1:
+                        files.add(child_path)
+                    else:
+                        raise _PinnedFileError("tree entry is unsafe")
+                except _PinnedFileError:
+                    raise
+                except OSError as error:
+                    raise _PinnedFileError("tree entry cannot be opened") from error
+                finally:
+                    if child is not None:
+                        os.close(child)
+            after = os.fstat(descriptor)
+            if (
+                before.st_dev,
+                before.st_ino,
+                before.st_size,
+                before.st_mtime_ns,
+            ) != (
+                after.st_dev,
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+            ):
+                raise _PinnedFileError("directory changed during enumeration")
+
+        try:
+            visit(start, relative_path)
+            return files, directories
+        finally:
+            os.close(start)
 
 
 def _classify_member(name: str) -> tuple[str, Split, str, str] | None:
@@ -1006,32 +1204,63 @@ def _read_label_polygons_bytes(
     return tuple(polygons)
 
 
-def _read_regular_bound_file(root: Path, relative_path: str) -> bytes:
-    if not _safe_member_path(relative_path):
-        raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
-    path = root / relative_path
+def _read_regular_bound_file(
+    root: Path,
+    relative_path: str,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+) -> bytes:
     try:
-        resolved_root = root.resolve(strict=True)
-        resolved = path.resolve(strict=True)
-        before = path.lstat()
-        if (
-            not resolved.is_relative_to(resolved_root)
-            or path.is_symlink()
-            or not stat.S_ISREG(before.st_mode)
-        ):
-            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
-        payload = path.read_bytes()
-        after = path.lstat()
-        if (
-            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-        ):
-            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
-        return payload
+        if pinned_root is not None:
+            if Path(os.path.abspath(root)) != pinned_root.path:
+                raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
+            return pinned_root.read_file(relative_path)
+        with _PinnedDirectory.open(root) as opened:
+            return opened.read_file(relative_path)
     except DatasetVerificationError:
         raise
-    except OSError as error:
+    except _PinnedFileError as error:
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+
+
+def _read_pinned_absolute_file(path: Path) -> bytes:
+    absolute = Path(os.path.abspath(os.fspath(Path(path))))
+    if not absolute.is_absolute():
+        raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
+    try:
+        with _PinnedDirectory.open(Path(os.path.sep)) as filesystem:
+            relative = absolute.relative_to(Path(os.path.sep)).as_posix()
+            if not relative:
+                raise _PinnedFileError("absolute file path is empty")
+            return filesystem.read_file(relative)
+    except (_PinnedFileError, ValueError) as error:
+        raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
+
+
+def _verify_exact_dataset_tree(
+    pinned_root: _PinnedDirectory,
+    inventory: DatasetInventory,
+) -> None:
+    expected_files = {"inventory.json", "inventory.sha256"}
+    for sample in inventory.samples:
+        expected_files.update(
+            (sample.image_relpath, sample.label_relpath, sample.truth_relpath)
+        )
+    expected_directories = {
+        parent.as_posix()
+        for path in expected_files
+        for parent in PurePosixPath(path).parents
+        if parent.as_posix() != "."
+    }
+    try:
+        actual_files, actual_directories = pinned_root.tree()
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+    if (
+        actual_files != expected_files
+        or actual_directories != expected_directories
+    ):
+        raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
 
 
 def _validate_persisted_access(test_access: object, event_sha: str | None) -> None:
@@ -1084,12 +1313,11 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
     if hashlib.sha256(canonical_json_bytes(without_sha)).hexdigest() != event_sha:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     expected_event = {**without_sha, "event_sha256": event_sha}
-    path = Path(access_log_path)
-    if path.is_symlink() or not path.is_file():
-        raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     try:
-        events = _parse_canonical_access_log(path.read_bytes())
-    except (OSError, DatasetVerificationError) as error:
+        events = _parse_canonical_access_log(
+            _read_pinned_absolute_file(Path(access_log_path))
+        )
+    except DatasetVerificationError as error:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
     if events != (expected_event,):
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
@@ -1099,11 +1327,54 @@ def _verify_inventory_and_tree(
     root: Path,
     split: Split,
     inventory: DatasetInventory,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+    require_capability: bool = True,
+    require_exact_core_tree: bool = False,
 ) -> dict[str, bytes]:
-    _require_inventory_capability(inventory)
-    if inventory.split != split or root.resolve() != inventory.dataset_root.resolve():
+    if require_capability:
+        _require_inventory_capability(inventory)
+    root_path = Path(os.path.abspath(root))
+    if inventory.split != split or root_path != Path(
+        os.path.abspath(inventory.dataset_root)
+    ):
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
-    inventory_payload = _read_regular_bound_file(root, "inventory.json")
+    owned_pinned = pinned_root is None
+    try:
+        active_pinned = pinned_root or _PinnedDirectory.open(root_path)
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
+    try:
+        inventory_payload = _read_regular_bound_file(
+            root_path, "inventory.json", pinned_root=active_pinned
+        )
+        sidecar = _read_regular_bound_file(
+            root_path, "inventory.sha256", pinned_root=active_pinned
+        )
+        truth_payloads = _verify_inventory_documents_and_samples(
+            root_path,
+            split,
+            inventory,
+            inventory_payload,
+            sidecar,
+            active_pinned,
+        )
+        if require_exact_core_tree:
+            _verify_exact_dataset_tree(active_pinned, inventory)
+        return truth_payloads
+    finally:
+        if owned_pinned:
+            active_pinned.close()
+
+
+def _verify_inventory_documents_and_samples(
+    root: Path,
+    split: Split,
+    inventory: DatasetInventory,
+    inventory_payload: bytes,
+    sidecar: bytes,
+    pinned_root: _PinnedDirectory,
+) -> dict[str, bytes]:
     try:
         document = json.loads(inventory_payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -1115,7 +1386,6 @@ def _verify_inventory_and_tree(
         or hashlib.sha256(inventory_payload).hexdigest() != inventory.inventory_sha256
     ):
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-    sidecar = _read_regular_bound_file(root, "inventory.sha256")
     if sidecar != f"{inventory.inventory_sha256}  inventory.json\n".encode("ascii"):
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
     if (
@@ -1186,9 +1456,15 @@ def _verify_inventory_and_tree(
             or len({value[2] for value in classifications if value is not None}) != 1
         ):
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-        image_payload = _read_regular_bound_file(root, sample.image_relpath)
-        label_payload = _read_regular_bound_file(root, sample.label_relpath)
-        truth_payload = _read_regular_bound_file(root, sample.truth_relpath)
+        image_payload = _read_regular_bound_file(
+            root, sample.image_relpath, pinned_root=pinned_root
+        )
+        label_payload = _read_regular_bound_file(
+            root, sample.label_relpath, pinned_root=pinned_root
+        )
+        truth_payload = _read_regular_bound_file(
+            root, sample.truth_relpath, pinned_root=pinned_root
+        )
         if (
             hashlib.sha256(image_payload).hexdigest() != sample.image_sha256
             or hashlib.sha256(label_payload).hexdigest()
@@ -1230,142 +1506,215 @@ def _verify_inventory_and_tree(
 def load_dataset_inventory(
     dataset_root: Path,
     *,
-    expected_split: Split | None = None,
+    expected_split: Split,
+    expected_archive_sha256: str,
+    expected_inventory_sha256: str,
+    expected_test_access_event_sha256: str | None = None,
+    expected_sealed_member_inventory_sha256: str | None = None,
+    expected_threshold_lock_sha256s: tuple[str, str] | None = None,
 ) -> DatasetInventory:
     """Load one formal persisted inventory and reissue only a local capability.
 
     The persisted document remains the source of every serializable field.  The
     process-local capability is minted only after strict reconstruction and is
-    never written back to disk.
+    never written back to disk.  Reload the core extracted tree before calling
+    :func:`load_truth_samples`; derived ``truth_masks`` are deliberately outside
+    this public loader's accepted tree.
     """
 
     _require_rasterizer_version()
-    root = Path(dataset_root)
-    if root.is_symlink() or not root.is_dir():
-        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID")
-    try:
-        root = root.resolve(strict=True)
-    except OSError as error:
-        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
-    inventory_payload = _read_regular_bound_file(root, "inventory.json")
-    try:
-        document = json.loads(inventory_payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
-    try:
-        canonical = canonical_json_bytes(document)
-    except (TypeError, ValueError) as error:
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
-    if (
-        not isinstance(document, Mapping)
-        or set(document) != _INVENTORY_KEYS
-        or canonical != inventory_payload
-    ):
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-    inventory_sha = hashlib.sha256(inventory_payload).hexdigest()
-    sidecar = _read_regular_bound_file(root, "inventory.sha256")
-    if sidecar != f"{inventory_sha}  inventory.json\n".encode("ascii"):
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-
-    split = document.get("split")
-    if split not in {"val", "test"}:
-        raise DatasetVerificationError("SPLIT_INVALID")
-    if expected_split is not None and (
-        expected_split not in {"val", "test"} or split != expected_split
-    ):
+    if expected_split not in {"val", "test"}:
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
-    if document.get("schema_version") != SCHEMA_VERSION:
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-    archive_sha = _require_sha256(
-        document.get("archive_sha256"), "INVENTORY_INTEGRITY_INVALID"
+    expected_archive_sha256 = _require_sha256(
+        expected_archive_sha256, "INVENTORY_EXTERNAL_ANCHOR_INVALID"
     )
-    sample_count = document.get("sample_count")
-    scenario_counts = document.get("scenario_counts")
-    raw_samples = document.get("samples")
-    if (
-        type(sample_count) is not int
-        or sample_count != _EXPECTED_SAMPLE_COUNT
-        or not isinstance(scenario_counts, Mapping)
-        or set(scenario_counts) != set(_EXPECTED_SCENARIO_COUNTS)
-        or any(
-            type(value) is not int or value != _EXPECTED_SCENARIO_COUNTS[key]
-            for key, value in scenario_counts.items()
+    expected_inventory_sha256 = _require_sha256(
+        expected_inventory_sha256, "INVENTORY_EXTERNAL_ANCHOR_INVALID"
+    )
+    if expected_split == "val":
+        if any(
+            value is not None
+            for value in (
+                expected_test_access_event_sha256,
+                expected_sealed_member_inventory_sha256,
+                expected_threshold_lock_sha256s,
+            )
+        ):
+            raise DatasetVerificationError("VAL_EXTERNAL_TEST_ANCHOR_CONFLICT")
+        normalized_event_sha = None
+        normalized_sealed_sha = None
+        normalized_locks = None
+    else:
+        normalized_event_sha = _require_sha256(
+            expected_test_access_event_sha256,
+            "INVENTORY_EXTERNAL_ANCHOR_INVALID",
         )
-        or document.get("rasterizer") != _RASTERIZER
-        or not isinstance(raw_samples, list)
-        or len(raw_samples) != _EXPECTED_SAMPLE_COUNT
-    ):
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-
-    samples: list[DatasetSampleRef] = []
-    for expected_index, raw_sample in enumerate(raw_samples):
-        if not isinstance(raw_sample, Mapping) or set(raw_sample) != _SAMPLE_KEYS:
-            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        normalized_sealed_sha = _require_sha256(
+            expected_sealed_member_inventory_sha256,
+            "INVENTORY_EXTERNAL_ANCHOR_INVALID",
+        )
         if (
-            type(raw_sample.get("formal_sample_index")) is not int
-            or raw_sample.get("formal_sample_index") != expected_index
-            or raw_sample.get("split") != split
-            or raw_sample.get("scenario") not in _EXPECTED_SCENARIO_COUNTS
-            or type(raw_sample.get("truth_count")) is not int
-            or raw_sample.get("truth_count") < 0
+            not isinstance(expected_threshold_lock_sha256s, tuple)
+            or len(expected_threshold_lock_sha256s) != 2
+        ):
+            raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_INVALID")
+        normalized_locks = tuple(
+            _require_sha256(value, "INVENTORY_EXTERNAL_ANCHOR_INVALID")
+            for value in expected_threshold_lock_sha256s
+        )
+        if normalized_locks[0] == normalized_locks[1]:
+            raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_INVALID")
+    try:
+        pinned_root = _PinnedDirectory.open(Path(dataset_root))
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
+    with pinned_root:
+        root = pinned_root.path
+        inventory_payload = _read_regular_bound_file(
+            root, "inventory.json", pinned_root=pinned_root
+        )
+        try:
+            document = json.loads(inventory_payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
+        try:
+            canonical = canonical_json_bytes(document)
+        except (TypeError, ValueError) as error:
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
+        if (
+            not isinstance(document, Mapping)
+            or set(document) != _INVENTORY_KEYS
+            or canonical != inventory_payload
         ):
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-        for name in ("image_relpath", "label_relpath", "truth_relpath"):
-            if not isinstance(raw_sample.get(name), str):
-                raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-        _require_sha256(
-            raw_sample.get("image_sha256"), "INVENTORY_INTEGRITY_INVALID"
+        inventory_sha = hashlib.sha256(inventory_payload).hexdigest()
+        if inventory_sha != expected_inventory_sha256:
+            raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_MISMATCH")
+        sidecar = _read_regular_bound_file(
+            root, "inventory.sha256", pinned_root=pinned_root
         )
-        _require_sha256(
-            raw_sample.get("label_sha256"), "INVENTORY_INTEGRITY_INVALID"
-        )
-        _require_sha256(
-            raw_sample.get("truth_sha256"), "INVENTORY_INTEGRITY_INVALID"
-        )
-        samples.append(
-            DatasetSampleRef(
-                formal_sample_index=expected_index,
-                split=split,
-                scenario=raw_sample["scenario"],
-                image_relpath=raw_sample["image_relpath"],
-                label_relpath=raw_sample["label_relpath"],
-                truth_relpath=raw_sample["truth_relpath"],
-                image_sha256=raw_sample["image_sha256"],
-                truth_count=raw_sample["truth_count"],
-            )
-        )
-    if (
-        [sample.image_sha256 for sample in samples]
-        != sorted(sample.image_sha256 for sample in samples)
-        or len({sample.image_sha256 for sample in samples}) != len(samples)
-    ):
-        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        if sidecar != f"{inventory_sha}  inventory.json\n".encode("ascii"):
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
 
-    test_access = document.get("test_access")
-    if split == "test":
-        if not isinstance(test_access, Mapping):
-            raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
-        event_sha = _require_sha256(
-            test_access.get("event_sha256"), "INVENTORY_ACCESS_CHAIN_INVALID"
-        )
-    else:
-        if test_access is not None:
+        split = document.get("split")
+        if split not in {"val", "test"}:
+            raise DatasetVerificationError("SPLIT_INVALID")
+        if split != expected_split:
             raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
-        event_sha = None
-    inventory = DatasetInventory(
-        schema_version=SCHEMA_VERSION,
-        split=split,
-        archive_sha256=archive_sha,
-        inventory_sha256=inventory_sha,
-        dataset_root=root,
-        sample_count=sample_count,
-        scenario_counts=dict(scenario_counts),
-        samples=tuple(samples),
-        test_access_event_sha256=event_sha,
-    )
-    _issue_inventory(inventory)
-    _verify_inventory_and_tree(root, split, inventory)
-    return inventory
+        if document.get("schema_version") != SCHEMA_VERSION:
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        archive_sha = _require_sha256(
+            document.get("archive_sha256"), "INVENTORY_INTEGRITY_INVALID"
+        )
+        if archive_sha != expected_archive_sha256:
+            raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_MISMATCH")
+        sample_count = document.get("sample_count")
+        scenario_counts = document.get("scenario_counts")
+        raw_samples = document.get("samples")
+        if (
+            type(sample_count) is not int
+            or sample_count != _EXPECTED_SAMPLE_COUNT
+            or not isinstance(scenario_counts, Mapping)
+            or set(scenario_counts) != set(_EXPECTED_SCENARIO_COUNTS)
+            or any(
+                type(value) is not int
+                or value != _EXPECTED_SCENARIO_COUNTS[key]
+                for key, value in scenario_counts.items()
+            )
+            or document.get("rasterizer") != _RASTERIZER
+            or not isinstance(raw_samples, list)
+            or len(raw_samples) != _EXPECTED_SAMPLE_COUNT
+        ):
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+
+        samples: list[DatasetSampleRef] = []
+        for expected_index, raw_sample in enumerate(raw_samples):
+            if not isinstance(raw_sample, Mapping) or set(raw_sample) != _SAMPLE_KEYS:
+                raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+            if (
+                type(raw_sample.get("formal_sample_index")) is not int
+                or raw_sample.get("formal_sample_index") != expected_index
+                or raw_sample.get("split") != split
+                or raw_sample.get("scenario") not in _EXPECTED_SCENARIO_COUNTS
+                or type(raw_sample.get("truth_count")) is not int
+                or raw_sample.get("truth_count") < 0
+            ):
+                raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+            for name in ("image_relpath", "label_relpath", "truth_relpath"):
+                if not isinstance(raw_sample.get(name), str):
+                    raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+            for name in ("image_sha256", "label_sha256", "truth_sha256"):
+                _require_sha256(
+                    raw_sample.get(name), "INVENTORY_INTEGRITY_INVALID"
+                )
+            samples.append(
+                DatasetSampleRef(
+                    formal_sample_index=expected_index,
+                    split=split,
+                    scenario=raw_sample["scenario"],
+                    image_relpath=raw_sample["image_relpath"],
+                    label_relpath=raw_sample["label_relpath"],
+                    truth_relpath=raw_sample["truth_relpath"],
+                    image_sha256=raw_sample["image_sha256"],
+                    truth_count=raw_sample["truth_count"],
+                )
+            )
+        if (
+            [sample.image_sha256 for sample in samples]
+            != sorted(sample.image_sha256 for sample in samples)
+            or len({sample.image_sha256 for sample in samples}) != len(samples)
+        ):
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+
+        test_access = document.get("test_access")
+        if split == "test":
+            if not isinstance(test_access, Mapping):
+                raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
+            event_sha = _require_sha256(
+                test_access.get("event_sha256"), "INVENTORY_ACCESS_CHAIN_INVALID"
+            )
+            sealed_sha = _require_sha256(
+                test_access.get("sealed_member_inventory_sha256"),
+                "INVENTORY_ACCESS_CHAIN_INVALID",
+            )
+            raw_locks = test_access.get("threshold_lock_sha256s")
+            if not isinstance(raw_locks, list) or len(raw_locks) != 2:
+                raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
+            persisted_locks = tuple(
+                _require_sha256(value, "INVENTORY_ACCESS_CHAIN_INVALID")
+                for value in raw_locks
+            )
+            if (
+                event_sha != normalized_event_sha
+                or sealed_sha != normalized_sealed_sha
+                or persisted_locks != normalized_locks
+            ):
+                raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_MISMATCH")
+        else:
+            if test_access is not None:
+                raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
+            event_sha = None
+        inventory = DatasetInventory(
+            schema_version=SCHEMA_VERSION,
+            split=split,
+            archive_sha256=archive_sha,
+            inventory_sha256=inventory_sha,
+            dataset_root=root,
+            sample_count=sample_count,
+            scenario_counts=dict(scenario_counts),
+            samples=tuple(samples),
+            test_access_event_sha256=event_sha,
+        )
+        _verify_inventory_and_tree(
+            root,
+            split,
+            inventory,
+            pinned_root=pinned_root,
+            require_capability=False,
+            require_exact_core_tree=True,
+        )
+        _issue_inventory(inventory)
+        return inventory
 
 
 def load_truth_samples(

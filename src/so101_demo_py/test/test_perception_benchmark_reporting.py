@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import replace
-from decimal import Decimal
 import hashlib
 import json
+import os
+from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
 import pytest
-
 import so101_demo.perception_benchmark.reporting as reporting_module
 from so101_demo.perception_benchmark.calibration import (
     LOCK_SCHEMA_VERSION,
@@ -21,7 +21,6 @@ from so101_demo.perception_benchmark.calibration import (
     ThresholdLock,
     YoloThresholds,
 )
-
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
     encode_mask_rle,
@@ -54,7 +53,6 @@ from so101_demo.perception_benchmark.reporting import (
     verify_evidence_index,
 )
 from so101_demo.perception_benchmark.timing import ResourceSample
-
 
 _SOURCE_COMMIT = "1" * 40
 _ARCHIVE_SHA = "2" * 64
@@ -2237,4 +2235,16 @@ def test_public_evidence_index_loader_rejects_tree_or_index_relaxation(
         (root / "records").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError):
+        load_evidence_index(root)
+
+
+def test_round1_public_evidence_index_loader_rejects_hardlinked_payload(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    _write_generic_evidence_index(root)
+    os.link(root / "records/000000.json", tmp_path / "external-record.json")
+
+    with pytest.raises(ValueError, match="hardlink|regular in-root file"):
         load_evidence_index(root)
