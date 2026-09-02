@@ -369,19 +369,7 @@ def aggregate_scenarios(
         raise ValueError("evidence_root must be an existing directory") from error
     if not root.is_dir():
         raise ValueError("evidence_root must be an existing directory")
-    if candidate_evidence_root is None:
-        candidate_root = root
-    else:
-        try:
-            candidate_root = Path(candidate_evidence_root).resolve(strict=True)
-        except (OSError, RuntimeError) as error:
-            raise ValueError(
-                "candidate_evidence_root must be an existing directory"
-            ) from error
-        if not candidate_root.is_dir():
-            raise ValueError(
-                "candidate_evidence_root must be an existing directory"
-            )
+    candidate_root = root if candidate_evidence_root is None else None
 
     pairs = _validated_pairs(records, truths)
     inputs_by_identity = _validated_image_inputs(matches, pairs)
@@ -419,7 +407,18 @@ def aggregate_scenarios(
         for instance in truth.instances:
             truth_union |= read_mask(instance.mask, root)
         predicted_union = np.zeros(shape, dtype=bool)
-        if record.record_status is RecordStatus.OK:
+        if record.record_status is RecordStatus.OK and record.raw_candidates:
+            if candidate_root is None:
+                try:
+                    candidate_root = Path(candidate_evidence_root).resolve(strict=True)
+                except (OSError, RuntimeError) as error:
+                    raise ValueError(
+                        "candidate_evidence_root must be an existing directory"
+                    ) from error
+                if not candidate_root.is_dir():
+                    raise ValueError(
+                        "candidate_evidence_root must be an existing directory"
+                    )
             for candidate in record.raw_candidates:
                 predicted_union |= read_mask(candidate.mask, candidate_root)
         predicted_pixels = int(np.count_nonzero(predicted_union))
