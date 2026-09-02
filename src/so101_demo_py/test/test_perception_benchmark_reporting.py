@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import os
+import tempfile
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -2248,3 +2249,36 @@ def test_round1_public_evidence_index_loader_rejects_hardlinked_payload(
 
     with pytest.raises(ValueError, match="hardlink|regular in-root file"):
         load_evidence_index(root)
+
+
+@pytest.mark.parametrize(
+    "alias_base",
+    (Path("/tmp"), Path(tempfile.gettempdir())),
+    ids=("tmp-alias", "default-var-alias"),
+)
+def test_round2_public_evidence_index_loader_accepts_macos_system_ancestor_aliases(
+    alias_base: Path,
+) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="so101-public-index-", dir=alias_base
+    ) as temporary:
+        root = Path(temporary) / "evidence"
+        root.mkdir()
+        _write_generic_evidence_index(root)
+
+        loaded = load_evidence_index(root)
+
+        assert len(loaded.entries) == 1
+
+
+def test_round2_public_evidence_index_loader_rejects_final_root_symlink(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    _write_generic_evidence_index(root)
+    linked_root = tmp_path / "linked-evidence"
+    linked_root.symlink_to(root, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="non-symlink directory"):
+        load_evidence_index(linked_root)

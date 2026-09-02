@@ -30,6 +30,7 @@ from PIL import Image, ImageDraw
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     canonical_json_bytes,
+    decode_mask_rle,
     encode_mask_rle,
 )
 from so101_demo.perception_benchmark.contracts import (
@@ -425,32 +426,42 @@ def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int,
 class _PinnedDirectory:
     """Pin one directory and access descendants only through no-follow fds."""
 
-    __slots__ = ("path", "_descriptor")
+    __slots__ = ("path", "_descriptor", "_identity")
 
-    def __init__(self, path: Path, descriptor: int) -> None:
+    def __init__(
+        self, path: Path, descriptor: int, identity: tuple[int, int]
+    ) -> None:
         self.path = path
         self._descriptor = descriptor
+        self._identity = identity
 
     @classmethod
     def open(cls, path: Path) -> "_PinnedDirectory":
         absolute = Path(os.path.abspath(os.fspath(Path(path))))
         descriptor: int | None = None
         try:
-            descriptor = os.open(os.path.sep, _OPEN_DIRECTORY_FLAGS)
-            for part in absolute.parts[1:]:
-                next_descriptor = os.open(
-                    part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor
-                )
-                metadata = os.fstat(next_descriptor)
-                if not stat.S_ISDIR(metadata.st_mode):
-                    os.close(next_descriptor)
-                    raise _PinnedFileError("pinned root component is not a directory")
-                os.close(descriptor)
-                descriptor = next_descriptor
-            metadata = os.fstat(descriptor)
-            if not stat.S_ISDIR(metadata.st_mode):
+            descriptor = os.open(absolute, _OPEN_DIRECTORY_FLAGS)
+            opened = os.fstat(descriptor)
+            if not stat.S_ISDIR(opened.st_mode):
                 raise _PinnedFileError("pinned root is not a directory")
-            return cls(absolute, descriptor)
+            lexical = os.lstat(absolute)
+            if stat.S_ISLNK(lexical.st_mode):
+                raise _PinnedFileError("pinned root cannot be a symlink")
+            canonical = Path(os.path.realpath(absolute))
+            bound = os.lstat(canonical)
+            if (
+                not stat.S_ISDIR(bound.st_mode)
+                or (opened.st_dev, opened.st_ino)
+                != (lexical.st_dev, lexical.st_ino)
+                or (opened.st_dev, opened.st_ino)
+                != (bound.st_dev, bound.st_ino)
+            ):
+                raise _PinnedFileError("pinned root changed while opening")
+            return cls(
+                canonical,
+                descriptor,
+                (opened.st_dev, opened.st_ino),
+            )
         except _PinnedFileError:
             if descriptor is not None:
                 os.close(descriptor)
@@ -476,6 +487,9 @@ class _PinnedDirectory:
             raise _PinnedFileError("directory path is unsafe")
         descriptor = os.dup(self._descriptor)
         try:
+            root_metadata = os.fstat(descriptor)
+            if (root_metadata.st_dev, root_metadata.st_ino) != self._identity:
+                raise _PinnedFileError("pinned root identity changed")
             for part in PurePosixPath(relative_path).parts if relative_path else ():
                 next_descriptor = os.open(
                     part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor
@@ -1212,7 +1226,7 @@ def _read_regular_bound_file(
 ) -> bytes:
     try:
         if pinned_root is not None:
-            if Path(os.path.abspath(root)) != pinned_root.path:
+            if Path(os.path.realpath(os.path.abspath(root))) != pinned_root.path:
                 raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
             return pinned_root.read_file(relative_path)
         with _PinnedDirectory.open(root) as opened:
@@ -1223,16 +1237,106 @@ def _read_regular_bound_file(
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
 
 
+def _derive_truth_artifacts(
+    inventory: DatasetInventory,
+    split: Split,
+    truth_payloads: Mapping[str, bytes],
+) -> tuple[
+    tuple[TruthSample, ...],
+    tuple[tuple[Path, dict[str, object], MaskRef], ...],
+]:
+    validated: list[
+        tuple[
+            DatasetSampleRef,
+            list[dict[str, object]],
+            tuple[tuple[tuple[Decimal, Decimal], ...], ...],
+        ]
+    ] = []
+    for sample_ref in inventory.samples:
+        truth = _read_truth_bytes(truth_payloads[sample_ref.truth_relpath], split)
+        polygons = _truth_polygons(truth)
+        raw_instances = truth["instances"]
+        if (
+            not isinstance(raw_instances, list)
+            or len(raw_instances) != sample_ref.truth_count
+        ):
+            raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
+        normalized_instances: list[dict[str, object]] = []
+        for raw_instance in raw_instances:
+            if not isinstance(raw_instance, dict):
+                raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
+            body_name = raw_instance.get("body_name")
+            if not isinstance(body_name, str) or not body_name.startswith(
+                "plastic_cup"
+            ):
+                raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
+            normalized_instances.append(raw_instance)
+        if truth["scenario"] != sample_ref.scenario:
+            raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
+        validated.append((sample_ref, normalized_instances, polygons))
+
+    samples: list[TruthSample] = []
+    mask_artifacts: list[tuple[Path, dict[str, object], MaskRef]] = []
+    for sample_ref, raw_instances, polygons in validated:
+        instances: list[TruthInstance] = []
+        stem = Path(sample_ref.truth_relpath).stem
+        for instance_index, (raw_instance, decimal_polygon) in enumerate(
+            zip(raw_instances, polygons, strict=True)
+        ):
+            mask = rasterize_polygon(
+                tuple((float(x), float(y)) for x, y in decimal_polygon),
+                _EXPECTED_IMAGE_SIZE[0],
+                _EXPECTED_IMAGE_SIZE[1],
+            )
+            relative_path = (
+                Path("truth_masks")
+                / split
+                / f"{stem}-{instance_index:02d}.json"
+            )
+            decoded_sha = hashlib.sha256(
+                mask.astype(np.uint8, copy=False).tobytes(order="C")
+            ).hexdigest()
+            body_name = raw_instance["body_name"]
+            assert isinstance(body_name, str)
+            mask_ref = MaskRef(
+                relative_path=relative_path.as_posix(),
+                sha256=decoded_sha,
+                pixel_count=int(mask.sum()),
+                image_width=_EXPECTED_IMAGE_SIZE[0],
+                image_height=_EXPECTED_IMAGE_SIZE[1],
+            )
+            mask_artifacts.append((relative_path, encode_mask_rle(mask), mask_ref))
+            instances.append(
+                TruthInstance(
+                    instance_id=f"{body_name}-{instance_index}",
+                    label="plastic_cup",
+                    mask=mask_ref,
+                )
+            )
+        samples.append(
+            TruthSample(
+                formal_sample_index=sample_ref.formal_sample_index,
+                split=split,
+                scenario=sample_ref.scenario,
+                image_relpath=sample_ref.image_relpath,
+                image_sha256=sample_ref.image_sha256,
+                image_width=_EXPECTED_IMAGE_SIZE[0],
+                image_height=_EXPECTED_IMAGE_SIZE[1],
+                instances=tuple(instances),
+            )
+        )
+    return tuple(samples), tuple(mask_artifacts)
+
+
 def _read_pinned_absolute_file(path: Path) -> bytes:
     absolute = Path(os.path.abspath(os.fspath(Path(path))))
     if not absolute.is_absolute():
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     try:
-        with _PinnedDirectory.open(Path(os.path.sep)) as filesystem:
-            relative = absolute.relative_to(Path(os.path.sep)).as_posix()
-            if not relative:
-                raise _PinnedFileError("absolute file path is empty")
-            return filesystem.read_file(relative)
+        if absolute.name == "":
+            raise _PinnedFileError("absolute file path is empty")
+        with _PinnedDirectory.open(absolute.parent) as parent:
+            return parent.read_file(absolute.name)
     except (_PinnedFileError, ValueError) as error:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
 
@@ -1240,15 +1344,18 @@ def _read_pinned_absolute_file(path: Path) -> bytes:
 def _verify_exact_dataset_tree(
     pinned_root: _PinnedDirectory,
     inventory: DatasetInventory,
+    truth_payloads: Mapping[str, bytes],
+    *,
+    require_truth_masks: bool = False,
 ) -> None:
-    expected_files = {"inventory.json", "inventory.sha256"}
+    core_files = {"inventory.json", "inventory.sha256"}
     for sample in inventory.samples:
-        expected_files.update(
+        core_files.update(
             (sample.image_relpath, sample.label_relpath, sample.truth_relpath)
         )
-    expected_directories = {
+    core_directories = {
         parent.as_posix()
-        for path in expected_files
+        for path in core_files
         for parent in PurePosixPath(path).parents
         if parent.as_posix() != "."
     }
@@ -1256,11 +1363,53 @@ def _verify_exact_dataset_tree(
         actual_files, actual_directories = pinned_root.tree()
     except _PinnedFileError as error:
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
-    if (
-        actual_files != expected_files
-        or actual_directories != expected_directories
-    ):
+    if actual_files == core_files and actual_directories == core_directories:
+        if require_truth_masks:
+            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
+        return
+
+    _, mask_artifacts = _derive_truth_artifacts(
+        inventory, inventory.split, truth_payloads
+    )
+    mask_files = {relative_path.as_posix() for relative_path, _, _ in mask_artifacts}
+    expected_files = core_files | mask_files
+    expected_directories = {
+        parent.as_posix()
+        for path in expected_files
+        for parent in PurePosixPath(path).parents
+        if parent.as_posix() != "."
+    }
+    if actual_files != expected_files or actual_directories != expected_directories:
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
+    for relative_path, expected_document, mask_ref in mask_artifacts:
+        try:
+            payload = pinned_root.read_file(relative_path.as_posix())
+            document = json.loads(payload)
+            if (
+                not isinstance(document, Mapping)
+                or canonical_json_bytes(document) != payload
+                or payload != canonical_json_bytes(expected_document)
+            ):
+                raise ValueError("mask document is not canonical expected evidence")
+            decoded = decode_mask_rle(document)
+        except (
+            _PinnedFileError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as error:
+            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+        decoded_sha = hashlib.sha256(
+            decoded.astype(np.uint8, copy=False).tobytes(order="C")
+        ).hexdigest()
+        if (
+            (decoded.shape[1], decoded.shape[0])
+            != (mask_ref.image_width, mask_ref.image_height)
+            or int(decoded.sum()) != mask_ref.pixel_count
+            or decoded_sha != mask_ref.sha256
+        ):
+            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
 
 
 def _validate_persisted_access(test_access: object, event_sha: str | None) -> None:
@@ -1360,7 +1509,7 @@ def _verify_inventory_and_tree(
             active_pinned,
         )
         if require_exact_core_tree:
-            _verify_exact_dataset_tree(active_pinned, inventory)
+            _verify_exact_dataset_tree(active_pinned, inventory, truth_payloads)
         return truth_payloads
     finally:
         if owned_pinned:
@@ -1517,9 +1666,8 @@ def load_dataset_inventory(
 
     The persisted document remains the source of every serializable field.  The
     process-local capability is minted only after strict reconstruction and is
-    never written back to disk.  Reload the core extracted tree before calling
-    :func:`load_truth_samples`; derived ``truth_masks`` are deliberately outside
-    this public loader's accepted tree.
+    never written back to disk.  The accepted tree is either the core extracted
+    dataset or that core plus one complete, rerasterized ``truth_masks`` tree.
     """
 
     _require_rasterizer_version()
@@ -1729,89 +1877,27 @@ def load_truth_samples(
     if split == "test" and inventory.test_access_event_sha256 is None:
         raise DatasetVerificationError("TEST_SEALED")
     truth_payloads = _verify_inventory_and_tree(root, split, inventory)
-    validated: list[
-        tuple[
-            DatasetSampleRef,
-            list[dict[str, object]],
-            tuple[tuple[tuple[Decimal, Decimal], ...], ...],
-        ]
-    ] = []
-    for sample_ref in inventory.samples:
-        truth = _read_truth_bytes(truth_payloads[sample_ref.truth_relpath], split)
-        polygons = _truth_polygons(truth)
-        raw_instances = truth["instances"]
-        if not isinstance(raw_instances, list) or len(raw_instances) != sample_ref.truth_count:
-            raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
-        normalized_instances: list[dict[str, object]] = []
-        for raw_instance in raw_instances:
-            if not isinstance(raw_instance, dict):
-                raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
-            body_name = raw_instance.get("body_name")
-            if not isinstance(body_name, str) or not body_name.startswith("plastic_cup"):
-                raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
-            normalized_instances.append(raw_instance)
-        if truth["scenario"] != sample_ref.scenario:
-            raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
-        validated.append((sample_ref, normalized_instances, polygons))
-
-    samples: list[TruthSample] = []
-    mask_documents: list[tuple[Path, dict[str, object]]] = []
-    for sample_ref, raw_instances, polygons in validated:
-        instances: list[TruthInstance] = []
-        stem = Path(sample_ref.truth_relpath).stem
-        for instance_index, (raw_instance, decimal_polygon) in enumerate(
-            zip(raw_instances, polygons, strict=True)
-        ):
-            assert isinstance(raw_instance, dict)
-            mask = rasterize_polygon(
-                tuple((float(x), float(y)) for x, y in decimal_polygon),
-                _EXPECTED_IMAGE_SIZE[0],
-                _EXPECTED_IMAGE_SIZE[1],
-            )
-            relative_path = (
-                Path("truth_masks")
-                / split
-                / f"{stem}-{instance_index:02d}.json"
-            )
-            mask_documents.append((relative_path, encode_mask_rle(mask)))
-            decoded_sha = hashlib.sha256(
-                mask.astype(np.uint8, copy=False).tobytes(order="C")
-            ).hexdigest()
-            body_name = raw_instance["body_name"]
-            assert isinstance(body_name, str)
-            instances.append(
-                TruthInstance(
-                    instance_id=f"{body_name}-{instance_index}",
-                    label="plastic_cup",
-                    mask=MaskRef(
-                        relative_path=relative_path.as_posix(),
-                        sha256=decoded_sha,
-                        pixel_count=int(mask.sum()),
-                        image_width=_EXPECTED_IMAGE_SIZE[0],
-                        image_height=_EXPECTED_IMAGE_SIZE[1],
-                    ),
-                )
-            )
-        samples.append(
-            TruthSample(
-                formal_sample_index=sample_ref.formal_sample_index,
-                split=split,
-                scenario=sample_ref.scenario,
-                image_relpath=sample_ref.image_relpath,
-                image_sha256=sample_ref.image_sha256,
-                image_width=_EXPECTED_IMAGE_SIZE[0],
-                image_height=_EXPECTED_IMAGE_SIZE[1],
-                instances=tuple(instances),
-            )
-        )
+    samples, mask_artifacts = _derive_truth_artifacts(
+        inventory, split, truth_payloads
+    )
     target_parent = root / "truth_masks"
     target = target_parent / split
     if target.exists() or target.is_symlink():
-        raise DatasetVerificationError("TRUTH_MASK_ALREADY_EXISTS")
+        try:
+            with _PinnedDirectory.open(root) as pinned_root:
+                _verify_exact_dataset_tree(
+                    pinned_root,
+                    inventory,
+                    truth_payloads,
+                    require_truth_masks=True,
+                )
+        except _PinnedFileError as error:
+            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+        return samples
     staging = Path(tempfile.mkdtemp(prefix=f".truth-masks-{split}-", dir=root))
     parent_created = False
     try:
-        for relative_path, document in mask_documents:
+        for relative_path, document, _ in mask_artifacts:
             staged_path = staging / relative_path.name
             atomic_write_json(staged_path, document)
             staged_path.chmod(0o444)
@@ -1833,4 +1919,4 @@ def load_truth_samples(
             shutil.rmtree(staging)
         if parent_created and target_parent.exists() and not any(target_parent.iterdir()):
             target_parent.rmdir()
-    return tuple(samples)
+    return samples
