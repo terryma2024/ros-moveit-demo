@@ -41,8 +41,11 @@ from so101_demo.perception_benchmark.codec import (
 )
 from so101_demo.perception_benchmark.contracts import (
     DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
     MaskRef,
     RawCandidate,
+    YOLO_MODEL_ID,
+    model_name_for_id,
 )
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
@@ -132,7 +135,8 @@ class RawDetectionResult:
         candidate_ids = [candidate.candidate_id for candidate in candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("raw candidate IDs must be unique")
-        if "yolo" in self.model_id.lower() and any(
+        model_name = None if not candidates else model_name_for_id(self.model_id)
+        if model_name == "yolo_seg" and any(
             candidate.ranking_score_source != "class_confidence"
             or candidate.class_confidence != candidate.ranking_score
             or candidate.grounding_box_score is not None
@@ -141,7 +145,7 @@ class RawDetectionResult:
             for candidate in candidates
         ):
             raise ValueError("YOLO raw candidate score provenance is invalid")
-        if "ground" in self.model_id.lower() and any(
+        if model_name == "grounded_sam" and any(
             candidate.ranking_score_source != "grounding_box_score"
             or candidate.class_confidence is not None
             or candidate.grounding_box_score != candidate.ranking_score
@@ -704,7 +708,7 @@ def build_calibrated_detector_port(
             weights_path=_yolo_weights_path(assets.asset_root),
             expected_sha256=cast(str, assets.weights_sha256),
             requested_device=assets.requested_device,
-            model_id="plastic-cup-yolo11s-seg-v2",
+            model_id=YOLO_MODEL_ID,
             thresholds=selected,
         )
     else:
@@ -726,6 +730,8 @@ def build_calibrated_detector_port(
             requested_device=assets.requested_device,
             allow_cpu_fallback=False,
         )
+        if getattr(detector, "model_id", None) != GROUNDED_SAM_MODEL_ID:
+            raise ValueError("calibrated Grounded-SAM model_id is not canonical")
     if not callable(getattr(detector, "detect", None)):
         raise TypeError("calibrated detector does not implement DetectorPort.detect")
     _validate_detector_runtime(detector, assets.requested_device, model)

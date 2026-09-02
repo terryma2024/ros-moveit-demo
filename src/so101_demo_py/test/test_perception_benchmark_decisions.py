@@ -24,6 +24,7 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthInstance,
     TruthSample,
+    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.decisions import (
     aggregate_decisions,
@@ -194,7 +195,7 @@ def _record(
         image_sha256=truth.image_sha256,
         image_width=truth.image_width,
         image_height=truth.image_height,
-        model_id="yolo-seg-task4-synthetic",
+        model_id=YOLO_MODEL_ID,
         runtime_provenance=RuntimeProvenance(
             runtime_device="mps",
             runtime_name="synthetic-yolo",

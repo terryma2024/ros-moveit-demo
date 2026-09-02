@@ -41,7 +41,11 @@ from so101_demo.perception_benchmark.calibration import (
     YoloThresholds,
 )
 from so101_demo.perception_benchmark.codec import decode_mask_rle, sha256_bytes
-from so101_demo.perception_benchmark.contracts import DecisionOutput
+from so101_demo.perception_benchmark.contracts import (
+    DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
+    YOLO_MODEL_ID,
+)
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
     ResourceSample,
@@ -146,10 +150,12 @@ class _RecordingDetectorPort:
         error: Exception | None = None,
         *,
         runtime_device: str = "mps",
+        model_id: str = YOLO_MODEL_ID,
     ) -> None:
         self._batch = batch
         self._error = error
         self.runtime_device = runtime_device
+        self.model_id = model_id
         self.detect_calls: list[tuple[DetectionFrame, DetectionQuery]] = []
 
     def detect(self, frame: DetectionFrame, query: DetectionQuery) -> DetectionBatch:
@@ -387,7 +393,7 @@ def _yolo_adapter(
     torch_api = torch_api or _TorchApi()
     return YoloRawAdapter(
         model=model or _YoloModel(),
-        model_id="plastic-cup-yolo11s-seg-v2",
+        model_id=YOLO_MODEL_ID,
         runtime_device="mps",
         weights_sha256="a" * 64,
         evidence_root=evidence_root,
@@ -416,7 +422,7 @@ def _grounded_adapter(
     sam_processor = _SamProcessor()
     sam_model = sam_model or _SamModel()
     adapter = GroundedSamRawAdapter(
-        model_id="grounding-dino-tiny+sam2.1-hiera-tiny",
+        model_id=GROUNDED_SAM_MODEL_ID,
         runtime_device="mps",
         manifest_sha256="b" * 64,
         evidence_root=evidence_root,
@@ -451,6 +457,84 @@ def test_both_adapters_emit_same_raw_contract(
     assert result.fallback_used is False
     assert result.runtime_device == "mps"
     assert result.dtype == "float32"
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    (
+        "not-yolo-imposter",
+        f"prefix-{YOLO_MODEL_ID}",
+        f"{YOLO_MODEL_ID}-suffix",
+    ),
+)
+def test_yolo_raw_adapter_rejects_noncanonical_identity_before_model_use(
+    tmp_path: Path, model_id: str
+) -> None:
+    model = _YoloModel()
+    torch_api = _TorchApi()
+
+    with pytest.raises(ValueError, match="model_id"):
+        YoloRawAdapter(
+            model=model,
+            model_id=model_id,
+            runtime_device="mps",
+            weights_sha256="a" * 64,
+            evidence_root=tmp_path,
+            synchronizer=DeviceSynchronizer(torch_api, "mps"),
+            resource_sampler=_resource_sampler(torch_api),
+        )
+
+    assert model.predict_calls == []
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    (
+        "grounded-sam-wrong",
+        f"prefix-{GROUNDED_SAM_MODEL_ID}",
+        f"{GROUNDED_SAM_MODEL_ID}-suffix",
+    ),
+)
+def test_grounded_raw_adapter_rejects_noncanonical_identity(
+    tmp_path: Path, model_id: str
+) -> None:
+    torch_api = _TorchApi()
+
+    with pytest.raises(ValueError, match="model_id"):
+        GroundedSamRawAdapter(
+            model_id=model_id,
+            runtime_device="mps",
+            manifest_sha256="b" * 64,
+            evidence_root=tmp_path,
+            torch_api=torch_api,
+            grounding_processor=_GroundingProcessor(),
+            grounding_model=_GroundingModel(),
+            sam_processor=_SamProcessor(),
+            sam_model=_SamModel(),
+            synchronizer=DeviceSynchronizer(torch_api, "mps"),
+            resource_sampler=_resource_sampler(torch_api),
+        )
+
+
+@pytest.mark.parametrize(
+    ("model_id", "model"),
+    [
+        (f"{YOLO_MODEL_ID}-suffix", "yolo"),
+        (f"{GROUNDED_SAM_MODEL_ID}-suffix", "grounded_sam"),
+    ],
+)
+def test_raw_detection_result_rejects_near_identity_with_candidates(
+    tmp_path: Path, model_id: str, model: str
+) -> None:
+    adapter = (
+        _yolo_adapter(tmp_path)
+        if model == "yolo"
+        else _grounded_adapter(tmp_path)[0]
+    )
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    with pytest.raises(ValueError, match="model_id"):
+        replace(result, model_id=model_id)
 
 
 @pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
@@ -1130,7 +1214,9 @@ def test_calibrated_builder_configures_existing_grounded_detector_from_lock(
     import so101_demo.perception_benchmark.adapters.base as base_module
 
     captured: list[dict[str, object]] = []
-    detector = _RecordingDetectorPort(_batch(_candidate("cup")))
+    detector = _RecordingDetectorPort(
+        _batch(_candidate("cup")), model_id=GROUNDED_SAM_MODEL_ID
+    )
     detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
     detector._sam_model = _ParameterModule()  # type: ignore[attr-defined]
 
@@ -1163,6 +1249,34 @@ def test_calibrated_builder_configures_existing_grounded_detector_from_lock(
     assert captured[0]["allow_cpu_fallback"] is False
 
 
+def test_calibrated_grounded_builder_rejects_noncanonical_detector_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import so101_demo.perception_benchmark.adapters.base as base_module
+
+    detector = _RecordingDetectorPort(
+        _batch(_candidate("cup")), model_id="grounded-sam-wrong"
+    )
+    detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
+    detector._sam_model = _ParameterModule()  # type: ignore[attr-defined]
+    monkeypatch.setattr(base_module, "verify_model_bundle", lambda root, sha: "bundle")
+    monkeypatch.setattr(base_module, "GroundedSamDetector", lambda **kwargs: detector)
+    assets = VerifiedBenchmarkAssets(
+        model="grounded_sam",
+        asset_root=tmp_path.resolve(),
+        weights_sha256=None,
+        manifest_sha256="b" * 64,
+        requested_device="mps",
+        allow_cpu_fallback=False,
+    )
+
+    with pytest.raises(ValueError, match="model_id"):
+        build_calibrated_detector_port(
+            "grounded_sam", _lock("grounded_sam"), assets
+        )
+
+
 def test_yolo_calibrated_detector_implements_real_detect_port(
     tmp_path: Path,
 ) -> None:
@@ -1192,6 +1306,31 @@ def test_yolo_calibrated_detector_implements_real_detect_port(
     assert model.predict_calls[-1]["iou"] == 0.70
     assert model.predict_calls[-1]["imgsz"] == 640
     assert model.predict_calls[-1]["half"] is False
+
+
+def test_yolo_calibrated_detector_rejects_identity_before_model_load(
+    tmp_path: Path,
+) -> None:
+    model_factory_calls: list[str] = []
+
+    def model_factory(path: str) -> _YoloModel:
+        model_factory_calls.append(path)
+        return _YoloModel()
+
+    with pytest.raises(ValueError, match="model_id"):
+        YoloCalibratedDetector(
+            weights_path=tmp_path / "missing.pt",
+            expected_sha256="a" * 64,
+            requested_device="mps",
+            model_id=f"{YOLO_MODEL_ID}-suffix",
+            thresholds=YoloThresholds(
+                Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
+            ),
+            torch_api=_TorchApi(),
+            model_factory=model_factory,
+        )
+
+    assert model_factory_calls == []
 
 
 def test_yolo_allows_first_prediction_to_move_verified_model_to_device(
@@ -1487,7 +1626,9 @@ def test_calibrated_grounded_builder_rejects_actual_device_or_dtype_mismatch(
     import so101_demo.perception_benchmark.adapters.base as base_module
 
     detector = _RecordingDetectorPort(
-        _batch(), runtime_device=runtime_device
+        _batch(),
+        runtime_device=runtime_device,
+        model_id=GROUNDED_SAM_MODEL_ID,
     )
     detector._grounding_model = _ParameterModule(  # type: ignore[attr-defined]
         devices=(runtime_device,), dtypes=(model_dtype,)
