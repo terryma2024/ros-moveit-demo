@@ -28,6 +28,7 @@ from so101_demo.perception_benchmark.comparison import (
     compare_platforms,
 )
 from so101_demo.perception_benchmark.contracts import (
+    MODEL_ID_BY_NAME,
     SCHEMA_VERSION,
     DecisionOutput,
     PredictionRecord,
@@ -498,6 +499,7 @@ class PerImageSummary:
     record_status: str
     truth_count: int
     candidate_count: int
+    candidates: tuple[RawCandidate, ...]
     matched_count_at_50: int
     true_positive: int
     false_positive: int
@@ -812,16 +814,11 @@ def _validate_record_group(
         raise ValueError("platform cell key must be linux or macos")
     if model not in {"yolo_seg", "grounded_sam"}:
         raise ValueError("model cell key must be yolo_seg or grounded_sam")
-    def model_matches(record: PredictionRecord) -> bool:
-        normalized = record.model_id.lower().replace("_", "-")
-        if model == "yolo_seg":
-            return "yolo" in normalized
-        return "grounded-sam" in normalized or (
-            "grounding-dino" in normalized and "sam" in normalized
+    expected_model_id = MODEL_ID_BY_NAME[model]
+    if any(record.model_id != expected_model_id for record in records):
+        raise ValueError(
+            "typed record model does not match the canonical model identity cell anchor"
         )
-
-    if any(not model_matches(record) for record in records):
-        raise ValueError("typed record model does not match the model cell anchor")
     first_record = records[0]
     if any(
         record.model_id != first_record.model_id
@@ -1559,6 +1556,15 @@ def _scenario_summaries(
                 record.formal_sample_index,
                 record.image_sha256,
             )] = single_metrics[scenario].no_cup_false_positive_count
+        leakage_outcomes = {
+            (record.formal_sample_index, record.image_sha256): (
+                _per_image_leakage_counts(
+                    record, truth, truth_root, candidate_root
+                )
+            )
+            for record, truth, _ in selected
+            if truth.scenario == "cup_near_bottle"
+        }
 
         def error_rate(rows: tuple[object, ...]) -> float | None:
             if not rows:
@@ -1608,9 +1614,10 @@ def _scenario_summaries(
             if not eligible:
                 return None
             counts = tuple(
-                _per_image_leakage_counts(
-                    row[0], row[1], truth_root, candidate_root  # type: ignore[index]
-                )
+                leakage_outcomes[(
+                    row[0].formal_sample_index,  # type: ignore[index]
+                    row[0].image_sha256,  # type: ignore[index]
+                )]
                 for row in eligible
             )
             predicted_pixels = sum(count[1] for count in counts)
@@ -1869,6 +1876,11 @@ def _per_image_rows(
                 record_status=record.record_status.value,
                 truth_count=len(truth.instances),
                 candidate_count=sample.candidate_count,
+                candidates=(
+                    record.raw_candidates
+                    if record.record_status is RecordStatus.OK
+                    else ()
+                ),
                 matched_count_at_50=matched,
                 true_positive=matched,
                 false_positive=sample.candidate_count - matched,
@@ -1906,6 +1918,83 @@ def _per_image_rows(
 
 
 @dataclass(frozen=True, slots=True)
+class _MetricCore:
+    ap50: float | None
+    ap50_95: float | None
+    ap_intervals: Mapping[str, ConfidenceInterval]
+    instance: InstanceMetricSummary
+    details: MetricDetails
+    safety: Mapping[str, ScenarioMetrics]
+    scenarios: Mapping[str, ScenarioMetricSummary]
+
+
+def _metric_cache_key(
+    value: AggregationInput,
+    records: tuple[PredictionRecord, ...],
+    inputs: tuple[ImageMetricInput, ...],
+) -> tuple[object, ...]:
+    """Identify only inputs that can affect Task8 capability/safety metrics.
+
+    Every mask in a matched non-error image has already been read and SHA-verified by
+    ``_image_inputs`` before this key is used. Roots, platforms, runtimes, phases, and
+    configs deliberately remain outside this cache because their summaries are built
+    independently; only byte-equivalent metric semantics may share the expensive
+    10,000-replicate bootstrap result.
+    """
+
+    rows: list[object] = []
+    for record, truth, image_input in zip(
+        records, value.truth_samples, inputs, strict=True
+    ):
+        rows.append(
+            (
+                record.record_status.value,
+                record.decision.value,
+                record.timed_out,
+                record.oom,
+                tuple(
+                    (
+                        candidate.candidate_id,
+                        candidate.ranking_score,
+                        candidate.mask.sha256,
+                        candidate.mask.pixel_count,
+                        candidate.mask.image_width,
+                        candidate.mask.image_height,
+                    )
+                    for candidate in (
+                        record.raw_candidates
+                        if record.record_status is RecordStatus.OK
+                        else ()
+                    )
+                ),
+                truth.scenario,
+                tuple(
+                    (
+                        instance.instance_id,
+                        instance.mask.sha256,
+                        instance.mask.pixel_count,
+                        instance.mask.image_width,
+                        instance.mask.image_height,
+                    )
+                    for instance in truth.instances
+                ),
+                image_input.truth_count,
+                image_input.candidate_count,
+                tuple(
+                    (match.truth_instance_id, match.candidate_id, match.iou)
+                    for match in image_input.matches
+                ),
+            )
+        )
+    return (
+        value.bootstrap_seed,
+        value.bootstrap_repetitions,
+        _IOU_THRESHOLDS,
+        tuple(rows),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class _CellResult:
     ap50: float | None
     ap50_95: float | None
@@ -1931,68 +2020,82 @@ def _aggregate_cell(
     config: str,
     records: tuple[PredictionRecord, ...],
     evidence: RunAggregationEvidence,
+    metric_cache: dict[tuple[object, ...], _MetricCore],
 ) -> _CellResult:
     candidate_root = _existing_root("candidate evidence_root", evidence.evidence_root)
     inputs = _image_inputs(records, value.truth_samples, truth_root, candidate_root)
-    keyed_inputs = MappingProxyType(
-        {
-            (record.formal_sample_index, record.image_sha256): sample
-            for record, sample in zip(records, inputs, strict=True)
-        }
-    )
-    ap = compute_ap(
-        records,
-        value.truth_samples,
-        truth_root,
-        _IOU_THRESHOLDS,
-        candidate_evidence_root=candidate_root,
-    )
-    ap_intervals = _ap_intervals(
-        records,
-        value.truth_samples,
-        truth_root,
-        candidate_root,
-        seed=value.bootstrap_seed,
-        repetitions=value.bootstrap_repetitions,
-    )
-    instance, details = _metric_details(
-        inputs,
-        records,
-        seed=value.bootstrap_seed,
-        repetitions=value.bootstrap_repetitions,
-    )
-    metric_records = tuple(
-        replace(record, raw_candidates=(), raw_count=0)
-        if record.record_status is RecordStatus.ERROR and record.raw_candidates
-        else record
-        for record in records
-    )
-    safety = aggregate_scenarios(
-        metric_records,
-        value.truth_samples,
-        keyed_inputs,
-        truth_root,
-        candidate_evidence_root=candidate_root,
-    )
-    scenarios = _scenario_summaries(
-        records,
-        value.truth_samples,
-        inputs,
-        safety,
-        truth_root,
-        candidate_root,
-        seed=value.bootstrap_seed,
-        repetitions=value.bootstrap_repetitions,
-    )
+    cache_key = _metric_cache_key(value, records, inputs)
+    core = metric_cache.get(cache_key)
+    if core is None:
+        keyed_inputs = MappingProxyType(
+            {
+                (record.formal_sample_index, record.image_sha256): sample
+                for record, sample in zip(records, inputs, strict=True)
+            }
+        )
+        ap = compute_ap(
+            records,
+            value.truth_samples,
+            truth_root,
+            _IOU_THRESHOLDS,
+            candidate_evidence_root=candidate_root,
+        )
+        ap_intervals = _ap_intervals(
+            records,
+            value.truth_samples,
+            truth_root,
+            candidate_root,
+            seed=value.bootstrap_seed,
+            repetitions=value.bootstrap_repetitions,
+        )
+        instance, details = _metric_details(
+            inputs,
+            records,
+            seed=value.bootstrap_seed,
+            repetitions=value.bootstrap_repetitions,
+        )
+        metric_records = tuple(
+            replace(record, raw_candidates=(), raw_count=0)
+            if record.record_status is RecordStatus.ERROR and record.raw_candidates
+            else record
+            for record in records
+        )
+        safety = aggregate_scenarios(
+            metric_records,
+            value.truth_samples,
+            keyed_inputs,
+            truth_root,
+            candidate_evidence_root=candidate_root,
+        )
+        scenarios = _scenario_summaries(
+            records,
+            value.truth_samples,
+            inputs,
+            safety,
+            truth_root,
+            candidate_root,
+            seed=value.bootstrap_seed,
+            repetitions=value.bootstrap_repetitions,
+        )
+        core = _MetricCore(
+            ap50=ap.mask_ap50,
+            ap50_95=ap.mask_map,
+            ap_intervals=ap_intervals,
+            instance=instance,
+            details=details,
+            safety=safety,
+            scenarios=scenarios,
+        )
+        metric_cache[cache_key] = core
     performance = _performance(evidence, timings_by_key[(platform, model, config)])
     return _CellResult(
-        ap50=ap.mask_ap50,
-        ap50_95=ap.mask_map,
-        ap_intervals=ap_intervals,
-        instance=instance,
-        details=details,
-        safety=safety,
-        scenarios=scenarios,
+        ap50=core.ap50,
+        ap50_95=core.ap50_95,
+        ap_intervals=core.ap_intervals,
+        instance=core.instance,
+        details=core.details,
+        safety=core.safety,
+        scenarios=core.scenarios,
         performance=performance,
         resource=_resource_summary(evidence),
         per_image=_per_image_rows(
@@ -2161,6 +2264,7 @@ class MetricsAggregator:
         performances: dict[str, PerformanceSummary] = {}
         resources: dict[str, ResourceSummary] = {}
         per_image: list[PerImageSummary] = []
+        metric_cache: dict[tuple[object, ...], _MetricCore] = {}
 
         for platform in sorted(input.raw_frozen_records):
             models: dict[str, RawMetricSummary] = {}
@@ -2176,6 +2280,7 @@ class MetricsAggregator:
                     config="TEST_RAW_FROZEN",
                     records=records,
                     evidence=input.run_evidence[key],
+                    metric_cache=metric_cache,
                 )
                 models[model] = RawMetricSummary(
                     sample_count=len(records),
@@ -2213,6 +2318,7 @@ class MetricsAggregator:
                         config=config,
                         records=records,
                         evidence=input.run_evidence[key],
+                        metric_cache=metric_cache,
                     )
                     decisions = aggregate_decisions(records, input.truth_samples)
                     configs[config] = FormalMetricSummary(
@@ -2257,6 +2363,7 @@ class MetricsAggregator:
                     config="ORACLE_DIAGNOSTIC",
                     records=records,
                     evidence=input.oracle_evidence[key],
+                    metric_cache=metric_cache,
                 )
                 models[model] = RawMetricSummary(
                     sample_count=len(records),
@@ -2483,6 +2590,9 @@ def _per_image_rows_for_csv(summary: BenchmarkSummary) -> list[dict[str, object]
             "record_status": row.record_status,
             "truth_count": row.truth_count,
             "candidate_count": row.candidate_count,
+            "candidates_json": canonical_json_bytes(
+                _jsonable(row.candidates)
+            ).decode("utf-8").strip(),
             "matched_count_at_50": row.matched_count_at_50,
             "true_positive": row.true_positive,
             "false_positive": row.false_positive,
@@ -2664,7 +2774,8 @@ class ReportWriter:
         per_image_fields = (
             "platform", "model", "config", "run_kind", "formal_sample_index",
             "image_sha256", "scenario", "record_status", "truth_count",
-            "candidate_count", "matched_count_at_50", "true_positive",
+            "candidate_count", "candidates_json", "matched_count_at_50",
+            "true_positive",
             "false_positive", "false_negative", "exact_count", "decision",
             "error_type", "timed_out", "oom", "total_ms", "phase_timings_json",
             "resource_observations_json",
