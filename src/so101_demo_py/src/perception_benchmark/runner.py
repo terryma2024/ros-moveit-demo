@@ -1471,8 +1471,7 @@ def _read_checkpoint(path: Path) -> RunCheckpoint:
         raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID") from error
 
 
-def _read_manifest(path: Path) -> RunManifest:
-    document, _ = _read_canonical_json(path, "MANIFEST_CANONICAL_INVALID")
+def _manifest_from_document(document: Mapping[str, object]) -> RunManifest:
     try:
         return RunManifest(**document)
     except (TypeError, ValueError) as error:
@@ -1777,11 +1776,14 @@ class DetectorBenchmarkRunner:
             self._active_root = root
             manifest_path = root / "manifest.json"
             if manifest_path.exists() or manifest_path.is_symlink():
-                existing_manifest = _read_manifest(manifest_path)
-                terminal_read_only = existing_manifest.status in {
-                    RunStatus.VALID,
-                    RunStatus.INVALID,
+                manifest_document, _ = _read_canonical_json(
+                    manifest_path, "MANIFEST_CANONICAL_INVALID"
+                )
+                terminal_read_only = manifest_document.get("status") in {
+                    RunStatus.VALID.value,
+                    RunStatus.INVALID.value,
                 }
+                existing_manifest = _manifest_from_document(manifest_document)
                 _verify_manifest_schema(existing_manifest)
                 manifest_schema_verified = True
                 if existing_manifest.status is RunStatus.VALID:
