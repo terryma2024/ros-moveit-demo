@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
@@ -20,12 +20,18 @@ from typing import Literal
 import numpy as np
 from PIL import Image
 
-from so101_demo.core.detection import DetectionFrame
+from so101_demo.core.detection import DetectionCandidate, DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     ProductionObservation,
     RawDetectionResult,
     RawDetectorAdapter,
+    ResourceSamplingError,
+)
+from so101_demo.perception_benchmark.calibration import (
+    CalibrationError,
+    ThresholdLock,
+    verify_threshold_lock,
 )
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
@@ -48,6 +54,7 @@ from so101_demo.perception_benchmark.dataset import (
     DatasetSampleRef,
     DatasetVerificationError,
     _require_inventory_capability,
+    _validate_persisted_access,
 )
 from so101_demo.perception_benchmark.timing import (
     PhaseTimingBreakdown,
@@ -58,6 +65,7 @@ from so101_demo.perception_benchmark.timing import (
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
 _RECORD_NAME = re.compile(r"^(\d{6})\.json$")
+_CANDIDATE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _SENSITIVE = re.compile(
     r"(?i)(api[_-]?(?:key|token)|access[_-]?token|token|password|secret)"
     r"\s*[:=]\s*\S+"
@@ -84,6 +92,14 @@ class _FatalRunError(RunIntegrityError):
     pass
 
 
+class _ResourceStreamValidationError(_FatalRunError):
+    pass
+
+
+class _ThermalValidationError(_FatalRunError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class RunSpec:
     run_id: str
@@ -98,6 +114,7 @@ class RunSpec:
     source_commit: str
     output_root: Path
     collection_mode: CollectionMode
+    threshold_lock_path: Path | None = None
     max_gpu_temperature_celsius: float | None = None
     production_observer: Callable[[DetectionFrame], ProductionObservation] | None = None
     runtime_provenance: RuntimeProvenance | None = None
@@ -111,6 +128,10 @@ class RunSpec:
         except ValueError as error:
             raise ValueError("run kind or collection mode is unsupported") from error
         object.__setattr__(self, "output_root", Path(self.output_root))
+        if self.threshold_lock_path is not None:
+            object.__setattr__(
+                self, "threshold_lock_path", Path(self.threshold_lock_path)
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +152,13 @@ class RunCheckpoint:
     run_kind: RunKind | None = None
     threshold_lock_sha256: str | None = None
     collection_mode: CollectionMode | None = None
+    runtime_name: str | None = None
+    runtime_version: str | None = None
+    runtime_environment: Mapping[str, str] | None = None
+    max_gpu_temperature_celsius: float | None = None
+    record_count: int = 0
+    error_count: int = 0
+    record_inventory_sha256: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "records_dir", Path(self.records_dir))
@@ -148,6 +176,10 @@ class RunCheckpoint:
                 )
             except ValueError as error:
                 raise ValueError("checkpoint collection_mode is unsupported") from error
+        if self.runtime_environment is not None:
+            object.__setattr__(
+                self, "runtime_environment", dict(self.runtime_environment)
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,16 +195,28 @@ class RunManifest:
     inventory_sha256: str
     config_sha256: str
     threshold_lock_sha256: str | None
+    collection_mode: CollectionMode
+    model_id: str
+    weights_sha256: str
+    runtime_name: str
+    runtime_version: str
+    runtime_environment: Mapping[str, str]
+    max_gpu_temperature_celsius: float | None
     record_count: int
     error_count: int
     record_inventory_sha256: str
+    record_chain_head_sha256: str | None
     started_at: str
-    ended_at: str
+    ended_at: str | None
     invalid_reason: str | None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "run_kind", RunKind(self.run_kind))
         object.__setattr__(self, "status", RunStatus(self.status))
+        object.__setattr__(
+            self, "collection_mode", CollectionMode(self.collection_mode)
+        )
+        object.__setattr__(self, "runtime_environment", dict(self.runtime_environment))
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +347,29 @@ def _atomic_write_new_json(path: Path, document: object) -> str:
     return _sha256(payload)
 
 
+def _atomic_write_new_bytes(path: Path, payload: bytes, code: str) -> None:
+    parent = _require_directory(path.parent, "MASK_DIRECTORY_INVALID")
+    if path.exists() or path.is_symlink():
+        raise RunIntegrityError("MASK_ALREADY_EXISTS")
+    descriptor = _open_directory(parent)
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        file_descriptor = os.open(path.name, flags, 0o600, dir_fd=descriptor)
+        with os.fdopen(file_descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.fsync(descriptor)
+    except FileExistsError as error:
+        raise RunIntegrityError("MASK_ALREADY_EXISTS") from error
+    except OSError as error:
+        raise RunIntegrityError(code) from error
+    finally:
+        os.close(descriptor)
+    _fsync_directory(parent)
+
+
 def _atomic_replace_json(path: Path, document: object, code: str) -> str:
     parent = _require_directory(path.parent, "OUTPUT_DIRECTORY_INVALID")
     if path.is_symlink():
@@ -349,6 +416,25 @@ def _safe_relative_path(root: Path, relative_path: str, code: str) -> Path:
     except (OSError, ValueError) as error:
         raise RunIntegrityError(code) from error
     return target
+
+
+def _create_new_directory(path: Path, root: Path, code: str) -> Path:
+    if path.exists() or path.is_symlink():
+        raise RunIntegrityError(code)
+    parent = _require_directory(path.parent, "MASK_DIRECTORY_INVALID")
+    if parent != root and not parent.is_relative_to(root):
+        raise RunIntegrityError("OUTPUT_DIRECTORY_ESCAPE")
+    descriptor = _open_directory(parent)
+    try:
+        os.mkdir(path.name, 0o700, dir_fd=descriptor)
+        os.fsync(descriptor)
+    except FileExistsError as error:
+        raise RunIntegrityError(code) from error
+    except OSError as error:
+        raise RunIntegrityError("MASK_DIRECTORY_CREATE_FAILED") from error
+    finally:
+        os.close(descriptor)
+    return _require_directory(path, "MASK_DIRECTORY_INVALID")
 
 
 def _read_canonical_json(path: Path, code: str) -> tuple[dict[str, object], bytes]:
@@ -449,6 +535,58 @@ def _verify_inventory(inventory: DatasetInventory) -> None:
             inventory.test_access_event_sha256,
             "TEST_ACCESS_EVENT_REQUIRED",
         )
+        try:
+            _validate_persisted_access(
+                document.get("test_access"),
+                inventory.test_access_event_sha256,
+            )
+        except DatasetVerificationError as error:
+            raise RunIntegrityError("INVENTORY_ACCESS_CHAIN_INVALID") from error
+
+
+def _verify_threshold_lock_chain(spec: RunSpec) -> ThresholdLock:
+    path = spec.threshold_lock_path
+    if path is None:
+        raise RunIntegrityError("LOCKED_RUN_REQUIRES_THRESHOLD_LOCK_PATH")
+    try:
+        lock = verify_threshold_lock(path)
+    except CalibrationError as error:
+        raise RunIntegrityError("THRESHOLD_LOCK_INVALID") from error
+    if lock.lock_sha256 != spec.threshold_lock_sha256:
+        raise RunIntegrityError("THRESHOLD_LOCK_SHA256_MISMATCH")
+    if lock.model != spec.model:
+        raise RunIntegrityError("THRESHOLD_LOCK_MODEL_MISMATCH")
+    if not lock.formal or dict(lock.platform_sample_counts) != {
+        "macos": 200,
+        "linux": 200,
+    }:
+        raise RunIntegrityError("THRESHOLD_LOCK_NOT_FORMAL")
+    if lock.source_commit != spec.source_commit:
+        raise RunIntegrityError("THRESHOLD_LOCK_SOURCE_MISMATCH")
+    root = Path(spec.inventory.dataset_root).resolve(strict=True)
+    document, _ = _read_canonical_json(
+        root / "inventory.json", "INVENTORY_CANONICAL_INVALID"
+    )
+    test_access = document.get("test_access")
+    if not isinstance(test_access, Mapping):
+        raise RunIntegrityError("LOCKED_RUN_REQUIRES_TEST_ACCESS")
+    registered = test_access.get("threshold_lock_sha256s")
+    if (
+        not isinstance(registered, list)
+        or spec.threshold_lock_sha256 not in registered
+    ):
+        raise RunIntegrityError("THRESHOLD_LOCK_NOT_REGISTERED")
+    granted_at = test_access.get("granted_at")
+    if not isinstance(granted_at, str):
+        raise RunIntegrityError("INVENTORY_ACCESS_CHAIN_INVALID")
+    try:
+        lock_mtime = path.stat().st_mtime
+        access_time = datetime.fromisoformat(granted_at).timestamp()
+    except (OSError, ValueError) as error:
+        raise RunIntegrityError("THRESHOLD_LOCK_TIME_INVALID") from error
+    if lock_mtime > access_time:
+        raise RunIntegrityError("THRESHOLD_LOCK_POSTDATES_TEST_ACCESS")
+    return lock
 
 
 def _read_verified_image(
@@ -524,27 +662,12 @@ def _classify_error(error: BaseException) -> _ClassifiedError:
 
 
 def _fatal_error_code(error: BaseException) -> str | None:
-    name = type(error).__name__.lower()
-    message = str(error).lower()
-    if any(token in name or token in message for token in ("thermal", "overheat")):
-        return "THERMAL_EVIDENCE_FAILED"
-    if any(
-        token in name or token in message
-        for token in ("resourcesampler", "resource sampler", "resource evidence")
-    ):
+    if isinstance(error, ResourceSamplingError):
         return "RESOURCE_EVIDENCE_FAILED"
-    if any(
-        token in message
-        for token in (
-            "cpu fallback",
-            "fallback execution",
-            "non_fp32",
-            "non-fp32",
-            "device_mismatch",
-            "runtime device",
-        )
-    ):
-        return "FORMAL_RUNTIME_INVALID"
+    if isinstance(error, _ResourceStreamValidationError):
+        return str(error)
+    if isinstance(error, _ThermalValidationError):
+        return str(error)
     return None
 
 
@@ -560,14 +683,14 @@ def _decision_from_candidates(
 
 def _validate_resource_stream(spec: RunSpec, result: RawDetectionResult) -> None:
     if not result.resource_samples:
-        raise _FatalRunError("RESOURCE_STREAM_EMPTY")
+        raise _ResourceStreamValidationError("RESOURCE_STREAM_EMPTY")
     limit = spec.max_gpu_temperature_celsius
     if limit is None:
         return
     for sample in result.resource_samples:
         temperature = sample.gpu_temperature_celsius
         if temperature is not None and temperature > limit:
-            raise _FatalRunError("THERMAL_LIMIT_EXCEEDED")
+            raise _ThermalValidationError("THERMAL_LIMIT_EXCEEDED")
 
 
 def _validate_raw_result(spec: RunSpec, result: RawDetectionResult) -> None:
@@ -603,28 +726,14 @@ def _weights_sha(adapter: object, model: str) -> str:
 def _runtime_provenance(
     spec: RunSpec, adapter: object
 ) -> RuntimeProvenance:
-    if spec.runtime_provenance is not None:
-        provenance = spec.runtime_provenance
-        if provenance.runtime_device != spec.device:
-            raise RunIntegrityError("RUNTIME_PROVENANCE_DEVICE_MISMATCH")
-        return provenance
-    runtime_name = f"{type(adapter).__module__}.{type(adapter).__qualname__}"
-    runtime_version = getattr(adapter, "runtime_version", None)
-    if not isinstance(runtime_version, str) or not runtime_version:
-        runtime_version = f"source-{spec.source_commit}"
-    return RuntimeProvenance(
-        runtime_device=spec.device,
-        runtime_name=runtime_name,
-        runtime_version=runtime_version,
-        weights_sha256=_weights_sha(adapter, spec.model),
-        environment={
-            "platform": spec.platform,
-            "model": spec.model,
-            "dtype": spec.dtype,
-            "source_commit": spec.source_commit,
-            "config_sha256": spec.config_sha256,
-        },
-    )
+    provenance = spec.runtime_provenance
+    if not isinstance(provenance, RuntimeProvenance):
+        raise RunIntegrityError("RUNTIME_PROVENANCE_REQUIRED")
+    if provenance.runtime_device != spec.device:
+        raise RunIntegrityError("RUNTIME_PROVENANCE_DEVICE_MISMATCH")
+    if provenance.weights_sha256 != _weights_sha(adapter, spec.model):
+        raise RunIntegrityError("RUNTIME_WEIGHTS_PROVENANCE_MISMATCH")
+    return provenance
 
 
 def _validate_spec(spec: RunSpec, adapter: object) -> None:
@@ -636,6 +745,8 @@ def _validate_spec(spec: RunSpec, adapter: object) -> None:
         raise RunIntegrityError("MODEL_INVALID")
     if spec.device not in {"mps", "cuda"}:
         raise RunIntegrityError("FORMAL_DEVICE_INVALID")
+    if (spec.platform, spec.device) not in {("macos", "mps"), ("linux", "cuda")}:
+        raise RunIntegrityError("PLATFORM_DEVICE_MISMATCH")
     if spec.dtype != "float32":
         raise RunIntegrityError("NON_FP32_RUNTIME")
     _require_sha(spec.config_sha256, "CONFIG_SHA256_INVALID")
@@ -655,7 +766,10 @@ def _validate_spec(spec: RunSpec, adapter: object) -> None:
     locked = spec.run_kind.name.startswith("TEST_") or (
         spec.run_kind is RunKind.ORACLE_DIAGNOSTIC
     )
-    if spec.run_kind is RunKind.VAL_RAW and spec.threshold_lock_sha256 is not None:
+    if spec.run_kind is RunKind.VAL_RAW and (
+        spec.threshold_lock_sha256 is not None
+        or spec.threshold_lock_path is not None
+    ):
         raise RunIntegrityError("VAL_RAW_FORBIDS_THRESHOLD_LOCK")
     if locked:
         _require_sha(
@@ -668,7 +782,11 @@ def _validate_spec(spec: RunSpec, adapter: object) -> None:
             spec.inventory.test_access_event_sha256,
             "LOCKED_RUN_REQUIRES_TEST_ACCESS",
         )
-    elif spec.threshold_lock_sha256 is not None:
+        _verify_threshold_lock_chain(spec)
+    elif (
+        spec.threshold_lock_sha256 is not None
+        or spec.threshold_lock_path is not None
+    ):
         raise RunIntegrityError("UNLOCKED_RUN_FORBIDS_THRESHOLD_LOCK")
     if spec.run_kind in {RunKind.VAL_RAW, RunKind.NON_FORMAL_DRY_RUN} and (
         spec.inventory.split != "val"
@@ -685,6 +803,7 @@ def _validate_spec(spec: RunSpec, adapter: object) -> None:
     token = "yolo" if spec.model == "yolo_seg" else "ground"
     if not isinstance(adapter_model_id, str) or token not in adapter_model_id.lower():
         raise RunIntegrityError("ADAPTER_MODEL_MISMATCH")
+    _runtime_provenance(spec, adapter)
 
 
 def _record_document(
@@ -705,12 +824,184 @@ def _record_document(
             "source_commit": spec.source_commit,
             "inventory_sha256": spec.inventory.inventory_sha256,
             "collection_mode": spec.collection_mode.value,
+            "max_gpu_temperature_celsius": spec.max_gpu_temperature_celsius,
             "timing_breakdown": _jsonable(timings),
             "resource_samples": _jsonable(resources),
             "irreversible_limits": _jsonable(irreversible_limits),
         }
     )
     return document
+
+
+def _adapter_evidence_root(adapter: object, run_root: Path) -> Path:
+    direct = getattr(adapter, "evidence_root", None)
+    if isinstance(direct, Path):
+        return _require_directory(direct, "ADAPTER_EVIDENCE_ROOT_INVALID")
+    store = getattr(adapter, "_artifact_store", None)
+    stored = getattr(store, "root", None)
+    if isinstance(stored, Path):
+        return _require_directory(stored, "ADAPTER_EVIDENCE_ROOT_INVALID")
+    return run_root
+
+
+def _read_verified_adapter_mask(mask: MaskRef, source_root: Path) -> tuple[np.ndarray, bytes]:
+    path = _safe_relative_path(
+        source_root, mask.relative_path, "RECORD_MASK_PATH_INVALID"
+    )
+    document, payload = _read_canonical_json(
+        path, "RECORD_MASK_CANONICAL_INVALID"
+    )
+    if canonical_json_bytes(document) != payload:
+        raise RunIntegrityError("RECORD_MASK_CANONICAL_INVALID")
+    try:
+        value = read_mask(mask, source_root)
+    except (OSError, ValueError) as error:
+        raise RunIntegrityError("RECORD_MASK_INTEGRITY_INVALID") from error
+    return value, payload
+
+
+def _publish_candidate_masks(
+    candidates: tuple[RawCandidate, ...],
+    formal_sample_index: int,
+    source_root: Path,
+    run_root: Path,
+) -> tuple[RawCandidate, ...]:
+    if not candidates:
+        return ()
+    for candidate in candidates:
+        if _CANDIDATE_ID.fullmatch(candidate.candidate_id) is None:
+            raise RunIntegrityError("CANDIDATE_ID_UNSAFE")
+    masks_root = run_root / "masks"
+    if masks_root.is_symlink():
+        raise RunIntegrityError("MASK_DIRECTORY_INVALID")
+    if not masks_root.exists():
+        _create_new_directory(masks_root, run_root, "MASK_DIRECTORY_ALREADY_EXISTS")
+    masks_root = _require_directory(masks_root, "MASK_DIRECTORY_INVALID")
+    index_dir = masks_root / f"{formal_sample_index:06d}"
+    _create_new_directory(index_dir, run_root, "MASK_INDEX_ALREADY_EXISTS")
+    published: list[RawCandidate] = []
+    for candidate in candidates:
+        _, payload = _read_verified_adapter_mask(candidate.mask, source_root)
+        relative = f"masks/{formal_sample_index:06d}/{candidate.candidate_id}.rle.json"
+        target = run_root / relative
+        _atomic_write_new_bytes(target, payload, "MASK_WRITE_FAILED")
+        published.append(
+            replace(
+                candidate,
+                mask=replace(candidate.mask, relative_path=relative),
+            )
+        )
+    return tuple(published)
+
+
+def _mask_sha256(value: np.ndarray) -> str:
+    return _sha256(value.astype(np.uint8, copy=False).tobytes(order="C"))
+
+
+def _matches_production_candidate(
+    spec: RunSpec,
+    raw: RawCandidate,
+    observed: DetectionCandidate,
+    raw_mask_sha256: str,
+) -> bool:
+    if (
+        observed.class_id != raw.label
+        or tuple(observed.bbox_xyxy) != raw.bbox_xyxy
+        or _mask_sha256(observed.mask) != raw_mask_sha256
+        or observed.confidence != raw.ranking_score
+    ):
+        return False
+    if spec.model == "yolo_seg":
+        return (
+            raw.class_confidence == observed.confidence
+            and observed.segmentation_quality is None
+        )
+    return (
+        raw.grounding_box_score == observed.confidence
+        and raw.sam_quality == observed.segmentation_quality
+    )
+
+
+def _reconcile_production_candidates(
+    spec: RunSpec,
+    frame: DetectionFrame,
+    result: RawDetectionResult,
+    observation: ProductionObservation,
+    provenance: RuntimeProvenance,
+    source_root: Path,
+) -> tuple[tuple[RawCandidate, ...], str | None]:
+    batch = observation.batch
+    if batch is None:
+        if observation.decision is not DecisionOutput.ERROR:
+            raise RunIntegrityError("PRODUCTION_BATCH_REQUIRED")
+        return result.raw_candidates, None
+    if (
+        batch.model_id != result.model_id
+        or batch.weights_sha256 != provenance.weights_sha256
+        or batch.runtime_device != spec.device
+        or (batch.image_width, batch.image_height)
+        != (frame.image_width, frame.image_height)
+    ):
+        raise RunIntegrityError("PRODUCTION_BATCH_IDENTITY_MISMATCH")
+    raw_mask_shas = {
+        raw.candidate_id: _mask_sha256(
+            _read_verified_adapter_mask(raw.mask, source_root)[0]
+        )
+        for raw in result.raw_candidates
+    }
+    available = {raw.candidate_id: raw for raw in result.raw_candidates}
+    mapped: list[RawCandidate] = []
+    ids: dict[str, str] = {}
+    for observed in batch.candidates:
+        if (
+            observed.source_stamp_ns != frame.source_stamp_ns
+            or observed.source_frame_id != frame.source_frame_id
+            or (observed.image_width, observed.image_height)
+            != (frame.image_width, frame.image_height)
+        ):
+            raise RunIntegrityError("PRODUCTION_CANDIDATE_FRAME_MISMATCH")
+        matches = [
+            raw
+            for raw in available.values()
+            if _matches_production_candidate(
+                spec,
+                raw,
+                observed,
+                raw_mask_shas[raw.candidate_id],
+            )
+        ]
+        if len(matches) != 1:
+            raise RunIntegrityError("PRODUCTION_CANDIDATE_MAPPING_INVALID")
+        raw = matches[0]
+        available.pop(raw.candidate_id)
+        mapped.append(raw)
+        ids[observed.instance_id] = raw.candidate_id
+    selected = None
+    if observation.selected_candidate_id is not None:
+        selected = ids.get(observation.selected_candidate_id)
+        if selected is None:
+            raise RunIntegrityError("PRODUCTION_SELECTED_MAPPING_INVALID")
+    return tuple(mapped), selected
+
+
+def _sanitize_observer_summary(error_type: str, summary: str) -> str:
+    synthetic = RuntimeError(summary)
+    sanitized = _sanitize_summary(synthetic)
+    prefix = "RuntimeError: "
+    if sanitized.startswith(prefix):
+        sanitized = sanitized[len(prefix) :]
+    return sanitized or error_type
+
+
+def _observer_error_flags(error_type: str, summary: str) -> tuple[bool, bool]:
+    combined = f"{error_type} {summary}".lower()
+    timed_out = "timeout" in combined or "timed out" in combined
+    oom = (
+        "out of memory" in combined
+        or "outofmemory" in combined
+        or re.search(r"\boom\b", combined) is not None
+    )
+    return timed_out, oom
 
 
 def _ok_record(
@@ -720,6 +1011,8 @@ def _ok_record(
     result: RawDetectionResult,
     provenance: RuntimeProvenance,
     observation: ProductionObservation | None,
+    run_root: Path,
+    source_root: Path,
 ) -> tuple[PredictionRecord, dict[str, object]]:
     candidates = result.raw_candidates
     selector_ms = result.phase_timings.selector_ms
@@ -730,7 +1023,14 @@ def _ok_record(
         record_status = RecordStatus.OK
     else:
         decision = observation.decision
-        selected = observation.selected_candidate_id
+        candidates, selected = _reconcile_production_candidates(
+            spec,
+            frame,
+            result,
+            observation,
+            provenance,
+            source_root,
+        )
         rejection = observation.rejection_reason
         selector_ms = observation.selector_ms
         error_type = observation.error_type
@@ -741,12 +1041,21 @@ def _ok_record(
             else RecordStatus.OK
         )
         if record_status is RecordStatus.ERROR:
-            candidates = ()
-            classified = _classify_error(
-                RuntimeError(error_summary or error_type or "production observation failed")
-            )
-            error_type = classified.error_type
-            error_summary = classified.summary
+            if error_type is None or error_summary is None:
+                raise RunIntegrityError("PRODUCTION_ERROR_FIELDS_INVALID")
+            error_summary = _sanitize_observer_summary(error_type, error_summary)
+    candidates = _publish_candidate_masks(
+        candidates,
+        sample.formal_sample_index,
+        source_root,
+        run_root,
+    )
+    timed_out = False
+    oom = False
+    if record_status is RecordStatus.ERROR:
+        timed_out, oom = _observer_error_flags(
+            str(error_type), str(error_summary)
+        )
     phase_timings = PhaseTimings(
         grounding_ms=result.phase_timings.dino_or_yolo_ms,
         sam_ms=result.phase_timings.sam_ms,
@@ -776,8 +1085,8 @@ def _ok_record(
         rejection_reason=rejection,
         error_type=error_type,
         error_summary=error_summary,
-        timed_out=False,
-        oom=False,
+        timed_out=timed_out,
+        oom=oom,
         fallback_used=False,
     )
     return record, _record_document(
@@ -796,8 +1105,28 @@ def _error_record(
     provenance: RuntimeProvenance,
     model_id: str,
     error: BaseException,
+    *,
+    result: RawDetectionResult | None = None,
+    run_root: Path | None = None,
+    source_root: Path | None = None,
 ) -> tuple[PredictionRecord, dict[str, object]]:
     classified = _classify_error(error)
+    candidates: tuple[RawCandidate, ...] = ()
+    timings: PhaseTimingBreakdown | None = None
+    resources: tuple[ResourceSample, ...] = ()
+    irreversible_limits: Mapping[str, int | float | str] = {}
+    if result is not None:
+        if run_root is None or source_root is None:
+            raise RunIntegrityError("ERROR_EVIDENCE_ROOT_MISSING")
+        candidates = _publish_candidate_masks(
+            result.raw_candidates,
+            sample.formal_sample_index,
+            source_root,
+            run_root,
+        )
+        timings = result.phase_timings
+        resources = result.resource_samples
+        irreversible_limits = result.irreversible_limits
     record = PredictionRecord(
         run_id=spec.run_id,
         schema_version=SCHEMA_VERSION,
@@ -814,9 +1143,13 @@ def _error_record(
         runtime_provenance=provenance,
         config_sha256=spec.config_sha256,
         threshold_lock_sha256=spec.threshold_lock_sha256,
-        raw_candidates=(),
-        phase_timings=PhaseTimings(),
-        raw_count=0,
+        raw_candidates=candidates,
+        phase_timings=PhaseTimings(
+            grounding_ms=None if timings is None else timings.dino_or_yolo_ms,
+            sam_ms=None if timings is None else timings.sam_ms,
+            selector_ms=None if timings is None else timings.selector_ms,
+        ),
+        raw_count=len(candidates),
         decision=DecisionOutput.ERROR,
         selected_candidate_id=None,
         rejection_reason=None,
@@ -829,9 +1162,9 @@ def _error_record(
     return record, _record_document(
         record,
         spec,
-        timings=None,
-        resources=(),
-        irreversible_limits={},
+        timings=timings,
+        resources=resources,
+        irreversible_limits=irreversible_limits,
     )
 
 
@@ -947,6 +1280,7 @@ def _checkpoint_identity(checkpoint: RunCheckpoint) -> dict[str, object]:
         "run_id": checkpoint.run_id,
         "platform": checkpoint.platform,
         "model": checkpoint.model,
+        "model_id": checkpoint.model_id,
         "device": checkpoint.device,
         "dtype": checkpoint.dtype,
         "run_kind": (
@@ -961,10 +1295,19 @@ def _checkpoint_identity(checkpoint: RunCheckpoint) -> dict[str, object]:
             if checkpoint.collection_mode is not None
             else None
         ),
+        "max_gpu_temperature_celsius": checkpoint.max_gpu_temperature_celsius,
     }
 
 
-def _verify_record_mask(mask: MaskRef, evidence_root: Path) -> None:
+def _verify_record_mask(
+    mask: MaskRef,
+    evidence_root: Path,
+    formal_sample_index: int,
+    candidate_id: str,
+) -> None:
+    expected = f"masks/{formal_sample_index:06d}/{candidate_id}.rle.json"
+    if mask.relative_path != expected:
+        raise RunIntegrityError("RECORD_MASK_LAYOUT_INVALID")
     path = _safe_relative_path(
         evidence_root, mask.relative_path, "RECORD_MASK_PATH_INVALID"
     )
@@ -975,6 +1318,34 @@ def _verify_record_mask(mask: MaskRef, evidence_root: Path) -> None:
         read_mask(mask, evidence_root)
     except (OSError, ValueError) as error:
         raise RunIntegrityError("RECORD_MASK_INTEGRITY_INVALID") from error
+
+
+def _verify_mask_tree(evidence_root: Path, expected_paths: set[str]) -> None:
+    masks_root = evidence_root / "masks"
+    if not expected_paths:
+        if masks_root.exists() or masks_root.is_symlink():
+            raise RunIntegrityError("MASK_TREE_UNEXPECTED")
+        return
+    root = _require_directory(masks_root, "MASK_DIRECTORY_INVALID")
+    actual: set[str] = set()
+    actual_directories: set[str] = set()
+    for index_entry in root.iterdir():
+        if (
+            index_entry.is_symlink()
+            or not index_entry.is_dir()
+            or re.fullmatch(r"\d{6}", index_entry.name) is None
+        ):
+            raise RunIntegrityError("MASK_TREE_UNEXPECTED")
+        actual_directories.add(index_entry.relative_to(evidence_root).as_posix())
+        for mask_path in index_entry.iterdir():
+            if mask_path.is_symlink() or not mask_path.is_file():
+                raise RunIntegrityError("MASK_TREE_UNEXPECTED")
+            actual.add(mask_path.relative_to(evidence_root).as_posix())
+    expected_directories = {
+        str(PurePosixPath(path).parent) for path in expected_paths
+    }
+    if actual != expected_paths or actual_directories != expected_directories:
+        raise RunIntegrityError("MASK_TREE_UNEXPECTED")
 
 
 def verify_resume(
@@ -1013,6 +1384,8 @@ def verify_resume(
     record_shas: list[str] = []
     previous_record_sha256: str | None = None
     evidence_root = records_dir.parent
+    error_count = 0
+    expected_mask_paths: set[str] = set()
     for index, path in paths:
         document, payload = _read_canonical_json(path, "RECORD_CANONICAL_INVALID")
         record_sha = _sha256(payload)
@@ -1024,6 +1397,10 @@ def verify_resume(
             raise RunIntegrityError("RECORD_HASH_CHAIN_INVALID")
         record = _record_from_document(document)
         _verify_extended_record(document)
+        if document.get("max_gpu_temperature_celsius") != (
+            checkpoint.max_gpu_temperature_celsius
+        ):
+            raise RunIntegrityError("RESUME_THERMAL_POLICY_CHANGED")
         sample = inventory.samples[index]
         if (
             record.formal_sample_index != index
@@ -1041,10 +1418,22 @@ def verify_resume(
             or record.runtime_provenance.weights_sha256
             != checkpoint.weights_sha256
             or record.runtime_provenance.runtime_device != checkpoint.device
+            or record.runtime_provenance.runtime_name != checkpoint.runtime_name
+            or record.runtime_provenance.runtime_version != checkpoint.runtime_version
+            or dict(record.runtime_provenance.environment)
+            != dict(checkpoint.runtime_environment or {})
         ):
             raise RunIntegrityError("RESUME_RUNTIME_IDENTITY_CHANGED")
         for candidate in record.raw_candidates:
-            _verify_record_mask(candidate.mask, evidence_root)
+            _verify_record_mask(
+                candidate.mask,
+                evidence_root,
+                index,
+                candidate.candidate_id,
+            )
+            expected_mask_paths.add(candidate.mask.relative_path)
+        if record.record_status is RecordStatus.ERROR:
+            error_count += 1
         previous_record_sha256 = record_sha
     expected_last = len(paths) - 1
     if checkpoint.last_formal_sample_index != expected_last:
@@ -1054,6 +1443,23 @@ def verify_resume(
             raise RunIntegrityError("CHECKPOINT_RECORD_SHA256_MISMATCH")
     elif checkpoint.last_record_sha256 != record_shas[-1]:
         raise RunIntegrityError("CHECKPOINT_RECORD_SHA256_MISMATCH")
+    digest = _sha256(
+        canonical_json_bytes(
+            {
+                "records": [
+                    {"formal_sample_index": index, "sha256": digest}
+                    for (index, _), digest in zip(paths, record_shas, strict=True)
+                ]
+            }
+        )
+    )
+    if (
+        checkpoint.record_count != len(paths)
+        or checkpoint.error_count != error_count
+        or checkpoint.record_inventory_sha256 != digest
+    ):
+        raise RunIntegrityError("CHECKPOINT_RECORD_INVENTORY_MISMATCH")
+    _verify_mask_tree(evidence_root, expected_mask_paths)
     return len(paths)
 
 
@@ -1073,7 +1479,13 @@ def _read_manifest(path: Path) -> RunManifest:
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID") from error
 
 
-def _verify_manifest_identity(manifest: RunManifest, spec: RunSpec) -> None:
+def _verify_manifest_identity(
+    manifest: RunManifest,
+    spec: RunSpec,
+    provenance: RuntimeProvenance,
+    adapter: object,
+) -> None:
+    _verify_manifest_schema(manifest)
     expected = {
         "run_id": spec.run_id,
         "run_kind": spec.run_kind,
@@ -1085,18 +1497,45 @@ def _verify_manifest_identity(manifest: RunManifest, spec: RunSpec) -> None:
         "inventory_sha256": spec.inventory.inventory_sha256,
         "config_sha256": spec.config_sha256,
         "threshold_lock_sha256": spec.threshold_lock_sha256,
+        "collection_mode": spec.collection_mode,
+        "model_id": str(getattr(adapter, "model_id", "")),
+        "weights_sha256": provenance.weights_sha256,
+        "runtime_name": provenance.runtime_name,
+        "runtime_version": provenance.runtime_version,
+        "runtime_environment": dict(provenance.environment),
+        "max_gpu_temperature_celsius": spec.max_gpu_temperature_celsius,
     }
     if any(getattr(manifest, name) != value for name, value in expected.items()):
         raise RunIntegrityError("RESUME_MANIFEST_IDENTITY_CHANGED")
-    if manifest.status is RunStatus.INVALID and not manifest.invalid_reason:
-        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
-    if manifest.status is not RunStatus.INVALID and manifest.invalid_reason is not None:
-        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
 
 
-def _record_inventory(records_dir: Path) -> tuple[int, int, str]:
+def _verify_manifest_schema(manifest: RunManifest) -> None:
+    if (
+        manifest.record_count < 0
+        or manifest.error_count < 0
+        or manifest.error_count > manifest.record_count
+        or _SHA256.fullmatch(manifest.record_inventory_sha256) is None
+        or (manifest.record_count == 0) != (manifest.record_chain_head_sha256 is None)
+        or (
+            manifest.record_chain_head_sha256 is not None
+            and _SHA256.fullmatch(manifest.record_chain_head_sha256) is None
+        )
+    ):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    if manifest.status is RunStatus.RUNNING:
+        if manifest.ended_at is not None or manifest.invalid_reason is not None:
+            raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    elif manifest.status is RunStatus.VALID:
+        if manifest.ended_at is None or manifest.invalid_reason is not None:
+            raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    elif manifest.status is RunStatus.INVALID:
+        if manifest.ended_at is None or not manifest.invalid_reason:
+            raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+
+
+def _record_inventory(records_dir: Path) -> tuple[int, int, str, str | None]:
     if records_dir.is_symlink() or not records_dir.is_dir():
-        return 0, 0, _sha256(canonical_json_bytes({"records": []}))
+        return 0, 0, _sha256(canonical_json_bytes({"records": []})), None
     rows: list[dict[str, object]] = []
     error_count = 0
     for path in sorted(records_dir.iterdir(), key=lambda item: item.name):
@@ -1118,7 +1557,24 @@ def _record_inventory(records_dir: Path) -> tuple[int, int, str]:
             }
         )
     digest = _sha256(canonical_json_bytes({"records": rows}))
-    return len(rows), error_count, digest
+    head = None if not rows else str(rows[-1]["sha256"])
+    return len(rows), error_count, digest, head
+
+
+def _verify_manifest_anchor(
+    manifest: RunManifest, checkpoint: RunCheckpoint
+) -> None:
+    if (
+        manifest.record_count != checkpoint.record_count
+        or manifest.error_count != checkpoint.error_count
+        or manifest.record_inventory_sha256
+        != checkpoint.record_inventory_sha256
+        or manifest.record_chain_head_sha256
+        != (
+            None if checkpoint.record_count == 0 else checkpoint.last_record_sha256
+        )
+    ):
+        raise RunIntegrityError("RESUME_MANIFEST_ANCHOR_MISMATCH")
 
 
 class DetectorBenchmarkRunner:
@@ -1182,13 +1638,40 @@ class DetectorBenchmarkRunner:
         started_at: str,
         invalid_reason: str | None,
         records_dir: Path | None,
+        provenance: RuntimeProvenance | None,
+        *,
+        preserve: RunManifest | None = None,
     ) -> RunManifest:
+        if preserve is not None:
+            return replace(
+                preserve,
+                status=status,
+                ended_at=None if status is RunStatus.RUNNING else _utc_now(),
+                invalid_reason=invalid_reason,
+            )
         if records_dir is None:
             record_count = 0
             error_count = 0
             inventory_sha = _sha256(canonical_json_bytes({"records": []}))
+            chain_head = None
         else:
-            record_count, error_count, inventory_sha = _record_inventory(records_dir)
+            record_count, error_count, inventory_sha, chain_head = _record_inventory(
+                records_dir
+            )
+        active_provenance = provenance
+        if active_provenance is None and isinstance(
+            spec.runtime_provenance, RuntimeProvenance
+        ):
+            active_provenance = spec.runtime_provenance
+        runtime_name = "unverified"
+        runtime_version = "unverified"
+        weights_sha256 = "0" * 64
+        environment: Mapping[str, str] = {"state": "unverified"}
+        if active_provenance is not None:
+            runtime_name = active_provenance.runtime_name
+            runtime_version = active_provenance.runtime_version
+            weights_sha256 = active_provenance.weights_sha256
+            environment = active_provenance.environment
         return RunManifest(
             run_id=spec.run_id,
             run_kind=spec.run_kind,
@@ -1201,11 +1684,19 @@ class DetectorBenchmarkRunner:
             inventory_sha256=spec.inventory.inventory_sha256,
             config_sha256=spec.config_sha256,
             threshold_lock_sha256=spec.threshold_lock_sha256,
+            collection_mode=spec.collection_mode,
+            model_id=str(getattr(self.adapter, "model_id", "unverified")),
+            weights_sha256=weights_sha256,
+            runtime_name=runtime_name,
+            runtime_version=runtime_version,
+            runtime_environment=environment,
+            max_gpu_temperature_celsius=spec.max_gpu_temperature_celsius,
             record_count=record_count,
             error_count=error_count,
             record_inventory_sha256=inventory_sha,
+            record_chain_head_sha256=chain_head,
             started_at=started_at,
-            ended_at=_utc_now(),
+            ended_at=None if status is RunStatus.RUNNING else _utc_now(),
             invalid_reason=invalid_reason,
         )
 
@@ -1213,23 +1704,42 @@ class DetectorBenchmarkRunner:
         started_at = _utc_now()
         root: Path | None = None
         records_dir: Path | None = None
+        provenance: RuntimeProvenance | None = None
+        existing_manifest: RunManifest | None = None
+        manifest_schema_verified = False
+        resume_verified = False
         try:
             root = self._root_for(spec)
             self._active_root = root
-            _verify_inventory(spec.inventory)
-            _validate_spec(spec, self.adapter)
             manifest_path = root / "manifest.json"
             if manifest_path.exists() or manifest_path.is_symlink():
                 existing_manifest = _read_manifest(manifest_path)
-                _verify_manifest_identity(existing_manifest, spec)
-                if existing_manifest.status is RunStatus.INVALID:
+                _verify_manifest_schema(existing_manifest)
+                manifest_schema_verified = True
+                if existing_manifest.status in {RunStatus.VALID, RunStatus.INVALID}:
                     return existing_manifest
+                if existing_manifest.status is not RunStatus.RUNNING:
+                    raise RunIntegrityError("MANIFEST_NOT_RESUMABLE")
+                started_at = existing_manifest.started_at
+            _verify_inventory(spec.inventory)
+            _validate_spec(spec, self.adapter)
             _verify_current_images(spec.inventory)
             provenance = _runtime_provenance(spec, self.adapter)
+            if existing_manifest is not None:
+                _verify_manifest_identity(
+                    existing_manifest, spec, provenance, self.adapter
+                )
+            if existing_manifest is None and any(
+                (root / name).exists() or (root / name).is_symlink()
+                for name in ("records", "masks", "checkpoint.json")
+            ):
+                raise RunIntegrityError("UNOWNED_RUN_ARTIFACTS")
             records_dir = self._records_dir(root)
             checkpoint_path = root / "checkpoint.json"
             record_entries = tuple(records_dir.iterdir())
             if checkpoint_path.exists() or checkpoint_path.is_symlink():
+                if existing_manifest is None:
+                    raise RunIntegrityError("RESUME_MANIFEST_MISSING")
                 checkpoint = _read_checkpoint(checkpoint_path)
                 if checkpoint.records_dir.resolve(strict=True) != records_dir:
                     raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
@@ -1250,9 +1760,15 @@ class DetectorBenchmarkRunner:
                     "run_kind": spec.run_kind,
                     "threshold_lock_sha256": spec.threshold_lock_sha256,
                     "collection_mode": spec.collection_mode,
+                    "runtime_name": provenance.runtime_name,
+                    "runtime_version": provenance.runtime_version,
+                    "runtime_environment": dict(provenance.environment),
+                    "max_gpu_temperature_celsius": spec.max_gpu_temperature_celsius,
                 }
                 if any(getattr(checkpoint, name) != value for name, value in expected.items()):
                     raise RunIntegrityError("RESUME_SPEC_CHANGED")
+                _verify_manifest_anchor(existing_manifest, checkpoint)
+                resume_verified = True
                 previous_record_sha256: str | None = (
                     checkpoint.last_record_sha256 if start_index else None
                 )
@@ -1261,10 +1777,29 @@ class DetectorBenchmarkRunner:
             else:
                 start_index = 0
                 previous_record_sha256 = None
-            running = self._manifest(
-                spec, RunStatus.RUNNING, started_at, None, records_dir
-            )
-            self._write_manifest(root, running)
+                if existing_manifest is not None:
+                    empty_sha = _sha256(canonical_json_bytes({"records": []}))
+                    if (
+                        existing_manifest.record_count != 0
+                        or existing_manifest.error_count != 0
+                        or existing_manifest.record_inventory_sha256 != empty_sha
+                        or existing_manifest.record_chain_head_sha256 is not None
+                    ):
+                        raise RunIntegrityError("RESUME_MANIFEST_ANCHOR_MISMATCH")
+                    resume_verified = True
+            if existing_manifest is None:
+                running = self._manifest(
+                    spec,
+                    RunStatus.RUNNING,
+                    started_at,
+                    None,
+                    records_dir,
+                    provenance,
+                )
+                self._write_manifest(root, running)
+            else:
+                running = existing_manifest
+            source_root = _adapter_evidence_root(self.adapter, root)
             for sample in spec.inventory.samples[start_index:]:
                 frame = _load_frame(spec.inventory, sample)
                 try:
@@ -1285,8 +1820,6 @@ class DetectorBenchmarkRunner:
                     _validate_raw_result(spec, result)
                     if result.model_id != getattr(self.adapter, "model_id", None):
                         raise _FatalRunError("MODEL_IDENTITY_MISMATCH")
-                    for candidate in result.raw_candidates:
-                        _verify_record_mask(candidate.mask, root)
                     observation = None
                     if spec.production_observer is not None:
                         observed_frame = _load_frame(spec.inventory, sample)
@@ -1303,6 +1836,9 @@ class DetectorBenchmarkRunner:
                                 provenance,
                                 str(getattr(self.adapter, "model_id")),
                                 error,
+                                result=result,
+                                run_root=root,
+                                source_root=source_root,
                             )
                         else:
                             if not isinstance(observation, ProductionObservation):
@@ -1314,6 +1850,8 @@ class DetectorBenchmarkRunner:
                                 result,
                                 provenance,
                                 observation,
+                                root,
+                                source_root,
                             )
                     else:
                         record, document = _ok_record(
@@ -1323,6 +1861,8 @@ class DetectorBenchmarkRunner:
                             result,
                             provenance,
                             None,
+                            root,
+                            source_root,
                         )
                 del record
                 document["previous_record_sha256"] = previous_record_sha256
@@ -1333,6 +1873,12 @@ class DetectorBenchmarkRunner:
                 )
                 if _sha256(persisted_payload) != record_sha:
                     raise RunIntegrityError("RECORD_READBACK_INVALID")
+                (
+                    record_count,
+                    error_count,
+                    record_inventory_sha256,
+                    _,
+                ) = _record_inventory(records_dir)
                 checkpoint = RunCheckpoint(
                     run_id=spec.run_id,
                     config_sha=spec.config_sha256,
@@ -1350,9 +1896,25 @@ class DetectorBenchmarkRunner:
                     run_kind=spec.run_kind,
                     threshold_lock_sha256=spec.threshold_lock_sha256,
                     collection_mode=spec.collection_mode,
+                    runtime_name=provenance.runtime_name,
+                    runtime_version=provenance.runtime_version,
+                    runtime_environment=dict(provenance.environment),
+                    max_gpu_temperature_celsius=spec.max_gpu_temperature_celsius,
+                    record_count=record_count,
+                    error_count=error_count,
+                    record_inventory_sha256=record_inventory_sha256,
                 )
                 self._write_checkpoint(checkpoint)
                 previous_record_sha256 = record_sha
+                running = self._manifest(
+                    spec,
+                    RunStatus.RUNNING,
+                    started_at,
+                    None,
+                    records_dir,
+                    provenance,
+                )
+                self._write_manifest(root, running)
             final_checkpoint = _read_checkpoint(root / "checkpoint.json")
             if verify_resume(
                 final_checkpoint,
@@ -1361,15 +1923,45 @@ class DetectorBenchmarkRunner:
                 spec.source_commit,
             ) != len(spec.inventory.samples):
                 raise RunIntegrityError("RUN_DENOMINATOR_INCOMPLETE")
+            _verify_manifest_anchor(running, final_checkpoint)
             manifest = self._manifest(
-                spec, RunStatus.VALID, started_at, None, records_dir
+                spec,
+                RunStatus.VALID,
+                started_at,
+                None,
+                records_dir,
+                provenance,
             )
             self._write_manifest(root, manifest)
             return manifest
-        except (RunIntegrityError, OSError) as error:
-            reason = str(error) if isinstance(error, RunIntegrityError) else "PERSISTENCE_FAILED"
+        except Exception as error:
+            if isinstance(error, RunIntegrityError):
+                reason = str(error)
+            elif isinstance(error, OSError):
+                reason = "PERSISTENCE_FAILED"
+            else:
+                reason = f"UNEXPECTED_RUNNER_FAILURE:{type(error).__name__}"
+            preserve = (
+                existing_manifest
+                if (
+                    existing_manifest is not None
+                    and manifest_schema_verified
+                    and not resume_verified
+                )
+                else None
+            )
+            if records_dir is None and root is not None:
+                candidate_records = root / "records"
+                if candidate_records.is_dir() and not candidate_records.is_symlink():
+                    records_dir = candidate_records.resolve(strict=True)
             manifest = self._manifest(
-                spec, RunStatus.INVALID, started_at, reason, records_dir
+                spec,
+                RunStatus.INVALID,
+                started_at,
+                reason,
+                records_dir,
+                provenance,
+                preserve=preserve,
             )
             if root is not None and not root.is_symlink():
                 try:
