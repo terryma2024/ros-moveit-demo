@@ -13,6 +13,7 @@ from so101_demo.perception_benchmark.contracts import (
     RecordStatus,
     RunKind,
     RuntimeProvenance,
+    TruthSample,
 )
 
 
@@ -40,10 +41,27 @@ def raw_candidate(**overrides: object) -> RawCandidate:
         "mask": _mask_ref(),
         "ranking_score": 0.9,
         "ranking_score_source": "grounding_box_score",
-        "class_confidence": 0.8,
+        "class_confidence": None,
         "grounding_box_score": 0.9,
         "grounding_text_score": 0.7,
         "sam_quality": 0.6,
+    }
+    values.update(overrides)
+    return RawCandidate(**values)  # type: ignore[arg-type]
+
+
+def _yolo_candidate(**overrides: object) -> RawCandidate:
+    values: dict[str, object] = {
+        "candidate_id": "cup-0",
+        "label": "plastic_cup",
+        "bbox_xyxy": (2.0, 1.0, 5.0, 3.0),
+        "mask": _mask_ref(),
+        "ranking_score": 0.9,
+        "ranking_score_source": "class_confidence",
+        "class_confidence": 0.9,
+        "grounding_box_score": None,
+        "grounding_text_score": None,
+        "sam_quality": None,
     }
     values.update(overrides)
     return RawCandidate(**values)  # type: ignore[arg-type]
@@ -71,6 +89,8 @@ def prediction_record(**overrides: object) -> PredictionRecord:
         "scenario": "single-cup",
         "image_relpath": "images/sample-017.png",
         "image_sha256": _sha256(),
+        "image_width": 6,
+        "image_height": 4,
         "model_id": "grounded-sam-v1",
         "runtime_provenance": _provenance(),
         "config_sha256": _sha256(),
@@ -177,6 +197,53 @@ def test_prediction_record_rejects_inconsistent_or_nonformal_values(
 def test_phase_timings_reject_nonfinite_latency() -> None:
     with pytest.raises(ValueError, match="sam_ms"):
         PhaseTimings(sam_ms=float("inf"))
+
+
+def test_prediction_record_binds_candidate_mask_dimensions_to_its_image() -> None:
+    mismatched = raw_candidate(
+        mask=_mask_ref(image_width=5), bbox_xyxy=(1.0, 1.0, 4.0, 3.0)
+    )
+
+    with pytest.raises(ValueError, match="candidate mask dimensions"):
+        prediction_record(raw_candidates=(mismatched,))
+
+
+def test_prediction_record_requires_model_specific_scores_and_sources() -> None:
+    yolo_record = prediction_record(
+        model_id="yolo11n-seg-v1",
+        raw_candidates=(_yolo_candidate(),),
+    )
+
+    assert yolo_record.raw_candidates[0].ranking_score_source == "class_confidence"
+    with pytest.raises(ValueError, match="Grounded-SAM"):
+        prediction_record(raw_candidates=(raw_candidate(class_confidence=0.0),))
+    with pytest.raises(ValueError, match="YOLO"):
+        prediction_record(
+            model_id="yolo11n-seg-v1",
+            raw_candidates=(_yolo_candidate(grounding_box_score=0.0),),
+        )
+    with pytest.raises(ValueError, match="ranking_score_source"):
+        prediction_record(
+            model_id="yolo11n-seg-v1",
+            raw_candidates=(_yolo_candidate(ranking_score_source="grounding_box_score"),),
+        )
+    with pytest.raises(ValueError, match="ranking_score_source"):
+        raw_candidate(ranking_score_source=None)
+
+
+@pytest.mark.parametrize("dimension", [True, 2.5])
+def test_truth_sample_rejects_non_integer_image_dimensions(dimension: object) -> None:
+    with pytest.raises(ValueError, match="image dimensions"):
+        TruthSample(
+            formal_sample_index=17,
+            split="val",
+            scenario="single-cup",
+            image_relpath="images/sample-017.png",
+            image_sha256=_sha256(),
+            image_width=dimension,  # type: ignore[arg-type]
+            image_height=4,
+            instances=(),
+        )
 
 
 def test_prediction_record_is_frozen() -> None:
