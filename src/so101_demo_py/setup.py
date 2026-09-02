@@ -71,6 +71,7 @@ setup(
             "text_pick_agent = so101_demo.cli.text_pick_agent:main",
             "prepare_grounded_sam_bundle = "
             "so101_demo.cli.prepare_grounded_sam_bundle:main",
+            "perception_benchmark = so101_demo.cli.perception_benchmark:main",
         ]
     },
 )
