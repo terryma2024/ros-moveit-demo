@@ -32,6 +32,7 @@ from so101_demo.perception_benchmark.codec import (
 )
 from so101_demo.perception_benchmark.contracts import (
     DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
     MaskRef,
     PhaseTimings,
     PredictionRecord,
@@ -41,6 +42,7 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthInstance,
     TruthSample,
+    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.dataset import TestSeal as DatasetTestSeal
 
@@ -150,7 +152,9 @@ def _record(
         image_sha256=image_sha,
         image_width=20,
         image_height=20,
-        model_id="yolo11n-seg-v1" if model == "yolo_seg" else "grounded-sam-v1",
+        model_id=(
+            YOLO_MODEL_ID if model == "yolo_seg" else GROUNDED_SAM_MODEL_ID
+        ),
         runtime_provenance=RuntimeProvenance(
             runtime_device="mps" if platform == "macos" else "cuda",
             runtime_name=model,
@@ -784,6 +788,36 @@ def test_calibration_rejects_wrong_model_and_non_task1_valid_candidate(
     broken_candidate = mac[1].raw_candidates[0]
     object.__setattr__(broken_candidate, "class_confidence", None)
     with pytest.raises(CalibrationError, match="TASK1_RECORD_CONTRACT_INVALID"):
+        calibrate_joint_platform_val(
+            "yolo_seg",
+            mac,
+            linux,
+            truths,
+            SHA_A,
+            evidence_root=tmp_path,
+            mac_prediction_inventory_sha256=SHA_B,
+            linux_prediction_inventory_sha256=SHA_C,
+            source_commit=SOURCE_COMMIT,
+            fixture_mode=True,
+        )
+
+
+def test_calibration_rejects_noncanonical_identity_on_empty_record(
+    tmp_path: Path,
+) -> None:
+    mac, linux, truths = _fixture(tmp_path, "yolo_seg")
+    noncanonical_empty = replace(
+        mac[0],
+        model_id="not-yolo-imposter",
+        raw_candidates=(),
+        raw_count=0,
+        decision=DecisionOutput.NOT_FOUND,
+        selected_candidate_id=None,
+        rejection_reason="TARGET_NOT_FOUND",
+    )
+    mac = (noncanonical_empty,) + mac[1:]
+
+    with pytest.raises(CalibrationError, match="CALIBRATION_MODEL_MISMATCH"):
         calibrate_joint_platform_val(
             "yolo_seg",
             mac,

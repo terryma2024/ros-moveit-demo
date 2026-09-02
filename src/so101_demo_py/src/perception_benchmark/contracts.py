@@ -14,8 +14,38 @@ from typing import Mapping
 from so101_demo.core.detection import RuntimeDevice
 
 SCHEMA_VERSION = "so101-perception-benchmark/v1"
+YOLO_MODEL_ID = "plastic-cup-yolo11s-seg-v2"
+GROUNDED_SAM_MODEL_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
+
+MODEL_ID_BY_NAME: Mapping[str, str] = MappingProxyType(
+    {
+        "yolo_seg": YOLO_MODEL_ID,
+        "grounded_sam": GROUNDED_SAM_MODEL_ID,
+    }
+)
+MODEL_NAME_BY_ID: Mapping[str, str] = MappingProxyType(
+    {model_id: name for name, model_id in MODEL_ID_BY_NAME.items()}
+)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def model_id_for_name(model_name: str) -> str:
+    """Return the canonical ID for one exact benchmark model name."""
+
+    try:
+        return MODEL_ID_BY_NAME[model_name]
+    except (KeyError, TypeError) as error:
+        raise ValueError("model name is not a registered benchmark model") from error
+
+
+def model_name_for_id(model_id: str) -> str:
+    """Return the benchmark model name for one exact canonical ID."""
+
+    try:
+        return MODEL_NAME_BY_ID[model_id]
+    except (KeyError, TypeError) as error:
+        raise ValueError("model_id is not a canonical benchmark model ID") from error
 
 
 class RunStatus(str, Enum):
@@ -346,8 +376,10 @@ class PredictionRecord:
     def _validate_model_candidate_fields(
         self, candidates: tuple[RawCandidate, ...]
     ) -> None:
-        normalized_model_id = self.model_id.lower().replace("_", "-")
-        if "yolo" in normalized_model_id:
+        if not candidates:
+            return
+        model_name = model_name_for_id(self.model_id)
+        if model_name == "yolo_seg":
             for candidate in candidates:
                 if candidate.class_confidence is None:
                     raise ValueError("YOLO candidates require class_confidence")
@@ -365,7 +397,7 @@ class PredictionRecord:
                 if candidate.ranking_score != candidate.class_confidence:
                     raise ValueError("YOLO ranking_score must match class_confidence")
             return
-        if "grounded-sam" in normalized_model_id:
+        if model_name == "grounded_sam":
             for candidate in candidates:
                 if candidate.class_confidence is not None:
                     raise ValueError("Grounded-SAM candidates forbid class_confidence")
@@ -387,8 +419,6 @@ class PredictionRecord:
                         "Grounded-SAM ranking_score must match grounding_box_score"
                     )
             return
-        if candidates:
-            raise ValueError("model_id must identify YOLO or Grounded-SAM candidates")
 
     def _validate_decision(self, candidate_ids: list[str]) -> None:
         if self.record_status is RecordStatus.ERROR:
