@@ -8,19 +8,22 @@ import json
 import platform
 import re
 import sys
+import tempfile
 from collections import Counter
 from dataclasses import asdict, dataclass, fields, replace
 from functools import partial
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 import numpy as np
+import yaml
 from PIL import Image
 from so101_demo.adapters.perception.detector_factory import DetectorFactoryOptions
 from so101_demo.adapters.perception.grounded_sam import GroundedSamDetector
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
+from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.adapters.perception.yolo_seg import verify_weights
 from so101_demo.perception_benchmark.adapters import (
     CollectionMode,
@@ -82,7 +85,7 @@ from so101_demo.perception_benchmark.runner import (
 from so101_demo.perception_benchmark.timing import ResourceSample
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_SOURCE_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
+_SOURCE_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _SCENARIOS = (
     "no_cup",
     "one_cup_distractors",
@@ -92,7 +95,16 @@ _SCENARIOS = (
 _MODELS = ("yolo_seg", "grounded_sam")
 _INDEX_SCHEMA = "so101-perception-benchmark/evidence-index/v1"
 _INDEX_SEMANTICS = "payload files only; evidence-index.json is excluded to avoid self-reference"
-_CONFIG_SHA256 = "24fed9a59ca8d8f727a91c30252e7378e6c7d2219aa3b5e1c1dc3ac152ec7ddf"
+_CONFIG_SHA256 = "2317bca5a5399a0b3b5410aaa3aa8bd31c1f160736120d9bb558fcc0d1c3b2f5"
+_ARCHIVE_ID = (
+    "datasets/so101-v5-t004-yolo-seg-synthetic/"
+    "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+)
+_ARCHIVE_SHA256 = "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"
+_YOLO_WEIGHTS_SHA256 = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
+_GROUNDED_MANIFEST_SHA256 = "838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3"
+_GROUNDING_DINO_REVISION = "a2bb814dd30d776dcf7e30523b00659f4f141c71"
+_SAM_REVISION = "de431c4043854a71d8101e17995dfe596bf101a5"
 
 
 class BenchmarkError(ValueError):
@@ -206,6 +218,139 @@ def _config_payload(path: Path) -> bytes:
     return payload
 
 
+def _mapping(value: object, code: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise BenchmarkError(code)
+    return value
+
+
+def _load_frozen_config(path: Path) -> Mapping[str, Any]:
+    payload = _config_payload(path)
+    try:
+        document = yaml.safe_load(payload)
+    except yaml.YAMLError as error:
+        raise BenchmarkError("CONFIG_INVALID") from error
+    config = _mapping(document, "CONFIG_INVALID")
+    if (
+        set(config)
+        != {
+            "schema_version",
+            "dataset",
+            "models",
+            "runtime",
+            "performance",
+            "bootstrap",
+            "evidence",
+            "run_order",
+        }
+        or config.get("schema_version") != "so101-perception-benchmark/config-v1"
+    ):
+        raise BenchmarkError("CONFIG_INVALID")
+    dataset = _mapping(config.get("dataset"), "CONFIG_INVALID")
+    models = _mapping(config.get("models"), "CONFIG_INVALID")
+    yolo = _mapping(models.get("yolo_seg"), "CONFIG_INVALID")
+    grounded = _mapping(models.get("grounded_sam"), "CONFIG_INVALID")
+    yolo_production = _mapping(yolo.get("production"), "CONFIG_INVALID")
+    grounded_production = _mapping(grounded.get("production"), "CONFIG_INVALID")
+    if (
+        dataset.get("archive") != _ARCHIVE_ID
+        or dataset.get("archive_sha256") != _ARCHIVE_SHA256
+        or dataset.get("image_width") != 640
+        or dataset.get("image_height") != 480
+        or dataset.get("split_sample_count") != 200
+        or yolo.get("model_id") != YOLO_MODEL_ID
+        or yolo.get("weights_sha256") != _YOLO_WEIGHTS_SHA256
+        or yolo.get("imgsz") != 640
+        or yolo_production.get("confidence") != 0.25
+        or yolo_production.get("selector_min_confidence") != 0.50
+        or _mapping(
+            yolo_production.get("nms"),
+            "CONFIG_INVALID",
+        ).get("source")
+        != "resolved_ultralytics_predictor_args"
+        or dict(_mapping(yolo.get("low_floor"), "CONFIG_INVALID"))
+        != {"confidence": 0.01, "nms_iou": 0.90, "max_det": 300}
+        or grounded.get("model_id") != GROUNDED_SAM_MODEL_ID
+        or grounded.get("manifest_sha256") != _GROUNDED_MANIFEST_SHA256
+        or grounded.get("grounding_dino_revision") != _GROUNDING_DINO_REVISION
+        or grounded.get("sam_revision") != _SAM_REVISION
+        or grounded.get("prompt") != "plastic cup."
+        or dict(grounded_production)
+        != {
+            "box_threshold": 0.35,
+            "text_threshold": 0.25,
+            "sam_quality_threshold": 0.75,
+            "selector_min_confidence": 0.50,
+            "duplicate_iou_threshold": 0.85,
+            "minimum_mask_pixels": 64,
+            "maximum_mask_area_ratio": 0.50,
+            "maximum_candidates": 16,
+        }
+        or dict(_mapping(grounded.get("low_floor"), "CONFIG_INVALID"))
+        != {
+            "box_threshold": 0.01,
+            "text_threshold": 0.01,
+            "sam_quality_threshold": 0.0,
+            "selector": "off",
+            "maximum_candidates": 300,
+        }
+        or dict(_mapping(config.get("runtime"), "CONFIG_INVALID"))
+        != {
+            "dtype": "float32",
+            "devices": {"macos": "mps", "linux": "cuda"},
+            "allow_cpu_fallback": False,
+            "offline": True,
+        }
+    ):
+        raise BenchmarkError("CONFIG_INVALID")
+    return config
+
+
+def _frozen_model(config: Mapping[str, Any], model: str) -> Mapping[str, Any]:
+    return _mapping(_mapping(config["models"], "CONFIG_INVALID").get(model), "CONFIG_INVALID")
+
+
+def _frozen_asset_sha(config: Mapping[str, Any], model: str) -> str:
+    values = _frozen_model(config, model)
+    key = "weights_sha256" if model == "yolo_seg" else "manifest_sha256"
+    return _sha(values.get(key), "CONFIG_INVALID")
+
+
+def _frozen_model_id(config: Mapping[str, Any], model: str) -> str:
+    value = _frozen_model(config, model).get("model_id")
+    if not isinstance(value, str) or not value:
+        raise BenchmarkError("CONFIG_INVALID")
+    return value
+
+
+def _bind_model_arguments(arguments: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    expected = _frozen_asset_sha(config, arguments.model)
+    supplied = (
+        arguments.weights_sha256 if arguments.model == "yolo_seg" else arguments.manifest_sha256
+    )
+    asset_path = arguments.weights if arguments.model == "yolo_seg" else arguments.model_root
+    if supplied != expected or asset_path is None or not Path(asset_path).is_absolute():
+        raise BenchmarkError("FROZEN_PROVENANCE_MISMATCH")
+
+
+def _bind_archive_arguments(arguments: argparse.Namespace, config: Mapping[str, Any]) -> None:
+    dataset = _mapping(config.get("dataset"), "CONFIG_INVALID")
+    archive_id = Path(str(dataset.get("archive")))
+    archive = Path(arguments.archive)
+    if (
+        arguments.expected_sha256 != dataset.get("archive_sha256")
+        or len(archive.parts) < len(archive_id.parts)
+        or archive.parts[-len(archive_id.parts) :] != archive_id.parts
+    ):
+        raise BenchmarkError("FROZEN_PROVENANCE_MISMATCH")
+
+
+def _bind_dataset_sha(value: object, config: Mapping[str, Any]) -> None:
+    dataset = _mapping(config.get("dataset"), "CONFIG_INVALID")
+    if value != dataset.get("archive_sha256"):
+        raise BenchmarkError("FROZEN_PROVENANCE_MISMATCH")
+
+
 def _source_commit(value: object) -> str:
     if not isinstance(value, str) or _SOURCE_COMMIT.fullmatch(value) is None:
         raise BenchmarkError("SOURCE_COMMIT_INVALID")
@@ -263,7 +408,41 @@ def _fixture(path: Path) -> Mapping[str, Any]:
     return document
 
 
+def _preflight_output_root(path: Path) -> Path:
+    root = Path(path)
+    if not root.is_absolute():
+        raise BenchmarkError("OUTPUT_ROOT_MUST_BE_ABSOLUTE")
+    if root.exists() or root.is_symlink():
+        raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS")
+    parent = root.parent
+    if not parent.is_dir() or parent.is_symlink():
+        raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
+    current = parent
+    while current != current.parent:
+        if current.is_symlink() or not current.is_dir():
+            raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
+        current = current.parent
+    return root
+
+
+def _preflight_append_log(path: Path) -> None:
+    target = Path(path)
+    if not target.is_absolute() or not target.parent.is_dir() or target.parent.is_symlink():
+        raise BenchmarkError("ACCESS_LOG_INVALID")
+    if target.is_symlink():
+        raise BenchmarkError("ACCESS_LOG_INVALID")
+    if target.exists():
+        try:
+            metadata = target.lstat()
+        except OSError as error:
+            raise BenchmarkError("ACCESS_LOG_INVALID") from error
+        if not target.is_file() or metadata.st_nlink != 1:
+            raise BenchmarkError("ACCESS_LOG_INVALID")
+
+
 def _handle_verify_assets(arguments: argparse.Namespace) -> int:
+    config = _load_frozen_config(arguments.config)
+    _bind_model_arguments(arguments, config)
     if arguments.model == "yolo_seg":
         if arguments.weights is None or arguments.weights_sha256 is None:
             raise BenchmarkError("MODEL_ASSET_ARGUMENTS_INVALID")
@@ -279,6 +458,8 @@ def _handle_verify_assets(arguments: argparse.Namespace) -> int:
 
 
 def _handle_inspect_archive(arguments: argparse.Namespace) -> int:
+    config = _load_frozen_config(arguments.config)
+    _bind_archive_arguments(arguments, config)
     result = DatasetArchiveVerifier().verify_archive(
         arguments.archive,
         arguments.expected_sha256,
@@ -289,6 +470,9 @@ def _handle_inspect_archive(arguments: argparse.Namespace) -> int:
 
 
 def _handle_prepare_dataset(arguments: argparse.Namespace) -> int:
+    config = _load_frozen_config(arguments.config)
+    _bind_archive_arguments(arguments, config)
+    _preflight_output_root(arguments.output_root)
     inventory = DatasetArchiveVerifier().verify_and_extract_split(
         arguments.archive,
         arguments.expected_sha256,
@@ -301,14 +485,41 @@ def _handle_prepare_dataset(arguments: argparse.Namespace) -> int:
 
 
 def _handle_unlock_test(arguments: argparse.Namespace) -> int:
+    config = _load_frozen_config(arguments.config)
+    _bind_archive_arguments(arguments, config)
+    _preflight_output_root(arguments.output_root)
     if (
         not arguments.yolo_threshold_lock.is_file()
         or not arguments.grounded_sam_threshold_lock.is_file()
     ):
         raise BenchmarkError("TEST_SEALED", "two verified threshold locks are required")
+    if arguments.yolo_threshold_lock == arguments.grounded_sam_threshold_lock:
+        raise BenchmarkError("TEST_SEALED", "two distinct verified threshold locks are required")
+    _read_bytes(arguments.yolo_threshold_lock, "THRESHOLD_LOCK_INVALID")
+    _read_bytes(arguments.grounded_sam_threshold_lock, "THRESHOLD_LOCK_INVALID")
+    _preflight_append_log(arguments.access_log)
+    archive = Path(arguments.archive)
+    try:
+        metadata = archive.lstat()
+    except OSError as error:
+        raise BenchmarkError("DATASET_ARCHIVE_UNREADABLE") from error
+    if archive.is_symlink() or not archive.is_file() or metadata.st_nlink != 1:
+        raise BenchmarkError("DATASET_ARCHIVE_UNREADABLE")
+    if sha256_file(archive) != arguments.expected_sha256:
+        raise BenchmarkError("DATASET_ARCHIVE_SHA256_MISMATCH")
     sealed_sha = sha256_bytes(
         _read_bytes(arguments.sealed_member_inventory, "SEALED_MEMBER_INVENTORY_INVALID")
     )
+    with tempfile.TemporaryDirectory(
+        prefix=".unlock-preflight-", dir=arguments.output_root.parent
+    ) as temporary:
+        inspected = DatasetArchiveVerifier().verify_archive(
+            arguments.archive,
+            arguments.expected_sha256,
+            Path(temporary) / "sealed-test-members.json",
+        )
+    if inspected.sealed_test_member_inventory_sha256 != sealed_sha:
+        raise BenchmarkError("TEST_SEAL_ARCHIVE_MISMATCH")
     seal = unlock_test_seal(
         TestSeal(sealed_sha, arguments.access_log),
         arguments.yolo_threshold_lock,
@@ -428,7 +639,8 @@ def _handle_dry_run(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def _inventory(arguments: argparse.Namespace):
+def _inventory(arguments: argparse.Namespace, config: Mapping[str, Any]):
+    _bind_dataset_sha(arguments.dataset_archive_sha256, config)
     kwargs: dict[str, object] = {
         "expected_split": arguments.split,
         "expected_archive_sha256": arguments.dataset_archive_sha256,
@@ -448,21 +660,60 @@ def _inventory(arguments: argparse.Namespace):
     return load_dataset_inventory(arguments.dataset_inventory.parent, **kwargs)
 
 
-def _raw_adapter(arguments: argparse.Namespace):
+class _FrozenRawAdapter:
+    def __init__(self, delegate: object, model: str, model_config: Mapping[str, Any]) -> None:
+        self._delegate = delegate
+        self._model = model
+        self._low_floor = dict(_mapping(model_config.get("low_floor"), "CONFIG_INVALID"))
+        self.model_id = getattr(delegate, "model_id", None)
+        self.runtime_device = getattr(delegate, "runtime_device", None)
+        if model == "yolo_seg":
+            self._weights_sha256 = getattr(delegate, "_weights_sha256", None)
+        else:
+            self._manifest_sha256 = getattr(delegate, "_manifest_sha256", None)
+
+    def collect(self, frame: object, mode: object):
+        result = self._delegate.collect(frame, mode)
+        limits = dict(result.irreversible_limits)
+        if self._model == "yolo_seg":
+            expected = {
+                "nms_iou": self._low_floor["nms_iou"],
+                "max_det": self._low_floor["max_det"],
+            }
+            if limits != expected:
+                raise BenchmarkError("LOW_FLOOR_CONFIG_MISMATCH")
+        else:
+            expected = {
+                "box_threshold": self._low_floor["box_threshold"],
+                "text_threshold": self._low_floor["text_threshold"],
+                "sam_quality_floor": self._low_floor["sam_quality_threshold"],
+                "min_mask_pixels": 64,
+                "max_mask_area_ratio": 0.50,
+            }
+            if limits != expected or len(result.raw_candidates) > int(
+                self._low_floor["maximum_candidates"]
+            ):
+                raise BenchmarkError("LOW_FLOOR_CONFIG_MISMATCH")
+        return result
+
+
+def _raw_adapter(arguments: argparse.Namespace, config: Mapping[str, Any]):
     if arguments.model == "yolo_seg":
-        return YoloRawAdapter.from_weights(
+        delegate = YoloRawAdapter.from_weights(
             weights_path=arguments.weights,
             expected_sha256=arguments.weights_sha256,
             requested_device=arguments.device,
             model_id=YOLO_MODEL_ID,
             evidence_root=arguments.output_root,
         )
-    return GroundedSamRawAdapter.from_bundle(
-        arguments.model_root,
-        expected_manifest_sha256=arguments.manifest_sha256,
-        requested_device=arguments.device,
-        evidence_root=arguments.output_root,
-    )
+    else:
+        delegate = GroundedSamRawAdapter.from_bundle(
+            arguments.model_root,
+            expected_manifest_sha256=arguments.manifest_sha256,
+            requested_device=arguments.device,
+            evidence_root=arguments.output_root,
+        )
+    return _FrozenRawAdapter(delegate, arguments.model, _frozen_model(config, arguments.model))
 
 
 def _model_asset_sha(arguments: argparse.Namespace) -> str:
@@ -508,7 +759,7 @@ def _validate_characterization_runtime(detector: object, device: str, model: str
             raise BenchmarkError("RUNTIME_PROVENANCE_UNAVAILABLE")
         try:
             values = tuple(parameters())
-        except Exception as error:
+        except (RuntimeError, TypeError, ValueError) as error:
             raise BenchmarkError("RUNTIME_PROVENANCE_UNAVAILABLE") from error
         if not values:
             raise BenchmarkError("RUNTIME_PROVENANCE_UNAVAILABLE")
@@ -635,8 +886,11 @@ def _handle_collect(arguments: argparse.Namespace) -> int:
     ):
         raise BenchmarkError("MODEL_ASSET_ARGUMENTS_INVALID")
     source_commit = _source_commit(arguments.source_commit)
+    config = _load_frozen_config(arguments.config)
+    _bind_model_arguments(arguments, config)
+    _bind_dataset_sha(arguments.dataset_archive_sha256, config)
     config_sha = sha256_bytes(_config_payload(arguments.config))
-    inventory = _inventory(arguments)
+    inventory = _inventory(arguments, config)
     lock_sha = None
     if arguments.split == "test":
         if arguments.threshold_lock is None:
@@ -652,7 +906,7 @@ def _handle_collect(arguments: argparse.Namespace) -> int:
     if not arguments.output_root.parent.is_dir():
         raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
     arguments.output_root.mkdir(mode=0o700)
-    adapter = _raw_adapter(arguments)
+    adapter = _raw_adapter(arguments, config)
     observer = None
     if run_kind in {
         RunKind.TEST_PRODUCTION,
@@ -695,9 +949,82 @@ def _expectation(path: Path, sha: str) -> RunEvidenceExpectation:
         raise BenchmarkError("RUN_EXPECTATION_INVALID") from error
 
 
+def _paths_overlap(first: Path, second: Path) -> bool:
+    left = Path(first).resolve(strict=False)
+    right = Path(second).resolve(strict=False)
+    return left == right or left.is_relative_to(right) or right.is_relative_to(left)
+
+
+def _preflight_calibration_output(arguments: argparse.Namespace) -> None:
+    output = _preflight_output_root(arguments.output_root)
+    protected = (
+        arguments.dataset_inventory.parent,
+        arguments.mac_run_root,
+        arguments.linux_run_root,
+    )
+    if any(_paths_overlap(output, path) for path in protected):
+        raise BenchmarkError("CALIBRATION_OUTPUT_OVERLAP")
+
+
+def _validate_val_run_provenance(
+    loaded: object,
+    *,
+    platform_name: str,
+    device: str,
+    arguments: argparse.Namespace,
+    config: Mapping[str, Any],
+) -> None:
+    manifest = getattr(loaded, "manifest", None)
+    expected = {
+        "model": arguments.model,
+        "model_id": _frozen_model_id(config, arguments.model),
+        "platform": platform_name,
+        "device": device,
+        "dtype": "float32",
+        "run_kind": RunKind.VAL_RAW,
+        "source_commit": arguments.source_commit,
+        "config_sha256": _CONFIG_SHA256,
+        "weights_sha256": _frozen_asset_sha(config, arguments.model),
+    }
+    if manifest is None or any(
+        getattr(manifest, name, None) != value for name, value in expected.items()
+    ):
+        raise BenchmarkError("RUN_PROVENANCE_MISMATCH")
+
+
+def _safe_rehome_mask(mask_ref: object, source: Path) -> np.ndarray:
+    relative_value = getattr(mask_ref, "relative_path", None)
+    if not isinstance(relative_value, str):
+        raise BenchmarkError("CALIBRATION_MASK_INVALID")
+    relative = PurePosixPath(relative_value)
+    if (
+        relative.is_absolute()
+        or "\\" in relative_value
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise BenchmarkError("CALIBRATION_MASK_INVALID")
+    root = Path(source).resolve(strict=True)
+    target = root.joinpath(*relative.parts)
+    try:
+        metadata = target.lstat()
+        resolved = target.resolve(strict=True)
+    except OSError as error:
+        raise BenchmarkError("CALIBRATION_MASK_INVALID") from error
+    if (
+        target.is_symlink()
+        or not target.is_file()
+        or metadata.st_nlink != 1
+        or not resolved.is_relative_to(root)
+    ):
+        raise BenchmarkError("CALIBRATION_MASK_INVALID")
+    return read_mask(mask_ref, root)
+
+
 def _handle_calibrate(arguments: argparse.Namespace) -> int:
-    if arguments.output_root.exists() or arguments.output_root.is_symlink():
-        raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS")
+    config = _load_frozen_config(arguments.config)
+    _bind_dataset_sha(arguments.dataset_archive_sha256, config)
+    _source_commit(arguments.source_commit)
+    _preflight_calibration_output(arguments)
     inventory = load_dataset_inventory(
         arguments.dataset_inventory.parent,
         expected_split="val",
@@ -713,8 +1040,25 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
     )
     mac = load_verified_run_evidence(arguments.mac_run_root, inventory, mac_expectation)
     linux = load_verified_run_evidence(arguments.linux_run_root, inventory, linux_expectation)
-    if mac.manifest.model != arguments.model or linux.manifest.model != arguments.model:
-        raise BenchmarkError("CALIBRATION_MODEL_MISMATCH")
+    if any(
+        _paths_overlap(arguments.output_root, path)
+        for path in (inventory.dataset_root, mac.evidence_root, linux.evidence_root)
+    ):
+        raise BenchmarkError("CALIBRATION_OUTPUT_OVERLAP")
+    _validate_val_run_provenance(
+        mac,
+        platform_name="macos",
+        device="mps",
+        arguments=arguments,
+        config=config,
+    )
+    _validate_val_run_provenance(
+        linux,
+        platform_name="linux",
+        device="cuda",
+        arguments=arguments,
+        config=config,
+    )
     arguments.output_root.mkdir(parents=False, mode=0o700)
     mask_root = arguments.output_root / "calibration-masks"
     mask_root.mkdir()
@@ -724,11 +1068,16 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
         for record in records:
             candidates = []
             for candidate in record.raw_candidates:
-                mask = read_mask(candidate.mask, source)
+                mask = _safe_rehome_mask(candidate.mask, source)
+                if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", candidate.candidate_id) is None:
+                    raise BenchmarkError("CALIBRATION_MASK_INVALID")
                 relative = (
                     f"{platform}/{record.formal_sample_index:06d}/{candidate.candidate_id}.json"
                 )
-                atomic_write_json(mask_root / relative, encode_mask_rle(mask))
+                destination = mask_root / relative
+                if destination.exists() or destination.is_symlink():
+                    raise BenchmarkError("CALIBRATION_MASK_OVERWRITE")
+                atomic_write_json(destination, encode_mask_rle(mask))
                 candidates.append(
                     replace(candidate, mask=replace(candidate.mask, relative_path=relative))
                 )
@@ -746,7 +1095,7 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
         evidence_root=mask_root,
         mac_prediction_inventory_sha256=mac.manifest.record_inventory_sha256,
         linux_prediction_inventory_sha256=linux.manifest.record_inventory_sha256,
-        source_commit=arguments.source_commit,
+        source_commit=mac.manifest.source_commit,
     )
     write_threshold_lock(arguments.output_root / "threshold-lock.json", lock)
     _write_index(arguments.output_root)
@@ -759,20 +1108,44 @@ def _resource_sample(document: Mapping[str, Any]) -> ResourceSample:
 
 
 def _aggregation_evidence(document: Mapping[str, Any], loaded) -> RunAggregationEvidence:
-    cold = tuple(ColdProcessSample(**item) for item in document.get("cold_process_samples", []))
+    raw_cold = document.get("cold_process_samples", [])
     raw_trace = document.get("resource_trace")
-    trace = None
-    if raw_trace is not None:
-        observations = tuple(
-            ResourceObservation(
-                phase=item["phase"],
-                monotonic_ns=item["monotonic_ns"],
-                formal_sample_index=item["formal_sample_index"],
-                sample=_resource_sample(item["sample"]),
-            )
-            for item in raw_trace["observations"]
+    if not isinstance(raw_cold, list):
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    try:
+        cold = tuple(
+            ColdProcessSample(**_mapping(item, "AGGREGATION_PLAN_INVALID")) for item in raw_cold
         )
-        trace = ResourceTrace(raw_trace["sampling_frequency_hz"], observations)
+        trace = None
+        if raw_trace is not None:
+            trace_document = _mapping(raw_trace, "AGGREGATION_PLAN_INVALID")
+            if set(trace_document) != {"sampling_frequency_hz", "observations"} or not isinstance(
+                trace_document["observations"], list
+            ):
+                raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+            observations = []
+            for value in trace_document["observations"]:
+                item = _mapping(value, "AGGREGATION_PLAN_INVALID")
+                if set(item) != {
+                    "phase",
+                    "monotonic_ns",
+                    "formal_sample_index",
+                    "sample",
+                }:
+                    raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+                observations.append(
+                    ResourceObservation(
+                        phase=item["phase"],
+                        monotonic_ns=item["monotonic_ns"],
+                        formal_sample_index=item["formal_sample_index"],
+                        sample=_resource_sample(
+                            _mapping(item["sample"], "AGGREGATION_PLAN_INVALID")
+                        ),
+                    )
+                )
+            trace = ResourceTrace(trace_document["sampling_frequency_hz"], tuple(observations))
+    except (TypeError, ValueError) as error:
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID") from error
     return RunAggregationEvidence(
         evidence_root=loaded.evidence_root,
         extended_record_documents=loaded.extended_record_documents,
@@ -781,32 +1154,146 @@ def _aggregation_evidence(document: Mapping[str, Any], loaded) -> RunAggregation
     )
 
 
+def _absolute_path_field(document: Mapping[str, Any], name: str) -> Path:
+    value = document.get(name)
+    if not isinstance(value, str) or not value:
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    path = Path(value)
+    if not path.is_absolute():
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    return path
+
+
+def _validated_aggregation_plan(
+    document: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], Mapping[str, Any], list[Mapping[str, Any]], str]:
+    if (
+        set(document)
+        != {
+            "schema_version",
+            "dataset",
+            "threshold_locks",
+            "runs",
+            "source_commit",
+        }
+        or document.get("schema_version") != "so101-perception-benchmark/aggregation-plan-v1"
+    ):
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    dataset = _mapping(document.get("dataset"), "AGGREGATION_PLAN_INVALID")
+    locks = _mapping(document.get("threshold_locks"), "AGGREGATION_PLAN_INVALID")
+    raw_runs = document.get("runs")
+    if set(dataset) != {
+        "root",
+        "archive_sha256",
+        "inventory_sha256",
+        "test_access_event_sha256",
+        "sealed_member_inventory_sha256",
+        "threshold_lock_sha256s",
+    } or set(locks) != set(_MODELS):
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    _absolute_path_field(dataset, "root")
+    for name in (
+        "archive_sha256",
+        "inventory_sha256",
+        "test_access_event_sha256",
+        "sealed_member_inventory_sha256",
+    ):
+        _sha(dataset.get(name), "AGGREGATION_PLAN_INVALID")
+    lock_shas = dataset.get("threshold_lock_sha256s")
+    if (
+        not isinstance(lock_shas, list)
+        or len(lock_shas) != 2
+        or any(_SHA256.fullmatch(str(value)) is None for value in lock_shas)
+    ):
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    for model in _MODELS:
+        anchor = _mapping(locks.get(model), "AGGREGATION_PLAN_INVALID")
+        if set(anchor) != {"path", "sha256"}:
+            raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+        _absolute_path_field(anchor, "path")
+        _sha(anchor.get("sha256"), "AGGREGATION_PLAN_INVALID")
+    if not isinstance(raw_runs, list) or not raw_runs:
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    runs: list[Mapping[str, Any]] = []
+    required = {
+        "platform",
+        "model",
+        "config",
+        "run_root",
+        "expectation",
+        "expectation_sha256",
+    }
+    optional = {"cold_process_samples", "resource_trace"}
+    for value in raw_runs:
+        item = _mapping(value, "AGGREGATION_PLAN_INVALID")
+        if not required.issubset(item) or not set(item).issubset(required | optional):
+            raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+        _absolute_path_field(item, "run_root")
+        _absolute_path_field(item, "expectation")
+        _sha(item.get("expectation_sha256"), "AGGREGATION_PLAN_INVALID")
+        runs.append(item)
+    return dataset, locks, runs, _source_commit(document.get("source_commit"))
+
+
+def _validate_aggregate_run_provenance(
+    loaded: object,
+    *,
+    platform_name: str,
+    model: str,
+    config_name: str,
+    source_commit: str,
+    config: Mapping[str, Any],
+) -> None:
+    kinds = {
+        "TEST_RAW_FROZEN": RunKind.TEST_RAW_FROZEN,
+        "production": RunKind.TEST_PRODUCTION,
+        "calibrated": RunKind.TEST_CALIBRATED,
+        "characterization": RunKind.TEST_CHARACTERIZATION,
+        "ORACLE_DIAGNOSTIC": RunKind.ORACLE_DIAGNOSTIC,
+    }
+    expected = {
+        "platform": platform_name,
+        "model": model,
+        "device": "mps" if platform_name == "macos" else "cuda",
+        "dtype": "float32",
+        "run_kind": kinds[config_name],
+        "source_commit": source_commit,
+        "config_sha256": _CONFIG_SHA256,
+        "model_id": _frozen_model_id(config, model),
+        "weights_sha256": _frozen_asset_sha(config, model),
+    }
+    manifest = getattr(loaded, "manifest", None)
+    if manifest is None or any(
+        getattr(manifest, name, None) != expected_value for name, expected_value in expected.items()
+    ):
+        raise BenchmarkError("RUN_PROVENANCE_MISMATCH")
+
+
 def _handle_aggregate(arguments: argparse.Namespace) -> int:
+    config_document = _load_frozen_config(arguments.config)
+    _preflight_output_root(arguments.output_root)
     plan = _read_json(
         arguments.aggregation_plan, "AGGREGATION_PLAN_INVALID", arguments.aggregation_plan_sha256
     )
-    if plan.get("schema_version") != "so101-perception-benchmark/aggregation-plan-v1":
-        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
-    dataset = plan.get("dataset")
-    if not isinstance(dataset, Mapping):
-        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
-    locks_document = plan.get("threshold_locks")
-    runs = plan.get("runs")
-    if not isinstance(locks_document, Mapping) or not isinstance(runs, list):
-        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+    dataset, locks_document, runs, source_commit = _validated_aggregation_plan(plan)
+    _bind_dataset_sha(dataset["archive_sha256"], config_document)
     threshold_locks = {}
     for model in _MODELS:
         lock_anchor = locks_document.get(model)
         if not isinstance(lock_anchor, Mapping) or set(lock_anchor) != {"path", "sha256"}:
             raise BenchmarkError("AGGREGATION_PLAN_INVALID")
-        lock_path = Path(lock_anchor["path"])
+        lock_path = _absolute_path_field(lock_anchor, "path")
         expected_lock_sha = _sha(lock_anchor["sha256"], "AGGREGATION_PLAN_INVALID")
         lock = verify_threshold_lock(lock_path)
-        if lock.lock_sha256 != expected_lock_sha or lock.model != model:
+        if (
+            lock.lock_sha256 != expected_lock_sha
+            or lock.model != model
+            or lock.source_commit != source_commit
+        ):
             raise BenchmarkError("THRESHOLD_LOCK_MISMATCH")
         threshold_locks[model] = lock
     inventory = load_dataset_inventory(
-        Path(dataset["root"]),
+        _absolute_path_field(dataset, "root"),
         expected_split="test",
         expected_archive_sha256=dataset["archive_sha256"],
         expected_inventory_sha256=dataset["inventory_sha256"],
@@ -821,15 +1308,17 @@ def _handle_aggregate(arguments: argparse.Namespace) -> int:
     evidence: dict[tuple[str, str, str], RunAggregationEvidence] = {}
     oracle_evidence: dict[tuple[str, str, str], RunAggregationEvidence] = {}
     for item in runs:
-        if not isinstance(item, Mapping):
-            raise BenchmarkError("AGGREGATION_PLAN_INVALID")
-        expectation = _expectation(Path(item["expectation"]), item["expectation_sha256"])
-        loaded = load_verified_run_evidence(Path(item["run_root"]), inventory, expectation)
-        platform, model, config = item["platform"], item["model"], item["config"]
+        expectation = _expectation(
+            _absolute_path_field(item, "expectation"), item["expectation_sha256"]
+        )
+        loaded = load_verified_run_evidence(
+            _absolute_path_field(item, "run_root"), inventory, expectation
+        )
+        platform, model, config_name = item["platform"], item["model"], item["config"]
         if (
             platform not in {"macos", "linux"}
             or model not in set(_MODELS)
-            or config
+            or config_name
             not in {
                 "TEST_RAW_FROZEN",
                 "production",
@@ -839,17 +1328,24 @@ def _handle_aggregate(arguments: argparse.Namespace) -> int:
             }
         ):
             raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+        _validate_aggregate_run_provenance(
+            loaded,
+            platform_name=platform,
+            model=model,
+            config_name=config_name,
+            source_commit=source_commit,
+            config=config_document,
+        )
         run_evidence = _aggregation_evidence(item, loaded)
-        if config == "TEST_RAW_FROZEN":
+        if config_name == "TEST_RAW_FROZEN":
             raw.setdefault(platform, {})[model] = loaded.records
-            evidence[(platform, model, config)] = run_evidence
-        elif config == "ORACLE_DIAGNOSTIC":
+            evidence[(platform, model, config_name)] = run_evidence
+        elif config_name == "ORACLE_DIAGNOSTIC":
             oracle.setdefault(platform, {})[model] = loaded.records
-            oracle_evidence[(platform, model, config)] = run_evidence
+            oracle_evidence[(platform, model, config_name)] = run_evidence
         else:
-            formal.setdefault(platform, {}).setdefault(model, {})[config] = loaded.records
-            evidence[(platform, model, config)] = run_evidence
-    source_commit = _source_commit(plan.get("source_commit"))
+            formal.setdefault(platform, {}).setdefault(model, {})[config_name] = loaded.records
+            evidence[(platform, model, config_name)] = run_evidence
     value = AggregationInput(
         formal=True,
         source_commit=source_commit,
@@ -899,22 +1395,29 @@ def _add_model_assets(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--manifest-sha256")
 
 
+def _add_frozen_config(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", type=Path, required=True)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="perception_benchmark")
     commands = parser.add_subparsers(dest="command", required=True)
 
     verify = commands.add_parser("verify-assets")
+    _add_frozen_config(verify)
     verify.add_argument("--model", choices=_MODELS, required=True)
     _add_model_assets(verify)
     verify.set_defaults(handler=_handle_verify_assets)
 
     inspect = commands.add_parser("inspect-archive")
+    _add_frozen_config(inspect)
     inspect.add_argument("--archive", type=Path, required=True)
     inspect.add_argument("--expected-sha256", required=True)
     inspect.add_argument("--sealed-member-inventory", type=Path, required=True)
     inspect.set_defaults(handler=_handle_inspect_archive)
 
     prepare = commands.add_parser("prepare-dataset")
+    _add_frozen_config(prepare)
     prepare.add_argument("--archive", type=Path, required=True)
     prepare.add_argument("--expected-sha256", required=True)
     prepare.add_argument("--split", choices=("val",), required=True)
@@ -922,6 +1425,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.set_defaults(handler=_handle_prepare_dataset)
 
     unlock = commands.add_parser("unlock-test")
+    _add_frozen_config(unlock)
     unlock.add_argument("--archive", type=Path, required=True)
     unlock.add_argument("--expected-sha256", required=True)
     unlock.add_argument("--sealed-member-inventory", type=Path, required=True)
@@ -955,6 +1459,7 @@ def build_parser() -> argparse.ArgumentParser:
     collect.set_defaults(handler=_handle_collect)
 
     calibrate = commands.add_parser("calibrate")
+    _add_frozen_config(calibrate)
     calibrate.add_argument("--model", choices=_MODELS, required=True)
     _add_dataset_anchors(calibrate)
     calibrate.set_defaults(split="val")
@@ -969,6 +1474,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.set_defaults(handler=_handle_calibrate)
 
     aggregate = commands.add_parser("aggregate")
+    _add_frozen_config(aggregate)
     aggregate.add_argument("--aggregation-plan", type=Path, required=True)
     aggregate.add_argument("--aggregation-plan-sha256", required=True)
     aggregate.add_argument("--bootstrap-seed", type=int, default=20260902)
@@ -989,6 +1495,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return arguments.handler(arguments)
     except BenchmarkError as error:
         print(f"{error.code}: {error.detail}", file=sys.stderr)
+        return 2
+    except ModelSetupError as error:
+        print(f"{error.code}: benchmark command rejected", file=sys.stderr)
         return 2
     except (CalibrationError, DatasetVerificationError, ValueError, OSError) as error:
         code = str(error).split(":", 1)[0]
