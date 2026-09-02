@@ -37,7 +37,7 @@ setup(
         (f"share/{package_name}", ["package.xml"]),
     ]
     + installed_resources(),
-    install_requires=["setuptools", "typing_extensions"],
+    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
     zip_safe=True,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",
