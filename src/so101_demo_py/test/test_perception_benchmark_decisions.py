@@ -758,6 +758,70 @@ def test_scenario_aggregate_requires_explicit_valid_evidence_root(
         )
 
 
+def test_empty_scenario_aggregate_does_not_resolve_unused_candidate_root(
+    tmp_path: Path,
+) -> None:
+    metrics = aggregate_scenarios(
+        (),
+        (),
+        {},
+        evidence_root=tmp_path,
+        candidate_evidence_root=tmp_path / "missing-candidate-root",
+    )
+
+    assert metrics == {}
+
+
+def test_no_cup_without_candidates_does_not_resolve_unused_candidate_root(
+    tmp_path: Path,
+) -> None:
+    truth = _truth(tmp_path, 0, "no_cup")
+    record = _record(truth, decision=DecisionOutput.NOT_FOUND)
+    image_input = _metric_input(record, truth)
+
+    metrics = aggregate_scenarios(
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (image_input,)),
+        evidence_root=tmp_path,
+        candidate_evidence_root=tmp_path / "missing-candidate-root",
+    )["no_cup"]
+
+    assert metrics.sample_count == 1
+    assert metrics.error_count == 0
+    assert metrics.no_cup_sample_count == 1
+    assert metrics.no_cup_false_positive_count == 0
+    assert metrics.no_cup_false_positive_rate == 0.0
+    assert metrics.two_cup_sample_count == 0
+    assert metrics.two_cup_both_matched_count == 0
+    assert metrics.two_cup_both_matched_recall is None
+    assert metrics.predicted_union_pixel_count == 0
+    assert metrics.non_cup_leakage_pixel_count == 0
+    assert metrics.non_cup_leakage_ratio == 0.0
+
+
+def test_candidate_mask_read_rejects_missing_candidate_root(tmp_path: Path) -> None:
+    truth = _truth(tmp_path, 0, "no_cup")
+    candidate = _candidate(
+        tmp_path,
+        0,
+        "candidate",
+        0.9,
+        _one_pixel_mask(),
+    )
+    record = _record(truth, (candidate,), decision=DecisionOutput.UNIQUE)
+    image_input = _metric_input(record, truth)
+
+    with pytest.raises(ValueError, match="candidate_evidence_root"):
+        aggregate_scenarios(
+            (record,),
+            (truth,),
+            _keyed_matches((record,), (image_input,)),
+            evidence_root=tmp_path,
+            candidate_evidence_root=tmp_path / "missing-candidate-root",
+        )
+
+
 def test_scenario_aggregate_rejects_distinct_indices_with_duplicate_image_sha(
     tmp_path: Path,
 ) -> None:
