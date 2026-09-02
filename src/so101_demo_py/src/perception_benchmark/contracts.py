@@ -41,8 +41,9 @@ class RunKind(str, Enum):
 
 
 class DecisionOutput(str, Enum):
-    SELECTED = "SELECTED"
-    REJECTED = "REJECTED"
+    NOT_FOUND = "NOT_FOUND"
+    UNIQUE = "UNIQUE"
+    AMBIGUOUS = "AMBIGUOUS"
     ERROR = "ERROR"
 
 
@@ -407,12 +408,22 @@ class PredictionRecord:
             raise ValueError("OK record_status forbids error fields")
         if self.decision is DecisionOutput.ERROR:
             raise ValueError("OK record_status forbids DecisionOutput.ERROR")
-        if self.decision is DecisionOutput.SELECTED:
+        if self.decision is DecisionOutput.UNIQUE:
             if self.selected_candidate_id not in candidate_ids:
                 raise ValueError("selected_candidate_id must name a raw candidate")
             if self.rejection_reason is not None:
-                raise ValueError("SELECTED decision forbids rejection_reason")
+                raise ValueError("UNIQUE decision forbids rejection_reason")
             return
-        if self.selected_candidate_id is not None:
-            raise ValueError("REJECTED decision has no selected_candidate_id")
-        object.__setattr__(self, "rejection_reason", _require_nonempty("rejection_reason", self.rejection_reason))
+        if self.decision is DecisionOutput.NOT_FOUND:
+            if self.selected_candidate_id is not None:
+                raise ValueError("NOT_FOUND decision has no selected_candidate_id")
+            if self.rejection_reason != "TARGET_NOT_FOUND":
+                raise ValueError("NOT_FOUND decision requires TARGET_NOT_FOUND")
+            return
+        if self.decision is DecisionOutput.AMBIGUOUS:
+            if self.selected_candidate_id is not None:
+                raise ValueError("AMBIGUOUS decision has no selected_candidate_id")
+            if self.rejection_reason != "TARGET_AMBIGUOUS":
+                raise ValueError("AMBIGUOUS decision requires TARGET_AMBIGUOUS")
+            return
+        raise ValueError("OK record_status requires a known non-error decision")

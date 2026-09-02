@@ -98,7 +98,7 @@ def prediction_record(**overrides: object) -> PredictionRecord:
         "raw_candidates": (raw_candidate(),),
         "phase_timings": PhaseTimings(sam_ms=1.5, selector_ms=0.0),
         "raw_count": 1,
-        "decision": DecisionOutput.SELECTED,
+        "decision": DecisionOutput.UNIQUE,
         "selected_candidate_id": "cup-0",
         "rejection_reason": None,
         "error_type": None,
@@ -134,6 +134,44 @@ def test_error_record_is_in_denominator_and_has_no_selected_candidate() -> None:
 
     assert record.formal_sample_index == 17
     assert record.error_type == "INFERENCE_FAILED"
+
+
+def test_decision_output_has_exact_persisted_values() -> None:
+    assert tuple(output.value for output in DecisionOutput) == (
+        "NOT_FOUND",
+        "UNIQUE",
+        "AMBIGUOUS",
+        "ERROR",
+    )
+
+
+def test_prediction_record_enforces_each_persisted_decision_contract() -> None:
+    unique = prediction_record()
+    not_found = prediction_record(
+        decision=DecisionOutput.NOT_FOUND,
+        selected_candidate_id=None,
+        rejection_reason="TARGET_NOT_FOUND",
+    )
+    ambiguous = prediction_record(
+        decision=DecisionOutput.AMBIGUOUS,
+        selected_candidate_id=None,
+        rejection_reason="TARGET_AMBIGUOUS",
+    )
+
+    assert unique.decision.value == "UNIQUE"
+    assert not_found.rejection_reason == "TARGET_NOT_FOUND"
+    assert ambiguous.rejection_reason == "TARGET_AMBIGUOUS"
+    with pytest.raises(ValueError, match="NOT_FOUND"):
+        prediction_record(
+            decision=DecisionOutput.NOT_FOUND,
+            rejection_reason="RAW_ONLY",
+        )
+    with pytest.raises(ValueError, match="AMBIGUOUS"):
+        prediction_record(
+            decision=DecisionOutput.AMBIGUOUS,
+            selected_candidate_id="cup-0",
+            rejection_reason="TARGET_AMBIGUOUS",
+        )
 
 
 def test_record_owns_tuple_input_and_rejects_duplicate_candidate_ids() -> None:

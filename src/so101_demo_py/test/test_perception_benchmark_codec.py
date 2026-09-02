@@ -15,7 +15,7 @@ from so101_demo.perception_benchmark.codec import (
     read_mask,
     sha256_bytes,
 )
-from so101_demo.perception_benchmark.contracts import MaskRef
+from so101_demo.perception_benchmark.contracts import DecisionOutput, MaskRef
 
 
 def test_rle_round_trip_is_lossless_coco_column_major() -> None:
@@ -58,6 +58,12 @@ def test_canonical_json_and_atomic_write_have_stable_digest(tmp_path: Path) -> N
     assert path.read_bytes() == expected
     assert digest == hashlib.sha256(expected).hexdigest()
     assert digest == sha256_bytes(expected)
+
+
+def test_canonical_json_serializes_exact_persisted_decision_value() -> None:
+    assert canonical_json_bytes({"decision": DecisionOutput.AMBIGUOUS}) == (
+        b'{"decision":"AMBIGUOUS"}\n'
+    )
 
 
 def test_read_mask_rejects_path_escape_and_checksum_mismatch(tmp_path: Path) -> None:
