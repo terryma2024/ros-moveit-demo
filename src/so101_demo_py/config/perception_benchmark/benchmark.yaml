@@ -1,0 +1,75 @@
+schema_version: so101-perception-benchmark/config-v1
+dataset:
+  archive: datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz
+  archive_sha256: c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1
+  image_width: 640
+  image_height: 480
+  split_sample_count: 200
+  scenarios: [no_cup, one_cup_distractors, two_cups, cup_near_bottle]
+models:
+  yolo_seg:
+    model_id: plastic-cup-yolo11s-seg-v2
+    weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+    imgsz: 640
+    production:
+      confidence: 0.25
+      selector_min_confidence: 0.50
+      nms:
+        source: resolved_ultralytics_predictor_args
+    low_floor:
+      confidence: 0.01
+    calibration_grid:
+      confidence: {start: 0.05, stop: 0.95, step: 0.05}
+      nms_iou: {start: 0.30, stop: 0.90, step: 0.10}
+      selector_min_confidence: {start: 0.05, stop: 0.95, step: 0.05}
+  grounded_sam:
+    model_id: grounding-dino-tiny+sam2.1-hiera-tiny
+    manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+    grounding_dino_revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+    sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
+    prompt: plastic cup.
+    production:
+      box_threshold: 0.35
+      text_threshold: 0.25
+      sam_quality_threshold: 0.75
+      selector_min_confidence: 0.50
+      duplicate_iou_threshold: 0.85
+      minimum_mask_pixels: 64
+      maximum_mask_area_ratio: 0.50
+      maximum_candidates: 16
+    low_floor:
+      box_threshold: 0.01
+      text_threshold: 0.01
+      sam_quality_threshold: 0.00
+      selector: off
+    calibration_grid:
+      box_threshold: {start: 0.05, stop: 0.90, step: 0.05}
+      text_threshold: {start: 0.05, stop: 0.50, step: 0.05}
+      sam_quality_threshold: {start: 0.50, stop: 0.95, step: 0.05}
+      selector_min_confidence: {start: 0.05, stop: 0.90, step: 0.05}
+      duplicate_iou_threshold: 0.85
+      minimum_mask_pixels: 64
+      maximum_mask_area_ratio: 0.50
+runtime:
+  dtype: float32
+  devices: {macos: mps, linux: cuda}
+  allow_cpu_fallback: false
+  offline: true
+performance:
+  warmup_images: 5
+  cold_processes: 3
+bootstrap:
+  seed: 20260902
+  repetitions: 10000
+evidence:
+  root: /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1
+  debug_root: /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1
+run_order:
+  - asset-verification-and-dry-run
+  - macos-val
+  - linux-val
+  - calibration-and-locks
+  - macos-test
+  - linux-test
+  - performance-cross-platform-report
+  - task11-remediation
