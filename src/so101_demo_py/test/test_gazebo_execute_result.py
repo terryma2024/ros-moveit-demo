@@ -14,6 +14,8 @@ from so101_demo.core.domain import (
 )
 from so101_demo.runtime.result_manifest import write_run_result
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_teleop_request_derives_result_from_checkpoint(tmp_path) -> None:
     policy = tmp_path / "policy.yaml"
@@ -118,7 +120,5 @@ def test_skipped_is_not_a_run_status() -> None:
 
 
 def test_execute_source_has_no_synthetic_incomplete_failure() -> None:
-    source = Path("src/so101_demo_py/src/backends/gazebo/execute.py").read_text(
-        encoding="utf-8"
-    )
+    source = (PACKAGE_ROOT / "src/backends/gazebo/execute.py").read_text(encoding="utf-8")
     assert "GAZEBO_EXECUTE_INCOMPLETE" not in source

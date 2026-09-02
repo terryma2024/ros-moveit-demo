@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _receipt(*, backend: str = "gazebo", success: bool = True):
     from so101_demo.ports.planning_scene import SceneCommandReceipt
@@ -21,8 +23,7 @@ def test_cli_defaults_to_compatible_mujoco_setup(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         scene_setup,
         "execute_scene_operation",
-        lambda backend, operation: calls.append((backend, operation))
-        or _receipt(backend=backend),
+        lambda backend, operation: calls.append((backend, operation)) or _receipt(backend=backend),
     )
 
     assert scene_setup.main([]) == 0
@@ -30,9 +31,7 @@ def test_cli_defaults_to_compatible_mujoco_setup(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out)["success"] is True
 
 
-def test_cli_removes_launch_injected_ros_parameter_arguments(
-    monkeypatch, tmp_path, capsys
-) -> None:
+def test_cli_removes_launch_injected_ros_parameter_arguments(monkeypatch, tmp_path, capsys) -> None:
     from so101_demo.cli import scene_setup
 
     params = tmp_path / "params.yaml"
@@ -44,8 +43,7 @@ def test_cli_removes_launch_injected_ros_parameter_arguments(
     monkeypatch.setattr(
         scene_setup,
         "execute_scene_operation",
-        lambda backend, operation: calls.append((backend, operation))
-        or _receipt(backend=backend),
+        lambda backend, operation: calls.append((backend, operation)) or _receipt(backend=backend),
     )
 
     assert scene_setup.main(["--ros-args", "--params-file", str(params)]) == 0
@@ -60,20 +58,22 @@ def test_cli_dispatches_every_gazebo_scene_operation(monkeypatch) -> None:
     monkeypatch.setattr(
         scene_setup,
         "execute_scene_operation",
-        lambda backend, operation: calls.append((backend, operation))
-        or _receipt(backend=backend),
+        lambda backend, operation: calls.append((backend, operation)) or _receipt(backend=backend),
     )
 
     for operation in ("setup", "observe", "attach", "detach", "upsert"):
         assert scene_setup.main(["--backend", "gazebo", operation]) == 0
 
-    assert calls == [("gazebo", operation) for operation in (
-        "setup",
-        "observe",
-        "attach",
-        "detach",
-        "upsert",
-    )]
+    assert calls == [
+        ("gazebo", operation)
+        for operation in (
+            "setup",
+            "observe",
+            "attach",
+            "detach",
+            "upsert",
+        )
+    ]
 
 
 def test_cli_returns_nonzero_and_stable_failure(monkeypatch, capsys) -> None:
@@ -92,5 +92,5 @@ def test_cli_returns_nonzero_and_stable_failure(monkeypatch, capsys) -> None:
 
 
 def test_setup_entrypoint_is_the_shared_cli() -> None:
-    setup_source = Path("src/so101_demo_py/setup.py").read_text(encoding="utf-8")
+    setup_source = (PACKAGE_ROOT / "setup.py").read_text(encoding="utf-8")
     assert "scene_setup = so101_demo.cli.scene_setup:main" in setup_source

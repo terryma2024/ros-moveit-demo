@@ -2,9 +2,11 @@ from pathlib import Path
 
 import pytest
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_setup_exposes_only_named_fixed_and_dynamic_pick_place_entries() -> None:
-    source = Path("src/so101_demo_py/setup.py").read_text(encoding="utf-8")
+    source = (PACKAGE_ROOT / "setup.py").read_text(encoding="utf-8")
 
     assert "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main" in source
     assert "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main" in source
@@ -107,15 +109,13 @@ def test_dynamic_cli_still_rejects_unknown_application_argument(capsys) -> None:
 
 
 def test_fixed_entrypoint_module_does_not_import_dynamic_or_rclpy() -> None:
-    source = Path("src/so101_demo_py/src/cli/fixed_cup_pick_place.py").read_text(encoding="utf-8")
+    source = (PACKAGE_ROOT / "src/cli/fixed_cup_pick_place.py").read_text(encoding="utf-8")
 
     assert "dynamic" not in source
     assert "rclpy" not in source
 
 
 def test_dynamic_gazebo_runtime_uses_simulation_clock() -> None:
-    source = Path("src/so101_demo_py/src/ros/dynamic_runtime.py").read_text(
-        encoding="utf-8"
-    )
+    source = (PACKAGE_ROOT / "src/ros/dynamic_runtime.py").read_text(encoding="utf-8")
 
     assert 'Parameter("use_sim_time", value=True)' in source
