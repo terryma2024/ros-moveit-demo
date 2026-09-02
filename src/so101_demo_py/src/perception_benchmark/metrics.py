@@ -165,13 +165,19 @@ def compute_image_metrics(
     evidence_root: Path | None = None,
     *,
     iou_threshold: float,
+    candidate_evidence_root: Path | None = None,
 ) -> InstanceMetricSummary:
     truth_items = tuple(truth)
     candidate_items = tuple(candidates)
     if (truth_items or candidate_items) and evidence_root is None:
         raise ValueError("evidence_root is required when masks are present")
     matches = (
-        maximize_mask_iou_assignment(truth_items, candidate_items, evidence_root)
+        maximize_mask_iou_assignment(
+            truth_items,
+            candidate_items,
+            evidence_root,
+            candidate_evidence_root=candidate_evidence_root,
+        )
         if truth_items and candidate_items and evidence_root is not None
         else ()
     )
@@ -234,6 +240,8 @@ def _ap_at_threshold(
     truths_by_index: dict[int, TruthSample],
     evidence_root: Path,
     threshold: float,
+    *,
+    candidate_evidence_root: Path | None = None,
 ) -> float | None:
     total_truth = sum(len(sample.instances) for sample in truths_by_index.values())
     if total_truth == 0:
@@ -248,7 +256,11 @@ def _ap_at_threshold(
         selected.append(candidate)
         sample = truths_by_index[sample_index]
         matched_by_index[sample_index] = _thresholded_match_count(
-            sample.instances, tuple(selected), evidence_root, threshold
+            sample.instances,
+            tuple(selected),
+            evidence_root,
+            threshold,
+            candidate_evidence_root=candidate_evidence_root,
         )
         current_total = sum(matched_by_index.values())
         if current_total < previous_total:
@@ -264,6 +276,8 @@ def _thresholded_match_count(
     candidates: Sequence[RawCandidate],
     evidence_root: Path,
     threshold: float,
+    *,
+    candidate_evidence_root: Path | None = None,
 ) -> int:
     ordered_truth = tuple(sorted(truth, key=lambda item: item.instance_id))
     ordered_candidates = tuple(
@@ -271,9 +285,14 @@ def _thresholded_match_count(
     )
     if not ordered_truth or not ordered_candidates:
         return 0
+    candidate_root = (
+        evidence_root
+        if candidate_evidence_root is None
+        else candidate_evidence_root
+    )
     truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
     candidate_masks = tuple(
-        read_mask(item.mask, evidence_root) for item in ordered_candidates
+        read_mask(item.mask, candidate_root) for item in ordered_candidates
     )
     ious = np.asarray(
         [
@@ -296,6 +315,8 @@ def compute_ap(
     truths: Sequence[TruthSample],
     evidence_root: Path,
     iou_thresholds: Sequence[float],
+    *,
+    candidate_evidence_root: Path | None = None,
 ) -> ApSummary:
     truth_items = tuple(truths)
     record_items = tuple(records)
@@ -338,6 +359,7 @@ def compute_ap(
                 truths_by_index,
                 evidence_root,
                 threshold,
+                candidate_evidence_root=candidate_evidence_root,
             ),
         )
         for threshold in thresholds
