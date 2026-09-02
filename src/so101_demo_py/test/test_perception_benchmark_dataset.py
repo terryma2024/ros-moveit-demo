@@ -104,6 +104,7 @@ def build_fixture_archive(
     label_mismatch: bool = False,
     payload_marker: bytes = b"",
     image_offset: int = 0,
+    extra_member_payload: bytes | None = None,
 ) -> Path:
     archive_path = tmp_path / "fixture.tar.gz"
     with tarfile.open(archive_path, "w:gz") as archive:
@@ -146,6 +147,12 @@ def build_fixture_archive(
                 _add_bytes(archive, f"{prefix}/images/{split}/{stem}.png", image_payload)
                 _add_bytes(archive, f"{prefix}/labels/{split}/{stem}.txt", label_payload)
                 _add_bytes(archive, f"{prefix}/truth/{split}/{stem}.json", truth_payload)
+        if extra_member_payload is not None:
+            _add_bytes(
+                archive,
+                "dataset/metadata/build.txt",
+                extra_member_payload,
+            )
     return archive_path
 
 
@@ -545,6 +552,38 @@ def test_test_extraction_rejects_cross_archive_seal_before_semantics(
     assert not (tmp_path / "test-open").exists()
 
 
+def test_test_extraction_rejects_identical_test_subtree_from_different_archive(
+    tmp_path: Path,
+) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = build_fixture_archive(
+        first_root,
+        include_val=True,
+        extra_member_payload=b"first archive metadata",
+    )
+    second = build_fixture_archive(
+        second_root,
+        include_val=True,
+        extra_member_payload=b"second archive metadata",
+    )
+    assert sha256_file(first) != sha256_file(second)
+    seal = _verified_unlocked_seal(first, tmp_path)
+
+    with pytest.raises(DatasetVerificationError, match="TEST_SEAL_ARCHIVE_MISMATCH"):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            second,
+            sha256_file(second),
+            tmp_path / "test-open",
+            "test",
+            seal,
+        )
+
+    assert not (tmp_path / "test-open").exists()
+
+
 def test_loader_rejects_fabricated_inventory_capability(tmp_path: Path) -> None:
     archive = build_fixture_archive(tmp_path, include_val=True)
     inventory = DatasetArchiveVerifier().verify_and_extract_split(
@@ -554,6 +593,21 @@ def test_loader_rejects_fabricated_inventory_capability(tmp_path: Path) -> None:
 
     with pytest.raises(DatasetVerificationError, match="INVENTORY_CAPABILITY_INVALID"):
         load_truth_samples(tmp_path / "val-open", "val", fabricated)
+
+    assert not (tmp_path / "val-open/truth_masks").exists()
+
+
+def test_loader_rejects_issued_inventory_with_mutated_sample_count(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "val-open", "val", None
+    )
+    object.__setattr__(inventory, "sample_count", 199)
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_CAPABILITY_INVALID"):
+        load_truth_samples(tmp_path / "val-open", "val", inventory)
 
     assert not (tmp_path / "val-open/truth_masks").exists()
 
@@ -656,6 +710,32 @@ def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
     monkeypatch.setattr(dataset_module, "atomic_write_json", real_atomic_write)
     truths = load_truth_samples(tmp_path / "val-open", "val", inventory)
     assert len(truths) == 200
+
+
+def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    dataset_root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), dataset_root, "val", None
+    )
+    mask_parent = dataset_root / "truth_masks"
+    mask_parent.mkdir()
+    real_replace = dataset_module.os.replace
+
+    def fail_publication(source: object, destination: object) -> None:
+        if Path(destination) == mask_parent / "val":
+            raise OSError("injected final mask publication failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(dataset_module.os, "replace", fail_publication)
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(dataset_root, "val", inventory)
+
+    assert mask_parent.is_dir()
+    assert not (mask_parent / "val").exists()
 
 
 def test_val_rejects_unlocked_test_seal_without_creating_output(
