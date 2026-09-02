@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
+from so101_demo.adapters.perception.yolo_seg import YoloResultError
 from so101_demo.application.object_pose import TargetSelector
 from so101_demo.core.detection import (
     DetectionBatch,
@@ -169,6 +170,32 @@ class _YoloResult:
         self.masks = SimpleNamespace(data=mask)
 
 
+class _Parameter:
+    def __init__(self, device: str, dtype: np.dtype[Any]) -> None:
+        self.device = device
+        self.dtype = dtype
+
+
+class _ParameterModule:
+    def __init__(
+        self,
+        devices: tuple[str, ...] = ("mps",),
+        dtypes: tuple[np.dtype[Any], ...] = (np.dtype(np.float32),),
+    ) -> None:
+        if len(devices) != len(dtypes):
+            raise ValueError("parameter devices/dtypes must align")
+        self._parameters = tuple(
+            _Parameter(device, dtype) for device, dtype in zip(devices, dtypes)
+        )
+
+    def parameters(self) -> Any:
+        return iter(self._parameters)
+
+    def move(self, device: str) -> None:
+        for parameter in self._parameters:
+            parameter.device = device
+
+
 class _YoloModel:
     names = {0: "plastic_cup"}
 
@@ -178,10 +205,17 @@ class _YoloModel:
         device: str = "mps",
         dtype: np.dtype[Any] = np.dtype(np.float32),
         move_on_predict: bool = False,
+        parameter_devices: tuple[str, ...] | None = None,
+        parameter_dtypes: tuple[np.dtype[Any], ...] | None = None,
+        error: Exception | None = None,
     ) -> None:
         self.device = device
         self.dtype = dtype
         self.move_on_predict = move_on_predict
+        self.error = error
+        devices = parameter_devices or (device,)
+        dtypes = parameter_dtypes or tuple(dtype for _ in devices)
+        self.model = _ParameterModule(devices, dtypes)
         self.predict_calls: list[dict[str, object]] = []
         self.predictor = SimpleNamespace(
             args=SimpleNamespace(conf=0.25, iou=0.70, imgsz=640)
@@ -191,6 +225,9 @@ class _YoloModel:
         self.predict_calls.append(kwargs)
         if self.move_on_predict:
             self.device = str(kwargs["device"])
+            self.model.move(self.device)
+        if self.error is not None:
+            raise self.error
         return [_YoloResult(dtype=self.dtype)]
 
 
@@ -230,12 +267,19 @@ class _GroundingModel:
     dtype = np.float32
     device = "mps"
 
-    def __init__(self) -> None:
+    def __init__(self, *, error: Exception | None = None) -> None:
         self.call_count = 0
+        self.error = error
+        self._parameters = _ParameterModule()
+
+    def parameters(self) -> Any:
+        return self._parameters.parameters()
 
     def __call__(self, **inputs: object) -> SimpleNamespace:
         assert "input_ids" in inputs
         self.call_count += 1
+        if self.error is not None:
+            raise self.error
         probabilities = np.asarray([0.1, 0.88, 0.79, 0.1], dtype=np.float32)
         logits = np.log(probabilities / (1.0 - probabilities)).reshape(1, 1, 4)
         return SimpleNamespace(logits=logits)
@@ -253,22 +297,39 @@ class _SamProcessor:
         }
 
     def post_process_masks(
-        self, masks: np.ndarray, original_sizes: np.ndarray
+        self,
+        masks: np.ndarray,
+        original_sizes: np.ndarray,
+        mask_threshold: float = 0.0,
+        binarize: bool = True,
+        max_hole_area: float = 0.0,
+        max_sprinkle_area: float = 0.0,
+        apply_non_overlapping_constraints: bool = False,
+        **kwargs: object,
     ) -> list[np.ndarray]:
+        del max_hole_area, max_sprinkle_area, apply_non_overlapping_constraints, kwargs
         assert tuple(original_sizes[0]) == (16, 20)
-        return [masks[0]]
+        assert binarize is True
+        return [np.asarray(masks[0]) > mask_threshold]
 
 
 class _SamModel:
     dtype = np.float32
     device = "mps"
 
-    def __init__(self) -> None:
+    def __init__(self, *, error: Exception | None = None) -> None:
         self.call_count = 0
+        self.error = error
+        self._parameters = _ParameterModule()
+
+    def parameters(self) -> Any:
+        return self._parameters.parameters()
 
     def __call__(self, **inputs: object) -> SimpleNamespace:
         assert np.asarray(inputs["input_boxes"]).shape == (1, 1, 4)
         self.call_count += 1
+        if self.error is not None:
+            raise self.error
         masks = np.zeros((1, 1, 1, 16, 20), dtype=np.float32)
         masks[0, 0, 0, 2:10, 3:13] = 1.0
         return SimpleNamespace(
@@ -285,8 +346,9 @@ def _yolo_adapter(
     evidence_root: Path,
     *,
     model: _YoloModel | None = None,
+    torch_api: _TorchApi | None = None,
 ) -> YoloRawAdapter:
-    torch_api = _TorchApi()
+    torch_api = torch_api or _TorchApi()
     return YoloRawAdapter(
         model=model or _YoloModel(),
         model_id="plastic-cup-yolo11s-seg-v2",
@@ -298,12 +360,24 @@ def _yolo_adapter(
     )
 
 
-def _grounded_adapter(evidence_root: Path) -> tuple[GroundedSamRawAdapter, _GroundingProcessor, _GroundingModel, _SamProcessor, _SamModel]:
-    torch_api = _TorchApi()
+def _grounded_adapter(
+    evidence_root: Path,
+    *,
+    torch_api: _TorchApi | None = None,
+    grounding_model: _GroundingModel | None = None,
+    sam_model: _SamModel | None = None,
+) -> tuple[
+    GroundedSamRawAdapter,
+    _GroundingProcessor,
+    _GroundingModel,
+    _SamProcessor,
+    _SamModel,
+]:
+    torch_api = torch_api or _TorchApi()
     grounding_processor = _GroundingProcessor()
-    grounding_model = _GroundingModel()
+    grounding_model = grounding_model or _GroundingModel()
     sam_processor = _SamProcessor()
-    sam_model = _SamModel()
+    sam_model = sam_model or _SamModel()
     adapter = GroundedSamRawAdapter(
         model_id="grounding-dino-tiny+sam2.1-hiera-tiny",
         runtime_device="mps",
@@ -401,6 +475,101 @@ def test_mask_artifacts_are_lossless_relative_fsynced_and_never_overwritten(
     assert artifact.read_bytes() == original
 
 
+@pytest.mark.parametrize(
+    "symlink_level",
+    ("evidence-root", "benchmark-masks", "namespace", "collection"),
+)
+def test_mask_artifact_store_rejects_preexisting_symlink_escape(
+    tmp_path: Path, symlink_level: str
+) -> None:
+    """Catch any adapter-owned parent following a symlink outside evidence_root."""
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    evidence_root = tmp_path
+    if symlink_level == "evidence-root":
+        evidence_root = tmp_path / "root-link"
+        evidence_root.symlink_to(outside, target_is_directory=True)
+    benchmark_masks = evidence_root / "benchmark-masks"
+    namespace = benchmark_masks / "yolo-seg"
+    if symlink_level == "evidence-root":
+        pass
+    elif symlink_level == "benchmark-masks":
+        benchmark_masks.symlink_to(outside, target_is_directory=True)
+    elif symlink_level == "namespace":
+        benchmark_masks.mkdir()
+        namespace.symlink_to(outside, target_is_directory=True)
+    else:
+        namespace.mkdir(parents=True)
+        (namespace / "collection-000000").symlink_to(
+            outside, target_is_directory=True
+        )
+
+    with pytest.raises(ValueError, match="symlink"):
+        _yolo_adapter(evidence_root)
+
+    assert list(outside.iterdir()) == []
+
+
+def test_mask_write_rejects_collection_swapped_to_outside_symlink(
+    tmp_path: Path,
+) -> None:
+    """Catch a post-allocation collection swap writing beyond evidence_root."""
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    class _SwappingYoloModel(_YoloModel):
+        def predict(self, **kwargs: object) -> list[_YoloResult]:
+            collection = (
+                tmp_path
+                / "benchmark-masks"
+                / "yolo-seg"
+                / "collection-000000"
+            )
+            collection.rmdir()
+            collection.symlink_to(outside, target_is_directory=True)
+            return super().predict(**kwargs)
+
+    adapter = _yolo_adapter(tmp_path, model=_SwappingYoloModel())
+
+    with pytest.raises(ValueError, match="symlink"):
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert list(outside.iterdir()) == []
+
+
+def test_mask_artifact_directory_entries_are_fsynced_before_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch publication before newly owned directories and file entries are durable."""
+
+    import so101_demo.perception_benchmark.adapters.base as base_module
+
+    synchronized: list[Path] = []
+    monkeypatch.setattr(
+        base_module,
+        "_fsync_directory",
+        lambda path: synchronized.append(Path(path)),
+    )
+
+    result = _yolo_adapter(tmp_path).collect(_frame(), CollectionMode.LOW_FLOOR)
+    artifact = tmp_path / result.raw_candidates[0].mask.relative_path
+    collection = artifact.parent
+    benchmark_masks = tmp_path / "benchmark-masks"
+    namespace = benchmark_masks / "yolo-seg"
+
+    assert synchronized == [
+        benchmark_masks,
+        tmp_path,
+        namespace,
+        benchmark_masks,
+        collection,
+        namespace,
+        collection,
+    ]
+
+
 def test_raw_result_owns_immutable_candidates_limits_and_resource_samples(
     tmp_path: Path,
 ) -> None:
@@ -448,6 +617,117 @@ def test_grounded_low_floor_is_stateless_and_keeps_distinct_model_scores(
     assert candidate.sam_quality == pytest.approx(0.84)
     assert second.raw_candidates[0].candidate_id == candidate.candidate_id
     assert not hasattr(adapter, "tracker")
+
+
+def test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly(
+    tmp_path: Path,
+) -> None:
+    """Pin the real 4.56.2 processor dtype/shape and the matching fake contract."""
+
+    import torch
+    import transformers
+    from transformers import Sam2Processor
+    from transformers.models.sam2.image_processing_sam2_fast import (
+        Sam2ImageProcessorFast,
+    )
+
+    assert transformers.__version__ == "4.56.2"
+    processor = Sam2Processor(image_processor=Sam2ImageProcessorFast())
+    logits = torch.zeros((1, 1, 1, 16, 20), dtype=torch.float32)
+    logits[0, 0, 0, 2:10, 3:13] = 1.0
+    processed = processor.post_process_masks(
+        logits, torch.tensor([[16, 20]], dtype=torch.int64)
+    )
+
+    assert len(processed) == 1
+    assert processed[0].dtype is torch.bool
+    assert tuple(processed[0].shape) == (1, 1, 16, 20)
+    assert int(processed[0].sum()) == 80
+    fake_processed = _SamProcessor().post_process_masks(
+        logits.numpy(), np.asarray([[16, 20]], dtype=np.int64)
+    )
+    assert fake_processed[0].dtype == np.bool_
+    np.testing.assert_array_equal(fake_processed[0], processed[0].numpy())
+
+    result = _grounded_adapter(tmp_path)[0].collect(
+        _frame(), CollectionMode.LOW_FLOOR
+    )
+    mask_ref = result.raw_candidates[0].mask
+    decoded = decode_mask_rle(
+        json.loads((tmp_path / mask_ref.relative_path).read_text(encoding="utf-8"))
+    )
+    assert decoded.dtype == np.bool_
+    assert int(decoded.sum()) == 80
+    assert result.raw_candidates[0].sam_quality == pytest.approx(0.84)
+
+
+def test_raw_inference_exceptions_synchronize_and_preserve_original_error(
+    tmp_path: Path,
+) -> None:
+    """Catch YOLO or Grounded-SAM skipping the requested-device error boundary."""
+
+    yolo_error = RuntimeError("yolo exploded")
+    yolo_torch = _TorchApi()
+    yolo = _yolo_adapter(
+        tmp_path,
+        model=_YoloModel(error=yolo_error),
+        torch_api=yolo_torch,
+    )
+    with pytest.raises(YoloResultError) as yolo_caught:
+        yolo.collect(_frame(), CollectionMode.LOW_FLOOR)
+    assert yolo_caught.value.__cause__ is yolo_error
+    assert yolo_torch.mps.synchronize_calls == 3
+
+    grounding_error = RuntimeError("grounding exploded")
+    grounded_torch = _TorchApi()
+    grounded = _grounded_adapter(
+        tmp_path,
+        torch_api=grounded_torch,
+        grounding_model=_GroundingModel(error=grounding_error),
+    )[0]
+    with pytest.raises(RuntimeError) as grounded_caught:
+        grounded.collect(_frame(), CollectionMode.LOW_FLOOR)
+    assert grounded_caught.value is grounding_error
+    assert grounded_torch.mps.synchronize_calls == 3
+
+    sam_error = RuntimeError("SAM exploded")
+    sam_torch = _TorchApi()
+    grounded_with_raising_sam = _grounded_adapter(
+        tmp_path,
+        torch_api=sam_torch,
+        sam_model=_SamModel(error=sam_error),
+    )[0]
+    with pytest.raises(RuntimeError) as sam_caught:
+        grounded_with_raising_sam.collect(_frame(), CollectionMode.LOW_FLOOR)
+    assert sam_caught.value is sam_error
+    assert sam_torch.mps.synchronize_calls == 4
+
+
+def test_calibrated_yolo_exception_synchronizes_without_swallowing_cause(
+    tmp_path: Path,
+) -> None:
+    """Catch the calibrated warm-up path omitting its post-inference sync."""
+
+    weights = tmp_path / "raising.pt"
+    weights.write_bytes(b"raising-weights")
+    expected = RuntimeError("warm-up exploded")
+    torch_api = _TorchApi()
+
+    with pytest.raises(YoloResultError) as caught:
+        YoloCalibratedDetector(
+            weights_path=weights,
+            expected_sha256=hashlib.sha256(b"raising-weights").hexdigest(),
+            requested_device="mps",
+            model_id="plastic-cup-yolo11s-seg-v2",
+            thresholds=YoloThresholds(
+                Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
+            ),
+            torch_api=torch_api,
+            model_factory=lambda _: _YoloModel(error=expected),
+        )
+
+    assert caught.value.__cause__ is expected
+    assert torch_api.mps.synchronize_calls == 2
 
 
 def test_production_observation_calls_real_port_and_real_target_selector() -> None:
@@ -572,6 +852,8 @@ def test_configured_production_builder_requires_a_real_detect_method(
         )
 
     expected = _RecordingDetectorPort(_batch())
+    expected._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
+    expected._sam_model = _ParameterModule()  # type: ignore[attr-defined]
     monkeypatch.setattr(
         base_module,
         "build_detector",
@@ -692,8 +974,8 @@ def test_calibrated_builder_configures_existing_grounded_detector_from_lock(
 
     captured: list[dict[str, object]] = []
     detector = _RecordingDetectorPort(_batch(_candidate("cup")))
-    detector._grounding_model = SimpleNamespace(dtype=np.dtype(np.float32))  # type: ignore[attr-defined]
-    detector._sam_model = SimpleNamespace(dtype=np.dtype(np.float32))  # type: ignore[attr-defined]
+    detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
+    detector._sam_model = _ParameterModule()  # type: ignore[attr-defined]
 
     def grounded_factory(**kwargs: object) -> _RecordingDetectorPort:
         captured.append(kwargs)
@@ -933,6 +1215,103 @@ def test_yolo_collection_rejects_device_or_dtype_mismatch(
 
 
 @pytest.mark.parametrize(
+    ("model", "message"),
+    (
+        (
+            _YoloModel(parameter_devices=("mps", "cpu")),
+            "DEVICE_MISMATCH",
+        ),
+        (
+            _YoloModel(
+                parameter_devices=("mps",),
+                parameter_dtypes=(np.dtype(np.float16),),
+            ),
+            "NON_FP32_RUNTIME",
+        ),
+    ),
+)
+def test_production_yolo_rejects_mixed_or_non_fp32_underlying_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+    model: _YoloModel,
+    message: str,
+) -> None:
+    """Catch trusting Ultralytics wrapper claims instead of torch parameters."""
+
+    import so101_demo.perception_benchmark.adapters.base as base_module
+
+    detector = _RecordingDetectorPort(_batch())
+    detector._model = model  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        base_module,
+        "build_detector",
+        lambda _options: SimpleNamespace(detector=detector),
+    )
+
+    with pytest.raises(ModelSetupError, match=message):
+        build_production_detector_port(
+            SimpleNamespace(
+                requested_device="mps",
+                allow_cpu_fallback=False,
+                backend="yolo_seg",
+            )
+        )
+
+
+def test_production_runtime_rejects_missing_parameter_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch declared runtime_device becoming the only formal runtime evidence."""
+
+    import so101_demo.perception_benchmark.adapters.base as base_module
+
+    detector = _RecordingDetectorPort(_batch())
+    detector._model = _YoloModel()  # type: ignore[attr-defined]
+    detector._model.model = SimpleNamespace()  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        base_module,
+        "build_detector",
+        lambda _options: SimpleNamespace(detector=detector),
+    )
+
+    with pytest.raises(ModelSetupError, match="RUNTIME_PROVENANCE_UNAVAILABLE"):
+        build_production_detector_port(
+            SimpleNamespace(
+                requested_device="mps",
+                allow_cpu_fallback=False,
+                backend="yolo_seg",
+            )
+        )
+
+
+def test_production_grounded_validates_both_loaded_components(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch the SAM component escaping formal device/FP32 validation."""
+
+    import so101_demo.perception_benchmark.adapters.base as base_module
+
+    detector = _RecordingDetectorPort(_batch())
+    detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
+    detector._sam_model = _ParameterModule(  # type: ignore[attr-defined]
+        devices=("cpu",)
+    )
+    monkeypatch.setattr(
+        base_module,
+        "build_detector",
+        lambda _options: SimpleNamespace(detector=detector),
+    )
+
+    with pytest.raises(ModelSetupError, match="DEVICE_MISMATCH"):
+        build_production_detector_port(
+            SimpleNamespace(
+                requested_device="mps",
+                allow_cpu_fallback=False,
+                backend="grounded_sam",
+            )
+        )
+
+
+@pytest.mark.parametrize(
     ("runtime_device", "model_dtype", "message"),
     (
         ("cpu", np.dtype(np.float32), "DEVICE_MISMATCH"),
@@ -953,8 +1332,12 @@ def test_calibrated_grounded_builder_rejects_actual_device_or_dtype_mismatch(
     detector = _RecordingDetectorPort(
         _batch(), runtime_device=runtime_device
     )
-    detector._grounding_model = SimpleNamespace(dtype=model_dtype)  # type: ignore[attr-defined]
-    detector._sam_model = SimpleNamespace(dtype=np.dtype(np.float32))  # type: ignore[attr-defined]
+    detector._grounding_model = _ParameterModule(  # type: ignore[attr-defined]
+        devices=(runtime_device,), dtypes=(model_dtype,)
+    )
+    detector._sam_model = _ParameterModule(  # type: ignore[attr-defined]
+        devices=(runtime_device,)
+    )
     monkeypatch.setattr(base_module, "verify_model_bundle", lambda root, sha: "bundle")
     monkeypatch.setattr(base_module, "GroundedSamDetector", lambda **kwargs: detector)
     assets = VerifiedBenchmarkAssets(
