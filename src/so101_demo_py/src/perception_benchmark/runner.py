@@ -15,6 +15,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import tempfile
+from types import MappingProxyType
 from typing import Literal
 
 import numpy as np
@@ -83,6 +84,56 @@ _OBSERVED_RUN_KINDS = {
     RunKind.TEST_CALIBRATED,
     RunKind.TEST_CHARACTERIZATION,
 }
+_CANDIDATE_KEYS = {
+    "candidate_id",
+    "label",
+    "bbox_xyxy",
+    "mask",
+    "ranking_score",
+    "ranking_score_source",
+    "class_confidence",
+    "grounding_box_score",
+    "grounding_text_score",
+    "sam_quality",
+}
+_MASK_KEYS = {
+    "relative_path",
+    "sha256",
+    "pixel_count",
+    "image_width",
+    "image_height",
+}
+_RUNTIME_PROVENANCE_KEYS = {
+    "runtime_device",
+    "runtime_name",
+    "runtime_version",
+    "weights_sha256",
+    "environment",
+}
+_PHASE_TIMING_KEYS = {"grounding_ms", "sam_ms", "selector_ms"}
+_TIMING_BREAKDOWN_KEYS = {
+    "preprocess_ms",
+    "dino_or_yolo_ms",
+    "sam_ms",
+    "postprocess_ms",
+    "selector_ms",
+    "total_ms",
+}
+_RESOURCE_SAMPLE_KEYS = {item.name for item in fields(ResourceSample)}
+_RECORD_DOCUMENT_KEYS = {item.name for item in fields(PredictionRecord)} | {
+    "platform",
+    "model",
+    "device",
+    "dtype",
+    "source_commit",
+    "inventory_sha256",
+    "collection_mode",
+    "max_gpu_temperature_celsius",
+    "timing_breakdown",
+    "resource_samples",
+    "irreversible_limits",
+    "previous_record_sha256",
+}
 
 
 class RunIntegrityError(ValueError):
@@ -99,6 +150,75 @@ class _ResourceStreamValidationError(_FatalRunError):
 
 class _ThermalValidationError(_FatalRunError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class RunEvidenceExpectation:
+    """External anchors required to trust one persisted terminal run."""
+
+    run_kind: RunKind
+    platform: Literal["macos", "linux"]
+    model: Literal["yolo_seg", "grounded_sam"]
+    device: Literal["mps", "cuda"]
+    dtype: Literal["float32"]
+    source_commit: str
+    config_sha256: str
+    threshold_lock_sha256: str | None
+    model_id: str
+    weights_sha256: str
+    runtime_name: str | None = None
+    runtime_version: str | None = None
+    runtime_environment: Mapping[str, str] | None = None
+    max_gpu_temperature_celsius: float | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "run_kind", RunKind(self.run_kind))
+        except ValueError as error:
+            raise ValueError("run_kind is unsupported") from error
+        if self.platform not in {"macos", "linux"}:
+            raise ValueError("platform is unsupported")
+        if self.model not in {"yolo_seg", "grounded_sam"}:
+            raise ValueError("model is unsupported")
+        if self.device not in {"mps", "cuda"}:
+            raise ValueError("device is unsupported")
+        if self.dtype != "float32":
+            raise ValueError("dtype must be float32")
+        if _SOURCE_COMMIT.fullmatch(self.source_commit) is None:
+            raise ValueError("source_commit must be a lowercase Git commit")
+        for name in ("config_sha256", "weights_sha256"):
+            if _SHA256.fullmatch(str(getattr(self, name))) is None:
+                raise ValueError(f"{name} must be a lowercase SHA256 digest")
+        if self.threshold_lock_sha256 is not None and _SHA256.fullmatch(
+            self.threshold_lock_sha256
+        ) is None:
+            raise ValueError("threshold_lock_sha256 must be null or a SHA256 digest")
+        if not isinstance(self.model_id, str) or not self.model_id:
+            raise ValueError("model_id must be non-empty")
+        for name in ("runtime_name", "runtime_version"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{name} must be null or non-empty")
+        if self.runtime_environment is not None:
+            environment = dict(self.runtime_environment)
+            if not all(
+                isinstance(key, str)
+                and key
+                and isinstance(value, str)
+                and value
+                for key, value in environment.items()
+            ):
+                raise ValueError("runtime_environment must map non-empty strings")
+            object.__setattr__(
+                self, "runtime_environment", MappingProxyType(environment)
+            )
+        if self.max_gpu_temperature_celsius is not None and (
+            isinstance(self.max_gpu_temperature_celsius, bool)
+            or not isinstance(self.max_gpu_temperature_celsius, (int, float))
+            or not math.isfinite(float(self.max_gpu_temperature_celsius))
+            or float(self.max_gpu_temperature_celsius) <= 0.0
+        ):
+            raise ValueError("max_gpu_temperature_celsius must be null or positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,7 +337,30 @@ class RunManifest:
         object.__setattr__(
             self, "collection_mode", CollectionMode(self.collection_mode)
         )
-        object.__setattr__(self, "runtime_environment", dict(self.runtime_environment))
+        object.__setattr__(
+            self,
+            "runtime_environment",
+            MappingProxyType(dict(self.runtime_environment)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedRunEvidence:
+    """Immutable typed and extended documents from one verified terminal run."""
+
+    manifest: RunManifest
+    evidence_root: Path
+    records: tuple[PredictionRecord, ...]
+    extended_record_documents: tuple[Mapping[str, object], ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence_root", Path(self.evidence_root))
+        object.__setattr__(self, "records", tuple(self.records))
+        object.__setattr__(
+            self,
+            "extended_record_documents",
+            tuple(_freeze_document(item) for item in self.extended_record_documents),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +409,16 @@ def _jsonable(value: object) -> object:
     if value is None or isinstance(value, (str, int, bool)):
         return value
     raise RunIntegrityError("DOCUMENT_VALUE_UNSUPPORTED")
+
+
+def _freeze_document(value: object) -> object:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_document(item) for key, item in value.items()}
+        )
+    if isinstance(value, (tuple, list)):
+        return tuple(_freeze_document(item) for item in value)
+    return value
 
 
 def _document_bytes(document: object) -> bytes:
@@ -1170,10 +1323,10 @@ def _error_record(
 
 
 def _candidate_from_document(document: object) -> RawCandidate:
-    if not isinstance(document, Mapping):
+    if not isinstance(document, Mapping) or set(document) != _CANDIDATE_KEYS:
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     mask = document.get("mask")
-    if not isinstance(mask, Mapping):
+    if not isinstance(mask, Mapping) or set(mask) != _MASK_KEYS:
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     try:
         return RawCandidate(
@@ -1204,7 +1357,9 @@ def _record_from_document(document: Mapping[str, object]) -> PredictionRecord:
     candidates = document.get("raw_candidates")
     if (
         not isinstance(runtime, Mapping)
+        or set(runtime) != _RUNTIME_PROVENANCE_KEYS
         or not isinstance(phases, Mapping)
+        or set(phases) != _PHASE_TIMING_KEYS
         or not isinstance(candidates, list)
     ):
         raise RunIntegrityError("RECORD_SCHEMA_INVALID")
@@ -1253,9 +1408,14 @@ def _record_from_document(document: Mapping[str, object]) -> PredictionRecord:
 
 
 def _verify_extended_record(document: Mapping[str, object]) -> None:
+    if set(document) != _RECORD_DOCUMENT_KEYS:
+        raise RunIntegrityError("RECORD_SCHEMA_INVALID")
     timings = document.get("timing_breakdown")
     if timings is not None:
-        if not isinstance(timings, Mapping):
+        if (
+            not isinstance(timings, Mapping)
+            or set(timings) != _TIMING_BREAKDOWN_KEYS
+        ):
             raise RunIntegrityError("RECORD_TIMING_INVALID")
         try:
             PhaseTimingBreakdown(**timings)
@@ -1265,14 +1425,26 @@ def _verify_extended_record(document: Mapping[str, object]) -> None:
     if not isinstance(resources, list):
         raise RunIntegrityError("RECORD_RESOURCE_INVALID")
     for raw in resources:
-        if not isinstance(raw, Mapping):
+        if not isinstance(raw, Mapping) or set(raw) != _RESOURCE_SAMPLE_KEYS:
             raise RunIntegrityError("RECORD_RESOURCE_INVALID")
         try:
             ResourceSample(**raw)
         except (TypeError, ValueError) as error:
             raise RunIntegrityError("RECORD_RESOURCE_INVALID") from error
     limits = document.get("irreversible_limits")
-    if not isinstance(limits, Mapping):
+    if not isinstance(limits, Mapping) or not all(
+        isinstance(key, str)
+        and key
+        and (
+            isinstance(value, str)
+            or (
+                not isinstance(value, bool)
+                and isinstance(value, (int, float))
+                and math.isfinite(float(value))
+            )
+        )
+        for key, value in limits.items()
+    ):
         raise RunIntegrityError("RECORD_LIMITS_INVALID")
 
 
@@ -1349,13 +1521,13 @@ def _verify_mask_tree(evidence_root: Path, expected_paths: set[str]) -> None:
         raise RunIntegrityError("MASK_TREE_UNEXPECTED")
 
 
-def verify_resume(
+def _load_verified_resume_evidence(
     checkpoint: RunCheckpoint,
     inventory: DatasetInventory,
     config_sha: str,
     source_commit: str,
-) -> int:
-    """Return the exact verified prefix length or reject the entire resume."""
+) -> tuple[tuple[PredictionRecord, ...], tuple[Mapping[str, object], ...]]:
+    """Verify and return the exact durable record prefix."""
 
     if not isinstance(checkpoint, RunCheckpoint):
         raise RunIntegrityError("CHECKPOINT_TYPE_INVALID")
@@ -1387,6 +1559,8 @@ def verify_resume(
     evidence_root = records_dir.parent
     error_count = 0
     expected_mask_paths: set[str] = set()
+    verified_records: list[PredictionRecord] = []
+    verified_documents: list[Mapping[str, object]] = []
     for index, path in paths:
         document, payload = _read_canonical_json(path, "RECORD_CANONICAL_INVALID")
         record_sha = _sha256(payload)
@@ -1435,6 +1609,8 @@ def verify_resume(
             expected_mask_paths.add(candidate.mask.relative_path)
         if record.record_status is RecordStatus.ERROR:
             error_count += 1
+        verified_records.append(record)
+        verified_documents.append(document)
         previous_record_sha256 = record_sha
     expected_last = len(paths) - 1
     if checkpoint.last_formal_sample_index != expected_last:
@@ -1461,11 +1637,30 @@ def verify_resume(
     ):
         raise RunIntegrityError("CHECKPOINT_RECORD_INVENTORY_MISMATCH")
     _verify_mask_tree(evidence_root, expected_mask_paths)
-    return len(paths)
+    return (
+        tuple(verified_records),
+        tuple(_freeze_document(document) for document in verified_documents),
+    )
+
+
+def verify_resume(
+    checkpoint: RunCheckpoint,
+    inventory: DatasetInventory,
+    config_sha: str,
+    source_commit: str,
+) -> int:
+    """Return the exact verified prefix length or reject the entire resume."""
+
+    records, _ = _load_verified_resume_evidence(
+        checkpoint, inventory, config_sha, source_commit
+    )
+    return len(records)
 
 
 def _read_checkpoint(path: Path) -> RunCheckpoint:
     document, _ = _read_canonical_json(path, "CHECKPOINT_CANONICAL_INVALID")
+    if set(document) != {item.name for item in fields(RunCheckpoint)}:
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
     try:
         return RunCheckpoint(**document)
     except (TypeError, ValueError) as error:
@@ -1473,6 +1668,8 @@ def _read_checkpoint(path: Path) -> RunCheckpoint:
 
 
 def _manifest_from_document(document: Mapping[str, object]) -> RunManifest:
+    if set(document) != {item.name for item in fields(RunManifest)}:
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     try:
         return RunManifest(**document)
     except (TypeError, ValueError) as error:
@@ -1511,7 +1708,9 @@ def _verify_manifest_identity(
 
 def _verify_manifest_schema(manifest: RunManifest) -> None:
     if (
-        manifest.record_count < 0
+        type(manifest.record_count) is not int
+        or type(manifest.error_count) is not int
+        or manifest.record_count < 0
         or manifest.error_count < 0
         or manifest.error_count > manifest.record_count
         or _SHA256.fullmatch(manifest.record_inventory_sha256) is None
@@ -1519,6 +1718,49 @@ def _verify_manifest_schema(manifest: RunManifest) -> None:
         or (
             manifest.record_chain_head_sha256 is not None
             and _SHA256.fullmatch(manifest.record_chain_head_sha256) is None
+        )
+    ):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    if (
+        not isinstance(manifest.run_id, str)
+        or not manifest.run_id
+        or manifest.platform not in {"macos", "linux"}
+        or manifest.model not in {"yolo_seg", "grounded_sam"}
+        or manifest.device not in {"mps", "cuda"}
+        or manifest.dtype != "float32"
+        or _SOURCE_COMMIT.fullmatch(manifest.source_commit) is None
+        or _SHA256.fullmatch(manifest.inventory_sha256) is None
+        or _SHA256.fullmatch(manifest.config_sha256) is None
+        or (
+            manifest.threshold_lock_sha256 is not None
+            and _SHA256.fullmatch(manifest.threshold_lock_sha256) is None
+        )
+        or not isinstance(manifest.model_id, str)
+        or not manifest.model_id
+        or _SHA256.fullmatch(manifest.weights_sha256) is None
+        or not isinstance(manifest.runtime_name, str)
+        or not manifest.runtime_name
+        or not isinstance(manifest.runtime_version, str)
+        or not manifest.runtime_version
+        or not all(
+            isinstance(key, str)
+            and key
+            and isinstance(value, str)
+            and value
+            for key, value in manifest.runtime_environment.items()
+        )
+        or (
+            manifest.max_gpu_temperature_celsius is not None
+            and (
+                isinstance(manifest.max_gpu_temperature_celsius, bool)
+                or not isinstance(
+                    manifest.max_gpu_temperature_celsius, (int, float)
+                )
+                or not math.isfinite(
+                    float(manifest.max_gpu_temperature_celsius)
+                )
+                or float(manifest.max_gpu_temperature_celsius) <= 0.0
+            )
         )
     ):
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
@@ -1601,6 +1843,202 @@ def _verify_checkpoint_spec_identity(
     }
     if any(getattr(checkpoint, name) != value for name, value in expected.items()):
         raise RunIntegrityError("RESUME_SPEC_CHANGED")
+
+
+def _verify_loaded_expectation(
+    manifest: RunManifest,
+    checkpoint: RunCheckpoint,
+    inventory: DatasetInventory,
+    expectation: RunEvidenceExpectation,
+) -> None:
+    if not isinstance(expectation, RunEvidenceExpectation):
+        raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_TYPE_INVALID")
+    if expectation.run_kind is RunKind.NON_FORMAL_DRY_RUN:
+        raise RunIntegrityError("NON_FORMAL_DRY_RUN_REQUIRES_SEPARATE_CARRIER")
+    if (expectation.platform, expectation.device) not in {
+        ("macos", "mps"),
+        ("linux", "cuda"),
+    }:
+        raise RunIntegrityError("PLATFORM_DEVICE_MISMATCH")
+    try:
+        canonical_model_id = model_id_for_name(expectation.model)
+    except ValueError as error:
+        raise RunIntegrityError("MODEL_IDENTITY_MISMATCH") from error
+    if expectation.model_id != canonical_model_id:
+        raise RunIntegrityError("MODEL_IDENTITY_MISMATCH")
+    locked = expectation.run_kind.name.startswith("TEST_") or (
+        expectation.run_kind is RunKind.ORACLE_DIAGNOSTIC
+    )
+    if locked:
+        _require_sha(
+            expectation.threshold_lock_sha256,
+            "LOCKED_RUN_REQUIRES_THRESHOLD_LOCK",
+        )
+        if inventory.split != "test":
+            raise RunIntegrityError("LOCKED_RUN_REQUIRES_TEST_INVENTORY")
+        root = _require_directory(
+            Path(inventory.dataset_root), "INVENTORY_DATASET_ROOT_INVALID"
+        )
+        inventory_document, _ = _read_canonical_json(
+            root / "inventory.json", "INVENTORY_CANONICAL_INVALID"
+        )
+        access = inventory_document.get("test_access")
+        registered = (
+            access.get("threshold_lock_sha256s")
+            if isinstance(access, Mapping)
+            else None
+        )
+        if (
+            not isinstance(registered, list)
+            or expectation.threshold_lock_sha256 not in registered
+        ):
+            raise RunIntegrityError("THRESHOLD_LOCK_NOT_REGISTERED")
+    elif expectation.threshold_lock_sha256 is not None:
+        raise RunIntegrityError("UNLOCKED_RUN_FORBIDS_THRESHOLD_LOCK")
+    if expectation.run_kind is RunKind.VAL_RAW and inventory.split != "val":
+        raise RunIntegrityError("VAL_RUN_REQUIRES_VAL_INVENTORY")
+
+    required = {
+        "run_kind": expectation.run_kind,
+        "platform": expectation.platform,
+        "model": expectation.model,
+        "device": expectation.device,
+        "dtype": expectation.dtype,
+        "source_commit": expectation.source_commit,
+        "inventory_sha256": inventory.inventory_sha256,
+        "config_sha256": expectation.config_sha256,
+        "threshold_lock_sha256": expectation.threshold_lock_sha256,
+        "collection_mode": CollectionMode.LOW_FLOOR,
+        "model_id": expectation.model_id,
+        "weights_sha256": expectation.weights_sha256,
+        "max_gpu_temperature_celsius": (
+            expectation.max_gpu_temperature_celsius
+        ),
+    }
+    if any(getattr(manifest, name) != value for name, value in required.items()):
+        raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
+    checkpoint_required = {
+        "run_kind": expectation.run_kind,
+        "platform": expectation.platform,
+        "model": expectation.model,
+        "device": expectation.device,
+        "dtype": expectation.dtype,
+        "source_commit": expectation.source_commit,
+        "inventory_sha256": inventory.inventory_sha256,
+        "config_sha": expectation.config_sha256,
+        "threshold_lock_sha256": expectation.threshold_lock_sha256,
+        "collection_mode": CollectionMode.LOW_FLOOR,
+        "model_id": expectation.model_id,
+        "weights_sha256": expectation.weights_sha256,
+        "max_gpu_temperature_celsius": (
+            expectation.max_gpu_temperature_celsius
+        ),
+    }
+    if any(
+        getattr(checkpoint, name) != value
+        for name, value in checkpoint_required.items()
+    ):
+        raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
+    optional = {
+        "runtime_name": expectation.runtime_name,
+        "runtime_version": expectation.runtime_version,
+        "runtime_environment": expectation.runtime_environment,
+    }
+    for name, value in optional.items():
+        if value is None:
+            continue
+        manifest_value = getattr(manifest, name)
+        checkpoint_value = getattr(checkpoint, name)
+        if name == "runtime_environment":
+            if dict(manifest_value) != dict(value) or dict(
+                checkpoint_value or {}
+            ) != dict(value):
+                raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
+        elif manifest_value != value or checkpoint_value != value:
+            raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
+    common = (
+        "run_id",
+        "run_kind",
+        "platform",
+        "model",
+        "model_id",
+        "weights_sha256",
+        "device",
+        "dtype",
+        "source_commit",
+        "inventory_sha256",
+        "config_sha256",
+        "threshold_lock_sha256",
+        "collection_mode",
+        "runtime_name",
+        "runtime_version",
+        "max_gpu_temperature_celsius",
+    )
+    for name in common:
+        checkpoint_name = "config_sha" if name == "config_sha256" else name
+        if getattr(manifest, name) != getattr(checkpoint, checkpoint_name):
+            raise RunIntegrityError("MANIFEST_CHECKPOINT_IDENTITY_MISMATCH")
+    if dict(manifest.runtime_environment) != dict(
+        checkpoint.runtime_environment or {}
+    ):
+        raise RunIntegrityError("MANIFEST_CHECKPOINT_IDENTITY_MISMATCH")
+
+
+def load_verified_run_evidence(
+    run_root: Path,
+    inventory: DatasetInventory,
+    expectation: RunEvidenceExpectation,
+) -> LoadedRunEvidence:
+    """Read and fully verify one immutable terminal run without rewriting it."""
+
+    root_path = Path(run_root)
+    if root_path.is_symlink() or not root_path.is_dir():
+        raise RunIntegrityError("RUN_EVIDENCE_ROOT_INVALID")
+    root = _require_directory(root_path, "RUN_EVIDENCE_ROOT_INVALID")
+    if (
+        not isinstance(inventory, DatasetInventory)
+        or inventory.sample_count != 200
+        or len(inventory.samples) != 200
+    ):
+        raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
+    manifest_document, _ = _read_canonical_json(
+        root / "manifest.json", "MANIFEST_CANONICAL_INVALID"
+    )
+    manifest = _manifest_from_document(manifest_document)
+    _verify_manifest_schema(manifest)
+    if manifest.status is not RunStatus.VALID:
+        raise RunIntegrityError("TERMINAL_RUN_NOT_VALID")
+    _verify_inventory(inventory)
+    _verify_current_images(inventory)
+    records_dir = _require_directory(
+        root / "records", "RECORDS_DIRECTORY_INVALID"
+    )
+    checkpoint = _read_checkpoint(root / "checkpoint.json")
+    checkpoint_records = _require_directory(
+        checkpoint.records_dir, "RECORDS_DIRECTORY_INVALID"
+    )
+    if checkpoint_records != records_dir or records_dir.parent != root:
+        raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
+    _verify_loaded_expectation(manifest, checkpoint, inventory, expectation)
+    records, documents = _load_verified_resume_evidence(
+        checkpoint,
+        inventory,
+        expectation.config_sha256,
+        expectation.source_commit,
+    )
+    _verify_manifest_anchor(manifest, checkpoint)
+    if (
+        len(records) != 200
+        or checkpoint.record_count != 200
+        or manifest.record_count != 200
+    ):
+        raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
+    return LoadedRunEvidence(
+        manifest=manifest,
+        evidence_root=root,
+        records=records,
+        extended_record_documents=documents,
+    )
 
 
 class DetectorBenchmarkRunner:
@@ -2036,9 +2474,12 @@ class DetectorBenchmarkRunner:
 
 __all__ = (
     "DetectorBenchmarkRunner",
+    "LoadedRunEvidence",
     "RunCheckpoint",
+    "RunEvidenceExpectation",
     "RunIntegrityError",
     "RunManifest",
     "RunSpec",
+    "load_verified_run_evidence",
     "verify_resume",
 )
