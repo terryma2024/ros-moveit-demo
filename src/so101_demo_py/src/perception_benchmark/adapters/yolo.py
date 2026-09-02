@@ -31,6 +31,7 @@ from so101_demo.core.detection import (
 from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     RawDetectionResult,
+    ResourceSamplingError,
     _MaskArtifactStore,
     _validate_accelerated_component,
 )
@@ -309,6 +310,10 @@ class YoloRawAdapter:
             timer.mark("dino_or_yolo")
             candidates = self._convert(results[0], frame, collection)
             timer.mark("postprocess")
+        try:
+            resource_sample = self._resource_sampler.sample()
+        except Exception as error:
+            raise ResourceSamplingError("YOLO resource sampling failed") from error
         return RawDetectionResult(
             model_id=self.model_id,
             runtime_device=self.runtime_device,
@@ -318,7 +323,7 @@ class YoloRawAdapter:
             phase_timings=timer.to_timings(
                 sam_applicable=False, selector_applicable=False
             ),
-            resource_samples=(self._resource_sampler.sample(),),
+            resource_samples=(resource_sample,),
             fallback_used=False,
             irreversible_limits={"nms_iou": 0.90, "max_det": 300},
         )

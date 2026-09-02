@@ -25,6 +25,7 @@ from so101_demo.perception_benchmark.adapters import (
     CollectionMode,
     GroundedSamRawAdapter,
     RawDetectionResult,
+    ResourceSamplingError,
     VerifiedBenchmarkAssets,
     YoloCalibratedDetector,
     YoloRawAdapter,
@@ -43,6 +44,7 @@ from so101_demo.perception_benchmark.codec import decode_mask_rle, sha256_bytes
 from so101_demo.perception_benchmark.contracts import DecisionOutput
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
+    ResourceSample,
     ResourceSampler,
 )
 from so101_demo.ports.object_detector import DetectorPort
@@ -342,11 +344,45 @@ def _resource_sampler(torch_api: _TorchApi) -> ResourceSampler:
     return ResourceSampler(process=_Process(), torch_api=torch_api, device="mps")
 
 
+class _ControlledResourceSampler:
+    device = "mps"
+
+    def __init__(
+        self,
+        *,
+        result: object | None = None,
+        error: Exception | None = None,
+        construct_invalid: bool = False,
+    ) -> None:
+        self.result = result
+        self.error = error
+        self.construct_invalid = construct_invalid
+        self.sample_calls = 0
+
+    def sample(self) -> Any:
+        self.sample_calls += 1
+        if self.error is not None:
+            raise self.error
+        if self.construct_invalid:
+            return ResourceSample(
+                process_rss_bytes=-1,
+                process_cpu_percent=10.0,
+                gpu_memory_allocated_bytes=1,
+                gpu_memory_reserved_bytes=2,
+                gpu_utilization_percent=3.0,
+                gpu_temperature_celsius=4.0,
+                gpu_power_watts=5.0,
+            )
+        assert self.result is not None
+        return self.result
+
+
 def _yolo_adapter(
     evidence_root: Path,
     *,
     model: _YoloModel | None = None,
     torch_api: _TorchApi | None = None,
+    resource_sampler: Any | None = None,
 ) -> YoloRawAdapter:
     torch_api = torch_api or _TorchApi()
     return YoloRawAdapter(
@@ -356,7 +392,7 @@ def _yolo_adapter(
         weights_sha256="a" * 64,
         evidence_root=evidence_root,
         synchronizer=DeviceSynchronizer(torch_api, "mps"),
-        resource_sampler=_resource_sampler(torch_api),
+        resource_sampler=resource_sampler or _resource_sampler(torch_api),
     )
 
 
@@ -366,6 +402,7 @@ def _grounded_adapter(
     torch_api: _TorchApi | None = None,
     grounding_model: _GroundingModel | None = None,
     sam_model: _SamModel | None = None,
+    resource_sampler: Any | None = None,
 ) -> tuple[
     GroundedSamRawAdapter,
     _GroundingProcessor,
@@ -389,7 +426,7 @@ def _grounded_adapter(
         sam_processor=sam_processor,
         sam_model=sam_model,
         synchronizer=DeviceSynchronizer(torch_api, "mps"),
-        resource_sampler=_resource_sampler(torch_api),
+        resource_sampler=resource_sampler or _resource_sampler(torch_api),
     )
     return adapter, grounding_processor, grounding_model, sam_processor, sam_model
 
@@ -414,6 +451,126 @@ def test_both_adapters_emit_same_raw_contract(
     assert result.fallback_used is False
     assert result.runtime_device == "mps"
     assert result.dtype == "float32"
+
+
+@pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
+def test_resource_sampling_failure_has_typed_adapter_boundary(
+    tmp_path: Path, model: str
+) -> None:
+    """Catch raw telemetry failures escaping without a machine-readable type."""
+
+    expected = ValueError("opaque failure 731")
+    sampler = _ControlledResourceSampler(error=expected)
+    adapter = (
+        _yolo_adapter(tmp_path, resource_sampler=sampler)
+        if model == "yolo"
+        else _grounded_adapter(tmp_path, resource_sampler=sampler)[0]
+    )
+
+    with pytest.raises(Exception) as caught:
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert type(caught.value).__name__ == "ResourceSamplingError"
+    assert isinstance(caught.value, ResourceSamplingError)
+    assert caught.value.__cause__ is expected
+    assert sampler.sample_calls == 1
+
+
+@pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
+def test_invalid_resource_sample_validation_has_typed_adapter_boundary(
+    tmp_path: Path, model: str
+) -> None:
+    """Catch ResourceSample validation errors leaking as untyped ValueError."""
+
+    sampler = _ControlledResourceSampler(construct_invalid=True)
+    adapter = (
+        _yolo_adapter(tmp_path, resource_sampler=sampler)
+        if model == "yolo"
+        else _grounded_adapter(tmp_path, resource_sampler=sampler)[0]
+    )
+
+    with pytest.raises(Exception) as caught:
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert type(caught.value).__name__ == "ResourceSamplingError"
+    assert isinstance(caught.value.__cause__, ValueError)
+    assert sampler.sample_calls == 1
+
+
+@pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
+def test_inference_value_error_is_not_reclassified_as_resource_sampling(
+    tmp_path: Path, model: str
+) -> None:
+    """Catch an overly broad resource wrapper swallowing model exceptions."""
+
+    expected = ValueError("opaque failure 731")
+    sample = ResourceSample(4096, 10.0, 1, 2, 3.0, 4.0, 5.0)
+    sampler = _ControlledResourceSampler(result=sample)
+    if model == "yolo":
+        adapter = _yolo_adapter(
+            tmp_path,
+            model=_YoloModel(error=expected),
+            resource_sampler=sampler,
+        )
+    else:
+        adapter = _grounded_adapter(
+            tmp_path,
+            grounding_model=_GroundingModel(error=expected),
+            resource_sampler=sampler,
+        )[0]
+
+    with pytest.raises(Exception) as caught:
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert type(caught.value).__name__ != "ResourceSamplingError"
+    if model == "yolo":
+        assert isinstance(caught.value, YoloResultError)
+        assert caught.value.__cause__ is expected
+    else:
+        assert caught.value is expected
+    assert sampler.sample_calls == 0
+
+
+@pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
+def test_result_schema_value_error_is_not_reclassified_as_resource_sampling(
+    tmp_path: Path, model: str
+) -> None:
+    """Catch resource wrapping extending beyond the sample call into result schema."""
+
+    sampler = _ControlledResourceSampler(result=object())
+    adapter = (
+        _yolo_adapter(tmp_path, resource_sampler=sampler)
+        if model == "yolo"
+        else _grounded_adapter(tmp_path, resource_sampler=sampler)[0]
+    )
+
+    with pytest.raises(ValueError, match="resource_samples") as caught:
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert not isinstance(caught.value, ResourceSamplingError)
+    assert caught.value.__cause__ is None
+    assert sampler.sample_calls == 1
+
+
+@pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
+def test_successful_resource_sampling_is_preserved(
+    tmp_path: Path, model: str
+) -> None:
+    """Catch the typed failure boundary changing successful resource records."""
+
+    sample = ResourceSample(4096, 10.0, 1, 2, 3.0, 4.0, 5.0)
+    sampler = _ControlledResourceSampler(result=sample)
+    adapter = (
+        _yolo_adapter(tmp_path, resource_sampler=sampler)
+        if model == "yolo"
+        else _grounded_adapter(tmp_path, resource_sampler=sampler)[0]
+    )
+
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert result.resource_samples == (sample,)
+    assert result.resource_samples[0] is sample
+    assert sampler.sample_calls == 1
 
 
 def test_yolo_low_floor_uses_exact_irreversible_settings_and_class_score(
