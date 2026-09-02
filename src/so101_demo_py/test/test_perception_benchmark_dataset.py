@@ -671,7 +671,7 @@ def test_archive_path_replacement_during_open_fails_atomically(
     assert not (tmp_path / "val-open").exists()
 
 
-def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
+def test_round5_truth_mask_publish_failure_retains_staging_for_explicit_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -694,12 +694,206 @@ def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
         load_truth_samples(tmp_path / "val-open", "val", inventory)
 
     assert not (tmp_path / "val-open/truth_masks/val").exists()
-    assert not any(
-        path.name.startswith(".truth-masks-") for path in (tmp_path / "val-open").iterdir()
+    retained = [
+        path for path in (tmp_path / "val-open").iterdir() if path.name.startswith(".truth-masks-")
+    ]
+    assert len(retained) == 1
+    staging = retained[0]
+    assert len(list((staging / "val").iterdir())) == 3
+
+
+def test_round5_prestat_substitute_is_retained_when_publication_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
     )
-    monkeypatch.setattr(dataset_module.os, "write", real_write)
-    truths = load_truth_samples(tmp_path / "val-open", "val", inventory)
-    assert len(truths) == 200
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    moved = outside / "actually-created-staging"
+    real_mkdir = dataset_module.os.mkdir
+    staging_name: str | None = None
+    substitute_identity: tuple[int, int] | None = None
+
+    def substitute_before_first_stat(
+        path: object,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> None:
+        nonlocal staging_name, substitute_identity
+        real_mkdir(path, mode=mode, dir_fd=dir_fd)
+        if (
+            staging_name is None
+            and isinstance(path, str)
+            and path.startswith(".truth-masks-stage-")
+            and dir_fd is not None
+        ):
+            staging_name = path
+            (root / path).rename(moved)
+            real_mkdir(path, mode=0o700, dir_fd=dir_fd)
+            metadata = (root / path).stat()
+            substitute_identity = metadata.st_dev, metadata.st_ino
+
+    monkeypatch.setattr(dataset_module.os, "mkdir", substitute_before_first_stat)
+    monkeypatch.setattr(
+        dataset_module,
+        "_rename_directory_noreplace",
+        lambda *args: (_ for _ in ()).throw(OSError(errno.EIO, "injected")),
+    )
+
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(root, "val", inventory)
+
+    assert staging_name is not None
+    assert substitute_identity is not None
+    substitute = root / staging_name
+    assert substitute.is_dir()
+    metadata = substitute.stat()
+    assert (metadata.st_dev, metadata.st_ino) == substitute_identity
+    assert len(list((substitute / "val").iterdir())) == 200
+    assert moved.is_dir()
+    assert list(moved.iterdir()) == []
+
+
+def test_round5_failure_cleanup_never_unlinks_through_a_moved_staging_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    moved = outside / "moved-after-identity-check"
+    real_unlink = dataset_module.os.unlink
+    raced = False
+    moved_snapshot: tuple[tuple[str, bytes], ...] | None = None
+
+    def move_staging_after_identity_check(
+        path: object,
+        *,
+        dir_fd: int | None = None,
+    ) -> None:
+        nonlocal moved_snapshot, raced
+        if not raced and isinstance(path, str) and dir_fd is not None:
+            opened = os.fstat(dir_fd)
+            candidates = [
+                candidate
+                for candidate in root.iterdir()
+                if candidate.name.startswith(".truth-masks-stage-")
+                and (candidate / "val").is_dir()
+                and (
+                    (candidate / "val").stat().st_dev,
+                    (candidate / "val").stat().st_ino,
+                )
+                == (opened.st_dev, opened.st_ino)
+            ]
+            if len(candidates) == 1:
+                raced = True
+                staging = candidates[0]
+                staging.rename(moved)
+                staging.mkdir()
+                (staging / "unowned-marker.bin").write_bytes(b"keep")
+                moved_snapshot = tuple(
+                    (item.relative_to(moved).as_posix(), item.read_bytes())
+                    for item in sorted(moved.rglob("*"))
+                    if item.is_file()
+                )
+        real_unlink(path, dir_fd=dir_fd)
+
+    monkeypatch.setattr(dataset_module.os, "unlink", move_staging_after_identity_check)
+    monkeypatch.setattr(
+        dataset_module,
+        "_rename_directory_noreplace",
+        lambda *args: (_ for _ in ()).throw(OSError(errno.EIO, "injected")),
+    )
+
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(root, "val", inventory)
+
+    if raced:
+        assert moved_snapshot is not None
+        current = tuple(
+            (item.relative_to(moved).as_posix(), item.read_bytes())
+            for item in sorted(moved.rglob("*"))
+            if item.is_file()
+        )
+        assert current == moved_snapshot
+    assert not raced
+    retained = [path for path in root.iterdir() if path.name.startswith(".truth-masks-stage-")]
+    assert len(retained) == 1
+    assert len(list((retained[0] / "val").iterdir())) == 200
+
+
+def test_round5_source_name_swap_at_noreplace_call_fails_closed_inside_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    moved = outside / "moved-after-precheck"
+    real_noreplace = dataset_module._rename_directory_noreplace
+    substitute_identity: tuple[int, int] | None = None
+    moved_snapshot: tuple[tuple[str, bytes], ...] | None = None
+
+    def swap_source_name_then_call_kernel(
+        source_fd: int,
+        source_name: str,
+        destination_fd: int,
+        destination_name: str,
+    ) -> None:
+        nonlocal moved_snapshot, substitute_identity
+        staging = root / source_name
+        staging.rename(moved)
+        staging.mkdir()
+        (staging / "unowned-marker.bin").write_bytes(b"confined inside root")
+        substitute = staging.stat()
+        substitute_identity = substitute.st_dev, substitute.st_ino
+        moved_snapshot = tuple(
+            (item.relative_to(moved).as_posix(), item.read_bytes())
+            for item in sorted(moved.rglob("*"))
+            if item.is_file()
+        )
+        real_noreplace(
+            source_fd,
+            source_name,
+            destination_fd,
+            destination_name,
+        )
+
+    monkeypatch.setattr(
+        dataset_module,
+        "_rename_directory_noreplace",
+        swap_source_name_then_call_kernel,
+    )
+
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(root, "val", inventory)
+
+    assert substitute_identity is not None
+    assert moved_snapshot is not None
+    installed = root / "truth_masks"
+    metadata = installed.stat()
+    assert (metadata.st_dev, metadata.st_ino) == substitute_identity
+    assert (installed / "unowned-marker.bin").read_bytes() == b"confined inside root"
+    current = tuple(
+        (item.relative_to(moved).as_posix(), item.read_bytes())
+        for item in sorted(moved.rglob("*"))
+        if item.is_file()
+    )
+    assert current == moved_snapshot
+    assert len(current) == 200
 
 
 def test_truth_mask_publication_rejects_preexisting_empty_destination(
