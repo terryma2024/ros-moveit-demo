@@ -21,6 +21,7 @@ from so101_demo.core.detection import DetectionFrame, RuntimeDevice
 from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     RawDetectionResult,
+    ResourceSamplingError,
     _MaskArtifactStore,
     _validate_accelerated_component,
 )
@@ -524,6 +525,12 @@ class GroundedSamRawAdapter:
                 qualities = np.empty((0, 0))
                 candidates = ()
             timer.mark("postprocess")
+        try:
+            resource_sample = self._resource_sampler.sample()
+        except Exception as error:
+            raise ResourceSamplingError(
+                "Grounded-SAM resource sampling failed"
+            ) from error
         return RawDetectionResult(
             model_id=self.model_id,
             runtime_device=self.runtime_device,
@@ -533,7 +540,7 @@ class GroundedSamRawAdapter:
             phase_timings=timer.to_timings(
                 sam_applicable=bool(proposals), selector_applicable=False
             ),
-            resource_samples=(self._resource_sampler.sample(),),
+            resource_samples=(resource_sample,),
             fallback_used=False,
             irreversible_limits={
                 "box_threshold": 0.01,

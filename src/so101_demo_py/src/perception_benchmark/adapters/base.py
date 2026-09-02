@@ -59,6 +59,10 @@ class CollectionMode(str, Enum):
     LOW_FLOOR = "LOW_FLOOR"
 
 
+class ResourceSamplingError(RuntimeError):
+    """Resource telemetry failed after detector candidate collection."""
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedBenchmarkAssets:
     """Pinned model assets and an explicit accelerator/fallback contract."""
@@ -733,6 +737,7 @@ __all__ = (
     "ProductionObservation",
     "RawDetectionResult",
     "RawDetectorAdapter",
+    "ResourceSamplingError",
     "VerifiedBenchmarkAssets",
     "build_calibrated_detector_port",
     "build_production_detector_port",
