@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import hmac
 import json
@@ -11,6 +13,7 @@ import re
 import secrets
 import shutil
 import stat
+import sys
 import tarfile
 import tempfile
 from collections import Counter
@@ -154,9 +157,7 @@ class TestAccessGrant:
 
     def __post_init__(self) -> None:
         try:
-            event_sha = _require_sha256(
-                self.event_sha256, "TEST_ACCESS_GRANT_INVALID"
-            )
+            event_sha = _require_sha256(self.event_sha256, "TEST_ACCESS_GRANT_INVALID")
             sealed_sha = _require_sha256(
                 self.sealed_member_inventory_sha256,
                 "TEST_ACCESS_GRANT_INVALID",
@@ -165,15 +166,13 @@ class TestAccessGrant:
             if len(locks) != 2:
                 raise DatasetVerificationError("TEST_ACCESS_GRANT_INVALID")
             normalized_locks = tuple(
-                _require_sha256(value, "TEST_ACCESS_GRANT_INVALID")
-                for value in locks
+                _require_sha256(value, "TEST_ACCESS_GRANT_INVALID") for value in locks
             )
             if normalized_locks[0] == normalized_locks[1]:
                 raise DatasetVerificationError("TEST_ACCESS_GRANT_INVALID")
             granted_at = datetime.fromisoformat(self.granted_at)
-            if (
-                granted_at.tzinfo is None
-                or granted_at.utcoffset() != timezone.utc.utcoffset(granted_at)
+            if granted_at.tzinfo is None or granted_at.utcoffset() != timezone.utc.utcoffset(
+                granted_at
             ):
                 raise DatasetVerificationError("TEST_ACCESS_GRANT_INVALID")
         except (TypeError, ValueError) as error:
@@ -198,9 +197,7 @@ class DatasetInventory:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dataset_root", Path(self.dataset_root))
-        object.__setattr__(
-            self, "scenario_counts", MappingProxyType(dict(self.scenario_counts))
-        )
+        object.__setattr__(self, "scenario_counts", MappingProxyType(dict(self.scenario_counts)))
         object.__setattr__(self, "samples", tuple(self.samples))
 
 
@@ -238,9 +235,7 @@ class TestSeal:
             raise DatasetVerificationError("THRESHOLD_LOCKS_NOT_DISTINCT")
         try:
             lock_shas = (
-                _require_sha256(
-                    verify_lock(Path(yolo_lock_path)), "THRESHOLD_LOCK_SHA256_INVALID"
-                ),
+                _require_sha256(verify_lock(Path(yolo_lock_path)), "THRESHOLD_LOCK_SHA256_INVALID"),
                 _require_sha256(
                     verify_lock(Path(grounded_sam_lock_path)),
                     "THRESHOLD_LOCK_SHA256_INVALID",
@@ -270,8 +265,7 @@ def append_test_access_event(
         "SEALED_MEMBER_INVENTORY_SHA256_INVALID",
     )
     locks = tuple(
-        _require_sha256(value, "THRESHOLD_LOCK_SHA256_INVALID")
-        for value in threshold_lock_sha256s
+        _require_sha256(value, "THRESHOLD_LOCK_SHA256_INVALID") for value in threshold_lock_sha256s
     )
     if len(locks) != 2 or locks[0] == locks[1]:
         raise DatasetVerificationError("THRESHOLD_LOCKS_NOT_DISTINCT")
@@ -395,9 +389,7 @@ def _safe_member_path(name: str) -> bool:
     if not name or "\\" in name:
         return False
     path = PurePosixPath(name)
-    return not path.is_absolute() and all(
-        part not in {"", ".", ".."} for part in path.parts
-    )
+    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
 
 
 class _PinnedFileError(ValueError):
@@ -418,6 +410,61 @@ _CREATE_FILE_FLAGS = (
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
 )
+_DARWIN_RENAME_EXCL = 0x00000004
+_LINUX_RENAME_NOREPLACE = 0x00000001
+
+
+def _rename_directory_noreplace(
+    source_fd: int,
+    source_name: str,
+    destination_fd: int,
+    destination_name: str,
+) -> None:
+    """Atomically rename one directory without replacing the destination."""
+    if (
+        type(source_fd) is not int
+        or source_fd < 0
+        or type(destination_fd) is not int
+        or destination_fd < 0
+        or not _safe_member_path(source_name)
+        or len(PurePosixPath(source_name).parts) != 1
+        or not _safe_member_path(destination_name)
+        or len(PurePosixPath(destination_name).parts) != 1
+    ):
+        raise OSError(errno.EINVAL, "unsafe no-replace rename input")
+
+    library = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == "darwin":
+        function = getattr(library, "renameatx_np", None)
+        flags = _DARWIN_RENAME_EXCL
+    elif sys.platform.startswith("linux"):
+        function = getattr(library, "renameat2", None)
+        flags = _LINUX_RENAME_NOREPLACE
+    else:
+        function = None
+        flags = 0
+    if function is None:
+        raise OSError(errno.ENOSYS, "atomic no-replace rename is unavailable")
+
+    function.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    function.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    result = function(
+        source_fd,
+        os.fsencode(source_name),
+        destination_fd,
+        os.fsencode(destination_name),
+        flags,
+    )
+    if result != 0:
+        error_number = ctypes.get_errno() or errno.EIO
+        raise OSError(error_number, os.strerror(error_number))
 
 
 def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
@@ -435,9 +482,7 @@ class _PinnedDirectory:
 
     __slots__ = ("path", "_descriptor", "_identity")
 
-    def __init__(
-        self, path: Path, descriptor: int, identity: tuple[int, int]
-    ) -> None:
+    def __init__(self, path: Path, descriptor: int, identity: tuple[int, int]) -> None:
         self.path = path
         self._descriptor = descriptor
         self._identity = identity
@@ -458,10 +503,8 @@ class _PinnedDirectory:
             bound = os.lstat(canonical)
             if (
                 not stat.S_ISDIR(bound.st_mode)
-                or (opened.st_dev, opened.st_ino)
-                != (lexical.st_dev, lexical.st_ino)
-                or (opened.st_dev, opened.st_ino)
-                != (bound.st_dev, bound.st_ino)
+                or (opened.st_dev, opened.st_ino) != (lexical.st_dev, lexical.st_ino)
+                or (opened.st_dev, opened.st_ino) != (bound.st_dev, bound.st_ino)
             ):
                 raise _PinnedFileError("pinned root changed while opening")
             return cls(
@@ -520,14 +563,58 @@ class _PinnedDirectory:
         except (_PinnedFileError, OSError) as error:
             raise _PinnedFileError("child metadata cannot be read") from error
 
-    def mkdir_child(self, name: str, mode: int = 0o700) -> None:
-        if self.child_metadata(name) is not None:
-            raise _PinnedFileError("child already exists")
+    def create_pinned_child(
+        self,
+        name: str,
+        mode: int = 0o700,
+        *,
+        fsync_parent: bool = True,
+    ) -> "_PinnedDirectory":
+        if not _safe_member_path(name) or len(PurePosixPath(name).parts) != 1:
+            raise _PinnedFileError("child name is unsafe")
+        descriptor: int | None = None
+        created_identity: tuple[int, int] | None = None
         try:
+            self._assert_identity()
             os.mkdir(name, mode=mode, dir_fd=self._descriptor)
-            self.fsync()
-        except (_PinnedFileError, OSError) as error:
+            created = os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
+            if not stat.S_ISDIR(created.st_mode):
+                raise _PinnedFileError("new child is not a real directory")
+            created_identity = created.st_dev, created.st_ino
+            descriptor = os.open(name, _OPEN_DIRECTORY_FLAGS, dir_fd=self._descriptor)
+            opened = os.fstat(descriptor)
+            after = os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
+            if (
+                not stat.S_ISDIR(opened.st_mode)
+                or created_identity != (opened.st_dev, opened.st_ino)
+                or created_identity != (after.st_dev, after.st_ino)
+            ):
+                raise _PinnedFileError("new child changed while opening")
+            if fsync_parent:
+                self.fsync()
+            child = _PinnedDirectory(
+                self.path / name,
+                descriptor,
+                created_identity,
+            )
+            descriptor = None
+            return child
+        except _PinnedFileError:
+            if descriptor is not None:
+                os.close(descriptor)
+            if created_identity is not None:
+                self.rmdir_owned_child(name, created_identity)
+            raise
+        except OSError as error:
+            if descriptor is not None:
+                os.close(descriptor)
+            if created_identity is not None:
+                self.rmdir_owned_child(name, created_identity)
             raise _PinnedFileError("child directory cannot be created") from error
+
+    def create_random_pinned_child(self, prefix: str) -> tuple[str, "_PinnedDirectory"]:
+        name = f"{prefix}{secrets.token_hex(16)}"
+        return name, self.create_pinned_child(name, mode=0o700)
 
     def open_child_directory(self, name: str) -> "_PinnedDirectory":
         before = self.child_metadata(name)
@@ -541,10 +628,8 @@ class _PinnedDirectory:
             if (
                 after is None
                 or not stat.S_ISDIR(opened.st_mode)
-                or (before.st_dev, before.st_ino)
-                != (opened.st_dev, opened.st_ino)
-                or (before.st_dev, before.st_ino)
-                != (after.st_dev, after.st_ino)
+                or (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino)
+                or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
             ):
                 raise _PinnedFileError("child directory changed while opening")
             return _PinnedDirectory(
@@ -667,34 +752,6 @@ class _PinnedDirectory:
         except OSError:
             return
 
-    def replace_child_into(
-        self,
-        source_name: str,
-        destination_parent: "_PinnedDirectory",
-        destination_name: str,
-    ) -> None:
-        if (
-            not _safe_member_path(source_name)
-            or len(PurePosixPath(source_name).parts) != 1
-            or not _safe_member_path(destination_name)
-            or len(PurePosixPath(destination_name).parts) != 1
-            or destination_parent.child_metadata(destination_name) is not None
-        ):
-            raise _PinnedFileError("publication target is unsafe or already exists")
-        try:
-            self._assert_identity()
-            destination_parent._assert_identity()
-            os.replace(
-                source_name,
-                destination_name,
-                src_dir_fd=self._descriptor,
-                dst_dir_fd=destination_parent._descriptor,
-            )
-            self.fsync()
-            destination_parent.fsync()
-        except (_PinnedFileError, OSError) as error:
-            raise _PinnedFileError("directory publication failed") from error
-
     def _open_descendant_directory(self, relative_path: str) -> int:
         if relative_path and not _safe_member_path(relative_path):
             raise _PinnedFileError("directory path is unsafe")
@@ -704,9 +761,7 @@ class _PinnedDirectory:
             if (root_metadata.st_dev, root_metadata.st_ino) != self._identity:
                 raise _PinnedFileError("pinned root identity changed")
             for part in PurePosixPath(relative_path).parts if relative_path else ():
-                next_descriptor = os.open(
-                    part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor
-                )
+                next_descriptor = os.open(part, _OPEN_DIRECTORY_FLAGS, dir_fd=descriptor)
                 metadata = os.fstat(next_descriptor)
                 if not stat.S_ISDIR(metadata.st_mode):
                     os.close(next_descriptor)
@@ -874,9 +929,7 @@ def _inspect_open_tar(
 class _VerifiedArchiveSnapshot(AbstractContextManager["_VerifiedArchiveSnapshot"]):
     def __init__(self, archive: Path, expected_sha256: str) -> None:
         self.path = Path(archive)
-        self.expected_sha256 = _require_sha256(
-            expected_sha256, "DATASET_ARCHIVE_SHA256_INVALID"
-        )
+        self.expected_sha256 = _require_sha256(expected_sha256, "DATASET_ARCHIVE_SHA256_INVALID")
         self._file: object | None = None
         self._tar: tarfile.TarFile | None = None
         self._stat: os.stat_result | None = None
@@ -892,11 +945,10 @@ class _VerifiedArchiveSnapshot(AbstractContextManager["_VerifiedArchiveSnapshot"
             self._file = file_object
             opened_stat = os.fstat(file_object.fileno())
             path_stat = os.lstat(self.path)
-            if (
-                not stat.S_ISREG(opened_stat.st_mode)
-                or (opened_stat.st_dev, opened_stat.st_ino)
-                != (path_stat.st_dev, path_stat.st_ino)
-            ):
+            if not stat.S_ISREG(opened_stat.st_mode) or (
+                opened_stat.st_dev,
+                opened_stat.st_ino,
+            ) != (path_stat.st_dev, path_stat.st_ino):
                 raise DatasetVerificationError("DATASET_ARCHIVE_UNREADABLE")
             self._stat = opened_stat
             if _hash_open_stream(file_object) != self.expected_sha256:
@@ -953,21 +1005,16 @@ class _VerifiedArchiveSnapshot(AbstractContextManager["_VerifiedArchiveSnapshot"
             if (
                 (descriptor_stat.st_dev, descriptor_stat.st_ino)
                 != (self._stat.st_dev, self._stat.st_ino)
-                or (path_stat.st_dev, path_stat.st_ino)
-                != (self._stat.st_dev, self._stat.st_ino)
+                or (path_stat.st_dev, path_stat.st_ino) != (self._stat.st_dev, self._stat.st_ino)
                 or descriptor_stat.st_size != self._stat.st_size
                 or descriptor_stat.st_mtime_ns != self._stat.st_mtime_ns
                 or _hash_open_stream(self._file) != self.expected_sha256
             ):
-                raise DatasetVerificationError(
-                    "ARCHIVE_CHANGED_DURING_VERIFICATION"
-                )
+                raise DatasetVerificationError("ARCHIVE_CHANGED_DURING_VERIFICATION")
         except DatasetVerificationError:
             raise
         except OSError as error:
-            raise DatasetVerificationError(
-                "ARCHIVE_CHANGED_DURING_VERIFICATION"
-            ) from error
+            raise DatasetVerificationError("ARCHIVE_CHANGED_DURING_VERIFICATION") from error
 
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
         try:
@@ -997,9 +1044,8 @@ def _require_triplets(
             code = "TEST_MEMBER_COUNT_INVALID" if split == "test" else "SPLIT_MEMBER_COUNT_INVALID"
             raise DatasetVerificationError(code)
         by_kind[member.kind] = member
-    valid = (
-        len(triplets) == expected_count
-        and all(set(by_kind) == set(_KINDS) for by_kind in triplets.values())
+    valid = len(triplets) == expected_count and all(
+        set(by_kind) == set(_KINDS) for by_kind in triplets.values()
     )
     if not valid:
         code = "TEST_MEMBER_COUNT_INVALID" if split == "test" else "SPLIT_MEMBER_COUNT_INVALID"
@@ -1018,9 +1064,7 @@ def _sealed_test_document(
     return {
         "schema_version": SCHEMA_VERSION,
         "split": "test",
-        "archive_sha256": _require_sha256(
-            archive_sha256, "DATASET_ARCHIVE_SHA256_INVALID"
-        ),
+        "archive_sha256": _require_sha256(archive_sha256, "DATASET_ARCHIVE_SHA256_INVALID"),
         "members": [
             {
                 "path": member.archive_path,
@@ -1032,9 +1076,7 @@ def _sealed_test_document(
     }
 
 
-def _sealed_test_sha(
-    classified: list[_ArchiveMember], archive_sha256: str
-) -> str:
+def _sealed_test_sha(classified: list[_ArchiveMember], archive_sha256: str) -> str:
     return hashlib.sha256(
         canonical_json_bytes(_sealed_test_document(classified, archive_sha256))
     ).hexdigest()
@@ -1049,9 +1091,8 @@ def _validate_test_chain(
     if test_seal.sealed_member_inventory_sha256 != current_sealed_sha:
         raise DatasetVerificationError("TEST_SEAL_ARCHIVE_MISMATCH")
     grant = test_seal.access_grant
-    if (
-        grant.sealed_member_inventory_sha256 != current_sealed_sha
-        or not _valid_grant_capability(grant)
+    if grant.sealed_member_inventory_sha256 != current_sealed_sha or not _valid_grant_capability(
+        grant
     ):
         raise DatasetVerificationError("TEST_ACCESS_GRANT_INVALID")
     _validate_access_event(test_seal.access_log_path, grant)
@@ -1069,12 +1110,8 @@ class DatasetArchiveVerifier:
         if sealed_path.exists() or sealed_path.is_symlink():
             raise DatasetVerificationError("OUTPUT_ROOT_ALREADY_EXISTS")
         with _VerifiedArchiveSnapshot(Path(archive), expected_sha256) as snapshot:
-            _require_triplets(
-                snapshot.classified, "test", _EXPECTED_SAMPLE_COUNT
-            )
-            sealed_document = _sealed_test_document(
-                snapshot.classified, snapshot.expected_sha256
-            )
+            _require_triplets(snapshot.classified, "test", _EXPECTED_SAMPLE_COUNT)
+            sealed_document = _sealed_test_document(snapshot.classified, snapshot.expected_sha256)
             safe_member_count = len(snapshot.members)
         sealed_sha = atomic_write_json(sealed_path, sealed_document)
         return ArchiveInventory(
@@ -1098,29 +1135,21 @@ class DatasetArchiveVerifier:
             raise DatasetVerificationError("OUTPUT_ROOT_ALREADY_EXISTS")
         if split not in {"val", "test"}:
             raise DatasetVerificationError("SPLIT_INVALID")
-        if split == "test" and (
-            test_seal is None or test_seal.access_grant is None
-        ):
+        if split == "test" and (test_seal is None or test_seal.access_grant is None):
             raise DatasetVerificationError("TEST_SEALED")
         if split == "val" and test_seal is not None and test_seal.access_grant is not None:
             raise DatasetVerificationError("VAL_TEST_SEAL_CONFLICT")
         _require_rasterizer_version()
         root.parent.mkdir(parents=True, exist_ok=True)
-        staging_root = Path(
-            tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=root.parent)
-        )
+        staging_root = Path(tempfile.mkdtemp(prefix=f".{root.name}.staging-", dir=root.parent))
         try:
             with _VerifiedArchiveSnapshot(Path(archive), expected_sha256) as snapshot:
-                triplets = _require_triplets(
-                    snapshot.classified, split, _EXPECTED_SAMPLE_COUNT
-                )
+                triplets = _require_triplets(snapshot.classified, split, _EXPECTED_SAMPLE_COUNT)
                 seal_for_inventory = None
                 if split == "test":
                     _validate_test_chain(
                         test_seal,
-                        _sealed_test_sha(
-                            snapshot.classified, snapshot.expected_sha256
-                        ),
+                        _sealed_test_sha(snapshot.classified, snapshot.expected_sha256),
                     )
                     seal_for_inventory = test_seal
                 snapshot.copy_split(staging_root, triplets)
@@ -1161,10 +1190,7 @@ class DatasetArchiveVerifier:
         images = {path.stem: path for path in (root / "images" / split).glob("*.png")}
         labels = {path.stem: path for path in (root / "labels" / split).glob("*.txt")}
         truths = {path.stem: path for path in (root / "truth" / split).glob("*.json")}
-        if (
-            not (set(images) == set(labels) == set(truths))
-            or len(images) != _EXPECTED_SAMPLE_COUNT
-        ):
+        if not (set(images) == set(labels) == set(truths)) or len(images) != _EXPECTED_SAMPLE_COUNT:
             raise DatasetVerificationError("SPLIT_MEMBER_COUNT_INVALID")
         for stem in sorted(images):
             image_path = images[stem]
@@ -1212,9 +1238,7 @@ class DatasetArchiveVerifier:
             raise DatasetVerificationError("SCENARIO_COUNTS_INVALID")
         ordered = tuple(
             replace(record, formal_sample_index=index)
-            for index, record in enumerate(
-                sorted(records, key=lambda item: item.image_sha256)
-            )
+            for index, record in enumerate(sorted(records, key=lambda item: item.image_sha256))
         )
         raw_hashes_by_image_sha = {
             item["record"].image_sha256: (
@@ -1469,19 +1493,14 @@ def _derive_truth_artifacts(
         truth = _read_truth_bytes(truth_payloads[sample_ref.truth_relpath], split)
         polygons = _truth_polygons(truth)
         raw_instances = truth["instances"]
-        if (
-            not isinstance(raw_instances, list)
-            or len(raw_instances) != sample_ref.truth_count
-        ):
+        if not isinstance(raw_instances, list) or len(raw_instances) != sample_ref.truth_count:
             raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
         normalized_instances: list[dict[str, object]] = []
         for raw_instance in raw_instances:
             if not isinstance(raw_instance, dict):
                 raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
             body_name = raw_instance.get("body_name")
-            if not isinstance(body_name, str) or not body_name.startswith(
-                "plastic_cup"
-            ):
+            if not isinstance(body_name, str) or not body_name.startswith("plastic_cup"):
                 raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
             normalized_instances.append(raw_instance)
         if truth["scenario"] != sample_ref.scenario:
@@ -1501,11 +1520,7 @@ def _derive_truth_artifacts(
                 _EXPECTED_IMAGE_SIZE[0],
                 _EXPECTED_IMAGE_SIZE[1],
             )
-            relative_path = (
-                Path("truth_masks")
-                / split
-                / f"{stem}-{instance_index:02d}.json"
-            )
+            relative_path = Path("truth_masks") / split / f"{stem}-{instance_index:02d}.json"
             decoded_sha = hashlib.sha256(
                 mask.astype(np.uint8, copy=False).tobytes(order="C")
             ).hexdigest()
@@ -1563,9 +1578,7 @@ def _verify_exact_dataset_tree(
 ) -> frozenset[str]:
     core_files = {"inventory.json", "inventory.sha256"}
     for sample in inventory.samples:
-        core_files.update(
-            (sample.image_relpath, sample.label_relpath, sample.truth_relpath)
-        )
+        core_files.update((sample.image_relpath, sample.label_relpath, sample.truth_relpath))
     core_directories = {
         parent.as_posix()
         for path in core_files
@@ -1581,9 +1594,7 @@ def _verify_exact_dataset_tree(
             raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
         return frozenset()
 
-    _, mask_artifacts = _derive_truth_artifacts(
-        inventory, inventory.split, truth_payloads
-    )
+    _, mask_artifacts = _derive_truth_artifacts(inventory, inventory.split, truth_payloads)
     mask_files = {relative_path.as_posix() for relative_path, _, _ in mask_artifacts}
     expected_files = core_files | mask_files
     expected_directories = {
@@ -1617,8 +1628,7 @@ def _verify_exact_dataset_tree(
             decoded.astype(np.uint8, copy=False).tobytes(order="C")
         ).hexdigest()
         if (
-            (decoded.shape[1], decoded.shape[0])
-            != (mask_ref.image_width, mask_ref.image_height)
+            (decoded.shape[1], decoded.shape[0]) != (mask_ref.image_width, mask_ref.image_height)
             or int(decoded.sum()) != mask_ref.pixel_count
             or decoded_sha != mask_ref.sha256
         ):
@@ -1630,13 +1640,10 @@ def _verify_truth_mask_refs(
     samples: tuple[TruthSample, ...], verified_paths: frozenset[str]
 ) -> None:
     referenced_paths = {
-        instance.mask.relative_path
-        for sample in samples
-        for instance in sample.instances
+        instance.mask.relative_path for sample in samples for instance in sample.instances
     }
-    if (
-        referenced_paths != set(verified_paths)
-        or any(not _safe_member_path(path) for path in referenced_paths)
+    if referenced_paths != set(verified_paths) or any(
+        not _safe_member_path(path) for path in referenced_paths
     ):
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
 
@@ -1665,8 +1672,7 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
         if not isinstance(raw_locks, list) or len(raw_locks) != 2:
             raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
         locks = tuple(
-            _require_sha256(value, "INVENTORY_ACCESS_CHAIN_INVALID")
-            for value in raw_locks
+            _require_sha256(value, "INVENTORY_ACCESS_CHAIN_INVALID") for value in raw_locks
         )
         if locks[0] == locks[1] or persisted_event_sha != event_sha:
             raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
@@ -1675,9 +1681,8 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
         if not isinstance(granted_at, str) or not isinstance(access_log_path, str):
             raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
         parsed_time = datetime.fromisoformat(granted_at)
-        if (
-            parsed_time.tzinfo is None
-            or parsed_time.utcoffset() != timezone.utc.utcoffset(parsed_time)
+        if parsed_time.tzinfo is None or parsed_time.utcoffset() != timezone.utc.utcoffset(
+            parsed_time
         ):
             raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     except (TypeError, ValueError) as error:
@@ -1692,9 +1697,7 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     expected_event = {**without_sha, "event_sha256": event_sha}
     try:
-        events = _parse_canonical_access_log(
-            _read_pinned_absolute_file(Path(access_log_path))
-        )
+        events = _parse_canonical_access_log(_read_pinned_absolute_file(Path(access_log_path)))
     except DatasetVerificationError as error:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
     if events != (expected_event,):
@@ -1735,9 +1738,7 @@ def _verify_inventory_and_tree(
         inventory_payload = _read_regular_bound_file(
             root_path, "inventory.json", pinned_root=active_pinned
         )
-        sidecar = _read_regular_bound_file(
-            root_path, "inventory.sha256", pinned_root=active_pinned
-        )
+        sidecar = _read_regular_bound_file(root_path, "inventory.sha256", pinned_root=active_pinned)
         truth_payloads = _verify_inventory_documents_and_samples(
             root_path,
             split,
@@ -1787,13 +1788,8 @@ def _verify_inventory_documents_and_samples(
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
     if split == "test":
         _require_sha256(inventory.test_access_event_sha256, "TEST_SEALED")
-        _validate_persisted_access(
-            document.get("test_access"), inventory.test_access_event_sha256
-        )
-    elif (
-        inventory.test_access_event_sha256 is not None
-        or document.get("test_access") is not None
-    ):
+        _validate_persisted_access(document.get("test_access"), inventory.test_access_event_sha256)
+    elif inventory.test_access_event_sha256 is not None or document.get("test_access") is not None:
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
     raw_samples = document.get("samples")
     if (
@@ -1836,10 +1832,8 @@ def _verify_inventory_documents_and_samples(
         )
         if (
             any(value is None for value in classifications)
-            or {value[0] for value in classifications if value is not None}
-            != set(_KINDS)
-            or {value[1] for value in classifications if value is not None}
-            != {split}
+            or {value[0] for value in classifications if value is not None} != set(_KINDS)
+            or {value[1] for value in classifications if value is not None} != {split}
             or len({value[2] for value in classifications if value is not None}) != 1
         ):
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
@@ -1854,10 +1848,8 @@ def _verify_inventory_documents_and_samples(
         )
         if (
             hashlib.sha256(image_payload).hexdigest() != sample.image_sha256
-            or hashlib.sha256(label_payload).hexdigest()
-            != raw_sample["label_sha256"]
-            or hashlib.sha256(truth_payload).hexdigest()
-            != raw_sample["truth_sha256"]
+            or hashlib.sha256(label_payload).hexdigest() != raw_sample["label_sha256"]
+            or hashlib.sha256(truth_payload).hexdigest() != raw_sample["truth_sha256"]
         ):
             raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
         try:
@@ -1875,16 +1867,12 @@ def _verify_inventory_documents_and_samples(
         truth_polygons = _truth_polygons(truth)
         if _read_label_polygons_bytes(label_payload) != truth_polygons:
             raise DatasetVerificationError("LABEL_TRUTH_POLYGON_MISMATCH")
-        if (
-            truth["scenario"] != sample.scenario
-            or len(truth_polygons) != sample.truth_count
-        ):
+        if truth["scenario"] != sample.scenario or len(truth_polygons) != sample.truth_count:
             raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
         current_scenarios[sample.scenario] += 1
         truth_payloads[sample.truth_relpath] = truth_payload
-    if (
-        dict(current_scenarios) != _EXPECTED_SCENARIO_COUNTS
-        or dict(current_scenarios) != dict(inventory.scenario_counts)
+    if dict(current_scenarios) != _EXPECTED_SCENARIO_COUNTS or dict(current_scenarios) != dict(
+        inventory.scenario_counts
     ):
         raise DatasetVerificationError("SCENARIO_COUNTS_INVALID")
     return truth_payloads
@@ -1976,9 +1964,7 @@ def load_dataset_inventory(
         inventory_sha = hashlib.sha256(inventory_payload).hexdigest()
         if inventory_sha != expected_inventory_sha256:
             raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_MISMATCH")
-        sidecar = _read_regular_bound_file(
-            root, "inventory.sha256", pinned_root=pinned_root
-        )
+        sidecar = _read_regular_bound_file(root, "inventory.sha256", pinned_root=pinned_root)
         if sidecar != f"{inventory_sha}  inventory.json\n".encode("ascii"):
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
 
@@ -1989,9 +1975,7 @@ def load_dataset_inventory(
             raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
         if document.get("schema_version") != SCHEMA_VERSION:
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
-        archive_sha = _require_sha256(
-            document.get("archive_sha256"), "INVENTORY_INTEGRITY_INVALID"
-        )
+        archive_sha = _require_sha256(document.get("archive_sha256"), "INVENTORY_INTEGRITY_INVALID")
         if archive_sha != expected_archive_sha256:
             raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_MISMATCH")
         sample_count = document.get("sample_count")
@@ -2003,8 +1987,7 @@ def load_dataset_inventory(
             or not isinstance(scenario_counts, Mapping)
             or set(scenario_counts) != set(_EXPECTED_SCENARIO_COUNTS)
             or any(
-                type(value) is not int
-                or value != _EXPECTED_SCENARIO_COUNTS[key]
+                type(value) is not int or value != _EXPECTED_SCENARIO_COUNTS[key]
                 for key, value in scenario_counts.items()
             )
             or document.get("rasterizer") != _RASTERIZER
@@ -2030,9 +2013,7 @@ def load_dataset_inventory(
                 if not isinstance(raw_sample.get(name), str):
                     raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
             for name in ("image_sha256", "label_sha256", "truth_sha256"):
-                _require_sha256(
-                    raw_sample.get(name), "INVENTORY_INTEGRITY_INVALID"
-                )
+                _require_sha256(raw_sample.get(name), "INVENTORY_INTEGRITY_INVALID")
             samples.append(
                 DatasetSampleRef(
                     formal_sample_index=expected_index,
@@ -2045,11 +2026,9 @@ def load_dataset_inventory(
                     truth_count=raw_sample["truth_count"],
                 )
             )
-        if (
-            [sample.image_sha256 for sample in samples]
-            != sorted(sample.image_sha256 for sample in samples)
-            or len({sample.image_sha256 for sample in samples}) != len(samples)
-        ):
+        if [sample.image_sha256 for sample in samples] != sorted(
+            sample.image_sha256 for sample in samples
+        ) or len({sample.image_sha256 for sample in samples}) != len(samples):
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
 
         test_access = document.get("test_access")
@@ -2067,8 +2046,7 @@ def load_dataset_inventory(
             if not isinstance(raw_locks, list) or len(raw_locks) != 2:
                 raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
             persisted_locks = tuple(
-                _require_sha256(value, "INVENTORY_ACCESS_CHAIN_INVALID")
-                for value in raw_locks
+                _require_sha256(value, "INVENTORY_ACCESS_CHAIN_INVALID") for value in raw_locks
             )
             if (
                 event_sha != normalized_event_sha
@@ -2118,6 +2096,59 @@ def _verify_complete_truth_mask_tree(
     _verify_truth_mask_refs(samples, verified_paths)
 
 
+def _metadata_identity(metadata: os.stat_result | None) -> tuple[int, int] | None:
+    if metadata is None:
+        return None
+    return metadata.st_dev, metadata.st_ino
+
+
+def _cleanup_owned_truth_staging(
+    pinned_root: _PinnedDirectory,
+    staging_name: str,
+    staging_identity: tuple[int, int],
+    split: Split,
+    split_identity: tuple[int, int] | None,
+    created_files: tuple[tuple[str, tuple[int, int]], ...],
+) -> None:
+    """Clean only an owned staging entry still bound below the pinned root."""
+    try:
+        if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
+            return
+        staging = pinned_root.open_child_directory(staging_name)
+    except _PinnedFileError:
+        return
+    try:
+        if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
+            return
+        if split_identity is not None:
+            try:
+                split_directory = staging.open_child_directory(split)
+            except _PinnedFileError:
+                return
+            with split_directory:
+                if split_directory._identity != split_identity:
+                    return
+                for filename, identity in reversed(created_files):
+                    if (
+                        _metadata_identity(pinned_root.child_metadata(staging_name))
+                        != staging_identity
+                    ):
+                        return
+                    split_directory.unlink_owned_file(filename, identity)
+            if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
+                return
+            staging.rmdir_owned_child(split, split_identity)
+    except _PinnedFileError:
+        return
+    finally:
+        staging.close()
+    try:
+        if _metadata_identity(pinned_root.child_metadata(staging_name)) == (staging_identity):
+            pinned_root.rmdir_owned_child(staging_name, staging_identity)
+    except _PinnedFileError:
+        return
+
+
 def _publish_truth_masks(
     pinned_root: _PinnedDirectory,
     split: Split,
@@ -2126,76 +2157,81 @@ def _publish_truth_masks(
     samples: tuple[TruthSample, ...],
     mask_artifacts: tuple[tuple[Path, dict[str, object], MaskRef], ...],
 ) -> None:
-    parent_created = False
     try:
-        parent_metadata = pinned_root.child_metadata("truth_masks")
-        if parent_metadata is None:
-            pinned_root.mkdir_child("truth_masks")
-            parent_created = True
-        elif not stat.S_ISDIR(parent_metadata.st_mode):
-            raise _PinnedFileError("truth_masks parent is not a real directory")
-        mask_parent = pinned_root.open_child_directory("truth_masks")
+        destination = pinned_root.child_metadata("truth_masks")
     except _PinnedFileError as error:
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
-
-    with mask_parent:
-        try:
-            target_metadata = mask_parent.child_metadata(split)
-            if target_metadata is not None:
-                _verify_complete_truth_mask_tree(
-                    pinned_root,
-                    inventory,
-                    truth_payloads,
-                    samples,
-                )
-                return
-            if mask_parent.child_names():
-                raise _PinnedFileError("truth_masks parent contains unknown entries")
-            staging_name = f".truth-masks-{split}-{secrets.token_hex(16)}"
-            pinned_root.mkdir_child(staging_name)
-            staging = pinned_root.open_child_directory(staging_name)
-        except _PinnedFileError as error:
-            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
-
-        created_files: list[tuple[str, tuple[int, int]]] = []
-        published = False
-        try:
-            for relative_path, document, _ in mask_artifacts:
-                filename = relative_path.name
-                identity = staging.write_new_file(
-                    filename, canonical_json_bytes(document)
-                )
-                created_files.append((filename, identity))
-            staging.fsync()
-            if mask_parent.child_metadata(split) is not None:
-                raise _PinnedFileError("truth mask split appeared during publication")
-            pinned_root.replace_child_into(staging_name, mask_parent, split)
-            published = True
-        except _PinnedFileError as error:
-            raise DatasetVerificationError("TRUTH_MASK_PUBLISH_FAILED") from error
-        finally:
-            if not published:
-                for filename, identity in reversed(created_files):
-                    try:
-                        staging.unlink_owned_file(filename, identity)
-                    except _PinnedFileError:
-                        pass
-            staging_identity = staging._identity
-            staging.close()
-            if not published:
-                try:
-                    pinned_root.rmdir_owned_child(staging_name, staging_identity)
-                except _PinnedFileError:
-                    pass
-
+    if destination is not None:
         _verify_complete_truth_mask_tree(
             pinned_root,
             inventory,
             truth_payloads,
             samples,
         )
-        if parent_created:
-            pinned_root.fsync()
+        return
+
+    staging_name: str | None = None
+    staging_identity: tuple[int, int] | None = None
+    split_identity: tuple[int, int] | None = None
+    created_files: list[tuple[str, tuple[int, int]]] = []
+    staging: _PinnedDirectory | None = None
+    published = False
+    try:
+        staging_name, staging = pinned_root.create_random_pinned_child(".truth-masks-stage-")
+        staging_identity = staging._identity
+        split_directory = staging.create_pinned_child(
+            split,
+            mode=0o700,
+            fsync_parent=False,
+        )
+        split_identity = split_directory._identity
+        with split_directory:
+            for relative_path, document, _ in mask_artifacts:
+                filename = relative_path.name
+                identity = split_directory.write_new_file(filename, canonical_json_bytes(document))
+                created_files.append((filename, identity))
+            split_directory.fsync()
+        staging.fsync()
+        if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
+            raise _PinnedFileError("owned staging entry moved before publication")
+        try:
+            _rename_directory_noreplace(
+                pinned_root._descriptor,
+                staging_name,
+                pinned_root._descriptor,
+                "truth_masks",
+            )
+        except OSError as error:
+            raise _PinnedFileError("atomic no-replace publication failed") from error
+        if (
+            pinned_root.child_metadata(staging_name) is not None
+            or _metadata_identity(pinned_root.child_metadata("truth_masks")) != staging_identity
+        ):
+            raise _PinnedFileError("published truth mask identity is invalid")
+        pinned_root.fsync()
+        published = True
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("TRUTH_MASK_PUBLISH_FAILED") from error
+    finally:
+        if staging is not None:
+            staging.close()
+        if not published and staging_name is not None and staging_identity is not None:
+            _cleanup_owned_truth_staging(
+                pinned_root,
+                staging_name,
+                staging_identity,
+                split,
+                split_identity,
+                tuple(created_files),
+            )
+
+    if published:
+        _verify_complete_truth_mask_tree(
+            pinned_root,
+            inventory,
+            truth_payloads,
+            samples,
+        )
 
 
 def load_truth_samples(
@@ -2219,9 +2255,7 @@ def load_truth_samples(
             inventory,
             pinned_root=pinned_root,
         )
-        samples, mask_artifacts = _derive_truth_artifacts(
-            inventory, split, truth_payloads
-        )
+        samples, mask_artifacts = _derive_truth_artifacts(inventory, split, truth_payloads)
         _publish_truth_masks(
             pinned_root,
             split,
