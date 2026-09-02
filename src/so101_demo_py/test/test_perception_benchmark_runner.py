@@ -681,6 +681,7 @@ def test_exact_valid_prefix_resumes_without_reprocessing_or_overwriting(
     before = {
         path.name: path.read_bytes() for path in (output_root / "records").iterdir()
     }
+    manifest_before = (output_root / "manifest.json").read_bytes()
     resumed_adapter = SyntheticAdapter(output_root)
 
     manifest = DetectorBenchmarkRunner(resumed_adapter, output_root).run(spec)
@@ -691,6 +692,134 @@ def test_exact_valid_prefix_resumes_without_reprocessing_or_overwriting(
     assert {
         path.name: path.read_bytes() for path in (output_root / "records").iterdir()
     } == before
+    assert (output_root / "manifest.json").read_bytes() == manifest_before
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "delete-mask",
+        "delete-record",
+        "delete-checkpoint",
+        "tamper-tail",
+        "change-spec",
+        "input-drift",
+    ),
+)
+def test_terminal_valid_rejects_evidence_or_spec_drift_without_rewrite_or_model_call(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Catch terminal VALID bypassing read-only verification on later invocations."""
+
+    inventory = _synthetic_inventory(tmp_path, 2)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    manifest_path = output_root / "manifest.json"
+    manifest_before = manifest_path.read_bytes()
+    rerun_spec = spec
+
+    if mutation == "delete-mask":
+        mask_path = output_root / _record(output_root, 1)["raw_candidates"][0][
+            "mask"
+        ]["relative_path"]
+        mask_path.unlink()
+    elif mutation == "delete-record":
+        (output_root / "records/000001.json").unlink()
+    elif mutation == "delete-checkpoint":
+        (output_root / "checkpoint.json").unlink()
+    elif mutation == "tamper-tail":
+        record_path = output_root / "records/000001.json"
+        document = _record(output_root, 1)
+        document["timing_breakdown"]["dino_or_yolo_ms"] = 2.0
+        document["timing_breakdown"]["total_ms"] = 2.0
+        atomic_write_json(record_path, document)
+    elif mutation == "change-spec":
+        rerun_spec = replace(spec, config_sha256=SHA_C)
+    else:
+        image_path = inventory.dataset_root / inventory.samples[1].image_relpath
+        image_path.write_bytes(image_path.read_bytes() + b"drift")
+
+    adapter = SyntheticAdapter(output_root)
+    with pytest.raises(RunIntegrityError):
+        DetectorBenchmarkRunner(adapter, output_root).run(rerun_spec)
+
+    assert adapter.calls == []
+    assert manifest_path.read_bytes() == manifest_before
+
+
+def test_terminal_valid_requires_current_verified_lock_path_without_manifest_rewrite(
+    tmp_path: Path,
+) -> None:
+    """Catch a locked terminal run accepting a missing or substituted lock path."""
+
+    lock = _formal_yolo_lock()
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(
+        inventory,
+        output_root,
+        run_id="terminal-locked",
+        run_kind=RunKind.TEST_RAW_FROZEN,
+        threshold_lock_sha256=lock.lock_sha256,
+        threshold_lock_path=lock_path,
+    )
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    manifest_path = output_root / "manifest.json"
+    manifest_before = manifest_path.read_bytes()
+    changed = replace(spec, threshold_lock_path=tmp_path / "missing-lock.json")
+    adapter = SyntheticAdapter(output_root)
+
+    with pytest.raises(RunIntegrityError):
+        DetectorBenchmarkRunner(adapter, output_root).run(changed)
+
+    assert adapter.calls == []
+    assert manifest_path.read_bytes() == manifest_before
+
+
+def test_terminal_schema_failure_does_not_rewrite_decodable_terminal_manifest(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    manifest_path = output_root / "manifest.json"
+    document = json.loads(manifest_path.read_bytes())
+    document["ended_at"] = None
+    atomic_write_json(manifest_path, document)
+    terminal_bytes = manifest_path.read_bytes()
+    adapter = SyntheticAdapter(output_root)
+
+    with pytest.raises(RunIntegrityError, match="MANIFEST_SCHEMA_INVALID"):
+        DetectorBenchmarkRunner(adapter, output_root).run(spec)
+
+    assert adapter.calls == []
+    assert manifest_path.read_bytes() == terminal_bytes
+
+
+def test_terminal_invalid_remains_byte_immutable_and_never_resumes(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root, platform="linux", device="mps")
+    first_adapter = SyntheticAdapter(output_root)
+    first = DetectorBenchmarkRunner(first_adapter, output_root).run(spec)
+    assert first.status is RunStatus.INVALID
+    manifest_path = output_root / "manifest.json"
+    manifest_before = manifest_path.read_bytes()
+    second_adapter = SyntheticAdapter(output_root)
+
+    second = DetectorBenchmarkRunner(second_adapter, output_root).run(spec)
+
+    assert second.status is RunStatus.INVALID
+    assert second_adapter.calls == []
+    assert manifest_path.read_bytes() == manifest_before
 
 
 def test_checkpoint_crash_never_advances_past_durable_record_and_resume_fails_closed(
