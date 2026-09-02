@@ -123,7 +123,7 @@ class YoloThresholds:
             object.__setattr__(
                 self, name, _decimal_probability(name, getattr(self, name))
             )
-        if isinstance(self.imgsz, bool) or self.imgsz != 640:
+        if type(self.imgsz) is not int or self.imgsz != 640:
             raise ValueError("imgsz must be the fixed integer 640")
 
     def to_document(self) -> dict[str, object]:
@@ -185,8 +185,8 @@ class GroundedSamBenchmarkThresholds:
             )
         if self.duplicate_iou != Decimal("0.85"):
             raise ValueError("duplicate_iou must be fixed at 0.85")
-        if isinstance(self.min_mask_pixels, bool) or self.min_mask_pixels != 64:
-            raise ValueError("min_mask_pixels must be fixed at 64")
+        if type(self.min_mask_pixels) is not int or self.min_mask_pixels != 64:
+            raise ValueError("min_mask_pixels must be the fixed integer 64")
         if self.max_mask_area_ratio != Decimal("0.50"):
             raise ValueError("max_mask_area_ratio must be fixed at 0.50")
 
@@ -268,10 +268,10 @@ def enumerate_yolo_grid() -> Iterator[YoloThresholds]:
 
 def enumerate_grounded_sam_grid() -> Iterator[GroundedSamBenchmarkThresholds]:
     for box, text, sam, selector in product(
-        decimal_range("0.10", "0.95", "0.05"),
+        decimal_range("0.05", "0.90", "0.05"),
         decimal_range("0.05", "0.50", "0.05"),
         decimal_range("0.50", "0.95", "0.05"),
-        decimal_range("0.10", "0.95", "0.05"),
+        decimal_range("0.05", "0.90", "0.05"),
     ):
         yield GroundedSamBenchmarkThresholds(
             box,
@@ -509,6 +509,8 @@ class ThresholdLock:
     val_inventory_sha256: str
     mac_prediction_inventory_sha256: str
     linux_prediction_inventory_sha256: str
+    formal: bool
+    platform_sample_counts: Mapping[str, int]
     selected: YoloThresholds | GroundedSamBenchmarkThresholds
     outcome: CalibrationOutcome
     deployable: bool
@@ -542,6 +544,16 @@ class ThresholdLock:
             self.source_commit
         ) is None:
             raise ValueError("source_commit is invalid")
+        if type(self.formal) is not bool:
+            raise ValueError("formal must be a bool")
+        sample_counts = dict(self.platform_sample_counts)
+        if set(sample_counts) != {"macos", "linux"} or any(
+            type(value) is not int or value <= 0 for value in sample_counts.values()
+        ):
+            raise ValueError("platform_sample_counts are invalid")
+        object.__setattr__(
+            self, "platform_sample_counts", MappingProxyType(sample_counts)
+        )
         if self.model == "yolo_seg" and not isinstance(self.selected, YoloThresholds):
             raise ValueError("selected config does not match model")
         if self.model == "grounded_sam" and not isinstance(
@@ -557,6 +569,13 @@ class ThresholdLock:
         ):
             raise ValueError("platform_metrics is invalid")
         object.__setattr__(self, "platform_metrics", MappingProxyType(metrics))
+        if any(
+            sample_counts[platform] != metrics[platform].sample_count
+            for platform in ("macos", "linux")
+        ):
+            raise ValueError("platform_sample_counts do not match platform_metrics")
+        if self.formal and sample_counts != {"macos": 200, "linux": 200}:
+            raise ValueError("formal locks require exactly 200 samples per platform")
         mac = metrics["macos"]
         linux = metrics["linux"]
         minimum_two = (
@@ -617,6 +636,11 @@ def _threshold_lock_document(
         "val_inventory_sha256": lock.val_inventory_sha256,
         "mac_prediction_inventory_sha256": lock.mac_prediction_inventory_sha256,
         "linux_prediction_inventory_sha256": lock.linux_prediction_inventory_sha256,
+        "formal": lock.formal,
+        "platform_sample_counts": {
+            platform: lock.platform_sample_counts[platform]
+            for platform in ("macos", "linux")
+        },
         "selected": lock.selected.to_document(),
         "outcome": lock.outcome,
         "deployable": lock.deployable,
@@ -1115,6 +1139,8 @@ def calibrate_joint_platform_val(
         val_inventory_sha256=val_inventory_sha,
         mac_prediction_inventory_sha256=mac_inventory_sha,
         linux_prediction_inventory_sha256=linux_inventory_sha,
+        formal=not fixture_mode,
+        platform_sample_counts={"macos": len(mac), "linux": len(linux)},
         selected=result.selected,
         outcome=result.outcome,
         deployable=result.deployable,
@@ -1199,11 +1225,11 @@ def _parse_selected(
             _parse_decimal_field(values, "max_mask_area_ratio"),
         )
         if (
-            config.box_threshold not in decimal_range("0.10", "0.95", "0.05")
+            config.box_threshold not in decimal_range("0.05", "0.90", "0.05")
             or config.text_threshold not in decimal_range("0.05", "0.50", "0.05")
             or config.sam_quality not in decimal_range("0.50", "0.95", "0.05")
             or config.target_confidence_threshold
-            not in decimal_range("0.10", "0.95", "0.05")
+            not in decimal_range("0.05", "0.90", "0.05")
         ):
             raise CalibrationError("THRESHOLD_LOCK_SELECTED_INVALID")
         return config
@@ -1239,6 +1265,21 @@ def _parse_platform_metrics(document: object) -> Mapping[str, PlatformCalibratio
     except (TypeError, ValueError) as error:
         raise CalibrationError("THRESHOLD_LOCK_METRICS_INVALID") from error
     return MappingProxyType(result)
+
+
+def _parse_platform_sample_counts(document: object) -> Mapping[str, int]:
+    values = _exact_keys(
+        document,
+        {"macos", "linux"},
+        "THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID",
+    )
+    counts: dict[str, int] = {}
+    for platform in ("macos", "linux"):
+        value = values[platform]
+        if type(value) is not int or value <= 0:
+            raise CalibrationError("THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID")
+        counts[platform] = value
+    return MappingProxyType(counts)
 
 
 def _parse_objective_metrics(document: object) -> ObjectiveCalibrationMetrics:
@@ -1280,6 +1321,8 @@ def verify_threshold_lock(path: Path) -> ThresholdLock:
         "val_inventory_sha256",
         "mac_prediction_inventory_sha256",
         "linux_prediction_inventory_sha256",
+        "formal",
+        "platform_sample_counts",
         "selected",
         "outcome",
         "deployable",
@@ -1314,8 +1357,21 @@ def verify_threshold_lock(path: Path) -> ThresholdLock:
         values["linux_prediction_inventory_sha256"]
     )
     commit = _validated_source_commit(values["source_commit"])
+    if type(values["formal"]) is not bool:
+        raise CalibrationError("THRESHOLD_LOCK_FORMALITY_INVALID")
+    formal = values["formal"]
+    platform_sample_counts = _parse_platform_sample_counts(
+        values["platform_sample_counts"]
+    )
     selected = _parse_selected(model, values["selected"])
     platform_metrics = _parse_platform_metrics(values["platform_metrics"])
+    if any(
+        platform_sample_counts[platform] != platform_metrics[platform].sample_count
+        for platform in ("macos", "linux")
+    ):
+        raise CalibrationError("THRESHOLD_LOCK_SAMPLE_COUNTS_INVALID")
+    if formal and dict(platform_sample_counts) != {"macos": 200, "linux": 200}:
+        raise CalibrationError("THRESHOLD_LOCK_FORMALITY_INVALID")
     objective_metrics = _parse_objective_metrics(values["objective_metrics"])
     expected_objective = _objective_metrics(
         CalibrationResult(
@@ -1342,6 +1398,8 @@ def verify_threshold_lock(path: Path) -> ThresholdLock:
             val_inventory_sha256=val_inventory_sha,
             mac_prediction_inventory_sha256=mac_inventory_sha,
             linux_prediction_inventory_sha256=linux_inventory_sha,
+            formal=formal,
+            platform_sample_counts=platform_sample_counts,
             selected=selected,
             outcome=values["outcome"],
             deployable=values["deployable"],
@@ -1372,6 +1430,14 @@ def unlock_test_seal(
     grounded_lock = verify_threshold_lock(grounded_path)
     if yolo_lock.model != "yolo_seg" or grounded_lock.model != "grounded_sam":
         raise CalibrationError("TEST_SEAL_LOCK_MODEL_MISMATCH")
+    if not yolo_lock.formal or not grounded_lock.formal:
+        raise CalibrationError("TEST_SEAL_LOCK_NONFORMAL")
+    if any(
+        lock.platform_sample_counts[platform] != 200
+        for lock in (yolo_lock, grounded_lock)
+        for platform in ("macos", "linux")
+    ):
+        raise CalibrationError("TEST_SEAL_LOCK_SAMPLE_COUNT_INVALID")
     if yolo_lock.val_inventory_sha256 != grounded_lock.val_inventory_sha256:
         raise CalibrationError("TEST_SEAL_LOCK_INVENTORY_MISMATCH")
     if yolo_lock.source_commit != grounded_lock.source_commit:
