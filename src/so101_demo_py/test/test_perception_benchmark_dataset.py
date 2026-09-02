@@ -738,6 +738,43 @@ def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
     assert not (mask_parent / "val").exists()
 
 
+def test_truth_mask_publish_failure_preserves_between_check_creator_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    dataset_root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), dataset_root, "val", None
+    )
+    mask_parent = dataset_root / "truth_masks"
+    real_mkdir = Path.mkdir
+    real_replace = dataset_module.os.replace
+
+    def concurrent_creator_then_mkdir(
+        path: Path,
+        mode: int = 0o777,
+        parents: bool = False,
+        exist_ok: bool = False,
+    ) -> None:
+        if path == mask_parent and not path.exists():
+            real_mkdir(path, mode=mode, parents=parents, exist_ok=False)
+        real_mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
+
+    def fail_publication(source: object, destination: object) -> None:
+        if Path(destination) == mask_parent / "val":
+            raise OSError("injected final mask publication failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(Path, "mkdir", concurrent_creator_then_mkdir)
+    monkeypatch.setattr(dataset_module.os, "replace", fail_publication)
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(dataset_root, "val", inventory)
+
+    assert mask_parent.is_dir()
+    assert not (mask_parent / "val").exists()
+
+
 def test_val_rejects_unlocked_test_seal_without_creating_output(
     tmp_path: Path,
 ) -> None:
