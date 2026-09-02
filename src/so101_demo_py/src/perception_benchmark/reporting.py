@@ -6,11 +6,13 @@ import csv
 from dataclasses import dataclass, fields, is_dataclass, replace
 from enum import Enum
 import io
+import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import tempfile
 from types import MappingProxyType
 from typing import Callable, Mapping, Sequence
@@ -91,6 +93,18 @@ _PAYLOAD_PATHS = (
 _INDEX_SEMANTICS = (
     "payload files only; evidence-index.json is excluded to avoid self-reference"
 )
+_INDEX_SCHEMA_VERSION = "so101-perception-benchmark/evidence-index/v1"
+
+
+def _index_relative_path(value: object) -> str:
+    if not isinstance(value, str) or not value or "\\" in value:
+        raise ValueError("evidence path must be a safe relative path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError("evidence path must be a safe relative path")
+    if value == "evidence-index.json":
+        raise ValueError("evidence index cannot include itself")
+    return value
 
 
 def _freeze(value: object) -> object:
@@ -547,12 +561,173 @@ class EvidenceEntry:
     size_bytes: int
     sha256: str
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "relative_path", _index_relative_path(self.relative_path)
+        )
+        if (
+            isinstance(self.size_bytes, bool)
+            or not isinstance(self.size_bytes, int)
+            or self.size_bytes < 0
+        ):
+            raise ValueError("evidence size_bytes must be a nonnegative integer")
+        _require_sha("evidence sha256", self.sha256)
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceIndex:
     schema_version: str
     payload_index_semantics: str
     entries: tuple[EvidenceEntry, ...]
+
+    def __post_init__(self) -> None:
+        if self.schema_version != _INDEX_SCHEMA_VERSION:
+            raise ValueError("evidence index schema_version is unsupported")
+        if self.payload_index_semantics != _INDEX_SEMANTICS:
+            raise ValueError("evidence index semantics are unsupported")
+        entries = tuple(self.entries)
+        if not all(isinstance(entry, EvidenceEntry) for entry in entries):
+            raise ValueError("evidence index entries must contain EvidenceEntry values")
+        paths = [entry.relative_path for entry in entries]
+        if len(paths) != len(set(paths)):
+            raise ValueError("evidence index paths must be unique")
+        object.__setattr__(self, "entries", entries)
+
+
+def _read_stable_regular_file(root: Path, relative_path: str) -> bytes:
+    path = root.joinpath(*PurePosixPath(relative_path).parts)
+    try:
+        before = path.lstat()
+        resolved = path.resolve(strict=True)
+        if (
+            path.is_symlink()
+            or not stat.S_ISREG(before.st_mode)
+            or not resolved.is_relative_to(root)
+        ):
+            raise ValueError("evidence payload must be a regular in-root file")
+        payload = path.read_bytes()
+        after = path.lstat()
+    except (OSError, RuntimeError) as error:
+        raise ValueError("evidence payload cannot be read") from error
+    if (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    ) != (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+    ):
+        raise ValueError("evidence payload changed during verification")
+    return payload
+
+
+def _evidence_tree(root: Path) -> tuple[set[str], set[str]]:
+    files: set[str] = set()
+    directories: set[str] = set()
+
+    def visit(directory: Path) -> None:
+        try:
+            entries = tuple(directory.iterdir())
+        except OSError as error:
+            raise ValueError("evidence tree cannot be enumerated") from error
+        for path in entries:
+            relative = path.relative_to(root).as_posix()
+            try:
+                metadata = path.lstat()
+            except OSError as error:
+                raise ValueError("evidence tree cannot be inspected") from error
+            if path.is_symlink():
+                raise ValueError("evidence tree cannot contain symlinks")
+            if stat.S_ISDIR(metadata.st_mode):
+                directories.add(relative)
+                visit(path)
+            elif stat.S_ISREG(metadata.st_mode):
+                files.add(relative)
+            else:
+                raise ValueError("evidence tree entries must be regular")
+
+    visit(root)
+    return files, directories
+
+
+def verify_evidence_index(output_root: Path) -> EvidenceIndex:
+    """Verify canonical index bytes and the exact indexed payload tree."""
+
+    candidate = Path(output_root)
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("output_root must be an existing non-symlink directory")
+    try:
+        root = candidate.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("output_root must be an existing directory") from error
+    payload = _read_stable_regular_file(root, "evidence-index.json")
+    try:
+        document = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("evidence index document is invalid") from error
+    if not isinstance(document, Mapping) or set(document) != {
+        "schema_version",
+        "payload_index_semantics",
+        "entries",
+    }:
+        raise ValueError("evidence index document has an invalid schema")
+    raw_entries = document.get("entries")
+    if not isinstance(raw_entries, list):
+        raise ValueError("evidence index entries must be a list")
+    entries: list[EvidenceEntry] = []
+    for raw in raw_entries:
+        if not isinstance(raw, Mapping) or set(raw) != {
+            "relative_path",
+            "size_bytes",
+            "sha256",
+        }:
+            raise ValueError("evidence index entry has an invalid schema")
+        entries.append(
+            EvidenceEntry(
+                relative_path=raw["relative_path"],
+                size_bytes=raw["size_bytes"],
+                sha256=raw["sha256"],
+            )
+        )
+    index = EvidenceIndex(
+        schema_version=document["schema_version"],
+        payload_index_semantics=document["payload_index_semantics"],
+        entries=tuple(entries),
+    )
+    try:
+        canonical = canonical_json_bytes(_jsonable(index))
+    except (TypeError, ValueError) as error:
+        raise ValueError("evidence index document is not canonical") from error
+    if canonical != payload:
+        raise ValueError("evidence index document is not canonical")
+    indexed_paths = {entry.relative_path for entry in index.entries}
+    expected_files = indexed_paths | {"evidence-index.json"}
+    expected_directories = {
+        parent.as_posix()
+        for path in indexed_paths
+        for parent in PurePosixPath(path).parents
+        if parent.as_posix() != "."
+    }
+    actual_files, actual_directories = _evidence_tree(root)
+    if actual_files != expected_files or actual_directories != expected_directories:
+        raise ValueError("evidence tree does not exactly match its index")
+    for entry in index.entries:
+        item_payload = _read_stable_regular_file(root, entry.relative_path)
+        if (
+            len(item_payload) != entry.size_bytes
+            or sha256_bytes(item_payload) != entry.sha256
+        ):
+            raise ValueError("evidence payload size or SHA256 mismatch")
+    return index
+
+
+def load_evidence_index(output_root: Path) -> EvidenceIndex:
+    """Load one immutable evidence index only after full tree verification."""
+
+    return verify_evidence_index(output_root)
 
 
 def percentile(values: Sequence[float], quantile: float) -> float | None:
@@ -2827,7 +3002,7 @@ class ReportWriter:
                 for relative_path in _PAYLOAD_PATHS
             )
             index = EvidenceIndex(
-                schema_version="so101-perception-benchmark/evidence-index/v1",
+                schema_version=_INDEX_SCHEMA_VERSION,
                 payload_index_semantics=_INDEX_SEMANTICS,
                 entries=entries,
             )
@@ -2867,5 +3042,7 @@ __all__ = (
     "ResourceTrace",
     "RunAggregationEvidence",
     "ScenarioMetricSummary",
+    "load_evidence_index",
     "percentile",
+    "verify_evidence_index",
 )
