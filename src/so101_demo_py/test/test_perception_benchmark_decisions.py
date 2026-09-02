@@ -438,36 +438,103 @@ def test_decision_aggregate_rejects_missing_duplicate_and_sha_mismatched_images(
         aggregate_decisions((record,), (mismatched_sha_truth,))
 
 
-def test_no_cup_fpr_uses_current_decision_and_keeps_errors_in_denominator(
+def test_no_cup_fpr_counts_ok_raw_candidate_rejected_by_selector(
     tmp_path: Path,
 ) -> None:
-    truths = tuple(_truth(tmp_path, index, "no_cup") for index in range(3))
-    low_raw = _candidate(tmp_path, 0, "low-raw", 0.01, _one_pixel_mask())
-    ambiguous_candidates = (
-        _candidate(tmp_path, 1, "accepted-0", 0.9, _one_pixel_mask(0)),
-        _candidate(tmp_path, 1, "accepted-1", 0.8, _one_pixel_mask(1)),
-    )
-    records = (
-        _record(truths[0], (low_raw,), decision=DecisionOutput.NOT_FOUND),
-        _record(truths[1], ambiguous_candidates, decision=DecisionOutput.AMBIGUOUS),
-        _record(truths[2], decision=DecisionOutput.ERROR, status=RecordStatus.ERROR),
-    )
-    inputs = tuple(
-        _metric_input(record, truth) for record, truth in zip(records, truths, strict=True)
+    truth = _truth(tmp_path, 0, "no_cup")
+    candidate = _candidate(tmp_path, 0, "low-raw", 0.01, _one_pixel_mask())
+    record = _record(
+        truth,
+        (candidate,),
+        decision=DecisionOutput.NOT_FOUND,
     )
 
     metrics = aggregate_scenarios(
-        records,
-        truths,
-        _keyed_matches(records, inputs),
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (_metric_input(record, truth),)),
         evidence_root=tmp_path,
     )["no_cup"]
 
-    assert metrics.sample_count == 3
-    assert metrics.error_count == 1
-    assert metrics.no_cup_sample_count == 3
+    assert metrics.no_cup_sample_count == 1
     assert metrics.no_cup_false_positive_count == 1
-    assert metrics.no_cup_false_positive_rate == pytest.approx(1.0 / 3.0)
+    assert metrics.no_cup_false_positive_rate == 1.0
+
+
+def test_no_cup_fpr_does_not_count_ok_record_without_raw_candidates(
+    tmp_path: Path,
+) -> None:
+    truth = _truth(tmp_path, 0, "no_cup")
+    record = _record(truth, decision=DecisionOutput.NOT_FOUND)
+
+    metrics = aggregate_scenarios(
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (_metric_input(record, truth),)),
+        evidence_root=tmp_path,
+    )["no_cup"]
+
+    assert metrics.no_cup_sample_count == 1
+    assert metrics.no_cup_false_positive_count == 0
+    assert metrics.no_cup_false_positive_rate == 0.0
+
+
+def test_no_cup_fpr_ignores_retained_raw_candidates_on_error_record(
+    tmp_path: Path,
+) -> None:
+    truth = _truth(tmp_path, 0, "no_cup")
+    partial_candidate = _candidate(
+        tmp_path,
+        0,
+        "partial-raw",
+        0.9,
+        _one_pixel_mask(),
+    )
+    record = _record(
+        truth,
+        (partial_candidate,),
+        decision=DecisionOutput.ERROR,
+        status=RecordStatus.ERROR,
+    )
+
+    metrics = aggregate_scenarios(
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (_metric_input(record, truth),)),
+        evidence_root=tmp_path,
+    )["no_cup"]
+
+    assert metrics.error_count == 1
+    assert metrics.no_cup_sample_count == 1
+    assert metrics.no_cup_false_positive_count == 0
+    assert metrics.no_cup_false_positive_rate == 0.0
+    assert metrics.predicted_union_pixel_count == 0
+
+
+def test_no_cup_fpr_counts_multiple_raw_candidates_as_one_image(
+    tmp_path: Path,
+) -> None:
+    truth = _truth(tmp_path, 0, "no_cup")
+    candidates = (
+        _candidate(tmp_path, 0, "raw-0", 0.02, _one_pixel_mask(0)),
+        _candidate(tmp_path, 0, "raw-1", 0.01, _one_pixel_mask(1)),
+    )
+    record = _record(
+        truth,
+        candidates,
+        decision=DecisionOutput.NOT_FOUND,
+    )
+
+    metrics = aggregate_scenarios(
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (_metric_input(record, truth),)),
+        evidence_root=tmp_path,
+    )["no_cup"]
+
+    assert metrics.no_cup_sample_count == 1
+    assert metrics.no_cup_false_positive_count == 1
+    assert metrics.no_cup_false_positive_rate == 1.0
 
 
 def test_two_cup_recall_requires_two_distinct_matches_at_iou_point_five(
