@@ -37,9 +37,15 @@ from so101_demo.perception_benchmark.metrics import (
 )
 
 
-def _write_mask(root: Path, name: str, pixels: list[list[int]]) -> MaskRef:
+def _write_mask(
+    root: Path,
+    name: str,
+    pixels: list[list[int]],
+    *,
+    directory: str = "masks",
+) -> MaskRef:
     mask = np.asarray(pixels, dtype=bool)
-    relative_path = f"masks/{name}.json"
+    relative_path = f"{directory}/{name}.json"
     path = root / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(canonical_json_bytes(encode_mask_rle(mask)))
@@ -56,12 +62,19 @@ def _truth_sample(
     root: Path,
     sample_index: int,
     masks: tuple[list[list[int]], ...],
+    *,
+    mask_directory: str = "masks",
 ) -> TruthSample:
     instances = tuple(
         TruthInstance(
             instance_id=f"t{position}",
             label="plastic_cup",
-            mask=_write_mask(root, f"truth-{sample_index}-{position}", pixels),
+            mask=_write_mask(
+                root,
+                f"truth-{sample_index}-{position}",
+                pixels,
+                directory=mask_directory,
+            ),
         )
         for position, pixels in enumerate(masks)
     )
@@ -188,6 +201,35 @@ def test_one_empty_side_uses_null_zero_denominator_semantics(tmp_path: Path) -> 
     assert missing_truth.recall is None
 
 
+def test_image_metrics_supports_separate_truth_and_candidate_roots(
+    tmp_path: Path,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth = _truth_sample(
+        truth_root,
+        0,
+        ([[1, 0], [0, 0]],),
+        mask_directory="truth_masks",
+    ).instances
+    candidates = (
+        _candidate(candidate_root, 0, "tp", 0.9, [[1, 0], [0, 0]]),
+        _candidate(candidate_root, 0, "fp", 0.8, [[0, 0], [0, 1]]),
+    )
+
+    summary = compute_image_metrics(
+        truth,
+        candidates,
+        truth_root,
+        iou_threshold=0.50,
+        candidate_evidence_root=candidate_root,
+    )
+
+    assert (summary.tp, summary.fp, summary.fn) == (1, 1, 0)
+    assert summary.precision == 0.5
+    assert summary.recall == 1.0
+
+
 def test_thresholded_summary_uses_only_qualified_matches() -> None:
     samples = (
         ImageMetricInput(
@@ -238,6 +280,33 @@ def test_ap_ranks_globally_and_rematches_each_image_prefix(tmp_path: Path) -> No
     assert summary.mask_ap75 is None
     assert summary.mask_map == pytest.approx(0.8349834983498351)
     assert summary.by_iou_threshold == ((0.5, pytest.approx(0.8349834983498351)),)
+
+
+def test_ap_supports_separate_truth_and_candidate_roots(tmp_path: Path) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    sample = _truth_sample(
+        truth_root,
+        0,
+        ([[1, 0], [0, 0]],),
+        mask_directory="truth_masks",
+    )
+    record = _record(
+        sample,
+        (_candidate(candidate_root, 0, "tp", 0.9, [[1, 0], [0, 0]]),),
+    )
+
+    summary = compute_ap(
+        (record,),
+        (sample,),
+        truth_root,
+        (0.50, 0.75),
+        candidate_evidence_root=candidate_root,
+    )
+
+    assert summary.mask_ap50 == 1.0
+    assert summary.mask_ap75 == 1.0
+    assert summary.mask_map == 1.0
 
 
 def test_ap_threshold_matching_keeps_true_positive_count_monotonic(tmp_path: Path) -> None:
