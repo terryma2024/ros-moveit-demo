@@ -25,7 +25,10 @@ from so101_demo.perception_benchmark.adapters.base import (
     _MaskArtifactStore,
     _validate_accelerated_component,
 )
-from so101_demo.perception_benchmark.contracts import RawCandidate
+from so101_demo.perception_benchmark.contracts import (
+    GROUNDED_SAM_MODEL_ID,
+    RawCandidate,
+)
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
     PhaseTimer,
@@ -33,7 +36,6 @@ from so101_demo.perception_benchmark.timing import (
 )
 
 
-_MODEL_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
 _PROMPT = "plastic cup."
 
 
@@ -184,6 +186,10 @@ class GroundedSamRawAdapter:
         resource_sampler: ResourceSampler,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
+        if model_id != GROUNDED_SAM_MODEL_ID:
+            raise ValueError(
+                "model_id must equal the canonical Grounded-SAM benchmark ID"
+            )
         if runtime_device not in {"mps", "cuda"}:
             raise ValueError("formal Grounded-SAM collection requires mps or cuda")
         if synchronizer.device != runtime_device or resource_sampler.device != runtime_device:
@@ -294,7 +300,7 @@ class GroundedSamRawAdapter:
             raise ModelSetupError("MODEL_LOAD_FAILED", str(error)) from error
         synchronizer = DeviceSynchronizer(torch_api, runtime_device)
         return cls(
-            model_id=_MODEL_ID,
+            model_id=GROUNDED_SAM_MODEL_ID,
             runtime_device=runtime_device,
             manifest_sha256=bundle.manifest_sha256,
             evidence_root=evidence_root,

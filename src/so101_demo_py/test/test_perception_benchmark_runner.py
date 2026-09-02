@@ -30,14 +30,18 @@ from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     canonical_json_bytes,
     encode_mask_rle,
+    read_mask,
 )
 from so101_demo.perception_benchmark.contracts import (
     DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
     MaskRef,
+    PredictionRecord,
     RawCandidate,
     RunKind,
     RunStatus,
     RuntimeProvenance,
+    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.dataset import (
     DatasetInventory,
@@ -49,6 +53,7 @@ from so101_demo.perception_benchmark.runner import (
     RunCheckpoint,
     RunIntegrityError,
     RunSpec,
+    _record_from_document,
     verify_resume,
 )
 from so101_demo.perception_benchmark.timing import (
@@ -175,7 +180,7 @@ def _synthetic_inventory(
 
 
 class SyntheticAdapter:
-    model_id = "plastic-cup-yolo11s-seg-v2"
+    model_id = YOLO_MODEL_ID
     runtime_device = "mps"
     runtime_version = "fixture-1"
     _weights_sha256 = SHA_B
@@ -257,6 +262,68 @@ class SyntheticAdapter:
             resource_samples=resources,
             fallback_used=False,
             irreversible_limits={"max_det": 300, "nms_iou": 0.9},
+        )
+
+
+class SyntheticGroundedAdapter:
+    model_id = GROUNDED_SAM_MODEL_ID
+    runtime_device = "mps"
+    runtime_version = "fixture-1"
+    _manifest_sha256 = SHA_B
+
+    def __init__(self, evidence_root: Path) -> None:
+        self.evidence_root = evidence_root
+        self.calls: list[int] = []
+
+    def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+        assert mode is CollectionMode.LOW_FLOOR
+        index = int(frame.source_stamp_ns) - 1  # type: ignore[attr-defined]
+        self.calls.append(index)
+        mask = np.zeros((16, 20), dtype=bool)
+        mask[3:11, 4:12] = True
+        candidate_id = "grounded-sam-000"
+        relative = f"adapter-masks/{index:06d}/{candidate_id}.rle.json"
+        atomic_write_json(self.evidence_root / relative, encode_mask_rle(mask))
+        candidate = RawCandidate(
+            candidate_id=candidate_id,
+            label="plastic_cup",
+            bbox_xyxy=(4.0, 3.0, 12.0, 11.0),
+            mask=MaskRef(
+                relative_path=relative,
+                sha256=hashlib.sha256(
+                    mask.astype(np.uint8).tobytes(order="C")
+                ).hexdigest(),
+                pixel_count=int(mask.sum()),
+                image_width=20,
+                image_height=16,
+            ),
+            ranking_score=0.81,
+            ranking_score_source="grounding_box_score",
+            class_confidence=None,
+            grounding_box_score=0.81,
+            grounding_text_score=0.73,
+            sam_quality=0.92,
+        )
+        return RawDetectionResult(
+            model_id=self.model_id,
+            runtime_device="mps",
+            dtype="float32",
+            collection_mode=CollectionMode.LOW_FLOOR,
+            raw_candidates=(candidate,),
+            phase_timings=PhaseTimingBreakdown(
+                preprocess_ms=0.0,
+                dino_or_yolo_ms=1.0,
+                sam_ms=2.0,
+                postprocess_ms=0.0,
+                selector_ms=None,
+                total_ms=3.0,
+            ),
+            resource_samples=(_resource_sample(),),
+            fallback_used=False,
+            irreversible_limits={
+                "box_threshold": 0.01,
+                "text_threshold": 0.01,
+            },
         )
 
 
@@ -403,6 +470,112 @@ def _locked_inventory(
         lock_path,
         access_log,
     )
+
+
+@pytest.mark.parametrize(
+    ("model", "model_id"),
+    (
+        ("yolo_seg", "not-yolo-imposter"),
+        ("yolo_seg", f"{YOLO_MODEL_ID}-suffix"),
+        ("grounded_sam", "grounded-sam-wrong"),
+        ("grounded_sam", f"prefix-{GROUNDED_SAM_MODEL_ID}"),
+    ),
+)
+def test_runner_rejects_noncanonical_adapter_identity_before_collection(
+    tmp_path: Path, model: str, model_id: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, count=2)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter: SyntheticAdapter | SyntheticGroundedAdapter
+    if model == "yolo_seg":
+        adapter = SyntheticAdapter(output_root)
+    else:
+        adapter = SyntheticGroundedAdapter(output_root)
+    adapter.model_id = model_id
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root, model=model)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "ADAPTER_MODEL_MISMATCH"
+    assert adapter.calls == []
+    assert not (output_root / "records").exists()
+
+
+def test_runner_stops_after_first_noncanonical_raw_result_without_continuation(
+    tmp_path: Path,
+) -> None:
+    class NearResultAdapter(SyntheticAdapter):
+        def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+            self.candidate_counts[int(frame.source_stamp_ns) - 1] = 0  # type: ignore[attr-defined]
+            result = super().collect(frame, mode)
+            return replace(result, model_id=f"{YOLO_MODEL_ID}-suffix")
+
+    inventory = _synthetic_inventory(tmp_path, count=3)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = NearResultAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "MODEL_IDENTITY_MISMATCH"
+    assert adapter.calls == [0]
+    assert list((output_root / "records").iterdir()) == []
+
+
+def test_runner_rechecks_adapter_identity_on_error_record_path(
+    tmp_path: Path,
+) -> None:
+    class MutatingErrorAdapter(SyntheticAdapter):
+        def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+            self.calls.append(int(frame.source_stamp_ns) - 1)  # type: ignore[attr-defined]
+            self.model_id = "not-yolo-imposter"
+            raise RuntimeError("model failed after identity corruption")
+
+    inventory = _synthetic_inventory(tmp_path, count=3)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = MutatingErrorAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "MODEL_IDENTITY_MISMATCH"
+    assert adapter.calls == [0]
+    assert list((output_root / "records").iterdir()) == []
+
+
+def test_grounded_candidate_round_trips_through_runner_record_contract(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, count=1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticGroundedAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root, model="grounded_sam")
+    )
+
+    assert manifest.status is RunStatus.VALID
+    record = _record_from_document(_record(output_root, 0))
+    assert isinstance(record, PredictionRecord)
+    assert record.model_id == "grounding-dino-tiny+sam2.1-hiera-tiny"
+    candidate = record.raw_candidates[0]
+    assert candidate.grounding_box_score == 0.81
+    assert candidate.grounding_text_score == 0.73
+    assert candidate.sam_quality == 0.92
+    assert candidate.class_confidence is None
+    expected_mask = np.zeros((16, 20), dtype=bool)
+    expected_mask[3:11, 4:12] = True
+    assert np.array_equal(read_mask(candidate.mask, output_root), expected_mask)
 
 
 def test_inference_exception_writes_error_record_and_continues_full_inventory(

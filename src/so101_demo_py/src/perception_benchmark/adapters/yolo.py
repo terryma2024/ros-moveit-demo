@@ -36,7 +36,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     _validate_accelerated_component,
 )
 from so101_demo.perception_benchmark.calibration import YoloThresholds
-from so101_demo.perception_benchmark.contracts import RawCandidate
+from so101_demo.perception_benchmark.contracts import RawCandidate, YOLO_MODEL_ID
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
     PhaseTimer,
@@ -53,6 +53,11 @@ def _to_numpy(value: Any) -> np.ndarray:
     if hasattr(current, "numpy"):
         current = current.numpy()
     return np.asarray(current)
+
+
+def _require_yolo_model_id(model_id: str) -> None:
+    if model_id != YOLO_MODEL_ID:
+        raise ValueError("model_id must equal the canonical YOLO benchmark ID")
 
 
 def _assert_model_device_and_dtype(
@@ -145,12 +150,11 @@ class YoloRawAdapter:
         resource_sampler: ResourceSampler,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
+        _require_yolo_model_id(model_id)
         if runtime_device not in {"mps", "cuda"}:
             raise ValueError("formal YOLO collection requires mps or cuda")
         if synchronizer.device != runtime_device or resource_sampler.device != runtime_device:
             raise ValueError("timing/resource device does not match YOLO runtime")
-        if not isinstance(model_id, str) or not model_id:
-            raise ValueError("model_id must be non-empty")
         if not isinstance(weights_sha256, str) or len(weights_sha256) != 64:
             raise ValueError("weights_sha256 is invalid")
         self._model = model
@@ -179,6 +183,7 @@ class YoloRawAdapter:
     ) -> "YoloRawAdapter":
         """Verify immutable local weights before constructing the raw model."""
 
+        _require_yolo_model_id(model_id)
         verified_sha256 = verify_weights(Path(weights_path), expected_sha256)
         if requested_device not in {"mps", "cuda"}:
             raise ModelSetupError(
@@ -344,6 +349,7 @@ class YoloCalibratedDetector:
         model_factory: Callable[[str], Any] | None = None,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
+        _require_yolo_model_id(model_id)
         if requested_device not in {"mps", "cuda"}:
             raise ModelSetupError(
                 "DEVICE_UNAVAILABLE", "calibrated YOLO requires mps or cuda"

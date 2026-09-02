@@ -48,6 +48,7 @@ from so101_demo.perception_benchmark.contracts import (
     RunStatus,
     RuntimeProvenance,
     SCHEMA_VERSION,
+    model_id_for_name,
 )
 from so101_demo.perception_benchmark.dataset import (
     DatasetInventory,
@@ -696,8 +697,7 @@ def _validate_resource_stream(spec: RunSpec, result: RawDetectionResult) -> None
 def _validate_raw_result(spec: RunSpec, result: RawDetectionResult) -> None:
     if not isinstance(result, RawDetectionResult):
         raise _FatalRunError("RAW_RESULT_SCHEMA_INVALID")
-    expected_model_token = "yolo" if spec.model == "yolo_seg" else "ground"
-    if expected_model_token not in result.model_id.lower():
+    if result.model_id != model_id_for_name(spec.model):
         raise _FatalRunError("MODEL_IDENTITY_MISMATCH")
     if result.runtime_device != spec.device:
         raise _FatalRunError("DEVICE_MISMATCH")
@@ -800,8 +800,7 @@ def _validate_spec(spec: RunSpec, adapter: object) -> None:
     if adapter_device != spec.device:
         raise RunIntegrityError("ADAPTER_DEVICE_MISMATCH")
     adapter_model_id = getattr(adapter, "model_id", None)
-    token = "yolo" if spec.model == "yolo_seg" else "ground"
-    if not isinstance(adapter_model_id, str) or token not in adapter_model_id.lower():
+    if adapter_model_id != model_id_for_name(spec.model):
         raise RunIntegrityError("ADAPTER_MODEL_MISMATCH")
     _runtime_provenance(spec, adapter)
 
@@ -1110,6 +1109,8 @@ def _error_record(
     run_root: Path | None = None,
     source_root: Path | None = None,
 ) -> tuple[PredictionRecord, dict[str, object]]:
+    if model_id != model_id_for_name(spec.model):
+        raise _FatalRunError("MODEL_IDENTITY_MISMATCH")
     classified = _classify_error(error)
     candidates: tuple[RawCandidate, ...] = ()
     timings: PhaseTimingBreakdown | None = None
