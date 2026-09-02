@@ -1,81 +1,135 @@
-# SO-101 MoveIt 仿真工作区
+# SO-101 MoveIt simulation workspace
 
-本仓库是面向 SO-101 机械臂的 ROS 2 Jazzy / MoveIt 2 仿真工作区，提供 Gazebo Harmonic、MuJoCo、RGB-D 感知、可视化 Teleop 和 pick-place 示例。当前推荐入口是统一 Python 包 `so101_demo_py`；仓库同时保留基于共享状态机的 C++ Gazebo 实现，以及 Panda 的 Gazebo、MuJoCo 和固定目标 Pose 示例。
+This repository is a ROS 2 Jazzy and MoveIt 2 workspace for SO-101 simulation.
+It includes Gazebo Harmonic and MuJoCo backends, RGB-D perception, a bounded
+natural-language task layer, a browser-based Teleop interface, and pick-place
+examples. The recommended SO-101 entry point is the unified Python package
+`so101_demo_py`. The workspace also keeps the shared-state-machine C++ Gazebo
+implementation and several Panda examples.
 
-## 主要能力
+## What is included
 
-- 使用同一套 Python 应用层在 MuJoCo 与 Gazebo 中运行 SO-101 固定目标 pick-place。
-- 从 MuJoCo CameraPlugin 的同时间戳 RGB、Depth 和 CameraInfo 生成杯子点云，经 tf2 变换后发布 `world` 坐标系下的 `/cup_pose`。
-- 提供与固定策略隔离的动态目标链路：冻结一条新鲜 `/cup_pose`，生成 TCP 目标，通过 5-DoF IK、MoveIt 规划和控制器完成抓放。
-- 通过 MoveIt 2 和 `ros2_control` 完成规划、轨迹执行与场景管理。
-- 提供统一的 Planning Scene、相机预设、仿真世界重置和分层运行证据。
-- 提供后端无关的 SO-101 Teleop Web UI。
-- 通过 `pick_place_common` 复用 C++ 工作流基础设施，并保留 SO-101、Panda 示例。
-- 使用项目锁定的 `mujoco_ros2_control` 0.1.0 架构 fork，保留 Linux 与 Apple Silicon macOS 的构建、运行和资格记录。
+- One Python application layer for fixed-waypoint SO-101 pick-place on MuJoCo
+  and Gazebo.
+- An RGB-D path that synchronizes CameraInfo, color, and depth by source stamp,
+  transforms the detected cup through tf2, and publishes `/cup_pose` in
+  `world`.
+- A dynamic target path that freezes one fresh `/cup_pose`, derives TCP targets,
+  runs 5-DoF IK, and uses MoveIt plus the controllers for planning and motion.
+- A Text Pick Agent that lets DeepSeek or local Ollama propose a closed
+  `TaskCommand`. Deterministic Python code keeps validation, confirmation,
+  request claiming, dispatch, and execution authority.
+- A YOLO-Seg object-pose path for one-shot multi-instance detection, fail-closed
+  target selection, aligned RGB-D localization, and atomic evidence artifacts.
+  It runs as `rgbd_object_pose` or as the `yolo_seg` backend of the integrated
+  perception launch. The current Text Agent launch still uses
+  `rgbd_cup_pose`.
+- Portable semantic profiling for the full Text Agent workflow. `summary` mode
+  writes cross-platform JSON; `trace` adds a Chrome trace and can start
+  `ros2_tracing` with LTTng on Linux.
+- MoveIt 2 and `ros2_control` integration for planning, trajectory execution,
+  and Planning Scene management.
+- Shared Planning Scene geometry, camera presets, transactional world reset,
+  and layered runtime evidence.
+- A backend-independent SO-101 Teleop Web UI.
+- A project-pinned `mujoco_ros2_control` 0.1.0 architecture fork with Linux and
+  Apple Silicon macOS build and qualification records.
 
-## 项目架构
+## Architecture at a glance
 
 ```text
-MuJoCo task_camera
-  -> exact-stamp RGB-D
-  -> cup point cloud + tf2
-  -> /cup_pose ----------------------> dynamic_cup_pick_place
-                                       |
-固定 policy -------------------------> fixed_cup_pick_place
-                                       |
-操作员 / Teleop Web UI --------------+-> MoveIt 2 + ros2_control
-                                          -> Gazebo Harmonic 或 MuJoCo
+Natural-language instruction
+  -> DeepSeek or Ollama planner
+  -> closed TaskCommand validation
+  -> confirmation + request claim + allowlisted dispatch
+                                      |
+MuJoCo task_camera                    |
+  -> exact-stamp RGB-D                |
+  -> rgbd_cup_pose                    |
+  -> source-stamped /cup_pose --------+-> dynamic_cup_pick_place
+                                             |
+Fixed policy ------------------------------->+-> MoveIt 2 + ros2_control
+                                                 -> Gazebo Harmonic or MuJoCo
+
+Optional observation path:
+  launch + perception + agent + runtime spans
+    -> JSONL events -> summary.json -> trace.json
+    -> Linux ros2_tracing / LTTng CTF when requested and available
+
+Selectable one-shot perception path:
+  aligned RGB-D -> YOLO-Seg -> exactly-one target selector -> 3D localization
+    -> /cup_pose + detections + overlay + per-request evidence
 ```
 
-- `so101_demo_py` 是 SO-101 Python 仿真的统一入口，拥有 MuJoCo/Gazebo launcher、RGB-D 感知、固定/动态抓取 CLI、配置和资源。
-- `so101_teleop` 提供仿真后端选择、ROS 2 服务端和 Web UI。
-- `pick_place_common` 提供机器人无关的 C++ pick-place 核心；机器人资源和策略留在各自的 C++ 包中。
-- `so101_mujoco_support` 提供 SO-101 MuJoCo 物理证据插件；固定版本的 `mujoco_ros2_control` fork 作为独立 overlay 构建。
-- `panda_mujoco_demo` 提供 Panda 的 MuJoCo 模型、控制器、MoveIt 配置和启动入口。
+The main package boundaries are:
 
-更完整的边界说明见 [Python 架构](docs/pick-place-python-architecture.md) 和 [C++ pick-place 架构](docs/pick-place-architecture.md)。
+- `so101_demo_py` owns the SO-101 Python launchers, application logic, fixed and
+  dynamic workflows, perception adapters, profiling, configuration, and
+  installed resources.
+- `so101_teleop` provides backend selection, the ROS 2 server, and the Web UI.
+- `pick_place_common` contains the robot-independent C++ pick-place core.
+  Robot resources and policies remain in their own C++ packages.
+- `so101_mujoco_support` provides SO-101 MuJoCo physics-evidence support. The
+  pinned `mujoco_ros2_control` fork is built as a separate overlay.
+- `panda_mujoco_demo` contains the Panda MuJoCo model, controllers, MoveIt
+  configuration, and launch entry points.
 
-## 目录结构
+See the [SO-101 Python architecture](docs/pick-place-python-architecture.md) for
+the dependency rules and runtime boundaries. The
+[shared C++ pick-place architecture](docs/pick-place-architecture.md) describes
+the backend-neutral state machine and physical-outcome ownership.
+
+## Repository layout
 
 ```text
 ws_moveit/
 ├── src/
-│   ├── so101_demo_py/             # 统一 SO-101 Python 仿真应用
-│   ├── so101_teleop/              # Teleop 服务端、Web UI 与后端配置
-│   ├── so101_mujoco_support/      # SO-101 MuJoCo 支持资源
-│   ├── pick_place_common/         # 机器人无关的 C++ 工作流核心
-│   ├── so101_gazebo_demo_cpp/     # SO-101 Gazebo / MoveIt C++ 示例
-│   ├── panda_gazebo_demo_cpp/     # Panda Gazebo / MoveIt C++ 示例
-│   ├── panda_mujoco_demo/          # Panda MuJoCo / MoveIt 示例
-│   └── fixed_pose_goal/           # Panda 固定目标 Pose 示例
-├── docs/                          # 架构、集成、运行与实验文档
-├── scripts/                       # 依赖安装和维护脚本
+│   ├── so101_demo_py/             # Unified SO-101 Python application
+│   ├── so101_teleop/              # Teleop server, Web UI, and backend profiles
+│   ├── so101_mujoco_support/      # SO-101 MuJoCo support resources
+│   ├── pick_place_common/         # Robot-independent C++ workflow core
+│   ├── so101_gazebo_demo_cpp/     # SO-101 Gazebo and MoveIt C++ example
+│   ├── panda_gazebo_demo_cpp/     # Panda Gazebo and MoveIt C++ example
+│   ├── panda_mujoco_demo/         # Panda MuJoCo and MoveIt example
+│   └── fixed_pose_goal/           # Panda fixed-target pose example
+├── docs/                          # Architecture, integration, and experiment docs
+├── scripts/                       # Dependency and maintenance scripts
 └── third_party/
-    └── mujoco_ros2_control/       # 固定版本的 fork submodule
+    └── mujoco_ros2_control/       # Pinned fork submodule
 ```
 
-`build/`、`install/` 和 `log/` 是 colcon 生成目录，不属于源码结构。
+`build/`, `install/`, and `log/` are generated by colcon and are not part of
+the source layout.
 
-## 项目 Skills
+## Project skills
 
-仓库级 agent 工作流位于 `.agents/skills/`：
+Repository-level agent workflows live in `.agents/skills/`:
 
-- [`so101-dev`](.agents/skills/so101-dev/SKILL.md)：修改、调试、测试或视觉验收 SO-101 应用时的必选主流程，定义 provenance、证据目录和分层验收门。
-- [`gui-capture`](.agents/skills/gui-capture/SKILL.md)：macOS 与 GNOME Linux 的 GUI 截图和控制路由；视觉验收必须使用新鲜截图并与运行数据配对。
-- [`gazebo-video-debug`](.agents/skills/gazebo-video-debug/SKILL.md)：录制和逐帧分析 Gazebo pick-place；必须与 `so101-dev` 一起使用，不能用视频替代 ROS、MoveIt 或物理状态证据。
+- [`so101-dev`](.agents/skills/so101-dev/SKILL.md) defines source and runtime
+  provenance, evidence storage, and layered acceptance for SO-101 development.
+- [`gui-capture`](.agents/skills/gui-capture/SKILL.md) routes GUI inspection on
+  macOS and GNOME Linux. Visual acceptance requires a fresh screenshot paired
+  with runtime data.
+- [`gazebo-video-debug`](.agents/skills/gazebo-video-debug/SKILL.md) records and
+  inspects Gazebo pick-place video. It supplements ROS, MoveIt, and physics
+  evidence rather than replacing them.
 
-## 环境要求
+## Requirements
 
-- Ubuntu 24.04 与 ROS 2 Jazzy；Apple Silicon macOS 使用源码构建的 Jazzy underlay，并将安装前缀软链为 `/opt/ros/jazzy`
+- Ubuntu 24.04 with ROS 2 Jazzy, or Apple Silicon macOS with the source-built
+  Jazzy underlay linked at `/opt/ros/jazzy`
 - MoveIt 2
-- Gazebo Harmonic 及 ROS 2 bridge/control 组件
-- `colcon`、`rosdep` 和 Zsh
-- MuJoCo 路径所需版本、fork commit 和依赖由 `dependency-lock.yaml` 与仓库脚本安装并验证
-- Teleop Web UI 需要 Bun；详见 Teleop 使用文档
+- Gazebo Harmonic and its ROS 2 bridge and control packages
+- `colcon`, `rosdep`, and Zsh
+- MuJoCo versions, fork commits, and dependencies pinned by
+  `dependency-lock.yaml` and the repository installation scripts
+- Bun for the Teleop Web UI
+- Optional Ultralytics and PyTorch runtime from the pinned perception lockfiles
+  when using `rgbd_object_pose`
 
-## 构建
+## Build
 
-先安装工作区声明的 ROS 依赖：
+Install the ROS dependencies declared by the workspace:
 
 ```bash
 cd /data/work/ws_moveit
@@ -83,7 +137,8 @@ source /opt/ros/jazzy/setup.zsh
 rosdep install --from-paths src --ignore-src -r -y
 ```
 
-完整构建（包括 MuJoCo overlay）使用固定依赖安装器：
+For a complete build, including the MuJoCo overlay, use the pinned dependency
+installer:
 
 ```bash
 zsh scripts/install-mujoco-ros2-control.zsh --init-submodule
@@ -92,7 +147,9 @@ colcon build --base-paths src --symlink-install
 source install/setup.zsh
 ```
 
-安装器会按 `src/so101_demo_py/config/mujoco/dependency-lock.yaml` 初始化、构建并验证 fork。若只使用某个 Gazebo/C++ 示例，可按包构建，例如：
+The installer initializes, builds, and verifies the fork against
+`src/so101_demo_py/config/mujoco/dependency-lock.yaml`. To build only a Gazebo
+or C++ example, select the required packages:
 
 ```bash
 source /opt/ros/jazzy/setup.zsh
@@ -100,22 +157,31 @@ colcon build --symlink-install --packages-up-to so101_gazebo_demo_cpp so101_tele
 source install/setup.zsh
 ```
 
-每次打开新终端后，都需要按所用后端重新 source ROS underlay、依赖 overlay 和本工作区 overlay。
+Every new terminal must source the ROS underlay, the backend dependency overlay,
+and this workspace overlay in that order.
 
-## 运行
+## Run
 
-以下命令均假定已完成构建并 source 对应 overlay。
+The commands below assume the relevant overlays have been built and sourced.
+Confirm the installed runtime before testing a source change:
 
-### 统一 SO-101 Python 示例
+```bash
+ros2 pkg prefix so101_demo_py
+ros2 pkg executables so101_demo_py | sort
+ros2 launch so101_demo_py so101_mujoco.launch.py --show-args
+```
 
-两个 pick-place launcher 默认使用 `run_mode:=dry_run execute:=false`，适合先检查启动图和配置：
+### Fixed-waypoint workflows
+
+The MuJoCo and Gazebo pick-place launchers default to
+`run_mode:=dry_run execute:=false`:
 
 ```bash
 ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py
 ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py
 ```
 
-确认只连接仿真环境后，可显式启用执行：
+Enable motion only inside the intended simulation environment:
 
 ```bash
 ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py \
@@ -125,18 +191,24 @@ ros2 launch so101_demo_py so101_gazebo_pick_place.launch.py \
   run_mode:=execute execute:=true
 ```
 
-若只需要启动仿真栈而不运行 pick-place，可使用：
+Stack-only launchers are also available:
 
 ```bash
 ros2 launch so101_demo_py so101_mujoco.launch.py
 ros2 launch so101_demo_py so101_gazebo.launch.py
 ```
 
-### RGB-D 感知驱动的 MuJoCo pick-place
+### RGB-D perception and dynamic pick-place
 
-一体化入口启动 MuJoCo、CameraPlugin、静态相机 TF、`rgbd_cup_pose`、MoveIt、控制器和 `dynamic_cup_pick_place`。它从实时 RGB-D 计算 `/cup_pose`，不会用 MuJoCo truth publisher 代替感知结果。
+The status-preserving wrapper owns MuJoCo, CameraPlugin, static camera TF,
+`rgbd_cup_pose`, MoveIt, the controllers, and `dynamic_cup_pick_place`. It uses
+camera data to produce `/cup_pose`; it does not substitute MuJoCo object truth
+for perception.
 
-该入口没有可执行的默认 dry-run：必须显式给出双重仿真执行授权。RGB-D 依赖渲染，因此 `headless:=false`；建议使用安装后的 status-preserving runner，让感知或抓取子进程失败能够传递为非零退出码：
+The launch file declares safe defaults for inspection, but its configured graph
+rejects the request unless `run_mode:=execute` and `execute:=true` are both
+present. The example below keeps the viewer visible with `headless:=false`;
+sensor rendering is controlled separately and also works in headless runs:
 
 ```bash
 mkdir -p /tmp/so101-debug-rgbd-readme-demo
@@ -147,19 +219,76 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place \
   evidence_file:=/tmp/so101-debug-rgbd-readme-demo/result.json
 ```
 
-`evidence_file` 必须是尚不存在的绝对路径，父目录必须已存在。可选初始杯位为 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm` 和 `cup_test_right_5cm`。动态执行会按 policy 做微抬升门禁，并记录每段轨迹的新鲜终点 joint/FK 证据。每次运行使用新的 `session_id` 与证据路径；不要把 action 成功、launch 启动成功、`DONE` 或单张截图单独当成完整物理验收。
+`evidence_file` must be a new absolute path with an existing parent directory.
+Use a new `session_id` and evidence path for every run. Available initial cup
+poses include `task_start`, `cup_test_forward_5cm`, `cup_test_left_5cm`, and
+`cup_test_right_5cm`.
 
-如果要把感知调试与机械臂动作解耦，可先查看三个独立工具的参数，再在已有相机栈中选择运行：
+For perception-only work, inspect the bounded tools before running them:
 
 ```bash
 ros2 run so101_demo_py rgbd_point_cloud --help
 ros2 run so101_demo_py rgbd_cup_pose --help
+ros2 run so101_demo_py rgbd_object_pose --help
 ros2 run so101_demo_py cup_pose_subscriber --help
 ```
 
-### 公共仿真命令
+`rgbd_object_pose` requires a regular weights file, its expected SHA256 digest,
+and a unique absolute evidence root. It rejects zero or multiple matching
+`plastic_cup` candidates instead of selecting one heuristically. The integrated
+perception launch can select the same path with `perception_backend:=yolo_seg`;
+it then requires `perception_weights` and `perception_weights_sha256`. The
+current Text Agent launch does not expose this backend selector.
 
-在对应仿真栈运行后，通过 `--backend mujoco|gazebo` 选择后端：
+### Natural-language RGB-D workflow
+
+Set `DEEPSEEK_API_KEY` in the current process environment, or provide the local
+Ollama model `qwen3.5:4b`. The integrated launch requires all three execution
+controls and owns the ROS and MuJoCo stack for the request:
+
+```bash
+mkdir -p /tmp/so101-debug-text-agent-readme
+ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
+  instruction:='Pick the plastic cup. Apply no constraints.' \
+  run_mode:=execute execute:=true skip_confirmation:=true \
+  headless:=false sensor_rendering:=true \
+  mujoco_initial_keyframe:=task_start \
+  session_id:=text-agent-readme-001 \
+  evidence_file:=/tmp/so101-debug-text-agent-readme/result.json
+```
+
+Use the standalone `text_pick_agent` preview and digest flow when an operator
+must inspect the proposed command before dispatch. `skip_confirmation` bypasses
+that human review only. It does not bypass schema validation, the capability
+allowlist, request claiming, runtime provenance, or downstream motion and
+evidence checks.
+
+### Cross-platform profiling
+
+The Text Agent launch accepts `profiling:=off|summary|trace`. Profiling is off by
+default. A portable summary run adds:
+
+```bash
+  profiling:=summary \
+  profiling_require_system_trace:=false
+```
+
+Enabled sessions write per-process JSONL streams and aggregate them into
+`profiling/manifest.json` and `profiling/summary.json`. `trace` also writes
+`profiling/trace.json`. On Linux it attempts the `ros2_tracing` and LTTng backend;
+set `profiling_require_system_trace:=true` when missing CTF output must fail the
+run. macOS keeps the portable semantic trace and records that the system backend
+is unavailable.
+
+The profiler observes launch, RGB-D, planner, validation, dispatch, dynamic
+runtime, state, and cleanup spans. It does not change task decisions or provide
+execution authority. See the
+[PickPlace profiling source guide](docs/guides/so101-pick-place-profiling-source-guide.md)
+for the artifact schema and interpretation rules.
+
+### Shared simulation tools
+
+Select the active backend explicitly:
 
 ```bash
 ros2 run so101_demo_py scene_setup --backend gazebo setup
@@ -169,7 +298,8 @@ ros2 run so101_demo_py teleop_reset --backend gazebo --session-id operator-reset
 
 ### Teleop Web UI
 
-先启动兼容的仿真栈，再以相同 session 启动 Teleop：
+Start a compatible simulation stack first, then launch Teleop with the same
+simulation session:
 
 ```bash
 ros2 launch so101_teleop so101_teleop.launch.py \
@@ -178,40 +308,55 @@ ros2 launch so101_teleop so101_teleop.launch.py \
   simulation_session_id:=<session-id>
 ```
 
-Teleop 也支持 `mujoco_py` 和 `gazebo_cpp` profile。网络访问、安全边界和 Web bundle 构建方式见 [Teleop Web UI 指南](src/so101_teleop/docs/so101-teleop-web-ui.md)。
+Teleop also supports `mujoco_py` and `gazebo_cpp` profiles. See the
+[Teleop Web UI guide](src/so101_teleop/docs/so101-teleop-web-ui.md) for network,
+safety, and Web bundle details.
 
-### C++ 与示例包
+### C++ and example packages
 
 ```bash
-# SO-101 Gazebo / MoveIt C++ 仿真
+# SO-101 Gazebo and MoveIt C++ simulation
 ros2 launch so101_gazebo_demo_cpp so101_gazebo.launch.py
 
-# Panda Gazebo / MoveIt 示例
+# Panda Gazebo and MoveIt example
 ros2 launch panda_gazebo_demo_cpp panda_gazebo.launch.py
 
-# Panda MuJoCo / MoveIt 示例
+# Panda MuJoCo and MoveIt example
 ros2 launch panda_mujoco_demo panda_mujoco.launch.py
 
-# Panda 固定目标 Pose 示例
+# Panda fixed-target pose example
 ros2 launch fixed_pose_goal fixed_pose_goal.launch.py
 ```
 
-## 文档索引
+## Documentation
 
-- [统一 SO-101 Python 包](src/so101_demo_py/README.md)
-- [RGB-D 感知 PickPlace 教学与源码导读](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
-- [动态杯位 PickPlace 源码导读](docs/guides/so101-dynamic-cup-pick-place-source-guide.md)
-- [Apple Silicon ROS 2 Jazzy 与 SO-101 MuJoCo](docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md)
-- [Python pick-place 架构](docs/pick-place-python-architecture.md)
-- [SO-101 MuJoCo ROS 2 集成指南](docs/guides/so101-mujoco-ros2-integration-guide.md)
-- [`mujoco_ros2_control` 0.1.0 升级说明](docs/guides/mujoco-ros2-control-0-1-upgrade-change-notes.md)
-- [C++ pick-place 架构](docs/pick-place-architecture.md)
-- [C++ launch 参数与安全合同](docs/pick-place-launch-parameters.md)
-- [SO-101 Gazebo C++ 包](src/so101_gazebo_demo_cpp/README.md)
-- [Teleop Web UI 指南](src/so101_teleop/docs/so101-teleop-web-ui.md)
-- [Panda Gazebo C++ 包](src/panda_gazebo_demo_cpp/README.md)
-- [Panda MuJoCo 包](src/panda_mujoco_demo/README.md)
+- [Unified SO-101 Python package](src/so101_demo_py/README.md)
+- [SO-101 Python architecture](docs/pick-place-python-architecture.md)
+- [Text Pick Agent source guide](docs/guides/so101-text-pick-agent-source-guide.md)
+- [RGB-D perception PickPlace source guide](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
+- [YOLO-Seg RGB-D perception source guide](docs/guides/so101-yolo-seg-rgbd-perception-pick-place-source-guide.md)
+- [Dynamic cup PickPlace source guide](docs/guides/so101-dynamic-cup-pick-place-source-guide.md)
+- [PickPlace profiling source guide](docs/guides/so101-pick-place-profiling-source-guide.md)
+- [Apple Silicon ROS 2 Jazzy and SO-101 MuJoCo guide](docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md)
+- [SO-101 MuJoCo ROS 2 integration guide](docs/guides/so101-mujoco-ros2-integration-guide.md)
+- [`mujoco_ros2_control` 0.1.0 upgrade notes](docs/guides/mujoco-ros2-control-0-1-upgrade-change-notes.md)
+- [Shared C++ pick-place architecture](docs/pick-place-architecture.md)
+- [C++ launch parameters and safety contract](docs/pick-place-launch-parameters.md)
+- [SO-101 Gazebo C++ package](src/so101_gazebo_demo_cpp/README.md)
+- [Teleop Web UI guide](src/so101_teleop/docs/so101-teleop-web-ui.md)
+- [Panda Gazebo C++ package](src/panda_gazebo_demo_cpp/README.md)
+- [Panda MuJoCo package](src/panda_mujoco_demo/README.md)
 
-## 安全边界
+## Safety boundary
 
-本仓库当前的 SO-101 操作入口仅面向仿真。Python real-arm adapter 保持 fail-closed，仓库没有可直接驱动真实 SO-101 的 launcher。动态 MuJoCo policy 仍以仓库内 manifest 的资格状态为准；历史实验台账和某个平台上的成功记录不能替代当前 commit、当前安装产物与本轮运行证据。不要把上述仿真执行命令用于真实机械臂；真实硬件接入需要独立的安全设计、限位、急停和验收流程。
+All current SO-101 launchers in this repository target simulation. The Python
+`real_stub` remains fail closed, and the repository does not include a launcher
+that can drive a physical SO-101. A dynamic MuJoCo policy is usable only under
+the qualification state recorded in its current manifest. Historical ledgers
+or a successful run on another machine do not replace current source, installed
+runtime, and run evidence.
+
+Do not use these simulation execution commands on a physical arm. Real hardware
+requires a separate adapter and safety design with calibrated limits, an
+operator enable, watchdogs, stop behavior, an emergency stop, and independent
+acceptance evidence.
