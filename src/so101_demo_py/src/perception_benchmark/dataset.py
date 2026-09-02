@@ -1286,8 +1286,12 @@ def load_truth_samples(
             staged_path = staging / relative_path.name
             atomic_write_json(staged_path, document)
             staged_path.chmod(0o444)
-        parent_created = not target_parent.exists()
-        target_parent.mkdir(mode=0o700, exist_ok=True)
+        try:
+            target_parent.mkdir(mode=0o700, exist_ok=False)
+        except FileExistsError:
+            pass
+        else:
+            parent_created = True
         if target.exists() or target.is_symlink():
             raise DatasetVerificationError("TRUTH_MASK_ALREADY_EXISTS")
         os.replace(staging, target)
