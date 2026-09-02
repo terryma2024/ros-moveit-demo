@@ -956,6 +956,109 @@ def _aggregation_plan_document(tmp_path: Path) -> dict[str, object]:
     }
 
 
+def _resource_sample_document() -> dict[str, object]:
+    return {
+        "process_rss_bytes": 4096,
+        "process_cpu_percent": 10.0,
+        "gpu_memory_allocated_bytes": 1024,
+        "gpu_memory_reserved_bytes": 2048,
+        "gpu_utilization_percent": 30.0,
+        "gpu_temperature_celsius": 40.0,
+        "gpu_power_watts": 50.0,
+        "unavailable_reasons": {},
+        "tool_versions": {"resource-probe": "1.0"},
+    }
+
+
+def _plan_with_resource_sample(tmp_path: Path) -> dict[str, object]:
+    plan = _aggregation_plan_document(tmp_path)
+    plan["runs"][0]["resource_trace"] = {  # type: ignore[index]
+        "sampling_frequency_hz": 10.0,
+        "observations": [
+            {
+                "phase": "load",
+                "monotonic_ns": 1,
+                "formal_sample_index": None,
+                "sample": _resource_sample_document(),
+            }
+        ],
+    }
+    return plan
+
+
+@pytest.mark.parametrize(
+    "mapping_drifts",
+    [
+        {"unavailable_reasons": [["gpu_power_watts", "probe unavailable"]]},
+        {"tool_versions": [["resource-probe", "1.0"]]},
+        {
+            "unavailable_reasons": [["gpu_power_watts", "probe unavailable"]],
+            "tool_versions": [["resource-probe", "1.0"]],
+        },
+    ],
+)
+def test_aggregate_rejects_resource_list_pairs_before_external_loaders(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mapping_drifts: dict[str, object],
+) -> None:
+    plan_document = _plan_with_resource_sample(tmp_path)
+    sample = plan_document["runs"][0]["resource_trace"]["observations"][0][  # type: ignore[index]
+        "sample"
+    ]
+    if "unavailable_reasons" in mapping_drifts:
+        sample["gpu_power_watts"] = None
+    sample.update(mapping_drifts)
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps(plan_document))
+    monkeypatch.setattr(
+        perception_benchmark,
+        "verify_threshold_lock",
+        lambda *a, **k: pytest.fail("resource type drift reached an external loader"),
+    )
+
+    result = perception_benchmark.main(
+        [
+            "aggregate",
+            "--config",
+            str(CONFIG),
+            "--aggregation-plan",
+            str(plan),
+            "--aggregation-plan-sha256",
+            perception_benchmark.sha256_bytes(plan.read_bytes()),
+            "--output-root",
+            str(tmp_path / "report"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert "AGGREGATION_PLAN_INVALID:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_aggregation_plan_accepts_raw_resource_mappings(tmp_path: Path) -> None:
+    plan = _plan_with_resource_sample(tmp_path)
+
+    _, _, runs, _ = perception_benchmark._validated_aggregation_plan(plan)
+
+    assert runs[0]["resource_trace"] is not None
+
+
+def test_aggregation_plan_rejects_resource_scalar_type_drift(tmp_path: Path) -> None:
+    plan = _plan_with_resource_sample(tmp_path)
+    sample = plan["runs"][0]["resource_trace"]["observations"][0][  # type: ignore[index]
+        "sample"
+    ]
+    sample["process_rss_bytes"] = []
+
+    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+        perception_benchmark._validated_aggregation_plan(plan)
+
+    assert caught.value.code == "AGGREGATION_PLAN_INVALID"
+
+
 @pytest.mark.parametrize(
     ("field", "drift"),
     [

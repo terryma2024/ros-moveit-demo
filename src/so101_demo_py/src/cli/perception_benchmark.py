@@ -1126,6 +1126,20 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
 
 
 def _resource_sample(document: Mapping[str, Any]) -> ResourceSample:
+    if set(document) != {
+        "process_rss_bytes",
+        "process_cpu_percent",
+        "gpu_memory_allocated_bytes",
+        "gpu_memory_reserved_bytes",
+        "gpu_utilization_percent",
+        "gpu_temperature_celsius",
+        "gpu_power_watts",
+        "unavailable_reasons",
+        "tool_versions",
+    } or not all(
+        isinstance(document[name], Mapping) for name in ("unavailable_reasons", "tool_versions")
+    ):
+        raise BenchmarkError("AGGREGATION_PLAN_INVALID")
     return ResourceSample(**document)
 
 

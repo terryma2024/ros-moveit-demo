@@ -177,3 +177,18 @@ Exact planned evidence paths are `$BENCHMARK_ROOT/dataset/sealed-test-members.js
 - Retained implementation evidence: every Task 9 RED/GREEN/full JUnit file plus `build-benchmark/`, `install-benchmark/`, and `log-benchmark/`.
 - Archived runs: none. No evidence was deleted.
 - Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
+
+## CP-BENCH-007 — FixRound3 resource-mapping validation
+
+- Review state: one important finding remained after FixRound2. Raw JSON list-of-pairs values for `ResourceSample.unavailable_reasons` and `ResourceSample.tool_versions` could be normalized by `dict()` inside the constructor and reach external threshold-lock loading.
+- Functional RED command: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-benchmark/so101_demo_py /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/test/test_perception_benchmark_cli.py --junitxml=/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix3-red-functional-v2.xml`
+- Functional RED evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix3-red-functional-v2.xml`; result `46 passed, 3 failed`. The three failures prove that each mapping field separately and both fields together reached the mocked external threshold-lock loader before the fix. Earlier import and ROS pytest-plugin collection failures are environment-boundary records, not functional RED evidence.
+- CLI GREEN evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix3-cli-green.xml`; result `49 passed` after raw-document exact-key and `Mapping` validation. A raw valid mapping remains accepted, while list-valued scalar drift remains a typed `AGGREGATION_PLAN_INVALID` failure.
+- Post-format CLI evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix3-cli-final.xml`; result `49 passed`.
+- Full regression evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix3-full-green.xml`; result `542 passed, 1 pre-existing pyparsing deprecation warning`.
+- Installed readback: `/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py/lib/so101_demo_py/perception_benchmark verify-evidence --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix2` returned `VERIFIED 41`.
+- Authoritative retained dry-run remains `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix2/`. No new dry-run was generated. Readback remains `16` records, `formal=false`, `run_kind=NON_FORMAL_DRY_RUN`, `8` records per model, and `4` records per scenario (`2` per model per scenario).
+- Superseded deletion candidates remain, without deletion: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run/`, `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-final/`, and `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1/`.
+- Retained implementation evidence: every Task 9 RED/GREEN/full JUnit file plus `build-benchmark/`, `install-benchmark/`, and `log-benchmark/`.
+- Archived runs: none. No evidence was deleted.
+- Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
