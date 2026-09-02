@@ -361,6 +361,8 @@ class PredictionRecord:
                     raise ValueError("YOLO candidates forbid Grounded-SAM score fields")
                 if candidate.ranking_score_source != "class_confidence":
                     raise ValueError("YOLO ranking_score_source must be class_confidence")
+                if candidate.ranking_score != candidate.class_confidence:
+                    raise ValueError("YOLO ranking_score must match class_confidence")
             return
         if "grounded-sam" in normalized_model_id:
             for candidate in candidates:
@@ -375,12 +377,14 @@ class PredictionRecord:
                     )
                 ):
                     raise ValueError("Grounded-SAM candidates require grounding and SAM scores")
-                if candidate.ranking_score_source not in {
-                    "grounding_box_score",
-                    "grounding_text_score",
-                    "sam_quality",
-                }:
-                    raise ValueError("Grounded-SAM ranking_score_source is invalid")
+                if candidate.ranking_score_source != "grounding_box_score":
+                    raise ValueError(
+                        "Grounded-SAM ranking_score_source must be grounding_box_score"
+                    )
+                if candidate.ranking_score != candidate.grounding_box_score:
+                    raise ValueError(
+                        "Grounded-SAM ranking_score must match grounding_box_score"
+                    )
             return
         if candidates:
             raise ValueError("model_id must identify YOLO or Grounded-SAM candidates")
