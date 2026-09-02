@@ -11,7 +11,11 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from so101_demo.perception_benchmark.codec import read_mask
-from so101_demo.perception_benchmark.contracts import PredictionRecord, RawCandidate
+from so101_demo.perception_benchmark.contracts import (
+    PredictionRecord,
+    RawCandidate,
+    model_name_for_id,
+)
 from so101_demo.perception_benchmark.matching import _hungarian_minimize, mask_iou
 
 
@@ -105,6 +109,11 @@ def _validated_records(
     items = tuple(records)
     if not all(isinstance(record, PredictionRecord) for record in items):
         raise ValueError(f"{name} must contain PredictionRecord values")
+    for record in items:
+        try:
+            model_name_for_id(record.model_id)
+        except ValueError as error:
+            raise ValueError(f"{name} contains a noncanonical model_id") from error
     result = {_identity(record): record for record in items}
     if len(result) != len(items):
         raise ValueError(f"{name} composite identities must be unique")
