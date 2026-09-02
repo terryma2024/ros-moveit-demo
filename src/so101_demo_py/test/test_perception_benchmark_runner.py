@@ -801,6 +801,42 @@ def test_terminal_schema_failure_does_not_rewrite_decodable_terminal_manifest(
     assert manifest_path.read_bytes() == terminal_bytes
 
 
+@pytest.mark.parametrize("terminal_status", (RunStatus.VALID, RunStatus.INVALID))
+@pytest.mark.parametrize("schema_mutation", ("extra-field", "missing-field"))
+def test_raw_terminal_manifest_schema_drift_is_read_only_before_strict_loading(
+    tmp_path: Path,
+    terminal_status: RunStatus,
+    schema_mutation: str,
+) -> None:
+    """Catch strict manifest construction running before raw terminal detection."""
+
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    if terminal_status is RunStatus.INVALID:
+        spec = replace(spec, platform="linux", device="mps")
+    first = DetectorBenchmarkRunner(
+        SyntheticAdapter(output_root), output_root
+    ).run(spec)
+    assert first.status is terminal_status
+    manifest_path = output_root / "manifest.json"
+    document = json.loads(manifest_path.read_bytes())
+    if schema_mutation == "extra-field":
+        document["unexpected_terminal_field"] = "must-not-be-rewritten"
+    else:
+        del document["runtime_version"]
+    atomic_write_json(manifest_path, document)
+    terminal_bytes = manifest_path.read_bytes()
+    adapter = SyntheticAdapter(output_root)
+
+    with pytest.raises(RunIntegrityError, match="MANIFEST_SCHEMA_INVALID"):
+        DetectorBenchmarkRunner(adapter, output_root).run(spec)
+
+    assert adapter.calls == []
+    assert manifest_path.read_bytes() == terminal_bytes
+
+
 def test_terminal_invalid_remains_byte_immutable_and_never_resumes(
     tmp_path: Path,
 ) -> None:
