@@ -4,7 +4,7 @@
 
 **Goal:** 在冻结的 200 张 val 与 200 张 test 数据上，以同一真值、匹配、安全决策和证据口径，对 YOLO-Seg 与逐帧无状态 Grounding DINO Tiny + SAM 2.1 Hiera Tiny 完成 Linux CUDA / macOS MPS A/B benchmark。
 
-**Architecture:** 新增独立的 `so101_demo.perception_benchmark` 包，将不可变 schema、数据装载、几何匹配、指标、标定、模型诊断适配、运行编排和报告拆成单一职责模块。val 低门槛候选先在双平台采集，再合并生成不可变 threshold-lock；threshold-lock 冻结后才运行 test，production 正式路径仍经过现有 `DetectorPort`，benchmark-only raw 诊断出口不改变生产 detector 语义。
+**Architecture:** 新增独立的 `so101_demo.perception_benchmark` 包，将不可变 schema、数据装载、几何匹配、指标、标定、模型诊断适配、运行编排和报告拆成单一职责模块。val 低门槛候选先在双平台采集，再合并生成不可变 threshold-lock；threshold-lock 冻结后才运行 test，production 正式路径仍经过 `so101_demo.ports.object_detector.DetectorPort`，benchmark-only raw 出口不改变生产 detector 语义。
 
 **Tech Stack:** Python 3.11、NumPy、Pillow 12.3.0、PyYAML 6.0.2、PyTorch 2.13.0、Ultralytics 8.4.115、Transformers 4.56.2、ROS 2 Jazzy/ament_python、pytest；不新增 SciPy 或 pycocotools。
 
@@ -18,10 +18,11 @@
 - Grounded-SAM manifest SHA-256 固定为 `838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3`；Grounding DINO revision 固定为 `a2bb814dd30d776dcf7e30523b00659f4f141c71`，SAM revision 固定为 `de431c4043854a71d8101e17995dfe596bf101a5`，prompt 固定为 `plastic cup.`，逐帧无状态，FP32，`offline=true`，`fallback_used=false`。
 - 依赖继续使用 `src/so101_demo_py/config/perception/requirements.lock`；不新增 SciPy、pycocotools 或联网运行依赖。Hungarian、101 点 AP、bootstrap、RLE 均用 Python + NumPy 实现；polygon 栅格化固定为 Pillow 12.3.0 的精确规则。
 - val-only 标定；两个平台的 val 记录合并选择一套共同 threshold-lock。threshold-lock 生成前禁止读取 test truth 或运行正式 test；test 结果不得反向改变 grid、阈值、prompt、模型、依赖或摘要结论。
-- raw 低门槛采集与正式运行分离：val 仅采集 low-floor raw；threshold-lock 后，test 运行一次 low-floor `ORACLE_DIAGNOSTIC` 以计算 raw/AP 和固定两套 decision replay，另分别运行 production 与 calibrated/characterization 性能/契约路径。`ORACLE_DIAGNOSTIC` 不参与阈值选择、模型排名或 production 配置回填。
-- production test 的正式调用必须通过现有 `so101_demo.adapters.perception.detector_factory.DetectorPort` 和 `TargetSelector`；benchmark-only adapters 只能暴露不可变 raw candidates、阶段时间和运行来源，不能改变生产 detector 语义。
+- raw 低门槛采集与正式运行分离：val 仅采集 low-floor raw；threshold-lock 后，test 按预注册 collection floors 运行一次正式 `TEST_RAW_FROZEN`，用于统一 raw AP、候选分布 A/B 和固定 production/calibrated decision replay。production 与 calibrated/characterization 另走真实 detector 进程以验证 contract/performance。可选 `ORACLE_DIAGNOSTIC` 只表示额外 test threshold sweep；本计划不运行它，它不得参与阈值选择、模型排名或 production 配置回填。
+- production test 的正式调用协议必须来自 `so101_demo.ports.object_detector.DetectorPort` 并使用实际 `TargetSelector`；`so101_demo.adapters.perception.detector_factory.build_detector` 只负责构造并返回结构上符合该 port 的 detector。禁止把 factory 文件里仅描述 runtime/cold-start 字段的窄内部 Protocol 当作正式 detect port。benchmark-only adapters 只能暴露不可变 raw candidates、阶段时间和运行来源，不能改变生产 detector 语义。
 - 由于当前 YOLO production 代码固定传入 `conf=0.25`、未在仓库配置文件显式写 NMS IoU，implementation 必须从 Ultralytics 8.4.115 warm-up 后的 resolved predictor args 读取 production NMS IoU 并写入配置快照；字段缺失时该 run 为 `INVALID`，禁止猜测历史默认值。此 ruling 的成本是 production 配置快照依赖锁定 Ultralytics 的可读 resolved args。
-- 低门槛 test 诊断比 spec 第 9.1 节最小矩阵多一次模型运行。其收益是 AP/raw 候选与 production/calibrated 性能、生产边界证据互不混淆；成本是每平台每模型多处理 200 张，但它仍在 threshold-lock 后运行，且不解封任何新的选择自由度。
+- `TEST_RAW_FROZEN` 比 spec 第 9.1 节最小矩阵多一次模型运行。其收益是统一 raw AP/候选能力 A/B 与 production/calibrated 性能、生产边界证据互不混淆；成本是每平台每模型多处理 200 张，但 collection floors 在 val 前已预注册、运行发生在 threshold-lock 后，且不解封任何新的选择自由度。
+- Test seal ruling：threshold-lock 前只校验完整 archive SHA、tar path 安全和 200 组 test image/label/truth member 的路径/bytes SHA/member-count，不解包、解析或栅格化 test truth，也不计算 test 场景/实例语义。两份 lock 都创建并验证后才解封 test 到新目录，再验收 200 张和 50/50/50/50。成本是 test 结构语义缺陷会在锁后使 run `INVALID`，但不会把 test 标签泄漏给标定。
 - run 状态只使用 `PLANNED`、`RUNNING`、`VALID`、`INVALID`；逐图状态只使用 `OK`、`ERROR`。run `INVALID` 与 record `ERROR` 是不同层级，不得把合法逐图错误自动升级为无效运行。
 - 注册 durable evidence root 固定为 `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1`；Mac 临时 staging/debug 固定为 `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1`。Mac 工件传输到 durable root 后按 immutable inventory 做 SHA readback；未经明确授权不删除任何 evidence。
 - 新账本固定为 `docs/experiments/grounded-sam-yolo-seg-benchmark-experiment-ledger.md`，外部运行前先写 `PLANNED`；每个实验记录 exact source commit、工作树状态、install overlay、runtime executable/package prefix、平台、device、dtype、依赖锁 SHA、配置 SHA、inventory SHA、开始/结束时间和证据路径。
@@ -122,6 +123,16 @@ class RunStatus(str, Enum):
     INVALID = "INVALID"
 
 
+class RunKind(str, Enum):
+    NON_FORMAL_DRY_RUN = "NON_FORMAL_DRY_RUN"
+    VAL_RAW = "VAL_RAW"
+    TEST_RAW_FROZEN = "TEST_RAW_FROZEN"
+    TEST_PRODUCTION = "TEST_PRODUCTION"
+    TEST_CALIBRATED = "TEST_CALIBRATED"
+    TEST_CHARACTERIZATION = "TEST_CHARACTERIZATION"
+    ORACLE_DIAGNOSTIC = "ORACLE_DIAGNOSTIC"
+
+
 @dataclass(frozen=True, slots=True)
 class MaskRef:
     relative_path: str
@@ -151,6 +162,8 @@ class RawCandidate:
 ```
 
 Implement `PredictionRecord.__post_init__` so an `ERROR` requires `DecisionOutput.ERROR` and non-empty `error_type`, while `OK` forbids error fields. Copy tuple/dict inputs into immutable owned values; reject duplicate candidate IDs, mask/image dimension mismatch, CPU device, fallback, nonfinite latency/confidence/box, missing provenance and unknown schema version.
+
+`PredictionRecord` includes exact keys `run_id`、`schema_version`、`run_kind`、`record_status`、`formal_sample_index`、`split`、`scenario`、`image_relpath`、`image_sha256`、`model_id`、`runtime_provenance`、`config_sha256`、`threshold_lock_sha256`、`raw_candidates`、`phase_timings`、`raw_count`、`decision`、`selected_candidate_id`、`rejection_reason`、`error_type`、`error_summary`、`timed_out`、`oom` and `fallback_used`. Require a lock SHA for every `TEST_*` run kind；if the optional `ORACLE_DIAGNOSTIC` is separately authorized, require a lock SHA there too.
 
 - [ ] **Step 4: Add canonical JSON and lossless row-major RLE**
 
@@ -214,7 +227,7 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 
 **Interfaces:**
 - Consumes: Task 1 `TruthInstance`、`TruthSample`、`MaskRef`、`atomic_write_json`。
-- Produces: `DatasetInventory`；`DatasetArchiveVerifier.verify_and_extract(archive: Path, expected_sha256: str, output_root: Path) -> DatasetInventory`；`rasterize_polygon(polygon_xy, width, height) -> np.ndarray`；`load_truth_samples(dataset_root, split, inventory) -> tuple[TruthSample, ...]`。
+- Produces: `ArchiveInventory`、`DatasetSampleRef`、`DatasetInventory`、`TestAccessGrant`、`TestSeal`；`DatasetArchiveVerifier.verify_archive(archive: Path, expected_sha256: str, sealed_test_inventory_path: Path) -> ArchiveInventory`；`DatasetArchiveVerifier.verify_and_extract_split(archive: Path, expected_sha256: str, output_root: Path, split: Literal["val", "test"], test_seal: TestSeal | None) -> DatasetInventory`；`rasterize_polygon(polygon_xy: tuple[tuple[float, float], ...], width: int, height: int) -> np.ndarray`；`load_truth_samples(dataset_root: Path, split: Literal["val", "test"], inventory: DatasetInventory) -> tuple[TruthSample, ...]`。
 
 - [ ] **Step 1: Write failing archive, traversal, count and rasterization tests**
 
@@ -232,13 +245,45 @@ def test_polygon_rule_is_round_half_up_and_includes_pillow_boundary() -> None:
     ]
 
 
-def test_inventory_requires_200_and_50_per_scenario(tmp_path: Path) -> None:
-    archive = build_fixture_archive(tmp_path, split_count=199)
-    with pytest.raises(DatasetVerificationError, match="split count"):
-        DatasetArchiveVerifier().verify_and_extract(archive, sha256_file(archive), tmp_path / "out")
+def test_prelock_archive_inventory_seals_test_members_without_truth_semantics(tmp_path: Path) -> None:
+    archive = build_fixture_archive(tmp_path, split_count=200)
+    inventory = DatasetArchiveVerifier().verify_archive(
+        archive, sha256_file(archive), tmp_path / "sealed-test-members.json"
+    )
+    assert inventory.test_triplet_count == 200
+    assert inventory.test_scenario_counts is None
+    assert not (tmp_path / "test-open").exists()
+
+
+def test_test_extraction_requires_two_verified_threshold_locks(tmp_path: Path) -> None:
+    archive = build_fixture_archive(tmp_path, split_count=200)
+    seal = TestSeal("a" * 64, tmp_path / "test-access.jsonl")
+    with pytest.raises(DatasetVerificationError, match="TEST_SEALED"):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive, sha256_file(archive), tmp_path / "test-open", "test", seal
+        )
+
+
+def test_verified_locks_open_test_and_then_validate_200_and_50_per_scenario(tmp_path: Path) -> None:
+    archive = build_fixture_archive(tmp_path, split_count=200)
+    seal = TestSeal("a" * 64, tmp_path / "test-access.jsonl").unlock(
+        tmp_path / "yolo-lock.json",
+        tmp_path / "grounded-lock.json",
+        verify_lock=lambda path: {"yolo-lock.json": "b" * 64, "grounded-lock.json": "c" * 64}[path.name],
+    )
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "test-open", "test", seal
+    )
+    assert inventory.sample_count == 200
+    assert inventory.scenario_counts == {
+        "no_cup": 50,
+        "one_cup_distractors": 50,
+        "two_cups": 50,
+        "cup_near_bottle": 50,
+    }
 ```
 
-Also create a tar member named `dataset/../../escape` and assert `ARCHIVE_PATH_UNSAFE`; corrupt one image/label pair and assert no partial inventory is returned.
+Also create a tar member named `dataset/../../escape` and assert `ARCHIVE_PATH_UNSAFE`; make a fixture with only 199 test image/label/truth triplets and assert `TEST_MEMBER_COUNT_INVALID`. The pre-lock test must assert that no test PNG, label, truth JSON, scenario or polygon is decoded.
 
 - [ ] **Step 2: Run the dataset test and confirm RED**
 
@@ -251,27 +296,112 @@ Run:
 
 Expected: import fails because `so101_demo.perception_benchmark.dataset` does not exist.
 
-- [ ] **Step 3: Implement SHA-first safe extraction and immutable inventory**
+- [ ] **Step 3: Define immutable inventory/seal records and SHA-first archive inspection**
+
+```python
+@dataclass(frozen=True, slots=True)
+class DatasetSampleRef:
+    formal_sample_index: int
+    split: Literal["val", "test"]
+    scenario: str
+    image_relpath: str
+    label_relpath: str
+    truth_relpath: str
+    image_sha256: str
+    truth_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveInventory:
+    archive_sha256: str
+    sealed_test_member_inventory_sha256: str
+    safe_member_count: int
+    test_triplet_count: int
+    test_scenario_counts: Mapping[str, int] | None
+
+
+@dataclass(frozen=True, slots=True)
+class TestAccessGrant:
+    event_sha256: str
+    sealed_member_inventory_sha256: str
+    threshold_lock_sha256s: tuple[str, str]
+    granted_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetInventory:
+    schema_version: str
+    split: Literal["val", "test"]
+    archive_sha256: str
+    inventory_sha256: str
+    dataset_root: Path
+    sample_count: int
+    scenario_counts: Mapping[str, int]
+    samples: tuple[DatasetSampleRef, ...]
+    test_access_event_sha256: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TestSeal:
+    sealed_member_inventory_sha256: str
+    access_log_path: Path
+    access_grant: TestAccessGrant | None = None
+
+    def unlock(
+        self,
+        yolo_lock_path: Path,
+        grounded_sam_lock_path: Path,
+        verify_lock: Callable[[Path], str],
+    ) -> "TestSeal":
+        lock_shas = (verify_lock(yolo_lock_path), verify_lock(grounded_sam_lock_path))
+        grant = append_test_access_event(self.access_log_path, self.sealed_member_inventory_sha256, lock_shas)
+        return replace(self, access_grant=grant)
+
+
+class DatasetArchiveVerifier:
+    def verify_archive(
+        self, archive: Path, expected_sha256: str, sealed_test_inventory_path: Path
+    ) -> ArchiveInventory:
+        if sha256_file(archive) != expected_sha256:
+            raise DatasetVerificationError("DATASET_ARCHIVE_HASH_MISMATCH")
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar.getmembers():
+                if not safe_member_path(member.name) or member.issym() or member.islnk():
+                    raise DatasetVerificationError("ARCHIVE_PATH_UNSAFE")
+            sealed = hash_test_member_bytes_without_decoding(tar)
+        require_exact_image_label_truth_triplets(sealed, count=200)
+        sealed_sha = atomic_write_json(sealed_test_inventory_path, sealed.to_document())
+        return ArchiveInventory(expected_sha256, sealed_sha, sealed.member_count, 200, None)
+```
+
+`ArchiveInventory` fields are `archive_sha256`、`sealed_test_member_inventory_sha256`、`safe_member_count`、`test_triplet_count` and `test_scenario_counts`; its pre-lock `test_scenario_counts` must be `None`. Member hashing may stream raw bytes, but must not call Pillow, JSON/YAML parsing, polygon rasterization or scenario extraction for any `test/` member.
+
+- [ ] **Step 4: Implement split-scoped extraction and exact semantic inventory**
 
 ```python
 class DatasetArchiveVerifier:
-    def verify_and_extract(self, archive: Path, expected_sha256: str, output_root: Path) -> DatasetInventory:
-        if sha256_file(archive) != expected_sha256:
-            raise DatasetVerificationError("DATASET_ARCHIVE_HASH_MISMATCH")
+    def verify_and_extract_split(
+        self,
+        archive: Path,
+        expected_sha256: str,
+        output_root: Path,
+        split: Literal["val", "test"],
+        test_seal: TestSeal | None,
+    ) -> DatasetInventory:
         if output_root.exists():
             raise DatasetVerificationError("OUTPUT_ROOT_ALREADY_EXISTS")
-        with tarfile.open(archive, "r:gz") as tar:
-            for member in tar.getmembers():
-                target = (output_root / member.name).resolve()
-                if not target.is_relative_to(output_root.resolve()) or member.issym() or member.islnk():
-                    raise DatasetVerificationError("ARCHIVE_PATH_UNSAFE")
-            tar.extractall(output_root, filter="data")
-        return self._build_inventory(output_root / "dataset", expected_sha256)
+        if split == "test" and (test_seal is None or test_seal.access_grant is None):
+            raise DatasetVerificationError("TEST_SEALED")
+        extract_only_split_members(archive, output_root, split)
+        return self._build_semantic_inventory(
+            output_root, split, expected_sha256,
+            None if test_seal is None else test_seal.access_grant.event_sha256,
+        )
 ```
 
-Inventory order is `sorted(samples, key=lambda item: item.image_sha256)` within each split, then assign `formal_sample_index=0..199`. Verify PNG dimensions `640x480`, truth/label/image one-to-one mapping, unique SHA, visible truth count, and exact scenario histogram. After validation, chmod extracted files read-only and write canonical `inventory.json` plus SHA.
+`extract_only_split_members` streams each allowed member into a newly created regular file and records receipt time after the access event；it does not preserve an older tar member mtime. Inventory order is `sorted(samples, key=lambda item: item.image_sha256)`, then assign `formal_sample_index=0..199`. `DatasetSampleRef` has `formal_sample_index`、`split`、`scenario`、`image_relpath`、`label_relpath`、`truth_relpath`、`image_sha256` and `truth_count`. Verify PNG dimensions `640x480`, truth/label/image one-to-one mapping, unique SHA, visible truth count and exact 50/50/50/50 histogram only for the requested open split. For test, require the access-event SHA and both lock SHAs in the resulting inventory. Chmod extracted files read-only and write canonical `inventory.json` plus SHA.
 
-- [ ] **Step 4: Implement the exact Pillow 12.3.0 rasterization rule**
+- [ ] **Step 5: Implement the exact Pillow 12.3.0 rasterization rule**
 
 ```python
 def _round_half_up(value: float) -> int:
@@ -293,7 +423,7 @@ def rasterize_polygon(polygon_xy: tuple[tuple[float, float], ...], width: int, h
 
 Store `rasterizer={"library":"Pillow","version":"12.3.0","coordinate_scale":"dimension_minus_one","rounding":"floor(x+0.5)","boundary":"ImageDraw.polygon fill=1"}` in inventory and reject another Pillow version during formal runs. For example, build val sample `000200001` from `truth/val/000200001.json`, not from predictions or RGB colors; verify label polygon equals truth polygon within exact parsed decimal values.
 
-- [ ] **Step 5: Run focused tests plus existing dataset tests**
+- [ ] **Step 6: Run focused tests plus existing dataset tests**
 
 Run:
 
@@ -303,9 +433,9 @@ Run:
   src/so101_demo_py/test/test_yolo_seg_dataset.py -q
 ```
 
-Expected: all pass; fixture proves no inference output is consulted.
+Expected: all pass; fixture proves no inference output is consulted, val can open while test remains sealed, and test semantic inventory is impossible without two verified lock SHAs.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 7: Commit Task 2**
 
 ```zsh
 git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/worktrees/moveit-demo1 \
@@ -326,7 +456,7 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 
 **Interfaces:**
 - Consumes: Task 1 records/RLE；Task 2 truth samples。
-- Produces: `MaskMatch`；`mask_iou(first: np.ndarray, second: np.ndarray) -> float`、`mask_dice(first: np.ndarray, second: np.ndarray) -> float`、`maximize_mask_iou_assignment(truth: Sequence[TruthInstance], candidates: Sequence[RawCandidate], evidence_root: Path) -> tuple[MaskMatch, ...]`；`compute_ap(records: Sequence[PredictionRecord], truths: Sequence[TruthSample], evidence_root: Path, iou_thresholds: Sequence[float]) -> ApSummary`；`bootstrap_image_metrics(samples: Sequence[ImageMetricInput], metric: Callable[[Sequence[ImageMetricInput]], float], seed: int = 20260902, repetitions: int = 10000) -> ConfidenceInterval`。
+- Produces: `MaskMatch`、`ImageMetricInput`、`InstanceMetricSummary`、`ApSummary`、`ConfidenceInterval`；`mask_iou(first: np.ndarray, second: np.ndarray) -> float`、`mask_dice(first: np.ndarray, second: np.ndarray) -> float`、`maximize_mask_iou_assignment(truth: Sequence[TruthInstance], candidates: Sequence[RawCandidate], evidence_root: Path) -> tuple[MaskMatch, ...]`；`compute_ap(records: Sequence[PredictionRecord], truths: Sequence[TruthSample], evidence_root: Path, iou_thresholds: Sequence[float]) -> ApSummary`；`bootstrap_image_metrics(samples: Sequence[ImageMetricInput], metric: Callable[[Sequence[ImageMetricInput]], float], seed: int = 20260902, repetitions: int = 10000) -> ConfidenceInterval`。
 
 - [ ] **Step 1: Write failing geometry, tie, empty-truth and AP tests**
 
@@ -531,8 +661,8 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 - Test: `src/so101_demo_py/test/test_perception_benchmark_calibration.py`
 
 **Interfaces:**
-- Consumes: Task 1 records/codec；Task 3/4 metrics；val inventory SHA and prediction inventories。
-- Produces: `YoloThresholds`、`GroundedSamBenchmarkThresholds`、`CalibrationResult`、`ThresholdLock`；`enumerate_yolo_grid() -> Iterator[YoloThresholds]`、`enumerate_grounded_sam_grid() -> Iterator[GroundedSamBenchmarkThresholds]`；`calibrate_joint_platform_val(model: str, mac_records: Sequence[PredictionRecord], linux_records: Sequence[PredictionRecord], truths: Sequence[TruthSample], inventory_sha: str) -> ThresholdLock`；`verify_test_seal(lock: ThresholdLock, test_access_log: Path) -> None`。
+- Consumes: Task 1 records/codec；Task 2 `TestSeal`；Task 3/4 metrics；val inventory SHA and prediction inventories。
+- Produces: `YoloThresholds`、`GroundedSamBenchmarkThresholds`、`CalibrationResult`、`ThresholdLock`；`enumerate_yolo_grid() -> Iterator[YoloThresholds]`、`enumerate_grounded_sam_grid() -> Iterator[GroundedSamBenchmarkThresholds]`；`calibrate_joint_platform_val(model: str, mac_records: Sequence[PredictionRecord], linux_records: Sequence[PredictionRecord], truths: Sequence[TruthSample], inventory_sha: str) -> ThresholdLock`；`verify_threshold_lock(path: Path) -> ThresholdLock`。Task 2 `TestSeal.unlock(...)` uses `lambda path: verify_threshold_lock(path).lock_sha256` only after both model locks exist。
 
 - [ ] **Step 1: Write failing exact-grid, tie-break, unsafe and seal tests**
 
@@ -546,15 +676,25 @@ def test_grids_have_exact_decimal_endpoints_without_float_drift() -> None:
 
 
 def test_joint_calibration_requires_zero_unsafe_on_both_platforms() -> None:
-    lock = calibrate_joint_platform_val(mac_records(), linux_records(), inventory_sha="a" * 64)
+    lock = calibrate_joint_platform_val(
+        model="yolo_seg",
+        mac_records=mac_records(),
+        linux_records=linux_records(),
+        truths=val_truths(),
+        inventory_sha="a" * 64,
+    )
     assert lock.selected.safe is True
     assert lock.platform_metrics["macos"].unsafe_unique_rate == 0.0
     assert lock.platform_metrics["linux"].unsafe_unique_rate == 0.0
 
 
-def test_test_truth_access_before_lock_is_rejected() -> None:
-    with pytest.raises(CalibrationError, match="TEST_SEALED"):
-        TestSeal(lock_path=None).open_truth("test")
+def test_threshold_lock_verifier_rejects_changed_selected_config(tmp_path: Path) -> None:
+    path = write_lock(tmp_path, calibrated_lock())
+    document = json.loads(path.read_text())
+    document["selected"]["conf"] = "0.90"
+    path.write_text(json.dumps(document))
+    with pytest.raises(CalibrationError, match="THRESHOLD_LOCK_HASH_MISMATCH"):
+        verify_threshold_lock(path)
 ```
 
 - [ ] **Step 2: Run calibration tests and confirm RED**
@@ -606,11 +746,31 @@ def calibration_key(point: EvaluatedPoint) -> tuple[object, ...]:
     )
 ```
 
-If every point is unsafe, set `outcome="UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"`, `deployable=false`, and still freeze the characterization winner selected by levels 2–7. `ThresholdLock` includes both platform val inventory SHAs, both prediction-record inventory SHAs, grid/target/tie-break version, selected values, code commit and its own SHA. `TestSeal` requires a verified threshold-lock file and appends a read-only access event before allowing test truth loading.
+Define the lock's stable fields before serialization:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ThresholdLock:
+    schema_version: str
+    model: Literal["yolo_seg", "grounded_sam"]
+    grid_version: str
+    objective_version: str
+    tie_break_version: str
+    val_inventory_sha256: str
+    mac_prediction_inventory_sha256: str
+    linux_prediction_inventory_sha256: str
+    selected: YoloThresholds | GroundedSamBenchmarkThresholds
+    outcome: Literal["SAFE_CALIBRATED", "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"]
+    deployable: bool
+    source_commit: str
+    lock_sha256: str
+```
+
+If every point is unsafe, set `outcome="UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"`, `deployable=false`, and still freeze the characterization winner selected by levels 2–7. `verify_threshold_lock` recomputes canonical bytes with `lock_sha256` omitted, compares it to the stored digest, and validates both val prediction inventory SHAs. Two independently verified model locks are required by `TestSeal.unlock`; the returned open seal appends one immutable access event before test truth extraction.
 
 - [ ] **Step 5: Run focused tests and canonical lock reproducibility test**
 
-Run Step 2 twice; Expected: identical lock SHA, exact same selected config, and test access is impossible when lock verification fails.
+Run Step 2 twice; Expected: identical lock SHA, exact same selected config, and a changed lock cannot produce a valid `TestSeal` access grant.
 
 - [ ] **Step 6: Commit Task 5**
 
@@ -635,8 +795,8 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 - Test: `src/so101_demo_py/test/test_perception_benchmark_timing.py`
 
 **Interfaces:**
-- Consumes: existing `YoloSegDetector`、`GroundedSamDetector`、`DetectorPort`、`GroundedSamThresholds`、`DetectionFrame`、`DetectionQuery`；Task 1 records。
-- Produces: `CollectionMode`、`RawDetectionResult`、`ProductionObservation`、`ResourceSample`；`RawDetectorAdapter.collect(frame: DetectionFrame, mode: CollectionMode) -> RawDetectionResult`；`YoloRawAdapter`、`GroundedSamRawAdapter`；`run_production_detector_port(detector: DetectorPort, frame: DetectionFrame, selector_threshold: float) -> ProductionObservation`；`DeviceSynchronizer.synchronize() -> None`；`ResourceSampler.sample() -> ResourceSample`。
+- Consumes: existing `YoloSegDetector`、`GroundedSamDetector`、`so101_demo.ports.object_detector.DetectorPort`、`build_detector`、`GroundedSamThresholds`、`DetectionFrame`、`DetectionQuery`；Task 1 records。Do not import the narrow internal `DetectorPort` declared in `detector_factory.py`。
+- Produces: `CollectionMode`、`RawDetectionResult`、`ProductionObservation`、`ResourceSample`、`VerifiedBenchmarkAssets`；`RawDetectorAdapter.collect(frame: DetectionFrame, mode: CollectionMode) -> RawDetectionResult`；`YoloRawAdapter`、`GroundedSamRawAdapter`；`YoloCalibratedDetector` implementing the object-detector port；`build_calibrated_detector_port(model: Literal["yolo_seg", "grounded_sam"], lock: ThresholdLock, assets: VerifiedBenchmarkAssets) -> DetectorPort`；`run_production_detector_port(detector: DetectorPort, frame: DetectionFrame, selector_threshold: float) -> ProductionObservation`；`DeviceSynchronizer.synchronize() -> None`；`ResourceSampler.sample() -> ResourceSample`。
 
 - [ ] **Step 1: Write failing common-schema and production-boundary tests**
 
@@ -651,10 +811,18 @@ def test_both_adapters_emit_same_raw_contract(adapter_factory) -> None:
 
 
 def test_production_observation_calls_detector_port_and_real_target_selector() -> None:
+    assert DetectorPort.__module__ == "so101_demo.ports.object_detector"
     detector = RecordingDetectorPort(batch=one_candidate_batch())
     observed = run_production_detector_port(detector, frame(), selector_threshold=0.50)
     assert detector.detect_calls == [(frame(), DetectionQuery("plastic_cup"))]
     assert observed.decision is DecisionOutput.UNIQUE
+
+
+@pytest.mark.parametrize("model", ("yolo_seg", "grounded_sam"))
+def test_calibrated_detector_implements_real_detect_port(model: str) -> None:
+    detector: DetectorPort = build_calibrated_detector_port(model, calibrated_lock(model), fake_assets(model))
+    batch = detector.detect(frame(), DetectionQuery("plastic_cup"))
+    assert isinstance(batch, DetectionBatch)
 
 
 def test_offline_missing_bundle_never_calls_network_loader(tmp_path: Path) -> None:
@@ -694,6 +862,32 @@ Expected: missing benchmark adapters/timing modules.
 - [ ] **Step 4: Implement adapter protocol and production observation boundary**
 
 ```python
+from so101_demo.ports.object_detector import DetectorPort
+
+
+@dataclass(frozen=True, slots=True)
+class RawDetectionResult:
+    model_id: str
+    runtime_device: RuntimeDevice
+    dtype: Literal["float32"]
+    collection_mode: CollectionMode
+    raw_candidates: tuple[RawCandidate, ...]
+    phase_timings: PhaseTimings
+    resource_samples: tuple[ResourceSample, ...]
+    fallback_used: bool
+    irreversible_limits: Mapping[str, int | float | str]
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedBenchmarkAssets:
+    model: Literal["yolo_seg", "grounded_sam"]
+    asset_root: Path
+    weights_sha256: str | None
+    manifest_sha256: str | None
+    requested_device: Literal["mps", "cuda"]
+    allow_cpu_fallback: Literal[False]
+
+
 class RawDetectorAdapter(Protocol):
     model_id: str
     runtime_device: RuntimeDevice
@@ -715,7 +909,7 @@ def run_production_detector_port(
     return ProductionObservation.unique(batch, selected.instance_id)
 ```
 
-The helper snapshots candidates before selector invocation and verifies their mask/confidence/ID canonical SHA afterward. `DetectorPort` production runs do not use raw adapter replay as a substitute.
+`RawDetectionResult.__post_init__` rejects CPU, non-FP32, fallback, duplicate candidate IDs and nonfinite phase values. The production helper snapshots candidates before selector invocation and verifies their mask/confidence/ID canonical SHA afterward. The production caller obtains the detector with `built = build_detector(factory_options)`, asserts `callable(getattr(built.detector, "detect", None))`, then passes `cast(DetectorPort, built.detector)`. `build_calibrated_detector_port` returns existing `GroundedSamDetector` configured from the lock or benchmark-only `YoloCalibratedDetector.detect(...)` configured from the YOLO lock；both return `DetectionBatch` and are consumed through the real object-detector port plus actual `TargetSelector`. Raw replay is never substituted for either port run, and benchmark code never imports `DetectorPort` from `detector_factory.py`.
 
 - [ ] **Step 5: Implement YOLO low-floor and resolved production snapshot**
 
@@ -844,6 +1038,54 @@ Expected: missing runner module.
 - [ ] **Step 3: Implement one-record-per-inventory-item execution**
 
 ```python
+@dataclass(frozen=True, slots=True)
+class RunSpec:
+    run_id: str
+    run_kind: RunKind
+    platform: Literal["macos", "linux"]
+    model: Literal["yolo_seg", "grounded_sam"]
+    device: Literal["mps", "cuda"]
+    dtype: Literal["float32"]
+    inventory: DatasetInventory
+    config_sha256: str
+    threshold_lock_sha256: str | None
+    source_commit: str
+    output_root: Path
+    collection_mode: CollectionMode
+
+
+@dataclass(frozen=True, slots=True)
+class RunCheckpoint:
+    run_id: str
+    config_sha: str
+    source_commit: str
+    inventory_sha256: str
+    records_dir: Path
+    last_formal_sample_index: int
+    last_record_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class RunManifest:
+    run_id: str
+    run_kind: RunKind
+    status: RunStatus
+    platform: str
+    model: str
+    device: str
+    dtype: str
+    source_commit: str
+    inventory_sha256: str
+    config_sha256: str
+    threshold_lock_sha256: str | None
+    record_count: int
+    error_count: int
+    record_inventory_sha256: str
+    started_at: str
+    ended_at: str
+    invalid_reason: str | None
+
+
 class DetectorBenchmarkRunner:
     def run(self, spec: RunSpec) -> RunManifest:
         start_index = verify_resume_or_start(spec)
@@ -865,7 +1107,12 @@ Catch OOM/timeout/sync/schema/model errors into typed record error fields; do no
 Resume only if existing indices are exactly `0..n-1`, every record/mask SHA verifies, source commit/config/model/inventory/device/dtype/run_kind match, and checkpoint points to record `n-1`. Any gap, duplicate, changed file or formal sample mismatch sets run manifest `INVALID`; never skip to the next unseen filename.
 
 ```python
-def verify_resume(checkpoint, inventory, config_sha, source_commit) -> int:
+def verify_resume(
+    checkpoint: RunCheckpoint,
+    inventory: DatasetInventory,
+    config_sha: str,
+    source_commit: str,
+) -> int:
     if checkpoint.config_sha != config_sha or checkpoint.source_commit != source_commit:
         raise RunIntegrityError("RESUME_PROVENANCE_CHANGED")
     indices = tuple(record.formal_sample_index for record in read_records(checkpoint.records_dir))
@@ -899,17 +1146,24 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 
 **Interfaces:**
 - Consumes: Tasks 1–7 records, matches, decisions, metrics, resources, threshold-lock。
-- Produces: `MetricsAggregator.aggregate(input: AggregationInput) -> BenchmarkSummary`；`ReportWriter.write(summary, output_root) -> EvidenceIndex`；`compare_platforms(mac_records, linux_records) -> CrossPlatformSummary`。
+- Produces: `AggregationInput`、`RawMetricSummary`、`FormalMetricSummary`、`PerformanceSummary`、`ResourceSummary`、`BenchmarkSummary`、`EvidenceIndex`、`CrossPlatformSummary`；`MetricsAggregator.aggregate(input: AggregationInput) -> BenchmarkSummary`；`ReportWriter.write(summary: BenchmarkSummary, output_root: Path) -> EvidenceIndex`；`compare_platforms(mac_records: Sequence[PredictionRecord], linux_records: Sequence[PredictionRecord]) -> CrossPlatformSummary`。
 
 - [ ] **Step 1: Write failing full-denominator and mismatch-list tests**
 
 ```python
 def test_report_keeps_error_record_in_all_denominators(tmp_path: Path) -> None:
     summary = MetricsAggregator().aggregate(fixture_with_one_error_of_four())
-    assert summary.sample_count == 4
-    assert summary.error_count == 1
-    assert summary.error_rate == 0.25
-    assert summary.scenarios["no_cup"].sample_count == 1
+    formal = summary.formal_by_platform_model_config["linux"]["yolo_seg"]["production"]
+    assert formal.sample_count == 4
+    assert formal.error_count == 1
+    assert formal.error_rate == 0.25
+    assert formal.scenarios["no_cup"].sample_count == 1
+
+
+def test_raw_frozen_ap_is_rankable_but_optional_oracle_is_excluded() -> None:
+    summary = MetricsAggregator().aggregate(raw_frozen_and_oracle_fixture())
+    assert summary.raw_frozen_by_platform_model["linux"]["yolo_seg"].mask_ap50 > 0.0
+    assert "ORACLE_DIAGNOSTIC" not in summary.formal_by_platform_model_config["linux"]["yolo_seg"]
 
 
 def test_cross_platform_report_lists_candidate_and_decision_mismatches() -> None:
@@ -933,7 +1187,76 @@ Expected: missing modules.
 
 - [ ] **Step 3: Implement exact aggregation matrix and confidence intervals**
 
-`BenchmarkSummary` keys are `platform -> model -> configuration -> overall/scenarios/performance/resources`. Validate exactly 200 unique image SHAs for formal split and 50 each scenario before aggregation. Emit `mask_AP50`、`mask_AP50_95`、precision/recall/F1 at 0.50、mean/median IoU/Dice、count accuracy、FP/image、FN/image、error/timeout/OOM、decision macro-F1、unique success、unsafe unique、no-cup FPR、two-cup both recall、leakage and 95% image bootstrap CI.
+Define the stable aggregation carrier:
+
+```python
+@dataclass(frozen=True, slots=True)
+class AggregationInput:
+    truth_samples: tuple[TruthSample, ...]
+    raw_frozen_records: Mapping[str, Mapping[str, tuple[PredictionRecord, ...]]]
+    formal_records: Mapping[str, Mapping[str, Mapping[str, tuple[PredictionRecord, ...]]]]
+    threshold_locks: Mapping[str, ThresholdLock]
+    resource_streams: Mapping[str, tuple[ResourceSample, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class PerformanceSummary:
+    cold_p50_ms: float | None
+    cold_p95_ms: float | None
+    cold_p99_ms: float | None
+    warmed_p50_ms: float | None
+    warmed_p95_ms: float | None
+    warmed_p99_ms: float | None
+    phase_percentiles: Mapping[str, Mapping[str, float | None]]
+    images_per_second: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSummary:
+    peak_rss_bytes: int | None
+    peak_device_allocated_bytes: int | None
+    peak_device_reserved_bytes: int | None
+    unavailable_reasons: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class RawMetricSummary:
+    sample_count: int
+    mask_ap50: float | None
+    mask_ap50_95: float | None
+    candidate_count_distribution: Mapping[str, float]
+    error_count: int
+    scenarios: Mapping[str, ScenarioMetrics]
+
+
+@dataclass(frozen=True, slots=True)
+class FormalMetricSummary:
+    sample_count: int
+    error_count: int
+    error_rate: float
+    decision_metrics: DecisionMetrics
+    instance_metrics: InstanceMetricSummary
+    scenarios: Mapping[str, ScenarioMetrics]
+    performance: PerformanceSummary
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkSummary:
+    schema_version: str
+    source_commit: str
+    dataset_archive_sha256: str
+    test_inventory_sha256: str
+    threshold_lock_sha256_by_model: Mapping[str, str]
+    raw_frozen_by_platform_model: Mapping[str, Mapping[str, RawMetricSummary]]
+    formal_by_platform_model_config: Mapping[str, Mapping[str, Mapping[str, FormalMetricSummary]]]
+    cross_platform: Mapping[str, CrossPlatformSummary]
+    performance: Mapping[str, PerformanceSummary]
+    resource_summary: Mapping[str, ResourceSummary]
+    overall_status: RunStatus
+    invalid_reasons: tuple[str, ...]
+```
+
+`raw_frozen_by_platform_model` contains `TEST_RAW_FROZEN` raw AP/candidate-distribution A/B and is allowed in the model-capability comparison. `formal_by_platform_model_config` contains only production and calibrated/characterization contract/safety decisions. Validate exactly 200 unique image SHAs for formal split and 50 each scenario before aggregation. Emit `mask_AP50`、`mask_AP50_95`、precision/recall/F1 at 0.50、mean/median IoU/Dice、count accuracy、FP/image、FN/image、error/timeout/OOM、decision macro-F1、unique success、unsafe unique、no-cup FPR、two-cup both recall、leakage and 95% image bootstrap CI.
 
 ```python
 def percentile(values: Sequence[float], quantile: float) -> float | None:
@@ -960,7 +1283,7 @@ report/benchmark.md
 evidence-index.json
 ```
 
-Every index entry has relative path, size and SHA. The report visibly separates `production`、`calibrated`/`characterization`、`ORACLE_DIAGNOSTIC`; oracle values never enter winner/safety summary.
+Every index entry has relative path, size and SHA. The report visibly separates `TEST_RAW_FROZEN` model-capability A/B、`production` and `calibrated`/`characterization`; raw frozen AP may rank raw model capability, while deployability/safety still comes only from frozen production/calibrated decision metrics. The optional `ORACLE_DIAGNOSTIC` section is emitted only if a separately authorized sweep exists, and such values never enter ranking, safety summary or config backfill.
 
 - [ ] **Step 5: Run focused tests and output-tree SHA repeat**
 
@@ -991,13 +1314,19 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 
 **Interfaces:**
 - Consumes: Tasks 1–8 public APIs；fixed assets and evidence roots。
-- Produces: console entry point `perception_benchmark` with `verify-assets`、`prepare-dataset`、`dry-run`、`collect`、`calibrate`、`aggregate`、`verify-evidence` subcommands；prewritten benchmark ledger。
+- Produces: console entry point `perception_benchmark` with `verify-assets`、`inspect-archive`、`prepare-dataset`、`unlock-test`、`dry-run`、`collect`、`calibrate`、`aggregate`、`verify-evidence` subcommands；prewritten benchmark ledger。
 
 - [ ] **Step 1: Write failing CLI/config/install tests**
 
 ```python
-def test_cli_rejects_test_collect_without_verified_threshold_lock(tmp_path: Path) -> None:
-    result = invoke_cli(["collect", "--split", "test", "--threshold-lock", str(tmp_path / "missing.json")])
+def test_cli_rejects_test_unlock_without_two_verified_threshold_locks(tmp_path: Path) -> None:
+    result = invoke_cli([
+        "unlock-test",
+        "--sealed-member-inventory", str(tmp_path / "sealed.json"),
+        "--yolo-threshold-lock", str(tmp_path / "missing-yolo.json"),
+        "--grounded-sam-threshold-lock", str(tmp_path / "missing-grounded.json"),
+        "--output-root", str(tmp_path / "test-open"),
+    ])
     assert result.exit_code == 2
     assert "TEST_SEALED" in result.stderr
 
@@ -1036,7 +1365,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 ```
 
-The collect command requires explicit `--run-id`、`--platform`、`--model`、`--device`、`--split`、`--run-kind`、`--dataset-inventory`、model asset path/SHA, `--output-root` and exact source commit. `--split test` requires a verified `--threshold-lock`; `ORACLE_DIAGNOSTIC` is always labeled and cannot write threshold-lock.
+`inspect-archive` verifies the whole archive/path structure and writes the raw-byte sealed test member inventory without extracting test. `prepare-dataset --split val` opens only val. `unlock-test` requires both verified lock paths, an unchanged sealed member inventory and a new absent output root; it appends the access event before extracting/parsing test and writes a test semantic inventory containing both lock SHAs.
+
+The collect command requires explicit `--run-id`、`--platform`、`--model`、`--device`、`--split`、`--run-kind`、`--dataset-inventory`、model asset path/SHA, `--output-root` and exact source commit. `--split test` accepts only a post-lock test inventory and a matching verified model `--threshold-lock`. `TEST_RAW_FROZEN` uses config's immutable preregistered floors and is eligible for raw model-capability A/B. `ORACLE_DIAGNOSTIC` requires an extra `--allow-oracle-diagnostic` flag, is always labeled, and cannot write a threshold-lock or enter ranking; no formal command in this plan uses it.
 
 Create the exact dry-run fixture as:
 
@@ -1085,12 +1416,11 @@ Use `--dry-run` fakes first in unit tests, then actual installed CLI on 2 fixed 
 source install-benchmark/setup.zsh
 perception_benchmark dry-run \
   --config install-benchmark/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml \
-  --dataset-inventory /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/inventory.json \
   --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run \
   --adapter-fixture src/so101_demo_py/test/fixtures/perception_benchmark/dry-run-adapters.json
 ```
 
-Expected: exit 0; exactly 8 records, two per scenario, `formal=false`, evidence index verifies. Do not include dry-run records in val/test inventories.
+Expected: the fixture supplies eight deterministic RGB frames and fake-adapter outputs；exit 0；exactly 8 records, two per scenario, `formal=false`；evidence index verifies. Do not include dry-run records in val/test inventories. Task 11 repeats the 8-image dry run with verified actual assets after val extraction.
 
 - [ ] **Step 6: Run focused CLI plus all benchmark tests**
 
@@ -1208,25 +1538,30 @@ git --git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/w
 
 **Interfaces:**
 - Consumes: package-gated exact source；fixed dataset/YOLO/bundle SHA values。
-- Produces: immutable asset inventories on both platforms；prewritten formal experiments `EXP-BENCH-VAL-MAC`、`EXP-BENCH-VAL-LINUX`、`EXP-BENCH-CALIBRATE`、`EXP-BENCH-TEST-MAC`、`EXP-BENCH-TEST-LINUX`、`EXP-BENCH-PERFORMANCE`、`EXP-BENCH-REPORT`。
+- Produces: immutable asset inventories on both platforms；sealed raw-byte test member inventory；open val semantic inventory；prewritten `EXP-BENCH-VAL-MAC`、`EXP-BENCH-VAL-LINUX` and `EXP-BENCH-CALIBRATE`。Test experiment IDs、collection floors and invariants are preregistered here, but their full `PLANNED` entries are created in Task 13 only after unlock yields the exact test inventory SHA and before any test model command。
 
-- [ ] **Step 1: Set all formal experiment entries to PLANNED before asset/runtime commands**
+- [ ] **Step 1: Set all pre-lock experiment entries to PLANNED and preregister post-lock IDs/floors**
 
-For each entry freeze: hypothesis, prediction, single variable, lifecycle `ISOLATED_STACK`, exact 200-image inventory SHA, platform/model/run kind, source commit, install overlay, runtime executable, device/dtype, asset/config SHA, output path, success/failure/invalid criteria, exact command, retained classification and next experiment. Keep `ROS_DOMAIN_ID` and `GZ_PARTITION` as `NONE` because this offline RGB benchmark launches no ROS graph or Gazebo; write those literal values rather than omitting provenance fields.
+For val/calibration entries freeze: hypothesis, prediction, single variable, lifecycle `ISOLATED_STACK`, exact val 200-image inventory SHA, platform/model/run kind, source commit, install overlay, runtime executable, device/dtype, asset/config SHA, output path, success/failure/invalid criteria, exact command, retained classification and next experiment. Preregister post-lock IDs `EXP-BENCH-TEST-MAC`、`EXP-BENCH-TEST-LINUX`、`EXP-BENCH-PERFORMANCE` and `EXP-BENCH-REPORT` plus exact low-floor config SHA, but do not invent a semantic test inventory SHA. Keep `ROS_DOMAIN_ID` and `GZ_PARTITION` as `NONE` because this offline RGB benchmark launches no ROS graph or Gazebo; write those literal values rather than omitting provenance fields.
 
-- [ ] **Step 2: Verify repository dataset archive and build read-only extraction**
+- [ ] **Step 2: Inspect the archive, seal raw test members, and open val only**
 
 ```zsh
 cd /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 shasum -a 256 datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz
 source install-benchmark/setup.zsh
+perception_benchmark inspect-archive \
+  --archive datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz \
+  --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 \
+  --sealed-test-member-inventory /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/sealed-test-members.json
 perception_benchmark prepare-dataset \
   --archive datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz \
   --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 \
-  --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset
+  --split val \
+  --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/val-open
 ```
 
-Expected: val/test inventories each 200 with 50/50/50/50 scenarios; all extracted regular files read-only; inventory SHA recorded before test truth remains sealed from calibration commands.
+Expected: archive SHA/path safety passes；sealed inventory records exactly 200 test image/label/truth path triplets and each member bytes SHA, while its `scenario_counts` is `null`；only val files exist under `val-open` and its semantic inventory is exactly 200 with 50/50/50/50. No test PNG/label/truth is extracted, parsed or rasterized.
 
 - [ ] **Step 3: Verify and stage YOLO weight without overwriting**
 
@@ -1247,9 +1582,13 @@ Mac bundle is `/Users/matianyi/Models/so101/grounded-sam-v1`; Linux bundle is `/
 
 - [ ] **Step 5: Verify lock/source/environment provenance and write asset indexes**
 
-Record SHA of `src/so101_demo_py/config/perception/requirements.lock`, `torch/ultralytics/transformers/Pillow/PyYAML` versions, OS/CPU/GPU/driver/CUDA/MPS, actual `cuda`/`mps`, FP32, `fallback_used=false`, exact source and installed CLI path. Copy the verified dataset archive, dataset inventory, Mac asset inventory and Linux asset inventory into the durable `assets/` tree only when their destinations are absent; write one canonical durable inventory and read every file back by SHA.
+Record SHA of `src/so101_demo_py/config/perception/requirements.lock`, `torch/ultralytics/transformers/Pillow/PyYAML` versions, OS/CPU/GPU/driver/CUDA/MPS, actual `cuda`/`mps`, FP32, `fallback_used=false`, exact source and installed CLI path. Copy the verified dataset archive, val semantic inventory, sealed test member inventory, Mac asset inventory and Linux asset inventory into the durable `assets/` tree only when their destinations are absent；write one canonical durable inventory and read every file back by SHA. Do not create a semantic test inventory here.
 
-- [ ] **Step 6: Update ledger and commit asset-registration checkpoint**
+- [ ] **Step 6: Run the actual 8-image non-formal dry run on both verified devices using val only**
+
+Run installed `perception_benchmark dry-run` with the open val inventory, two fixed image-SHA samples per scenario, both verified models, FP32, offline/fallback false, first on Mac MPS and then in the isolated Linux checkout on CUDA. Each platform writes a separate `NON_FORMAL_DRY_RUN` evidence tree with 8 x 2 model records；neither tree enters val calibration or test metrics. Require schema/mask/report generation, actual device provenance and zero missing sample before continuing.
+
+- [ ] **Step 7: Update ledger and commit asset-registration checkpoint**
 
 Asset experiment is `VALID` only if every fixed SHA/revision/device/offline check succeeds. Record retained asset indexes and source assets; classify stale Mac staging/isolated checkout as deletion candidates without deletion.
 
@@ -1282,7 +1621,7 @@ Re-read source/install/runtime, empty output destination, asset/config/inventory
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 perception_benchmark collect \
   --run-id mac-yolo-val-raw-ab-v1 --platform macos --model yolo_seg --device mps \
   --dtype float32 --split val --run-kind VAL_RAW \
-  --dataset-inventory /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/inventory.json \
+  --dataset-inventory /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/val-open/inventory.json \
   --weights /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/assets/best.pt \
   --weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 \
   --config install-benchmark/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml \
@@ -1317,10 +1656,11 @@ Record run counts/errors/order/resource gaps, durable indexes, retained/archived
 **Files:**
 - Modify: `docs/experiments/grounded-sam-yolo-seg-benchmark-experiment-ledger.md`
 - Evidence only: `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/`
+- Evidence only: `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/dataset/test-open/`
 
 **Interfaces:**
 - Consumes: four `VALID` val record inventories only；no test truth/predictions。
-- Produces: YOLO and Grounded-SAM threshold-locks, calibration surfaces, access log proving test remained sealed。
+- Produces: YOLO and Grounded-SAM threshold-locks；calibration surfaces；one immutable test access event；post-lock `DatasetInventory(split="test")` with 200 samples/50x4 and both lock SHAs；fully prewritten `PLANNED` test/performance/report experiments before Task 14。
 
 - [ ] **Step 1: Verify val inputs and precondition the calibration experiment**
 
@@ -1333,7 +1673,7 @@ perception_benchmark calibrate \
   --model yolo_seg \
   --mac-record-inventory /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/val/macos/yolo/evidence-index.json \
   --linux-record-inventory /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/val/linux/yolo/evidence-index.json \
-  --val-inventory-sha256 "$(perception_benchmark verify-evidence --print-inventory-sha /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/dataset/val-inventory.json)" \
+  --val-inventory-sha256 "$(perception_benchmark verify-evidence --print-inventory-sha /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets/val-inventory.json)" \
   --bootstrap-seed 20260902 --bootstrap-repetitions 10000 \
   --output-root /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/yolo
 ```
@@ -1342,15 +1682,44 @@ Expected: all exact grid points evaluated with shared objective/tie-break; one l
 
 - [ ] **Step 3: Run joint-platform calibration for Grounded-SAM**
 
-Run the same command with Grounded-SAM val inventories and output `calibration/grounded-sam`. Expected: one common cross-platform lock, no platform-specific threshold.
+```zsh
+perception_benchmark calibrate \
+  --model grounded_sam \
+  --mac-record-inventory /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/val/macos/grounded-sam/evidence-index.json \
+  --linux-record-inventory /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/val/linux/grounded-sam/evidence-index.json \
+  --val-inventory-sha256 "$(perception_benchmark verify-evidence --print-inventory-sha /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets/val-inventory.json)" \
+  --bootstrap-seed 20260902 --bootstrap-repetitions 10000 \
+  --output-root /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/grounded-sam
+```
 
-- [ ] **Step 4: Seal and verify locks before test access**
+Expected: one common cross-platform Grounded-SAM lock, no platform-specific threshold.
 
-Run `perception_benchmark verify-evidence` on both calibration directories, independently recompute lock SHA, compare embedded grid/input inventories/code commit, and append `threshold-lock-created` to access log. Then chmod lock/config/inventory files read-only. Only now can `TestSeal.open_truth("test")` succeed.
+- [ ] **Step 4: Verify both locks, append one access event, then extract/parse test into a new directory**
 
-- [ ] **Step 5: Mark calibration VALID/INVALID and commit ledger checkpoint**
+First run `perception_benchmark verify-evidence` on both calibration directories, independently recompute lock SHA, compare embedded grid/input inventories/code commit, and chmod lock/config/inventory files read-only. Then run exactly:
 
-An unsafe but correctly characterized lock is a `VALID` run with `outcome=UNSAFE_CALIBRATION_NO_FEASIBLE_POINT`, not `INVALID`. A test access before lock, changed val input or lock SHA mismatch is `INVALID`. Commit message: `docs: freeze benchmark threshold locks`.
+```zsh
+perception_benchmark unlock-test \
+  --archive /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz \
+  --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 \
+  --sealed-member-inventory /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets/sealed-test-members.json \
+  --yolo-threshold-lock /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/yolo/threshold-lock.json \
+  --grounded-sam-threshold-lock /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/grounded-sam/threshold-lock.json \
+  --access-log /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/calibration/test-access.jsonl \
+  --output-root /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/dataset/test-open
+```
+
+The command must append the access event before opening any test member, then extract only test members. Expected: output root was absent；test semantic inventory has 200 unique image SHAs and 50/50/50/50 scenarios；inventory embeds the access-event SHA and both verified lock SHAs. Any test member decode/schema/scenario/count failure marks calibration/unlock run `INVALID`; it does not permit recalibration.
+
+After durable verification, copy the immutable `dataset/test-open` tree to `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dataset/test-open` on Mac only if absent, then run `perception_benchmark verify-evidence` there and require the same semantic inventory SHA. Both durable and Mac extraction/copy receipts must be later than the access event.
+
+- [ ] **Step 5: Prewrite exact test experiments using the post-lock inventory SHA**
+
+Before any test model process, create full `PLANNED` entries for `EXP-BENCH-TEST-MAC`、`EXP-BENCH-TEST-LINUX`、`EXP-BENCH-PERFORMANCE` and `EXP-BENCH-REPORT`. Freeze exact test inventory/access-event/two-lock SHAs, both model asset/config SHAs, source/install/runtime, `TEST_RAW_FROZEN` collection floors, production/calibrated configs, output roots, model order, success/invalid criteria and exact commands.
+
+- [ ] **Step 6: Mark calibration/unlock VALID or INVALID and commit ledger checkpoint**
+
+An unsafe but correctly characterized lock is a `VALID` run with `outcome=UNSAFE_CALIBRATION_NO_FEASIBLE_POINT`, not `INVALID`. A test access/timestamp before both locks, changed val input, lock SHA mismatch or invalid test semantic inventory is `INVALID`. Commit message: `docs: freeze benchmark threshold locks`.
 
 ### Task 14: Threshold-lock 后的双平台 test raw、production 与 calibrated runs
 
@@ -1360,22 +1729,22 @@ An unsafe but correctly characterized lock is a `VALID` run with `outcome=UNSAFE
 - Evidence only: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/test/`
 
 **Interfaces:**
-- Consumes: verified threshold-locks, exact test inventory, fixed assets/source/config。
-- Produces per platform/model: one low-floor `ORACLE_DIAGNOSTIC` 200-image run; one production `DetectorPort` 200-image contract/performance run; one calibrated/characterization 200-image performance/contract run；fixed production/calibrated decision replay from the diagnostic raw records。
+- Consumes: both verified threshold-locks；post-lock test inventory/access event；fixed assets/source/config。
+- Produces per platform/model: one preregistered-floor `TEST_RAW_FROZEN` 200-image run for raw AP/candidate-distribution A/B；one production `so101_demo.ports.object_detector.DetectorPort` 200-image contract/performance run；one calibrated/characterization detector implementing that same port for 200-image contract/performance；fixed production/calibrated decision replay from raw frozen records。
 
-- [ ] **Step 1: Verify threshold-lock and open test exactly once per experiment**
+- [ ] **Step 1: Verify the already-open post-lock test inventory and access event**
 
-Record lock SHA/access event before loading test truth or image paths. Recheck all assets/source/install/device and output absence. If any test artifact timestamp predates the lock event, mark the run `INVALID`.
+Verify the test inventory embeds the exact access-event and both lock SHAs, the event precedes every extracted test artifact, and all test experiment entries were `PLANNED` before model start. Recheck all assets/source/install/device and output absence. Do not extract/parse test again. If any test artifact timestamp predates the lock event, mark the run `INVALID`.
 
 - [ ] **Step 2: Run Mac test in preregistered interleaved order**
 
 For YOLO and Grounded-SAM, execute in the preregistered order; every production/calibrated model process performs at least five excluded warm-up images, synchronizes its device boundaries, and saves the formal 200-image timing/resource stream:
 
-1. `TEST_RAW_ORACLE` low-floor diagnostic on all 200 images, labeled `ORACLE_DIAGNOSTIC`;
-2. `TEST_PRODUCTION` on all 200 images through `build_detector(factory_options).detector.detect(frame, DetectionQuery("plastic_cup"))` and actual `TargetSelector`;
-3. `TEST_CALIBRATED` or `TEST_CHARACTERIZATION` on all 200 images with the frozen lock, without changing the lock.
+1. `TEST_RAW_FROZEN` at the preregistered low-floor collection config on all 200 images;
+2. `TEST_PRODUCTION` on all 200 images through `cast(so101_demo.ports.object_detector.DetectorPort, build_detector(factory_options).detector).detect(frame, DetectionQuery("plastic_cup"))` and actual `TargetSelector`;
+3. `TEST_CALIBRATED` or `TEST_CHARACTERIZATION` on all 200 images through a benchmark-constructed detector that implements `so101_demo.ports.object_detector.DetectorPort`, using the frozen lock and actual `TargetSelector` without changing production source semantics.
 
-The diagnostic record is the source for raw AP and immutable production/calibrated replay. Production `DetectorPort` decisions must equal production replay for the same image or the run is `INVALID`. Calibrated performance run decisions must equal calibrated replay. Each run has 200 records; they are separate run IDs and are never combined into a 600-image denominator.
+The raw frozen record is the source for unified raw AP/candidate-distribution model-capability A/B and immutable production/calibrated replay. Production and calibrated `DetectorPort` decisions must equal their replay for the same image or the run is `INVALID`. Each run has 200 records；they are separate run IDs and are never combined into a 600-image denominator. No threshold sweep runs in this plan.
 
 - [ ] **Step 3: Validate Mac test and upload/read back durable evidence**
 
@@ -1385,9 +1754,9 @@ Verify six run manifests (2 models x 3 run kinds), their record/mask inventories
 
 Use the same three run kinds, locks, image SHA order and source/config/assets on CUDA. Do not run YOLO and Grounded-SAM concurrently. Record device synchronization and model order. Production again must pass actual `DetectorPort`/`TargetSelector`, not benchmark replay alone.
 
-- [ ] **Step 5: Validate formal-vs-oracle separation and no test tuning**
+- [ ] **Step 5: Validate raw-vs-formal separation and no test tuning**
 
-Assert threshold-lock SHAs unchanged; no command wrote calibration output; `ORACLE_DIAGNOSTIC` is excluded from ranking/safety conclusions; production and calibrated results remain separate. A formal run with missing sample, changed threshold, fallback or replay/DetectorPort disagreement becomes `INVALID`.
+Assert threshold-lock SHAs unchanged；no command wrote calibration output；`TEST_RAW_FROZEN` floors equal the preregistered config SHA and may enter only raw capability A/B；production and calibrated safety results remain separate and both have port/replay equality. Assert no `ORACLE_DIAGNOSTIC` run exists. A formal run with missing sample, changed threshold/floor, fallback or replay/DetectorPort disagreement becomes `INVALID`.
 
 - [ ] **Step 6: Update ledger and commit test checkpoint**
 
@@ -1400,8 +1769,8 @@ Record each run state/outcome/error counts and exact evidence index. Commit mess
 - Evidence only: `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/performance/`
 
 **Interfaces:**
-- Consumes: Task 14 valid formal configurations and exact inventories。
-- Produces: cold/warmed/per-phase/resource raw streams and platform consistency input; no accuracy sample selection。
+- Consumes: Task 14 valid `TEST_RAW_FROZEN`、production、calibrated/characterization runs and exact inventories。
+- Produces: cold/warmed/per-phase/resource streams and platform consistency input；no accuracy sample selection。Raw frozen timing remains labeled collection-cost evidence and is not substituted for production/calibrated latency；raw frozen candidates do enter cross-platform raw-capability consistency comparison。
 
 - [ ] **Step 1: Verify the preregistered Task 14 paired order and thermal/load/sampler state**
 
@@ -1421,7 +1790,7 @@ Sample from load through warm-up and inference: RSS, CPU, available CUDA allocat
 
 - [ ] **Step 5: Produce and verify cross-platform per-image comparison input**
 
-For every same model/config/image pair, verify stable IDs/order, compare candidate count, confidence delta, box IoU, mask IoU, decision and error type. Preserve full mismatch list. Do not remove mismatches as “floating point noise.”
+For every same model/config/image pair, verify stable IDs/order, compare candidate count, confidence delta, box IoU, mask IoU, decision and error type. Compare `TEST_RAW_FROZEN` candidate/mask consistency separately from production/calibrated decision consistency, preserve both full mismatch lists, and do not remove mismatches as “floating point noise.”
 
 - [ ] **Step 6: Update ledger and commit performance checkpoint**
 
@@ -1449,11 +1818,11 @@ perception_benchmark aggregate \
   --output-root /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/final
 ```
 
-Expected: main test table has Linux/Mac x YOLO/Grounded-SAM x production/calibrated-or-characterization, each sample count 200; all four scenarios count 50. Val stays in calibration appendix; oracle stays in diagnostics appendix.
+Expected: raw capability table has Linux/Mac x YOLO/Grounded-SAM `TEST_RAW_FROZEN`, each sample count 200；main safety/contract table has Linux/Mac x YOLO/Grounded-SAM x production/calibrated-or-characterization, each sample count 200；all four scenarios count 50. Val stays in calibration appendix. The report states no `ORACLE_DIAGNOSTIC` sweep was run.
 
 - [ ] **Step 2: Generate complete machine and human report**
 
-The report must explicitly include every spec §7 metric, 95% CI, error counts, full 3x4 decision confusion, exact count/safety metrics, cold/warm/per-phase/resource values, cross-platform mismatch list, production vs calibrated separation, oracle exclusion, fixed assets/provenance, dataset convex-hull limitation, absence of bottle mask, and the RGB-only non-goals for Depth/TF/`/cup_pose`/Pick & Place.
+The report must explicitly include every spec §7 metric, 95% CI, error counts, full 3x4 decision confusion, exact count/safety metrics, cold/warm/per-phase/resource values, cross-platform mismatch list, `TEST_RAW_FROZEN` raw-capability ranking, production vs calibrated separation, confirmation that no optional oracle sweep ran, fixed assets/provenance, dataset convex-hull limitation, absence of bottle mask, and the RGB-only non-goals for Depth/TF/`/cup_pose`/Pick & Place.
 
 - [ ] **Step 3: Apply project-local humanizer-zh to Chinese report prose**
 
@@ -1528,8 +1897,8 @@ Run explicit linked-worktree `status --short`, `diff --check`, and `log -1 --one
 | --- | --- |
 | §1–2 purpose/non-goals | Global Constraints, Tasks 8, 16 |
 | §3 fixed assets/provenance | Tasks 9, 11, 12, 14 |
-| §4 responsibilities/DetectorPort | File Map, Tasks 6, 7, 14 |
-| §5 immutable truth/prediction schema | Tasks 1, 2, 7 |
+| §4 responsibilities/DetectorPort | File Map, Tasks 6, 7, 14；detect protocol 固定来自 `so101_demo.ports.object_detector` |
+| §5 immutable truth/prediction schema | Tasks 1, 2, 7；test split 由 `TestSeal` 延迟解封 |
 | §6 Hungarian/AP/empty truth | Task 3 |
 | §7 accuracy/decision/performance/cross-platform | Tasks 3, 4, 8, 15, 16 |
 | §8 production/calibrated/low-floor/grid/tie-break | Tasks 5, 6, 12–14 |
@@ -1550,10 +1919,12 @@ Run explicit linked-worktree `status --short`, `diff --check`, and `log -1 --one
 - [ ] Type/signature consistency: verify every `Consumes` symbol is produced by an earlier task and names match exactly: `PredictionRecord`、`RawCandidate`、`DatasetInventory`、`ThresholdLock`、`RawDetectionResult`、`RunManifest`、`BenchmarkSummary`。
 - [ ] Literal/config consistency: verify all three fixed asset SHAs, two model revisions, four scenarios, sample counts, devices, FP32, warm-up/cold counts, bootstrap seed/repetitions and evidence roots match the approved spec exactly.
 - [ ] Link scan: run `python3 -c 'from pathlib import Path; import re; files=(Path("docs/superpowers/plans/2026-09-02-grounded-sam-yolo-seg-benchmark.md"),Path("docs/superpowers/specs/2026-09-02-grounded-sam-yolo-seg-benchmark-design.md")); missing=[str((path.parent/target).resolve()) for path in files for target in re.findall(r"\[[^]]+\]\(([^)#]+)(?:#[^)]+)?\)",path.read_text()) if "://" not in target and not (path.parent/target).resolve().exists()]; assert not missing, missing'`; expected: every relative repository link resolves and no file is modified.
+- [ ] Test-seal command scan: run `python3 -c 'from pathlib import Path; import re; text=Path("docs/superpowers/plans/2026-09-02-grounded-sam-yolo-seg-benchmark.md").read_text(); pre=text.split("### Task 13:",1)[0]; commands="\n".join(re.findall(r"```zsh\n(.*?)```",pre,re.S)); bad=[line for line in commands.splitlines() if "--split test" in line or "truth/test" in line or "unlock-test" in line]; assert not bad,bad'`; expected: no formal test extraction/truth/model command before Task 13 lock verification.
+- [ ] Explicit linked-worktree Git scan: run `rg -n '^git ' docs/superpowers/plans/2026-09-02-grounded-sam-yolo-seg-benchmark.md | rg -v -- '--git-dir=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/worktrees/moveit-demo1'`; expected: no matches.
 - [ ] Git diff check: run explicit linked-worktree `git diff --check` and `git status --short`; expected: no whitespace errors, no staged/untracked runtime artifacts added, and only intended plan/implementation scope appears per task.
 
 ## Execution Handoff
 
-Plan execution defaults to **Subagent-Driven Development**. The orchestrator must use `superpowers:subagent-driven-development`, dispatch one fresh implementer per task, and perform spec-compliance then code-quality/evidence review before advancing. Tasks 12–17 are sequential evidence gates; no agent may run test before the shared threshold-lock is frozen, and no reviewer may rewrite or replace formal run evidence.
+Plan execution defaults to **Subagent-Driven Development**. The orchestrator must use `superpowers:subagent-driven-development`, dispatch one fresh implementer per task, and perform spec-compliance then code-quality/evidence review before advancing. Tasks 12–17 are sequential evidence gates；no agent may extract/parse formal test truth or run a formal test-split model command before both threshold-locks are verified, and no reviewer may rewrite or replace formal run evidence.
 
 Plan complete and saved to `docs/superpowers/plans/2026-09-02-grounded-sam-yolo-seg-benchmark.md`. Recommended execution: Subagent-Driven, task-by-task with review checkpoints.
