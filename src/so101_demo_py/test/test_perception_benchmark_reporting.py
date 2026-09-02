@@ -45,9 +45,13 @@ from so101_demo.perception_benchmark.contracts import (
 )
 from so101_demo.perception_benchmark.reporting import (
     AggregationInput,
+    EvidenceEntry,
+    EvidenceIndex,
     MetricsAggregator,
     ReportWriter,
     RunAggregationEvidence,
+    load_evidence_index,
+    verify_evidence_index,
 )
 from so101_demo.perception_benchmark.timing import ResourceSample
 
@@ -2106,3 +2110,131 @@ def test_report_writer_never_publishes_partial_root_on_write_failure(
         ReportWriter().write(summary, output_root)
 
     assert not output_root.exists()
+
+
+def _write_generic_evidence_index(
+    root: Path,
+    *,
+    entries: tuple[dict[str, object], ...] | None = None,
+    schema_version: str = "so101-perception-benchmark/evidence-index/v1",
+    semantics: str = (
+        "payload files only; evidence-index.json is excluded to avoid self-reference"
+    ),
+) -> None:
+    if entries is None:
+        payload = b'{"formal":false}\n'
+        path = root / "records/000000.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        entries = (
+            {
+                "relative_path": "records/000000.json",
+                "size_bytes": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+        )
+    (root / "evidence-index.json").write_bytes(
+        canonical_json_bytes(
+            {
+                "schema_version": schema_version,
+                "payload_index_semantics": semantics,
+                "entries": list(entries),
+            }
+        )
+    )
+
+
+def test_public_evidence_index_loaders_verify_report_and_generic_dry_run_trees(
+    tmp_path: Path,
+) -> None:
+    summary = MetricsAggregator().aggregate(_fixture(tmp_path / "fixture"))
+    report_root = tmp_path / "report"
+    written = ReportWriter().write(summary, report_root)
+
+    loaded = load_evidence_index(report_root)
+
+    assert loaded == written
+    assert verify_evidence_index(report_root) == written
+    assert isinstance(loaded, EvidenceIndex)
+    assert all(isinstance(entry, EvidenceEntry) for entry in loaded.entries)
+
+    dry_run_root = tmp_path / "dry-run"
+    dry_run_root.mkdir()
+    _write_generic_evidence_index(dry_run_root)
+    generic = verify_evidence_index(dry_run_root)
+    assert generic.entries == (
+        EvidenceEntry(
+            "records/000000.json",
+            len(b'{"formal":false}\n'),
+            hashlib.sha256(b'{"formal":false}\n').hexdigest(),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "tamper",
+        "extra-file",
+        "path-traversal",
+        "self-entry",
+        "duplicate",
+        "size",
+        "sha",
+        "schema",
+        "semantics",
+        "noncanonical-index",
+        "symlink-file",
+        "symlink-directory",
+    ),
+)
+def test_public_evidence_index_loader_rejects_tree_or_index_relaxation(
+    tmp_path: Path, mutation: str
+) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir()
+    _write_generic_evidence_index(root)
+    document = json.loads((root / "evidence-index.json").read_bytes())
+    payload_path = root / "records/000000.json"
+    if mutation == "tamper":
+        payload_path.write_bytes(payload_path.read_bytes() + b"tamper")
+    elif mutation == "extra-file":
+        (root / "extra.txt").write_text("extra\n")
+    elif mutation == "path-traversal":
+        document["entries"][0]["relative_path"] = "../escape.json"
+        _write_generic_evidence_index(root, entries=tuple(document["entries"]))
+    elif mutation == "self-entry":
+        document["entries"][0]["relative_path"] = "evidence-index.json"
+        _write_generic_evidence_index(root, entries=tuple(document["entries"]))
+    elif mutation == "duplicate":
+        document["entries"].append(dict(document["entries"][0]))
+        _write_generic_evidence_index(root, entries=tuple(document["entries"]))
+    elif mutation == "size":
+        document["entries"][0]["size_bytes"] += 1
+        _write_generic_evidence_index(root, entries=tuple(document["entries"]))
+    elif mutation == "sha":
+        document["entries"][0]["sha256"] = "0" * 64
+        _write_generic_evidence_index(root, entries=tuple(document["entries"]))
+    elif mutation == "schema":
+        _write_generic_evidence_index(root, schema_version="unknown")
+    elif mutation == "semantics":
+        _write_generic_evidence_index(root, semantics="self is included")
+    elif mutation == "noncanonical-index":
+        (root / "evidence-index.json").write_text(
+            json.dumps(document, indent=2), encoding="utf-8"
+        )
+    elif mutation == "symlink-file":
+        outside = tmp_path / "outside.json"
+        outside.write_bytes(payload_path.read_bytes())
+        payload_path.unlink()
+        payload_path.symlink_to(outside)
+    else:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "000000.json").write_bytes(payload_path.read_bytes())
+        payload_path.unlink()
+        (root / "records").rmdir()
+        (root / "records").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        load_evidence_index(root)

@@ -50,10 +50,13 @@ from so101_demo.perception_benchmark.dataset import (
 )
 from so101_demo.perception_benchmark.runner import (
     DetectorBenchmarkRunner,
+    LoadedRunEvidence,
     RunCheckpoint,
+    RunEvidenceExpectation,
     RunIntegrityError,
     RunSpec,
     _record_from_document,
+    load_verified_run_evidence,
     verify_resume,
 )
 from so101_demo.perception_benchmark.timing import (
@@ -445,6 +448,7 @@ def _locked_inventory(
     lock: ThresholdLock,
     *,
     write_lock_before_access: bool = True,
+    count: int = 1,
 ) -> tuple[DatasetInventory, Path, Path]:
     lock_path = root / "locks" / "yolo.json"
     lock_path.parent.mkdir(parents=True)
@@ -466,7 +470,7 @@ def _locked_inventory(
         "access_log_path": str(access_log),
     }
     return (
-        _synthetic_inventory(root, 1, split="test", test_access=test_access),
+        _synthetic_inventory(root, count, split="test", test_access=test_access),
         lock_path,
         access_log,
     )
@@ -1720,3 +1724,213 @@ def test_running_manifest_tracks_safe_checkpoint_before_process_interrupt(
     assert running["record_chain_head_sha256"] == first_sha
     assert running["record_inventory_sha256"] == _record_inventory_digest(output_root)
     assert running["ended_at"] is None
+
+
+def _evidence_expectation(**overrides: object) -> RunEvidenceExpectation:
+    values: dict[str, object] = {
+        "run_kind": RunKind.VAL_RAW,
+        "platform": "macos",
+        "model": "yolo_seg",
+        "device": "mps",
+        "dtype": "float32",
+        "source_commit": SOURCE_COMMIT,
+        "config_sha256": SHA_A,
+        "threshold_lock_sha256": None,
+        "model_id": YOLO_MODEL_ID,
+        "weights_sha256": SHA_B,
+        "runtime_name": "synthetic-runtime",
+        "runtime_version": "fixture-1",
+        "runtime_environment": {"fixture": "runner", "torch": "2.8.0"},
+        "max_gpu_temperature_celsius": None,
+    }
+    values.update(overrides)
+    return RunEvidenceExpectation(**values)  # type: ignore[arg-type]
+
+
+def test_public_run_loader_returns_immutable_full_verified_evidence(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    expected_manifest = DetectorBenchmarkRunner(
+        SyntheticAdapter(output_root), output_root
+    ).run(_spec(inventory, output_root))
+
+    loaded = load_verified_run_evidence(
+        output_root, inventory, _evidence_expectation()
+    )
+
+    assert isinstance(loaded, LoadedRunEvidence)
+    assert loaded.evidence_root == output_root.resolve(strict=True)
+    assert loaded.manifest == expected_manifest
+    assert len(loaded.records) == 200
+    assert len(loaded.extended_record_documents) == 200
+    assert loaded.records[199].formal_sample_index == 199
+    with pytest.raises(TypeError):
+        loaded.extended_record_documents[0]["platform"] = "linux"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        loaded.manifest.runtime_environment["fixture"] = "changed"  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("run_kind", RunKind.TEST_RAW_FROZEN),
+        ("platform", "linux"),
+        ("model", "grounded_sam"),
+        ("device", "cuda"),
+        ("source_commit", "cafebabe" * 5),
+        ("config_sha256", SHA_C),
+        ("threshold_lock_sha256", SHA_C),
+        ("model_id", GROUNDED_SAM_MODEL_ID),
+        ("weights_sha256", SHA_C),
+        ("runtime_name", "other-runtime"),
+        ("runtime_version", "other-version"),
+        ("runtime_environment", {"fixture": "changed"}),
+        ("max_gpu_temperature_celsius", 80.0),
+    ),
+)
+def test_public_run_loader_rejects_external_expectation_mismatch(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    expectation = replace(_evidence_expectation(), **{field: value})
+
+    with pytest.raises(RunIntegrityError):
+        load_verified_run_evidence(output_root, inventory, expectation)
+
+
+def test_public_run_expectation_rejects_non_fp32_dtype() -> None:
+    with pytest.raises(ValueError, match="dtype must be float32"):
+        replace(_evidence_expectation(), dtype="float16")
+
+
+def _rewrite_terminal_anchors(root: Path) -> None:
+    record_path = root / "records/000199.json"
+    record_sha = hashlib.sha256(record_path.read_bytes()).hexdigest()
+    checkpoint_path = root / "checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_bytes())
+    checkpoint["last_record_sha256"] = record_sha
+    checkpoint["record_inventory_sha256"] = _record_inventory_digest(root)
+    atomic_write_json(checkpoint_path, checkpoint)
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["record_chain_head_sha256"] = record_sha
+    manifest["record_inventory_sha256"] = checkpoint["record_inventory_sha256"]
+    atomic_write_json(manifest_path, manifest)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "running-manifest",
+        "partial-records",
+        "extra-record",
+        "tail-tamper",
+        "extra-document-field",
+        "resource-mismatch",
+        "mask-tamper",
+        "image-tamper",
+    ),
+)
+def test_public_run_loader_rejects_partial_tampered_or_extended_schema_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    manifest_path = output_root / "manifest.json"
+    terminal_before = manifest_path.read_bytes()
+    if mutation == "running-manifest":
+        manifest = json.loads(terminal_before)
+        manifest["status"] = "RUNNING"
+        manifest["ended_at"] = None
+        atomic_write_json(manifest_path, manifest)
+        terminal_before = manifest_path.read_bytes()
+    elif mutation == "partial-records":
+        (output_root / "records/000199.json").unlink()
+    elif mutation == "extra-record":
+        (output_root / "records/000200.json").write_bytes(b"{}\n")
+    elif mutation == "tail-tamper":
+        record_path = output_root / "records/000199.json"
+        record_path.write_bytes(record_path.read_bytes() + b" ")
+    elif mutation in {"extra-document-field", "resource-mismatch"}:
+        record_path = output_root / "records/000199.json"
+        document = json.loads(record_path.read_bytes())
+        if mutation == "extra-document-field":
+            document["unexpected"] = "forbidden"
+        else:
+            document["resource_samples"][0]["process_cpu_percent"] = -1.0
+        atomic_write_json(record_path, document)
+        _rewrite_terminal_anchors(output_root)
+        terminal_before = manifest_path.read_bytes()
+    elif mutation == "mask-tamper":
+        record = _record(output_root, 199)
+        mask = output_root / record["raw_candidates"][0]["mask"]["relative_path"]
+        mask.write_bytes(mask.read_bytes() + b" ")
+    else:
+        image = inventory.dataset_root / inventory.samples[199].image_relpath
+        image.write_bytes(image.read_bytes() + b"drift")
+
+    with pytest.raises(RunIntegrityError):
+        load_verified_run_evidence(
+            output_root, inventory, _evidence_expectation()
+        )
+
+    assert manifest_path.read_bytes() == terminal_before
+
+
+def test_public_run_loader_requires_exact_full_inventory_denominator(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 8)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    with pytest.raises(RunIntegrityError, match="TERMINAL_RUN_DENOMINATOR_INCOMPLETE"):
+        load_verified_run_evidence(
+            output_root, inventory, _evidence_expectation()
+        )
+
+
+def test_public_run_loader_verifies_registered_test_lock_chain(
+    tmp_path: Path,
+) -> None:
+    lock = _formal_yolo_lock()
+    inventory, lock_path, access_log = _locked_inventory(
+        tmp_path / "locked", lock, count=200
+    )
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(
+        inventory,
+        output_root,
+        run_id="public-locked",
+        run_kind=RunKind.TEST_RAW_FROZEN,
+        threshold_lock_sha256=lock.lock_sha256,
+        threshold_lock_path=lock_path,
+    )
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    expectation = _evidence_expectation(
+        run_kind=RunKind.TEST_RAW_FROZEN,
+        threshold_lock_sha256=lock.lock_sha256,
+    )
+    assert len(
+        load_verified_run_evidence(output_root, inventory, expectation).records
+    ) == 200
+
+    access_log.write_bytes(access_log.read_bytes() + b"{}\n")
+    with pytest.raises(RunIntegrityError, match="INVENTORY_ACCESS_CHAIN_INVALID"):
+        load_verified_run_evidence(output_root, inventory, expectation)
