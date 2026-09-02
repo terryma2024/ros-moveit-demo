@@ -90,3 +90,44 @@ This is an audit record. Only `PLANNED`, `RUNNING`, `VALID`, and `INVALID` are l
 - Command: `perception_benchmark dry-run --config <installed-benchmark.yaml> --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/task11-remediation/<run-id> --adapter-fixture <recorded-fixture.json>`
 - Evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/task11-remediation/` followed, after asset qualification, by `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/task11-remediation/`.
 - Lifecycle: retain the accepted remediation proof; archive superseded trials; rejected trial directories remain deletion candidates pending explicit authorization.
+
+## CP-BENCH-002 — CORRECTION after independent review of `8985c56`
+
+This checkpoint is append-only. It supersedes conflicting lifecycle wording above without rewriting the original audit record.
+
+- Review state: `8985c56` had two critical and five important findings. Formal commands were not yet fully bound to the frozen config/provenance; calibration cross-run provenance and output isolation were incomplete; expected model/setup and malformed-plan errors were not all converted into stable CLI failures; test unlock output preflight occurred too late; and the config omitted registered Task 6 low-floor limits.
+- Fix RED command: `PYTHONPATH=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-benchmark/so101_demo_py /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/test/test_perception_benchmark_cli.py --junitxml=/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-red.xml`
+- Fix RED evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-red.xml`; result `13 passed, 9 failed`, with all failures caused by missing reviewed behavior rather than an import/install boundary.
+- Current fix command: `PYTHONPATH=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-benchmark/so101_demo_py /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/test/test_perception_benchmark_cli.py --junitxml=/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-cli-green.xml`
+- Current fix evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-cli-green.xml`; result `22 passed`.
+- Authoritative retained dry-run at this checkpoint: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-final/`; its public evidence-index readback returned `VERIFIED 41`, with `8` samples and `16` model records.
+- Superseded deletion candidate: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run/`. It has not been deleted.
+- Retained fix evidence: all Task 9 RED/GREEN JUnit files under `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/`.
+- Archived runs: none.
+- Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
+
+## CP-BENCH-003 — FixRound1 installed verification
+
+This checkpoint supersedes CP-BENCH-002 only for the authoritative non-formal dry-run lifecycle. Earlier records remain unchanged for auditability.
+
+- Full regression command: `PYTHONPATH=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-benchmark/so101_demo_py /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/test/test_perception_benchmark_*.py --junitxml=/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-benchmark-full.xml`
+- Full regression evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-benchmark-full.xml`; result `526 passed, 1 pre-existing pyparsing deprecation warning`.
+- Installed build command: `source install/setup.zsh && /Users/matianyi/ros2_jazzy/.venv/bin/colcon --log-base log-benchmark build --packages-select so101_demo_py --packages-ignore mujoco_ros2_control_msgs mujoco_vendor so101_teleop mujoco_3d_lidar mujoco_ros2_control_plugins mujoco_ros2_control so101_mujoco_support --symlink-install --build-base build-benchmark --install-base install-benchmark`
+- Installed build result: one package finished successfully. The later macOS LaunchServices `kLSNoExecutableErr` diagnostic did not change the successful colcon exit status and no GUI was required.
+- Installed dry-run command: `source install-benchmark/setup.zsh && /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py/lib/so101_demo_py/perception_benchmark dry-run --config /Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --output-root /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1 --adapter-fixture /Users/matianyi/.codex/worktrees/5b15/moveit-demo/src/so101_demo_py/test/fixtures/perception_benchmark/dry-run-adapters.json`
+- Authoritative retained dry-run: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1/`; public evidence-index readback returned `VERIFIED 41`.
+- Authoritative dry-run counts: `formal=false`, `run_kind=NON_FORMAL_DRY_RUN`, `8` samples, `16` model records, `8` records per model, and `2` samples for each registered scenario. No `inventory.json` exists.
+- Superseded deletion candidates, not deleted: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run/` and `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-final/`.
+- Retained implementation evidence: FixRound1 RED/GREEN/full JUnit, `build-benchmark/`, `install-benchmark/`, and `log-benchmark/`.
+- Archived runs: none.
+- Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
+
+## CP-BENCH-004 — FixRound1 final regression correction
+
+This append-only checkpoint records the final regression after adding the sealed-inventory pre-event test. It supersedes the CP-BENCH-003 test count, but not its installed dry-run lifecycle decision.
+
+- Final CLI evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-cli-final2.xml`; result `34 passed`.
+- Final full regression command: `PYTHONPATH=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/build-benchmark/so101_demo_py /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/test/test_perception_benchmark_*.py --junitxml=/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-benchmark-full-final.xml`
+- Final full regression evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-benchmark-full-final.xml`; result `527 passed, 1 pre-existing pyparsing deprecation warning`.
+- Authoritative retained dry-run remains `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1/`; its evidence index remains `VERIFIED 41`.
+- Archived runs: none. No evidence was deleted.
