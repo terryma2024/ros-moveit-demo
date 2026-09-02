@@ -32,6 +32,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     RawDetectionResult,
     _MaskArtifactStore,
+    _validate_accelerated_component,
 )
 from so101_demo.perception_benchmark.calibration import YoloThresholds
 from so101_demo.perception_benchmark.contracts import RawCandidate
@@ -53,51 +54,10 @@ def _to_numpy(value: Any) -> np.ndarray:
     return np.asarray(current)
 
 
-def _device_name(value: object) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).lower()
-    if normalized.startswith("cuda"):
-        return "cuda"
-    if normalized.startswith("mps"):
-        return "mps"
-    if normalized.startswith("cpu"):
-        return "cpu"
-    return normalized
-
-
-def _dtype_name(value: object) -> str | None:
-    if value is None:
-        return None
-    try:
-        return np.dtype(value).name
-    except TypeError:
-        normalized = str(value).lower()
-        if "float32" in normalized:
-            return "float32"
-        if "float16" in normalized or "half" in normalized:
-            return "float16"
-        return normalized
-
-
 def _assert_model_device_and_dtype(
     model: Any, requested_device: RuntimeDevice, arrays: tuple[np.ndarray, ...] = ()
 ) -> None:
-    observed_device = _device_name(getattr(model, "device", None))
-    if observed_device is None:
-        observed_device = _device_name(
-            getattr(getattr(getattr(model, "predictor", None), "model", None), "device", None)
-        )
-    if observed_device is not None and observed_device != requested_device:
-        raise ModelSetupError(
-            "DEVICE_MISMATCH",
-            f"requested {requested_device}, observed {observed_device}",
-        )
-    observed_dtype = _dtype_name(getattr(model, "dtype", None))
-    if observed_dtype is not None and observed_dtype != "float32":
-        raise ModelSetupError(
-            "NON_FP32_RUNTIME", f"observed model dtype {observed_dtype}"
-        )
+    _validate_accelerated_component(model, requested_device, "YOLO model")
     if any(array.dtype != np.float32 for array in arrays):
         observed = sorted({array.dtype.name for array in arrays})
         raise ModelSetupError(
@@ -418,6 +378,12 @@ class YoloCalibratedDetector:
                 verbose=False,
             )
         except Exception as error:
+            try:
+                self._synchronizer.synchronize()
+            except Exception as sync_error:
+                error.add_note(
+                    f"accelerator synchronization also failed: {sync_error}"
+                )
             raise YoloResultError(f"INFERENCE_FAILED: {error}") from error
         self._synchronizer.synchronize()
         if not isinstance(results, (list, tuple)) or len(results) != 1:

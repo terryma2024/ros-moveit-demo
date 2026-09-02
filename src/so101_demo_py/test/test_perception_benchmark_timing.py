@@ -54,6 +54,48 @@ def test_cuda_and_mps_are_synchronized_at_each_timing_boundary() -> None:
         assert timer.elapsed_ms == {"preprocess": 1.0, "dino_or_yolo": 2.0}
 
 
+def test_phase_timer_synchronizes_exception_exit_without_replacing_error() -> None:
+    """Catch an exceptional accelerator phase omitting its final device boundary."""
+
+    api = _RecordingTorchApi()
+    expected = RuntimeError("model exploded")
+
+    with pytest.raises(RuntimeError) as caught:
+        with PhaseTimer(
+            DeviceSynchronizer(api, "mps"),
+            monotonic_ns=iter((0,)).__next__,
+        ):
+            raise expected
+
+    assert caught.value is expected
+    assert api.mps.synchronize_calls == 2
+
+
+def test_phase_timer_preserves_body_error_when_exception_sync_also_fails() -> None:
+    """Catch cleanup synchronization replacing the original inference failure."""
+
+    class _FailingCleanupAccelerator(_RecordingAccelerator):
+        def synchronize(self) -> None:
+            super().synchronize()
+            if self.synchronize_calls == 2:
+                raise RuntimeError("cleanup sync failed")
+
+    api = _RecordingTorchApi()
+    api.mps = _FailingCleanupAccelerator()
+    expected = RuntimeError("model exploded")
+
+    with pytest.raises(RuntimeError) as caught:
+        with PhaseTimer(
+            DeviceSynchronizer(api, "mps"),
+            monotonic_ns=iter((0,)).__next__,
+        ):
+            raise expected
+
+    assert caught.value is expected
+    assert api.mps.synchronize_calls == 2
+    assert "cleanup sync failed" in " ".join(expected.__notes__)
+
+
 def test_phase_timer_preserves_nonapplicable_nulls_and_coherent_total() -> None:
     """Catch a YOLO-only phase being zero-filled as if SAM had run."""
 
@@ -145,7 +187,7 @@ def test_resource_sampler_preserves_cuda_measurements() -> None:
     api.cuda.memory_reserved = lambda: 2000  # type: ignore[attr-defined]
     api.cuda.utilization = lambda: 75.0  # type: ignore[attr-defined]
     api.cuda.temperature = lambda: 61.0  # type: ignore[attr-defined]
-    api.cuda.power_draw = lambda: 125.5  # type: ignore[attr-defined]
+    api.cuda.power_draw = lambda: 75_000  # type: ignore[attr-defined]
 
     sample = ResourceSampler(
         process=_FakeProcess(), torch_api=api, device="cuda"
@@ -155,7 +197,7 @@ def test_resource_sampler_preserves_cuda_measurements() -> None:
     assert sample.gpu_memory_reserved_bytes == 2000
     assert sample.gpu_utilization_percent == 75.0
     assert sample.gpu_temperature_celsius == 61.0
-    assert sample.gpu_power_watts == 125.5
+    assert sample.gpu_power_watts == 75.0
     assert sample.unavailable_reasons == {}
 
 

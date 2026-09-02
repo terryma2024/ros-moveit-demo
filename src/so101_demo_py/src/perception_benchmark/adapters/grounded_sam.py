@@ -22,6 +22,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     RawDetectionResult,
     _MaskArtifactStore,
+    _validate_accelerated_component,
 )
 from so101_demo.perception_benchmark.contracts import RawCandidate
 from so101_demo.perception_benchmark.timing import (
@@ -70,42 +71,8 @@ def _move_inputs(inputs: Any, device: RuntimeDevice) -> Any:
     return inputs
 
 
-def _normalized_device(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value).lower()
-    for device in ("cuda", "mps", "cpu"):
-        if text.startswith(device):
-            return device
-    return text
-
-
-def _normalized_dtype(value: object) -> str | None:
-    if value is None:
-        return None
-    try:
-        return np.dtype(value).name
-    except TypeError:
-        text = str(value).lower()
-        if "float32" in text:
-            return "float32"
-        if "float16" in text or "half" in text:
-            return "float16"
-        return text
-
-
 def _validate_component(component: Any, runtime_device: RuntimeDevice, name: str) -> None:
-    observed_device = _normalized_device(getattr(component, "device", None))
-    if observed_device is not None and observed_device != runtime_device:
-        raise ModelSetupError(
-            "DEVICE_MISMATCH",
-            f"{name} requested {runtime_device}, observed {observed_device}",
-        )
-    observed_dtype = _normalized_dtype(getattr(component, "dtype", None))
-    if observed_dtype is not None and observed_dtype != "float32":
-        raise ModelSetupError(
-            "NON_FP32_RUNTIME", f"{name} observed dtype {observed_dtype}"
-        )
+    _validate_accelerated_component(component, runtime_device, name)
 
 
 def _prepare_model(model: Any, device: RuntimeDevice) -> Any:
@@ -467,7 +434,7 @@ class GroundedSamRawAdapter:
         if qualities.ndim == 3 and qualities.shape[0] == 1:
             qualities = qualities[0]
         if (
-            masks.dtype != np.float32
+            masks.dtype not in (np.dtype(np.bool_), np.dtype(np.float32))
             or qualities.dtype != np.float32
             or masks.ndim != 4
             or masks.shape[0] != len(proposals)
@@ -492,7 +459,11 @@ class GroundedSamRawAdapter:
         for index, (bbox, box_score, text_score) in enumerate(proposals):
             mask_index = int(np.argmax(qualities[index]))
             quality = float(qualities[index, mask_index])
-            mask = np.asarray(masks[index, mask_index] >= 0.5, dtype=bool)
+            selected_mask = masks[index, mask_index]
+            if selected_mask.dtype == np.bool_:
+                mask = np.asarray(selected_mask, dtype=bool)
+            else:
+                mask = np.asarray(selected_mask >= 0.5, dtype=bool)
             pixel_count = int(mask.sum())
             if quality < 0.0 or pixel_count < 64 or pixel_count / frame_area > 0.50:
                 continue
