@@ -2,8 +2,7 @@ from pathlib import Path
 
 import pytest
 
-
-PACKAGE = Path("src/so101_demo_py")
+PACKAGE = Path(__file__).resolve().parents[1]
 
 
 def test_loads_the_gazebo_plan_only_variant() -> None:

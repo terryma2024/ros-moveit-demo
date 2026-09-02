@@ -6,6 +6,8 @@ import pytest
 import yaml
 from so101_demo.ports.reset import ResetStepReceipt
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _pose():
     from so101_demo.core.task_geometry import Pose7
@@ -134,9 +136,7 @@ def test_gazebo_pose_vector_preserves_named_pose_and_entity_ids() -> None:
 
 
 def test_gazebo_parking_pose_is_stable_on_the_ground_plane() -> None:
-    config = yaml.safe_load(
-        Path("src/so101_demo_py/config/gazebo/reset.yaml").read_bytes()
-    )
+    config = yaml.safe_load((PACKAGE_ROOT / "config/gazebo/reset.yaml").read_bytes())
 
     assert config["parking_pose_xyz_xyzw"] == [
         0.45,
@@ -239,7 +239,10 @@ def test_robot_adapter_executes_the_exact_planned_trajectory() -> None:
         planner=planner,
         executor=executor,
         command_gripper=lambda _target: ResetStepReceipt(True, None, {}),
-        observe_joints=lambda: ({str(index): 0.0 for index in range(1, 7)}, {str(index): 0.0 for index in range(1, 7)}),
+        observe_joints=lambda: (
+            {str(index): 0.0 for index in range(1, 7)},
+            {str(index): 0.0 for index in range(1, 7)},
+        ),
         home_positions=(0.0, 0.0, 0.0, 0.0, 0.0),
         gripper_open_position=-0.059600220867817,
         position_tolerance=0.002,
@@ -289,9 +292,7 @@ def test_moveit_planning_client_converts_joint_domain_request_to_wire_request() 
             return True
 
         def result(self):
-            trajectory = SimpleNamespace(
-                joint_trajectory=SimpleNamespace(points=[object()])
-            )
+            trajectory = SimpleNamespace(joint_trajectory=SimpleNamespace(points=[object()]))
             return SimpleNamespace(
                 motion_plan_response=SimpleNamespace(
                     error_code=SimpleNamespace(val=1), trajectory=trajectory
