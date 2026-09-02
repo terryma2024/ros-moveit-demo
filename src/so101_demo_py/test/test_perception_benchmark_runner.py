@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
-import hashlib
-import json
 
 import numpy as np
-from PIL import Image
 import pytest
-
 import so101_demo.perception_benchmark.dataset as dataset_module
+from PIL import Image
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 from so101_demo.perception_benchmark.adapters import (
     CollectionMode,
@@ -33,15 +33,15 @@ from so101_demo.perception_benchmark.codec import (
     read_mask,
 )
 from so101_demo.perception_benchmark.contracts import (
-    DecisionOutput,
     GROUNDED_SAM_MODEL_ID,
+    YOLO_MODEL_ID,
+    DecisionOutput,
     MaskRef,
     PredictionRecord,
     RawCandidate,
     RunKind,
     RunStatus,
     RuntimeProvenance,
-    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.dataset import (
     DatasetInventory,
@@ -63,7 +63,6 @@ from so101_demo.perception_benchmark.timing import (
     PhaseTimingBreakdown,
     ResourceSample,
 )
-
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -1728,6 +1727,7 @@ def test_running_manifest_tracks_safe_checkpoint_before_process_interrupt(
 
 def _evidence_expectation(**overrides: object) -> RunEvidenceExpectation:
     values: dict[str, object] = {
+        "run_id": "fixture-val-raw",
         "run_kind": RunKind.VAL_RAW,
         "platform": "macos",
         "model": "yolo_seg",
@@ -1924,6 +1924,7 @@ def test_public_run_loader_verifies_registered_test_lock_chain(
     )
     DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
     expectation = _evidence_expectation(
+        run_id="public-locked",
         run_kind=RunKind.TEST_RAW_FROZEN,
         threshold_lock_sha256=lock.lock_sha256,
     )
@@ -1934,3 +1935,127 @@ def test_public_run_loader_verifies_registered_test_lock_chain(
     access_log.write_bytes(access_log.read_bytes() + b"{}\n")
     with pytest.raises(RunIntegrityError, match="INVENTORY_ACCESS_CHAIN_INVALID"):
         load_verified_run_evidence(output_root, inventory, expectation)
+
+
+def test_round1_public_run_loader_rejects_another_valid_run_id(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root, run_id="other-valid-run")
+    )
+
+    with pytest.raises(RunIntegrityError, match="RUN_EVIDENCE_EXPECTATION_MISMATCH"):
+        load_verified_run_evidence(output_root, inventory, _evidence_expectation())
+
+
+def test_round1_public_run_loader_rejects_runtime_wildcard_for_self_consistent_drift(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    drifted = RuntimeProvenance(
+        runtime_device="mps",
+        runtime_name="drifted-runtime",
+        runtime_version="drifted-2",
+        weights_sha256=SHA_B,
+        environment={"fixture": "drifted", "torch": "2.9.0"},
+    )
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root, runtime_provenance=drifted)
+    )
+
+    with pytest.raises((ValueError, RunIntegrityError)):
+        wildcard = replace(
+            _evidence_expectation(),
+            runtime_name=None,
+            runtime_version=None,
+            runtime_environment=None,
+        )
+        load_verified_run_evidence(output_root, inventory, wildcard)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("started_at", False), ("ended_at", True)),
+)
+def test_round1_public_run_loader_rejects_non_string_manifest_timestamps(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    manifest_path = output_root / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest[field] = value
+    atomic_write_json(manifest_path, manifest)
+
+    with pytest.raises(RunIntegrityError, match="MANIFEST_SCHEMA_INVALID"):
+        load_verified_run_evidence(output_root, inventory, _evidence_expectation())
+
+
+def test_round1_public_run_loader_rejects_boolean_checkpoint_count(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    checkpoint_path = output_root / "checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_bytes())
+    checkpoint["error_count"] = False
+    atomic_write_json(checkpoint_path, checkpoint)
+
+    with pytest.raises(RunIntegrityError, match="CHECKPOINT_SCHEMA_INVALID"):
+        load_verified_run_evidence(output_root, inventory, _evidence_expectation())
+
+
+@pytest.mark.parametrize(
+    ("filename", "error_code"),
+    (
+        ("manifest.json", "MANIFEST_SCHEMA_INVALID"),
+        ("checkpoint.json", "CHECKPOINT_SCHEMA_INVALID"),
+    ),
+)
+def test_round1_public_run_loader_rejects_normalizable_environment_type_drift(
+    tmp_path: Path, filename: str, error_code: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    document_path = output_root / filename
+    document = json.loads(document_path.read_bytes())
+    document["runtime_environment"] = [
+        ["fixture", "runner"],
+        ["torch", "2.8.0"],
+    ]
+    atomic_write_json(document_path, document)
+
+    with pytest.raises(RunIntegrityError, match=error_code):
+        load_verified_run_evidence(output_root, inventory, _evidence_expectation())
+
+
+def test_round1_public_run_loader_rejects_hardlinked_terminal_file(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    os.link(output_root / "manifest.json", tmp_path / "external-manifest.json")
+
+    with pytest.raises(RunIntegrityError, match="RUN_EVIDENCE_FILE_UNSAFE"):
+        load_verified_run_evidence(output_root, inventory, _evidence_expectation())

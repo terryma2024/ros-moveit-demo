@@ -1,33 +1,35 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError, replace
-from datetime import datetime, timezone
 import hashlib
-from io import BytesIO
 import json
 import os
-from pathlib import Path
 import tarfile
+from dataclasses import FrozenInstanceError, replace
+from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
 from typing import Callable
 
-from PIL import Image
 import numpy as np
 import pytest
-
 import so101_demo.perception_benchmark.dataset as dataset_module
+from PIL import Image
 from so101_demo.perception_benchmark.codec import read_mask
 from so101_demo.perception_benchmark.contracts import TruthSample
 from so101_demo.perception_benchmark.dataset import (
     DatasetArchiveVerifier,
     DatasetVerificationError,
-    TestAccessGrant as DatasetTestAccessGrant,
-    TestSeal as DatasetTestSeal,
     load_dataset_inventory,
     load_truth_samples,
     rasterize_polygon,
     sha256_file,
 )
-
+from so101_demo.perception_benchmark.dataset import (
+    TestAccessGrant as DatasetTestAccessGrant,
+)
+from so101_demo.perception_benchmark.dataset import (
+    TestSeal as DatasetTestSeal,
+)
 
 SCENARIOS = (
     "no_cup",
@@ -808,6 +810,30 @@ def _rewrite_inventory_document(root: Path, document: dict[str, object]) -> None
     )
 
 
+def _public_inventory_anchors(root: Path, split: str) -> dict[str, object]:
+    payload = (root / "inventory.json").read_bytes()
+    document = json.loads(payload)
+    anchors: dict[str, object] = {
+        "expected_split": split,
+        "expected_archive_sha256": document["archive_sha256"],
+        "expected_inventory_sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    if split == "test":
+        access = document["test_access"]
+        anchors.update(
+            {
+                "expected_test_access_event_sha256": access["event_sha256"],
+                "expected_sealed_member_inventory_sha256": access[
+                    "sealed_member_inventory_sha256"
+                ],
+                "expected_threshold_lock_sha256s": tuple(
+                    access["threshold_lock_sha256s"]
+                ),
+            }
+        )
+    return anchors
+
+
 def test_public_inventory_loader_reconstructs_and_reissues_verified_capability(
     tmp_path: Path,
 ) -> None:
@@ -817,7 +843,7 @@ def test_public_inventory_loader_reconstructs_and_reissues_verified_capability(
         archive, sha256_file(archive), root, "val", None
     )
 
-    inventory = load_dataset_inventory(root, expected_split="val")
+    inventory = load_dataset_inventory(root, **_public_inventory_anchors(root, "val"))
 
     assert inventory.dataset_root == root.resolve(strict=True)
     assert inventory.sample_count == 200
@@ -853,6 +879,7 @@ def test_public_inventory_loader_rejects_schema_or_sample_relaxation(
     DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), root, "val", None
     )
+    anchors = _public_inventory_anchors(root, "val")
     document = json.loads((root / "inventory.json").read_bytes())
     if mutation == "extra-top-level":
         document["extra"] = "forbidden"
@@ -873,7 +900,7 @@ def test_public_inventory_loader_rejects_schema_or_sample_relaxation(
     _rewrite_inventory_document(root, document)
 
     with pytest.raises(DatasetVerificationError):
-        load_dataset_inventory(root)
+        load_dataset_inventory(root, **anchors)
 
 
 def test_public_inventory_loader_rejects_noncanonical_sidecar_tamper_and_symlink(
@@ -884,17 +911,18 @@ def test_public_inventory_loader_rejects_noncanonical_sidecar_tamper_and_symlink
     DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), root, "val", None
     )
+    anchors = _public_inventory_anchors(root, "val")
     canonical = (root / "inventory.json").read_bytes()
     (root / "inventory.json").chmod(0o644)
     (root / "inventory.json").write_bytes(canonical[:-1] + b" \n")
     with pytest.raises(DatasetVerificationError):
-        load_dataset_inventory(root)
+        load_dataset_inventory(root, **anchors)
 
     (root / "inventory.json").write_bytes(canonical)
     (root / "inventory.sha256").chmod(0o644)
     (root / "inventory.sha256").write_text("0" * 64 + "  inventory.json\n")
     with pytest.raises(DatasetVerificationError):
-        load_dataset_inventory(root)
+        load_dataset_inventory(root, **anchors)
 
     (root / "inventory.sha256").write_text(
         f"{hashlib.sha256(canonical).hexdigest()}  inventory.json\n"
@@ -902,7 +930,7 @@ def test_public_inventory_loader_rejects_noncanonical_sidecar_tamper_and_symlink
     linked = tmp_path / "linked-dataset"
     linked.symlink_to(root, target_is_directory=True)
     with pytest.raises(DatasetVerificationError):
-        load_dataset_inventory(linked)
+        load_dataset_inventory(linked, **anchors)
 
 
 def test_public_inventory_loader_rechecks_current_bytes_and_semantics(
@@ -913,6 +941,7 @@ def test_public_inventory_loader_rechecks_current_bytes_and_semantics(
     DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), root, "val", None
     )
+    anchors = _public_inventory_anchors(root, "val")
     document = json.loads((root / "inventory.json").read_bytes())
     first = document["samples"][0]
     label_path = root / first["label_relpath"]
@@ -920,11 +949,14 @@ def test_public_inventory_loader_rechecks_current_bytes_and_semantics(
     label_path.write_text("0 0.1 0.1 0.2 0.1 0.15 0.2\n", encoding="utf-8")
     first["label_sha256"] = hashlib.sha256(label_path.read_bytes()).hexdigest()
     _rewrite_inventory_document(root, document)
+    anchors["expected_inventory_sha256"] = hashlib.sha256(
+        (root / "inventory.json").read_bytes()
+    ).hexdigest()
 
     with pytest.raises(
         DatasetVerificationError, match="LABEL_TRUTH_POLYGON_MISMATCH"
     ):
-        load_dataset_inventory(root)
+        load_dataset_inventory(root, **anchors)
 
 
 def test_public_inventory_loader_binds_loaded_object_to_original_tree(
@@ -935,7 +967,9 @@ def test_public_inventory_loader_binds_loaded_object_to_original_tree(
     DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), original, "val", None
     )
-    inventory = load_dataset_inventory(original)
+    inventory = load_dataset_inventory(
+        original, **_public_inventory_anchors(original, "val")
+    )
     moved = tmp_path / "moved-val-open"
     original.rename(moved)
 
@@ -953,15 +987,182 @@ def test_public_test_inventory_loader_rejects_changed_access_or_lock_chain(
         archive, sha256_file(archive), root, "test", seal
     )
     assert seal.access_grant is not None
+    anchors = _public_inventory_anchors(root, "test")
     access_log = seal.access_log_path
     access_log.write_bytes(access_log.read_bytes() + b"{}\n")
 
     with pytest.raises(DatasetVerificationError, match="INVENTORY_ACCESS_CHAIN_INVALID"):
-        load_dataset_inventory(root, expected_split="test")
+        load_dataset_inventory(root, **anchors)
 
     access_log.write_bytes(access_log.read_bytes()[:-3])
     document = json.loads((root / "inventory.json").read_bytes())
     document["test_access"]["threshold_lock_sha256s"][0] = "d" * 64
     _rewrite_inventory_document(root, document)
-    with pytest.raises(DatasetVerificationError, match="INVENTORY_ACCESS_CHAIN_INVALID"):
-        load_dataset_inventory(root, expected_split="test")
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_EXTERNAL_ANCHOR_MISMATCH"):
+        load_dataset_inventory(root, **anchors)
+
+
+def test_round1_public_inventory_loader_requires_all_external_val_anchors(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+
+    with pytest.raises(TypeError):
+        load_dataset_inventory(root)
+
+
+def test_round1_public_inventory_loader_rejects_coherent_self_attested_rewrite_before_issuance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = build_fixture_archive(tmp_path)
+    seal = _verified_unlocked_seal(archive, tmp_path)
+    root = tmp_path / "test-open"
+    DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "test", seal
+    )
+    assert seal.access_grant is not None
+    original_inventory_sha = hashlib.sha256(
+        (root / "inventory.json").read_bytes()
+    ).hexdigest()
+    document = json.loads((root / "inventory.json").read_bytes())
+    original_archive_sha = document["archive_sha256"]
+    original_event_sha = document["test_access"]["event_sha256"]
+    original_sealed_sha = document["test_access"][
+        "sealed_member_inventory_sha256"
+    ]
+    original_locks = tuple(document["test_access"]["threshold_lock_sha256s"])
+    document["archive_sha256"] = "d" * 64
+    document["test_access"]["sealed_member_inventory_sha256"] = "e" * 64
+    document["test_access"]["threshold_lock_sha256s"] = ["f" * 64, "9" * 64]
+    event_without_sha = {
+        "event_type": "TEST_ACCESS_GRANTED",
+        "granted_at": document["test_access"]["granted_at"],
+        "sealed_member_inventory_sha256": "e" * 64,
+        "threshold_lock_sha256s": ["f" * 64, "9" * 64],
+    }
+    rewritten_event_sha = hashlib.sha256(
+        dataset_module.canonical_json_bytes(event_without_sha)
+    ).hexdigest()
+    document["test_access"]["event_sha256"] = rewritten_event_sha
+    seal.access_log_path.write_bytes(
+        dataset_module.canonical_json_bytes(
+            {**event_without_sha, "event_sha256": rewritten_event_sha}
+        )
+    )
+    _rewrite_inventory_document(root, document)
+
+    def forbidden_issue(inventory: object) -> None:
+        raise RuntimeError("capability issued before external anchors verified")
+
+    monkeypatch.setattr(dataset_module, "_issue_inventory", forbidden_issue)
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_EXTERNAL_ANCHOR_MISMATCH"):
+        load_dataset_inventory(
+            root,
+            expected_split="test",
+            expected_archive_sha256=original_archive_sha,
+            expected_inventory_sha256=original_inventory_sha,
+            expected_test_access_event_sha256=original_event_sha,
+            expected_sealed_member_inventory_sha256=original_sealed_sha,
+            expected_threshold_lock_sha256s=original_locks,
+        )
+
+
+def test_round1_public_val_inventory_rejects_test_access_anchors(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    inventory_payload = (root / "inventory.json").read_bytes()
+
+    with pytest.raises(DatasetVerificationError, match="VAL_EXTERNAL_TEST_ANCHOR_CONFLICT"):
+        load_dataset_inventory(
+            root,
+            expected_split="val",
+            expected_archive_sha256=sha256_file(archive),
+            expected_inventory_sha256=hashlib.sha256(inventory_payload).hexdigest(),
+            expected_test_access_event_sha256="a" * 64,
+            expected_sealed_member_inventory_sha256="b" * 64,
+            expected_threshold_lock_sha256s=("c" * 64, "d" * 64),
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("extra-file", "extra-dir", "symlink", "special", "unknown-split", "hardlink"),
+)
+def test_round1_public_inventory_loader_rejects_every_unreferenced_tree_entry(
+    tmp_path: Path, mutation: str
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    inventory_payload = (root / "inventory.json").read_bytes()
+    if mutation == "extra-file":
+        (root / "extra.txt").write_text("extra\n", encoding="utf-8")
+    elif mutation == "extra-dir":
+        (root / "extra").mkdir()
+    elif mutation == "symlink":
+        (root / "extra-link").symlink_to(root / "inventory.json")
+    elif mutation == "special":
+        os.mkfifo(root / "extra.fifo")
+    elif mutation == "unknown-split":
+        (root / "images/test").mkdir()
+    else:
+        os.link(root / "inventory.json", tmp_path / "external-inventory.json")
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+        load_dataset_inventory(
+            root,
+            expected_split="val",
+            expected_archive_sha256=sha256_file(archive),
+            expected_inventory_sha256=hashlib.sha256(inventory_payload).hexdigest(),
+        )
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="fork is unavailable")
+def test_round1_inventory_capability_is_invalidated_across_fork_until_public_reload(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    inventory_sha = hashlib.sha256((root / "inventory.json").read_bytes()).hexdigest()
+    read_fd, write_fd = os.pipe()
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.close(read_fd)
+        outcome = b"ok"
+        try:
+            with pytest.raises(DatasetVerificationError, match="INVENTORY_CAPABILITY_INVALID"):
+                dataset_module._require_inventory_capability(inventory)
+            reloaded = load_dataset_inventory(
+                root,
+                expected_split="val",
+                expected_archive_sha256=sha256_file(archive),
+                expected_inventory_sha256=inventory_sha,
+            )
+            dataset_module._require_inventory_capability(reloaded)
+        except BaseException as error:
+            outcome = f"error:{type(error).__name__}:{error}".encode()
+        os.write(write_fd, outcome)
+        os.close(write_fd)
+        os._exit(0)
+    os.close(write_fd)
+    outcome = os.read(read_fd, 4096)
+    os.close(read_fd)
+    _, status = os.waitpid(child_pid, 0)
+
+    dataset_module._require_inventory_capability(inventory)
+    assert os.waitstatus_to_exitcode(status) == 0
+    assert outcome == b"ok"
