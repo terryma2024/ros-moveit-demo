@@ -59,6 +59,28 @@ _RASTERIZER = {
     "boundary": "ImageDraw.polygon fill=1",
 }
 _KINDS = {"images": ".png", "labels": ".txt", "truth": ".json"}
+_INVENTORY_KEYS = {
+    "schema_version",
+    "split",
+    "archive_sha256",
+    "sample_count",
+    "scenario_counts",
+    "rasterizer",
+    "test_access",
+    "samples",
+}
+_SAMPLE_KEYS = {
+    "formal_sample_index",
+    "split",
+    "scenario",
+    "image_relpath",
+    "label_relpath",
+    "truth_relpath",
+    "image_sha256",
+    "label_sha256",
+    "truth_sha256",
+    "truth_count",
+}
 _CAPABILITY_KEY = secrets.token_bytes(32)
 
 
@@ -1069,7 +1091,7 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
         events = _parse_canonical_access_log(path.read_bytes())
     except (OSError, DatasetVerificationError) as error:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
-    if sum(event == expected_event for event in events) != 1:
+    if events != (expected_event,):
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
 
 
@@ -1088,6 +1110,7 @@ def _verify_inventory_and_tree(
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
     if (
         not isinstance(document, Mapping)
+        or set(document) != _INVENTORY_KEYS
         or canonical_json_bytes(document) != inventory_payload
         or hashlib.sha256(inventory_payload).hexdigest() != inventory.inventory_sha256
     ):
@@ -1129,20 +1152,10 @@ def _verify_inventory_and_tree(
     ):
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
     truth_payloads: dict[str, bytes] = {}
-    expected_sample_keys = {
-        "formal_sample_index",
-        "split",
-        "scenario",
-        "image_relpath",
-        "label_relpath",
-        "truth_relpath",
-        "image_sha256",
-        "label_sha256",
-        "truth_sha256",
-        "truth_count",
-    }
+    current_image_shas: set[str] = set()
+    current_scenarios: Counter[str] = Counter()
     for sample, raw_sample in zip(inventory.samples, raw_samples, strict=True):
-        if not isinstance(raw_sample, Mapping) or set(raw_sample) != expected_sample_keys:
+        if not isinstance(raw_sample, Mapping) or set(raw_sample) != _SAMPLE_KEYS:
             raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
         expected_record = {
             "formal_sample_index": sample.formal_sample_index,
@@ -1184,8 +1197,175 @@ def _verify_inventory_and_tree(
             != raw_sample["truth_sha256"]
         ):
             raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
+        try:
+            with Image.open(BytesIO(image_payload)) as image:
+                image_size = image.size
+                image.verify()
+        except (OSError, ValueError) as error:
+            raise DatasetVerificationError("IMAGE_DECODE_FAILED") from error
+        if image_size != _EXPECTED_IMAGE_SIZE:
+            raise DatasetVerificationError("IMAGE_DIMENSIONS_INVALID")
+        if sample.image_sha256 in current_image_shas:
+            raise DatasetVerificationError("DUPLICATE_IMAGE_SHA256")
+        current_image_shas.add(sample.image_sha256)
+        truth = _read_truth_bytes(truth_payload, split)
+        truth_polygons = _truth_polygons(truth)
+        if _read_label_polygons_bytes(label_payload) != truth_polygons:
+            raise DatasetVerificationError("LABEL_TRUTH_POLYGON_MISMATCH")
+        if (
+            truth["scenario"] != sample.scenario
+            or len(truth_polygons) != sample.truth_count
+        ):
+            raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
+        current_scenarios[sample.scenario] += 1
         truth_payloads[sample.truth_relpath] = truth_payload
+    if (
+        dict(current_scenarios) != _EXPECTED_SCENARIO_COUNTS
+        or dict(current_scenarios) != dict(inventory.scenario_counts)
+    ):
+        raise DatasetVerificationError("SCENARIO_COUNTS_INVALID")
     return truth_payloads
+
+
+def load_dataset_inventory(
+    dataset_root: Path,
+    *,
+    expected_split: Split | None = None,
+) -> DatasetInventory:
+    """Load one formal persisted inventory and reissue only a local capability.
+
+    The persisted document remains the source of every serializable field.  The
+    process-local capability is minted only after strict reconstruction and is
+    never written back to disk.
+    """
+
+    _require_rasterizer_version()
+    root = Path(dataset_root)
+    if root.is_symlink() or not root.is_dir():
+        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID")
+    try:
+        root = root.resolve(strict=True)
+    except OSError as error:
+        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
+    inventory_payload = _read_regular_bound_file(root, "inventory.json")
+    try:
+        document = json.loads(inventory_payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
+    try:
+        canonical = canonical_json_bytes(document)
+    except (TypeError, ValueError) as error:
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID") from error
+    if (
+        not isinstance(document, Mapping)
+        or set(document) != _INVENTORY_KEYS
+        or canonical != inventory_payload
+    ):
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+    inventory_sha = hashlib.sha256(inventory_payload).hexdigest()
+    sidecar = _read_regular_bound_file(root, "inventory.sha256")
+    if sidecar != f"{inventory_sha}  inventory.json\n".encode("ascii"):
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+
+    split = document.get("split")
+    if split not in {"val", "test"}:
+        raise DatasetVerificationError("SPLIT_INVALID")
+    if expected_split is not None and (
+        expected_split not in {"val", "test"} or split != expected_split
+    ):
+        raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
+    if document.get("schema_version") != SCHEMA_VERSION:
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+    archive_sha = _require_sha256(
+        document.get("archive_sha256"), "INVENTORY_INTEGRITY_INVALID"
+    )
+    sample_count = document.get("sample_count")
+    scenario_counts = document.get("scenario_counts")
+    raw_samples = document.get("samples")
+    if (
+        type(sample_count) is not int
+        or sample_count != _EXPECTED_SAMPLE_COUNT
+        or not isinstance(scenario_counts, Mapping)
+        or set(scenario_counts) != set(_EXPECTED_SCENARIO_COUNTS)
+        or any(
+            type(value) is not int or value != _EXPECTED_SCENARIO_COUNTS[key]
+            for key, value in scenario_counts.items()
+        )
+        or document.get("rasterizer") != _RASTERIZER
+        or not isinstance(raw_samples, list)
+        or len(raw_samples) != _EXPECTED_SAMPLE_COUNT
+    ):
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+
+    samples: list[DatasetSampleRef] = []
+    for expected_index, raw_sample in enumerate(raw_samples):
+        if not isinstance(raw_sample, Mapping) or set(raw_sample) != _SAMPLE_KEYS:
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        if (
+            type(raw_sample.get("formal_sample_index")) is not int
+            or raw_sample.get("formal_sample_index") != expected_index
+            or raw_sample.get("split") != split
+            or raw_sample.get("scenario") not in _EXPECTED_SCENARIO_COUNTS
+            or type(raw_sample.get("truth_count")) is not int
+            or raw_sample.get("truth_count") < 0
+        ):
+            raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        for name in ("image_relpath", "label_relpath", "truth_relpath"):
+            if not isinstance(raw_sample.get(name), str):
+                raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+        _require_sha256(
+            raw_sample.get("image_sha256"), "INVENTORY_INTEGRITY_INVALID"
+        )
+        _require_sha256(
+            raw_sample.get("label_sha256"), "INVENTORY_INTEGRITY_INVALID"
+        )
+        _require_sha256(
+            raw_sample.get("truth_sha256"), "INVENTORY_INTEGRITY_INVALID"
+        )
+        samples.append(
+            DatasetSampleRef(
+                formal_sample_index=expected_index,
+                split=split,
+                scenario=raw_sample["scenario"],
+                image_relpath=raw_sample["image_relpath"],
+                label_relpath=raw_sample["label_relpath"],
+                truth_relpath=raw_sample["truth_relpath"],
+                image_sha256=raw_sample["image_sha256"],
+                truth_count=raw_sample["truth_count"],
+            )
+        )
+    if (
+        [sample.image_sha256 for sample in samples]
+        != sorted(sample.image_sha256 for sample in samples)
+        or len({sample.image_sha256 for sample in samples}) != len(samples)
+    ):
+        raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
+
+    test_access = document.get("test_access")
+    if split == "test":
+        if not isinstance(test_access, Mapping):
+            raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
+        event_sha = _require_sha256(
+            test_access.get("event_sha256"), "INVENTORY_ACCESS_CHAIN_INVALID"
+        )
+    else:
+        if test_access is not None:
+            raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
+        event_sha = None
+    inventory = DatasetInventory(
+        schema_version=SCHEMA_VERSION,
+        split=split,
+        archive_sha256=archive_sha,
+        inventory_sha256=inventory_sha,
+        dataset_root=root,
+        sample_count=sample_count,
+        scenario_counts=dict(scenario_counts),
+        samples=tuple(samples),
+        test_access_event_sha256=event_sha,
+    )
+    _issue_inventory(inventory)
+    _verify_inventory_and_tree(root, split, inventory)
+    return inventory
 
 
 def load_truth_samples(
