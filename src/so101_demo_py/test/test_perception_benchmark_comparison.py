@@ -15,6 +15,7 @@ from so101_demo.perception_benchmark.comparison import compare_platforms
 from so101_demo.perception_benchmark.contracts import (
     SCHEMA_VERSION,
     DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
     MaskRef,
     PhaseTimings,
     PredictionRecord,
@@ -22,6 +23,7 @@ from so101_demo.perception_benchmark.contracts import (
     RecordStatus,
     RunKind,
     RuntimeProvenance,
+    YOLO_MODEL_ID,
 )
 
 
@@ -71,7 +73,7 @@ def _record(
     decision: DecisionOutput,
     platform: str,
     image_sha256: str = "1" * 64,
-    model_id: str = "yolo_seg",
+    model_id: str = YOLO_MODEL_ID,
 ) -> PredictionRecord:
     selected = candidates[0].candidate_id if decision is DecisionOutput.UNIQUE else None
     rejection = {
@@ -257,13 +259,13 @@ def test_cross_platform_compares_every_grounded_sam_score(tmp_path: Path) -> Non
         (grounded_candidate(mac_root, 0.7),),
         decision=DecisionOutput.UNIQUE,
         platform="macos",
-        model_id="grounded-sam-v1",
+        model_id=GROUNDED_SAM_MODEL_ID,
     )
     linux = _record(
         (grounded_candidate(linux_root, 0.6),),
         decision=DecisionOutput.UNIQUE,
         platform="linux",
-        model_id="grounded-sam-v1",
+        model_id=GROUNDED_SAM_MODEL_ID,
     )
 
     result = compare_platforms(

@@ -15,6 +15,7 @@ from so101_demo.perception_benchmark.codec import (
 )
 from so101_demo.perception_benchmark.contracts import (
     DecisionOutput,
+    GROUNDED_SAM_MODEL_ID,
     MaskRef,
     PhaseTimings,
     PredictionRecord,
@@ -24,6 +25,7 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthInstance,
     TruthSample,
+    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.matching import MaskMatch
 from so101_demo.perception_benchmark.metrics import (
@@ -138,7 +140,7 @@ def _record(
     grounded_sam: bool = False,
 ) -> PredictionRecord:
     is_error = status is RecordStatus.ERROR
-    model_id = "grounded-sam-v1" if grounded_sam else "yolo-seg-v1"
+    model_id = GROUNDED_SAM_MODEL_ID if grounded_sam else YOLO_MODEL_ID
     return PredictionRecord(
         run_id="run-001",
         schema_version="so101-perception-benchmark/v1",

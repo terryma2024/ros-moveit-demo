@@ -25,8 +25,8 @@ from so101_demo.perception_benchmark.contracts import (
     RawCandidate,
     RecordStatus,
     RunKind,
-    TruthInstance,
     TruthSample,
+    model_id_for_name,
 )
 from so101_demo.perception_benchmark.dataset import TestSeal
 from so101_demo.perception_benchmark.decisions import (
@@ -666,12 +666,7 @@ def _validated_source_commit(value: object) -> str:
 
 
 def _candidate_model_matches(record: PredictionRecord, model: ModelName) -> bool:
-    normalized = record.model_id.lower().replace("_", "-")
-    return (
-        "yolo" in normalized
-        if model == "yolo_seg"
-        else "grounded-sam" in normalized
-    )
+    return record.model_id == model_id_for_name(model)
 
 
 def _validate_record(record: object) -> PredictionRecord:
