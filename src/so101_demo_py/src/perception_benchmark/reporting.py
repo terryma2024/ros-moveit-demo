@@ -61,7 +61,12 @@ from so101_demo.perception_benchmark.timing import ResourceSample
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
-_SCENARIOS = ("no_cup", "one_cup", "two_cups", "cup_near_bottle")
+_SCENARIOS = (
+    "no_cup",
+    "one_cup_distractors",
+    "two_cups",
+    "cup_near_bottle",
+)
 _FORMAL_PLATFORMS = ("linux", "macos")
 _FORMAL_MODELS = ("yolo_seg", "grounded_sam")
 _IOU_THRESHOLDS = tuple(value / 100.0 for value in range(50, 96, 5))
@@ -149,13 +154,105 @@ def _existing_root(name: str, value: Path) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
+class ColdProcessSample:
+    """One cold latency observation anchored to a provably fresh process."""
+
+    process_id: str
+    pid: int
+    process_started_ns: int
+    latency_ms: float
+    runtime_name: str
+    runtime_version: str
+    weights_sha256: str
+    executable_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.process_id, str) or not self.process_id:
+            raise ValueError("cold process_id must be non-empty")
+        if isinstance(self.pid, bool) or not isinstance(self.pid, int) or self.pid <= 0:
+            raise ValueError("cold pid must be a positive integer")
+        if (
+            isinstance(self.process_started_ns, bool)
+            or not isinstance(self.process_started_ns, int)
+            or self.process_started_ns < 0
+        ):
+            raise ValueError("cold process_started_ns must be nonnegative")
+        object.__setattr__(
+            self, "latency_ms", _finite_nonnegative("cold latency_ms", self.latency_ms)
+        )
+        for name in ("runtime_name", "runtime_version"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"cold {name} must be non-empty")
+        _require_sha("cold weights_sha256", self.weights_sha256)
+        _require_sha("cold executable_sha256", self.executable_sha256)
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceObservation:
+    """One phase-tagged resource observation in a run trace."""
+
+    phase: str
+    monotonic_ns: int
+    formal_sample_index: int | None
+    sample: ResourceSample
+
+    def __post_init__(self) -> None:
+        if self.phase not in {"load", "warmup", "inference"}:
+            raise ValueError("resource phase must be load, warmup, or inference")
+        if (
+            isinstance(self.monotonic_ns, bool)
+            or not isinstance(self.monotonic_ns, int)
+            or self.monotonic_ns < 0
+        ):
+            raise ValueError("resource monotonic_ns must be nonnegative")
+        if self.formal_sample_index is not None and (
+            isinstance(self.formal_sample_index, bool)
+            or not isinstance(self.formal_sample_index, int)
+            or self.formal_sample_index < 0
+        ):
+            raise ValueError("resource formal_sample_index must be null or nonnegative")
+        if not isinstance(self.sample, ResourceSample):
+            raise ValueError("resource observation sample must be a ResourceSample")
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceTrace:
+    """Ordered phase-tagged resource observations plus sampling provenance."""
+
+    sampling_frequency_hz: float
+    observations: tuple[ResourceObservation, ...]
+
+    def __post_init__(self) -> None:
+        frequency = _finite_nonnegative(
+            "sampling_frequency_hz", self.sampling_frequency_hz
+        )
+        if frequency == 0.0:
+            raise ValueError("sampling_frequency_hz must be positive")
+        object.__setattr__(self, "sampling_frequency_hz", frequency)
+        observations = tuple(self.observations)
+        if not all(isinstance(item, ResourceObservation) for item in observations):
+            raise ValueError("resource trace must contain ResourceObservation values")
+        timestamps = [item.monotonic_ns for item in observations]
+        if timestamps != sorted(timestamps) or len(timestamps) != len(set(timestamps)):
+            raise ValueError("resource observations must have unique ordered timestamps")
+        object.__setattr__(self, "observations", observations)
+
+
+@dataclass(frozen=True, slots=True)
 class RunAggregationEvidence:
-    """Task 8-only immutable evidence for one platform/model/config run."""
+    """Task 8-only immutable evidence for one platform/model/config run.
+
+    The legacy float/resource tuples exist only for explicit non-formal fixtures. Formal
+    inputs must use fresh-process samples and a phase-tagged resource trace.
+    """
 
     evidence_root: Path
     extended_record_documents: tuple[Mapping[str, object], ...]
-    cold_latency_ms: tuple[float, ...]
-    resource_samples: tuple[ResourceSample, ...]
+    cold_process_samples: tuple[ColdProcessSample, ...] = ()
+    resource_trace: ResourceTrace | None = None
+    cold_latency_ms: tuple[float, ...] = ()
+    resource_samples: tuple[ResourceSample, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "evidence_root", Path(self.evidence_root))
@@ -167,6 +264,14 @@ class RunAggregationEvidence:
             "extended_record_documents",
             tuple(_freeze(document) for document in documents),
         )
+        cold_processes = tuple(self.cold_process_samples)
+        if not all(isinstance(sample, ColdProcessSample) for sample in cold_processes):
+            raise ValueError("cold_process_samples must contain ColdProcessSample values")
+        object.__setattr__(self, "cold_process_samples", cold_processes)
+        if self.resource_trace is not None and not isinstance(
+            self.resource_trace, ResourceTrace
+        ):
+            raise ValueError("resource_trace must be a ResourceTrace or null")
         object.__setattr__(
             self,
             "cold_latency_ms",
@@ -295,8 +400,30 @@ class PerformanceSummary:
 @dataclass(frozen=True, slots=True)
 class ResourceSummary:
     peak_rss_bytes: int | None
+    peak_process_cpu_percent: float | None
     peak_device_allocated_bytes: int | None
     peak_device_reserved_bytes: int | None
+    peak_gpu_utilization_percent: float | None
+    peak_gpu_temperature_celsius: float | None
+    peak_gpu_power_watts: float | None
+    sampling_frequency_hz: float | None
+    sampling_gaps_ms: tuple[float, ...]
+    max_sampling_gap_ms: float | None
+    tool_versions: Mapping[str, tuple[str, ...]]
+    phase_summaries: Mapping[str, "ResourcePhaseSummary"]
+    unavailable_reasons: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class ResourcePhaseSummary:
+    sample_count: int
+    peak_rss_bytes: int | None
+    peak_process_cpu_percent: float | None
+    peak_device_allocated_bytes: int | None
+    peak_device_reserved_bytes: int | None
+    peak_gpu_utilization_percent: float | None
+    peak_gpu_temperature_celsius: float | None
+    peak_gpu_power_watts: float | None
     unavailable_reasons: Mapping[str, str]
 
 
@@ -382,6 +509,9 @@ class PerImageSummary:
     oom: bool
     total_ms: float
     phase_timings_ms: Mapping[str, float | None]
+    resource_observations: tuple[ResourceObservation, ...]
+    resource_sampling_frequency_hz: float | None
+    resource_sampling_gaps_ms: tuple[float, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,6 +657,7 @@ def _validate_extended_documents(
         raise ValueError("extended record document count does not match records")
     timings: list[Mapping[str, float | None]] = []
     document_resources: list[ResourceSample] = []
+    document_resource_groups: list[tuple[ResourceSample, ...]] = []
     common_fields = tuple(_record_document(records[0])) if records else ()
     for position, (record, document) in enumerate(zip(records, documents, strict=True)):
         expected = _record_document(record)
@@ -581,11 +712,85 @@ def _validate_extended_documents(
         resources = document.get("resource_samples")
         if not isinstance(resources, (list, tuple)):
             raise ValueError("extended record resource_samples must be a sequence")
-        document_resources.extend(_resource_from_document(item) for item in resources)
+        resource_group = tuple(_resource_from_document(item) for item in resources)
+        document_resource_groups.append(resource_group)
+        document_resources.extend(resource_group)
         timings.append(MappingProxyType(normalized))
-    if tuple(document_resources) != evidence.resource_samples:
+    expected_resources = (
+        tuple(item.sample for item in evidence.resource_trace.observations)
+        if evidence.resource_trace is not None
+        else evidence.resource_samples
+    )
+    if tuple(document_resources) != expected_resources:
         raise ValueError("extended resource rows do not match run resource stream")
+    if evidence.resource_trace is not None:
+        expected_groups = tuple(
+            tuple(
+                observation.sample
+                for observation in evidence.resource_trace.observations
+                if observation.formal_sample_index == record.formal_sample_index
+                or (
+                    observation.formal_sample_index is None
+                    and position == 0
+                )
+            )
+            for position, record in enumerate(records)
+        )
+        if tuple(document_resource_groups) != expected_groups:
+            raise ValueError(
+                "extended resource rows do not match their phase/image anchors"
+            )
     return tuple(timings)
+
+
+def _validate_run_evidence(
+    records: tuple[PredictionRecord, ...],
+    evidence: RunAggregationEvidence,
+    *,
+    formal: bool,
+) -> None:
+    cold = evidence.cold_process_samples
+    if formal:
+        if evidence.cold_latency_ms or evidence.resource_samples:
+            raise ValueError("formal evidence forbids unanchored fixture samples")
+        if len(cold) < 3:
+            raise ValueError("formal evidence requires at least three distinct fresh processes")
+        if evidence.resource_trace is None:
+            raise ValueError(
+                "formal resource trace requires load, warmup, and inference phases"
+            )
+    if cold:
+        process_ids = [sample.process_id for sample in cold]
+        process_anchors = [
+            (sample.pid, sample.process_started_ns) for sample in cold
+        ]
+        if len(set(process_ids)) != len(process_ids) or len(
+            set(process_anchors)
+        ) != len(process_anchors):
+            raise ValueError("cold samples must identify distinct fresh processes")
+        provenance = records[0].runtime_provenance
+        if any(
+            sample.runtime_name != provenance.runtime_name
+            or sample.runtime_version != provenance.runtime_version
+            or sample.weights_sha256 != provenance.weights_sha256
+            for sample in cold
+        ):
+            raise ValueError("cold process provenance does not match run records")
+    trace = evidence.resource_trace
+    if trace is None:
+        return
+    phases = {observation.phase for observation in trace.observations}
+    if formal and phases != {"load", "warmup", "inference"}:
+        raise ValueError(
+            "formal resource trace requires load, warmup, and inference phases"
+        )
+    valid_indices = {record.formal_sample_index for record in records}
+    for observation in trace.observations:
+        if observation.phase in {"load", "warmup"}:
+            if observation.formal_sample_index is not None:
+                raise ValueError("load/warmup resources cannot claim an image index")
+        elif observation.formal_sample_index not in valid_indices:
+            raise ValueError("inference resource observation has no record anchor")
 
 
 def _validate_record_group(
@@ -607,11 +812,15 @@ def _validate_record_group(
         raise ValueError("platform cell key must be linux or macos")
     if model not in {"yolo_seg", "grounded_sam"}:
         raise ValueError("model cell key must be yolo_seg or grounded_sam")
-    model_token = "yolo" if model == "yolo_seg" else "grounded-sam"
-    if any(
-        model_token not in record.model_id.lower().replace("_", "-")
-        for record in records
-    ):
+    def model_matches(record: PredictionRecord) -> bool:
+        normalized = record.model_id.lower().replace("_", "-")
+        if model == "yolo_seg":
+            return "yolo" in normalized
+        return "grounded-sam" in normalized or (
+            "grounding-dino" in normalized and "sam" in normalized
+        )
+
+    if any(not model_matches(record) for record in records):
         raise ValueError("typed record model does not match the model cell anchor")
     first_record = records[0]
     if any(
@@ -628,6 +837,15 @@ def _validate_record_group(
         for record in records
     ):
         raise ValueError("typed record device does not match the platform cell anchor")
+    if any(
+        (record.timed_out or record.oom)
+        and (
+            record.record_status is not RecordStatus.ERROR
+            or record.decision is not DecisionOutput.ERROR
+        )
+        for record in records
+    ):
+        raise ValueError("timeout or OOM evidence requires ERROR status and decision")
     if len({record.run_id for record in records}) != 1:
         raise ValueError("one aggregation cell must contain exactly one run_id")
     if len({record.config_sha256 for record in records}) != 1:
@@ -692,6 +910,11 @@ def _formal_matrix_gate(value: AggregationInput) -> None:
         raise ValueError("formal aggregation requires formal ThresholdLock values")
     if locks["yolo_seg"].lock_sha256 == locks["grounded_sam"].lock_sha256:
         raise ValueError("formal aggregation requires distinct model threshold locks")
+    if (
+        locks["yolo_seg"].val_inventory_sha256
+        != locks["grounded_sam"].val_inventory_sha256
+    ):
+        raise ValueError("formal threshold locks must share the same validation inventory")
     for model, lock in locks.items():
         if lock.model != model or lock.source_commit != value.source_commit:
             raise ValueError("threshold lock model/source anchor mismatch")
@@ -720,6 +943,52 @@ def _expected_evidence_keys(value: AggregationInput) -> set[tuple[str, str, str]
         for config in configs
     )
     return keys
+
+
+def _validate_formal_runtime_identities(value: AggregationInput) -> None:
+    first_by_platform_model: dict[tuple[str, str], PredictionRecord] = {}
+    for platform in _FORMAL_PLATFORMS:
+        for model in _FORMAL_MODELS:
+            groups = (
+                value.raw_frozen_records[platform][model],
+                *value.formal_records[platform][model].values(),
+            )
+            if any(not records for records in groups):
+                raise ValueError("formal matrix record groups must be non-empty")
+            first = groups[0][0]
+            signature = (
+                first.model_id,
+                first.runtime_provenance.runtime_device,
+                first.runtime_provenance.runtime_name,
+                first.runtime_provenance.runtime_version,
+                first.runtime_provenance.weights_sha256,
+                dict(first.runtime_provenance.environment),
+            )
+            if any(
+                (
+                    records[0].model_id,
+                    records[0].runtime_provenance.runtime_device,
+                    records[0].runtime_provenance.runtime_name,
+                    records[0].runtime_provenance.runtime_version,
+                    records[0].runtime_provenance.weights_sha256,
+                    dict(records[0].runtime_provenance.environment),
+                )
+                != signature
+                for records in groups[1:]
+            ):
+                raise ValueError(
+                    "formal run kinds require one frozen model/runtime identity"
+                )
+            first_by_platform_model[(platform, model)] = first
+    for model in _FORMAL_MODELS:
+        mac = first_by_platform_model[("macos", model)]
+        linux = first_by_platform_model[("linux", model)]
+        if (
+            mac.model_id != linux.model_id
+            or mac.runtime_provenance.weights_sha256
+            != linux.runtime_provenance.weights_sha256
+        ):
+            raise ValueError("formal cross-platform model asset identity must match")
 
 
 def _records_for_key(
@@ -757,6 +1026,7 @@ def _validate_input(value: AggregationInput) -> tuple[Path, dict[tuple[str, str,
         raise ValueError("truth_samples must be in deterministic formal index order")
     if value.formal:
         _formal_matrix_gate(value)
+        _validate_formal_runtime_identities(value)
     expected_keys = _expected_evidence_keys(value)
     if set(value.run_evidence) != expected_keys:
         raise ValueError("run_evidence keys do not match the raw/formal matrix")
@@ -776,8 +1046,7 @@ def _validate_input(value: AggregationInput) -> tuple[Path, dict[tuple[str, str,
         )
         evidence = value.run_evidence[key]
         _existing_root("candidate evidence_root", evidence.evidence_root)
-        if value.formal and (len(evidence.cold_latency_ms) < 3 or not evidence.resource_samples):
-            raise ValueError("formal run evidence requires cold and resource samples")
+        _validate_run_evidence(records, evidence, formal=value.formal)
         timings_by_key[key] = _validate_extended_documents(
             records,
             evidence,
@@ -813,6 +1082,7 @@ def _validate_input(value: AggregationInput) -> tuple[Path, dict[tuple[str, str,
         )
         evidence = value.oracle_evidence[key]
         _existing_root("oracle candidate evidence_root", evidence.evidence_root)
+        _validate_run_evidence(records, evidence, formal=False)
         timings_by_key[key] = _validate_extended_documents(
             records,
             evidence,
@@ -1267,6 +1537,28 @@ def _scenario_summaries(
             seed=seed,
             repetitions=repetitions,
         )
+        no_cup_outcomes: dict[tuple[int, str], int] = {}
+        for record, truth, image_input in selected:
+            if truth.instances:
+                continue
+            single_metrics = aggregate_scenarios(
+                (record,),
+                (truth,),
+                MappingProxyType(
+                    {
+                        (
+                            record.formal_sample_index,
+                            record.image_sha256,
+                        ): image_input
+                    }
+                ),
+                truth_root,
+                candidate_evidence_root=candidate_root,
+            )
+            no_cup_outcomes[(
+                record.formal_sample_index,
+                record.image_sha256,
+            )] = single_metrics[scenario].no_cup_false_positive_count
 
         def error_rate(rows: tuple[object, ...]) -> float | None:
             if not rows:
@@ -1290,15 +1582,14 @@ def _scenario_summaries(
             eligible = [row for row in rows if not row[1].instances]  # type: ignore[index]
             if not eligible:
                 return None
-            return float(
-                sum(
-                    row[0].record_status is RecordStatus.OK  # type: ignore[index]
-                    and row[0].decision  # type: ignore[index]
-                    in (DecisionOutput.UNIQUE, DecisionOutput.AMBIGUOUS)
-                    for row in eligible
-                )
-                / len(eligible)
+            false_positives = sum(
+                no_cup_outcomes[(
+                    row[0].formal_sample_index,  # type: ignore[index]
+                    row[0].image_sha256,  # type: ignore[index]
+                )]
+                for row in eligible
             )
+            return float(false_positives / len(eligible))
 
         def two_cup_recall(rows: tuple[object, ...]) -> float | None:
             eligible = [row for row in rows if len(row[1].instances) >= 2]  # type: ignore[index]
@@ -1324,7 +1615,7 @@ def _scenario_summaries(
             )
             predicted_pixels = sum(count[1] for count in counts)
             return (
-                0.0
+                None
                 if predicted_pixels == 0
                 else float(sum(count[0] for count in counts) / predicted_pixels)
             )
@@ -1381,7 +1672,11 @@ def _performance(
     evidence: RunAggregationEvidence,
     timings: tuple[Mapping[str, float | None], ...],
 ) -> PerformanceSummary:
-    cold = evidence.cold_latency_ms
+    cold = (
+        tuple(sample.latency_ms for sample in evidence.cold_process_samples)
+        if evidence.cold_process_samples
+        else evidence.cold_latency_ms
+    )
     warmed = tuple(float(row["total_ms"]) for row in timings)
     phase_percentiles = MappingProxyType(
         {
@@ -1431,17 +1726,28 @@ def _performance(
     )
 
 
-def _resource_summary(evidence: RunAggregationEvidence) -> ResourceSummary:
-    samples = evidence.resource_samples
-    fields_and_output = (
-        ("process_rss_bytes", "peak_rss_bytes"),
-        ("gpu_memory_allocated_bytes", "peak_device_allocated_bytes"),
-        ("gpu_memory_reserved_bytes", "peak_device_reserved_bytes"),
-    )
-    peaks: dict[str, int | None] = {}
+_RESOURCE_FIELDS_AND_OUTPUT = (
+    ("process_rss_bytes", "peak_rss_bytes"),
+    ("process_cpu_percent", "peak_process_cpu_percent"),
+    ("gpu_memory_allocated_bytes", "peak_device_allocated_bytes"),
+    ("gpu_memory_reserved_bytes", "peak_device_reserved_bytes"),
+    ("gpu_utilization_percent", "peak_gpu_utilization_percent"),
+    ("gpu_temperature_celsius", "peak_gpu_temperature_celsius"),
+    ("gpu_power_watts", "peak_gpu_power_watts"),
+)
+
+
+def _resource_peaks(
+    samples: tuple[ResourceSample, ...],
+) -> tuple[dict[str, int | float | None], Mapping[str, str]]:
+    peaks: dict[str, int | float | None] = {}
     reasons: dict[str, str] = {}
-    for source, output in fields_and_output:
-        values = [getattr(sample, source) for sample in samples if getattr(sample, source) is not None]
+    for source, output in _RESOURCE_FIELDS_AND_OUTPUT:
+        values = [
+            getattr(sample, source)
+            for sample in samples
+            if getattr(sample, source) is not None
+        ]
         peaks[output] = max(values) if values else None
         if not values:
             described = sorted(
@@ -1454,11 +1760,77 @@ def _resource_summary(evidence: RunAggregationEvidence) -> ResourceSummary:
             reasons[output] = (
                 "; ".join(described) if described else "resource stream unavailable"
             )
+    return peaks, MappingProxyType(reasons)
+
+
+def _resource_phase_summary(
+    samples: tuple[ResourceSample, ...],
+) -> ResourcePhaseSummary:
+    peaks, reasons = _resource_peaks(samples)
+    return ResourcePhaseSummary(
+        sample_count=len(samples),
+        peak_rss_bytes=peaks["peak_rss_bytes"],  # type: ignore[arg-type]
+        peak_process_cpu_percent=peaks["peak_process_cpu_percent"],  # type: ignore[arg-type]
+        peak_device_allocated_bytes=peaks["peak_device_allocated_bytes"],  # type: ignore[arg-type]
+        peak_device_reserved_bytes=peaks["peak_device_reserved_bytes"],  # type: ignore[arg-type]
+        peak_gpu_utilization_percent=peaks["peak_gpu_utilization_percent"],  # type: ignore[arg-type]
+        peak_gpu_temperature_celsius=peaks["peak_gpu_temperature_celsius"],  # type: ignore[arg-type]
+        peak_gpu_power_watts=peaks["peak_gpu_power_watts"],  # type: ignore[arg-type]
+        unavailable_reasons=reasons,
+    )
+
+
+def _resource_summary(evidence: RunAggregationEvidence) -> ResourceSummary:
+    trace = evidence.resource_trace
+    observations = () if trace is None else trace.observations
+    samples = (
+        tuple(item.sample for item in observations)
+        if trace is not None
+        else evidence.resource_samples
+    )
+    peaks, reasons = _resource_peaks(samples)
+    versions: dict[str, set[str]] = {}
+    for sample in samples:
+        for tool, version in sample.tool_versions.items():
+            versions.setdefault(tool, set()).add(version)
+    gaps = tuple(
+        (later.monotonic_ns - earlier.monotonic_ns) / 1_000_000.0
+        for earlier, later in zip(observations, observations[1:])
+    )
+    phase_summaries = MappingProxyType(
+        {
+            phase: _resource_phase_summary(
+                tuple(
+                    observation.sample
+                    for observation in observations
+                    if observation.phase == phase
+                )
+            )
+            for phase in ("load", "warmup", "inference")
+            if any(observation.phase == phase for observation in observations)
+        }
+    )
     return ResourceSummary(
-        peak_rss_bytes=peaks["peak_rss_bytes"],
-        peak_device_allocated_bytes=peaks["peak_device_allocated_bytes"],
-        peak_device_reserved_bytes=peaks["peak_device_reserved_bytes"],
-        unavailable_reasons=MappingProxyType(reasons),
+        peak_rss_bytes=peaks["peak_rss_bytes"],  # type: ignore[arg-type]
+        peak_process_cpu_percent=peaks["peak_process_cpu_percent"],  # type: ignore[arg-type]
+        peak_device_allocated_bytes=peaks["peak_device_allocated_bytes"],  # type: ignore[arg-type]
+        peak_device_reserved_bytes=peaks["peak_device_reserved_bytes"],  # type: ignore[arg-type]
+        peak_gpu_utilization_percent=peaks["peak_gpu_utilization_percent"],  # type: ignore[arg-type]
+        peak_gpu_temperature_celsius=peaks["peak_gpu_temperature_celsius"],  # type: ignore[arg-type]
+        peak_gpu_power_watts=peaks["peak_gpu_power_watts"],  # type: ignore[arg-type]
+        sampling_frequency_hz=(
+            None if trace is None else trace.sampling_frequency_hz
+        ),
+        sampling_gaps_ms=gaps,
+        max_sampling_gap_ms=max(gaps) if gaps else None,
+        tool_versions=MappingProxyType(
+            {
+                tool: tuple(sorted(tool_versions))
+                for tool, tool_versions in sorted(versions.items())
+            }
+        ),
+        phase_summaries=phase_summaries,
+        unavailable_reasons=reasons,
     )
 
 
@@ -1470,8 +1842,19 @@ def _per_image_rows(
     truths: tuple[TruthSample, ...],
     inputs: tuple[ImageMetricInput, ...],
     timings: tuple[Mapping[str, float | None], ...],
+    evidence: RunAggregationEvidence,
 ) -> tuple[PerImageSummary, ...]:
     rows: list[PerImageSummary] = []
+    observations = (
+        ()
+        if evidence.resource_trace is None
+        else evidence.resource_trace.observations
+    )
+    resource_gaps = tuple(
+        (later.monotonic_ns - earlier.monotonic_ns) / 1_000_000.0
+        for earlier, later in zip(observations, observations[1:])
+    )
+    first_index = records[0].formal_sample_index
     for record, truth, sample, timing in zip(records, truths, inputs, timings, strict=True):
         matched = sum(match.iou >= 0.50 for match in sample.matches)
         rows.append(
@@ -1502,6 +1885,21 @@ def _per_image_rows(
                 phase_timings_ms=MappingProxyType(
                     {name: timing[name] for name in _TIMING_FIELDS[:-1]}
                 ),
+                resource_observations=tuple(
+                    observation
+                    for observation in observations
+                    if observation.formal_sample_index == record.formal_sample_index
+                    or (
+                        observation.formal_sample_index is None
+                        and record.formal_sample_index == first_index
+                    )
+                ),
+                resource_sampling_frequency_hz=(
+                    None
+                    if evidence.resource_trace is None
+                    else evidence.resource_trace.sampling_frequency_hz
+                ),
+                resource_sampling_gaps_ms=resource_gaps,
             )
         )
     return tuple(rows)
@@ -1605,6 +2003,7 @@ def _aggregate_cell(
             value.truth_samples,
             inputs,
             timings_by_key[(platform, model, config)],
+            evidence,
         ),
     )
 
@@ -1885,8 +2284,7 @@ class MetricsAggregator:
                 summary
                 for platform in formal.values()
                 for models in platform.values()
-                for config, summary in models.items()
-                if config != "production"
+                for summary in models.values()
             ]
             lock_safe = all(
                 lock.deployable and lock.outcome == "SAFE_CALIBRATED"
@@ -2098,6 +2496,15 @@ def _per_image_rows_for_csv(summary: BenchmarkSummary) -> list[dict[str, object]
             "phase_timings_json": canonical_json_bytes(
                 _jsonable(row.phase_timings_ms)
             ).decode("utf-8").strip(),
+            "resource_observations_json": canonical_json_bytes(
+                _jsonable(row.resource_observations)
+            ).decode("utf-8").strip(),
+            "resource_sampling_frequency_hz": (
+                row.resource_sampling_frequency_hz
+            ),
+            "resource_sampling_gaps_ms_json": canonical_json_bytes(
+                row.resource_sampling_gaps_ms
+            ).decode("utf-8").strip(),
         }
         for row in summary.per_image
     ]
@@ -2125,6 +2532,22 @@ def _mismatch_rows(summary: BenchmarkSummary) -> list[dict[str, object]]:
                     "linux_decision": item.linux_decision,
                     "mac_error_type": item.mac_error_type,
                     "linux_error_type": item.linux_error_type,
+                    "mac_runtime_device": item.mac_runtime_device,
+                    "linux_runtime_device": item.linux_runtime_device,
+                    "runtime_device_pair_expected": item.runtime_device_pair_expected,
+                    "weights_sha256_equal": item.weights_sha256_equal,
+                    "runtime_name_equal": item.runtime_name_equal,
+                    "runtime_version_equal": item.runtime_version_equal,
+                    "runtime_environment_equal": item.runtime_environment_equal,
+                    "runtime_environment_identity_equal": (
+                        item.runtime_environment_identity_equal
+                    ),
+                    "mac_runtime_environment_json": canonical_json_bytes(
+                        _jsonable(item.mac_runtime_environment)
+                    ).decode("utf-8").strip(),
+                    "linux_runtime_environment_json": canonical_json_bytes(
+                        _jsonable(item.linux_runtime_environment)
+                    ).decode("utf-8").strip(),
                     "candidate_pairs_json": canonical_json_bytes(
                         _jsonable(item.candidate_pairs)
                     ).decode("utf-8").strip(),
@@ -2244,12 +2667,19 @@ class ReportWriter:
             "candidate_count", "matched_count_at_50", "true_positive",
             "false_positive", "false_negative", "exact_count", "decision",
             "error_type", "timed_out", "oom", "total_ms", "phase_timings_json",
+            "resource_observations_json",
+            "resource_sampling_frequency_hz", "resource_sampling_gaps_ms_json",
         )
         mismatch_fields = (
             "comparison", "formal_sample_index", "image_sha256", "model_id",
             "config_sha256", "run_kind", "candidate_count_equal",
             "candidate_ids_equal", "decision_equal", "error_type_equal",
             "mac_decision", "linux_decision", "mac_error_type", "linux_error_type",
+            "mac_runtime_device", "linux_runtime_device",
+            "runtime_device_pair_expected", "weights_sha256_equal",
+            "runtime_name_equal", "runtime_version_equal",
+            "runtime_environment_equal", "runtime_environment_identity_equal",
+            "mac_runtime_environment_json", "linux_runtime_environment_json",
             "candidate_pairs_json", "unmatched_mac_candidate_ids_json",
             "unmatched_linux_candidate_ids_json",
         )
@@ -2310,6 +2740,7 @@ class ReportWriter:
 __all__ = (
     "AggregationInput",
     "BenchmarkSummary",
+    "ColdProcessSample",
     "EvidenceEntry",
     "EvidenceIndex",
     "FormalMetricSummary",
@@ -2319,7 +2750,10 @@ __all__ = (
     "PerformanceSummary",
     "RawMetricSummary",
     "ReportWriter",
+    "ResourceObservation",
+    "ResourcePhaseSummary",
     "ResourceSummary",
+    "ResourceTrace",
     "RunAggregationEvidence",
     "ScenarioMetricSummary",
     "percentile",
