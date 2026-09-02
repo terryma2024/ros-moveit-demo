@@ -224,6 +224,8 @@ def maximize_mask_iou_assignment(
     truth: Sequence[TruthInstance],
     candidates: Sequence[RawCandidate],
     evidence_root: Path,
+    *,
+    candidate_evidence_root: Path | None = None,
 ) -> tuple[MaskMatch, ...]:
     """Maximize total mask IoU with stable truth and candidate ordering."""
 
@@ -233,9 +235,14 @@ def maximize_mask_iou_assignment(
     )
     if not ordered_truth or not ordered_candidates:
         return ()
+    candidate_root = (
+        evidence_root
+        if candidate_evidence_root is None
+        else candidate_evidence_root
+    )
     truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
     candidate_masks = tuple(
-        read_mask(item.mask, evidence_root) for item in ordered_candidates
+        read_mask(item.mask, candidate_root) for item in ordered_candidates
     )
     ious = np.asarray(
         [
