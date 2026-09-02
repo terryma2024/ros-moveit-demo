@@ -573,21 +573,20 @@ class _PinnedDirectory:
         if not _safe_member_path(name) or len(PurePosixPath(name).parts) != 1:
             raise _PinnedFileError("child name is unsafe")
         descriptor: int | None = None
-        created_identity: tuple[int, int] | None = None
         try:
             self._assert_identity()
             os.mkdir(name, mode=mode, dir_fd=self._descriptor)
-            created = os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
-            if not stat.S_ISDIR(created.st_mode):
+            observed = os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
+            if not stat.S_ISDIR(observed.st_mode):
                 raise _PinnedFileError("new child is not a real directory")
-            created_identity = created.st_dev, created.st_ino
+            observed_identity = observed.st_dev, observed.st_ino
             descriptor = os.open(name, _OPEN_DIRECTORY_FLAGS, dir_fd=self._descriptor)
             opened = os.fstat(descriptor)
             after = os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
             if (
                 not stat.S_ISDIR(opened.st_mode)
-                or created_identity != (opened.st_dev, opened.st_ino)
-                or created_identity != (after.st_dev, after.st_ino)
+                or observed_identity != (opened.st_dev, opened.st_ino)
+                or observed_identity != (after.st_dev, after.st_ino)
             ):
                 raise _PinnedFileError("new child changed while opening")
             if fsync_parent:
@@ -595,21 +594,17 @@ class _PinnedDirectory:
             child = _PinnedDirectory(
                 self.path / name,
                 descriptor,
-                created_identity,
+                observed_identity,
             )
             descriptor = None
             return child
         except _PinnedFileError:
             if descriptor is not None:
                 os.close(descriptor)
-            if created_identity is not None:
-                self.rmdir_owned_child(name, created_identity)
             raise
         except OSError as error:
             if descriptor is not None:
                 os.close(descriptor)
-            if created_identity is not None:
-                self.rmdir_owned_child(name, created_identity)
             raise _PinnedFileError("child directory cannot be created") from error
 
     def create_random_pinned_child(self, prefix: str) -> tuple[str, "_PinnedDirectory"]:
@@ -676,7 +671,6 @@ class _PinnedDirectory:
         ):
             raise _PinnedFileError("new file input is unsafe")
         descriptor: int | None = None
-        created_identity: tuple[int, int] | None = None
         try:
             self._assert_identity()
             descriptor = os.open(
@@ -688,7 +682,6 @@ class _PinnedDirectory:
             created = os.fstat(descriptor)
             if not stat.S_ISREG(created.st_mode) or created.st_nlink != 1:
                 raise _PinnedFileError("new file is not a single-link regular file")
-            created_identity = created.st_dev, created.st_ino
             offset = 0
             while offset < len(payload):
                 written = os.write(descriptor, payload[offset:])
@@ -712,45 +705,12 @@ class _PinnedDirectory:
                 raise _PinnedFileError("new file changed while writing")
             return persisted.st_dev, persisted.st_ino
         except _PinnedFileError:
-            if created_identity is not None:
-                self.unlink_owned_file(name, created_identity)
             raise
         except OSError as error:
-            if created_identity is not None:
-                self.unlink_owned_file(name, created_identity)
             raise _PinnedFileError("new file cannot be persisted") from error
         finally:
             if descriptor is not None:
                 os.close(descriptor)
-
-    def unlink_owned_file(self, name: str, identity: tuple[int, int]) -> None:
-        metadata = self.child_metadata(name)
-        if (
-            metadata is None
-            or not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_nlink != 1
-            or (metadata.st_dev, metadata.st_ino) != identity
-        ):
-            return
-        try:
-            os.unlink(name, dir_fd=self._descriptor)
-            self.fsync()
-        except OSError:
-            return
-
-    def rmdir_owned_child(self, name: str, identity: tuple[int, int]) -> None:
-        metadata = self.child_metadata(name)
-        if (
-            metadata is None
-            or not stat.S_ISDIR(metadata.st_mode)
-            or (metadata.st_dev, metadata.st_ino) != identity
-        ):
-            return
-        try:
-            os.rmdir(name, dir_fd=self._descriptor)
-            self.fsync()
-        except OSError:
-            return
 
     def _open_descendant_directory(self, relative_path: str) -> int:
         if relative_path and not _safe_member_path(relative_path):
@@ -2102,53 +2062,6 @@ def _metadata_identity(metadata: os.stat_result | None) -> tuple[int, int] | Non
     return metadata.st_dev, metadata.st_ino
 
 
-def _cleanup_owned_truth_staging(
-    pinned_root: _PinnedDirectory,
-    staging_name: str,
-    staging_identity: tuple[int, int],
-    split: Split,
-    split_identity: tuple[int, int] | None,
-    created_files: tuple[tuple[str, tuple[int, int]], ...],
-) -> None:
-    """Clean only an owned staging entry still bound below the pinned root."""
-    try:
-        if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
-            return
-        staging = pinned_root.open_child_directory(staging_name)
-    except _PinnedFileError:
-        return
-    try:
-        if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
-            return
-        if split_identity is not None:
-            try:
-                split_directory = staging.open_child_directory(split)
-            except _PinnedFileError:
-                return
-            with split_directory:
-                if split_directory._identity != split_identity:
-                    return
-                for filename, identity in reversed(created_files):
-                    if (
-                        _metadata_identity(pinned_root.child_metadata(staging_name))
-                        != staging_identity
-                    ):
-                        return
-                    split_directory.unlink_owned_file(filename, identity)
-            if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
-                return
-            staging.rmdir_owned_child(split, split_identity)
-    except _PinnedFileError:
-        return
-    finally:
-        staging.close()
-    try:
-        if _metadata_identity(pinned_root.child_metadata(staging_name)) == (staging_identity):
-            pinned_root.rmdir_owned_child(staging_name, staging_identity)
-    except _PinnedFileError:
-        return
-
-
 def _publish_truth_masks(
     pinned_root: _PinnedDirectory,
     split: Split,
@@ -2170,12 +2083,7 @@ def _publish_truth_masks(
         )
         return
 
-    staging_name: str | None = None
-    staging_identity: tuple[int, int] | None = None
-    split_identity: tuple[int, int] | None = None
-    created_files: list[tuple[str, tuple[int, int]]] = []
     staging: _PinnedDirectory | None = None
-    published = False
     try:
         staging_name, staging = pinned_root.create_random_pinned_child(".truth-masks-stage-")
         staging_identity = staging._identity
@@ -2184,16 +2092,14 @@ def _publish_truth_masks(
             mode=0o700,
             fsync_parent=False,
         )
-        split_identity = split_directory._identity
         with split_directory:
             for relative_path, document, _ in mask_artifacts:
                 filename = relative_path.name
-                identity = split_directory.write_new_file(filename, canonical_json_bytes(document))
-                created_files.append((filename, identity))
+                split_directory.write_new_file(filename, canonical_json_bytes(document))
             split_directory.fsync()
         staging.fsync()
         if _metadata_identity(pinned_root.child_metadata(staging_name)) != (staging_identity):
-            raise _PinnedFileError("owned staging entry moved before publication")
+            raise _PinnedFileError("bound staging entry moved before publication")
         try:
             _rename_directory_noreplace(
                 pinned_root._descriptor,
@@ -2209,29 +2115,18 @@ def _publish_truth_masks(
         ):
             raise _PinnedFileError("published truth mask identity is invalid")
         pinned_root.fsync()
-        published = True
     except _PinnedFileError as error:
         raise DatasetVerificationError("TRUTH_MASK_PUBLISH_FAILED") from error
     finally:
         if staging is not None:
             staging.close()
-        if not published and staging_name is not None and staging_identity is not None:
-            _cleanup_owned_truth_staging(
-                pinned_root,
-                staging_name,
-                staging_identity,
-                split,
-                split_identity,
-                tuple(created_files),
-            )
 
-    if published:
-        _verify_complete_truth_mask_tree(
-            pinned_root,
-            inventory,
-            truth_payloads,
-            samples,
-        )
+    _verify_complete_truth_mask_tree(
+        pinned_root,
+        inventory,
+        truth_payloads,
+        samples,
+    )
 
 
 def load_truth_samples(
