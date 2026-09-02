@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -2059,3 +2060,88 @@ def test_round1_public_run_loader_rejects_hardlinked_terminal_file(
 
     with pytest.raises(RunIntegrityError, match="RUN_EVIDENCE_FILE_UNSAFE"):
         load_verified_run_evidence(output_root, inventory, _evidence_expectation())
+
+
+@pytest.mark.parametrize(
+    "alias_base",
+    (Path("/tmp"), Path(tempfile.gettempdir())),
+    ids=("tmp-alias", "default-var-alias"),
+)
+def test_round2_public_run_loader_accepts_macos_system_ancestor_aliases(
+    alias_base: Path,
+) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="so101-public-run-", dir=alias_base
+    ) as temporary:
+        workspace = Path(temporary)
+        inventory = _synthetic_inventory(workspace, 200)
+        output_root = workspace / "run"
+        output_root.mkdir()
+        DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+            _spec(inventory, output_root)
+        )
+
+        loaded = load_verified_run_evidence(
+            output_root, inventory, _evidence_expectation()
+        )
+
+        assert loaded.evidence_root == output_root.resolve(strict=True)
+        assert len(loaded.records) == 200
+
+
+def test_round2_public_run_loader_rejects_final_root_symlink(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    linked_root = tmp_path / "linked-run"
+    linked_root.symlink_to(output_root, target_is_directory=True)
+
+    with pytest.raises(RunIntegrityError, match="RUN_EVIDENCE_ROOT_INVALID"):
+        load_verified_run_evidence(
+            linked_root, inventory, _evidence_expectation()
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error_code"),
+    (
+        ("runtime-environment", "RECORD_SCHEMA_INVALID"),
+        ("tool-versions", "RECORD_RESOURCE_INVALID"),
+        ("unavailable-reasons", "RECORD_RESOURCE_INVALID"),
+    ),
+)
+def test_round2_public_run_loader_rejects_normalizable_nested_record_mappings(
+    tmp_path: Path, mutation: str, error_code: str
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    record_path = output_root / "records/000199.json"
+    document = json.loads(record_path.read_bytes())
+    if mutation == "runtime-environment":
+        document["runtime_provenance"]["environment"] = [
+            ["fixture", "runner"],
+            ["torch", "2.8.0"],
+        ]
+    elif mutation == "tool-versions":
+        document["resource_samples"][0]["tool_versions"] = [["fixture", "1"]]
+    else:
+        reasons = document["resource_samples"][0]["unavailable_reasons"]
+        document["resource_samples"][0]["unavailable_reasons"] = list(
+            reasons.items()
+        )
+    atomic_write_json(record_path, document)
+    _rewrite_terminal_anchors(output_root)
+
+    with pytest.raises(RunIntegrityError, match=error_code):
+        load_verified_run_evidence(
+            output_root, inventory, _evidence_expectation()
+        )

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tarfile
+import tempfile
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timezone
 from io import BytesIO
@@ -1166,3 +1167,111 @@ def test_round1_inventory_capability_is_invalidated_across_fork_until_public_rel
     dataset_module._require_inventory_capability(inventory)
     assert os.waitstatus_to_exitcode(status) == 0
     assert outcome == b"ok"
+
+
+@pytest.mark.parametrize(
+    "alias_base",
+    (Path("/tmp"), Path(tempfile.gettempdir())),
+    ids=("tmp-alias", "default-var-alias"),
+)
+def test_round2_public_dataset_loader_accepts_macos_system_ancestor_aliases(
+    alias_base: Path,
+) -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="so101-public-dataset-", dir=alias_base
+    ) as temporary:
+        workspace = Path(temporary)
+        archive = build_fixture_archive(workspace, include_val=True)
+        root = workspace / "val-open"
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive, sha256_file(archive), root, "val", None
+        )
+
+        loaded = load_dataset_inventory(
+            root, **_public_inventory_anchors(root, "val")
+        )
+
+        assert loaded.dataset_root == root.resolve(strict=True)
+        dataset_module._require_inventory_capability(loaded)
+
+
+def test_round2_pinned_reader_rejects_descendant_modified_during_same_fd_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "pinned"
+    root.mkdir()
+    target = root / "payload.bin"
+    target.write_bytes(b"stable payload")
+    real_read = dataset_module.os.read
+    modified = False
+
+    def mutate_after_read(descriptor: int, count: int) -> bytes:
+        nonlocal modified
+        payload = real_read(descriptor, count)
+        if payload and not modified:
+            modified = True
+            target.write_bytes(payload + b" drift")
+        return payload
+
+    monkeypatch.setattr(dataset_module.os, "read", mutate_after_read)
+    with dataset_module._PinnedDirectory.open(root) as pinned:
+        with pytest.raises(ValueError, match="changed during pinned read"):
+            pinned.read_file("payload.bin")
+
+
+def test_round2_public_dataset_loader_accepts_complete_derived_truth_tree_and_reuses_it(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    anchors = _public_inventory_anchors(root, "val")
+    first_truths = load_truth_samples(root, "val", inventory)
+
+    reloaded = load_dataset_inventory(root, **anchors)
+    second_truths = load_truth_samples(root, "val", reloaded)
+
+    assert second_truths == first_truths
+    dataset_module._require_inventory_capability(reloaded)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("partial", "missing", "extra", "wrong-split", "symlink", "hardlink", "tamper"),
+)
+def test_round2_public_dataset_loader_rejects_incomplete_or_tampered_truth_mask_tree(
+    tmp_path: Path, mutation: str
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    anchors = _public_inventory_anchors(root, "val")
+    load_truth_samples(root, "val", inventory)
+    mask_root = root / "truth_masks/val"
+    mask_paths = sorted(mask_root.iterdir())
+    first_mask = mask_paths[0]
+    if mutation == "partial":
+        first_mask.unlink()
+    elif mutation == "missing":
+        mask_root.rename(tmp_path / "removed-val-masks")
+    elif mutation == "extra":
+        (mask_root / "extra.json").write_text("{}\n", encoding="utf-8")
+    elif mutation == "wrong-split":
+        mask_root.rename(mask_root.parent / "test")
+    elif mutation == "symlink":
+        outside = tmp_path / "outside-mask.json"
+        outside.write_bytes(first_mask.read_bytes())
+        first_mask.unlink()
+        first_mask.symlink_to(outside)
+    elif mutation == "hardlink":
+        os.link(first_mask, tmp_path / "external-mask.json")
+    else:
+        first_mask.chmod(0o644)
+        first_mask.write_bytes(first_mask.read_bytes() + b"tamper")
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+        load_dataset_inventory(root, **anchors)
