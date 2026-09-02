@@ -164,6 +164,12 @@ def _validated_pairs(
         raise ValueError("record formal_sample_index values must be unique")
     if len(truths_by_index) != len(truth_items):
         raise ValueError("truth formal_sample_index values must be unique")
+    record_image_shas = [record.image_sha256 for record in record_items]
+    truth_image_shas = [truth.image_sha256 for truth in truth_items]
+    if len(record_image_shas) != len(set(record_image_shas)):
+        raise ValueError("record image_sha256 values must be unique")
+    if len(truth_image_shas) != len(set(truth_image_shas)):
+        raise ValueError("truth image_sha256 values must be unique")
     if set(records_by_index) != set(truths_by_index):
         raise ValueError("records and truths must cover the same images")
 
@@ -277,21 +283,49 @@ def non_cup_leakage_ratio(
 
 
 def _validated_image_inputs(
-    image_inputs: Sequence[ImageMetricInput],
+    image_inputs: Mapping[tuple[int, str], ImageMetricInput],
     pairs: Sequence[tuple[PredictionRecord, TruthSample]],
-) -> Mapping[int, ImageMetricInput]:
-    items = tuple(image_inputs)
-    if not all(isinstance(item, ImageMetricInput) for item in items):
-        raise ValueError("matches must contain ImageMetricInput values")
-    by_index = {item.formal_sample_index: item for item in items}
-    if len(by_index) != len(items):
-        raise ValueError("match formal_sample_index values must be unique")
-    expected_indices = {record.formal_sample_index for record, _ in pairs}
-    if set(by_index) != expected_indices:
-        raise ValueError("records, truths, and matches must cover the same images")
+) -> Mapping[tuple[int, str], ImageMetricInput]:
+    if not isinstance(image_inputs, Mapping):
+        raise ValueError(
+            "matches must map composite image identities to ImageMetricInput values"
+        )
+    entries = tuple(image_inputs.items())
+    by_identity: dict[tuple[int, str], ImageMetricInput] = {}
+    for identity, item in entries:
+        if (
+            not isinstance(identity, tuple)
+            or len(identity) != 2
+            or isinstance(identity[0], bool)
+            or not isinstance(identity[0], int)
+            or identity[0] < 0
+            or not isinstance(identity[1], str)
+        ):
+            raise ValueError(
+                "matches must use (formal_sample_index, image_sha256) keys"
+            )
+        if identity in by_identity:
+            raise ValueError("match composite image identities must be unique")
+        if not isinstance(item, ImageMetricInput):
+            raise ValueError("matches must contain ImageMetricInput values")
+        by_identity[identity] = item
+
+    expected_identities = {
+        (record.formal_sample_index, record.image_sha256)
+        for record, _ in pairs
+    }
+    if set(by_identity) != expected_identities:
+        raise ValueError(
+            "records, truths, and matches must cover the same composite image identities"
+        )
 
     for record, truth in pairs:
-        item = by_index[record.formal_sample_index]
+        identity = (record.formal_sample_index, record.image_sha256)
+        item = by_identity[identity]
+        if item.formal_sample_index != identity[0]:
+            raise ValueError(
+                "match formal_sample_index does not match its composite identity"
+            )
         if item.truth_count != len(truth.instances):
             raise ValueError("match truth_count does not match truth sample")
         if item.candidate_count != len(record.raw_candidates):
@@ -304,7 +338,7 @@ def _validated_image_inputs(
             raise ValueError("match truth_instance_id is outside the aligned image")
         if any(match.candidate_id not in candidate_ids for match in item.matches):
             raise ValueError("match candidate_id is outside the aligned image")
-    return MappingProxyType(by_index)
+    return MappingProxyType(by_identity)
 
 
 @dataclass(slots=True)
@@ -322,7 +356,7 @@ class _ScenarioAccumulator:
 def aggregate_scenarios(
     records: Sequence[PredictionRecord],
     truths: Sequence[TruthSample],
-    matches: Sequence[ImageMetricInput],
+    matches: Mapping[tuple[int, str], ImageMetricInput],
     evidence_root: Path,
 ) -> Mapping[str, ScenarioMetrics]:
     """Aggregate fail-closed per-scenario safety and mask leakage metrics."""
@@ -335,10 +369,12 @@ def aggregate_scenarios(
         raise ValueError("evidence_root must be an existing directory")
 
     pairs = _validated_pairs(records, truths)
-    inputs_by_index = _validated_image_inputs(matches, pairs)
+    inputs_by_identity = _validated_image_inputs(matches, pairs)
     accumulators: dict[str, _ScenarioAccumulator] = {}
     for record, truth in pairs:
-        image_input = inputs_by_index[record.formal_sample_index]
+        image_input = inputs_by_identity[
+            (record.formal_sample_index, record.image_sha256)
+        ]
         accumulator = accumulators.setdefault(
             truth.scenario, _ScenarioAccumulator()
         )
