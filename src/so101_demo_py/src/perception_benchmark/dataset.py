@@ -562,6 +562,7 @@ def _require_triplets(
 
 def _sealed_test_document(
     classified: list[_ArchiveMember],
+    archive_sha256: str,
 ) -> dict[str, object]:
     test_members = sorted(
         (member for member in classified if member.split == "test"),
@@ -570,6 +571,9 @@ def _sealed_test_document(
     return {
         "schema_version": SCHEMA_VERSION,
         "split": "test",
+        "archive_sha256": _require_sha256(
+            archive_sha256, "DATASET_ARCHIVE_SHA256_INVALID"
+        ),
         "members": [
             {
                 "path": member.archive_path,
@@ -581,9 +585,11 @@ def _sealed_test_document(
     }
 
 
-def _sealed_test_sha(classified: list[_ArchiveMember]) -> str:
+def _sealed_test_sha(
+    classified: list[_ArchiveMember], archive_sha256: str
+) -> str:
     return hashlib.sha256(
-        canonical_json_bytes(_sealed_test_document(classified))
+        canonical_json_bytes(_sealed_test_document(classified, archive_sha256))
     ).hexdigest()
 
 
@@ -619,7 +625,9 @@ class DatasetArchiveVerifier:
             _require_triplets(
                 snapshot.classified, "test", _EXPECTED_SAMPLE_COUNT
             )
-            sealed_document = _sealed_test_document(snapshot.classified)
+            sealed_document = _sealed_test_document(
+                snapshot.classified, snapshot.expected_sha256
+            )
             safe_member_count = len(snapshot.members)
         sealed_sha = atomic_write_json(sealed_path, sealed_document)
         return ArchiveInventory(
@@ -662,7 +670,10 @@ class DatasetArchiveVerifier:
                 seal_for_inventory = None
                 if split == "test":
                     _validate_test_chain(
-                        test_seal, _sealed_test_sha(snapshot.classified)
+                        test_seal,
+                        _sealed_test_sha(
+                            snapshot.classified, snapshot.expected_sha256
+                        ),
                     )
                     seal_for_inventory = test_seal
                 snapshot.copy_split(staging_root, triplets)
@@ -833,6 +844,9 @@ def _inventory_capability(inventory: DatasetInventory) -> str:
         inventory.archive_sha256,
         inventory.inventory_sha256,
         inventory.dataset_root.resolve(),
+        inventory.sample_count,
+        tuple(sorted(inventory.scenario_counts.items())),
+        inventory.samples,
         inventory.test_access_event_sha256,
     )
 
@@ -1085,7 +1099,8 @@ def _verify_inventory_and_tree(
         document.get("schema_version") != inventory.schema_version
         or document.get("split") != split
         or document.get("archive_sha256") != inventory.archive_sha256
-        or document.get("sample_count") != _EXPECTED_SAMPLE_COUNT
+        or document.get("sample_count") != inventory.sample_count
+        or inventory.sample_count != _EXPECTED_SAMPLE_COUNT
         or document.get("rasterizer") != _RASTERIZER
         or document.get("scenario_counts") != dict(inventory.scenario_counts)
     ):
@@ -1271,8 +1286,8 @@ def load_truth_samples(
             staged_path = staging / relative_path.name
             atomic_write_json(staged_path, document)
             staged_path.chmod(0o444)
+        parent_created = not target_parent.exists()
         target_parent.mkdir(mode=0o700, exist_ok=True)
-        parent_created = True
         if target.exists() or target.is_symlink():
             raise DatasetVerificationError("TRUTH_MASK_ALREADY_EXISTS")
         os.replace(staging, target)
