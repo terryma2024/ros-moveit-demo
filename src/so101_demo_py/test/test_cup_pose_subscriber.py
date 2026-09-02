@@ -1,6 +1,9 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _pose_message(
@@ -181,8 +184,6 @@ def test_main_exits_cleanly_on_sigint_without_double_shutting_down_rclpy(
 
 
 def test_setup_registers_the_cup_pose_subscriber_executable() -> None:
-    from pathlib import Path
-
-    source = Path("src/so101_demo_py/setup.py").read_text(encoding="utf-8")
+    source = (PACKAGE_ROOT / "setup.py").read_text(encoding="utf-8")
 
     assert "cup_pose_subscriber = so101_demo.cli.cup_pose_subscriber:main" in source
