@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import sys
 import tarfile
 import tempfile
 from dataclasses import FrozenInstanceError, replace
@@ -119,16 +121,12 @@ def build_fixture_archive(
                 prefix = "dataset"
                 if not semantic_payloads:
                     image_payload = b"not-a-png" + payload_marker
-                    truth_payload = (
-                        b"not-json: scenario polygon truth_count" + payload_marker
-                    )
+                    truth_payload = b"not-json: scenario polygon truth_count" + payload_marker
                     label_payload = b"not-a-label" + payload_marker
                 else:
                     image_index = 0 if duplicate_image_sha else index
                     image_payload = _png_bytes(
-                        image_index
-                        + image_offset
-                        + (1000 if split == "val" else 0),
+                        image_index + image_offset + (1000 if split == "val" else 0),
                         width=image_size[0],
                         height=image_size[1],
                     )
@@ -143,8 +141,7 @@ def build_fixture_archive(
                         document["seed"] = 200000 + index
                         document["split"] = "val"
                         truth_payload = (
-                            json.dumps(document, sort_keys=True, separators=(",", ":"))
-                            + "\n"
+                            json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n"
                         ).encode()
                     if label_mismatch and index == 0:
                         label_payload = b"0 0.1 0.1 0.2 0.1 0.15 0.2\n"
@@ -188,9 +185,7 @@ def _verified_unlocked_seal(
     ).unlock(
         tmp_path / f"yolo-lock{suffix}.json",
         tmp_path / f"grounded-lock{suffix}.json",
-        verify_lock=lambda path: (
-            "b" * 64 if path.name.startswith("yolo-lock") else "c" * 64
-        ),
+        verify_lock=lambda path: "b" * 64 if path.name.startswith("yolo-lock") else "c" * 64,
     )
 
 
@@ -274,9 +269,7 @@ def test_archive_hash_mismatch_fails_before_tar_inspection(tmp_path: Path) -> No
     archive.write_bytes(b"opaque")
 
     with pytest.raises(DatasetVerificationError, match="DATASET_ARCHIVE_HASH_MISMATCH"):
-        DatasetArchiveVerifier().verify_archive(
-            archive, "0" * 64, tmp_path / "sealed.json"
-        )
+        DatasetArchiveVerifier().verify_archive(archive, "0" * 64, tmp_path / "sealed.json")
 
 
 def test_archive_verification_refuses_existing_seal_output(tmp_path: Path) -> None:
@@ -285,9 +278,7 @@ def test_archive_verification_refuses_existing_seal_output(tmp_path: Path) -> No
     sealed.write_text("preserve-me\n", encoding="utf-8")
 
     with pytest.raises(DatasetVerificationError, match="OUTPUT_ROOT_ALREADY_EXISTS"):
-        DatasetArchiveVerifier().verify_archive(
-            archive, sha256_file(archive), sealed
-        )
+        DatasetArchiveVerifier().verify_archive(archive, sha256_file(archive), sealed)
 
     assert sealed.read_text(encoding="utf-8") == "preserve-me\n"
 
@@ -536,12 +527,8 @@ def test_test_extraction_rejects_cross_archive_seal_before_semantics(
     second_root = tmp_path / "second"
     first_root.mkdir()
     second_root.mkdir()
-    first = build_fixture_archive(
-        first_root, semantic_payloads=False, payload_marker=b"-first"
-    )
-    second = build_fixture_archive(
-        second_root, semantic_payloads=False, payload_marker=b"-second"
-    )
+    first = build_fixture_archive(first_root, semantic_payloads=False, payload_marker=b"-first")
+    second = build_fixture_archive(second_root, semantic_payloads=False, payload_marker=b"-second")
     seal = _verified_unlocked_seal(first, tmp_path)
 
     with pytest.raises(DatasetVerificationError, match="TEST_SEAL_ARCHIVE_MISMATCH"):
@@ -657,9 +644,7 @@ def test_archive_path_replacement_during_open_fails_atomically(
     first_root.mkdir()
     second_root.mkdir()
     archive = build_fixture_archive(first_root, include_val=True)
-    replacement = build_fixture_archive(
-        second_root, include_val=True, image_offset=5000
-    )
+    replacement = build_fixture_archive(second_root, include_val=True, image_offset=5000)
     expected_sha = sha256_file(archive)
     real_tar_open = tarfile.open
     replaced = False
@@ -674,9 +659,7 @@ def test_archive_path_replacement_during_open_fails_atomically(
 
     monkeypatch.setattr(dataset_module.tarfile, "open", open_then_replace)
 
-    with pytest.raises(
-        DatasetVerificationError, match="ARCHIVE_CHANGED_DURING_VERIFICATION"
-    ):
+    with pytest.raises(DatasetVerificationError, match="ARCHIVE_CHANGED_DURING_VERIFICATION"):
         DatasetArchiveVerifier().verify_and_extract_split(
             archive,
             expected_sha,
@@ -712,17 +695,15 @@ def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
 
     assert not (tmp_path / "val-open/truth_masks/val").exists()
     assert not any(
-        path.name.startswith(".truth-masks-")
-        for path in (tmp_path / "val-open").iterdir()
+        path.name.startswith(".truth-masks-") for path in (tmp_path / "val-open").iterdir()
     )
     monkeypatch.setattr(dataset_module.os, "write", real_write)
     truths = load_truth_samples(tmp_path / "val-open", "val", inventory)
     assert len(truths) == 200
 
 
-def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
+def test_truth_mask_publication_rejects_preexisting_empty_destination(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     archive = build_fixture_archive(tmp_path, include_val=True)
     dataset_root = tmp_path / "val-open"
@@ -731,30 +712,18 @@ def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
     )
     mask_parent = dataset_root / "truth_masks"
     mask_parent.mkdir()
-    real_replace = dataset_module.os.replace
+    metadata = mask_parent.stat()
 
-    def fail_publication(
-        source: object,
-        destination: object,
-        *args: object,
-        **kwargs: object,
-    ) -> None:
-        if destination == "val" and "dst_dir_fd" in kwargs:
-            raise OSError("injected final mask publication failure")
-        real_replace(source, destination, *args, **kwargs)
-
-    monkeypatch.setattr(dataset_module.os, "replace", fail_publication)
-    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
         load_truth_samples(dataset_root, "val", inventory)
 
-    assert mask_parent.is_dir()
+    current = mask_parent.stat()
+    assert (current.st_dev, current.st_ino) == (metadata.st_dev, metadata.st_ino)
     assert not (mask_parent / "val").exists()
-    assert not any(
-        path.name.startswith(".truth-masks-") for path in dataset_root.iterdir()
-    )
+    assert not any(path.name.startswith(".truth-masks-") for path in dataset_root.iterdir())
 
 
-def test_truth_mask_publish_failure_preserves_between_check_creator_parent(
+def test_round4_truth_mask_publication_never_replaces_racing_empty_destination(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -764,27 +733,32 @@ def test_truth_mask_publish_failure_preserves_between_check_creator_parent(
         archive, sha256_file(archive), dataset_root, "val", None
     )
     mask_parent = dataset_root / "truth_masks"
-    real_mkdir = dataset_module.os.mkdir
-    injected = False
+    real_fsync = dataset_module.os.fsync
+    destination_identity: tuple[int, int] | None = None
 
-    def concurrent_creator_then_mkdir(
-        path: object,
-        mode: int = 0o777,
-        *,
-        dir_fd: int | None = None,
+    def create_empty_destination_after_staging_sync(
+        descriptor: int,
     ) -> None:
-        nonlocal injected
-        if path == "truth_masks" and dir_fd is not None and not injected:
-            injected = True
-            real_mkdir(path, mode=mode, dir_fd=dir_fd)
-        real_mkdir(path, mode=mode, dir_fd=dir_fd)
+        nonlocal destination_identity
+        real_fsync(descriptor)
+        try:
+            names = os.listdir(descriptor)
+        except OSError:
+            return
+        if destination_identity is None and names == ["val"] and not mask_parent.exists():
+            mask_parent.mkdir()
+            metadata = mask_parent.stat()
+            destination_identity = metadata.st_dev, metadata.st_ino
 
-    monkeypatch.setattr(dataset_module.os, "mkdir", concurrent_creator_then_mkdir)
-    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+    monkeypatch.setattr(dataset_module.os, "fsync", create_empty_destination_after_staging_sync)
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
         load_truth_samples(dataset_root, "val", inventory)
 
+    assert destination_identity is not None
     assert mask_parent.is_dir()
-    assert not (mask_parent / "val").exists()
+    metadata = mask_parent.stat()
+    assert (metadata.st_dev, metadata.st_ino) == destination_identity
+    assert list(mask_parent.iterdir()) == []
 
 
 def test_val_rejects_unlocked_test_seal_without_creating_output(
@@ -807,8 +781,7 @@ def test_val_rejects_unlocked_test_seal_without_creating_output(
 
 def _rewrite_inventory_document(root: Path, document: dict[str, object]) -> None:
     payload = (
-        json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        + "\n"
+        json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
     ).encode("utf-8")
     (root / "inventory.json").chmod(0o644)
     (root / "inventory.json").write_bytes(payload)
@@ -832,12 +805,8 @@ def _public_inventory_anchors(root: Path, split: str) -> dict[str, object]:
         anchors.update(
             {
                 "expected_test_access_event_sha256": access["event_sha256"],
-                "expected_sealed_member_inventory_sha256": access[
-                    "sealed_member_inventory_sha256"
-                ],
-                "expected_threshold_lock_sha256s": tuple(
-                    access["threshold_lock_sha256s"]
-                ),
+                "expected_sealed_member_inventory_sha256": access["sealed_member_inventory_sha256"],
+                "expected_threshold_lock_sha256s": tuple(access["threshold_lock_sha256s"]),
             }
         )
     return anchors
@@ -962,9 +931,7 @@ def test_public_inventory_loader_rechecks_current_bytes_and_semantics(
         (root / "inventory.json").read_bytes()
     ).hexdigest()
 
-    with pytest.raises(
-        DatasetVerificationError, match="LABEL_TRUTH_POLYGON_MISMATCH"
-    ):
+    with pytest.raises(DatasetVerificationError, match="LABEL_TRUTH_POLYGON_MISMATCH"):
         load_dataset_inventory(root, **anchors)
 
 
@@ -976,9 +943,7 @@ def test_public_inventory_loader_binds_loaded_object_to_original_tree(
     DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), original, "val", None
     )
-    inventory = load_dataset_inventory(
-        original, **_public_inventory_anchors(original, "val")
-    )
+    inventory = load_dataset_inventory(original, **_public_inventory_anchors(original, "val"))
     moved = tmp_path / "moved-val-open"
     original.rename(moved)
 
@@ -1034,15 +999,11 @@ def test_round1_public_inventory_loader_rejects_coherent_self_attested_rewrite_b
         archive, sha256_file(archive), root, "test", seal
     )
     assert seal.access_grant is not None
-    original_inventory_sha = hashlib.sha256(
-        (root / "inventory.json").read_bytes()
-    ).hexdigest()
+    original_inventory_sha = hashlib.sha256((root / "inventory.json").read_bytes()).hexdigest()
     document = json.loads((root / "inventory.json").read_bytes())
     original_archive_sha = document["archive_sha256"]
     original_event_sha = document["test_access"]["event_sha256"]
-    original_sealed_sha = document["test_access"][
-        "sealed_member_inventory_sha256"
-    ]
+    original_sealed_sha = document["test_access"]["sealed_member_inventory_sha256"]
     original_locks = tuple(document["test_access"]["threshold_lock_sha256s"])
     document["archive_sha256"] = "d" * 64
     document["test_access"]["sealed_member_inventory_sha256"] = "e" * 64
@@ -1185,9 +1146,7 @@ def test_round1_inventory_capability_is_invalidated_across_fork_until_public_rel
 def test_round2_public_dataset_loader_accepts_macos_system_ancestor_aliases(
     alias_base: Path,
 ) -> None:
-    with tempfile.TemporaryDirectory(
-        prefix="so101-public-dataset-", dir=alias_base
-    ) as temporary:
+    with tempfile.TemporaryDirectory(prefix="so101-public-dataset-", dir=alias_base) as temporary:
         workspace = Path(temporary)
         archive = build_fixture_archive(workspace, include_val=True)
         root = workspace / "val-open"
@@ -1195,9 +1154,7 @@ def test_round2_public_dataset_loader_accepts_macos_system_ancestor_aliases(
             archive, sha256_file(archive), root, "val", None
         )
 
-        loaded = load_dataset_inventory(
-            root, **_public_inventory_anchors(root, "val")
-        )
+        loaded = load_dataset_inventory(root, **_public_inventory_anchors(root, "val"))
 
         assert loaded.dataset_root == root.resolve(strict=True)
         dataset_module._require_inventory_capability(loaded)
@@ -1316,7 +1273,7 @@ def test_round3_truth_loader_rejects_symlink_mask_parent_without_touching_outsid
     assert not (outside / "val").exists()
 
 
-def test_round3_truth_loader_fails_closed_if_mask_parent_name_is_swapped(
+def test_round4_truth_loader_does_not_chase_moved_or_substituted_staging(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1325,48 +1282,73 @@ def test_round3_truth_loader_fails_closed_if_mask_parent_name_is_swapped(
     inventory = DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), root, "val", None
     )
-    mask_parent = root / "truth_masks"
-    mask_parent.mkdir()
-    held_parent = root / "truth_masks-held"
     outside = tmp_path / "outside"
     outside.mkdir()
-    sentinel = outside / "sentinel.bin"
-    sentinel.write_bytes(b"outside must remain unchanged")
-    real_replace = dataset_module.os.replace
-    swapped = False
+    moved = outside / "moved-owned-staging"
+    real_fsync = dataset_module.os.fsync
+    staging_name: str | None = None
+    substitute_identity: tuple[int, int] | None = None
+    moved_snapshot: tuple[tuple[str, bytes], ...] | None = None
 
-    def swap_parent_before_publish(
-        source: object,
-        destination: object,
-        *args: object,
-        **kwargs: object,
-    ) -> None:
-        nonlocal swapped
-        descriptor_relative_publish = (
-            destination == "val" and "dst_dir_fd" in kwargs
+    def move_and_substitute_after_staging_sync(descriptor: int) -> None:
+        nonlocal moved_snapshot, staging_name, substitute_identity
+        real_fsync(descriptor)
+        try:
+            names = os.listdir(descriptor)
+        except OSError:
+            return
+        if staging_name is not None or names != ["val"] or (root / "truth_masks").exists():
+            return
+        metadata = os.fstat(descriptor)
+        candidates = [
+            path
+            for path in root.iterdir()
+            if path.name.startswith(".truth-masks-")
+            and (path.stat().st_dev, path.stat().st_ino) == (metadata.st_dev, metadata.st_ino)
+        ]
+        assert len(candidates) == 1
+        staging_path = candidates[0]
+        staging_name = staging_path.name
+        staging_path.rename(moved)
+        staging_path.mkdir()
+        marker = staging_path / "unowned-marker.bin"
+        marker.write_bytes(b"do not delete substituted inode")
+        substitute = staging_path.stat()
+        substitute_identity = substitute.st_dev, substitute.st_ino
+        moved_snapshot = tuple(
+            (path.relative_to(moved).as_posix(), path.read_bytes())
+            for path in sorted(moved.rglob("*"))
+            if path.is_file()
         )
-        if not swapped and (
-            Path(destination) == mask_parent / "val"
-            or descriptor_relative_publish
-        ):
-            swapped = True
-            mask_parent.rename(held_parent)
-            mask_parent.symlink_to(outside, target_is_directory=True)
-        real_replace(source, destination, *args, **kwargs)
 
-    monkeypatch.setattr(dataset_module.os, "replace", swap_parent_before_publish)
+    monkeypatch.setattr(dataset_module.os, "fsync", move_and_substitute_after_staging_sync)
 
-    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
         load_truth_samples(root, "val", inventory)
 
-    assert sentinel.read_bytes() == b"outside must remain unchanged"
-    assert not (outside / "val").exists()
+    assert staging_name is not None
+    assert substitute_identity is not None
+    assert moved_snapshot is not None
+    substitute_path = root / staging_name
+    substitute = substitute_path.stat()
+    assert (substitute.st_dev, substitute.st_ino) == substitute_identity
+    assert (substitute_path / "unowned-marker.bin").read_bytes() == (
+        b"do not delete substituted inode"
+    )
+    assert moved.is_dir()
+    assert (
+        tuple(
+            (path.relative_to(moved).as_posix(), path.read_bytes())
+            for path in sorted(moved.rglob("*"))
+            if path.is_file()
+        )
+        == moved_snapshot
+    )
+    assert not (root / "truth_masks").exists()
 
 
 def test_round3_truth_loader_binds_alias_root_by_pinned_identity() -> None:
-    with tempfile.TemporaryDirectory(
-        prefix="so101-public-truth-", dir=Path("/tmp")
-    ) as temporary:
+    with tempfile.TemporaryDirectory(prefix="so101-public-truth-", dir=Path("/tmp")) as temporary:
         workspace = Path(temporary)
         archive = build_fixture_archive(workspace, include_val=True)
         root = workspace / "val-open"
@@ -1383,3 +1365,172 @@ def test_round3_truth_loader_binds_alias_root_by_pinned_identity() -> None:
         assert first_inventory.dataset_root == root.resolve(strict=True)
         assert second_inventory.dataset_root == root.resolve(strict=True)
         assert second_truths == first_truths
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS renameatx_np contract")
+def test_round4_macos_noreplace_installs_exact_source_inode(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    source = root / "source"
+    source.mkdir()
+    source_metadata = source.stat()
+    wrapper = getattr(dataset_module, "_rename_directory_noreplace", None)
+    assert callable(wrapper)
+
+    with dataset_module._PinnedDirectory.open(root) as pinned:
+        wrapper(pinned._descriptor, "source", pinned._descriptor, "truth_masks")
+
+    installed = (root / "truth_masks").stat()
+    assert (installed.st_dev, installed.st_ino) == (
+        source_metadata.st_dev,
+        source_metadata.st_ino,
+    )
+    assert not source.exists()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS renameatx_np contract")
+def test_round4_macos_noreplace_refuses_existing_empty_destination(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    source = root / "source"
+    source.mkdir()
+    destination = root / "truth_masks"
+    destination.mkdir()
+    source_metadata = source.stat()
+    destination_metadata = destination.stat()
+    wrapper = getattr(dataset_module, "_rename_directory_noreplace", None)
+    assert callable(wrapper)
+
+    with dataset_module._PinnedDirectory.open(root) as pinned:
+        with pytest.raises(OSError) as caught:
+            wrapper(
+                pinned._descriptor,
+                "source",
+                pinned._descriptor,
+                "truth_masks",
+            )
+
+    assert caught.value.errno == errno.EEXIST
+    current_source = source.stat()
+    current_destination = destination.stat()
+    assert (current_source.st_dev, current_source.st_ino) == (
+        source_metadata.st_dev,
+        source_metadata.st_ino,
+    )
+    assert (current_destination.st_dev, current_destination.st_ino) == (
+        destination_metadata.st_dev,
+        destination_metadata.st_ino,
+    )
+
+
+def test_round4_linux_noreplace_selects_renameat2_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, bytes, int, bytes, int]] = []
+
+    class FakeRenameAt2:
+        argtypes: object = None
+        restype: object = None
+
+        def __call__(
+            self,
+            source_fd: int,
+            source_name: bytes,
+            destination_fd: int,
+            destination_name: bytes,
+            flags: int,
+        ) -> int:
+            calls.append(
+                (
+                    source_fd,
+                    source_name,
+                    destination_fd,
+                    destination_name,
+                    flags,
+                )
+            )
+            return 0
+
+    class FakeLibC:
+        renameat2 = FakeRenameAt2()
+
+    wrapper = getattr(dataset_module, "_rename_directory_noreplace", None)
+    assert callable(wrapper)
+    monkeypatch.setattr(dataset_module.sys, "platform", "linux")
+    monkeypatch.setattr(dataset_module.ctypes, "CDLL", lambda *args, **kwargs: FakeLibC())
+
+    wrapper(10, "source", 11, "truth_masks")
+
+    assert calls == [(10, b"source", 11, b"truth_masks", 1)]
+
+
+def test_round4_noreplace_fails_closed_when_kernel_primitive_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeLibC:
+        pass
+
+    monkeypatch.setattr(dataset_module.sys, "platform", "darwin")
+    monkeypatch.setattr(dataset_module.ctypes, "CDLL", lambda *args, **kwargs: FakeLibC())
+    monkeypatch.setattr(
+        dataset_module.os,
+        "replace",
+        lambda *args, **kwargs: pytest.fail("replace fallback must not run"),
+    )
+    monkeypatch.setattr(
+        dataset_module.os,
+        "rename",
+        lambda *args, **kwargs: pytest.fail("rename fallback must not run"),
+    )
+
+    with pytest.raises(OSError) as caught:
+        dataset_module._rename_directory_noreplace(
+            10,
+            "source",
+            10,
+            "truth_masks",
+        )
+
+    assert caught.value.errno == errno.ENOSYS
+
+
+def test_round4_new_pinned_child_rejects_swap_before_open_without_cleanup_chase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    moved = outside / "moved-owned-staging"
+    staging_name = ".truth-masks-stage-0123456789abcdef0123456789abcdef"
+    real_open = dataset_module.os.open
+    swapped = False
+
+    with dataset_module._PinnedDirectory.open(root) as pinned:
+
+        def swap_before_open(
+            path: object,
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            nonlocal swapped
+            if path == staging_name and dir_fd == pinned._descriptor and not swapped:
+                swapped = True
+                (root / staging_name).rename(moved)
+                (root / staging_name).mkdir()
+                (root / staging_name / "unowned-marker.bin").write_bytes(b"keep")
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        monkeypatch.setattr(dataset_module.os, "open", swap_before_open)
+        with pytest.raises(ValueError, match="changed while opening"):
+            pinned.create_pinned_child(staging_name)
+
+    assert swapped
+    assert moved.is_dir()
+    assert list(moved.iterdir()) == []
+    assert (root / staging_name / "unowned-marker.bin").read_bytes() == b"keep"
