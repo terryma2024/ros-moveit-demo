@@ -19,9 +19,15 @@ from so101_demo.perception_benchmark.matching import (
 )
 
 
-def _write_mask(root: Path, name: str, pixels: list[list[int]]) -> MaskRef:
+def _write_mask(
+    root: Path,
+    name: str,
+    pixels: list[list[int]],
+    *,
+    directory: str = "masks",
+) -> MaskRef:
     mask = np.asarray(pixels, dtype=bool)
-    relative_path = f"masks/{name}.json"
+    relative_path = f"{directory}/{name}.json"
     path = root / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(canonical_json_bytes(encode_mask_rle(mask)))
@@ -34,11 +40,19 @@ def _write_mask(root: Path, name: str, pixels: list[list[int]]) -> MaskRef:
     )
 
 
-def _truth(root: Path, instance_id: str, pixels: list[list[int]]) -> TruthInstance:
+def _truth(
+    root: Path,
+    instance_id: str,
+    pixels: list[list[int]],
+    *,
+    directory: str = "masks",
+) -> TruthInstance:
     return TruthInstance(
         instance_id=instance_id,
         label="plastic_cup",
-        mask=_write_mask(root, f"truth-{instance_id}", pixels),
+        mask=_write_mask(
+            root, f"truth-{instance_id}", pixels, directory=directory
+        ),
     )
 
 
@@ -47,8 +61,12 @@ def _candidate(
     candidate_id: str,
     score: float,
     pixels: list[list[int]],
+    *,
+    directory: str = "masks",
 ) -> RawCandidate:
-    mask = _write_mask(root, f"candidate-{candidate_id}", pixels)
+    mask = _write_mask(
+        root, f"candidate-{candidate_id}", pixels, directory=directory
+    )
     return RawCandidate(
         candidate_id=candidate_id,
         label="plastic_cup",
@@ -206,3 +224,135 @@ def test_assignment_reads_masks_through_verified_codec(
 
     with pytest.raises(ValueError, match=field.replace("image_width", "dimensions")):
         maximize_mask_iou_assignment((truth,), (invalid_candidate,), tmp_path)
+
+
+def test_assignment_supports_separate_roots_without_changing_tie_order(
+    tmp_path: Path,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth = (
+        _truth(
+            truth_root,
+            "t1",
+            [[1, 0], [0, 0]],
+            directory="truth_masks",
+        ),
+        _truth(
+            truth_root,
+            "t0",
+            [[1, 0], [0, 0]],
+            directory="truth_masks",
+        ),
+    )
+    candidates = (
+        _candidate(candidate_root, "b", 0.9, [[1, 0], [0, 0]]),
+        _candidate(candidate_root, "z", 0.95, [[1, 0], [0, 0]]),
+        _candidate(candidate_root, "a", 0.9, [[1, 0], [0, 0]]),
+    )
+
+    matches = maximize_mask_iou_assignment(
+        truth,
+        candidates,
+        truth_root,
+        candidate_evidence_root=candidate_root,
+    )
+
+    assert [
+        (match.truth_instance_id, match.candidate_id, match.iou)
+        for match in matches
+    ] == [
+        ("t0", "z", 1.0),
+        ("t1", "a", 1.0),
+    ]
+
+
+@pytest.mark.parametrize("invalid_side", ["truth", "candidate"])
+def test_assignment_verifies_sha_on_each_separate_root(
+    tmp_path: Path,
+    invalid_side: str,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth = _truth(
+        truth_root,
+        "t0",
+        [[1, 0], [0, 0]],
+        directory="truth_masks",
+    )
+    candidate = _candidate(
+        candidate_root,
+        "c0",
+        0.9,
+        [[1, 0], [0, 0]],
+    )
+    if invalid_side == "truth":
+        truth = replace(truth, mask=replace(truth.mask, sha256="f" * 64))
+    else:
+        candidate = replace(
+            candidate,
+            mask=replace(candidate.mask, sha256="f" * 64),
+        )
+
+    with pytest.raises(ValueError, match="sha256"):
+        maximize_mask_iou_assignment(
+            (truth,),
+            (candidate,),
+            truth_root,
+            candidate_evidence_root=candidate_root,
+        )
+
+
+@pytest.mark.parametrize("escaped_side", ["truth", "candidate"])
+def test_assignment_rejects_symlink_escape_from_each_separate_root(
+    tmp_path: Path,
+    escaped_side: str,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth_root.mkdir()
+    candidate_root.mkdir()
+    outside_root = tmp_path / f"outside-{escaped_side}"
+
+    if escaped_side == "truth":
+        truth = _truth(
+            outside_root,
+            "t0",
+            [[1, 0], [0, 0]],
+            directory="truth_masks",
+        )
+        (truth_root / "truth_masks").symlink_to(
+            outside_root / "truth_masks",
+            target_is_directory=True,
+        )
+        candidate = _candidate(
+            candidate_root,
+            "c0",
+            0.9,
+            [[1, 0], [0, 0]],
+        )
+    else:
+        truth = _truth(
+            truth_root,
+            "t0",
+            [[1, 0], [0, 0]],
+            directory="truth_masks",
+        )
+        candidate = _candidate(
+            outside_root,
+            "c0",
+            0.9,
+            [[1, 0], [0, 0]],
+        )
+        (candidate_root / "masks").symlink_to(
+            outside_root / "masks",
+            target_is_directory=True,
+        )
+
+    with pytest.raises(ValueError, match="escapes evidence_root"):
+        maximize_mask_iou_assignment(
+            (truth,),
+            (candidate,),
+            truth_root,
+            candidate_evidence_root=candidate_root,
+        )

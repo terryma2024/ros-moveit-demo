@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Mapping
@@ -89,10 +89,15 @@ class DuplicateCompositeMatches(
 
 
 def _write_mask(
-    root: Path, sample_index: int, name: str, pixels: list[list[int]]
+    root: Path,
+    sample_index: int,
+    name: str,
+    pixels: list[list[int]],
+    *,
+    directory: str = "masks",
 ) -> MaskRef:
     mask = np.asarray(pixels, dtype=bool)
-    relative_path = f"masks/{sample_index}-{name}.json"
+    relative_path = f"{directory}/{sample_index}-{name}.json"
     path = root / relative_path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(canonical_json_bytes(encode_mask_rle(mask)))
@@ -113,13 +118,20 @@ def _truth(
     *,
     image_sha256: str | None = None,
     shape: tuple[int, int] = (3, 3),
+    mask_directory: str = "masks",
 ) -> TruthSample:
     height, width = shape
     instances = tuple(
         TruthInstance(
             instance_id=f"truth-{position}",
             label="plastic_cup",
-            mask=_write_mask(root, sample_index, f"truth-{position}", pixels),
+            mask=_write_mask(
+                root,
+                sample_index,
+                f"truth-{position}",
+                pixels,
+                directory=mask_directory,
+            ),
         )
         for position, pixels in enumerate(masks)
     )
@@ -550,6 +562,94 @@ def test_cup_near_bottle_leakage_reads_validated_masks_outside_truth_cup_union(
     assert metrics.predicted_union_pixel_count == 7
     assert metrics.non_cup_leakage_pixel_count == 3
     assert metrics.non_cup_leakage_ratio == pytest.approx(3.0 / 7.0)
+
+
+def test_scenario_leakage_supports_separate_truth_and_candidate_roots(
+    tmp_path: Path,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth = _truth(
+        truth_root,
+        0,
+        "cup_near_bottle",
+        ([[1, 1, 0], [1, 1, 0], [0, 0, 0]],),
+        mask_directory="truth_masks",
+    )
+    prediction = _candidate(
+        candidate_root,
+        0,
+        "prediction",
+        0.9,
+        [[1, 1, 1], [1, 1, 1], [0, 0, 1]],
+    )
+    record = _record(truth, (prediction,), decision=DecisionOutput.UNIQUE)
+    image_input = _metric_input(
+        record,
+        truth,
+        (MaskMatch("truth-0", "prediction", 4.0 / 7.0),),
+    )
+
+    metrics = aggregate_scenarios(
+        (record,),
+        (truth,),
+        _keyed_matches((record,), (image_input,)),
+        truth_root,
+        candidate_evidence_root=candidate_root,
+    )["cup_near_bottle"]
+
+    assert metrics.predicted_union_pixel_count == 7
+    assert metrics.non_cup_leakage_pixel_count == 3
+    assert metrics.non_cup_leakage_ratio == pytest.approx(3.0 / 7.0)
+
+
+@pytest.mark.parametrize("invalid_side", ["truth", "candidate"])
+def test_scenario_leakage_verifies_sha_on_each_separate_root(
+    tmp_path: Path,
+    invalid_side: str,
+) -> None:
+    truth_root = tmp_path / "truth-root"
+    candidate_root = tmp_path / "candidate-root"
+    truth = _truth(
+        truth_root,
+        0,
+        "synthetic",
+        (_one_pixel_mask(),),
+        mask_directory="truth_masks",
+    )
+    candidate = _candidate(
+        candidate_root,
+        0,
+        "candidate",
+        0.9,
+        _one_pixel_mask(),
+    )
+    if invalid_side == "truth":
+        invalid_instance = replace(
+            truth.instances[0],
+            mask=replace(truth.instances[0].mask, sha256="f" * 64),
+        )
+        truth = replace(truth, instances=(invalid_instance,))
+    else:
+        candidate = replace(
+            candidate,
+            mask=replace(candidate.mask, sha256="f" * 64),
+        )
+    record = _record(truth, (candidate,), decision=DecisionOutput.UNIQUE)
+    image_input = _metric_input(
+        record,
+        truth,
+        (MaskMatch("truth-0", "candidate", 1.0),),
+    )
+
+    with pytest.raises(ValueError, match="sha256"):
+        aggregate_scenarios(
+            (record,),
+            (truth,),
+            _keyed_matches((record,), (image_input,)),
+            truth_root,
+            candidate_evidence_root=candidate_root,
+        )
 
 
 def test_non_cup_leakage_ratio_handles_zero_union_and_rejects_shape_mismatch() -> None:
