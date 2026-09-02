@@ -186,6 +186,31 @@ def test_cross_platform_requires_roots_only_when_candidates_are_present() -> Non
     assert result.items[0].is_mismatch is False
 
 
+@pytest.mark.parametrize(
+    "impostor_model_id",
+    (
+        f"prefix-{YOLO_MODEL_ID}",
+        f"{YOLO_MODEL_ID}-suffix",
+        f"prefix-{GROUNDED_SAM_MODEL_ID}",
+        f"{GROUNDED_SAM_MODEL_ID}-suffix",
+    ),
+)
+def test_cross_platform_rejects_noncanonical_empty_candidate_model_ids(
+    impostor_model_id: str,
+) -> None:
+    mac = replace(
+        _record((), decision=DecisionOutput.NOT_FOUND, platform="macos"),
+        model_id=impostor_model_id,
+    )
+    linux = replace(
+        _record((), decision=DecisionOutput.NOT_FOUND, platform="linux"),
+        model_id=impostor_model_id,
+    )
+
+    with pytest.raises(ValueError, match="canonical model_id"):
+        compare_platforms((mac,), (linux,))
+
+
 def test_cross_platform_rejects_missing_mask_root_for_candidate_records(
     tmp_path: Path,
 ) -> None:

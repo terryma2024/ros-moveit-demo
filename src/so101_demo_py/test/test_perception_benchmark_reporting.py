@@ -28,7 +28,10 @@ from so101_demo.perception_benchmark.codec import (
     sha256_bytes,
 )
 from so101_demo.perception_benchmark.contracts import (
+    GROUNDED_SAM_MODEL_ID,
+    MODEL_ID_BY_NAME,
     SCHEMA_VERSION,
+    YOLO_MODEL_ID,
     DecisionOutput,
     MaskRef,
     PhaseTimings,
@@ -147,7 +150,7 @@ def _record(
         image_sha256=truth.image_sha256,
         image_width=truth.image_width,
         image_height=truth.image_height,
-        model_id="yolo_seg",
+        model_id=YOLO_MODEL_ID,
         runtime_provenance=RuntimeProvenance(
             runtime_device="cuda",
             runtime_name="test-runtime",
@@ -925,7 +928,15 @@ def test_aggregation_rejects_mixed_runtime_signature_within_one_cell(
     key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
     records = list(aggregation_input.raw_frozen_records["linux"]["yolo_seg"])
     if mutation == "model_id":
-        records[1] = replace(records[1], model_id="yolo_seg_other")
+        records[1] = replace(
+            records[1],
+            model_id=GROUNDED_SAM_MODEL_ID,
+            raw_candidates=(),
+            raw_count=0,
+            decision=DecisionOutput.NOT_FOUND,
+            selected_candidate_id=None,
+            rejection_reason="TARGET_NOT_FOUND",
+        )
     else:
         records[1] = replace(
             records[1],
@@ -951,7 +962,12 @@ def test_aggregation_rejects_mixed_runtime_signature_within_one_cell(
         },
     )
 
-    with pytest.raises(ValueError, match="homogeneous runtime/model signature"):
+    expected_error = (
+        "canonical model identity"
+        if mutation == "model_id"
+        else "homogeneous runtime/model signature"
+    )
+    with pytest.raises(ValueError, match=expected_error):
         MetricsAggregator().aggregate(aggregation_input)
 
 
@@ -971,10 +987,6 @@ _FORMAL_SCENARIOS = (
     "two_cups",
     "cup_near_bottle",
 )
-_FORMAL_MODEL_IDS = {
-    "yolo_seg": "plastic-cup-yolo11s-seg-v2",
-    "grounded_sam": "grounding-dino-tiny+sam2.1-hiera-tiny",
-}
 _FORMAL_WEIGHTS = {
     "yolo_seg": "a" * 64,
     "grounded_sam": "b" * 64,
@@ -1079,6 +1091,7 @@ def _formal_truth_inventory(root: Path) -> tuple[TruthSample, ...]:
 def _formal_records(
     truths: tuple[TruthSample, ...],
     *,
+    candidate_root: Path,
     platform: str,
     model: str,
     config: str,
@@ -1086,6 +1099,8 @@ def _formal_records(
     lock_sha256: str,
 ) -> tuple[PredictionRecord, ...]:
     config_sha256 = hashlib.sha256(f"{model}/{config}".encode()).hexdigest()
+    left = _write_mask(candidate_root, "formal-left", [[1, 0], [0, 0]])
+    right = _write_mask(candidate_root, "formal-right", [[0, 0], [0, 1]])
     provenance = RuntimeProvenance(
         runtime_device="mps" if platform == "macos" else "cuda",
         runtime_name="torch",
@@ -1097,41 +1112,97 @@ def _formal_records(
             "accelerator": "mps" if platform == "macos" else "cuda",
         },
     )
-    return tuple(
-        PredictionRecord(
-            run_id=f"{platform}-{model}-{config}",
-            schema_version=SCHEMA_VERSION,
-            run_kind=run_kind,
-            record_status=RecordStatus.OK,
-            formal_sample_index=truth.formal_sample_index,
-            split=truth.split,
-            scenario=truth.scenario,
-            image_relpath=truth.image_relpath,
-            image_sha256=truth.image_sha256,
-            image_width=truth.image_width,
-            image_height=truth.image_height,
-            model_id=_FORMAL_MODEL_IDS[model],
-            runtime_provenance=provenance,
-            config_sha256=config_sha256,
-            threshold_lock_sha256=lock_sha256,
-            raw_candidates=(),
-            phase_timings=PhaseTimings(
-                grounding_ms=2.0,
-                sam_ms=3.0 if model == "grounded_sam" else None,
-                selector_ms=1.0,
-            ),
-            raw_count=0,
-            decision=DecisionOutput.NOT_FOUND,
-            selected_candidate_id=None,
-            rejection_reason="TARGET_NOT_FOUND",
-            error_type=None,
-            error_summary=None,
-            timed_out=False,
-            oom=False,
-            fallback_used=False,
+    records: list[PredictionRecord] = []
+    for truth in truths:
+        masks_and_boxes = (
+            ()
+            if truth.scenario == "no_cup"
+            else (
+                (
+                    left,
+                    (0.0, 0.0, 1.0, 1.0),
+                    0.9,
+                ),
+                *(
+                    ((right, (1.0, 1.0, 2.0, 2.0), 0.8),)
+                    if truth.scenario == "two_cups"
+                    else ()
+                ),
+            )
         )
-        for truth in truths
-    )
+        candidates = tuple(
+            RawCandidate(
+                candidate_id=(
+                    f"candidate-{truth.formal_sample_index}-{position}"
+                ),
+                label="plastic_cup",
+                bbox_xyxy=bbox,
+                mask=mask,
+                ranking_score=score,
+                ranking_score_source=(
+                    "class_confidence"
+                    if model == "yolo_seg"
+                    else "grounding_box_score"
+                ),
+                class_confidence=score if model == "yolo_seg" else None,
+                grounding_box_score=(
+                    score if model == "grounded_sam" else None
+                ),
+                grounding_text_score=(
+                    score - 0.1 if model == "grounded_sam" else None
+                ),
+                sam_quality=0.95 if model == "grounded_sam" else None,
+            )
+            for position, (mask, bbox, score) in enumerate(masks_and_boxes)
+        )
+        if len(candidates) == 0:
+            decision = DecisionOutput.NOT_FOUND
+            rejection_reason = "TARGET_NOT_FOUND"
+        elif len(candidates) == 1:
+            decision = DecisionOutput.UNIQUE
+            rejection_reason = None
+        else:
+            decision = DecisionOutput.AMBIGUOUS
+            rejection_reason = "TARGET_AMBIGUOUS"
+        records.append(
+            PredictionRecord(
+                run_id=f"{platform}-{model}-{config}",
+                schema_version=SCHEMA_VERSION,
+                run_kind=run_kind,
+                record_status=RecordStatus.OK,
+                formal_sample_index=truth.formal_sample_index,
+                split=truth.split,
+                scenario=truth.scenario,
+                image_relpath=truth.image_relpath,
+                image_sha256=truth.image_sha256,
+                image_width=truth.image_width,
+                image_height=truth.image_height,
+                model_id=MODEL_ID_BY_NAME[model],
+                runtime_provenance=provenance,
+                config_sha256=config_sha256,
+                threshold_lock_sha256=lock_sha256,
+                raw_candidates=candidates,
+                phase_timings=PhaseTimings(
+                    grounding_ms=2.0,
+                    sam_ms=3.0 if model == "grounded_sam" else None,
+                    selector_ms=1.0,
+                ),
+                raw_count=len(candidates),
+                decision=decision,
+                selected_candidate_id=(
+                    candidates[0].candidate_id
+                    if decision is DecisionOutput.UNIQUE
+                    else None
+                ),
+                rejection_reason=rejection_reason,
+                error_type=None,
+                error_summary=None,
+                timed_out=False,
+                oom=False,
+                fallback_used=False,
+            )
+        )
+    return tuple(records)
 
 
 def _formal_resource_sample(offset: int) -> ResourceSample:
@@ -1221,8 +1292,18 @@ def _positive_formal_input(tmp_path: Path) -> AggregationInput:
         formal[platform] = {}
         for model in ("yolo_seg", "grounded_sam"):
             lock_sha = locks[model].lock_sha256
+            raw_root = (
+                tmp_path / "candidates" / platform / model / "TEST_RAW_FROZEN"
+            )
+            production_root = (
+                tmp_path / "candidates" / platform / model / "production"
+            )
+            calibrated_root = (
+                tmp_path / "candidates" / platform / model / "calibrated"
+            )
             raw_records = _formal_records(
                 truths,
+                candidate_root=raw_root,
                 platform=platform,
                 model=model,
                 config="TEST_RAW_FROZEN",
@@ -1231,6 +1312,7 @@ def _positive_formal_input(tmp_path: Path) -> AggregationInput:
             )
             production_records = _formal_records(
                 truths,
+                candidate_root=production_root,
                 platform=platform,
                 model=model,
                 config="production",
@@ -1239,6 +1321,7 @@ def _positive_formal_input(tmp_path: Path) -> AggregationInput:
             )
             calibrated_records = _formal_records(
                 truths,
+                candidate_root=calibrated_root,
                 platform=platform,
                 model=model,
                 config="calibrated",
@@ -1276,6 +1359,98 @@ def _positive_formal_input(tmp_path: Path) -> AggregationInput:
         oracle_records={},
         oracle_evidence={},
     )
+
+
+def _replace_formal_model_with_empty_impostor_records(
+    value: AggregationInput,
+    *,
+    model: str,
+    impostor_model_id: str,
+) -> AggregationInput:
+    raw = {
+        platform: dict(models)
+        for platform, models in value.raw_frozen_records.items()
+    }
+    formal = {
+        platform: {
+            current_model: dict(configs)
+            for current_model, configs in models.items()
+        }
+        for platform, models in value.formal_records.items()
+    }
+    evidence = dict(value.run_evidence)
+    for platform in ("macos", "linux"):
+        for config in ("TEST_RAW_FROZEN", "production", "calibrated"):
+            records = (
+                raw[platform][model]
+                if config == "TEST_RAW_FROZEN"
+                else formal[platform][model][config]
+            )
+            changed = tuple(
+                replace(
+                    record,
+                    model_id=impostor_model_id,
+                    raw_candidates=(),
+                    raw_count=0,
+                    decision=DecisionOutput.NOT_FOUND,
+                    selected_candidate_id=None,
+                    rejection_reason="TARGET_NOT_FOUND",
+                )
+                for record in records
+            )
+            if config == "TEST_RAW_FROZEN":
+                raw[platform][model] = changed
+            else:
+                formal[platform][model][config] = changed
+            key = (platform, model, config)
+            old_evidence = evidence[key]
+            resource_samples = tuple(
+                observation.sample
+                for observation in old_evidence.resource_trace.observations
+            )
+            evidence[key] = replace(
+                old_evidence,
+                extended_record_documents=tuple(
+                    _extended_document(
+                        record,
+                        total_ms=10.0,
+                        platform=platform,
+                        model=model,
+                        resource_samples=resource_samples if position == 0 else (),
+                    )
+                    for position, record in enumerate(changed)
+                ),
+            )
+    return replace(
+        value,
+        raw_frozen_records=raw,
+        formal_records=formal,
+        run_evidence=evidence,
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "impostor_model_id"),
+    (
+        ("yolo_seg", f"prefix-{YOLO_MODEL_ID}"),
+        ("yolo_seg", f"{YOLO_MODEL_ID}-suffix"),
+        ("grounded_sam", f"prefix-{GROUNDED_SAM_MODEL_ID}"),
+        ("grounded_sam", f"{GROUNDED_SAM_MODEL_ID}-suffix"),
+    ),
+)
+def test_formal_validation_rejects_empty_candidate_impostor_model_ids(
+    tmp_path: Path,
+    model: str,
+    impostor_model_id: str,
+) -> None:
+    value = _replace_formal_model_with_empty_impostor_records(
+        _positive_formal_input(tmp_path),
+        model=model,
+        impostor_model_id=impostor_model_id,
+    )
+
+    with pytest.raises(ValueError, match="canonical model identity"):
+        reporting_module._validate_input(value)
 
 
 def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
@@ -1319,6 +1494,44 @@ def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
     assert summary.raw_frozen_by_platform_model["linux"][
         "grounded_sam"
     ].sample_count == 200
+    for platform in ("macos", "linux"):
+        for model in ("yolo_seg", "grounded_sam"):
+            raw_summary = summary.raw_frozen_by_platform_model[platform][model]
+            assert raw_summary.mask_ap50 == pytest.approx(1.0)
+            assert raw_summary.mask_ap50_95 == pytest.approx(1.0)
+            assert raw_summary.instance_metrics.precision == pytest.approx(1.0)
+            assert raw_summary.instance_metrics.recall == pytest.approx(1.0)
+            assert raw_summary.metric_details.f1 == pytest.approx(1.0)
+            assert raw_summary.instance_metrics.mean_iou == pytest.approx(1.0)
+            assert raw_summary.metric_details.median_iou == pytest.approx(1.0)
+            assert raw_summary.instance_metrics.mean_dice == pytest.approx(1.0)
+            assert raw_summary.metric_details.median_dice == pytest.approx(1.0)
+            assert raw_summary.candidate_count_distribution == {
+                "0": 0.25,
+                "1": 0.5,
+                "2": 0.25,
+            }
+            assert raw_summary.scenarios[
+                "two_cups"
+            ].safety_metrics.two_cup_both_matched_recall == pytest.approx(1.0)
+            assert raw_summary.scenarios[
+                "cup_near_bottle"
+            ].safety_metrics.non_cup_leakage_ratio == pytest.approx(0.0)
+            for config in ("production", "calibrated"):
+                decision_metrics = summary.formal_by_platform_model_config[
+                    platform
+                ][model][config].decision_metrics
+                assert decision_metrics.macro_f1 == pytest.approx(1.0)
+                assert decision_metrics.unique_success_rate == pytest.approx(1.0)
+                assert decision_metrics.unsafe_unique_rate == pytest.approx(0.0)
+                assert decision_metrics.confusion["0"] == {
+                    "NOT_FOUND": 50,
+                    "UNIQUE": 0,
+                    "AMBIGUOUS": 0,
+                    "ERROR": 0,
+                }
+                assert decision_metrics.confusion["1"]["UNIQUE"] == 100
+                assert decision_metrics.confusion["2+"]["AMBIGUOUS"] == 50
     assert set(
         summary.raw_frozen_by_platform_model["linux"]["grounded_sam"].scenarios
     ) == set(_FORMAL_SCENARIOS)
@@ -1361,6 +1574,26 @@ def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
     assert comparison.items[0].runtime_device_pair_expected is True
     assert comparison.items[0].runtime_environment_equal is False
     assert comparison.items[0].runtime_environment_identity_equal is True
+    candidate_comparison = next(
+        item for item in comparison.items if item.formal_sample_index == 50
+    )
+    assert len(candidate_comparison.candidate_pairs) == 1
+    assert candidate_comparison.candidate_pairs[0].mask_iou == pytest.approx(1.0)
+    assert candidate_comparison.candidate_pairs[0].box_iou == pytest.approx(1.0)
+    assert candidate_comparison.candidate_pairs[
+        0
+    ].grounding_box_score_absolute_delta == pytest.approx(0.0)
+    candidate_row = next(
+        row
+        for row in summary.per_image
+        if row.platform == "linux"
+        and row.model == "grounded_sam"
+        and row.config == "TEST_RAW_FROZEN"
+        and row.formal_sample_index == 50
+    )
+    assert candidate_row.candidate_count == 1
+    assert len(candidate_row.candidates) == 1
+    assert candidate_row.candidates[0].grounding_box_score == pytest.approx(0.9)
     report_root = tmp_path / "formal-report"
     ReportWriter().write(summary, report_root)
     resources_document = json.loads(
@@ -1398,6 +1631,92 @@ def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
         100.0,
         100.0,
     ]
+    candidate_csv_row = next(
+        row
+        for row in per_image_rows
+        if row["platform"] == "linux"
+        and row["model"] == "grounded_sam"
+        and row["config"] == "TEST_RAW_FROZEN"
+        and row["formal_sample_index"] == "50"
+    )
+    retained_candidates = json.loads(candidate_csv_row["candidates_json"])
+    assert retained_candidates[0]["candidate_id"] == "candidate-50-0"
+    assert retained_candidates[0]["grounding_box_score"] == pytest.approx(0.9)
+
+
+def test_formal_candidate_mask_sha_tamper_fails_closed(tmp_path: Path) -> None:
+    value = _positive_formal_input(tmp_path)
+    key = ("linux", "grounded_sam", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+    candidate = value.raw_frozen_records["linux"]["grounded_sam"][
+        50
+    ].raw_candidates[0]
+    mask_path = evidence.evidence_root / candidate.mask.relative_path
+    mask_path.write_bytes(
+        canonical_json_bytes(encode_mask_rle(np.zeros((2, 2), dtype=bool)))
+    )
+
+    with pytest.raises(ValueError, match="digest|SHA|mask"):
+        MetricsAggregator().aggregate(value)
+
+
+def test_runner_record_codec_feeds_canonical_grounded_record_to_aggregator(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.perception_benchmark.runner import _record_from_document
+
+    full = _positive_formal_input(tmp_path)
+    source_key = ("linux", "grounded_sam", "TEST_RAW_FROZEN")
+    source_evidence = full.run_evidence[source_key]
+    document = json.loads(
+        canonical_json_bytes(
+            reporting_module._plain(
+                source_evidence.extended_record_documents[50]
+            )
+        )
+    )
+    record = _record_from_document(document)
+    truth = full.truth_samples[50]
+    assert record.model_id == GROUNDED_SAM_MODEL_ID
+    assert record.raw_candidates[0].grounding_box_score == pytest.approx(0.9)
+
+    evidence = RunAggregationEvidence(
+        evidence_root=source_evidence.evidence_root,
+        extended_record_documents=(
+            _extended_document(
+                record,
+                total_ms=10.0,
+                platform="linux",
+                model="grounded_sam",
+            ),
+        ),
+        cold_latency_ms=(30.0,),
+        resource_samples=(),
+    )
+    value = AggregationInput(
+        formal=False,
+        source_commit=_SOURCE_COMMIT,
+        dataset_archive_sha256=_ARCHIVE_SHA,
+        test_inventory_sha256=_INVENTORY_SHA,
+        truth_evidence_root=full.truth_evidence_root,
+        truth_samples=(truth,),
+        raw_frozen_records={"linux": {"grounded_sam": (record,)}},
+        formal_records={},
+        threshold_locks={},
+        run_evidence={source_key: evidence},
+        oracle_records={},
+        oracle_evidence={},
+        bootstrap_seed=20260902,
+        bootstrap_repetitions=10,
+    )
+
+    summary = MetricsAggregator().aggregate(value)
+
+    raw = summary.raw_frozen_by_platform_model["linux"]["grounded_sam"]
+    assert raw.sample_count == 1
+    assert raw.mask_ap50 == pytest.approx(1.0)
+    assert raw.mask_ap50_95 == pytest.approx(1.0)
+    assert summary.per_image[0].candidates == record.raw_candidates
 
 
 def _replace_formal_cell(
@@ -1474,7 +1793,17 @@ def test_formal_rejects_model_or_runtime_drift_between_run_kinds(
     changed: list[PredictionRecord] = []
     for record in records:
         if mutation == "model_id":
-            changed.append(replace(record, model_id="plastic-cup-yolo11s-seg-v3"))
+            changed.append(
+                replace(
+                    record,
+                    model_id=GROUNDED_SAM_MODEL_ID,
+                    raw_candidates=(),
+                    raw_count=0,
+                    decision=DecisionOutput.NOT_FOUND,
+                    selected_candidate_id=None,
+                    rejection_reason="TARGET_NOT_FOUND",
+                )
+            )
             continue
         provenance = record.runtime_provenance
         if mutation == "weights_sha256":
