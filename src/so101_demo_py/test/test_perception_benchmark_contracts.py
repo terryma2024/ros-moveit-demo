@@ -231,6 +231,25 @@ def test_prediction_record_requires_model_specific_scores_and_sources() -> None:
         raw_candidate(ranking_score_source=None)
 
 
+def test_prediction_record_requires_grounding_score_provenance_and_matching_values() -> None:
+    with pytest.raises(ValueError, match="Grounded-SAM ranking_score_source"):
+        prediction_record(
+            raw_candidates=(
+                raw_candidate(
+                    ranking_score=0.7,
+                    ranking_score_source="grounding_text_score",
+                ),
+            ),
+        )
+    with pytest.raises(ValueError, match="YOLO ranking_score"):
+        prediction_record(
+            model_id="yolo11n-seg-v1",
+            raw_candidates=(_yolo_candidate(ranking_score=0.8),),
+        )
+    with pytest.raises(ValueError, match="Grounded-SAM ranking_score"):
+        prediction_record(raw_candidates=(raw_candidate(ranking_score=0.8),))
+
+
 @pytest.mark.parametrize("dimension", [True, 2.5])
 def test_truth_sample_rejects_non_integer_image_dimensions(dimension: object) -> None:
     with pytest.raises(ValueError, match="image dimensions"):
