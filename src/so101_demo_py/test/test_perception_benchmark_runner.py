@@ -1,0 +1,682 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+import hashlib
+import json
+
+import numpy as np
+from PIL import Image
+import pytest
+
+import so101_demo.perception_benchmark.dataset as dataset_module
+from so101_demo.perception_benchmark.adapters import CollectionMode, RawDetectionResult
+from so101_demo.perception_benchmark.codec import (
+    atomic_write_json,
+    canonical_json_bytes,
+    encode_mask_rle,
+)
+from so101_demo.perception_benchmark.contracts import (
+    DecisionOutput,
+    MaskRef,
+    RawCandidate,
+    RunKind,
+    RunStatus,
+)
+from so101_demo.perception_benchmark.dataset import DatasetInventory, DatasetSampleRef
+from so101_demo.perception_benchmark.runner import (
+    DetectorBenchmarkRunner,
+    RunCheckpoint,
+    RunIntegrityError,
+    RunSpec,
+    verify_resume,
+)
+from so101_demo.perception_benchmark.timing import (
+    PhaseTimingBreakdown,
+    ResourceSample,
+)
+
+
+SHA_A = "a" * 64
+SHA_B = "b" * 64
+SOURCE_COMMIT = "deadbeef" * 5
+
+
+def _resource_sample(*, temperature: float | None = None) -> ResourceSample:
+    missing = {
+        "gpu_temperature_celsius": "fixture sensor unavailable",
+        "gpu_power_watts": "fixture sensor unavailable",
+    }
+    if temperature is not None:
+        missing.pop("gpu_temperature_celsius")
+    return ResourceSample(
+        process_rss_bytes=4096,
+        process_cpu_percent=0.0,
+        gpu_memory_allocated_bytes=0,
+        gpu_memory_reserved_bytes=0,
+        gpu_utilization_percent=0.0,
+        gpu_temperature_celsius=temperature,
+        gpu_power_watts=None,
+        unavailable_reasons=missing,
+        tool_versions={"fixture": "1"},
+    )
+
+
+def _inventory_document(
+    inventory: DatasetInventory,
+) -> dict[str, object]:
+    return {
+        "schema_version": inventory.schema_version,
+        "split": inventory.split,
+        "archive_sha256": inventory.archive_sha256,
+        "sample_count": inventory.sample_count,
+        "scenario_counts": dict(inventory.scenario_counts),
+        "test_access": None,
+        "samples": [
+            {
+                "formal_sample_index": sample.formal_sample_index,
+                "split": sample.split,
+                "scenario": sample.scenario,
+                "image_relpath": sample.image_relpath,
+                "label_relpath": sample.label_relpath,
+                "truth_relpath": sample.truth_relpath,
+                "image_sha256": sample.image_sha256,
+                "truth_count": sample.truth_count,
+            }
+            for sample in inventory.samples
+        ],
+    }
+
+
+def _synthetic_inventory(root: Path, count: int = 8) -> DatasetInventory:
+    dataset_root = root / "dataset"
+    image_root = dataset_root / "images" / "val"
+    image_root.mkdir(parents=True)
+    payloads: list[tuple[str, bytes]] = []
+    for index in range(count):
+        path = image_root / f"fixture-{index:03d}.png"
+        image = Image.new("RGB", (20, 16), (index + 1, 2, 3))
+        image.save(path, format="PNG")
+        payload = path.read_bytes()
+        payloads.append((hashlib.sha256(payload).hexdigest(), payload))
+
+    samples: list[DatasetSampleRef] = []
+    for formal_index, (digest, payload) in enumerate(sorted(payloads)):
+        image_relpath = f"images/val/sample-{formal_index:03d}.png"
+        image_path = dataset_root / image_relpath
+        image_path.write_bytes(payload)
+        samples.append(
+            DatasetSampleRef(
+                formal_sample_index=formal_index,
+                split="val",
+                scenario="fixture",
+                image_relpath=image_relpath,
+                label_relpath=f"labels/val/sample-{formal_index:03d}.txt",
+                truth_relpath=f"truth/val/sample-{formal_index:03d}.json",
+                image_sha256=digest,
+                truth_count=1,
+            )
+        )
+
+    provisional = DatasetInventory(
+        schema_version="so101-perception-benchmark/v1",
+        split="val",
+        archive_sha256=SHA_A,
+        inventory_sha256=SHA_A,
+        dataset_root=dataset_root,
+        sample_count=count,
+        scenario_counts={"fixture": count},
+        samples=tuple(samples),
+        test_access_event_sha256=None,
+    )
+    document = _inventory_document(provisional)
+    payload = canonical_json_bytes(document)
+    inventory = replace(
+        provisional, inventory_sha256=hashlib.sha256(payload).hexdigest()
+    )
+    atomic_write_json(dataset_root / "inventory.json", _inventory_document(inventory))
+    (dataset_root / "inventory.sha256").write_text(
+        f"{inventory.inventory_sha256}  inventory.json\n", encoding="ascii"
+    )
+    dataset_module._issue_inventory(inventory)
+    return inventory
+
+
+class SyntheticAdapter:
+    model_id = "plastic-cup-yolo11s-seg-v2"
+    runtime_device = "mps"
+    runtime_version = "fixture-1"
+    _weights_sha256 = SHA_B
+
+    def __init__(
+        self,
+        evidence_root: Path,
+        *,
+        failures: dict[int, BaseException] | None = None,
+        candidate_counts: dict[int, int] | None = None,
+        temperatures: dict[int, float] | None = None,
+        empty_resources_at: int | None = None,
+    ) -> None:
+        self.evidence_root = evidence_root
+        self.failures = failures or {}
+        self.candidate_counts = candidate_counts or {}
+        self.temperatures = temperatures or {}
+        self.empty_resources_at = empty_resources_at
+        self.calls: list[int] = []
+
+    def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+        assert mode is CollectionMode.LOW_FLOOR
+        index = int(frame.source_stamp_ns) - 1  # type: ignore[attr-defined]
+        self.calls.append(index)
+        failure = self.failures.get(index)
+        if failure is not None:
+            raise failure
+        candidate_count = self.candidate_counts.get(index, 1)
+        candidates: list[RawCandidate] = []
+        for candidate_index in range(candidate_count):
+            mask = np.zeros((16, 20), dtype=bool)
+            mask[2 + candidate_index : 8 + candidate_index, 3:10] = True
+            candidate_id = f"yolo-{candidate_index:03d}"
+            relative = f"masks/{index:06d}/{candidate_id}.rle.json"
+            atomic_write_json(
+                self.evidence_root / relative, encode_mask_rle(mask)
+            )
+            candidates.append(
+                RawCandidate(
+                    candidate_id=candidate_id,
+                    label="plastic_cup",
+                    bbox_xyxy=(3.0, 2.0, 10.0, 10.0),
+                    mask=MaskRef(
+                        relative_path=relative,
+                        sha256=hashlib.sha256(
+                            mask.astype(np.uint8).tobytes(order="C")
+                        ).hexdigest(),
+                        pixel_count=int(mask.sum()),
+                        image_width=20,
+                        image_height=16,
+                    ),
+                    ranking_score=0.9 - candidate_index * 0.1,
+                    ranking_score_source="class_confidence",
+                    class_confidence=0.9 - candidate_index * 0.1,
+                    grounding_box_score=None,
+                    grounding_text_score=None,
+                    sam_quality=None,
+                )
+            )
+        resources = (
+            ()
+            if self.empty_resources_at == index
+            else (_resource_sample(temperature=self.temperatures.get(index)),)
+        )
+        return RawDetectionResult(
+            model_id=self.model_id,
+            runtime_device="mps",
+            dtype="float32",
+            collection_mode=CollectionMode.LOW_FLOOR,
+            raw_candidates=tuple(candidates),
+            phase_timings=PhaseTimingBreakdown(
+                preprocess_ms=0.0,
+                dino_or_yolo_ms=1.0,
+                sam_ms=None,
+                postprocess_ms=0.0,
+                selector_ms=None,
+                total_ms=1.0,
+            ),
+            resource_samples=resources,
+            fallback_used=False,
+            irreversible_limits={"max_det": 300, "nms_iou": 0.9},
+        )
+
+
+class ResourceSamplerFailure(RuntimeError):
+    pass
+
+
+def _spec(
+    inventory: DatasetInventory,
+    output_root: Path,
+    **overrides: object,
+) -> RunSpec:
+    values: dict[str, object] = {
+        "run_id": "fixture-val-raw",
+        "run_kind": RunKind.VAL_RAW,
+        "platform": "macos",
+        "model": "yolo_seg",
+        "device": "mps",
+        "dtype": "float32",
+        "inventory": inventory,
+        "config_sha256": SHA_A,
+        "threshold_lock_sha256": None,
+        "source_commit": SOURCE_COMMIT,
+        "output_root": output_root,
+        "collection_mode": CollectionMode.LOW_FLOOR,
+    }
+    values.update(overrides)
+    return RunSpec(**values)  # type: ignore[arg-type]
+
+
+def _record(root: Path, index: int) -> dict[str, object]:
+    return json.loads(
+        (root / "records" / f"{index:06d}.json").read_text(encoding="utf-8")
+    )
+
+
+def _checkpoint(root: Path) -> RunCheckpoint:
+    document = json.loads((root / "checkpoint.json").read_text(encoding="utf-8"))
+    document["records_dir"] = Path(document["records_dir"])
+    document["run_kind"] = RunKind(document["run_kind"])
+    document["collection_mode"] = CollectionMode(document["collection_mode"])
+    return RunCheckpoint(**document)
+
+
+def test_inference_exception_writes_error_record_and_continues_full_inventory(
+    tmp_path: Path,
+) -> None:
+    """Catch an inference exception shrinking the formal denominator."""
+
+    inventory = _synthetic_inventory(tmp_path)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, failures={3: RuntimeError("model failed")})
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.VALID
+    assert manifest.record_count == 8
+    assert manifest.error_count == 1
+    assert adapter.calls == list(range(8))
+    failed = _record(output_root, 3)
+    assert failed["decision"] == DecisionOutput.ERROR.value
+    assert failed["record_status"] == "ERROR"
+    assert failed["raw_candidates"] == []
+    assert failed["selected_candidate_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("error", "error_type", "timed_out", "oom"),
+    (
+        (TimeoutError("deadline"), "TIMEOUT", True, False),
+        (MemoryError("CUDA out of memory"), "OOM", False, True),
+        (RuntimeError("accelerator synchronize failed"), "SYNC", False, False),
+        (ValueError("RESULT_CONTRACT_INVALID"), "SCHEMA", False, False),
+        (RuntimeError("model exploded\napi_token=secret-value"), "MODEL", False, False),
+    ),
+)
+def test_error_records_are_typed_bounded_sanitized_and_never_retried(
+    tmp_path: Path,
+    error: BaseException,
+    error_type: str,
+    timed_out: bool,
+    oom: bool,
+) -> None:
+    """Catch typed inference failures becoming retries, fallback, or unsafe text."""
+
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, failures={0: error})
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.VALID
+    assert adapter.calls == [0]
+    record = _record(output_root, 0)
+    assert record["error_type"] == error_type
+    assert record["timed_out"] is timed_out
+    assert record["oom"] is oom
+    assert record["fallback_used"] is False
+    assert record["model_id"] == adapter.model_id
+    assert "\n" not in record["error_summary"]
+    assert len(record["error_summary"]) <= 240
+    assert "secret-value" not in record["error_summary"]
+
+
+@pytest.mark.parametrize("interrupt", (KeyboardInterrupt(), SystemExit(2)))
+def test_process_interrupts_are_not_downgraded_to_per_image_error(
+    tmp_path: Path, interrupt: BaseException
+) -> None:
+    """Catch operator/process termination being swallowed as a model error."""
+
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, failures={0: interrupt})
+
+    with pytest.raises(type(interrupt)):
+        DetectorBenchmarkRunner(adapter, output_root).run(
+            _spec(inventory, output_root)
+        )
+
+    assert not (output_root / "records" / "000000.json").exists()
+
+
+def test_records_follow_canonical_inventory_order_and_four_state_semantics(
+    tmp_path: Path,
+) -> None:
+    """Catch filename order, zip/truncation, or an alternate decision vocabulary."""
+
+    inventory = _synthetic_inventory(tmp_path, 4)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(
+        output_root, candidate_counts={0: 0, 1: 1, 2: 2, 3: 1}
+    )
+
+    DetectorBenchmarkRunner(adapter, output_root).run(_spec(inventory, output_root))
+
+    assert sorted(path.name for path in (output_root / "records").iterdir()) == [
+        "000000.json",
+        "000001.json",
+        "000002.json",
+        "000003.json",
+    ]
+    assert [_record(output_root, index)["decision"] for index in range(4)] == [
+        "NOT_FOUND",
+        "UNIQUE",
+        "AMBIGUOUS",
+        "UNIQUE",
+    ]
+    for index, sample in enumerate(inventory.samples):
+        record = _record(output_root, index)
+        assert record["formal_sample_index"] == index
+        assert record["image_sha256"] == sample.image_sha256
+        assert record["image_width"] == 20
+        assert record["image_height"] == 16
+        assert record["resource_samples"][0]["process_cpu_percent"] == 0.0
+        assert record["timing_breakdown"]["sam_ms"] is None
+
+
+def test_val_raw_rejects_lock_and_changed_image_before_any_model_call(
+    tmp_path: Path,
+) -> None:
+    """Catch VAL_RAW consuming a lock or inference running after input SHA drift."""
+
+    inventory = _synthetic_inventory(tmp_path, 2)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+    locked = _spec(inventory, output_root, threshold_lock_sha256=SHA_B)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(locked)
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "VAL_RAW_FORBIDS_THRESHOLD_LOCK"
+    assert adapter.calls == []
+
+    clean_root = tmp_path / "run-drift"
+    clean_root.mkdir()
+    changed = inventory.dataset_root / inventory.samples[0].image_relpath
+    changed.write_bytes(changed.read_bytes() + b"tampered")
+    drift_adapter = SyntheticAdapter(clean_root)
+    manifest = DetectorBenchmarkRunner(drift_adapter, clean_root).run(
+        _spec(inventory, clean_root)
+    )
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "INPUT_IMAGE_SHA256_CHANGED"
+    assert drift_adapter.calls == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "gap",
+        "duplicate",
+        "record-tamper",
+        "record-content-tamper",
+        "mask-tamper",
+        "checkpoint-sha",
+        "config",
+        "source",
+        "model",
+        "device",
+        "dtype",
+        "run-kind",
+        "lock",
+    ),
+)
+def test_resume_rejects_any_noncontiguous_tampered_or_changed_identity(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Catch resume selecting a next filename instead of proving one exact prefix."""
+
+    inventory = _synthetic_inventory(tmp_path, 4)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    checkpoint = _checkpoint(output_root)
+
+    if mutation == "gap":
+        (output_root / "records" / "000001.json").rename(
+            output_root / "records" / "000005.json"
+        )
+    elif mutation == "duplicate":
+        document = _record(output_root, 1)
+        document["formal_sample_index"] = 0
+        atomic_write_json(output_root / "records" / "000001.json", document)
+    elif mutation == "record-tamper":
+        path = output_root / "records" / "000002.json"
+        path.write_bytes(path.read_bytes() + b" ")
+    elif mutation == "record-content-tamper":
+        path = output_root / "records" / "000001.json"
+        document = _record(output_root, 1)
+        document["timing_breakdown"]["dino_or_yolo_ms"] = 2.0
+        document["timing_breakdown"]["total_ms"] = 2.0
+        atomic_write_json(path, document)
+    elif mutation == "mask-tamper":
+        mask_path = output_root / _record(output_root, 2)["raw_candidates"][0]["mask"]["relative_path"]
+        mask_path.write_bytes(mask_path.read_bytes() + b" ")
+    elif mutation == "checkpoint-sha":
+        checkpoint = replace(checkpoint, last_record_sha256=SHA_A)
+    elif mutation == "config":
+        checkpoint = replace(checkpoint, config_sha=SHA_B)
+    elif mutation == "source":
+        checkpoint = replace(checkpoint, source_commit="cafebabe" * 5)
+    elif mutation == "model":
+        checkpoint = replace(checkpoint, model="grounded_sam")
+    elif mutation == "device":
+        checkpoint = replace(checkpoint, device="cuda")
+    elif mutation == "dtype":
+        checkpoint = replace(checkpoint, dtype="float16")
+    elif mutation == "run-kind":
+        checkpoint = replace(checkpoint, run_kind=RunKind.TEST_RAW_FROZEN)
+    else:
+        checkpoint = replace(checkpoint, threshold_lock_sha256=SHA_B)
+
+    with pytest.raises(RunIntegrityError):
+        verify_resume(
+            checkpoint,
+            inventory,
+            config_sha=SHA_A,
+            source_commit=SOURCE_COMMIT,
+        )
+
+
+def test_exact_valid_prefix_resumes_without_reprocessing_or_overwriting(
+    tmp_path: Path,
+) -> None:
+    """Catch a complete verified prefix being re-run or its artifacts overwritten."""
+
+    inventory = _synthetic_inventory(tmp_path, 4)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(inventory, output_root)
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(spec)
+    before = {
+        path.name: path.read_bytes() for path in (output_root / "records").iterdir()
+    }
+    resumed_adapter = SyntheticAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(resumed_adapter, output_root).run(spec)
+
+    assert manifest.status is RunStatus.VALID
+    assert manifest.record_count == 4
+    assert resumed_adapter.calls == []
+    assert {
+        path.name: path.read_bytes() for path in (output_root / "records").iterdir()
+    } == before
+
+
+def test_checkpoint_crash_never_advances_past_durable_record_and_resume_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Catch checkpoint publication before record durability or silent crash repair."""
+
+    inventory = _synthetic_inventory(tmp_path, 5)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+    runner = DetectorBenchmarkRunner(adapter, output_root)
+    real_write = runner._write_checkpoint
+
+    def crash_at_two(checkpoint: RunCheckpoint) -> None:
+        if checkpoint.last_formal_sample_index == 2:
+            raise OSError("checkpoint device failed")
+        real_write(checkpoint)
+
+    monkeypatch.setattr(runner, "_write_checkpoint", crash_at_two)
+    manifest = runner.run(_spec(inventory, output_root))
+
+    assert manifest.status is RunStatus.INVALID
+    assert sorted(path.name for path in (output_root / "records").iterdir()) == [
+        "000000.json",
+        "000001.json",
+        "000002.json",
+    ]
+    assert _checkpoint(output_root).last_formal_sample_index == 1
+    resumed = SyntheticAdapter(output_root)
+    resumed_manifest = DetectorBenchmarkRunner(resumed, output_root).run(
+        _spec(inventory, output_root)
+    )
+    assert resumed_manifest.status is RunStatus.INVALID
+    assert resumed.calls == []
+
+
+@pytest.mark.parametrize(
+    ("adapter_kwargs", "thermal_limit", "reason", "retained"),
+    (
+        ({"failures": {2: ResourceSamplerFailure("sensor failed")}}, None, "RESOURCE_EVIDENCE_FAILED", 2),
+        ({"empty_resources_at": 2}, None, "RESOURCE_STREAM_EMPTY", 2),
+        ({"temperatures": {2: 91.0}}, 80.0, "THERMAL_LIMIT_EXCEEDED", 2),
+    ),
+)
+def test_resource_or_thermal_failure_invalidates_whole_run_and_stops(
+    tmp_path: Path,
+    adapter_kwargs: dict[str, object],
+    thermal_limit: float | None,
+    reason: str,
+    retained: int,
+) -> None:
+    """Catch invalid hardware evidence being counted as an ordinary image error."""
+
+    inventory = _synthetic_inventory(tmp_path, 5)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root, **adapter_kwargs)
+    spec = _spec(
+        inventory,
+        output_root,
+        max_gpu_temperature_celsius=thermal_limit,
+    )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(spec)
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == reason
+    assert manifest.record_count == retained
+    assert adapter.calls == list(range(retained + 1))
+    assert sorted((output_root / "records").glob("*.json")) == [
+        output_root / "records" / f"{index:06d}.json"
+        for index in range(retained)
+    ]
+    resumed = SyntheticAdapter(output_root)
+    resumed_manifest = DetectorBenchmarkRunner(resumed, output_root).run(spec)
+    assert resumed_manifest.status is RunStatus.INVALID
+    assert resumed.calls == []
+
+
+def test_resume_detects_current_input_drift_and_inventory_document_tamper(
+    tmp_path: Path,
+) -> None:
+    """Catch resume trusting stale record metadata over current immutable inputs."""
+
+    inventory = _synthetic_inventory(tmp_path, 3)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    DetectorBenchmarkRunner(SyntheticAdapter(output_root), output_root).run(
+        _spec(inventory, output_root)
+    )
+    checkpoint = _checkpoint(output_root)
+
+    image_path = inventory.dataset_root / inventory.samples[2].image_relpath
+    image_path.write_bytes(image_path.read_bytes() + b"drift")
+    with pytest.raises(RunIntegrityError, match="INPUT_IMAGE_SHA256_CHANGED"):
+        verify_resume(checkpoint, inventory, SHA_A, SOURCE_COMMIT)
+
+    image_path.write_bytes(image_path.read_bytes()[:-5])
+    inventory_path = inventory.dataset_root / "inventory.json"
+    inventory_path.write_bytes(inventory_path.read_bytes() + b" ")
+    with pytest.raises(RunIntegrityError, match="INVENTORY_CANONICAL_INVALID"):
+        verify_resume(checkpoint, inventory, SHA_A, SOURCE_COMMIT)
+
+
+def test_adapter_mask_is_verified_before_record_or_checkpoint_publication(
+    tmp_path: Path,
+) -> None:
+    """Catch a stale MaskRef being committed before its lossless mask is verified."""
+
+    class MissingMaskAdapter(SyntheticAdapter):
+        def collect(self, frame: object, mode: CollectionMode) -> RawDetectionResult:
+            result = super().collect(frame, mode)
+            mask_path = self.evidence_root / result.raw_candidates[0].mask.relative_path
+            mask_path.unlink()
+            return result
+
+    inventory = _synthetic_inventory(tmp_path, 1)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = MissingMaskAdapter(output_root)
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(inventory, output_root)
+    )
+
+    assert manifest.status is RunStatus.INVALID
+    assert manifest.invalid_reason == "RECORD_MASK_PATH_INVALID"
+    assert list((output_root / "records").iterdir()) == []
+    assert not (output_root / "checkpoint.json").exists()
+
+
+def test_preexisting_record_or_symlink_output_is_never_overwritten(
+    tmp_path: Path,
+) -> None:
+    """Catch runner writes escaping or replacing evidence it does not own."""
+
+    inventory = _synthetic_inventory(tmp_path, 1)
+    occupied = tmp_path / "occupied"
+    (occupied / "records").mkdir(parents=True)
+    original = b"user-owned\n"
+    (occupied / "records" / "000000.json").write_bytes(original)
+    adapter = SyntheticAdapter(occupied)
+    manifest = DetectorBenchmarkRunner(adapter, occupied).run(
+        _spec(inventory, occupied)
+    )
+    assert manifest.status is RunStatus.INVALID
+    assert adapter.calls == []
+    assert (occupied / "records" / "000000.json").read_bytes() == original
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked = tmp_path / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    linked_adapter = SyntheticAdapter(outside)
+    linked_manifest = DetectorBenchmarkRunner(linked_adapter, linked).run(
+        _spec(inventory, linked)
+    )
+    assert linked_manifest.status is RunStatus.INVALID
+    assert linked_adapter.calls == []
+    assert list(outside.iterdir()) == []
