@@ -5,10 +5,11 @@ task_id: so101-text-agent-macos-dds-localhost-ab-20260901
 status: COMPLETE
 goal: Separate RGB-D subscription matching, first callbacks, and first common stamp, then compare SUBNET and LOCALHOST discovery over the four frozen MuJoCo keyframes on mac-mini.
 success_contract: Profiling-off preserves the uninstrumented subscription path; enabled profiling emits complete matched, first-callback, and common-stamp milestones; four SUBNET and four LOCALHOST FULL_RESTART runs use DeepSeek only and satisfy the existing functional and physical acceptance contract.
-worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo/.worktrees/so101-cross-platform-profiling
-branch: codex/so101-cross-platform-profiling
+worktree: /Users/matianyi/Projects/robot_demo_001/moveit-demo
+branch: main
 base_commit: 7bd5505f2a6a80c8c9c17ebed586c22592cf23e3
 tested_candidate_commit: 1e350bd259cffc4b7feab5a42840534aa5ef5d4f
+merged_main_commit: c5f69ceb528b199a8fcc3f3b5b0fdb55f76f286a
 evidence_root: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901
 platform_evidence_root_mac_mini: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901-macmini
 confirmed_conclusions:
@@ -22,7 +23,7 @@ disproven_routes:
   - The first-round data does not support the hypothesis that SUBNET interface discovery materially delays endpoint matching relative to LOCALHOST.
 open_hypotheses:
   - The lower LOCALHOST first-color and common-stamp waits may include block-order or warm-cache effects because all SUBNET runs preceded all LOCALHOST runs.
-latest_checkpoint: CP-DDS-003
+latest_checkpoint: CP-DDS-004
 next_experiment: NONE
 ```
 
@@ -199,5 +200,43 @@ evidence_size_mac_mini: 124M
 analysis_artifact_mac_mini: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901-macmini/analysis.json
 analysis_copy_local: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901/macmini-analysis.json
 decision: COMPLETE
+next_experiment: NONE
+```
+
+## CP-DDS-004 - local main merge and profiling source guide
+
+```yaml
+checkpoint_id: CP-DDS-004
+last_valid_experiment: EXP-DDS-MAC-024
+main_merge:
+  method: fast-forward
+  from: 7bd5505f2a6a80c8c9c17ebed586c22592cf23e3
+  to: c5f69ceb528b199a8fcc3f3b5b0fdb55f76f286a
+discovery_contract:
+  product_mode: SUBNET
+  source_launch_config_changes: NONE
+  localhost_content: Historical A/B experiment evidence only; no product discovery setting was changed.
+guide: docs/guides/so101-pick-place-profiling-source-guide.md
+guide_review:
+  humanizer_zh_applied: true
+  humanizer_fenced_code_blocks_preserved: true
+  local_markdown_links_resolved: true
+merged_main_validation:
+  isolated_overlay: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901/release/main-overlay-3/install
+  build: 2 packages passed
+  package_tests: 996 passed
+  profiling_off_benchmark: pass=true; text_agent_preview delta 36.871 ns per iteration; dry_run_state_action delta 0.302 ns per iteration
+  launch_show_args: profiling choices off, summary, trace; default off
+invalid_release_preflights:
+  - main-overlay: colcon was absent from the non-direnv PATH; build did not start.
+  - main-overlay-2: CMake selected Homebrew Python 3.14 and rosidl_adapter could not import em; package build stopped before so101_demo_py.
+retained_evidence_root: /tmp/so101-debug-text-agent-macos-dds-localhost-ab-20260901
+archived_runs: NONE
+deletion_candidates:
+  - release/main-overlay
+  - release/main-overlay-2
+  - The three invalid DDS diagnostic runs already listed in CP-DDS-003.
+owned_processes: NONE
+decision: KEEP_AND_PUBLISH_MAIN
 next_experiment: NONE
 ```
