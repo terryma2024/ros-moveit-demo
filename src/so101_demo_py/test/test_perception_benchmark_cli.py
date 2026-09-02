@@ -806,3 +806,238 @@ def test_raw_adapter_result_must_match_registered_task6_limits() -> None:
         adapter.collect(object(), object())
 
     assert caught.value.code == "LOW_FLOOR_CONFIG_MISMATCH"
+
+
+def test_output_preflight_accepts_only_the_known_macos_tmp_alias() -> None:
+    output = Path("/tmp") / "so101-task9-fix2-preflight-does-not-exist"
+    assert not output.exists()
+
+    assert perception_benchmark._preflight_output_root(output) == output
+
+
+def test_output_preflight_rejects_user_created_symlink_parent(tmp_path: Path) -> None:
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    alias_parent = tmp_path / "user-alias"
+    alias_parent.symlink_to(real_parent, target_is_directory=True)
+
+    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+        perception_benchmark._preflight_output_root(alias_parent / "output")
+
+    assert caught.value.code == "OUTPUT_ROOT_PARENT_INVALID"
+
+
+def test_collect_uses_shared_output_preflight_before_dataset_or_adapter_boundary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    real_parent = tmp_path / "real-parent"
+    real_parent.mkdir()
+    alias_parent = tmp_path / "user-alias"
+    alias_parent.symlink_to(real_parent, target_is_directory=True)
+    arguments = SimpleNamespace(
+        run_kind="VAL_RAW",
+        allow_oracle_diagnostic=False,
+        split="val",
+        threshold_lock=None,
+        platform="macos",
+        device="mps",
+        dtype="float32",
+        model="yolo_seg",
+        weights=tmp_path / "best.pt",
+        weights_sha256=("f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"),
+        model_root=None,
+        manifest_sha256=None,
+        source_commit="6" * 40,
+        config=CONFIG,
+        dataset_archive_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        output_root=alias_parent / "formal-run",
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "_inventory",
+        lambda *a, **k: pytest.fail("unsafe output reached dataset boundary"),
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "_raw_adapter",
+        lambda *a, **k: pytest.fail("unsafe output reached adapter boundary"),
+    )
+
+    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+        perception_benchmark._handle_collect(arguments)
+
+    assert caught.value.code == "OUTPUT_ROOT_PARENT_INVALID"
+    assert not arguments.output_root.exists()
+
+
+def test_unlock_rechecks_output_after_archive_verify_before_access_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = (
+        tmp_path
+        / "datasets/so101-v5-t004-yolo-seg-synthetic"
+        / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+    )
+    archive.parent.mkdir(parents=True)
+    archive.write_bytes(b"placeholder")
+    for name in ("yolo.json", "grounded.json", "sealed.json"):
+        (tmp_path / name).write_text("{}")
+    output = tmp_path / "test-open"
+    sealed_sha = perception_benchmark.sha256_bytes((tmp_path / "sealed.json").read_bytes())
+    arguments = SimpleNamespace(
+        config=CONFIG,
+        archive=archive,
+        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        sealed_member_inventory=tmp_path / "sealed.json",
+        yolo_threshold_lock=tmp_path / "yolo.json",
+        grounded_sam_threshold_lock=tmp_path / "grounded.json",
+        access_log=tmp_path / "access.ndjson",
+        output_root=output,
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "sha256_file",
+        lambda path: arguments.expected_sha256,
+    )
+
+    def verify_and_race(*args: object) -> object:
+        output.mkdir()
+        return SimpleNamespace(sealed_test_member_inventory_sha256=sealed_sha)
+
+    monkeypatch.setattr(
+        perception_benchmark.DatasetArchiveVerifier,
+        "verify_archive",
+        verify_and_race,
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "unlock_test_seal",
+        lambda *a, **k: pytest.fail("access event appended after output race"),
+    )
+
+    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+        perception_benchmark._handle_unlock_test(arguments)
+
+    assert caught.value.code == "OUTPUT_ROOT_ALREADY_EXISTS"
+    assert not arguments.access_log.exists()
+
+
+def _aggregation_plan_document(tmp_path: Path) -> dict[str, object]:
+    return {
+        "schema_version": "so101-perception-benchmark/aggregation-plan-v1",
+        "dataset": {
+            "root": str(tmp_path / "test-dataset"),
+            "archive_sha256": ("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+            "inventory_sha256": "1" * 64,
+            "test_access_event_sha256": "2" * 64,
+            "sealed_member_inventory_sha256": "3" * 64,
+            "threshold_lock_sha256s": ["4" * 64, "5" * 64],
+        },
+        "threshold_locks": {
+            "yolo_seg": {"path": str(tmp_path / "yolo-lock.json"), "sha256": "4" * 64},
+            "grounded_sam": {
+                "path": str(tmp_path / "grounded-lock.json"),
+                "sha256": "5" * 64,
+            },
+        },
+        "runs": [
+            {
+                "platform": "macos",
+                "model": "yolo_seg",
+                "config": "TEST_RAW_FROZEN",
+                "run_root": str(tmp_path / "run"),
+                "expectation": str(tmp_path / "expectation.json"),
+                "expectation_sha256": "6" * 64,
+                "cold_process_samples": [],
+                "resource_trace": None,
+            }
+        ],
+        "source_commit": "7" * 40,
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "drift"),
+    [
+        ("platform", []),
+        ("model", {}),
+        ("config", 7),
+        ("cold_process_samples", {}),
+        ("resource_trace", {"sampling_frequency_hz": "fast", "observations": []}),
+    ],
+)
+def test_aggregation_plan_recursively_rejects_nested_type_drift(
+    tmp_path: Path, field: str, drift: object
+) -> None:
+    plan = _aggregation_plan_document(tmp_path)
+    plan["runs"][0][field] = drift  # type: ignore[index]
+
+    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+        perception_benchmark._validated_aggregation_plan(plan)
+
+    assert caught.value.code == "AGGREGATION_PLAN_INVALID"
+
+
+def test_aggregate_platform_list_is_stable_exit2_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    plan_document = _aggregation_plan_document(tmp_path)
+    plan_document["runs"][0]["platform"] = []  # type: ignore[index]
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps(plan_document))
+    locks = iter(
+        (
+            SimpleNamespace(
+                lock_sha256="4" * 64,
+                model="yolo_seg",
+                source_commit="7" * 40,
+            ),
+            SimpleNamespace(
+                lock_sha256="5" * 64,
+                model="grounded_sam",
+                source_commit="7" * 40,
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "verify_threshold_lock",
+        lambda *a, **k: next(locks),
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "load_dataset_inventory",
+        lambda *a, **k: SimpleNamespace(
+            dataset_root=tmp_path / "test-dataset",
+            archive_sha256=plan_document["dataset"]["archive_sha256"],  # type: ignore[index]
+            inventory_sha256="1" * 64,
+        ),
+    )
+    monkeypatch.setattr(perception_benchmark, "load_truth_samples", lambda *a, **k: ())
+    monkeypatch.setattr(perception_benchmark, "_expectation", lambda *a, **k: object())
+    monkeypatch.setattr(
+        perception_benchmark,
+        "load_verified_run_evidence",
+        lambda *a, **k: SimpleNamespace(),
+    )
+
+    result = perception_benchmark.main(
+        [
+            "aggregate",
+            "--config",
+            str(CONFIG),
+            "--aggregation-plan",
+            str(plan),
+            "--aggregation-plan-sha256",
+            perception_benchmark.sha256_bytes(plan.read_bytes()),
+            "--output-root",
+            str(tmp_path / "report"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 2
+    assert "AGGREGATION_PLAN_INVALID:" in captured.err
+    assert "Traceback" not in captured.err

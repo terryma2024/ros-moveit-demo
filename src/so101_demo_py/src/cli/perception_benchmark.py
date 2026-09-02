@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import os
 import platform
 import re
 import sys
@@ -415,11 +416,31 @@ def _preflight_output_root(path: Path) -> Path:
     if root.exists() or root.is_symlink():
         raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS")
     parent = root.parent
-    if not parent.is_dir() or parent.is_symlink():
+    if not parent.is_dir():
         raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
     current = parent
     while current != current.parent:
-        if current.is_symlink() or not current.is_dir():
+        if current.is_symlink():
+            aliases = {
+                Path("/tmp"): ("private/tmp", Path("/private/tmp")),
+                Path("/var"): ("private/var", Path("/private/var")),
+            }
+            expected = aliases.get(current)
+            try:
+                metadata = current.lstat()
+                link_text = os.readlink(current)
+                resolved = current.resolve(strict=True)
+            except OSError as error:
+                raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID") from error
+            if (
+                expected is None
+                or metadata.st_uid != 0
+                or link_text != expected[0]
+                or resolved != expected[1]
+                or not resolved.is_dir()
+            ):
+                raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
+        elif not current.is_dir():
             raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
         current = current.parent
     return root
@@ -460,6 +481,7 @@ def _handle_verify_assets(arguments: argparse.Namespace) -> int:
 def _handle_inspect_archive(arguments: argparse.Namespace) -> int:
     config = _load_frozen_config(arguments.config)
     _bind_archive_arguments(arguments, config)
+    _preflight_output_root(arguments.sealed_member_inventory)
     result = DatasetArchiveVerifier().verify_archive(
         arguments.archive,
         arguments.expected_sha256,
@@ -520,6 +542,7 @@ def _handle_unlock_test(arguments: argparse.Namespace) -> int:
         )
     if inspected.sealed_test_member_inventory_sha256 != sealed_sha:
         raise BenchmarkError("TEST_SEAL_ARCHIVE_MISMATCH")
+    _preflight_output_root(arguments.output_root)
     seal = unlock_test_seal(
         TestSeal(sealed_sha, arguments.access_log),
         arguments.yolo_threshold_lock,
@@ -548,14 +571,13 @@ def _handle_dry_run(arguments: argparse.Namespace) -> int:
     config_payload = _config_payload(arguments.config)
     fixture = _fixture(arguments.adapter_fixture)
     output = arguments.output_root
-    if not output.is_absolute():
-        raise BenchmarkError("OUTPUT_ROOT_MUST_BE_ABSOLUTE")
+    _preflight_output_root(output)
     try:
         output.mkdir(parents=False, mode=0o700)
-    except FileNotFoundError as error:
-        raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID") from error
     except FileExistsError as error:
         raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS") from error
+    except OSError as error:
+        raise BenchmarkError("OUTPUT_ROOT_CREATION_FAILED") from error
     plan = build_dry_run_plan()
     records_per_model: Counter[str] = Counter()
     samples_document: list[dict[str, object]] = []
@@ -889,6 +911,7 @@ def _handle_collect(arguments: argparse.Namespace) -> int:
     config = _load_frozen_config(arguments.config)
     _bind_model_arguments(arguments, config)
     _bind_dataset_sha(arguments.dataset_archive_sha256, config)
+    _preflight_output_root(arguments.output_root)
     config_sha = sha256_bytes(_config_payload(arguments.config))
     inventory = _inventory(arguments, config)
     lock_sha = None
@@ -899,13 +922,12 @@ def _handle_collect(arguments: argparse.Namespace) -> int:
         if lock.model != arguments.model or lock.source_commit != source_commit:
             raise BenchmarkError("THRESHOLD_LOCK_MISMATCH")
         lock_sha = lock.lock_sha256
-    if not arguments.output_root.is_absolute():
-        raise BenchmarkError("OUTPUT_ROOT_MUST_BE_ABSOLUTE")
-    if arguments.output_root.exists() or arguments.output_root.is_symlink():
-        raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS")
-    if not arguments.output_root.parent.is_dir():
-        raise BenchmarkError("OUTPUT_ROOT_PARENT_INVALID")
-    arguments.output_root.mkdir(mode=0o700)
+    try:
+        arguments.output_root.mkdir(mode=0o700)
+    except FileExistsError as error:
+        raise BenchmarkError("OUTPUT_ROOT_ALREADY_EXISTS") from error
+    except OSError as error:
+        raise BenchmarkError("OUTPUT_ROOT_CREATION_FAILED") from error
     adapter = _raw_adapter(arguments, config)
     observer = None
     if run_kind in {
@@ -1107,7 +1129,9 @@ def _resource_sample(document: Mapping[str, Any]) -> ResourceSample:
     return ResourceSample(**document)
 
 
-def _aggregation_evidence(document: Mapping[str, Any], loaded) -> RunAggregationEvidence:
+def _parse_aggregation_resources(
+    document: Mapping[str, Any],
+) -> tuple[tuple[ColdProcessSample, ...], ResourceTrace | None]:
     raw_cold = document.get("cold_process_samples", [])
     raw_trace = document.get("resource_trace")
     if not isinstance(raw_cold, list):
@@ -1146,6 +1170,11 @@ def _aggregation_evidence(document: Mapping[str, Any], loaded) -> RunAggregation
             trace = ResourceTrace(trace_document["sampling_frequency_hz"], tuple(observations))
     except (TypeError, ValueError) as error:
         raise BenchmarkError("AGGREGATION_PLAN_INVALID") from error
+    return cold, trace
+
+
+def _aggregation_evidence(document: Mapping[str, Any], loaded) -> RunAggregationEvidence:
+    cold, trace = _parse_aggregation_resources(document)
     return RunAggregationEvidence(
         evidence_root=loaded.evidence_root,
         extended_record_documents=loaded.extended_record_documents,
@@ -1203,7 +1232,9 @@ def _validated_aggregation_plan(
     if (
         not isinstance(lock_shas, list)
         or len(lock_shas) != 2
-        or any(_SHA256.fullmatch(str(value)) is None for value in lock_shas)
+        or any(
+            not isinstance(value, str) or _SHA256.fullmatch(value) is None for value in lock_shas
+        )
     ):
         raise BenchmarkError("AGGREGATION_PLAN_INVALID")
     for model in _MODELS:
@@ -1231,6 +1262,23 @@ def _validated_aggregation_plan(
         _absolute_path_field(item, "run_root")
         _absolute_path_field(item, "expectation")
         _sha(item.get("expectation_sha256"), "AGGREGATION_PLAN_INVALID")
+        if (
+            not isinstance(item.get("platform"), str)
+            or item["platform"] not in {"macos", "linux"}
+            or not isinstance(item.get("model"), str)
+            or item["model"] not in set(_MODELS)
+            or not isinstance(item.get("config"), str)
+            or item["config"]
+            not in {
+                "TEST_RAW_FROZEN",
+                "production",
+                "calibrated",
+                "characterization",
+                "ORACLE_DIAGNOSTIC",
+            }
+        ):
+            raise BenchmarkError("AGGREGATION_PLAN_INVALID")
+        _parse_aggregation_resources(item)
         runs.append(item)
     return dataset, locks, runs, _source_commit(document.get("source_commit"))
 
