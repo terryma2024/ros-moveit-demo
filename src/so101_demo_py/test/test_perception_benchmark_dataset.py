@@ -696,22 +696,26 @@ def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
     inventory = DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), tmp_path / "val-open", "val", None
     )
-    real_atomic_write = dataset_module.atomic_write_json
+    real_write = dataset_module.os.write
     writes = 0
 
-    def fail_third_write(path: Path, document: object) -> str:
+    def fail_third_write(descriptor: int, payload: bytes) -> int:
         nonlocal writes
         writes += 1
         if writes == 3:
             raise OSError("injected mask staging failure")
-        return real_atomic_write(path, document)
+        return real_write(descriptor, payload)
 
-    monkeypatch.setattr(dataset_module, "atomic_write_json", fail_third_write)
+    monkeypatch.setattr(dataset_module.os, "write", fail_third_write)
     with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
         load_truth_samples(tmp_path / "val-open", "val", inventory)
 
     assert not (tmp_path / "val-open/truth_masks/val").exists()
-    monkeypatch.setattr(dataset_module, "atomic_write_json", real_atomic_write)
+    assert not any(
+        path.name.startswith(".truth-masks-")
+        for path in (tmp_path / "val-open").iterdir()
+    )
+    monkeypatch.setattr(dataset_module.os, "write", real_write)
     truths = load_truth_samples(tmp_path / "val-open", "val", inventory)
     assert len(truths) == 200
 
@@ -729,10 +733,15 @@ def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
     mask_parent.mkdir()
     real_replace = dataset_module.os.replace
 
-    def fail_publication(source: object, destination: object) -> None:
-        if Path(destination) == mask_parent / "val":
+    def fail_publication(
+        source: object,
+        destination: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        if destination == "val" and "dst_dir_fd" in kwargs:
             raise OSError("injected final mask publication failure")
-        real_replace(source, destination)
+        real_replace(source, destination, *args, **kwargs)
 
     monkeypatch.setattr(dataset_module.os, "replace", fail_publication)
     with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
@@ -740,6 +749,9 @@ def test_truth_mask_publish_failure_preserves_preexisting_empty_parent(
 
     assert mask_parent.is_dir()
     assert not (mask_parent / "val").exists()
+    assert not any(
+        path.name.startswith(".truth-masks-") for path in dataset_root.iterdir()
+    )
 
 
 def test_truth_mask_publish_failure_preserves_between_check_creator_parent(
@@ -752,27 +764,23 @@ def test_truth_mask_publish_failure_preserves_between_check_creator_parent(
         archive, sha256_file(archive), dataset_root, "val", None
     )
     mask_parent = dataset_root / "truth_masks"
-    real_mkdir = Path.mkdir
-    real_replace = dataset_module.os.replace
+    real_mkdir = dataset_module.os.mkdir
+    injected = False
 
     def concurrent_creator_then_mkdir(
-        path: Path,
+        path: object,
         mode: int = 0o777,
-        parents: bool = False,
-        exist_ok: bool = False,
+        *,
+        dir_fd: int | None = None,
     ) -> None:
-        if path == mask_parent and not path.exists():
-            real_mkdir(path, mode=mode, parents=parents, exist_ok=False)
-        real_mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
+        nonlocal injected
+        if path == "truth_masks" and dir_fd is not None and not injected:
+            injected = True
+            real_mkdir(path, mode=mode, dir_fd=dir_fd)
+        real_mkdir(path, mode=mode, dir_fd=dir_fd)
 
-    def fail_publication(source: object, destination: object) -> None:
-        if Path(destination) == mask_parent / "val":
-            raise OSError("injected final mask publication failure")
-        real_replace(source, destination)
-
-    monkeypatch.setattr(Path, "mkdir", concurrent_creator_then_mkdir)
-    monkeypatch.setattr(dataset_module.os, "replace", fail_publication)
-    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+    monkeypatch.setattr(dataset_module.os, "mkdir", concurrent_creator_then_mkdir)
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
         load_truth_samples(dataset_root, "val", inventory)
 
     assert mask_parent.is_dir()
@@ -1275,3 +1283,103 @@ def test_round2_public_dataset_loader_rejects_incomplete_or_tampered_truth_mask_
 
     with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
         load_dataset_inventory(root, **anchors)
+
+
+def test_round3_truth_loader_rejects_symlink_mask_parent_without_touching_outside(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.bin"
+    sentinel.write_bytes(b"outside must remain unchanged")
+    (root / "truth_masks").symlink_to(outside, target_is_directory=True)
+    before = tuple(
+        (path.relative_to(outside).as_posix(), path.read_bytes())
+        for path in sorted(outside.rglob("*"))
+        if path.is_file()
+    )
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+        load_truth_samples(root, "val", inventory)
+
+    after = tuple(
+        (path.relative_to(outside).as_posix(), path.read_bytes())
+        for path in sorted(outside.rglob("*"))
+        if path.is_file()
+    )
+    assert after == before
+    assert not (outside / "val").exists()
+
+
+def test_round3_truth_loader_fails_closed_if_mask_parent_name_is_swapped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    root = tmp_path / "val-open"
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), root, "val", None
+    )
+    mask_parent = root / "truth_masks"
+    mask_parent.mkdir()
+    held_parent = root / "truth_masks-held"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel.bin"
+    sentinel.write_bytes(b"outside must remain unchanged")
+    real_replace = dataset_module.os.replace
+    swapped = False
+
+    def swap_parent_before_publish(
+        source: object,
+        destination: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        nonlocal swapped
+        descriptor_relative_publish = (
+            destination == "val" and "dst_dir_fd" in kwargs
+        )
+        if not swapped and (
+            Path(destination) == mask_parent / "val"
+            or descriptor_relative_publish
+        ):
+            swapped = True
+            mask_parent.rename(held_parent)
+            mask_parent.symlink_to(outside, target_is_directory=True)
+        real_replace(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(dataset_module.os, "replace", swap_parent_before_publish)
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+        load_truth_samples(root, "val", inventory)
+
+    assert sentinel.read_bytes() == b"outside must remain unchanged"
+    assert not (outside / "val").exists()
+
+
+def test_round3_truth_loader_binds_alias_root_by_pinned_identity() -> None:
+    with tempfile.TemporaryDirectory(
+        prefix="so101-public-truth-", dir=Path("/tmp")
+    ) as temporary:
+        workspace = Path(temporary)
+        archive = build_fixture_archive(workspace, include_val=True)
+        root = workspace / "val-open"
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive, sha256_file(archive), root, "val", None
+        )
+        anchors = _public_inventory_anchors(root, "val")
+
+        first_inventory = load_dataset_inventory(root, **anchors)
+        first_truths = load_truth_samples(root, "val", first_inventory)
+        second_inventory = load_dataset_inventory(root, **anchors)
+        second_truths = load_truth_samples(root, "val", second_inventory)
+
+        assert first_inventory.dataset_root == root.resolve(strict=True)
+        assert second_inventory.dataset_root == root.resolve(strict=True)
+        assert second_truths == first_truths
