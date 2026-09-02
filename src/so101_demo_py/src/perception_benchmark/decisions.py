@@ -389,8 +389,7 @@ def aggregate_scenarios(
             accumulator.no_cup_sample_count += 1
             if (
                 record.record_status is RecordStatus.OK
-                and record.decision
-                in (DecisionOutput.UNIQUE, DecisionOutput.AMBIGUOUS)
+                and bool(record.raw_candidates)
             ):
                 accumulator.no_cup_false_positive_count += 1
 
