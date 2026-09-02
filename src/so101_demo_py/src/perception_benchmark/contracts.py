@@ -60,6 +60,12 @@ def _require_nonempty(name: str, value: object) -> str:
     return value
 
 
+def _require_positive_int(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
 def _require_probability(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
         raise ValueError(f"{name} must be finite and in [0, 1]")
@@ -112,15 +118,8 @@ class MaskRef:
         object.__setattr__(self, "sha256", _require_sha256("sha256", self.sha256))
         if isinstance(self.pixel_count, bool) or not isinstance(self.pixel_count, int) or self.pixel_count < 0:
             raise ValueError("pixel_count must be a nonnegative integer")
-        if (
-            isinstance(self.image_width, bool)
-            or isinstance(self.image_height, bool)
-            or not isinstance(self.image_width, int)
-            or not isinstance(self.image_height, int)
-            or self.image_width <= 0
-            or self.image_height <= 0
-        ):
-            raise ValueError("image dimensions must be positive integers")
+        object.__setattr__(self, "image_width", _require_positive_int("image dimensions", self.image_width))
+        object.__setattr__(self, "image_height", _require_positive_int("image dimensions", self.image_height))
         if self.pixel_count > self.image_width * self.image_height:
             raise ValueError("pixel_count must not exceed image area")
 
@@ -161,8 +160,8 @@ class TruthSample:
         object.__setattr__(self, "scenario", _require_nonempty("scenario", self.scenario))
         object.__setattr__(self, "image_relpath", _require_relative_path("image_relpath", self.image_relpath))
         object.__setattr__(self, "image_sha256", _require_sha256("image_sha256", self.image_sha256))
-        if self.image_width <= 0 or self.image_height <= 0:
-            raise ValueError("image dimensions must be positive integers")
+        object.__setattr__(self, "image_width", _require_positive_int("image dimensions", self.image_width))
+        object.__setattr__(self, "image_height", _require_positive_int("image dimensions", self.image_height))
         instances = tuple(self.instances)
         if not all(isinstance(instance, TruthInstance) for instance in instances):
             raise ValueError("instances must contain TruthInstance values")
@@ -267,6 +266,8 @@ class PredictionRecord:
     scenario: str
     image_relpath: str
     image_sha256: str
+    image_width: int
+    image_height: int
     model_id: str
     runtime_provenance: RuntimeProvenance
     config_sha256: str
@@ -303,6 +304,8 @@ class PredictionRecord:
         object.__setattr__(self, "scenario", _require_nonempty("scenario", self.scenario))
         object.__setattr__(self, "image_relpath", _require_relative_path("image_relpath", self.image_relpath))
         object.__setattr__(self, "image_sha256", _require_sha256("image_sha256", self.image_sha256))
+        object.__setattr__(self, "image_width", _require_positive_int("image dimensions", self.image_width))
+        object.__setattr__(self, "image_height", _require_positive_int("image dimensions", self.image_height))
         object.__setattr__(self, "model_id", _require_nonempty("model_id", self.model_id))
         if not isinstance(self.runtime_provenance, RuntimeProvenance):
             raise ValueError("runtime_provenance is required")
@@ -321,13 +324,12 @@ class PredictionRecord:
         candidate_ids = [candidate.candidate_id for candidate in candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("candidate_id values must be unique")
-        if candidates:
-            dimensions = {
-                (candidate.mask.image_width, candidate.mask.image_height)
-                for candidate in candidates
-            }
-            if len(dimensions) != 1:
-                raise ValueError("candidate mask dimensions must match")
+        if any(
+            (candidate.mask.image_width, candidate.mask.image_height)
+            != (self.image_width, self.image_height)
+            for candidate in candidates
+        ):
+            raise ValueError("candidate mask dimensions must match prediction image dimensions")
         object.__setattr__(self, "raw_candidates", candidates)
         if isinstance(self.raw_count, bool) or not isinstance(self.raw_count, int) or self.raw_count != len(candidates):
             raise ValueError("raw_count must equal the number of raw_candidates")
@@ -337,7 +339,51 @@ class PredictionRecord:
             object.__setattr__(self, name, _require_bool(name, getattr(self, name)))
         if self.fallback_used:
             raise ValueError("fallback_used must be false for benchmark records")
+        self._validate_model_candidate_fields(candidates)
         self._validate_decision(candidate_ids)
+
+    def _validate_model_candidate_fields(
+        self, candidates: tuple[RawCandidate, ...]
+    ) -> None:
+        normalized_model_id = self.model_id.lower().replace("_", "-")
+        if "yolo" in normalized_model_id:
+            for candidate in candidates:
+                if candidate.class_confidence is None:
+                    raise ValueError("YOLO candidates require class_confidence")
+                if any(
+                    value is not None
+                    for value in (
+                        candidate.grounding_box_score,
+                        candidate.grounding_text_score,
+                        candidate.sam_quality,
+                    )
+                ):
+                    raise ValueError("YOLO candidates forbid Grounded-SAM score fields")
+                if candidate.ranking_score_source != "class_confidence":
+                    raise ValueError("YOLO ranking_score_source must be class_confidence")
+            return
+        if "grounded-sam" in normalized_model_id:
+            for candidate in candidates:
+                if candidate.class_confidence is not None:
+                    raise ValueError("Grounded-SAM candidates forbid class_confidence")
+                if any(
+                    value is None
+                    for value in (
+                        candidate.grounding_box_score,
+                        candidate.grounding_text_score,
+                        candidate.sam_quality,
+                    )
+                ):
+                    raise ValueError("Grounded-SAM candidates require grounding and SAM scores")
+                if candidate.ranking_score_source not in {
+                    "grounding_box_score",
+                    "grounding_text_score",
+                    "sam_quality",
+                }:
+                    raise ValueError("Grounded-SAM ranking_score_source is invalid")
+            return
+        if candidates:
+            raise ValueError("model_id must identify YOLO or Grounded-SAM candidates")
 
     def _validate_decision(self, candidate_ids: list[str]) -> None:
         if self.record_status is RecordStatus.ERROR:

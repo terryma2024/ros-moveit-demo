@@ -18,16 +18,14 @@ from so101_demo.perception_benchmark.codec import (
 from so101_demo.perception_benchmark.contracts import MaskRef
 
 
-def test_rle_round_trip_is_lossless_and_row_major() -> None:
+def test_rle_round_trip_is_lossless_coco_column_major() -> None:
     mask = np.array([[False, True, True], [False, False, True]], dtype=bool)
 
     document = encode_mask_rle(mask)
 
     assert document == {
-        "encoding": "binary-rle-c-v1",
-        "height": 2,
-        "width": 3,
-        "counts": [1, 2, 2, 1],
+        "size": [2, 3],
+        "counts": [2, 1, 1, 2],
     }
     decoded = decode_mask_rle(document)
     assert decoded.dtype == np.bool_
@@ -37,10 +35,11 @@ def test_rle_round_trip_is_lossless_and_row_major() -> None:
 @pytest.mark.parametrize(
     "document",
     [
-        {"encoding": "wrong", "height": 1, "width": 1, "counts": [0, 1]},
-        {"encoding": "binary-rle-c-v1", "height": 1, "width": 1, "counts": [2]},
-        {"encoding": "binary-rle-c-v1", "height": 1, "width": 1, "counts": [0, 2]},
-        {"encoding": "binary-rle-c-v1", "height": 1, "width": 1, "counts": [0, -1]},
+        {"encoding": "binary-rle-c-v1", "height": 1, "width": 1, "counts": [0, 1]},
+        {"size": [1, 1], "counts": [2]},
+        {"size": [1, 1], "counts": [0, 2]},
+        {"size": [1, 1], "counts": [0, -1]},
+        {"size": [True, 1], "counts": [0, 1]},
     ],
 )
 def test_rle_rejects_malformed_payloads(document: dict[str, object]) -> None:

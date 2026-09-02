@@ -13,14 +13,11 @@ import numpy as np
 
 from so101_demo.perception_benchmark.contracts import MaskRef
 
-_RLE_ENCODING = "binary-rle-c-v1"
-
-
 def encode_mask_rle(mask: np.ndarray) -> dict[str, object]:
     value = np.asarray(mask, dtype=bool)
     if value.ndim != 2:
         raise ValueError("mask must be two-dimensional")
-    flat = value.astype(np.uint8, copy=False).ravel(order="C")
+    flat = value.astype(np.uint8, copy=False).ravel(order="F")
     counts: list[int] = []
     current = 0
     run = 0
@@ -33,26 +30,26 @@ def encode_mask_rle(mask: np.ndarray) -> dict[str, object]:
             run = 1
     counts.append(run)
     return {
-        "encoding": _RLE_ENCODING,
-        "height": value.shape[0],
-        "width": value.shape[1],
+        "size": [value.shape[0], value.shape[1]],
         "counts": counts,
     }
 
 
 def decode_mask_rle(document: Mapping[str, object]) -> np.ndarray:
-    if not isinstance(document, Mapping) or set(document) != {
-        "encoding",
-        "height",
-        "width",
-        "counts",
-    }:
-        raise ValueError("RLE document must contain exactly encoding, height, width, and counts")
-    if document["encoding"] != _RLE_ENCODING:
-        raise ValueError("unsupported RLE encoding")
-    height = document["height"]
-    width = document["width"]
+    if not isinstance(document, Mapping) or set(document) != {"size", "counts"}:
+        raise ValueError("COCO RLE document must contain exactly size and counts")
+    size = document["size"]
     counts = document["counts"]
+    if (
+        not isinstance(size, list)
+        or len(size) != 2
+        or isinstance(size[0], bool)
+        or isinstance(size[1], bool)
+        or not isinstance(size[0], int)
+        or not isinstance(size[1], int)
+    ):
+        raise ValueError("COCO RLE size must be a [height, width] integer list")
+    height, width = size
     if (
         isinstance(height, bool)
         or isinstance(width, bool)
@@ -61,13 +58,13 @@ def decode_mask_rle(document: Mapping[str, object]) -> np.ndarray:
         or height <= 0
         or width <= 0
     ):
-        raise ValueError("RLE dimensions must be positive integers")
+        raise ValueError("COCO RLE dimensions must be positive integers")
     if not isinstance(counts, list) or not counts:
-        raise ValueError("RLE counts must be a non-empty list")
+        raise ValueError("COCO RLE counts must be a non-empty list")
     if any(isinstance(count, bool) or not isinstance(count, int) or count < 0 for count in counts):
-        raise ValueError("RLE counts must be nonnegative integers")
+        raise ValueError("COCO RLE counts must be nonnegative integers")
     if sum(counts) != height * width:
-        raise ValueError("RLE counts do not match dimensions")
+        raise ValueError("COCO RLE counts do not match dimensions")
     pixels = np.empty(height * width, dtype=bool)
     offset = 0
     current = False
@@ -75,7 +72,7 @@ def decode_mask_rle(document: Mapping[str, object]) -> np.ndarray:
         pixels[offset : offset + count] = current
         offset += count
         current = not current
-    return pixels.reshape((height, width), order="C")
+    return pixels.reshape((height, width), order="F")
 
 
 def canonical_json_bytes(document: object) -> bytes:
