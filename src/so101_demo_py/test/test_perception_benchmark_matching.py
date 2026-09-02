@@ -142,6 +142,41 @@ def test_equal_cost_matrix_uses_sorted_truth_and_lower_candidate_column(tmp_path
     ]
 
 
+def test_residual_ties_are_refined_after_locking_the_highest_iou_edge(
+    tmp_path: Path,
+) -> None:
+    truth = (
+        _truth(tmp_path, "t1", [[0, 0, 0, 0]]),
+        _truth(tmp_path, "t2", [[1, 0, 0, 0]]),
+        _truth(tmp_path, "t0", [[0, 0, 0, 0]]),
+    )
+    candidates = (
+        _candidate(tmp_path, "c", 0.9, [[0, 0, 0, 0]]),
+        _candidate(tmp_path, "a", 0.9, [[1, 1, 1, 1]]),
+        _candidate(tmp_path, "b", 0.9, [[0, 0, 0, 0]]),
+    )
+
+    matches = maximize_mask_iou_assignment(truth, candidates, tmp_path)
+
+    assert [(match.truth_instance_id, match.candidate_id, match.iou) for match in matches] == [
+        ("t0", "b", 0.0),
+        ("t1", "c", 0.0),
+        ("t2", "a", 0.25),
+    ]
+
+
+def test_equal_iou_and_confidence_prefers_smaller_candidate_id(tmp_path: Path) -> None:
+    truth = (_truth(tmp_path, "t0", [[0, 0]]),)
+    candidates = (
+        _candidate(tmp_path, "b", 0.7, [[0, 0]]),
+        _candidate(tmp_path, "a", 0.7, [[0, 0]]),
+    )
+
+    match = maximize_mask_iou_assignment(truth, candidates, tmp_path)[0]
+
+    assert (match.truth_instance_id, match.candidate_id, match.iou) == ("t0", "a", 0.0)
+
+
 def test_assignment_handles_either_empty_side_without_synthetic_matches(tmp_path: Path) -> None:
     truth = (_truth(tmp_path, "t0", [[1]]),)
     candidate = (_candidate(tmp_path, "a", 0.9, [[1]]),)

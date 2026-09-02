@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 import math
 from pathlib import Path
 from typing import Sequence
@@ -138,6 +139,87 @@ def _hungarian_minimize(cost: np.ndarray) -> tuple[int | None, ...]:
     return tuple(assignment)
 
 
+def _optimal_edges(
+    values: np.ndarray,
+    rows: tuple[int, ...],
+    columns: tuple[int, ...],
+) -> tuple[tuple[int, int], ...]:
+    if not rows or not columns:
+        return ()
+    submatrix = values[np.ix_(rows, columns)]
+    assignment = _hungarian_minimize(-submatrix)
+    return tuple(
+        (rows[subrow], columns[subcolumn])
+        for subrow, subcolumn in enumerate(assignment)
+        if subcolumn is not None
+    )
+
+
+def _exact_edge_total(
+    values: np.ndarray, edges: Sequence[tuple[int, int]]
+) -> Fraction:
+    return sum(
+        (Fraction.from_float(float(values[row, column])) for row, column in edges),
+        start=Fraction(),
+    )
+
+
+def _lexicographic_maximize(values: np.ndarray) -> tuple[int | None, ...]:
+    """Refine a maximum-total assignment with explicit residual checks."""
+
+    row_count, column_count = values.shape
+    if row_count == 0:
+        return ()
+    if column_count == 0:
+        return (None,) * row_count
+    all_rows = tuple(range(row_count))
+    all_columns = tuple(range(column_count))
+    target_edges = _optimal_edges(values, all_rows, all_columns)
+    target_total = _exact_edge_total(values, target_edges)
+    required_edges = min(row_count, column_count)
+    edge_priority = sorted(
+        (
+            (row, column)
+            for row in range(row_count)
+            for column in range(column_count)
+        ),
+        key=lambda edge: (-values[edge], edge[1], edge[0]),
+    )
+
+    locked: list[tuple[int, int]] = []
+    locked_rows: set[int] = set()
+    locked_columns: set[int] = set()
+    for row, column in edge_priority:
+        if row in locked_rows or column in locked_columns:
+            continue
+        trial = (*locked, (row, column))
+        residual_rows = tuple(
+            item for item in all_rows if item not in locked_rows and item != row
+        )
+        residual_columns = tuple(
+            item
+            for item in all_columns
+            if item not in locked_columns and item != column
+        )
+        residual_edges = _optimal_edges(values, residual_rows, residual_columns)
+        if len(trial) + len(residual_edges) != required_edges:
+            continue
+        if _exact_edge_total(values, (*trial, *residual_edges)) != target_total:
+            continue
+        locked.append((row, column))
+        locked_rows.add(row)
+        locked_columns.add(column)
+        if len(locked) == required_edges:
+            break
+
+    if len(locked) != required_edges:
+        raise ValueError("maximum assignment could not be deterministically refined")
+    assignment: list[int | None] = [None] * row_count
+    for row, column in locked:
+        assignment[row] = column
+    return tuple(assignment)
+
+
 def maximize_mask_iou_assignment(
     truth: Sequence[TruthInstance],
     candidates: Sequence[RawCandidate],
@@ -162,7 +244,7 @@ def maximize_mask_iou_assignment(
         ],
         dtype=np.float64,
     )
-    row_to_column = _hungarian_minimize(1.0 - ious)
+    row_to_column = _lexicographic_maximize(ious)
     return tuple(
         MaskMatch(
             ordered_truth[row].instance_id,
