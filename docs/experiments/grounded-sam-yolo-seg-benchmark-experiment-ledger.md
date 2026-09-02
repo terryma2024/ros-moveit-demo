@@ -192,3 +192,56 @@ Exact planned evidence paths are `$BENCHMARK_ROOT/dataset/sealed-test-members.js
 - Retained implementation evidence: every Task 9 RED/GREEN/full JUnit file plus `build-benchmark/`, `install-benchmark/`, and `log-benchmark/`.
 - Archived runs: none. No evidence was deleted.
 - Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
+
+## CP-BENCH-008 — Task 10 package-gate provenance and RUNNING transition
+
+This checkpoint is append-only. It starts the Task 10 package-gate experiment without rewriting the earlier `EXP-BENCH-001` audit entry.
+
+- Experiment state: `EXP-BENCH-001` is `RUNNING` for Mac/Linux exact-source package gates only.
+- Observation time: `2026-09-02T22:15:20Z` through `2026-09-02T22:15:41Z`.
+- Lifecycle: `ISOLATED_STACK`; this task does not start a ROS graph, Gazebo, MoveIt, RViz, model inference, or hardware execution.
+- Source commit: `1da1286ccd59cfa1deaa6da55c8dbd9b7f62fea4`.
+- Mac worktree: `/Users/matianyi/.codex/worktrees/5b15/moveit-demo`; branch `codex/v5-t004-yolo-seg-rgbd`; preserved untracked paths are `build-benchmark/`, `build-task10-watermark-v2/`, `build-task11-tf-discovery/`, `install-benchmark/`, `install-task10-watermark-v2/`, `install-task11-tf-discovery/`, `log-benchmark/`, and `log-task10-watermark-v2/`.
+- Mac canonical checkout: `/Users/matianyi/Projects/robot_demo_001/moveit-demo`; commit `b5f183353466264e0601d4946a8f3922691af575`; branch `main`; clean status. The parent checkout reported `-e7e0299cf8115214a0daf483cc40da6b09309091 moveit-demo`; no synchronization or mutation is authorized.
+- ai-station canonical checkout: `/data/work/ws_moveit`; commit `e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4`; branch `main`; preserved untracked path `docs/experiments/ai-station-linux-headless-rgbd-four-point-upgrade-experiment-ledger.md`.
+- Process ownership: no existing `perception_benchmark`, `move_group`, `rviz2`, or `gz sim` stack was observed on Mac. No such remote stack was observed; the only remote process match was the bounded read-only SSH wrapper that performed this query. No existing process will be stopped or replaced.
+- Planned Mac install overlay: `/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/`.
+- Planned Mac runtime executable/package prefix: `/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py`.
+- Planned isolated Linux checkout: `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1` if absent; otherwise a new explicit suffix will be selected without overwriting the existing path.
+- Planned isolated Linux install overlay: `<isolated-checkout>/install-benchmark/`.
+- ROS domain ID: `NONE`.
+- Gazebo partition: `NONE`.
+- Success criteria: both Mac and Linux collect non-zero `so101_demo_py` tests with zero errors/failures; Linux source checkout is clean at the exact source commit; Mac `rclpy` resolves to ROS Jazzy; Linux `ros2 pkg prefix so101_demo_py` resolves inside the isolated checkout; all retained evidence is under the registered roots.
+- Invalid criteria: any source/install/runtime provenance mismatch, zero tests, non-zero test command, any JUnit error/failure, unsafe pre-existing output path, or inability to preserve canonical checkout/process state.
+- Command status: Mac package gate `PENDING`; exact-source bundle `PENDING`; Linux isolated build/package gate `PENDING`; evidence index `PENDING`.
+- Evidence roots: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1` and `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1`.
+
+## CP-BENCH-009 — Task 10 package-gate terminal result
+
+This checkpoint is append-only and supersedes CP-BENCH-008 only for the terminal Task 10 state.
+
+- Experiment state: `EXP-BENCH-001` is `INVALID`.
+- Terminal observation time: `2026-09-02T22:57:06Z`.
+- Conclusion: the Mac package gate passed after completing the candidate overlay, but the standard Linux `colcon test` package gate did not pass. This experiment is excluded from benchmark execution and cannot authorize Task 11 formal asset staging.
+- First unsatisfied boundary: Linux package-test execution context. `colcon test` ran pytest from `build-benchmark/so101_demo_py`; the first failing test was `test_cup_pose_subscriber.py::test_setup_registers_the_cup_pose_subscriber_executable`, whose repository-root-relative read of `src/so101_demo_py/setup.py` raised `FileNotFoundError`.
+- Additional observed Linux boundaries: the exact-source Git bundle contains the parent repository but not initialized `third_party/mujoco_ros2_control` submodule content; `torch` is unavailable in the ROS-only Python; and the Linux Pillow rasterizer identity does not match the frozen rasterizer identity used by the dataset tests. These are observations from the same invalid package run, not benchmark/model results.
+- Mac focused command result: exit `0`; `49 passed`; JUnit `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/mac-focused-cli.xml`.
+- Mac first package command result: exit `1`; `1594 passed, 1 failed`; the failed provenance test found `so101_mujoco_support` in the ordinary `install/` underlay while `so101_demo_py` was in `install-benchmark/`. The failed JUnit remains `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/mac-so101_demo_py.xml`.
+- Mac candidate-overlay remediation: the first `so101_mujoco_support` build failed because CMake selected Homebrew Python 3.14 without `em`; the second build explicitly selected `/Users/matianyi/ros2_jazzy/.venv/bin/python3` and completed. No source file changed. The focused provenance regression then passed `1/1`.
+- Mac final package command result: exit `0`; `1595 tests, 0 errors, 0 failures, 0 skipped`; final JUnit SHA-256 `691aab773daea7b2be74d676d45603301a4cebbee95b7a6ce3e554c69131b8fc`.
+- Mac runtime provenance: `rclpy=/opt/ros/jazzy/rclpy/lib/python3.11/site-packages/rclpy/__init__.py`; `so101_demo_py` prefix `/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py`; `so101_mujoco_support` prefix `/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_mujoco_support`; source commit `1da1286ccd59cfa1deaa6da55c8dbd9b7f62fea4`.
+- Mac immutable gate evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/mac-package-gate/`; public verifier result `VERIFIED 4`; evidence-index SHA-256 `5a33f57a7acd8de4673ce155e5d5dd91caefd24ef731f463400eb30eba8720a5`.
+- Exact-source bundle: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/source.bundle` and ai-station `/data/work/so101-grounded-sam-yolo-benchmark-source.bundle`; bundle head `1da1286ccd59cfa1deaa6da55c8dbd9b7f62fea4`; bundle SHA-256 on both hosts `086318bd4fc6210d0a1d48f3a9b41899a6e5dd290aca0f900ed84e632e6c8a4d`.
+- Bundle command correction: `git bundle create <path> <raw-sha>` was rejected as an empty bundle; `git bundle create <path> HEAD` produced a complete bundle whose listed `HEAD` was the required exact SHA.
+- First Linux clone: `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1`; checkout failed when Git LFS smudge attempted to resolve the formal dataset through a file bundle. No formal dataset bytes were opened or accepted. The directory is retained as an invalid-attempt deletion candidate and was not reused, overwritten, or deleted.
+- Authoritative Linux checkout: `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task10-v2`; cloned with `GIT_LFS_SKIP_SMUDGE=1`; clean immediately after detached checkout at `1da1286ccd59cfa1deaa6da55c8dbd9b7f62fea4`. Post-build status contains only the owned untracked `build-benchmark/`, `install-benchmark/`, and `log-benchmark/` directories.
+- Linux build: the first command was rejected before build because `--log-base` was placed after the `build` verb. After correcting it to the top-level colcon position, exact-source `so101_mujoco_support` and `so101_demo_py` both built successfully. Their prefixes are `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task10-v2/install-benchmark/{so101_mujoco_support,so101_demo_py}`. The canonical `/data/work/ws_moveit/install` was consumed read-only for lower-level dependencies.
+- Linux focused command result: exit `0`; `49 passed`; JUnit `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/tests/linux/junit/focused-cli.xml`.
+- Linux package command result: pytest collected `1595` tests. By the time the owned process remained in `D/jbd2_log_wait_commit` beyond 15 minutes, it had emitted multiple failures and completed `882` test records. The owned pytest PID was interrupted only after the gate was already invalid. Partial JUnit/test-result: `882 tests, 0 errors, 74 failures, 2 skipped`; `colcon test-result` exit `1`.
+- Linux immutable gate evidence: `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/tests/linux/package-gate/`; public verifier result `VERIFIED 4`; evidence-index SHA-256 `84e941691fcd2827c08b4a4cccb34ac8a42523d4f866b28ca5dd9baceef4f1e9`.
+- ROS domain ID: `NONE`. Gazebo partition: `NONE`. No ROS graph, Gazebo, MoveIt, RViz, model inference, formal archive inspection, or hardware command ran.
+- Preserved state: Mac canonical checkout remained at `b5f183353466264e0601d4946a8f3922691af575` with clean status. ai-station canonical checkout remained at `e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4` with its pre-existing untracked `docs/experiments/ai-station-linux-headless-rgbd-four-point-upgrade-experiment-ledger.md`. No benchmark/test process remained after the bounded interrupt; final process matches were only the read-only query itself.
+- Retained: both immutable package-gate evidence trees, the exact-source bundle on both hosts, the authoritative isolated Linux checkout and its build/install/log directories, every failed and successful Mac JUnit/build log, the Linux focused JUnit, partial package JUnit, and test-result.
+- Archived: none.
+- Deletion candidates, not deleted: failed first Linux checkout `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1`; unindexed duplicate Linux paths `/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/tests/linux/{junit,ros-home}`; superseded Mac package-gate duplicates outside `tests/mac-package-gate/`; existing Task 9 deletion candidates remain unchanged.
+- Decision: `ABANDON` this package-gate attempt. The next inline task must resolve the Linux package-test working-directory, dependency/submodule, Python capability, and frozen rasterizer identities before creating a new experiment ID. Task 10 does not enter Task 11.
