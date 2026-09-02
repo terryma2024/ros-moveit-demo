@@ -1577,6 +1577,32 @@ def _verify_manifest_anchor(
         raise RunIntegrityError("RESUME_MANIFEST_ANCHOR_MISMATCH")
 
 
+def _verify_checkpoint_spec_identity(
+    checkpoint: RunCheckpoint,
+    spec: RunSpec,
+    provenance: RuntimeProvenance,
+    adapter: object,
+) -> None:
+    expected = {
+        "run_id": spec.run_id,
+        "platform": spec.platform,
+        "model": spec.model,
+        "model_id": str(getattr(adapter, "model_id")),
+        "weights_sha256": provenance.weights_sha256,
+        "device": spec.device,
+        "dtype": spec.dtype,
+        "run_kind": spec.run_kind,
+        "threshold_lock_sha256": spec.threshold_lock_sha256,
+        "collection_mode": spec.collection_mode,
+        "runtime_name": provenance.runtime_name,
+        "runtime_version": provenance.runtime_version,
+        "runtime_environment": dict(provenance.environment),
+        "max_gpu_temperature_celsius": spec.max_gpu_temperature_celsius,
+    }
+    if any(getattr(checkpoint, name) != value for name, value in expected.items()):
+        raise RunIntegrityError("RESUME_SPEC_CHANGED")
+
+
 class DetectorBenchmarkRunner:
     """Execute exactly one durable record for every canonical inventory sample."""
 
@@ -1630,6 +1656,43 @@ class DetectorBenchmarkRunner:
         _atomic_replace_json(
             root / "manifest.json", manifest, "MANIFEST_WRITE_FAILED"
         )
+
+    def _verify_terminal_valid(
+        self,
+        root: Path,
+        spec: RunSpec,
+        manifest: RunManifest,
+    ) -> None:
+        _verify_inventory(spec.inventory)
+        _validate_spec(spec, self.adapter)
+        _verify_current_images(spec.inventory)
+        provenance = _runtime_provenance(spec, self.adapter)
+        _verify_manifest_identity(manifest, spec, provenance, self.adapter)
+        records_dir = _require_directory(
+            root / "records", "RECORDS_DIRECTORY_INVALID"
+        )
+        checkpoint = _read_checkpoint(root / "checkpoint.json")
+        checkpoint_records = _require_directory(
+            checkpoint.records_dir, "RECORDS_DIRECTORY_INVALID"
+        )
+        if checkpoint_records != records_dir:
+            raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
+        _verify_checkpoint_spec_identity(
+            checkpoint, spec, provenance, self.adapter
+        )
+        verified_count = verify_resume(
+            checkpoint,
+            spec.inventory,
+            spec.config_sha256,
+            spec.source_commit,
+        )
+        _verify_manifest_anchor(manifest, checkpoint)
+        if (
+            verified_count != spec.inventory.sample_count
+            or checkpoint.record_count != spec.inventory.sample_count
+            or manifest.record_count != spec.inventory.sample_count
+        ):
+            raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
 
     def _manifest(
         self,
@@ -1708,15 +1771,23 @@ class DetectorBenchmarkRunner:
         existing_manifest: RunManifest | None = None
         manifest_schema_verified = False
         resume_verified = False
+        terminal_read_only = False
         try:
             root = self._root_for(spec)
             self._active_root = root
             manifest_path = root / "manifest.json"
             if manifest_path.exists() or manifest_path.is_symlink():
                 existing_manifest = _read_manifest(manifest_path)
+                terminal_read_only = existing_manifest.status in {
+                    RunStatus.VALID,
+                    RunStatus.INVALID,
+                }
                 _verify_manifest_schema(existing_manifest)
                 manifest_schema_verified = True
-                if existing_manifest.status in {RunStatus.VALID, RunStatus.INVALID}:
+                if existing_manifest.status is RunStatus.VALID:
+                    self._verify_terminal_valid(root, spec, existing_manifest)
+                    return existing_manifest
+                if existing_manifest.status is RunStatus.INVALID:
                     return existing_manifest
                 if existing_manifest.status is not RunStatus.RUNNING:
                     raise RunIntegrityError("MANIFEST_NOT_RESUMABLE")
@@ -1749,24 +1820,9 @@ class DetectorBenchmarkRunner:
                     spec.config_sha256,
                     spec.source_commit,
                 )
-                expected = {
-                    "run_id": spec.run_id,
-                    "platform": spec.platform,
-                    "model": spec.model,
-                    "model_id": str(getattr(self.adapter, "model_id")),
-                    "weights_sha256": provenance.weights_sha256,
-                    "device": spec.device,
-                    "dtype": spec.dtype,
-                    "run_kind": spec.run_kind,
-                    "threshold_lock_sha256": spec.threshold_lock_sha256,
-                    "collection_mode": spec.collection_mode,
-                    "runtime_name": provenance.runtime_name,
-                    "runtime_version": provenance.runtime_version,
-                    "runtime_environment": dict(provenance.environment),
-                    "max_gpu_temperature_celsius": spec.max_gpu_temperature_celsius,
-                }
-                if any(getattr(checkpoint, name) != value for name, value in expected.items()):
-                    raise RunIntegrityError("RESUME_SPEC_CHANGED")
+                _verify_checkpoint_spec_identity(
+                    checkpoint, spec, provenance, self.adapter
+                )
                 _verify_manifest_anchor(existing_manifest, checkpoint)
                 resume_verified = True
                 previous_record_sha256: str | None = (
@@ -1935,6 +1991,8 @@ class DetectorBenchmarkRunner:
             self._write_manifest(root, manifest)
             return manifest
         except Exception as error:
+            if terminal_read_only:
+                raise
             if isinstance(error, RunIntegrityError):
                 reason = str(error)
             elif isinstance(error, OSError):
