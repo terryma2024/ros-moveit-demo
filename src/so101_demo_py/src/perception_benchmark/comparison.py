@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Sequence
+from types import MappingProxyType
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -20,8 +21,25 @@ class CandidatePairComparison:
 
     mac_candidate_id: str
     linux_candidate_id: str
+    ranking_score_source_equal: bool
+    mac_ranking_score_source: str
+    linux_ranking_score_source: str
+    ranking_score_absolute_delta: float
+    ranking_score_relative_delta: float | None
     confidence_absolute_delta: float
     confidence_relative_delta: float | None
+    class_confidence_presence_equal: bool
+    class_confidence_absolute_delta: float | None
+    class_confidence_relative_delta: float | None
+    grounding_box_score_presence_equal: bool
+    grounding_box_score_absolute_delta: float | None
+    grounding_box_score_relative_delta: float | None
+    grounding_text_score_presence_equal: bool
+    grounding_text_score_absolute_delta: float | None
+    grounding_text_score_relative_delta: float | None
+    sam_quality_presence_equal: bool
+    sam_quality_absolute_delta: float | None
+    sam_quality_relative_delta: float | None
     mask_iou: float
     box_iou: float
 
@@ -48,6 +66,16 @@ class CrossPlatformItem:
     linux_decision: str
     mac_error_type: str | None
     linux_error_type: str | None
+    mac_runtime_device: str
+    linux_runtime_device: str
+    runtime_device_pair_expected: bool
+    weights_sha256_equal: bool
+    runtime_name_equal: bool
+    runtime_version_equal: bool
+    runtime_environment_equal: bool
+    runtime_environment_identity_equal: bool
+    mac_runtime_environment: Mapping[str, str]
+    linux_runtime_environment: Mapping[str, str]
     is_mismatch: bool
 
 
@@ -117,6 +145,43 @@ def _relative_delta(first: float, second: float) -> float | None:
     return float(absolute / abs(second))
 
 
+def _optional_score_delta(
+    first: float | None,
+    second: float | None,
+) -> tuple[bool, float | None, float | None]:
+    presence_equal = (first is None) == (second is None)
+    if first is None or second is None:
+        return presence_equal, None, None
+    absolute = float(abs(first - second))
+    return presence_equal, absolute, _relative_delta(first, second)
+
+
+_PLATFORM_ENVIRONMENT_KEYS = frozenset(
+    {
+        "accelerator",
+        "architecture",
+        "device",
+        "machine",
+        "operating_system",
+        "os",
+        "platform",
+        "runtime_device",
+    }
+)
+
+
+def _runtime_environment_identity(
+    environment: Mapping[str, str],
+) -> Mapping[str, str]:
+    return MappingProxyType(
+        {
+            key: value
+            for key, value in sorted(environment.items())
+            if key not in _PLATFORM_ENVIRONMENT_KEYS
+        }
+    )
+
+
 def _candidate_pairs(
     mac_candidates: tuple[RawCandidate, ...],
     linux_candidates: tuple[RawCandidate, ...],
@@ -160,14 +225,52 @@ def _candidate_pairs(
         absolute_delta = abs(
             mac_candidate.ranking_score - linux_candidate.ranking_score
         )
+        class_delta = _optional_score_delta(
+            mac_candidate.class_confidence,
+            linux_candidate.class_confidence,
+        )
+        box_score_delta = _optional_score_delta(
+            mac_candidate.grounding_box_score,
+            linux_candidate.grounding_box_score,
+        )
+        text_score_delta = _optional_score_delta(
+            mac_candidate.grounding_text_score,
+            linux_candidate.grounding_text_score,
+        )
+        quality_delta = _optional_score_delta(
+            mac_candidate.sam_quality,
+            linux_candidate.sam_quality,
+        )
         pairs.append(
             CandidatePairComparison(
                 mac_candidate_id=mac_candidate.candidate_id,
                 linux_candidate_id=linux_candidate.candidate_id,
+                ranking_score_source_equal=(
+                    mac_candidate.ranking_score_source
+                    == linux_candidate.ranking_score_source
+                ),
+                mac_ranking_score_source=mac_candidate.ranking_score_source,
+                linux_ranking_score_source=linux_candidate.ranking_score_source,
+                ranking_score_absolute_delta=float(absolute_delta),
+                ranking_score_relative_delta=_relative_delta(
+                    mac_candidate.ranking_score, linux_candidate.ranking_score
+                ),
                 confidence_absolute_delta=float(absolute_delta),
                 confidence_relative_delta=_relative_delta(
                     mac_candidate.ranking_score, linux_candidate.ranking_score
                 ),
+                class_confidence_presence_equal=class_delta[0],
+                class_confidence_absolute_delta=class_delta[1],
+                class_confidence_relative_delta=class_delta[2],
+                grounding_box_score_presence_equal=box_score_delta[0],
+                grounding_box_score_absolute_delta=box_score_delta[1],
+                grounding_box_score_relative_delta=box_score_delta[2],
+                grounding_text_score_presence_equal=text_score_delta[0],
+                grounding_text_score_absolute_delta=text_score_delta[1],
+                grounding_text_score_relative_delta=text_score_delta[2],
+                sam_quality_presence_equal=quality_delta[0],
+                sam_quality_absolute_delta=quality_delta[1],
+                sam_quality_relative_delta=quality_delta[2],
                 mask_iou=float(ious[mac_index, linux_index]),
                 box_iou=_box_iou(
                     mac_candidate.bbox_xyxy, linux_candidate.bbox_xyxy
@@ -267,8 +370,39 @@ def compare_platforms(
         )
         decision_equal = mac.decision is linux.decision
         error_type_equal = mac.error_type == linux.error_type
+        mac_provenance = mac.runtime_provenance
+        linux_provenance = linux.runtime_provenance
+        weights_equal = (
+            mac_provenance.weights_sha256 == linux_provenance.weights_sha256
+        )
+        runtime_name_equal = (
+            mac_provenance.runtime_name == linux_provenance.runtime_name
+        )
+        runtime_version_equal = (
+            mac_provenance.runtime_version == linux_provenance.runtime_version
+        )
+        mac_environment = MappingProxyType(dict(mac_provenance.environment))
+        linux_environment = MappingProxyType(dict(linux_provenance.environment))
+        environment_equal = mac_environment == linux_environment
+        environment_identity_equal = (
+            _runtime_environment_identity(mac_environment)
+            == _runtime_environment_identity(linux_environment)
+        )
+        device_pair_expected = (
+            mac_provenance.runtime_device == "mps"
+            and linux_provenance.runtime_device == "cuda"
+        )
         pair_mismatch = any(
-            pair.confidence_absolute_delta != 0.0
+            not pair.ranking_score_source_equal
+            or pair.ranking_score_absolute_delta != 0.0
+            or not pair.class_confidence_presence_equal
+            or (pair.class_confidence_absolute_delta or 0.0) != 0.0
+            or not pair.grounding_box_score_presence_equal
+            or (pair.grounding_box_score_absolute_delta or 0.0) != 0.0
+            or not pair.grounding_text_score_presence_equal
+            or (pair.grounding_text_score_absolute_delta or 0.0) != 0.0
+            or not pair.sam_quality_presence_equal
+            or (pair.sam_quality_absolute_delta or 0.0) != 0.0
             or pair.mask_iou != 1.0
             or pair.box_iou != 1.0
             for pair in pairs
@@ -281,6 +415,11 @@ def compare_platforms(
             or pair_mismatch
             or not decision_equal
             or not error_type_equal
+            or not weights_equal
+            or not runtime_name_equal
+            or not runtime_version_equal
+            or not environment_identity_equal
+            or not device_pair_expected
         )
         items.append(
             CrossPlatformItem(
@@ -302,12 +441,40 @@ def compare_platforms(
                 linux_decision=linux.decision.value,
                 mac_error_type=mac.error_type,
                 linux_error_type=linux.error_type,
+                mac_runtime_device=mac_provenance.runtime_device,
+                linux_runtime_device=linux_provenance.runtime_device,
+                runtime_device_pair_expected=device_pair_expected,
+                weights_sha256_equal=weights_equal,
+                runtime_name_equal=runtime_name_equal,
+                runtime_version_equal=runtime_version_equal,
+                runtime_environment_equal=environment_equal,
+                runtime_environment_identity_equal=environment_identity_equal,
+                mac_runtime_environment=mac_environment,
+                linux_runtime_environment=linux_environment,
                 is_mismatch=is_mismatch,
             )
         )
     mismatch_shas = tuple(item.image_sha256 for item in items if item.is_mismatch)
-    if any(not math.isfinite(pair.confidence_absolute_delta) for item in items for pair in item.candidate_pairs):
-        raise ValueError("comparison produced a nonfinite confidence delta")
+    deltas = (
+        value
+        for item in items
+        for pair in item.candidate_pairs
+        for value in (
+            pair.ranking_score_absolute_delta,
+            pair.ranking_score_relative_delta,
+            pair.class_confidence_absolute_delta,
+            pair.class_confidence_relative_delta,
+            pair.grounding_box_score_absolute_delta,
+            pair.grounding_box_score_relative_delta,
+            pair.grounding_text_score_absolute_delta,
+            pair.grounding_text_score_relative_delta,
+            pair.sam_quality_absolute_delta,
+            pair.sam_quality_relative_delta,
+        )
+        if value is not None
+    )
+    if any(not math.isfinite(value) for value in deltas):
+        raise ValueError("comparison produced a nonfinite score delta")
     return CrossPlatformSummary(
         pair_count=len(items),
         mismatch_count=len(mismatch_shas),

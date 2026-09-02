@@ -1,12 +1,26 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import replace
+from decimal import Decimal
 import hashlib
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+import so101_demo.perception_benchmark.reporting as reporting_module
+from so101_demo.perception_benchmark.calibration import (
+    LOCK_SCHEMA_VERSION,
+    OBJECTIVE_VERSION,
+    TIE_BREAK_VERSION,
+    GroundedSamBenchmarkThresholds,
+    ObjectiveCalibrationMetrics,
+    PlatformCalibrationMetrics,
+    ThresholdLock,
+    YoloThresholds,
+)
 
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
@@ -32,6 +46,7 @@ from so101_demo.perception_benchmark.reporting import (
     ReportWriter,
     RunAggregationEvidence,
 )
+from so101_demo.perception_benchmark.timing import ResourceSample
 
 
 _SOURCE_COMMIT = "1" * 40
@@ -187,6 +202,7 @@ def _extended_document(
     total_ms: float,
     platform: str = "linux",
     model: str = "yolo_seg",
+    resource_samples: tuple[ResourceSample, ...] = (),
 ) -> dict[str, object]:
     phases = record.phase_timings
     required_phase_total = sum(
@@ -235,7 +251,7 @@ def _extended_document(
         "fallback_used": record.fallback_used,
         "platform": platform,
         "model": model,
-        "device": "cuda",
+        "device": record.runtime_provenance.runtime_device,
         "dtype": "float32",
         "source_commit": _SOURCE_COMMIT,
         "inventory_sha256": _INVENTORY_SHA,
@@ -253,7 +269,20 @@ def _extended_document(
             "selector_ms": phases.selector_ms,
             "total_ms": total_ms,
         },
-        "resource_samples": [],
+        "resource_samples": [
+            {
+                "process_rss_bytes": sample.process_rss_bytes,
+                "process_cpu_percent": sample.process_cpu_percent,
+                "gpu_memory_allocated_bytes": sample.gpu_memory_allocated_bytes,
+                "gpu_memory_reserved_bytes": sample.gpu_memory_reserved_bytes,
+                "gpu_utilization_percent": sample.gpu_utilization_percent,
+                "gpu_temperature_celsius": sample.gpu_temperature_celsius,
+                "gpu_power_watts": sample.gpu_power_watts,
+                "unavailable_reasons": dict(sample.unavailable_reasons),
+                "tool_versions": dict(sample.tool_versions),
+            }
+            for sample in resource_samples
+        ],
         "irreversible_limits": {},
     }
 
@@ -380,6 +409,191 @@ def test_report_keeps_error_record_in_every_denominator(tmp_path: Path) -> None:
     assert summary.formal is False
     assert summary.deployable is False
     assert summary.qualification_status == "NON_FORMAL_INVALID_FOR_DEPLOYMENT"
+
+
+@pytest.mark.parametrize("flag", ("timed_out", "oom"))
+def test_ok_record_cannot_claim_timeout_or_oom(
+    tmp_path: Path,
+    flag: str,
+) -> None:
+    aggregation_input = _fixture(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    records = list(aggregation_input.raw_frozen_records["linux"]["yolo_seg"])
+    records[0] = replace(records[0], **{flag: True})
+    record_tuple = tuple(records)
+    evidence = aggregation_input.run_evidence[key]
+    aggregation_input = replace(
+        aggregation_input,
+        raw_frozen_records={"linux": {"yolo_seg": record_tuple}},
+        run_evidence={
+            **aggregation_input.run_evidence,
+            key: replace(
+                evidence,
+                extended_record_documents=tuple(
+                    _extended_document(record, total_ms=10.0 + position)
+                    for position, record in enumerate(record_tuple)
+                ),
+            ),
+        },
+    )
+
+    with pytest.raises(ValueError, match="timeout|OOM|ERROR"):
+        MetricsAggregator().aggregate(aggregation_input)
+
+
+def test_no_cup_fpr_uses_effective_raw_candidates_not_selector_decision(
+    tmp_path: Path,
+) -> None:
+    aggregation_input = _fixture(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    candidate_root = aggregation_input.run_evidence[key].evidence_root
+    false_positive = _candidate(
+        candidate_root,
+        0,
+        0,
+        [[1, 0, 0], [0, 0, 0], [0, 0, 0]],
+        score=0.1,
+    )
+    records = list(aggregation_input.raw_frozen_records["linux"]["yolo_seg"])
+    records[0] = replace(
+        records[0],
+        raw_candidates=(false_positive,),
+        raw_count=1,
+    )
+    record_tuple = tuple(records)
+    evidence = aggregation_input.run_evidence[key]
+    aggregation_input = replace(
+        aggregation_input,
+        raw_frozen_records={"linux": {"yolo_seg": record_tuple}},
+        run_evidence={
+            **aggregation_input.run_evidence,
+            key: replace(
+                evidence,
+                extended_record_documents=tuple(
+                    _extended_document(record, total_ms=10.0 + position)
+                    for position, record in enumerate(record_tuple)
+                ),
+            ),
+        },
+    )
+
+    summary = MetricsAggregator().aggregate(aggregation_input)
+    safety = summary.raw_frozen_by_platform_model["linux"]["yolo_seg"].scenarios[
+        "no_cup"
+    ].safety_metrics
+
+    assert records[0].decision is DecisionOutput.NOT_FOUND
+    assert safety.no_cup_false_positive_count == 1
+    assert safety.no_cup_false_positive_rate == 1.0
+
+
+def test_all_zero_predicted_leakage_bootstrap_is_undefined(tmp_path: Path) -> None:
+    aggregation_input = _fixture(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    records = list(aggregation_input.raw_frozen_records["linux"]["yolo_seg"])
+    records[3] = replace(
+        records[3],
+        raw_candidates=(),
+        raw_count=0,
+        decision=DecisionOutput.NOT_FOUND,
+        selected_candidate_id=None,
+        rejection_reason="TARGET_NOT_FOUND",
+    )
+    record_tuple = tuple(records)
+    evidence = aggregation_input.run_evidence[key]
+    aggregation_input = replace(
+        aggregation_input,
+        raw_frozen_records={"linux": {"yolo_seg": record_tuple}},
+        run_evidence={
+            **aggregation_input.run_evidence,
+            key: replace(
+                evidence,
+                extended_record_documents=tuple(
+                    _extended_document(record, total_ms=10.0 + position)
+                    for position, record in enumerate(record_tuple)
+                ),
+            ),
+        },
+    )
+
+    summary = MetricsAggregator().aggregate(aggregation_input)
+    interval = summary.raw_frozen_by_platform_model["linux"]["yolo_seg"].scenarios[
+        "cup_near_bottle"
+    ].confidence_intervals["non_cup_leakage_ratio"]
+
+    assert interval.lower is None
+    assert interval.upper is None
+
+
+def test_unavailable_resource_telemetry_stays_null_with_reasons(
+    tmp_path: Path,
+) -> None:
+    value = _fixture(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+    missing_fields = (
+        "process_rss_bytes",
+        "process_cpu_percent",
+        "gpu_memory_allocated_bytes",
+        "gpu_memory_reserved_bytes",
+        "gpu_utilization_percent",
+        "gpu_temperature_celsius",
+        "gpu_power_watts",
+    )
+    sample = ResourceSample(
+        process_rss_bytes=None,
+        process_cpu_percent=None,
+        gpu_memory_allocated_bytes=None,
+        gpu_memory_reserved_bytes=None,
+        gpu_utilization_percent=None,
+        gpu_temperature_celsius=None,
+        gpu_power_watts=None,
+        unavailable_reasons={field: "probe unavailable" for field in missing_fields},
+        tool_versions={"resource-probe": "1.0"},
+    )
+    trace = reporting_module.ResourceTrace(
+        sampling_frequency_hz=2.0,
+        observations=(
+            reporting_module.ResourceObservation(
+                phase="inference",
+                monotonic_ns=1_000_000,
+                formal_sample_index=0,
+                sample=sample,
+            ),
+        ),
+    )
+    records = value.raw_frozen_records["linux"]["yolo_seg"]
+    documents = tuple(
+        _extended_document(
+            record,
+            total_ms=10.0 + position,
+            resource_samples=(sample,) if position == 0 else (),
+        )
+        for position, record in enumerate(records)
+    )
+    value = replace(
+        value,
+        run_evidence={
+            **value.run_evidence,
+            key: replace(
+                evidence,
+                extended_record_documents=documents,
+                resource_trace=trace,
+            ),
+        },
+    )
+
+    summary = MetricsAggregator().aggregate(value)
+    resources = summary.resource_summary["linux/yolo_seg/TEST_RAW_FROZEN"]
+
+    assert resources.peak_process_cpu_percent is None
+    assert resources.peak_gpu_power_watts is None
+    assert resources.unavailable_reasons["peak_gpu_power_watts"] == (
+        "probe unavailable"
+    )
+    assert resources.phase_summaries[
+        "inference"
+    ].peak_gpu_utilization_percent is None
 
 
 def test_error_record_may_retain_partial_candidates_but_metrics_count_zero(
@@ -751,6 +965,693 @@ def _empty_truths(root: Path, scenario_counts: dict[str, int]) -> tuple[TruthSam
     return tuple(truths)
 
 
+_FORMAL_SCENARIOS = (
+    "no_cup",
+    "one_cup_distractors",
+    "two_cups",
+    "cup_near_bottle",
+)
+_FORMAL_MODEL_IDS = {
+    "yolo_seg": "plastic-cup-yolo11s-seg-v2",
+    "grounded_sam": "grounding-dino-tiny+sam2.1-hiera-tiny",
+}
+_FORMAL_WEIGHTS = {
+    "yolo_seg": "a" * 64,
+    "grounded_sam": "b" * 64,
+}
+
+
+def _formal_lock(model: str, val_inventory_sha256: str) -> ThresholdLock:
+    platform_metrics = {
+        platform: PlatformCalibrationMetrics(
+            sample_count=200,
+            error_count=0,
+            macro_f1=1.0,
+            mask_ap50_95=None,
+            unsafe_unique_count=0,
+            unsafe_unique_denominator=100,
+            unsafe_unique_rate=0.0,
+            two_cup_both_matched_recall=1.0,
+        )
+        for platform in ("macos", "linux")
+    }
+    selected = (
+        YoloThresholds(
+            conf=Decimal("0.25"),
+            nms_iou=Decimal("0.70"),
+            target_confidence_threshold=Decimal("0.50"),
+        )
+        if model == "yolo_seg"
+        else GroundedSamBenchmarkThresholds(
+            box_threshold=Decimal("0.30"),
+            text_threshold=Decimal("0.25"),
+            sam_quality=Decimal("0.50"),
+            target_confidence_threshold=Decimal("0.50"),
+        )
+    )
+    lock = ThresholdLock(
+        schema_version=LOCK_SCHEMA_VERSION,
+        model=model,
+        grid_version=(
+            "yolo-seg-grid/v1"
+            if model == "yolo_seg"
+            else "grounded-sam-grid/v1"
+        ),
+        objective_version=OBJECTIVE_VERSION,
+        tie_break_version=TIE_BREAK_VERSION,
+        val_inventory_sha256=val_inventory_sha256,
+        mac_prediction_inventory_sha256=("c" if model == "yolo_seg" else "d")
+        * 64,
+        linux_prediction_inventory_sha256=("e" if model == "yolo_seg" else "f")
+        * 64,
+        formal=True,
+        platform_sample_counts={"macos": 200, "linux": 200},
+        selected=selected,
+        outcome="SAFE_CALIBRATED",
+        deployable=True,
+        source_commit=_SOURCE_COMMIT,
+        objective_metrics=ObjectiveCalibrationMetrics(
+            min_platform_macro_f1=1.0,
+            merged_macro_f1=1.0,
+            merged_mask_ap50_95=None,
+            min_platform_two_cup_recall=1.0,
+        ),
+        platform_metrics=platform_metrics,
+        lock_sha256="0" * 64,
+    )
+    return lock.with_recomputed_sha256()
+
+
+def _formal_truth_inventory(root: Path) -> tuple[TruthSample, ...]:
+    left = _write_mask(root, "formal-left", [[1, 0], [0, 0]])
+    right = _write_mask(root, "formal-right", [[0, 0], [0, 1]])
+    truths: list[TruthSample] = []
+    for scenario in _FORMAL_SCENARIOS:
+        for _ in range(50):
+            index = len(truths)
+            instances: tuple[TruthInstance, ...]
+            if scenario == "no_cup":
+                instances = ()
+            elif scenario == "two_cups":
+                instances = (
+                    TruthInstance(f"truth-{index}-left", "plastic_cup", left),
+                    TruthInstance(f"truth-{index}-right", "plastic_cup", right),
+                )
+            else:
+                instances = (
+                    TruthInstance(f"truth-{index}-left", "plastic_cup", left),
+                )
+            truths.append(
+                TruthSample(
+                    formal_sample_index=index,
+                    split="test",
+                    scenario=scenario,
+                    image_relpath=f"images/{index:03d}.png",
+                    image_sha256=f"{index + 1000:064x}",
+                    image_width=2,
+                    image_height=2,
+                    instances=instances,
+                )
+            )
+    return tuple(truths)
+
+
+def _formal_records(
+    truths: tuple[TruthSample, ...],
+    *,
+    platform: str,
+    model: str,
+    config: str,
+    run_kind: RunKind,
+    lock_sha256: str,
+) -> tuple[PredictionRecord, ...]:
+    config_sha256 = hashlib.sha256(f"{model}/{config}".encode()).hexdigest()
+    provenance = RuntimeProvenance(
+        runtime_device="mps" if platform == "macos" else "cuda",
+        runtime_name="torch",
+        runtime_version="2.8.0",
+        weights_sha256=_FORMAL_WEIGHTS[model],
+        environment={
+            "dependency_lock": "benchmark-lock-v1",
+            "platform": platform,
+            "accelerator": "mps" if platform == "macos" else "cuda",
+        },
+    )
+    return tuple(
+        PredictionRecord(
+            run_id=f"{platform}-{model}-{config}",
+            schema_version=SCHEMA_VERSION,
+            run_kind=run_kind,
+            record_status=RecordStatus.OK,
+            formal_sample_index=truth.formal_sample_index,
+            split=truth.split,
+            scenario=truth.scenario,
+            image_relpath=truth.image_relpath,
+            image_sha256=truth.image_sha256,
+            image_width=truth.image_width,
+            image_height=truth.image_height,
+            model_id=_FORMAL_MODEL_IDS[model],
+            runtime_provenance=provenance,
+            config_sha256=config_sha256,
+            threshold_lock_sha256=lock_sha256,
+            raw_candidates=(),
+            phase_timings=PhaseTimings(
+                grounding_ms=2.0,
+                sam_ms=3.0 if model == "grounded_sam" else None,
+                selector_ms=1.0,
+            ),
+            raw_count=0,
+            decision=DecisionOutput.NOT_FOUND,
+            selected_candidate_id=None,
+            rejection_reason="TARGET_NOT_FOUND",
+            error_type=None,
+            error_summary=None,
+            timed_out=False,
+            oom=False,
+            fallback_used=False,
+        )
+        for truth in truths
+    )
+
+
+def _formal_resource_sample(offset: int) -> ResourceSample:
+    return ResourceSample(
+        process_rss_bytes=1_000 + offset,
+        process_cpu_percent=10.0 + offset,
+        gpu_memory_allocated_bytes=2_000 + offset,
+        gpu_memory_reserved_bytes=3_000 + offset,
+        gpu_utilization_percent=40.0 + offset,
+        gpu_temperature_celsius=50.0 + offset,
+        gpu_power_watts=60.0 + offset,
+        unavailable_reasons={},
+        tool_versions={"resource-probe": "1.0", "psutil": "7.0"},
+    )
+
+
+def _formal_run_evidence(
+    root: Path,
+    records: tuple[PredictionRecord, ...],
+    *,
+    platform: str,
+    model: str,
+    config: str,
+) -> RunAggregationEvidence:
+    root.mkdir(parents=True, exist_ok=True)
+    samples = tuple(_formal_resource_sample(offset) for offset in range(3))
+    observations = tuple(
+        reporting_module.ResourceObservation(
+            phase=phase,
+            monotonic_ns=1_000_000_000 + position * 100_000_000,
+            formal_sample_index=0 if phase == "inference" else None,
+            sample=samples[position],
+        )
+        for position, phase in enumerate(("load", "warmup", "inference"))
+    )
+    trace = reporting_module.ResourceTrace(
+        sampling_frequency_hz=10.0,
+        observations=observations,
+    )
+    first = records[0].runtime_provenance
+    cold_samples = tuple(
+        reporting_module.ColdProcessSample(
+            process_id=f"{platform}-{model}-{config}-cold-{position}",
+            pid=10_000 + position,
+            process_started_ns=2_000_000_000 + position * 1_000_000,
+            latency_ms=30.0 + position,
+            runtime_name=first.runtime_name,
+            runtime_version=first.runtime_version,
+            weights_sha256=first.weights_sha256,
+            executable_sha256="9" * 64,
+        )
+        for position in range(3)
+    )
+    documents = tuple(
+        _extended_document(
+            record,
+            total_ms=10.0,
+            platform=platform,
+            model=model,
+            resource_samples=samples if position == 0 else (),
+        )
+        for position, record in enumerate(records)
+    )
+    return RunAggregationEvidence(
+        evidence_root=root,
+        extended_record_documents=documents,
+        cold_process_samples=cold_samples,
+        resource_trace=trace,
+    )
+
+
+def _positive_formal_input(tmp_path: Path) -> AggregationInput:
+    truth_root = tmp_path / "truth"
+    truths = _formal_truth_inventory(truth_root)
+    val_inventory_sha256 = "8" * 64
+    locks = {
+        model: _formal_lock(model, val_inventory_sha256)
+        for model in ("yolo_seg", "grounded_sam")
+    }
+    raw: dict[str, dict[str, tuple[PredictionRecord, ...]]] = {}
+    formal: dict[
+        str, dict[str, dict[str, tuple[PredictionRecord, ...]]]
+    ] = {}
+    evidence: dict[tuple[str, str, str], RunAggregationEvidence] = {}
+    for platform in ("macos", "linux"):
+        raw[platform] = {}
+        formal[platform] = {}
+        for model in ("yolo_seg", "grounded_sam"):
+            lock_sha = locks[model].lock_sha256
+            raw_records = _formal_records(
+                truths,
+                platform=platform,
+                model=model,
+                config="TEST_RAW_FROZEN",
+                run_kind=RunKind.TEST_RAW_FROZEN,
+                lock_sha256=lock_sha,
+            )
+            production_records = _formal_records(
+                truths,
+                platform=platform,
+                model=model,
+                config="production",
+                run_kind=RunKind.TEST_PRODUCTION,
+                lock_sha256=lock_sha,
+            )
+            calibrated_records = _formal_records(
+                truths,
+                platform=platform,
+                model=model,
+                config="calibrated",
+                run_kind=RunKind.TEST_CALIBRATED,
+                lock_sha256=lock_sha,
+            )
+            raw[platform][model] = raw_records
+            formal[platform][model] = {
+                "production": production_records,
+                "calibrated": calibrated_records,
+            }
+            for config, records in (
+                ("TEST_RAW_FROZEN", raw_records),
+                ("production", production_records),
+                ("calibrated", calibrated_records),
+            ):
+                evidence[(platform, model, config)] = _formal_run_evidence(
+                    tmp_path / "candidates" / platform / model / config,
+                    records,
+                    platform=platform,
+                    model=model,
+                    config=config,
+                )
+    return AggregationInput(
+        formal=True,
+        source_commit=_SOURCE_COMMIT,
+        dataset_archive_sha256=_ARCHIVE_SHA,
+        test_inventory_sha256=_INVENTORY_SHA,
+        truth_evidence_root=truth_root,
+        truth_samples=truths,
+        raw_frozen_records=raw,
+        formal_records=formal,
+        threshold_locks=locks,
+        run_evidence=evidence,
+        oracle_records={},
+        oracle_evidence={},
+    )
+
+
+def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
+    tmp_path: Path,
+) -> None:
+    aggregation_input = _positive_formal_input(tmp_path)
+    cells = tuple(
+        records
+        for platform in ("macos", "linux")
+        for model in ("yolo_seg", "grounded_sam")
+        for records in (
+            aggregation_input.raw_frozen_records[platform][model],
+            aggregation_input.formal_records[platform][model]["production"],
+            aggregation_input.formal_records[platform][model]["calibrated"],
+        )
+    )
+    assert len(cells) == 12
+    assert all(len(records) == 200 for records in cells)
+    assert all(
+        {
+            scenario: sum(record.scenario == scenario for record in records)
+            for scenario in _FORMAL_SCENARIOS
+        }
+        == {scenario: 50 for scenario in _FORMAL_SCENARIOS}
+        for records in cells
+    )
+    assert aggregation_input.raw_frozen_records["linux"]["grounded_sam"][
+        0
+    ].model_id == "grounding-dino-tiny+sam2.1-hiera-tiny"
+
+    summary = MetricsAggregator().aggregate(aggregation_input)
+
+    assert summary.formal is True
+    assert summary.deployable is True
+    assert summary.qualification_status == "FORMAL_DEPLOYABLE"
+    assert set(summary.raw_frozen_by_platform_model) == {"macos", "linux"}
+    assert set(summary.raw_frozen_by_platform_model["linux"]) == {
+        "yolo_seg",
+        "grounded_sam",
+    }
+    assert summary.raw_frozen_by_platform_model["linux"][
+        "grounded_sam"
+    ].sample_count == 200
+    assert set(
+        summary.raw_frozen_by_platform_model["linux"]["grounded_sam"].scenarios
+    ) == set(_FORMAL_SCENARIOS)
+    assert len(summary.per_image) == 2 * 2 * 3 * 200
+    assert len(
+        {
+            lock.val_inventory_sha256
+            for lock in aggregation_input.threshold_locks.values()
+        }
+    ) == 1
+    resource = summary.resource_summary[
+        "linux/grounded_sam/TEST_RAW_FROZEN"
+    ]
+    assert set(resource.phase_summaries) == {"load", "warmup", "inference"}
+    assert resource.peak_process_cpu_percent == 12.0
+    assert resource.peak_gpu_utilization_percent == 42.0
+    assert resource.peak_gpu_temperature_celsius == 52.0
+    assert resource.peak_gpu_power_watts == 62.0
+    assert resource.sampling_frequency_hz == 10.0
+    assert resource.sampling_gaps_ms == (100.0, 100.0)
+    assert resource.tool_versions == {
+        "psutil": ("7.0",),
+        "resource-probe": ("1.0",),
+    }
+    first_row = next(
+        row
+        for row in summary.per_image
+        if row.platform == "linux"
+        and row.model == "grounded_sam"
+        and row.config == "TEST_RAW_FROZEN"
+        and row.formal_sample_index == 0
+    )
+    assert tuple(item.phase for item in first_row.resource_observations) == (
+        "load",
+        "warmup",
+        "inference",
+    )
+    comparison = summary.cross_platform["grounded_sam/TEST_RAW_FROZEN"]
+    assert comparison.mismatch_count == 0
+    assert comparison.items[0].runtime_device_pair_expected is True
+    assert comparison.items[0].runtime_environment_equal is False
+    assert comparison.items[0].runtime_environment_identity_equal is True
+    report_root = tmp_path / "formal-report"
+    ReportWriter().write(summary, report_root)
+    resources_document = json.loads(
+        (report_root / "performance/resources.json").read_text()
+    )
+    resource_document = resources_document[
+        "linux/grounded_sam/TEST_RAW_FROZEN"
+    ]
+    assert resource_document["peak_gpu_power_watts"] == 62.0
+    assert set(resource_document["phase_summaries"]) == {
+        "load",
+        "warmup",
+        "inference",
+    }
+    with (report_root / "metrics/per-image.csv").open(newline="") as handle:
+        per_image_rows = tuple(csv.DictReader(handle))
+    retained_row = next(
+        row
+        for row in per_image_rows
+        if row["platform"] == "linux"
+        and row["model"] == "grounded_sam"
+        and row["config"] == "TEST_RAW_FROZEN"
+        and row["formal_sample_index"] == "0"
+    )
+    retained_observations = json.loads(
+        retained_row["resource_observations_json"]
+    )
+    assert [item["phase"] for item in retained_observations] == [
+        "load",
+        "warmup",
+        "inference",
+    ]
+    assert retained_row["resource_sampling_frequency_hz"] == "10.0"
+    assert json.loads(retained_row["resource_sampling_gaps_ms_json"]) == [
+        100.0,
+        100.0,
+    ]
+
+
+def _replace_formal_cell(
+    value: AggregationInput,
+    *,
+    platform: str,
+    model: str,
+    config: str,
+    records: tuple[PredictionRecord, ...],
+) -> AggregationInput:
+    raw = {
+        outer_platform: dict(models)
+        for outer_platform, models in value.raw_frozen_records.items()
+    }
+    formal = {
+        outer_platform: {
+            outer_model: dict(configs)
+            for outer_model, configs in models.items()
+        }
+        for outer_platform, models in value.formal_records.items()
+    }
+    if config == "TEST_RAW_FROZEN":
+        raw[platform][model] = records
+    else:
+        formal[platform][model][config] = records
+
+    key = (platform, model, config)
+    old_evidence = value.run_evidence[key]
+    resource_samples = tuple(
+        observation.sample
+        for observation in old_evidence.resource_trace.observations
+    )
+    provenance = records[0].runtime_provenance
+    evidence = replace(
+        old_evidence,
+        extended_record_documents=tuple(
+            _extended_document(
+                record,
+                total_ms=10.0,
+                platform=platform,
+                model=model,
+                resource_samples=resource_samples if position == 0 else (),
+            )
+            for position, record in enumerate(records)
+        ),
+        cold_process_samples=tuple(
+            replace(
+                sample,
+                runtime_name=provenance.runtime_name,
+                runtime_version=provenance.runtime_version,
+                weights_sha256=provenance.weights_sha256,
+            )
+            for sample in old_evidence.cold_process_samples
+        ),
+    )
+    return replace(
+        value,
+        raw_frozen_records=raw,
+        formal_records=formal,
+        run_evidence={**value.run_evidence, key: evidence},
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("model_id", "weights_sha256", "runtime_name", "runtime_version", "environment"),
+)
+def test_formal_rejects_model_or_runtime_drift_between_run_kinds(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    value = _positive_formal_input(tmp_path)
+    records = value.formal_records["linux"]["yolo_seg"]["calibrated"]
+    changed: list[PredictionRecord] = []
+    for record in records:
+        if mutation == "model_id":
+            changed.append(replace(record, model_id="plastic-cup-yolo11s-seg-v3"))
+            continue
+        provenance = record.runtime_provenance
+        if mutation == "weights_sha256":
+            provenance = replace(provenance, weights_sha256="e" * 64)
+        elif mutation == "runtime_name":
+            provenance = replace(provenance, runtime_name="onnxruntime")
+        elif mutation == "runtime_version":
+            provenance = replace(provenance, runtime_version="2.9.0")
+        else:
+            provenance = replace(
+                provenance,
+                environment={
+                    **provenance.environment,
+                    "dependency_lock": "benchmark-lock-drift",
+                },
+            )
+        changed.append(replace(record, runtime_provenance=provenance))
+    value = _replace_formal_cell(
+        value,
+        platform="linux",
+        model="yolo_seg",
+        config="calibrated",
+        records=tuple(changed),
+    )
+
+    with pytest.raises(ValueError, match="frozen model/runtime identity"):
+        MetricsAggregator().aggregate(value)
+
+
+def test_formal_rejects_model_asset_drift_between_platforms(tmp_path: Path) -> None:
+    value = _positive_formal_input(tmp_path)
+    for config in ("TEST_RAW_FROZEN", "production", "calibrated"):
+        records = (
+            value.raw_frozen_records["linux"]["yolo_seg"]
+            if config == "TEST_RAW_FROZEN"
+            else value.formal_records["linux"]["yolo_seg"][config]
+        )
+        changed = tuple(
+            replace(
+                record,
+                runtime_provenance=replace(
+                    record.runtime_provenance,
+                    weights_sha256="e" * 64,
+                ),
+            )
+            for record in records
+        )
+        value = _replace_formal_cell(
+            value,
+            platform="linux",
+            model="yolo_seg",
+            config=config,
+            records=changed,
+        )
+
+    with pytest.raises(ValueError, match="cross-platform model asset identity"):
+        MetricsAggregator().aggregate(value)
+
+
+def test_formal_rejects_threshold_locks_with_different_val_inventories(
+    tmp_path: Path,
+) -> None:
+    value = _positive_formal_input(tmp_path)
+    grounded_lock = replace(
+        value.threshold_locks["grounded_sam"],
+        val_inventory_sha256="7" * 64,
+        lock_sha256="0" * 64,
+    ).with_recomputed_sha256()
+
+    with pytest.raises(ValueError, match="same validation inventory"):
+        MetricsAggregator().aggregate(
+            replace(
+                value,
+                threshold_locks={
+                    **value.threshold_locks,
+                    "grounded_sam": grounded_lock,
+                },
+            )
+        )
+
+
+def test_formal_rejects_duplicate_cold_process_identity(tmp_path: Path) -> None:
+    value = _positive_formal_input(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+    samples = list(evidence.cold_process_samples)
+    samples[1] = replace(
+        samples[1],
+        process_id=samples[0].process_id,
+        pid=samples[0].pid,
+        process_started_ns=samples[0].process_started_ns,
+    )
+
+    with pytest.raises(ValueError, match="distinct fresh process"):
+        MetricsAggregator().aggregate(
+            replace(
+                value,
+                run_evidence={
+                    **value.run_evidence,
+                    key: replace(evidence, cold_process_samples=tuple(samples)),
+                },
+            )
+        )
+
+
+def test_formal_rejects_nonformal_cold_float_convenience(tmp_path: Path) -> None:
+    value = _positive_formal_input(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+
+    with pytest.raises(ValueError, match="unanchored fixture samples"):
+        MetricsAggregator().aggregate(
+            replace(
+                value,
+                run_evidence={
+                    **value.run_evidence,
+                    key: replace(
+                        evidence,
+                        cold_process_samples=(),
+                        cold_latency_ms=(30.0, 31.0, 32.0),
+                    ),
+                },
+            )
+        )
+
+
+def test_formal_rejects_missing_resource_phase(tmp_path: Path) -> None:
+    value = _positive_formal_input(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+    trace = replace(
+        evidence.resource_trace,
+        observations=tuple(
+            observation
+            for observation in evidence.resource_trace.observations
+            if observation.phase != "warmup"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="load, warmup, and inference"):
+        MetricsAggregator().aggregate(
+            replace(
+                value,
+                run_evidence={
+                    **value.run_evidence,
+                    key: replace(evidence, resource_trace=trace),
+                },
+            )
+        )
+
+
+def test_formal_rejects_resource_rows_moved_to_the_wrong_record(
+    tmp_path: Path,
+) -> None:
+    value = _positive_formal_input(tmp_path)
+    key = ("linux", "yolo_seg", "TEST_RAW_FROZEN")
+    evidence = value.run_evidence[key]
+    documents = [dict(document) for document in evidence.extended_record_documents]
+    first_resources = documents[0]["resource_samples"]
+    documents[0]["resource_samples"] = ()
+    documents[1]["resource_samples"] = first_resources
+
+    with pytest.raises(ValueError, match="phase/image anchors"):
+        MetricsAggregator().aggregate(
+            replace(
+                value,
+                run_evidence={
+                    **value.run_evidence,
+                    key: replace(
+                        evidence,
+                        extended_record_documents=tuple(documents),
+                    ),
+                },
+            )
+        )
+
+
 def _formal_shell(
     tmp_path: Path, truths: tuple[TruthSample, ...]
 ) -> AggregationInput:
@@ -782,7 +1683,12 @@ def test_formal_aggregation_rejects_wrong_scenario_distribution(
 ) -> None:
     truths = _empty_truths(
         tmp_path / "truth",
-        {"no_cup": 51, "one_cup": 49, "two_cups": 50, "cup_near_bottle": 50},
+        {
+            "no_cup": 51,
+            "one_cup_distractors": 49,
+            "two_cups": 50,
+            "cup_near_bottle": 50,
+        },
     )
 
     with pytest.raises(ValueError, match="50 samples per scenario"):
@@ -794,7 +1700,12 @@ def test_formal_aggregation_rejects_missing_required_matrix_cell(
 ) -> None:
     truths = _empty_truths(
         tmp_path / "truth",
-        {"no_cup": 50, "one_cup": 50, "two_cups": 50, "cup_near_bottle": 50},
+        {
+            "no_cup": 50,
+            "one_cup_distractors": 50,
+            "two_cups": 50,
+            "cup_near_bottle": 50,
+        },
     )
 
     with pytest.raises(ValueError, match="formal matrix"):
