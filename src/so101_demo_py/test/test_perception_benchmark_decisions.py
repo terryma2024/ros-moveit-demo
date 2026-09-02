@@ -51,6 +51,43 @@ class ScoreThresholds:
         )
 
 
+class FailIfCalledThresholds:
+    """A real filter stub whose only valid use is not being called."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def filter_candidates(
+        self, candidates: tuple[RawCandidate, ...]
+    ) -> tuple[RawCandidate, ...]:
+        self.call_count += 1
+        raise AssertionError("ERROR replay must not filter candidates")
+
+
+class DuplicateCompositeMatches(
+    Mapping[tuple[int, str], ImageMetricInput]
+):
+    """Expose a duplicate key through the Mapping iteration contract."""
+
+    def __init__(
+        self, key: tuple[int, str], value: ImageMetricInput
+    ) -> None:
+        self._key = key
+        self._value = value
+
+    def __getitem__(self, key: tuple[int, str]) -> ImageMetricInput:
+        if key != self._key:
+            raise KeyError(key)
+        return self._value
+
+    def __iter__(self):
+        yield self._key
+        yield self._key
+
+    def __len__(self) -> int:
+        return 2
+
+
 def _write_mask(
     root: Path, sample_index: int, name: str, pixels: list[list[int]]
 ) -> MaskRef:
@@ -227,6 +264,16 @@ def _metric_input(
     )
 
 
+def _keyed_matches(
+    records: tuple[PredictionRecord, ...],
+    inputs: tuple[ImageMetricInput, ...],
+) -> dict[tuple[int, str], ImageMetricInput]:
+    return {
+        (record.formal_sample_index, record.image_sha256): image_input
+        for record, image_input in zip(records, inputs, strict=True)
+    }
+
+
 def test_replay_maps_zero_one_and_two_accepted_candidates_without_mutating_record(
     tmp_path: Path,
 ) -> None:
@@ -279,14 +326,16 @@ def test_replay_preserves_error_without_filtering_or_mutating_record(tmp_path: P
         status=RecordStatus.ERROR,
     )
     before_sha = _record_sha(record)
+    thresholds = FailIfCalledThresholds()
 
-    replay = replay_decision(record, ScoreThresholds(0.0))
+    replay = replay_decision(record, thresholds)
 
     assert (replay.decision, replay.selected_candidate_id, replay.rejection_reason) == (
         DecisionOutput.ERROR,
         None,
         "INFERENCE_FAILED",
     )
+    assert thresholds.call_count == 0
     assert _record_sha(record) == before_sha
 
 
@@ -395,7 +444,12 @@ def test_no_cup_fpr_uses_current_decision_and_keeps_errors_in_denominator(
         _metric_input(record, truth) for record, truth in zip(records, truths, strict=True)
     )
 
-    metrics = aggregate_scenarios(records, truths, inputs, evidence_root=tmp_path)["no_cup"]
+    metrics = aggregate_scenarios(
+        records,
+        truths,
+        _keyed_matches(records, inputs),
+        evidence_root=tmp_path,
+    )["no_cup"]
 
     assert metrics.sample_count == 3
     assert metrics.error_count == 1
@@ -441,7 +495,12 @@ def test_two_cup_recall_requires_two_distinct_matches_at_iou_point_five(
         _metric_input(records[2], truths[2]),
     )
 
-    metrics = aggregate_scenarios(records, truths, inputs, evidence_root=tmp_path)["two_cups"]
+    metrics = aggregate_scenarios(
+        records,
+        truths,
+        _keyed_matches(records, inputs),
+        evidence_root=tmp_path,
+    )["two_cups"]
 
     assert metrics.sample_count == 3
     assert metrics.error_count == 1
@@ -482,7 +541,10 @@ def test_cup_near_bottle_leakage_reads_validated_masks_outside_truth_cup_union(
     )
 
     metrics = aggregate_scenarios(
-        records, (truth, empty_truth), inputs, evidence_root=tmp_path
+        records,
+        (truth, empty_truth),
+        _keyed_matches(records, inputs),
+        evidence_root=tmp_path,
     )["cup_near_bottle"]
 
     assert metrics.predicted_union_pixel_count == 7
@@ -510,21 +572,31 @@ def test_scenario_aggregate_rejects_missing_duplicate_foreign_and_count_mismatch
         record, truth, (MaskMatch("truth-0", "candidate", 1.0),)
     )
 
-    with pytest.raises(ValueError, match="same images"):
-        aggregate_scenarios((record,), (truth,), (), evidence_root=tmp_path)
+    identity = (record.formal_sample_index, record.image_sha256)
+    with pytest.raises(ValueError, match="composite image identities"):
+        aggregate_scenarios((record,), (truth,), {}, evidence_root=tmp_path)
     with pytest.raises(ValueError, match="unique"):
         aggregate_scenarios(
-            (record,), (truth,), (valid, valid), evidence_root=tmp_path
+            (record,),
+            (truth,),
+            DuplicateCompositeMatches(identity, valid),
+            evidence_root=tmp_path,
         )
     foreign = ImageMetricInput(9, 0, 0, ())
-    with pytest.raises(ValueError, match="same images"):
+    with pytest.raises(ValueError, match="composite image identities"):
         aggregate_scenarios(
-            (record,), (truth,), (foreign,), evidence_root=tmp_path
+            (record,),
+            (truth,),
+            {(9, "f" * 64): foreign},
+            evidence_root=tmp_path,
         )
     wrong_count = ImageMetricInput(0, 0, 1, ())
     with pytest.raises(ValueError, match="truth_count"):
         aggregate_scenarios(
-            (record,), (truth,), (wrong_count,), evidence_root=tmp_path
+            (record,),
+            (truth,),
+            {identity: wrong_count},
+            evidence_root=tmp_path,
         )
 
 
@@ -544,11 +616,24 @@ def test_scenario_aggregate_rejects_match_ids_outside_the_aligned_image(
 
     with pytest.raises(ValueError, match="truth_instance_id"):
         aggregate_scenarios(
-            (record,), (truth,), (foreign_truth,), evidence_root=tmp_path
+            (record,),
+            (truth,),
+            {
+                (record.formal_sample_index, record.image_sha256): foreign_truth
+            },
+            evidence_root=tmp_path,
         )
     with pytest.raises(ValueError, match="candidate_id"):
         aggregate_scenarios(
-            (record,), (truth,), (foreign_candidate,), evidence_root=tmp_path
+            (record,),
+            (truth,),
+            {
+                (
+                    record.formal_sample_index,
+                    record.image_sha256,
+                ): foreign_candidate
+            },
+            evidence_root=tmp_path,
         )
 
 
@@ -564,5 +649,52 @@ def test_scenario_aggregate_requires_explicit_valid_evidence_root(
 
     with pytest.raises(ValueError, match="evidence_root"):
         aggregate_scenarios(
-            (record,), (truth,), (image_input,), evidence_root=tmp_path / "missing"
+            (record,),
+            (truth,),
+            {
+                (record.formal_sample_index, record.image_sha256): image_input
+            },
+            evidence_root=tmp_path / "missing",
+        )
+
+
+def test_scenario_aggregate_rejects_distinct_indices_with_duplicate_image_sha(
+    tmp_path: Path,
+) -> None:
+    duplicate_sha = "d" * 64
+    truths = (
+        _truth(tmp_path, 0, "synthetic", image_sha256=duplicate_sha),
+        _truth(tmp_path, 1, "synthetic", image_sha256=duplicate_sha),
+    )
+    records = tuple(_record(truth) for truth in truths)
+    inputs = tuple(
+        _metric_input(record, truth)
+        for record, truth in zip(records, truths, strict=True)
+    )
+
+    with pytest.raises(ValueError, match="image_sha256 values must be unique"):
+        aggregate_scenarios(
+            records,
+            truths,
+            _keyed_matches(records, inputs),
+            evidence_root=tmp_path,
+        )
+
+
+def test_scenario_aggregate_rejects_foreign_sha_before_scoring_local_ids(
+    tmp_path: Path,
+) -> None:
+    truth = _truth(tmp_path, 0, "synthetic", (_one_pixel_mask(),))
+    candidate = _candidate(tmp_path, 0, "candidate", 0.9, _one_pixel_mask())
+    record = _record(truth, (candidate,), decision=DecisionOutput.UNIQUE)
+    image_input = _metric_input(
+        record, truth, (MaskMatch("truth-0", "candidate", 1.0),)
+    )
+
+    with pytest.raises(ValueError, match="composite image identities"):
+        aggregate_scenarios(
+            (record,),
+            (truth,),
+            {(record.formal_sample_index, "f" * 64): image_input},
+            evidence_root=tmp_path,
         )
