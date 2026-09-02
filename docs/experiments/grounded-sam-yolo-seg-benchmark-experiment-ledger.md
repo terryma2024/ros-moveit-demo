@@ -131,3 +131,49 @@ This append-only checkpoint records the final regression after adding the sealed
 - Final full regression evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix1-benchmark-full-final.xml`; result `527 passed, 1 pre-existing pyparsing deprecation warning`.
 - Authoritative retained dry-run remains `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1/`; its evidence index remains `VERIFIED 41`.
 - Archived runs: none. No evidence was deleted.
+
+## CP-BENCH-005 — CORRECTION for frozen-config command contracts
+
+Status: `PLANNED`. Reason: the formal archive, verified model assets, cross-platform runs, and threshold locks have not been staged or executed. Every conflicting command in EXP-BENCH-001 through EXP-BENCH-007 is superseded by the commands below. The old text remains above only as immutable audit history.
+
+The replacement commands use these exact planned paths:
+
+```zsh
+BENCHMARK_CONFIG=/Users/matianyi/.codex/worktrees/5b15/moveit-demo/install-benchmark/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml
+BENCHMARK_ROOT=/data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1
+ARCHIVE_ROOT=$BENCHMARK_ROOT/inputs/datasets/so101-v5-t004-yolo-seg-synthetic
+ARCHIVE=$ARCHIVE_ROOT/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz
+YOLO_WEIGHTS=$BENCHMARK_ROOT/inputs/models/yolo_seg/best.pt
+GROUNDED_BUNDLE=$BENCHMARK_ROOT/inputs/models/grounded_sam
+SOURCE_COMMIT=$(GIT_DIR=/Users/matianyi/Projects/robot_demo_001/.git/modules/moveit-demo/worktrees/moveit-demo1 GIT_WORK_TREE=/Users/matianyi/.codex/worktrees/5b15/moveit-demo git rev-parse HEAD)
+VAL_INVENTORY_SHA256=$(tr -d '[:space:]' < $BENCHMARK_ROOT/anchors/val-inventory.sha256)
+MAC_VAL_EXPECTATION_SHA256=$(tr -d '[:space:]' < $BENCHMARK_ROOT/anchors/macos-yolo-val-expectation.sha256)
+LINUX_VAL_EXPECTATION_SHA256=$(tr -d '[:space:]' < $BENCHMARK_ROOT/anchors/linux-yolo-val-expectation.sha256)
+AGGREGATION_PLAN_SHA256=$(tr -d '[:space:]' < $BENCHMARK_ROOT/anchors/aggregation-plan.sha256)
+```
+
+- `verify-assets` replacement, YOLO-Seg: `perception_benchmark verify-assets --config $BENCHMARK_CONFIG --model yolo_seg --weights $YOLO_WEIGHTS --weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`
+- `verify-assets` replacement, Grounded-SAM: `perception_benchmark verify-assets --config $BENCHMARK_CONFIG --model grounded_sam --model-root $GROUNDED_BUNDLE --manifest-sha256 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3`
+- `inspect-archive` replacement: `perception_benchmark inspect-archive --config $BENCHMARK_CONFIG --archive $ARCHIVE --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 --sealed-member-inventory $BENCHMARK_ROOT/dataset/sealed-test-members.json`
+- `prepare-dataset` replacement: `perception_benchmark prepare-dataset --config $BENCHMARK_CONFIG --archive $ARCHIVE --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 --split val --output-root $BENCHMARK_ROOT/dataset/val`
+- `collect` replacement, macOS YOLO validation: `perception_benchmark collect --config $BENCHMARK_CONFIG --run-id 20260902-ab-v1-macos-yolo-val --platform macos --model yolo_seg --device mps --dtype float32 --split val --run-kind VAL_RAW --dataset-inventory $BENCHMARK_ROOT/dataset/val/inventory.json --dataset-archive-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 --inventory-sha256 $VAL_INVENTORY_SHA256 --weights $YOLO_WEIGHTS --weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --source-commit $SOURCE_COMMIT --output-root $BENCHMARK_ROOT/val/macos/yolo_seg/raw`
+- `calibrate` replacement: `perception_benchmark calibrate --config $BENCHMARK_CONFIG --model yolo_seg --dataset-inventory $BENCHMARK_ROOT/dataset/val/inventory.json --dataset-archive-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 --inventory-sha256 $VAL_INVENTORY_SHA256 --mac-run-root $BENCHMARK_ROOT/val/macos/yolo_seg/raw --mac-run-expectation $BENCHMARK_ROOT/anchors/macos-yolo-val-expectation.json --mac-run-expectation-sha256 $MAC_VAL_EXPECTATION_SHA256 --linux-run-root $BENCHMARK_ROOT/val/linux/yolo_seg/raw --linux-run-expectation $BENCHMARK_ROOT/anchors/linux-yolo-val-expectation.json --linux-run-expectation-sha256 $LINUX_VAL_EXPECTATION_SHA256 --source-commit $SOURCE_COMMIT --output-root $BENCHMARK_ROOT/locks/yolo_seg`
+- `unlock-test` replacement: `perception_benchmark unlock-test --config $BENCHMARK_CONFIG --archive $ARCHIVE --expected-sha256 c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1 --sealed-member-inventory $BENCHMARK_ROOT/dataset/sealed-test-members.json --yolo-threshold-lock $BENCHMARK_ROOT/locks/yolo_seg/threshold-lock.json --grounded-sam-threshold-lock $BENCHMARK_ROOT/locks/grounded_sam/threshold-lock.json --access-log $BENCHMARK_ROOT/dataset/test-access.ndjson --output-root $BENCHMARK_ROOT/dataset/test`
+- `aggregate` replacement: `perception_benchmark aggregate --config $BENCHMARK_CONFIG --aggregation-plan $BENCHMARK_ROOT/anchors/aggregation-plan.json --aggregation-plan-sha256 $AGGREGATION_PLAN_SHA256 --bootstrap-seed 20260902 --bootstrap-repetitions 10000 --output-root $BENCHMARK_ROOT/report`
+
+Exact planned evidence paths are `$BENCHMARK_ROOT/dataset/sealed-test-members.json`, `$BENCHMARK_ROOT/dataset/{val,test}/inventory.json`, `$BENCHMARK_ROOT/{val,test}/{macos,linux}/{yolo_seg,grounded_sam}/`, `$BENCHMARK_ROOT/locks/{yolo_seg,grounded_sam}/threshold-lock.json`, `$BENCHMARK_ROOT/anchors/{val-inventory,macos-yolo-val-expectation,linux-yolo-val-expectation,aggregation-plan}.sha256`, and `$BENCHMARK_ROOT/report/evidence-index.json`. Each SHA sidecar must be created and registered as an independent external anchor before the corresponding command transitions from `PLANNED` to `RUNNING`; it must never be replaced by a self-reported digest from the command being verified.
+
+## CP-BENCH-006 — FixRound2 output and plan preflight correction
+
+- Review state: four important findings required a narrow macOS system-alias exception, shared output preflight for every mutating command, an immediate second unlock output check after archive verification, recursive aggregation-plan input validation, and executable replacement commands containing the frozen `--config` argument.
+- RED evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix2-red.xml`; result `35 passed, 9 failed` before implementation.
+- CLI GREEN evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix2-cli-green.xml`; result `44 passed`.
+- Full regression evidence: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/task9/fix2-benchmark-full.xml`; result `537 passed, 1 pre-existing pyparsing deprecation warning`.
+- Installed build: the isolated `build-benchmark` / `install-benchmark` / `log-benchmark` build completed one package successfully. The later macOS LaunchServices `kLSNoExecutableErr` diagnostic did not change the successful colcon exit status.
+- Authoritative retained dry-run: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix2/`; public evidence-index readback returned `VERIFIED 41`.
+- Authoritative dry-run counts: `formal=false`, `run_kind=NON_FORMAL_DRY_RUN`, `8` samples, `16` model records, `8` records per model, `2` samples per registered scenario, and no `inventory.json`.
+- Unlock boundary: the CLI performs an immediate output absence/safe-parent recheck after the potentially expensive archive verification and before invoking `unlock_test_seal`. This closes the reproduced window. A portable userspace preflight cannot make a future append to the access log and later archive extraction one atomic filesystem transaction; this checkpoint does not claim otherwise.
+- Superseded deletion candidates, not deleted: `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run/`, `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-final/`, and `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/dry-run-task9-fix1/`.
+- Retained implementation evidence: every Task 9 RED/GREEN/full JUnit file plus `build-benchmark/`, `install-benchmark/`, and `log-benchmark/`.
+- Archived runs: none. No evidence was deleted.
+- Formal execution: none. No formal archive/model/test, ROS, remote, or hardware command ran.
