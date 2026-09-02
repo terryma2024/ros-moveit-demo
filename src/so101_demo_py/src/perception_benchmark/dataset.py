@@ -411,6 +411,13 @@ _OPEN_BASE_FLAGS = (
     | getattr(os, "O_NONBLOCK", 0)
 )
 _OPEN_DIRECTORY_FLAGS = _OPEN_BASE_FLAGS | getattr(os, "O_DIRECTORY", 0)
+_CREATE_FILE_FLAGS = (
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_EXCL
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
 
 
 def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
@@ -481,6 +488,212 @@ class _PinnedDirectory:
 
     def __exit__(self, *args: object) -> None:
         self.close()
+
+    def _assert_identity(self) -> None:
+        try:
+            metadata = os.fstat(self._descriptor)
+        except OSError as error:
+            raise _PinnedFileError("pinned directory cannot be inspected") from error
+        if (metadata.st_dev, metadata.st_ino) != self._identity:
+            raise _PinnedFileError("pinned directory identity changed")
+
+    def same_identity(self, other: "_PinnedDirectory") -> bool:
+        self._assert_identity()
+        other._assert_identity()
+        return self._identity == other._identity
+
+    def fsync(self) -> None:
+        try:
+            self._assert_identity()
+            os.fsync(self._descriptor)
+        except (_PinnedFileError, OSError) as error:
+            raise _PinnedFileError("pinned directory cannot be synced") from error
+
+    def child_metadata(self, name: str) -> os.stat_result | None:
+        if not _safe_member_path(name) or len(PurePosixPath(name).parts) != 1:
+            raise _PinnedFileError("child name is unsafe")
+        try:
+            self._assert_identity()
+            return os.stat(name, dir_fd=self._descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+        except (_PinnedFileError, OSError) as error:
+            raise _PinnedFileError("child metadata cannot be read") from error
+
+    def mkdir_child(self, name: str, mode: int = 0o700) -> None:
+        if self.child_metadata(name) is not None:
+            raise _PinnedFileError("child already exists")
+        try:
+            os.mkdir(name, mode=mode, dir_fd=self._descriptor)
+            self.fsync()
+        except (_PinnedFileError, OSError) as error:
+            raise _PinnedFileError("child directory cannot be created") from error
+
+    def open_child_directory(self, name: str) -> "_PinnedDirectory":
+        before = self.child_metadata(name)
+        if before is None or not stat.S_ISDIR(before.st_mode):
+            raise _PinnedFileError("child is not a real directory")
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(name, _OPEN_DIRECTORY_FLAGS, dir_fd=self._descriptor)
+            opened = os.fstat(descriptor)
+            after = self.child_metadata(name)
+            if (
+                after is None
+                or not stat.S_ISDIR(opened.st_mode)
+                or (before.st_dev, before.st_ino)
+                != (opened.st_dev, opened.st_ino)
+                or (before.st_dev, before.st_ino)
+                != (after.st_dev, after.st_ino)
+            ):
+                raise _PinnedFileError("child directory changed while opening")
+            return _PinnedDirectory(
+                self.path / name,
+                descriptor,
+                (opened.st_dev, opened.st_ino),
+            )
+        except _PinnedFileError:
+            if descriptor is not None:
+                os.close(descriptor)
+            raise
+        except OSError as error:
+            if descriptor is not None:
+                os.close(descriptor)
+            raise _PinnedFileError("child directory cannot be opened") from error
+
+    def child_names(self) -> tuple[str, ...]:
+        try:
+            self._assert_identity()
+            before = os.fstat(self._descriptor)
+            names = tuple(sorted(os.listdir(self._descriptor)))
+            after = os.fstat(self._descriptor)
+        except (_PinnedFileError, OSError) as error:
+            raise _PinnedFileError("child names cannot be read") from error
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ):
+            raise _PinnedFileError("directory changed while listing children")
+        return names
+
+    def write_new_file(self, name: str, payload: bytes) -> tuple[int, int]:
+        if (
+            not _safe_member_path(name)
+            or len(PurePosixPath(name).parts) != 1
+            or not isinstance(payload, bytes)
+        ):
+            raise _PinnedFileError("new file input is unsafe")
+        descriptor: int | None = None
+        created_identity: tuple[int, int] | None = None
+        try:
+            self._assert_identity()
+            descriptor = os.open(
+                name,
+                _CREATE_FILE_FLAGS,
+                0o400,
+                dir_fd=self._descriptor,
+            )
+            created = os.fstat(descriptor)
+            if not stat.S_ISREG(created.st_mode) or created.st_nlink != 1:
+                raise _PinnedFileError("new file is not a single-link regular file")
+            created_identity = created.st_dev, created.st_ino
+            offset = 0
+            while offset < len(payload):
+                written = os.write(descriptor, payload[offset:])
+                if written <= 0:
+                    raise _PinnedFileError("new file write made no progress")
+                offset += written
+            os.fchmod(descriptor, 0o444)
+            os.fsync(descriptor)
+            persisted = os.fstat(descriptor)
+            if (
+                persisted.st_dev,
+                persisted.st_ino,
+                persisted.st_size,
+                persisted.st_nlink,
+            ) != (
+                created.st_dev,
+                created.st_ino,
+                len(payload),
+                1,
+            ):
+                raise _PinnedFileError("new file changed while writing")
+            return persisted.st_dev, persisted.st_ino
+        except _PinnedFileError:
+            if created_identity is not None:
+                self.unlink_owned_file(name, created_identity)
+            raise
+        except OSError as error:
+            if created_identity is not None:
+                self.unlink_owned_file(name, created_identity)
+            raise _PinnedFileError("new file cannot be persisted") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+
+    def unlink_owned_file(self, name: str, identity: tuple[int, int]) -> None:
+        metadata = self.child_metadata(name)
+        if (
+            metadata is None
+            or not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or (metadata.st_dev, metadata.st_ino) != identity
+        ):
+            return
+        try:
+            os.unlink(name, dir_fd=self._descriptor)
+            self.fsync()
+        except OSError:
+            return
+
+    def rmdir_owned_child(self, name: str, identity: tuple[int, int]) -> None:
+        metadata = self.child_metadata(name)
+        if (
+            metadata is None
+            or not stat.S_ISDIR(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != identity
+        ):
+            return
+        try:
+            os.rmdir(name, dir_fd=self._descriptor)
+            self.fsync()
+        except OSError:
+            return
+
+    def replace_child_into(
+        self,
+        source_name: str,
+        destination_parent: "_PinnedDirectory",
+        destination_name: str,
+    ) -> None:
+        if (
+            not _safe_member_path(source_name)
+            or len(PurePosixPath(source_name).parts) != 1
+            or not _safe_member_path(destination_name)
+            or len(PurePosixPath(destination_name).parts) != 1
+            or destination_parent.child_metadata(destination_name) is not None
+        ):
+            raise _PinnedFileError("publication target is unsafe or already exists")
+        try:
+            self._assert_identity()
+            destination_parent._assert_identity()
+            os.replace(
+                source_name,
+                destination_name,
+                src_dir_fd=self._descriptor,
+                dst_dir_fd=destination_parent._descriptor,
+            )
+            self.fsync()
+            destination_parent.fsync()
+        except (_PinnedFileError, OSError) as error:
+            raise _PinnedFileError("directory publication failed") from error
 
     def _open_descendant_directory(self, relative_path: str) -> int:
         if relative_path and not _safe_member_path(relative_path):
@@ -1347,7 +1560,7 @@ def _verify_exact_dataset_tree(
     truth_payloads: Mapping[str, bytes],
     *,
     require_truth_masks: bool = False,
-) -> None:
+) -> frozenset[str]:
     core_files = {"inventory.json", "inventory.sha256"}
     for sample in inventory.samples:
         core_files.update(
@@ -1366,7 +1579,7 @@ def _verify_exact_dataset_tree(
     if actual_files == core_files and actual_directories == core_directories:
         if require_truth_masks:
             raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
-        return
+        return frozenset()
 
     _, mask_artifacts = _derive_truth_artifacts(
         inventory, inventory.split, truth_payloads
@@ -1410,6 +1623,22 @@ def _verify_exact_dataset_tree(
             or decoded_sha != mask_ref.sha256
         ):
             raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
+    return frozenset(mask_files)
+
+
+def _verify_truth_mask_refs(
+    samples: tuple[TruthSample, ...], verified_paths: frozenset[str]
+) -> None:
+    referenced_paths = {
+        instance.mask.relative_path
+        for sample in samples
+        for instance in sample.instances
+    }
+    if (
+        referenced_paths != set(verified_paths)
+        or any(not _safe_member_path(path) for path in referenced_paths)
+    ):
+        raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
 
 
 def _validate_persisted_access(test_access: object, event_sha: str | None) -> None:
@@ -1484,9 +1713,7 @@ def _verify_inventory_and_tree(
     if require_capability:
         _require_inventory_capability(inventory)
     root_path = Path(os.path.abspath(root))
-    if inventory.split != split or root_path != Path(
-        os.path.abspath(inventory.dataset_root)
-    ):
+    if inventory.split != split:
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
     owned_pinned = pinned_root is None
     try:
@@ -1494,6 +1721,17 @@ def _verify_inventory_and_tree(
     except _PinnedFileError as error:
         raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
     try:
+        try:
+            if pinned_root is not None:
+                with _PinnedDirectory.open(root_path) as requested_root:
+                    if not active_pinned.same_identity(requested_root):
+                        raise _PinnedFileError("requested root identity differs")
+            with _PinnedDirectory.open(inventory.dataset_root) as inventory_root:
+                if not active_pinned.same_identity(inventory_root):
+                    raise _PinnedFileError("inventory root identity differs")
+        except _PinnedFileError as error:
+            raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH") from error
+        root_path = active_pinned.path
         inventory_payload = _read_regular_bound_file(
             root_path, "inventory.json", pinned_root=active_pinned
         )
@@ -1865,58 +2103,131 @@ def load_dataset_inventory(
         return inventory
 
 
+def _verify_complete_truth_mask_tree(
+    pinned_root: _PinnedDirectory,
+    inventory: DatasetInventory,
+    truth_payloads: Mapping[str, bytes],
+    samples: tuple[TruthSample, ...],
+) -> None:
+    verified_paths = _verify_exact_dataset_tree(
+        pinned_root,
+        inventory,
+        truth_payloads,
+        require_truth_masks=True,
+    )
+    _verify_truth_mask_refs(samples, verified_paths)
+
+
+def _publish_truth_masks(
+    pinned_root: _PinnedDirectory,
+    split: Split,
+    inventory: DatasetInventory,
+    truth_payloads: Mapping[str, bytes],
+    samples: tuple[TruthSample, ...],
+    mask_artifacts: tuple[tuple[Path, dict[str, object], MaskRef], ...],
+) -> None:
+    parent_created = False
+    try:
+        parent_metadata = pinned_root.child_metadata("truth_masks")
+        if parent_metadata is None:
+            pinned_root.mkdir_child("truth_masks")
+            parent_created = True
+        elif not stat.S_ISDIR(parent_metadata.st_mode):
+            raise _PinnedFileError("truth_masks parent is not a real directory")
+        mask_parent = pinned_root.open_child_directory("truth_masks")
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+
+    with mask_parent:
+        try:
+            target_metadata = mask_parent.child_metadata(split)
+            if target_metadata is not None:
+                _verify_complete_truth_mask_tree(
+                    pinned_root,
+                    inventory,
+                    truth_payloads,
+                    samples,
+                )
+                return
+            if mask_parent.child_names():
+                raise _PinnedFileError("truth_masks parent contains unknown entries")
+            staging_name = f".truth-masks-{split}-{secrets.token_hex(16)}"
+            pinned_root.mkdir_child(staging_name)
+            staging = pinned_root.open_child_directory(staging_name)
+        except _PinnedFileError as error:
+            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
+
+        created_files: list[tuple[str, tuple[int, int]]] = []
+        published = False
+        try:
+            for relative_path, document, _ in mask_artifacts:
+                filename = relative_path.name
+                identity = staging.write_new_file(
+                    filename, canonical_json_bytes(document)
+                )
+                created_files.append((filename, identity))
+            staging.fsync()
+            if mask_parent.child_metadata(split) is not None:
+                raise _PinnedFileError("truth mask split appeared during publication")
+            pinned_root.replace_child_into(staging_name, mask_parent, split)
+            published = True
+        except _PinnedFileError as error:
+            raise DatasetVerificationError("TRUTH_MASK_PUBLISH_FAILED") from error
+        finally:
+            if not published:
+                for filename, identity in reversed(created_files):
+                    try:
+                        staging.unlink_owned_file(filename, identity)
+                    except _PinnedFileError:
+                        pass
+            staging_identity = staging._identity
+            staging.close()
+            if not published:
+                try:
+                    pinned_root.rmdir_owned_child(staging_name, staging_identity)
+                except _PinnedFileError:
+                    pass
+
+        _verify_complete_truth_mask_tree(
+            pinned_root,
+            inventory,
+            truth_payloads,
+            samples,
+        )
+        if parent_created:
+            pinned_root.fsync()
+
+
 def load_truth_samples(
     dataset_root: Path,
     split: Split,
     inventory: DatasetInventory,
 ) -> tuple[TruthSample, ...]:
     _require_rasterizer_version()
-    root = Path(dataset_root)
     if split not in {"val", "test"}:
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
     if split == "test" and inventory.test_access_event_sha256 is None:
         raise DatasetVerificationError("TEST_SEALED")
-    truth_payloads = _verify_inventory_and_tree(root, split, inventory)
-    samples, mask_artifacts = _derive_truth_artifacts(
-        inventory, split, truth_payloads
-    )
-    target_parent = root / "truth_masks"
-    target = target_parent / split
-    if target.exists() or target.is_symlink():
-        try:
-            with _PinnedDirectory.open(root) as pinned_root:
-                _verify_exact_dataset_tree(
-                    pinned_root,
-                    inventory,
-                    truth_payloads,
-                    require_truth_masks=True,
-                )
-        except _PinnedFileError as error:
-            raise DatasetVerificationError("INVENTORY_TREE_MISMATCH") from error
-        return samples
-    staging = Path(tempfile.mkdtemp(prefix=f".truth-masks-{split}-", dir=root))
-    parent_created = False
     try:
-        for relative_path, document, _ in mask_artifacts:
-            staged_path = staging / relative_path.name
-            atomic_write_json(staged_path, document)
-            staged_path.chmod(0o444)
-        try:
-            target_parent.mkdir(mode=0o700, exist_ok=False)
-        except FileExistsError:
-            pass
-        else:
-            parent_created = True
-        if target.exists() or target.is_symlink():
-            raise DatasetVerificationError("TRUTH_MASK_ALREADY_EXISTS")
-        os.replace(staging, target)
-    except DatasetVerificationError:
-        raise
-    except OSError as error:
-        raise DatasetVerificationError("TRUTH_MASK_PUBLISH_FAILED") from error
-    finally:
-        if staging.exists():
-            shutil.rmtree(staging)
-        if parent_created and target_parent.exists() and not any(target_parent.iterdir()):
-            target_parent.rmdir()
-    return samples
+        pinned_root = _PinnedDirectory.open(Path(dataset_root))
+    except _PinnedFileError as error:
+        raise DatasetVerificationError("INVENTORY_DATASET_ROOT_INVALID") from error
+    with pinned_root:
+        truth_payloads = _verify_inventory_and_tree(
+            pinned_root.path,
+            split,
+            inventory,
+            pinned_root=pinned_root,
+        )
+        samples, mask_artifacts = _derive_truth_artifacts(
+            inventory, split, truth_payloads
+        )
+        _publish_truth_masks(
+            pinned_root,
+            split,
+            inventory,
+            truth_payloads,
+            samples,
+            mask_artifacts,
+        )
+        return samples
