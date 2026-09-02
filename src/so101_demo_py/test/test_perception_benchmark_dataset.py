@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import tarfile
 from typing import Callable
@@ -19,6 +20,7 @@ from so101_demo.perception_benchmark.contracts import TruthSample
 from so101_demo.perception_benchmark.dataset import (
     DatasetArchiveVerifier,
     DatasetVerificationError,
+    TestAccessGrant as DatasetTestAccessGrant,
     TestSeal as DatasetTestSeal,
     load_truth_samples,
     rasterize_polygon,
@@ -100,6 +102,8 @@ def build_fixture_archive(
     duplicate_image_sha: bool = False,
     scenario_for_index: Callable[[int], str] | None = None,
     label_mismatch: bool = False,
+    payload_marker: bytes = b"",
+    image_offset: int = 0,
 ) -> Path:
     archive_path = tmp_path / "fixture.tar.gz"
     with tarfile.open(archive_path, "w:gz") as archive:
@@ -109,13 +113,17 @@ def build_fixture_archive(
                 stem = f"{(300000 if split == 'test' else 200000) + index:09d}"
                 prefix = "dataset"
                 if not semantic_payloads:
-                    image_payload = b"not-a-png"
-                    truth_payload = b"not-json: scenario polygon truth_count"
-                    label_payload = b"not-a-label"
+                    image_payload = b"not-a-png" + payload_marker
+                    truth_payload = (
+                        b"not-json: scenario polygon truth_count" + payload_marker
+                    )
+                    label_payload = b"not-a-label" + payload_marker
                 else:
                     image_index = 0 if duplicate_image_sha else index
                     image_payload = _png_bytes(
-                        image_index + (1000 if split == "val" else 0),
+                        image_index
+                        + image_offset
+                        + (1000 if split == "val" else 0),
                         width=image_size[0],
                         height=image_size[1],
                     )
@@ -149,6 +157,29 @@ def _unlocked_seal(tmp_path: Path, sealed_sha: str = "a" * 64) -> DatasetTestSea
             "yolo-lock.json": "b" * 64,
             "grounded-lock.json": "c" * 64,
         }[path.name],
+    )
+
+
+def _verified_unlocked_seal(
+    archive: Path,
+    tmp_path: Path,
+    *,
+    suffix: str = "",
+) -> DatasetTestSeal:
+    inventory = DatasetArchiveVerifier().verify_archive(
+        archive,
+        sha256_file(archive),
+        tmp_path / f"sealed{suffix}.json",
+    )
+    return DatasetTestSeal(
+        inventory.sealed_test_member_inventory_sha256,
+        tmp_path / f"test-access{suffix}.jsonl",
+    ).unlock(
+        tmp_path / f"yolo-lock{suffix}.json",
+        tmp_path / f"grounded-lock{suffix}.json",
+        verify_lock=lambda path: (
+            "b" * 64 if path.name.startswith("yolo-lock") else "c" * 64
+        ),
     )
 
 
@@ -264,7 +295,7 @@ def test_test_extraction_requires_two_verified_threshold_locks(tmp_path: Path) -
 
 def test_verified_locks_open_test_and_validate_exact_histogram(tmp_path: Path) -> None:
     archive = build_fixture_archive(tmp_path)
-    seal = _unlocked_seal(tmp_path)
+    seal = _verified_unlocked_seal(archive, tmp_path)
 
     inventory = DatasetArchiveVerifier().verify_and_extract_split(
         archive, sha256_file(archive), tmp_path / "test-open", "test", seal
@@ -340,7 +371,7 @@ def test_truth_loader_rejects_test_inventory_without_access_event(tmp_path: Path
         sha256_file(archive),
         tmp_path / "test-open",
         "test",
-        _unlocked_seal(tmp_path),
+        _verified_unlocked_seal(archive, tmp_path),
     )
     stripped_inventory = replace(inventory, test_access_event_sha256=None)
 
@@ -402,7 +433,7 @@ def test_open_split_rejects_invalid_formal_semantics(
             sha256_file(archive),
             tmp_path / "test-open",
             "test",
-            _unlocked_seal(tmp_path),
+            _verified_unlocked_seal(archive, tmp_path),
         )
 
 
@@ -432,3 +463,214 @@ def test_inventory_and_seal_records_are_immutable(tmp_path: Path) -> None:
     with pytest.raises(FrozenInstanceError):
         seal = DatasetTestSeal("a" * 64, tmp_path / "events.jsonl")
         seal.access_grant = None  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("event_sha", "lock_shas"),
+    [
+        ("z" * 64, ("b" * 64, "c" * 64)),
+        ("d" * 64, ("b" * 64, "b" * 64)),
+    ],
+)
+def test_access_grant_constructor_rejects_invalid_or_duplicate_shas(
+    event_sha: str,
+    lock_shas: tuple[str, str],
+) -> None:
+    with pytest.raises(DatasetVerificationError, match="TEST_ACCESS_GRANT_INVALID"):
+        DatasetTestAccessGrant(
+            event_sha,
+            "a" * 64,
+            lock_shas,
+            "2026-09-02T12:00:00+00:00",
+        )
+
+
+def test_test_seal_rejects_fabricated_grant_without_issued_capability(
+    tmp_path: Path,
+) -> None:
+    forged = DatasetTestAccessGrant(
+        "d" * 64,
+        "a" * 64,
+        ("b" * 64, "c" * 64),
+        "2026-09-02T12:00:00+00:00",
+    )
+
+    with pytest.raises(DatasetVerificationError, match="TEST_ACCESS_GRANT_INVALID"):
+        DatasetTestSeal("a" * 64, tmp_path / "missing.jsonl", forged)
+
+
+def test_test_extraction_rejects_tampered_access_event_before_semantics(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, semantic_payloads=False)
+    seal = _verified_unlocked_seal(archive, tmp_path)
+    seal.access_log_path.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(DatasetVerificationError, match="TEST_ACCESS_EVENT_INVALID"):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive,
+            sha256_file(archive),
+            tmp_path / "test-open",
+            "test",
+            seal,
+        )
+
+    assert not (tmp_path / "test-open").exists()
+
+
+def test_test_extraction_rejects_cross_archive_seal_before_semantics(
+    tmp_path: Path,
+) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = build_fixture_archive(
+        first_root, semantic_payloads=False, payload_marker=b"-first"
+    )
+    second = build_fixture_archive(
+        second_root, semantic_payloads=False, payload_marker=b"-second"
+    )
+    seal = _verified_unlocked_seal(first, tmp_path)
+
+    with pytest.raises(DatasetVerificationError, match="TEST_SEAL_ARCHIVE_MISMATCH"):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            second,
+            sha256_file(second),
+            tmp_path / "test-open",
+            "test",
+            seal,
+        )
+
+    assert not (tmp_path / "test-open").exists()
+
+
+def test_loader_rejects_fabricated_inventory_capability(tmp_path: Path) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "val-open", "val", None
+    )
+    fabricated = replace(inventory)
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_CAPABILITY_INVALID"):
+        load_truth_samples(tmp_path / "val-open", "val", fabricated)
+
+    assert not (tmp_path / "val-open/truth_masks").exists()
+
+
+def test_loader_rejects_tampered_inventory_document_and_output_tree(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "val-open", "val", None
+    )
+    inventory_path = tmp_path / "val-open/inventory.json"
+    inventory_path.chmod(0o644)
+    inventory_path.write_bytes(inventory_path.read_bytes() + b" ")
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_INTEGRITY_INVALID"):
+        load_truth_samples(tmp_path / "val-open", "val", inventory)
+
+    assert not (tmp_path / "val-open/truth_masks").exists()
+
+
+def test_loader_rejects_truth_file_drift_before_semantic_parse(tmp_path: Path) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "val-open", "val", None
+    )
+    truth_path = tmp_path / "val-open" / inventory.samples[0].truth_relpath
+    truth_path.chmod(0o644)
+    truth_path.write_bytes(truth_path.read_bytes() + b" ")
+
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_TREE_MISMATCH"):
+        load_truth_samples(tmp_path / "val-open", "val", inventory)
+
+    assert not (tmp_path / "val-open/truth_masks").exists()
+
+
+def test_archive_path_replacement_during_open_fails_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    archive = build_fixture_archive(first_root, include_val=True)
+    replacement = build_fixture_archive(
+        second_root, include_val=True, image_offset=5000
+    )
+    expected_sha = sha256_file(archive)
+    real_tar_open = tarfile.open
+    replaced = False
+
+    def open_then_replace(*args: object, **kwargs: object) -> tarfile.TarFile:
+        nonlocal replaced
+        opened = real_tar_open(*args, **kwargs)
+        if not replaced:
+            os.replace(replacement, archive)
+            replaced = True
+        return opened
+
+    monkeypatch.setattr(dataset_module.tarfile, "open", open_then_replace)
+
+    with pytest.raises(
+        DatasetVerificationError, match="ARCHIVE_CHANGED_DURING_VERIFICATION"
+    ):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive,
+            expected_sha,
+            tmp_path / "val-open",
+            "val",
+            None,
+        )
+
+    assert not (tmp_path / "val-open").exists()
+
+
+def test_truth_mask_publish_failure_is_atomic_and_allows_clean_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), tmp_path / "val-open", "val", None
+    )
+    real_atomic_write = dataset_module.atomic_write_json
+    writes = 0
+
+    def fail_third_write(path: Path, document: object) -> str:
+        nonlocal writes
+        writes += 1
+        if writes == 3:
+            raise OSError("injected mask staging failure")
+        return real_atomic_write(path, document)
+
+    monkeypatch.setattr(dataset_module, "atomic_write_json", fail_third_write)
+    with pytest.raises(DatasetVerificationError, match="TRUTH_MASK_PUBLISH_FAILED"):
+        load_truth_samples(tmp_path / "val-open", "val", inventory)
+
+    assert not (tmp_path / "val-open/truth_masks/val").exists()
+    monkeypatch.setattr(dataset_module, "atomic_write_json", real_atomic_write)
+    truths = load_truth_samples(tmp_path / "val-open", "val", inventory)
+    assert len(truths) == 200
+
+
+def test_val_rejects_unlocked_test_seal_without_creating_output(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path, include_val=True)
+    seal = _verified_unlocked_seal(archive, tmp_path)
+
+    with pytest.raises(DatasetVerificationError, match="VAL_TEST_SEAL_CONFLICT"):
+        DatasetArchiveVerifier().verify_and_extract_split(
+            archive,
+            sha256_file(archive),
+            tmp_path / "val-open",
+            "val",
+            seal,
+        )
+
+    assert not (tmp_path / "val-open").exists()
