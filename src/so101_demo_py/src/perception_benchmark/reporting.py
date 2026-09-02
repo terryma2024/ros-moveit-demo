@@ -3,22 +3,21 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, fields, is_dataclass, replace
-from enum import Enum
 import io
 import json
 import math
 import os
-from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
 import tempfile
+from dataclasses import dataclass, fields, is_dataclass, replace
+from enum import Enum
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
-
 from so101_demo.perception_benchmark.calibration import ThresholdLock
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
@@ -40,6 +39,10 @@ from so101_demo.perception_benchmark.contracts import (
     RunStatus,
     TruthSample,
 )
+from so101_demo.perception_benchmark.dataset import (
+    _PinnedDirectory,
+    _PinnedFileError,
+)
 from so101_demo.perception_benchmark.decisions import (
     DecisionMetrics,
     ScenarioMetrics,
@@ -54,13 +57,12 @@ from so101_demo.perception_benchmark.metrics import (
     ConfidenceInterval,
     ImageMetricInput,
     InstanceMetricSummary,
+    _thresholded_match_count,
     compute_ap,
     interpolated_ap,
     summarize_image_metrics,
-    _thresholded_match_count,
 )
 from so101_demo.perception_benchmark.timing import ResourceSample
-
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
@@ -656,72 +658,90 @@ def _evidence_tree(root: Path) -> tuple[set[str], set[str]]:
 def verify_evidence_index(output_root: Path) -> EvidenceIndex:
     """Verify canonical index bytes and the exact indexed payload tree."""
 
-    candidate = Path(output_root)
-    if candidate.is_symlink() or not candidate.is_dir():
-        raise ValueError("output_root must be an existing non-symlink directory")
     try:
-        root = candidate.resolve(strict=True)
-    except (OSError, RuntimeError) as error:
-        raise ValueError("output_root must be an existing directory") from error
-    payload = _read_stable_regular_file(root, "evidence-index.json")
-    try:
-        document = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("evidence index document is invalid") from error
-    if not isinstance(document, Mapping) or set(document) != {
-        "schema_version",
-        "payload_index_semantics",
-        "entries",
-    }:
-        raise ValueError("evidence index document has an invalid schema")
-    raw_entries = document.get("entries")
-    if not isinstance(raw_entries, list):
-        raise ValueError("evidence index entries must be a list")
-    entries: list[EvidenceEntry] = []
-    for raw in raw_entries:
-        if not isinstance(raw, Mapping) or set(raw) != {
-            "relative_path",
-            "size_bytes",
-            "sha256",
+        pinned_root = _PinnedDirectory.open(Path(output_root))
+    except _PinnedFileError as error:
+        raise ValueError(
+            "output_root must be an existing non-symlink directory"
+        ) from error
+    with pinned_root:
+        try:
+            payload = pinned_root.read_file("evidence-index.json")
+        except _PinnedFileError as error:
+            raise ValueError(
+                "evidence index must be a regular in-root file without hardlinks"
+            ) from error
+        try:
+            document = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("evidence index document is invalid") from error
+        if not isinstance(document, Mapping) or set(document) != {
+            "schema_version",
+            "payload_index_semantics",
+            "entries",
         }:
-            raise ValueError("evidence index entry has an invalid schema")
-        entries.append(
-            EvidenceEntry(
-                relative_path=raw["relative_path"],
-                size_bytes=raw["size_bytes"],
-                sha256=raw["sha256"],
+            raise ValueError("evidence index document has an invalid schema")
+        raw_entries = document.get("entries")
+        if not isinstance(raw_entries, list):
+            raise ValueError("evidence index entries must be a list")
+        entries: list[EvidenceEntry] = []
+        for raw in raw_entries:
+            if not isinstance(raw, Mapping) or set(raw) != {
+                "relative_path",
+                "size_bytes",
+                "sha256",
+            }:
+                raise ValueError("evidence index entry has an invalid schema")
+            entries.append(
+                EvidenceEntry(
+                    relative_path=raw["relative_path"],
+                    size_bytes=raw["size_bytes"],
+                    sha256=raw["sha256"],
+                )
             )
+        index = EvidenceIndex(
+            schema_version=document["schema_version"],
+            payload_index_semantics=document["payload_index_semantics"],
+            entries=tuple(entries),
         )
-    index = EvidenceIndex(
-        schema_version=document["schema_version"],
-        payload_index_semantics=document["payload_index_semantics"],
-        entries=tuple(entries),
-    )
-    try:
-        canonical = canonical_json_bytes(_jsonable(index))
-    except (TypeError, ValueError) as error:
-        raise ValueError("evidence index document is not canonical") from error
-    if canonical != payload:
-        raise ValueError("evidence index document is not canonical")
-    indexed_paths = {entry.relative_path for entry in index.entries}
-    expected_files = indexed_paths | {"evidence-index.json"}
-    expected_directories = {
-        parent.as_posix()
-        for path in indexed_paths
-        for parent in PurePosixPath(path).parents
-        if parent.as_posix() != "."
-    }
-    actual_files, actual_directories = _evidence_tree(root)
-    if actual_files != expected_files or actual_directories != expected_directories:
-        raise ValueError("evidence tree does not exactly match its index")
-    for entry in index.entries:
-        item_payload = _read_stable_regular_file(root, entry.relative_path)
+        try:
+            canonical = canonical_json_bytes(_jsonable(index))
+        except (TypeError, ValueError) as error:
+            raise ValueError("evidence index document is not canonical") from error
+        if canonical != payload:
+            raise ValueError("evidence index document is not canonical")
+        indexed_paths = {entry.relative_path for entry in index.entries}
+        expected_files = indexed_paths | {"evidence-index.json"}
+        expected_directories = {
+            parent.as_posix()
+            for path in indexed_paths
+            for parent in PurePosixPath(path).parents
+            if parent.as_posix() != "."
+        }
+        try:
+            actual_files, actual_directories = pinned_root.tree()
+        except _PinnedFileError as error:
+            raise ValueError(
+                "evidence tree cannot contain symlinks, hardlinks, or special entries"
+            ) from error
         if (
-            len(item_payload) != entry.size_bytes
-            or sha256_bytes(item_payload) != entry.sha256
+            actual_files != expected_files
+            or actual_directories != expected_directories
         ):
-            raise ValueError("evidence payload size or SHA256 mismatch")
-    return index
+            raise ValueError("evidence tree does not exactly match its index")
+        for entry in index.entries:
+            try:
+                item_payload = pinned_root.read_file(entry.relative_path)
+            except _PinnedFileError as error:
+                raise ValueError(
+                    "evidence payload must be a regular in-root file without hardlinks"
+                ) from error
+            if (
+                len(item_payload) != entry.size_bytes
+                or sha256_bytes(item_payload) != entry.sha256
+            ):
+                raise ValueError("evidence payload size or SHA256 mismatch")
+        return index
 
 
 def load_evidence_index(output_root: Path) -> EvidenceIndex:

@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
+import os
+import re
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-import hashlib
 from io import BytesIO
-import json
-import math
-import os
 from pathlib import Path, PurePosixPath
-import re
-import tempfile
 from types import MappingProxyType
 from typing import Literal
 
 import numpy as np
 from PIL import Image
-
 from so101_demo.core.detection import DetectionCandidate, DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
@@ -36,9 +35,12 @@ from so101_demo.perception_benchmark.calibration import (
 )
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
+    decode_mask_rle,
     read_mask,
+    sha256_bytes,
 )
 from so101_demo.perception_benchmark.contracts import (
+    SCHEMA_VERSION,
     DecisionOutput,
     MaskRef,
     PhaseTimings,
@@ -48,13 +50,14 @@ from so101_demo.perception_benchmark.contracts import (
     RunKind,
     RunStatus,
     RuntimeProvenance,
-    SCHEMA_VERSION,
     model_id_for_name,
 )
 from so101_demo.perception_benchmark.dataset import (
     DatasetInventory,
     DatasetSampleRef,
     DatasetVerificationError,
+    _PinnedDirectory,
+    _PinnedFileError,
     _require_inventory_capability,
     _validate_persisted_access,
 )
@@ -62,7 +65,6 @@ from so101_demo.perception_benchmark.timing import (
     PhaseTimingBreakdown,
     ResourceSample,
 )
-
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
@@ -156,6 +158,7 @@ class _ThermalValidationError(_FatalRunError):
 class RunEvidenceExpectation:
     """External anchors required to trust one persisted terminal run."""
 
+    run_id: str
     run_kind: RunKind
     platform: Literal["macos", "linux"]
     model: Literal["yolo_seg", "grounded_sam"]
@@ -166,9 +169,9 @@ class RunEvidenceExpectation:
     threshold_lock_sha256: str | None
     model_id: str
     weights_sha256: str
-    runtime_name: str | None = None
-    runtime_version: str | None = None
-    runtime_environment: Mapping[str, str] | None = None
+    runtime_name: str
+    runtime_version: str
+    runtime_environment: Mapping[str, str]
     max_gpu_temperature_celsius: float | None = None
 
     def __post_init__(self) -> None:
@@ -176,6 +179,8 @@ class RunEvidenceExpectation:
             object.__setattr__(self, "run_kind", RunKind(self.run_kind))
         except ValueError as error:
             raise ValueError("run_kind is unsupported") from error
+        if not isinstance(self.run_id, str) or not self.run_id:
+            raise ValueError("run_id must be non-empty")
         if self.platform not in {"macos", "linux"}:
             raise ValueError("platform is unsupported")
         if self.model not in {"yolo_seg", "grounded_sam"}:
@@ -197,21 +202,22 @@ class RunEvidenceExpectation:
             raise ValueError("model_id must be non-empty")
         for name in ("runtime_name", "runtime_version"):
             value = getattr(self, name)
-            if value is not None and (not isinstance(value, str) or not value):
-                raise ValueError(f"{name} must be null or non-empty")
-        if self.runtime_environment is not None:
-            environment = dict(self.runtime_environment)
-            if not all(
-                isinstance(key, str)
-                and key
-                and isinstance(value, str)
-                and value
-                for key, value in environment.items()
-            ):
-                raise ValueError("runtime_environment must map non-empty strings")
-            object.__setattr__(
-                self, "runtime_environment", MappingProxyType(environment)
-            )
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} must be non-empty")
+        if not isinstance(self.runtime_environment, Mapping):
+            raise ValueError("runtime_environment must be a mapping")
+        environment = dict(self.runtime_environment)
+        if not all(
+            isinstance(key, str)
+            and key
+            and isinstance(value, str)
+            and value
+            for key, value in environment.items()
+        ):
+            raise ValueError("runtime_environment must map non-empty strings")
+        object.__setattr__(
+            self, "runtime_environment", MappingProxyType(environment)
+        )
         if self.max_gpu_temperature_celsius is not None and (
             isinstance(self.max_gpu_temperature_celsius, bool)
             or not isinstance(self.max_gpu_temperature_celsius, (int, float))
@@ -591,13 +597,12 @@ def _create_new_directory(path: Path, root: Path, code: str) -> Path:
     return _require_directory(path, "MASK_DIRECTORY_INVALID")
 
 
-def _read_canonical_json(path: Path, code: str) -> tuple[dict[str, object], bytes]:
-    if path.is_symlink() or not path.is_file():
-        raise RunIntegrityError(code)
+def _decode_canonical_json(
+    payload: bytes, code: str
+) -> tuple[dict[str, object], bytes]:
     try:
-        payload = path.read_bytes()
         document = json.loads(payload)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RunIntegrityError(code) from error
     if not isinstance(document, dict):
         raise RunIntegrityError(code)
@@ -608,6 +613,28 @@ def _read_canonical_json(path: Path, code: str) -> tuple[dict[str, object], byte
     if canonical != payload:
         raise RunIntegrityError(code)
     return document, payload
+
+
+def _read_canonical_json(path: Path, code: str) -> tuple[dict[str, object], bytes]:
+    if path.is_symlink() or not path.is_file():
+        raise RunIntegrityError(code)
+    try:
+        payload = path.read_bytes()
+    except OSError as error:
+        raise RunIntegrityError(code) from error
+    return _decode_canonical_json(payload, code)
+
+
+def _read_pinned_canonical_json(
+    pinned_root: _PinnedDirectory,
+    relative_path: str,
+    code: str,
+) -> tuple[dict[str, object], bytes]:
+    try:
+        payload = pinned_root.read_file(relative_path)
+    except _PinnedFileError as error:
+        raise RunIntegrityError("RUN_EVIDENCE_FILE_UNSAFE") from error
+    return _decode_canonical_json(payload, code)
 
 
 def _sample_document_matches(
@@ -628,28 +655,42 @@ def _sample_document_matches(
     return all(document.get(name) == value for name, value in expected.items())
 
 
-def _verify_inventory(inventory: DatasetInventory) -> None:
+def _verify_inventory(
+    inventory: DatasetInventory,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+) -> Mapping[str, object]:
     if not isinstance(inventory, DatasetInventory):
         raise RunIntegrityError("INVENTORY_TYPE_INVALID")
     try:
         _require_inventory_capability(inventory)
     except DatasetVerificationError as error:
         raise RunIntegrityError("INVENTORY_CAPABILITY_INVALID") from error
-    root = _require_directory(
-        Path(inventory.dataset_root), "INVENTORY_DATASET_ROOT_INVALID"
-    )
-    document, payload = _read_canonical_json(
-        root / "inventory.json", "INVENTORY_CANONICAL_INVALID"
-    )
+    root = Path(os.path.abspath(inventory.dataset_root))
+    if pinned_root is None:
+        root = _require_directory(root, "INVENTORY_DATASET_ROOT_INVALID")
+        document, payload = _read_canonical_json(
+            root / "inventory.json", "INVENTORY_CANONICAL_INVALID"
+        )
+        sidecar = _safe_relative_path(
+            root, "inventory.sha256", "INVENTORY_CANONICAL_INVALID"
+        )
+        try:
+            sidecar_payload = sidecar.read_bytes()
+        except OSError as error:
+            raise RunIntegrityError("INVENTORY_CANONICAL_INVALID") from error
+    else:
+        if pinned_root.path != root:
+            raise RunIntegrityError("INVENTORY_DATASET_ROOT_INVALID")
+        document, payload = _read_pinned_canonical_json(
+            pinned_root, "inventory.json", "INVENTORY_CANONICAL_INVALID"
+        )
+        try:
+            sidecar_payload = pinned_root.read_file("inventory.sha256")
+        except _PinnedFileError as error:
+            raise RunIntegrityError("RUN_EVIDENCE_FILE_UNSAFE") from error
     if _sha256(payload) != inventory.inventory_sha256:
         raise RunIntegrityError("INVENTORY_SHA256_CHANGED")
-    sidecar = _safe_relative_path(
-        root, "inventory.sha256", "INVENTORY_CANONICAL_INVALID"
-    )
-    try:
-        sidecar_payload = sidecar.read_bytes()
-    except OSError as error:
-        raise RunIntegrityError("INVENTORY_CANONICAL_INVALID") from error
     if sidecar_payload != (
         f"{inventory.inventory_sha256}  inventory.json\n".encode("ascii")
     ):
@@ -696,6 +737,7 @@ def _verify_inventory(inventory: DatasetInventory) -> None:
             )
         except DatasetVerificationError as error:
             raise RunIntegrityError("INVENTORY_ACCESS_CHAIN_INVALID") from error
+    return document
 
 
 def _verify_threshold_lock_chain(spec: RunSpec) -> ThresholdLock:
@@ -744,22 +786,39 @@ def _verify_threshold_lock_chain(spec: RunSpec) -> ThresholdLock:
 
 
 def _read_verified_image(
-    inventory: DatasetInventory, sample: DatasetSampleRef
+    inventory: DatasetInventory,
+    sample: DatasetSampleRef,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
 ) -> tuple[bytes, Path]:
-    root = Path(inventory.dataset_root).resolve(strict=True)
-    path = _safe_relative_path(root, sample.image_relpath, "INPUT_IMAGE_INVALID")
-    try:
-        payload = path.read_bytes()
-    except OSError as error:
-        raise RunIntegrityError("INPUT_IMAGE_UNREADABLE") from error
+    root = Path(os.path.abspath(inventory.dataset_root))
+    path = root.joinpath(*PurePosixPath(sample.image_relpath).parts)
+    if pinned_root is None:
+        root = root.resolve(strict=True)
+        path = _safe_relative_path(root, sample.image_relpath, "INPUT_IMAGE_INVALID")
+        try:
+            payload = path.read_bytes()
+        except OSError as error:
+            raise RunIntegrityError("INPUT_IMAGE_UNREADABLE") from error
+    else:
+        if pinned_root.path != root:
+            raise RunIntegrityError("INVENTORY_DATASET_ROOT_INVALID")
+        try:
+            payload = pinned_root.read_file(sample.image_relpath)
+        except _PinnedFileError as error:
+            raise RunIntegrityError("RUN_EVIDENCE_FILE_UNSAFE") from error
     if _sha256(payload) != sample.image_sha256:
         raise RunIntegrityError("INPUT_IMAGE_SHA256_CHANGED")
     return payload, path
 
 
-def _verify_current_images(inventory: DatasetInventory) -> None:
+def _verify_current_images(
+    inventory: DatasetInventory,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+) -> None:
     for sample in inventory.samples:
-        _read_verified_image(inventory, sample)
+        _read_verified_image(inventory, sample, pinned_root=pinned_root)
 
 
 def _load_frame(inventory: DatasetInventory, sample: DatasetSampleRef) -> DetectionFrame:
@@ -1477,23 +1536,74 @@ def _verify_record_mask(
     evidence_root: Path,
     formal_sample_index: int,
     candidate_id: str,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
 ) -> None:
     expected = f"masks/{formal_sample_index:06d}/{candidate_id}.rle.json"
     if mask.relative_path != expected:
         raise RunIntegrityError("RECORD_MASK_LAYOUT_INVALID")
-    path = _safe_relative_path(
-        evidence_root, mask.relative_path, "RECORD_MASK_PATH_INVALID"
-    )
-    document, payload = _read_canonical_json(path, "RECORD_MASK_CANONICAL_INVALID")
+    if pinned_root is None:
+        path = _safe_relative_path(
+            evidence_root, mask.relative_path, "RECORD_MASK_PATH_INVALID"
+        )
+        document, payload = _read_canonical_json(
+            path, "RECORD_MASK_CANONICAL_INVALID"
+        )
+    else:
+        document, payload = _read_pinned_canonical_json(
+            pinned_root,
+            mask.relative_path,
+            "RECORD_MASK_CANONICAL_INVALID",
+        )
     if canonical_json_bytes(document) != payload:
         raise RunIntegrityError("RECORD_MASK_CANONICAL_INVALID")
     try:
-        read_mask(mask, evidence_root)
+        if pinned_root is None:
+            read_mask(mask, evidence_root)
+        else:
+            decoded = decode_mask_rle(document)
+            if (decoded.shape[1], decoded.shape[0]) != (
+                mask.image_width,
+                mask.image_height,
+            ):
+                raise ValueError("mask dimensions do not match MaskRef")
+            if int(decoded.sum()) != mask.pixel_count:
+                raise ValueError("mask pixel_count does not match MaskRef")
+            digest = sha256_bytes(
+                decoded.astype(np.uint8, copy=False).tobytes(order="C")
+            )
+            if digest != mask.sha256:
+                raise ValueError("mask sha256 does not match MaskRef")
     except (OSError, ValueError) as error:
         raise RunIntegrityError("RECORD_MASK_INTEGRITY_INVALID") from error
 
 
-def _verify_mask_tree(evidence_root: Path, expected_paths: set[str]) -> None:
+def _verify_mask_tree(
+    evidence_root: Path,
+    expected_paths: set[str],
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+) -> None:
+    if pinned_root is not None:
+        try:
+            all_files, all_directories = pinned_root.tree()
+        except _PinnedFileError as error:
+            raise RunIntegrityError("RUN_EVIDENCE_FILE_UNSAFE") from error
+        actual = {path for path in all_files if path.startswith("masks/")}
+        actual_directories = {
+            path for path in all_directories if path.startswith("masks/")
+        }
+        if "masks" in all_directories:
+            actual_directories.add("masks")
+        expected_directories = (
+            {"masks"}
+            | {str(PurePosixPath(path).parent) for path in expected_paths}
+            if expected_paths
+            else set()
+        )
+        if actual != expected_paths or actual_directories != expected_directories:
+            raise RunIntegrityError("MASK_TREE_UNEXPECTED")
+        return
     masks_root = evidence_root / "masks"
     if not expected_paths:
         if masks_root.exists() or masks_root.is_symlink():
@@ -1526,6 +1636,9 @@ def _load_verified_resume_evidence(
     inventory: DatasetInventory,
     config_sha: str,
     source_commit: str,
+    *,
+    pinned_root: _PinnedDirectory | None = None,
+    pinned_inventory_root: _PinnedDirectory | None = None,
 ) -> tuple[tuple[PredictionRecord, ...], tuple[Mapping[str, object], ...]]:
     """Verify and return the exact durable record prefix."""
 
@@ -1535,20 +1648,42 @@ def _load_verified_resume_evidence(
         raise RunIntegrityError("RESUME_PROVENANCE_CHANGED")
     if checkpoint.inventory_sha256 != inventory.inventory_sha256:
         raise RunIntegrityError("RESUME_INVENTORY_CHANGED")
-    _verify_inventory(inventory)
-    _verify_current_images(inventory)
-    records_dir = _require_directory(
-        checkpoint.records_dir, "RECORDS_DIRECTORY_INVALID"
-    )
-    if records_dir != checkpoint.records_dir.resolve(strict=True):
-        raise RunIntegrityError("RECORDS_DIRECTORY_CHANGED")
-    entries = list(records_dir.iterdir())
-    paths: list[tuple[int, Path]] = []
-    for path in entries:
-        match = _RECORD_NAME.fullmatch(path.name)
-        if match is None or path.is_symlink() or not path.is_file():
+    _verify_inventory(inventory, pinned_root=pinned_inventory_root)
+    _verify_current_images(inventory, pinned_root=pinned_inventory_root)
+    paths: list[tuple[int, Path | str]] = []
+    if pinned_root is None:
+        records_dir = _require_directory(
+            checkpoint.records_dir, "RECORDS_DIRECTORY_INVALID"
+        )
+        if records_dir != checkpoint.records_dir.resolve(strict=True):
+            raise RunIntegrityError("RECORDS_DIRECTORY_CHANGED")
+        evidence_root = records_dir.parent
+        for path in records_dir.iterdir():
+            match = _RECORD_NAME.fullmatch(path.name)
+            if match is None or path.is_symlink() or not path.is_file():
+                raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
+            paths.append((int(match.group(1)), path))
+    else:
+        try:
+            all_files, all_directories = pinned_root.tree()
+        except _PinnedFileError as error:
+            raise RunIntegrityError("RUN_EVIDENCE_FILE_UNSAFE") from error
+        record_directories = {
+            path for path in all_directories if path.startswith("records")
+        }
+        if record_directories != {"records"}:
             raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
-        paths.append((int(match.group(1)), path))
+        evidence_root = pinned_root.path
+        for relative_path in all_files:
+            parts = PurePosixPath(relative_path).parts
+            if not parts or parts[0] != "records":
+                continue
+            if len(parts) != 2:
+                raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
+            match = _RECORD_NAME.fullmatch(parts[1])
+            if match is None:
+                raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
+            paths.append((int(match.group(1)), relative_path))
     paths.sort(key=lambda item: item[0])
     indices = [index for index, _ in paths]
     if indices != list(range(len(indices))) or len(indices) > len(inventory.samples):
@@ -1556,13 +1691,25 @@ def _load_verified_resume_evidence(
     expected_identity = _checkpoint_identity(checkpoint)
     record_shas: list[str] = []
     previous_record_sha256: str | None = None
-    evidence_root = records_dir.parent
     error_count = 0
     expected_mask_paths: set[str] = set()
     verified_records: list[PredictionRecord] = []
     verified_documents: list[Mapping[str, object]] = []
     for index, path in paths:
-        document, payload = _read_canonical_json(path, "RECORD_CANONICAL_INVALID")
+        if pinned_root is None:
+            if not isinstance(path, Path):
+                raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
+            document, payload = _read_canonical_json(
+                path, "RECORD_CANONICAL_INVALID"
+            )
+            persisted_index = int(path.stem)
+        else:
+            if not isinstance(path, str):
+                raise RunIntegrityError("RECORDS_DIRECTORY_UNEXPECTED_ENTRY")
+            document, payload = _read_pinned_canonical_json(
+                pinned_root, path, "RECORD_CANONICAL_INVALID"
+            )
+            persisted_index = int(PurePosixPath(path).stem)
         record_sha = _sha256(payload)
         record_shas.append(record_sha)
         if (
@@ -1579,7 +1726,7 @@ def _load_verified_resume_evidence(
         sample = inventory.samples[index]
         if (
             record.formal_sample_index != index
-            or record.formal_sample_index != int(path.stem)
+            or record.formal_sample_index != persisted_index
             or record.split != sample.split
             or record.scenario != sample.scenario
             or record.image_relpath != sample.image_relpath
@@ -1605,6 +1752,7 @@ def _load_verified_resume_evidence(
                 evidence_root,
                 index,
                 candidate.candidate_id,
+                pinned_root=pinned_root,
             )
             expected_mask_paths.add(candidate.mask.relative_path)
         if record.record_status is RecordStatus.ERROR:
@@ -1636,7 +1784,9 @@ def _load_verified_resume_evidence(
         or checkpoint.record_inventory_sha256 != digest
     ):
         raise RunIntegrityError("CHECKPOINT_RECORD_INVENTORY_MISMATCH")
-    _verify_mask_tree(evidence_root, expected_mask_paths)
+    _verify_mask_tree(
+        evidence_root, expected_mask_paths, pinned_root=pinned_root
+    )
     return (
         tuple(verified_records),
         tuple(_freeze_document(document) for document in verified_documents),
@@ -1659,21 +1809,147 @@ def verify_resume(
 
 def _read_checkpoint(path: Path) -> RunCheckpoint:
     document, _ = _read_canonical_json(path, "CHECKPOINT_CANONICAL_INVALID")
+    return _checkpoint_from_document(document)
+
+
+def _checkpoint_from_document(document: Mapping[str, object]) -> RunCheckpoint:
     if set(document) != {item.name for item in fields(RunCheckpoint)}:
         raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    if (
+        not isinstance(document.get("records_dir"), str)
+        or not document["records_dir"]
+        or document.get("run_kind")
+        not in {item.value for item in RunKind}
+        or document.get("collection_mode")
+        not in {item.value for item in CollectionMode}
+        or not isinstance(document.get("runtime_environment"), Mapping)
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
     try:
-        return RunCheckpoint(**document)
+        checkpoint = RunCheckpoint(**document)
     except (TypeError, ValueError) as error:
         raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID") from error
+    _verify_checkpoint_schema(checkpoint)
+    return checkpoint
+
+
+def _verify_checkpoint_schema(checkpoint: RunCheckpoint) -> None:
+    string_fields = (
+        "run_id",
+        "platform",
+        "model",
+        "model_id",
+        "weights_sha256",
+        "device",
+        "dtype",
+        "source_commit",
+        "config_sha",
+        "inventory_sha256",
+        "last_record_sha256",
+        "record_inventory_sha256",
+        "runtime_name",
+        "runtime_version",
+    )
+    if any(
+        not isinstance(getattr(checkpoint, name), str)
+        or not getattr(checkpoint, name)
+        for name in string_fields
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    if (
+        checkpoint.platform not in {"macos", "linux"}
+        or checkpoint.model not in {"yolo_seg", "grounded_sam"}
+        or checkpoint.device not in {"mps", "cuda"}
+        or (checkpoint.platform, checkpoint.device)
+        not in {("macos", "mps"), ("linux", "cuda")}
+        or checkpoint.dtype != "float32"
+        or not isinstance(checkpoint.run_kind, RunKind)
+        or not isinstance(checkpoint.collection_mode, CollectionMode)
+        or _SOURCE_COMMIT.fullmatch(str(checkpoint.source_commit)) is None
+        or _SHA256.fullmatch(str(checkpoint.config_sha)) is None
+        or _SHA256.fullmatch(str(checkpoint.inventory_sha256)) is None
+        or _SHA256.fullmatch(str(checkpoint.weights_sha256 or "")) is None
+        or _SHA256.fullmatch(str(checkpoint.last_record_sha256)) is None
+        or _SHA256.fullmatch(str(checkpoint.record_inventory_sha256 or ""))
+        is None
+        or (
+            checkpoint.threshold_lock_sha256 is not None
+            and (
+                not isinstance(checkpoint.threshold_lock_sha256, str)
+                or _SHA256.fullmatch(checkpoint.threshold_lock_sha256) is None
+            )
+        )
+        or not checkpoint.records_dir.is_absolute()
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    locked = checkpoint.run_kind.name.startswith("TEST_") or (
+        checkpoint.run_kind is RunKind.ORACLE_DIAGNOSTIC
+    )
+    if locked != (checkpoint.threshold_lock_sha256 is not None):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    if not isinstance(checkpoint.runtime_environment, Mapping) or not all(
+        isinstance(key, str)
+        and key
+        and isinstance(value, str)
+        and value
+        for key, value in checkpoint.runtime_environment.items()
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    if (
+        type(checkpoint.last_formal_sample_index) is not int
+        or type(checkpoint.record_count) is not int
+        or type(checkpoint.error_count) is not int
+        or checkpoint.record_count < 0
+        or checkpoint.record_count > 200
+        or checkpoint.error_count < 0
+        or checkpoint.error_count > checkpoint.record_count
+        or checkpoint.last_formal_sample_index != checkpoint.record_count - 1
+        or (
+            checkpoint.record_count == 0
+            and checkpoint.last_record_sha256 != "0" * 64
+        )
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
+    if checkpoint.max_gpu_temperature_celsius is not None and (
+        isinstance(checkpoint.max_gpu_temperature_celsius, bool)
+        or not isinstance(checkpoint.max_gpu_temperature_celsius, (int, float))
+        or not math.isfinite(float(checkpoint.max_gpu_temperature_celsius))
+        or float(checkpoint.max_gpu_temperature_celsius) <= 0.0
+    ):
+        raise RunIntegrityError("CHECKPOINT_SCHEMA_INVALID")
 
 
 def _manifest_from_document(document: Mapping[str, object]) -> RunManifest:
     if set(document) != {item.name for item in fields(RunManifest)}:
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    if (
+        document.get("run_kind") not in {item.value for item in RunKind}
+        or document.get("status") not in {item.value for item in RunStatus}
+        or document.get("collection_mode")
+        not in {item.value for item in CollectionMode}
+        or not isinstance(document.get("runtime_environment"), Mapping)
+    ):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     try:
         return RunManifest(**document)
     except (TypeError, ValueError) as error:
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID") from error
+
+
+def _canonical_utc_timestamp(value: object) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID") from error
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() != timezone.utc.utcoffset(parsed)
+        or parsed.isoformat() != value
+    ):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    return parsed
 
 
 def _verify_manifest_identity(
@@ -1707,41 +1983,79 @@ def _verify_manifest_identity(
 
 
 def _verify_manifest_schema(manifest: RunManifest) -> None:
+    started_at = _canonical_utc_timestamp(manifest.started_at)
+    ended_at = (
+        None
+        if manifest.ended_at is None
+        else _canonical_utc_timestamp(manifest.ended_at)
+    )
+    string_fields = (
+        "run_id",
+        "platform",
+        "model",
+        "device",
+        "dtype",
+        "source_commit",
+        "inventory_sha256",
+        "config_sha256",
+        "model_id",
+        "weights_sha256",
+        "runtime_name",
+        "runtime_version",
+        "record_inventory_sha256",
+    )
+    if any(
+        not isinstance(getattr(manifest, name), str)
+        or not getattr(manifest, name)
+        for name in string_fields
+    ):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     if (
         type(manifest.record_count) is not int
         or type(manifest.error_count) is not int
         or manifest.record_count < 0
+        or manifest.record_count > 200
         or manifest.error_count < 0
         or manifest.error_count > manifest.record_count
-        or _SHA256.fullmatch(manifest.record_inventory_sha256) is None
+        or _SHA256.fullmatch(str(manifest.record_inventory_sha256)) is None
         or (manifest.record_count == 0) != (manifest.record_chain_head_sha256 is None)
         or (
             manifest.record_chain_head_sha256 is not None
-            and _SHA256.fullmatch(manifest.record_chain_head_sha256) is None
+            and (
+                not isinstance(manifest.record_chain_head_sha256, str)
+                or _SHA256.fullmatch(manifest.record_chain_head_sha256) is None
+            )
         )
     ):
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     if (
         not isinstance(manifest.run_id, str)
         or not manifest.run_id
+        or not isinstance(manifest.run_kind, RunKind)
+        or not isinstance(manifest.status, RunStatus)
+        or not isinstance(manifest.collection_mode, CollectionMode)
         or manifest.platform not in {"macos", "linux"}
         or manifest.model not in {"yolo_seg", "grounded_sam"}
         or manifest.device not in {"mps", "cuda"}
         or manifest.dtype != "float32"
-        or _SOURCE_COMMIT.fullmatch(manifest.source_commit) is None
-        or _SHA256.fullmatch(manifest.inventory_sha256) is None
-        or _SHA256.fullmatch(manifest.config_sha256) is None
+        or _SOURCE_COMMIT.fullmatch(str(manifest.source_commit)) is None
+        or _SHA256.fullmatch(str(manifest.inventory_sha256)) is None
+        or _SHA256.fullmatch(str(manifest.config_sha256)) is None
         or (
             manifest.threshold_lock_sha256 is not None
-            and _SHA256.fullmatch(manifest.threshold_lock_sha256) is None
+            and (
+                not isinstance(manifest.threshold_lock_sha256, str)
+                or _SHA256.fullmatch(manifest.threshold_lock_sha256) is None
+            )
         )
         or not isinstance(manifest.model_id, str)
         or not manifest.model_id
-        or _SHA256.fullmatch(manifest.weights_sha256) is None
+        or _SHA256.fullmatch(str(manifest.weights_sha256)) is None
         or not isinstance(manifest.runtime_name, str)
         or not manifest.runtime_name
         or not isinstance(manifest.runtime_version, str)
         or not manifest.runtime_version
+        or not isinstance(manifest.runtime_environment, Mapping)
         or not all(
             isinstance(key, str)
             and key
@@ -1764,6 +2078,13 @@ def _verify_manifest_schema(manifest: RunManifest) -> None:
         )
     ):
         raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    locked = manifest.run_kind.name.startswith("TEST_") or (
+        manifest.run_kind is RunKind.ORACLE_DIAGNOSTIC
+    )
+    if locked != (manifest.threshold_lock_sha256 is not None):
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
+    if ended_at is not None and ended_at < started_at:
+        raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     if manifest.status is RunStatus.RUNNING:
         if manifest.ended_at is not None or manifest.invalid_reason is not None:
             raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
@@ -1771,7 +2092,11 @@ def _verify_manifest_schema(manifest: RunManifest) -> None:
         if manifest.ended_at is None or manifest.invalid_reason is not None:
             raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
     elif manifest.status is RunStatus.INVALID:
-        if manifest.ended_at is None or not manifest.invalid_reason:
+        if (
+            manifest.ended_at is None
+            or not isinstance(manifest.invalid_reason, str)
+            or not manifest.invalid_reason
+        ):
             raise RunIntegrityError("MANIFEST_SCHEMA_INVALID")
 
 
@@ -1850,6 +2175,7 @@ def _verify_loaded_expectation(
     checkpoint: RunCheckpoint,
     inventory: DatasetInventory,
     expectation: RunEvidenceExpectation,
+    inventory_document: Mapping[str, object],
 ) -> None:
     if not isinstance(expectation, RunEvidenceExpectation):
         raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_TYPE_INVALID")
@@ -1876,12 +2202,6 @@ def _verify_loaded_expectation(
         )
         if inventory.split != "test":
             raise RunIntegrityError("LOCKED_RUN_REQUIRES_TEST_INVENTORY")
-        root = _require_directory(
-            Path(inventory.dataset_root), "INVENTORY_DATASET_ROOT_INVALID"
-        )
-        inventory_document, _ = _read_canonical_json(
-            root / "inventory.json", "INVENTORY_CANONICAL_INVALID"
-        )
         access = inventory_document.get("test_access")
         registered = (
             access.get("threshold_lock_sha256s")
@@ -1899,6 +2219,7 @@ def _verify_loaded_expectation(
         raise RunIntegrityError("VAL_RUN_REQUIRES_VAL_INVENTORY")
 
     required = {
+        "run_id": expectation.run_id,
         "run_kind": expectation.run_kind,
         "platform": expectation.platform,
         "model": expectation.model,
@@ -1911,6 +2232,8 @@ def _verify_loaded_expectation(
         "collection_mode": CollectionMode.LOW_FLOOR,
         "model_id": expectation.model_id,
         "weights_sha256": expectation.weights_sha256,
+        "runtime_name": expectation.runtime_name,
+        "runtime_version": expectation.runtime_version,
         "max_gpu_temperature_celsius": (
             expectation.max_gpu_temperature_celsius
         ),
@@ -1918,6 +2241,7 @@ def _verify_loaded_expectation(
     if any(getattr(manifest, name) != value for name, value in required.items()):
         raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
     checkpoint_required = {
+        "run_id": expectation.run_id,
         "run_kind": expectation.run_kind,
         "platform": expectation.platform,
         "model": expectation.model,
@@ -1930,6 +2254,8 @@ def _verify_loaded_expectation(
         "collection_mode": CollectionMode.LOW_FLOOR,
         "model_id": expectation.model_id,
         "weights_sha256": expectation.weights_sha256,
+        "runtime_name": expectation.runtime_name,
+        "runtime_version": expectation.runtime_version,
         "max_gpu_temperature_celsius": (
             expectation.max_gpu_temperature_celsius
         ),
@@ -1939,23 +2265,12 @@ def _verify_loaded_expectation(
         for name, value in checkpoint_required.items()
     ):
         raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
-    optional = {
-        "runtime_name": expectation.runtime_name,
-        "runtime_version": expectation.runtime_version,
-        "runtime_environment": expectation.runtime_environment,
-    }
-    for name, value in optional.items():
-        if value is None:
-            continue
-        manifest_value = getattr(manifest, name)
-        checkpoint_value = getattr(checkpoint, name)
-        if name == "runtime_environment":
-            if dict(manifest_value) != dict(value) or dict(
-                checkpoint_value or {}
-            ) != dict(value):
-                raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
-        elif manifest_value != value or checkpoint_value != value:
-            raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
+    if dict(manifest.runtime_environment) != dict(
+        expectation.runtime_environment
+    ) or dict(checkpoint.runtime_environment or {}) != dict(
+        expectation.runtime_environment
+    ):
+        raise RunIntegrityError("RUN_EVIDENCE_EXPECTATION_MISMATCH")
     common = (
         "run_id",
         "run_kind",
@@ -1991,54 +2306,73 @@ def load_verified_run_evidence(
 ) -> LoadedRunEvidence:
     """Read and fully verify one immutable terminal run without rewriting it."""
 
-    root_path = Path(run_root)
-    if root_path.is_symlink() or not root_path.is_dir():
-        raise RunIntegrityError("RUN_EVIDENCE_ROOT_INVALID")
-    root = _require_directory(root_path, "RUN_EVIDENCE_ROOT_INVALID")
     if (
         not isinstance(inventory, DatasetInventory)
         or inventory.sample_count != 200
         or len(inventory.samples) != 200
     ):
         raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
-    manifest_document, _ = _read_canonical_json(
-        root / "manifest.json", "MANIFEST_CANONICAL_INVALID"
-    )
-    manifest = _manifest_from_document(manifest_document)
-    _verify_manifest_schema(manifest)
-    if manifest.status is not RunStatus.VALID:
-        raise RunIntegrityError("TERMINAL_RUN_NOT_VALID")
-    _verify_inventory(inventory)
-    _verify_current_images(inventory)
-    records_dir = _require_directory(
-        root / "records", "RECORDS_DIRECTORY_INVALID"
-    )
-    checkpoint = _read_checkpoint(root / "checkpoint.json")
-    checkpoint_records = _require_directory(
-        checkpoint.records_dir, "RECORDS_DIRECTORY_INVALID"
-    )
-    if checkpoint_records != records_dir or records_dir.parent != root:
-        raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
-    _verify_loaded_expectation(manifest, checkpoint, inventory, expectation)
-    records, documents = _load_verified_resume_evidence(
-        checkpoint,
-        inventory,
-        expectation.config_sha256,
-        expectation.source_commit,
-    )
-    _verify_manifest_anchor(manifest, checkpoint)
-    if (
-        len(records) != 200
-        or checkpoint.record_count != 200
-        or manifest.record_count != 200
-    ):
-        raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
-    return LoadedRunEvidence(
-        manifest=manifest,
-        evidence_root=root,
-        records=records,
-        extended_record_documents=documents,
-    )
+    try:
+        pinned_root = _PinnedDirectory.open(Path(run_root))
+    except _PinnedFileError as error:
+        raise RunIntegrityError("RUN_EVIDENCE_ROOT_INVALID") from error
+    with pinned_root:
+        try:
+            pinned_inventory_root = _PinnedDirectory.open(
+                Path(inventory.dataset_root)
+            )
+        except _PinnedFileError as error:
+            raise RunIntegrityError("INVENTORY_DATASET_ROOT_INVALID") from error
+        with pinned_inventory_root:
+            root = pinned_root.path
+            manifest_document, _ = _read_pinned_canonical_json(
+                pinned_root, "manifest.json", "MANIFEST_CANONICAL_INVALID"
+            )
+            manifest = _manifest_from_document(manifest_document)
+            _verify_manifest_schema(manifest)
+            if manifest.status is not RunStatus.VALID:
+                raise RunIntegrityError("TERMINAL_RUN_NOT_VALID")
+            checkpoint_document, _ = _read_pinned_canonical_json(
+                pinned_root, "checkpoint.json", "CHECKPOINT_CANONICAL_INVALID"
+            )
+            checkpoint = _checkpoint_from_document(checkpoint_document)
+            inventory_document = _verify_inventory(
+                inventory, pinned_root=pinned_inventory_root
+            )
+            _verify_current_images(
+                inventory, pinned_root=pinned_inventory_root
+            )
+            records_dir = root / "records"
+            if checkpoint.records_dir != records_dir:
+                raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
+            _verify_loaded_expectation(
+                manifest,
+                checkpoint,
+                inventory,
+                expectation,
+                inventory_document,
+            )
+            records, documents = _load_verified_resume_evidence(
+                checkpoint,
+                inventory,
+                expectation.config_sha256,
+                expectation.source_commit,
+                pinned_root=pinned_root,
+                pinned_inventory_root=pinned_inventory_root,
+            )
+            _verify_manifest_anchor(manifest, checkpoint)
+            if (
+                len(records) != 200
+                or checkpoint.record_count != 200
+                or manifest.record_count != 200
+            ):
+                raise RunIntegrityError("TERMINAL_RUN_DENOMINATOR_INCOMPLETE")
+            return LoadedRunEvidence(
+                manifest=manifest,
+                evidence_root=root,
+                records=records,
+                extended_record_documents=documents,
+            )
 
 
 class DetectorBenchmarkRunner:
