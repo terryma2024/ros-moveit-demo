@@ -241,16 +241,25 @@ class _MaskArtifactStore:
         root = Path(evidence_root)
         if not root.is_absolute():
             raise ValueError("evidence_root must be absolute")
-        root.mkdir(parents=True, exist_ok=True)
+        if root.is_symlink():
+            raise ValueError("evidence_root must not be a symlink")
+        if not root.is_dir():
+            raise ValueError("evidence_root must be an existing directory")
         self.root = root.resolve(strict=True)
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", namespace):
             raise ValueError("mask artifact namespace is invalid")
         self._namespace = PurePosixPath("benchmark-masks", namespace)
-        (self.root / self._namespace).mkdir(parents=True, exist_ok=True)
+        benchmark_root = self.root / "benchmark-masks"
+        _create_owned_directory(benchmark_root, self.root)
+        self._namespace_path = benchmark_root / namespace
+        _create_owned_directory(self._namespace_path, self.root)
         existing: list[int] = []
-        for path in (self.root / self._namespace).glob("collection-*"):
-            match = re.fullmatch(r"collection-(\d{6})", path.name)
+        for entry in os.scandir(self._namespace_path):
+            match = re.fullmatch(r"collection-(\d{6})", entry.name)
             if match is not None:
+                if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+                    raise ValueError("mask collection must not be a symlink")
+                _require_owned_directory(Path(entry.path), self.root)
                 existing.append(int(match.group(1)))
         self._next_collection = max(existing, default=-1) + 1
         self._lock = threading.Lock()
@@ -261,8 +270,10 @@ class _MaskArtifactStore:
                 relative = self._namespace / f"collection-{self._next_collection:06d}"
                 self._next_collection += 1
                 try:
-                    (self.root / relative).mkdir()
+                    created = _create_owned_directory(self.root / relative, self.root)
                 except FileExistsError:
+                    continue
+                if not created:
                     continue
                 return relative
 
@@ -278,17 +289,30 @@ class _MaskArtifactStore:
         if value.ndim != 2 or not bool(value.any()):
             raise ValueError("candidate mask must be non-empty and two-dimensional")
         target = self.root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
+        _require_owned_directory_chain(target.parent, self.root)
+        if target.is_symlink():
+            raise ValueError("mask target must not be a symlink")
+        if target.exists():
+            raise FileExistsError(target)
         payload = canonical_json_bytes(encode_mask_rle(value))
-        with target.open("xb") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        directory_fd = os.open(target.parent, os.O_RDONLY)
+        parent_descriptor = _open_directory_no_follow(target.parent)
         try:
-            os.fsync(directory_fd)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            file_descriptor = os.open(
+                target.name,
+                flags,
+                0o600,
+                dir_fd=parent_descriptor,
+            )
+            with os.fdopen(file_descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(parent_descriptor)
         finally:
-            os.close(directory_fd)
+            os.close(parent_descriptor)
+        _fsync_directory(target.parent)
         mask_sha = sha256_bytes(
             value.astype(np.uint8, copy=False).tobytes(order="C")
         )
@@ -299,6 +323,61 @@ class _MaskArtifactStore:
             image_width=int(value.shape[1]),
             image_height=int(value.shape[0]),
         )
+
+
+def _open_directory_no_follow(path: Path) -> int:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    return os.open(path, flags)
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = _open_directory_no_follow(path)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _require_owned_directory(path: Path, root: Path) -> None:
+    if path.is_symlink():
+        raise ValueError("mask artifact directory must not be a symlink")
+    if not path.is_dir():
+        raise ValueError("mask artifact parent must be a directory")
+    try:
+        path.resolve(strict=True).relative_to(root)
+    except ValueError as error:
+        raise ValueError("mask artifact directory escapes evidence_root") from error
+
+
+def _require_owned_directory_chain(path: Path, root: Path) -> None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ValueError("mask artifact directory escapes evidence_root") from error
+    current = root
+    _require_owned_directory(current, root)
+    for part in relative.parts:
+        current = current / part
+        _require_owned_directory(current, root)
+
+
+def _create_owned_directory(path: Path, root: Path) -> bool:
+    _require_owned_directory_chain(path.parent, root)
+    parent_descriptor = _open_directory_no_follow(path.parent)
+    try:
+        try:
+            os.mkdir(path.name, 0o700, dir_fd=parent_descriptor)
+        except FileExistsError:
+            _require_owned_directory(path, root)
+            return False
+        os.fsync(parent_descriptor)
+    finally:
+        os.close(parent_descriptor)
+    _require_owned_directory(path, root)
+    _fsync_directory(path)
+    _fsync_directory(path.parent)
+    return True
 
 
 def _candidate_snapshot(batch: DetectionBatch) -> str:
@@ -445,8 +524,9 @@ def build_production_detector_port(factory_options: Any) -> DetectorPort:
     built = build_detector(factory_options)
     if not callable(getattr(built.detector, "detect", None)):
         raise TypeError("factory detector does not implement DetectorPort.detect")
-    _validate_detector_runtime(built.detector, requested_device)
-    if getattr(factory_options, "backend", None) == "yolo_seg":
+    backend = getattr(factory_options, "backend", None)
+    _validate_detector_runtime(built.detector, requested_device, backend)
+    if backend == "yolo_seg":
         from so101_demo.perception_benchmark.adapters.yolo import (
             resolve_yolo_production_config,
         )
@@ -487,22 +567,103 @@ def _runtime_dtype(value: object) -> str | None:
         return normalized
 
 
-def _validate_detector_runtime(detector: Any, requested_device: str) -> None:
+def _runtime_device(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).lower()
+    for device in ("cuda", "mps", "cpu"):
+        if normalized.startswith(device):
+            return device
+    return normalized
+
+
+def _runtime_parameter_module(component: Any) -> Any:
+    nested = getattr(component, "model", None)
+    for candidate in (nested, component):
+        if candidate is not None and callable(getattr(candidate, "parameters", None)):
+            return candidate
+    raise ModelSetupError(
+        "RUNTIME_PROVENANCE_UNAVAILABLE",
+        "loaded component exposes no model parameters",
+    )
+
+
+def _validate_accelerated_component(
+    component: Any, requested_device: str, name: str
+) -> None:
+    module = _runtime_parameter_module(component)
+    try:
+        parameters = tuple(module.parameters())
+    except Exception as error:
+        raise ModelSetupError(
+            "RUNTIME_PROVENANCE_UNAVAILABLE",
+            f"{name} parameters cannot be inspected",
+        ) from error
+    if not parameters:
+        raise ModelSetupError(
+            "RUNTIME_PROVENANCE_UNAVAILABLE",
+            f"{name} exposes no parameters",
+        )
+    devices = {
+        _runtime_device(getattr(parameter, "device", None))
+        for parameter in parameters
+    }
+    if None in devices or any(
+        device not in {"cuda", "mps", "cpu"} for device in devices
+    ):
+        raise ModelSetupError(
+            "RUNTIME_PROVENANCE_UNAVAILABLE",
+            f"{name} parameter device is missing or unknown",
+        )
+    if devices != {requested_device}:
+        observed = ",".join(sorted(cast(set[str], devices)))
+        raise ModelSetupError(
+            "DEVICE_MISMATCH",
+            f"{name} requested {requested_device}, observed {observed}",
+        )
+    dtypes = {
+        _runtime_dtype(getattr(parameter, "dtype", None))
+        for parameter in parameters
+    }
+    if None in dtypes or any(dtype is None or not dtype for dtype in dtypes):
+        raise ModelSetupError(
+            "RUNTIME_PROVENANCE_UNAVAILABLE",
+            f"{name} parameter dtype is missing or unknown",
+        )
+    if dtypes != {"float32"}:
+        observed = ",".join(sorted(cast(set[str], dtypes)))
+        raise ModelSetupError(
+            "NON_FP32_RUNTIME", f"{name} observed parameter dtypes {observed}"
+        )
+
+
+def _validate_detector_runtime(
+    detector: Any, requested_device: str, backend: object
+) -> None:
     observed_device = str(getattr(detector, "runtime_device", "")).lower()
     if observed_device != requested_device:
         raise ModelSetupError(
             "DEVICE_MISMATCH",
             f"requested {requested_device}, observed {observed_device or 'unknown'}",
         )
-    for name in ("_model", "_grounding_model", "_sam_model"):
-        component = getattr(detector, name, None)
+    if backend == "yolo_seg":
+        component_names = (("_model", "YOLO model"),)
+    elif backend == "grounded_sam":
+        component_names = (
+            ("_grounding_model", "grounding model"),
+            ("_sam_model", "SAM model"),
+        )
+    else:
+        raise ModelSetupError(
+            "RUNTIME_PROVENANCE_UNAVAILABLE", "detector backend is unknown"
+        )
+    for attribute, name in component_names:
+        component = getattr(detector, attribute, None)
         if component is None:
-            continue
-        observed_dtype = _runtime_dtype(getattr(component, "dtype", None))
-        if observed_dtype is not None and observed_dtype != "float32":
             raise ModelSetupError(
-                "NON_FP32_RUNTIME", f"{name} observed dtype {observed_dtype}"
+                "RUNTIME_PROVENANCE_UNAVAILABLE", f"{name} is unavailable"
             )
+        _validate_accelerated_component(component, requested_device, name)
 
 
 def _validated_lock(model: str, lock: ThresholdLock) -> ThresholdLock:
@@ -563,7 +724,7 @@ def build_calibrated_detector_port(
         )
     if not callable(getattr(detector, "detect", None)):
         raise TypeError("calibrated detector does not implement DetectorPort.detect")
-    _validate_detector_runtime(detector, assets.requested_device)
+    _validate_detector_runtime(detector, assets.requested_device, model)
     return detector
 
 

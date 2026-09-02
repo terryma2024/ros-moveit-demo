@@ -211,7 +211,20 @@ class PhaseTimer:
         self._last_phase_index = phase_index
         return elapsed
 
-    def __exit__(self, *_error: object) -> None:
+    def __exit__(
+        self,
+        error_type: type[BaseException] | None,
+        error: BaseException | None,
+        traceback: object,
+    ) -> None:
+        del error_type, traceback
+        if error is not None:
+            try:
+                self._synchronizer.synchronize()
+            except Exception as sync_error:
+                error.add_note(
+                    f"accelerator synchronization also failed: {sync_error}"
+                )
         return None
 
     def to_timings(
@@ -310,7 +323,8 @@ class ResourceSampler:
                 "gpu_temperature_celsius": lambda: getattr(
                     accelerator, "temperature"
                 )(),
-                "gpu_power_watts": lambda: getattr(accelerator, "power_draw")(),
+                "gpu_power_watts": lambda: getattr(accelerator, "power_draw")()
+                / 1000.0,
             }
         else:
             accelerator = self._torch.mps
