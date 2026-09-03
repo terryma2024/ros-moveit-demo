@@ -4590,3 +4590,54 @@ deletion: none
 next_command: commit and push CP-062, synchronize ai-station, rerun the prerequisite check, then execute the exact unlock command once
 decision: EXECUTE_ONE_TIME_POSTFIX_TEST_UNLOCK_AFTER_COMMIT
 ```
+
+## Checkpoint CP-063 — Post-fix test access result and Mac transfer gate
+
+```yaml
+checkpoint_id: CP-063
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-062
+status: WAITING_FOR_EXPLICIT_CROSS_ENV_TEST_DATA_TRANSFER_AUTHORIZATION
+test_unlock:
+  result: PASS
+  unlock_script_sha256: d69bd2280e747f698a8f7323029f7755ce943d63a878241407a2c817a062fbba
+  first_outer_sha_attempt: stopped before script execution because its expected script digest was incorrect
+  execution_count_after_verified_script_sha: 1
+  access_event_count: 1
+  access_event_sha256: c77c2dcf6772ba708f03d6e910ffd5e9323d7c47a9e915fa8ed33c96cef6f76f
+  access_log: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/test-access-r1.jsonl
+  access_log_sha256: c5179c15b5f0586a93e9ba48d2a47d2cd3ce7e2dbed65b85dff8a3fcbe7d10e4
+  test_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+  test_inventory_sha256: 72d38c392889d9f1d8095f24d148f31bd2915a5f36fc62b123f6625fc7e76dd2
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  regular_file_count: 602
+  symlink_count: 0
+  total_bytes: 9654066
+  strict_lock_internal_sha256s:
+    - bbe200f0f46bb035a78a22e7524e0f401175f99d41ce6067fd888aacd8644df6
+    - 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+frozen_after_access:
+  - archive, seal, prompts, models, low-floor configs, grids, thresholds, matching, objectives, tie-breaks, and both lock files
+  - no post-test calibration or test-driven configuration change is permitted
+mac_transfer:
+  intended_source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+  intended_transfer_archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1-transfer.tar.gz
+  intended_destination: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-postfix-r4-macos-r1
+  result: BLOCKED_BEFORE_EXECUTION
+  transferred_bytes: 0
+  reason: cross-environment transfer of the complete opened held-out test dataset requires payload-specific user authorization
+execution_order:
+  - retain Mac-first formal matrix order
+  - do not start Linux test inference until all six Mac runs validate
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+  archived_runs:
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-aborted-r1
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-rejected-r2
+  deletion_candidates: none
+next_command: after explicit authorization for this exact payload and destination, create one immutable transfer archive, verify its SHA and path safety, copy it to the registered Mac temporary root, preserve both lock mtimes with scp -p, and preregister the twelve-run frozen matrix
+decision: STOP_BEFORE_CROSS_ENV_TEST_DATA_TRANSFER
+```
