@@ -2257,3 +2257,49 @@ deletion_candidates:
 next_command: commit EXP-080 preregistration, add only the scenario-label regression, and observe RED
 decision: RUN_EXP_080_TDD_ONLY
 ```
+
+## Checkpoint CP-021 — corrected fresh dataset generation lock
+
+```yaml
+checkpoint_id: CP-021
+last_valid_experiment: EXP-080
+source_commit: 650f3398fb9e6eb5cc3b9ae6f15afc0bb1d858f7
+tdd:
+  red: 3 failed and 1 two-cup control passed; JUnit SHA256 c82cc68f5a086d9e9e0c002dad96172705a11c81e39f2fe6a1e2af7bf5a076ad
+  mac_green: 108 passed in 128.25 s; JUnit SHA256 403cdd3735cb9ae76ec018a0a95ab920c5a60dc36381dd9a5400814874a3598b
+  linux_green: 26 passed in 2.90 s; JUnit SHA256 c5c4a0b6e19c0a8041e6935788f410620de39a1db22b5394834e67dfde50d9a4
+  static: py_compile and git diff --check passed
+fix_scope: build_labeled_sample now admits only scenario-active plastic_cup body names before converting object IDs to instance masks
+linux_build:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-080/linux-build-r1
+  mode: non-symlink install
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-080/linux-build-r1/install/so101_demo_py
+  generator_python: /data/work/venvs/so101-grounded-sam/bin/python
+corrected_generation:
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-080/linux-build-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/fresh_dataset.yaml
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-650f3398-r3
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  checksum_file: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz.sha256
+  generator_commit: 650f3398fb9e6eb5cc3b9ae6f15afc0bb1d858f7
+  expected_samples: 880
+  expected_artifacts_before_manifest: 2641
+  expected_class_instance_total: 880
+  expected_val_visible_counts: {no_cup: 0, one_cup_distractors: 1, two_cups: 2, cup_near_bottle: 1}
+  environment: MUJOCO_GL=egl and PYTHONNOUSERSITE=1
+access_boundary:
+  - validate top-level manifest and open val content only
+  - do not open any corrected test image, label, or truth content
+  - create the archive and adjacent checksum once only after corrected val semantics pass
+preflight:
+  - local, Gitee, and ai-station exact source SHA readback
+  - corrected output, archive, and checksum targets absent and non-symlink
+  - no model, benchmark, dataset-generator, simulator, ROS, or tmux process active
+retained_runs:
+  - all EXP-080 retained runs
+  - exp-080 linux-build-r1
+archived_runs: []
+deletion_candidates:
+  - unchanged from EXP-080
+next_command: commit CP-021, synchronize ai-station, generate raw-650f3398-r3 once, validate only manifest and val, then create one deterministic archive and checksum
+decision: RUN_CORRECTED_DATASET_GENERATION
+```
