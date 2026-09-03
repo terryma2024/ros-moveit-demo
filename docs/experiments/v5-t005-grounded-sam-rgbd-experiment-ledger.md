@@ -2889,3 +2889,50 @@ deletion_candidates:
 next_command: commit and push CP-032, synchronize ai-station, verify both platform output parents and all four outputs/label/script targets, then run Mac validation only
 decision: COLLECT_MAC_THEN_LINUX_VAL_RAW_WITH_TEST_SEALED
 ```
+
+## Checkpoint CP-033 — Linux validation script transfer replacement lock
+
+```yaml
+checkpoint_id: CP-033
+experiment_id: EXP-079
+status: PREREGISTERED_LINUX_TRANSFER_R2
+source_commit: 85f0566698b5a0b602989736ffc7bd5417ef40e8
+mac_val_result:
+  status: VALID
+  yolo_seg: {record_count: 200, record_inventory_sha256: 52bda6fa1f323ed423d9ae6709a28898be930176afb78ab518cbea8910e8fc7e, error_count: 0, record_statuses: [OK], timed_out: false, oom: false, fallback_used: false}
+  grounded_sam: {record_count: 200, record_inventory_sha256: 182815997bb5c11a0383618c3d5068bd2e65afb1498ab4c0d34fea2c5ed3f99b, error_count: 0, record_statuses: [OK], timed_out: false, oom: false, fallback_used: false}
+  integrity: load_verified_run_evidence passed both independent expectations, record chains, source images, masks, and manifest/checkpoint anchors
+  launchd_job_removed: true
+linux_r1_transfer:
+  status: INVALID_PRESTART
+  first_bad_boundary: remote scripts parent did not exist
+  error: scp destination open failed with No such file or directory
+  remote_script_created: false
+  model_loaded: false
+  inference_run: false
+  model_outputs_created: false
+  test_semantic_content_accessed: false
+linux_r2_transfer:
+  parent_to_create_once: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts
+  local_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r1.sh
+  remote_target: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r2.sh
+  required_sha256: 7a0802c374183ed2e108c705e486587de8ee4995c800f992142115059b2d4cc1
+  command: /bin/bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r2.sh
+  output_parent_to_create_once: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux
+  outputs:
+    yolo_seg: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/yolo-r1
+    grounded_sam: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/grounded-sam-r1
+success_criteria:
+  - create only the two registered parent directories while R2 script and both model outputs remain absent
+  - copy once, chmod 0755, verify the exact script SHA, then execute once
+  - CP-032 Linux validation and test-seal criteria remain unchanged
+stop_criteria:
+  - any R2 target collision, script SHA mismatch, command failure, invalid run, fallback, timeout, OOM, or test access
+retained_runs:
+  - all CP-032 retained runs and valid Mac validation evidence
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-032; absent remote R1 script is not an artifact
+next_command: commit and push CP-033, synchronize ai-station, create the two registered parents, verify R2 targets absent, copy and verify linux-val-r2.sh, then execute it once
+decision: CREATE_REMOTE_PARENTS_THEN_TRANSFER_AND_RUN_LINUX_R2
+```
