@@ -2354,3 +2354,55 @@ next_change:
 next_command: add a frozen-config regression for the new archive and observe RED before editing benchmark.yaml or CLI constants
 decision: RUN_CONFIG_REBIND_TDD_ONLY
 ```
+
+## Checkpoint CP-023 — fresh val and test-seal preparation lock
+
+```yaml
+checkpoint_id: CP-023
+experiment_id: EXP-079
+status: RUNNING_DATASET_PREPARATION
+source_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+config_rebind:
+  archive_id: datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  config_sha256: 4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160
+  evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+  debug_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+  unchanged: model revisions and bytes, prompt, production and low-floor values, calibration grids, FP32, native devices, offline/no-fallback, counts, scenarios, warmup/cold/bootstrap and run order
+tdd:
+  red: frozen config literal failed; JUnit SHA256 06c68cdee0e8a373249a9075f56dba4edde6e668b6ab8b29af5a82549136c136
+  mac_green: 54 passed in 0.93 s; JUnit SHA256 2424fe4e3920d3d1ff985cb1812f894eac0ef559656b576789f0699105f4e0cd
+  linux_green: 54 passed in 6.10 s; JUnit SHA256 2aed679ed53eb63e3aeb91debb28eee0bb036a84108b17cbba9b8a1b4d05a80d
+  static: py_compile, exact config SHA readback, old-literal scan and git diff --check passed
+mac_build:
+  r1: INVALID_PREBUILD because Mac colcon does not support --allow-overriding
+  r2: VALID non-symlink install; first test command was INVALID_ENVIRONMENT due a Linux python3.12 path, corrected command loaded the python3.11 installed copy and passed
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-ef254-r2/install/so101_demo_py
+  runtime_python: /Users/matianyi/ros2_jazzy/.venv/bin/python
+linux_build:
+  r1: VALID non-symlink install
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py
+  runtime_python: /data/work/venvs/so101-grounded-sam/bin/python
+dataset_preparation:
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml
+  sealed_member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r1.json
+  val_output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r1
+  inspect_command: perception_benchmark inspect-archive --config <exact config> --archive <exact archive> --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --sealed-member-inventory <absent sealed-test-members-r1.json>
+  val_command: perception_benchmark prepare-dataset --config <exact config> --archive <exact archive> --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --split val --output-root <absent val-open-r1>
+success_criteria:
+  - archive/config SHA and safe paths verify
+  - seal contains exactly 200 image/label/truth test triplets while test scenario_counts stays null
+  - val semantic inventory contains 200 unique samples, four scenarios of 50, and source bytes read back
+  - no test member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - any command failure or test semantic access makes this preparation ID terminal invalid and blocks inference
+retained_runs:
+  - all CP-022 retained runs
+  - Mac build r1/r2 and Linux build r1 for ef254f60
+archived_runs: []
+deletion_candidates:
+  - Mac build r1 and invalid first r2 JUnit, only after explicit user authorization
+next_command: commit CP-023, synchronize ai-station, run inspect_command once, verify its non-semantic seal, then run val_command once
+decision: PREPARE_FRESH_VAL_KEEP_TEST_SEALED
+```
