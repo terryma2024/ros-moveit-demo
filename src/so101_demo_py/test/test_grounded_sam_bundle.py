@@ -7,14 +7,12 @@ from pathlib import Path
 
 import pytest
 import setuptools
-
 from so101_demo.adapters.perception.model_bundle import (
     build_model_bundle,
     verify_model_bundle,
 )
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.cli.prepare_grounded_sam_bundle import main
-
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG_PATH = (PACKAGE_ROOT / "config/perception/grounded_sam.yaml").resolve()
@@ -25,6 +23,7 @@ LOCKED_DEPENDENCIES = {
     "huggingface-hub": "0.34.4",
     "mujoco": "3.12.0",
     "safetensors": "0.6.2",
+    "scipy": "1.17.1",
     "tokenizers": "0.22.0",
     "torch": "2.13.0",
     "torchvision": "0.28.0",

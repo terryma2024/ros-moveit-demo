@@ -5,7 +5,6 @@ from pathlib import Path
 
 import yaml
 
-
 PACKAGE_ROOT = Path(__file__).parents[1]
 LOCK_PATH = PACKAGE_ROOT / "config/perception/requirements.lock"
 TRAINING_PATH = PACKAGE_ROOT / "config/perception/training.yaml"
@@ -37,6 +36,7 @@ def test_perception_application_dependencies_are_exactly_pinned() -> None:
     assert packages["pyyaml"] == "6.0.2"
     assert packages["pillow"] == "12.3.0"
     assert packages["transformers"] == "4.56.2"
+    assert packages["scipy"] == "1.17.1"
     assert packages["huggingface-hub"] == "0.34.4"
     assert packages["safetensors"] == "0.6.2"
     assert packages["tokenizers"] == "0.22.0"
