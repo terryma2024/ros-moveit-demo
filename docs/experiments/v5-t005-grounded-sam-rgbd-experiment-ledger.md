@@ -4355,3 +4355,55 @@ deletion: none
 next_command: publish CP-058, synchronize ai-station, execute and validate YOLO calibration only, then separately lock Grounded-SAM calibration
 decision: RUN_POSTFIX_YOLO_CALIBRATION_THEN_GATE_GROUNDED_SAM
 ```
+
+## Checkpoint CP-059 — Post-fix Grounded-SAM joint calibration lock
+
+```yaml
+checkpoint_id: CP-059
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-058
+status: READY_FOR_GROUNDED_SAM_JOINT_CALIBRATION
+benchmark_code_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+yolo_result:
+  status: VALID
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/yolo-r1
+  workers: 8
+  grid_points: 2527
+  total_seconds: 17.4
+  inference_during_calibration: false
+  threshold_lock_file_sha256: 1c2f7e270123e72115a30a673a697cb07bdab9f295e6c429172995d1ade7bac1
+  threshold_lock_internal_sha256: bbe200f0f46bb035a78a22e7524e0f401175f99d41ce6067fd888aacd8644df6
+  evidence_index_sha256: 84cc18a1d718cb7494ec2c7a362f93fa8a040ef08de9d6ca6023fd9367d1ccdc
+  progress_log_sha256: 280bb0a1db7bae5598cffa2537fe512c90da46075390639ba62db29e82b8f196
+  verification: {formal: true, deployable: true, outcome: SAFE_CALIBRATED, verify_evidence: PASS, unsafe_unique_macos: 0, unsafe_unique_linux: 0}
+  selected: {conf: '0.90', nms_iou: '0.90', target_confidence_threshold: '0.90', imgsz: 640}
+  objective: {min_platform_macro_f1: 1.0, merged_macro_f1: 1.0, merged_mask_ap50_95: 0.07407516182260027, min_platform_two_cup_recall: 0.0}
+  interpretation: zero two-cup both-matched recall does not establish required multi-object capability despite the fail-closed safety outcome
+grounded_sam_calibration:
+  dataset_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-postfix-r4/inventory.json
+  dataset_archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  inventory_sha256: 141d79acd2aa3758f4ee90056b14aab0f105d74778f193a998bc341ae6ce59b3
+  mac_run: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/macos/grounded-sam-r1
+  mac_expectation: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/expectations/macos-grounded_sam.json
+  mac_expectation_sha256: 8d46ccbd0e3a6f9c1180abf8ecaa7cabcc8d3b76b490d406439dd28aa60377d3
+  linux_run: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/linux/grounded-sam-r1
+  linux_expectation: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/expectations/linux-grounded_sam.json
+  linux_expectation_sha256: d2794b732dcfa27a784ef3dace71e44c9907ebff4a50f9636fdc5f8220c667e7
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/grounded-sam-r1
+  progress_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/grounded-sam-postfix-r4-calibrate.log
+  workers: 8
+calibration_contract:
+  - only the frozen val inventory and two validated Grounded-SAM VAL_RAW runs are inputs
+  - exactly 32400 frozen grid points; no model load or SAM/DINO call during calibration
+  - reuse precomputed candidate threshold states and truth-mask IoUs across all grid points
+  - progress must cover verify, rehome, second verify, precompute, grid, and finalize
+  - result must be formal, deployable, SAFE_CALIBRATED, and have zero unsafe unique selections on both platforms
+  - all quality metrics remain diagnostic; do not infer PickPlace readiness from the safety outcome
+  - test remains sealed and inaccessible
+stop_criteria:
+  - output collision, expectation/evidence mismatch, inference call, nonzero command, malformed or non-deployable lock, unsafe outcome, or test access
+deletion: none
+next_command: publish CP-059, synchronize ai-station, execute the optimized Grounded-SAM calibration once, and verify its lock and evidence before any test unlock
+decision: RUN_POSTFIX_GROUNDED_SAM_NUMERICAL_CALIBRATION_ONLY
+```
