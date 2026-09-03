@@ -2614,3 +2614,41 @@ deletion_candidates:
 next_command: commit and push CP-027, synchronize ai-station, verify output targets absent, install the isolated Mac runtime overlay, and run the MPS tensor probe
 decision: REMEDIATE_MPS_IN_ISOLATED_OVERLAY_BEFORE_DRY_RUN
 ```
+
+## Checkpoint CP-028 — native Terminal MPS probe replacement lock
+
+```yaml
+checkpoint_id: CP-028
+experiment_id: EXP-079
+status: PREREGISTERED_NATIVE_TERMINAL_PROBE
+source_commit: 555715e1cfffa7f3e0fab3dff0a5cfb6597bbea7
+cp_027_overlay_result:
+  status: CANCELLED_PRESTART
+  reason: upstream reproduction identifies the false-negative as specific to the Codex runtime context; replacing PyTorch inside the same context would not establish native Mac MPS availability
+  matching_upstream_issue: https://github.com/pytorch/pytorch/issues/177819
+  first_attempt: download did not complete and created no target directory
+  duplicate_attempt: one accidentally duplicated download process was terminated; the retained tracked download was then cancelled before target creation
+  overlay_target_created: false
+  base_virtual_environment_modified: false
+  evidence_deleted: false
+native_terminal_probe:
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-native-terminal-probe-r1.sh
+  script_sha256: d005198b065f93e0b711914a7f2746bb5c568f6880a45b2d516629a1df142137
+  command: /bin/zsh /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-native-terminal-probe-r1.sh
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-native-terminal-probe-r1.json
+  output_policy: output and temporary path must be absent; write once; chmod 0444; execute from the ordinary macOS Terminal process
+success_criteria:
+  - exact base Python and torch 2.13.0 are used without any runtime overlay
+  - mps_built and mps_available are true
+  - one tensor is allocated on mps:0 and read back as 1.0
+  - the probe output is immutable and its SHA-256 is recorded
+stop_criteria:
+  - any output collision, script digest mismatch, base environment drift, MPS false, allocation failure, or CPU tensor
+retained_runs:
+  - all CP-027 retained runs and the probe script
+archived_runs: []
+deletion_candidates:
+  - pip temporary download directories from the cancelled attempts, only after explicit user authorization
+next_command: commit and push CP-028, verify the script digest and output absence, then run the exact command once from ordinary macOS Terminal
+decision: PROVE_NATIVE_MPS_OUTSIDE_CODEX_RUNTIME
+```
