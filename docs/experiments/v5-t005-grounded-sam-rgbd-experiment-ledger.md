@@ -2057,3 +2057,67 @@ qualification_boundary:
 next_command: prewrite EXP-079 fresh-validation and newly sealed-test design before any new model inference
 decision: DESIGN_FRESH_DATA_ROUTE
 ```
+
+## EXP-079 — fresh validation and sealed-test route
+
+```yaml
+experiment_id: EXP-079
+status: PLANNED
+prior_experiment: EXP-078_VALID_SUCCESS
+hypothesis: after punctuation-equivalent label retention, a calibration based only on a fresh dual-platform validation split can determine whether this fixed Grounding-DINO Tiny plus stateless SAM 2.1 Hiera Tiny pipeline has a non-conflicting safe threshold interval
+prediction: the new validation records will retain every prompt-equivalent low-floor proposal, and any threshold lock will be derived without reading the new test split; only a later one-time sealed-test run can support a deployability decision
+fresh_dataset:
+  generator: existing MuJoCo object-ID renderer with one TDD extension for explicit disjoint split seed starts
+  image_size: [640, 480]
+  split_counts: {train: 480, val: 200, test: 200}
+  seed_starts: {train: 400000, val: 500000, test: 600000}
+  scenarios: [no_cup, one_cup_distractors, two_cups, cup_near_bottle]
+  per_val_scenario: 50
+  per_test_scenario: 50
+  old_seed_ranges_forbidden: {train: [100000, 100479], val: [200000, 200199], test: [300000, 300199]}
+  test_policy: generation and archive sealing may enumerate safe member paths and byte digests, but no agent or calibration command may extract, parse, render, summarize, or infer on test images, labels, truth, scenarios, or instances before both new threshold locks verify
+single_source_change_before_generation:
+  - accept optional seed_starts with exact train/val/test keys
+  - preserve current seed starts when the field is absent
+  - reject negative, Boolean, missing, extra, overlapping, or count-overflowing ranges
+  - write the selected ranges into dataset-manifest.json
+frozen_after_archive_creation:
+  - archive bytes and SHA256
+  - sealed test member inventory and SHA256
+  - open val semantic inventory and SHA256
+  - source commit, MJCF SHA256, model assets, prompt, grid, FP32, native MPS/CUDA, offline, and no-fallback policy
+execution_order:
+  - TDD seed-start contract and exact-source package gates on Mac and Linux
+  - generate one new archive on Linux and read back its SHA without inspecting test semantics
+  - bind a new benchmark config/source commit to that archive and rebuild both platforms
+  - prepare only val plus the non-semantic sealed test-member inventory
+  - run native Mac and Linux low-floor val for YOLO-Seg and Grounded-SAM
+  - jointly calibrate one cross-platform lock per model using val only
+  - verify both lock identities, then append exactly one new test-access event
+  - extract and verify the new test split once; run the frozen formal matrix once per preregistered run ID
+  - return to four-scene and PickPlace qualification only if both platforms have unsafe unique-selection rate 0 and the no/one/two-cup threshold interval is non-conflicting
+success_criteria:
+  - no seed overlaps the old dataset or another new split
+  - val and test each contain exactly 200 unique images and 50 images per scenario
+  - every expected sample remains in the denominator, including inference errors
+  - both platforms use the same archive and the same per-model threshold lock
+  - Grounded-SAM stays frame-stateless and retains plastic cup plus plastic cup. equivalently
+  - frozen test unsafe unique-selection rate is 0 on both platforms before Task 11 resumes
+failure_criteria:
+  - no feasible val point or any frozen-test unsafe unique selection blocks Task 11 and PickPlace claims
+invalid_criteria:
+  - any R12 prediction/truth/metric influences generation, threshold selection, ranking, or acceptance
+  - any new test semantic access occurs before both new locks verify
+  - archive, inventory, source, model, runtime, device, dtype, fallback, count, order, or evidence-index provenance drifts
+  - a failed formal run is resumed, overwritten, hidden, or replaced under the same semantic identity
+stop_criteria:
+  - stop immediately on test leakage, provenance mismatch, unsafe selection, non-native fallback, or incomplete evidence
+registered_evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869
+mac_development_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+linux_durable_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+retained_runs: [all CP-017 retained runs]
+archived_runs: []
+deletion_candidates: [none added before execution]
+next_command: commit this preregistration, then add only the seed-start regression tests and observe RED before implementation
+decision: RUN_TDD_SEED_NAMESPACE_ONLY
+```
