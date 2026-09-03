@@ -3518,3 +3518,99 @@ stop_criteria:
 next_command: commit and push CP-043, synchronize ai-station, reverify both targets are absent, then execute the exact one-time unlock command
 decision: READY_FOR_ONE_TIME_TEST_ACCESS
 ```
+
+## Checkpoint CP-044 — fresh test access result and frozen formal matrix
+
+```yaml
+checkpoint_id: CP-044
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-043
+test_unlock:
+  result: PASS
+  access_event_count: 1
+  access_event_sha256: 1398c45bb0ca686146d982974592695dfc08f0fb08ab631ad913268ca7c2845a
+  access_log_sha256: 0ea2b811436f3528c092875d2a6d5a6bd779db26d953ca4be9ad63154d26ebd4
+  test_inventory_sha256: 5cb884693cc8022b79481e37d24e9585e4c755b1e5293909732aedc1f2aa06d4
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  truth_instance_count: 200
+  extracted_core_files: 602
+  generated_truth_mask_files: 200
+  symlink_count: 0
+  strict_lock_internal_sha256s:
+    - 0899521b12ddfcce8f302a9dfb2943eb2bfb26ea2092e2d839b89bd2e93a5151
+    - 374cbbc28596e61d937556c6e9adf4d2c72959c26eb896e1e9bfb4cd1489fd9e
+  linux_dataset_loader_verification: PASS
+mac_test_copy:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-r1
+  target: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-macos-r1
+  transfer: one scp copy into an absent target; no overwrite or deletion
+  copied_files: 802
+  local_dataset_loader_verification: PASS
+  local_access_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/calibration/test-access-r1.jsonl
+  local_access_log_sha256: 0ea2b811436f3528c092875d2a6d5a6bd779db26d953ca4be9ad63154d26ebd4
+  local_yolo_lock_file_sha256: c8b166f263077713e79b6ae33394efd7fbe37b39353ea3933d6da5c8e120b2d8
+  local_grounded_sam_lock_file_sha256: 9ad6d9a0f8c21575a4dc9e5d3cea5fc8da3e450493ec12cd3f9cf0add9d4c3bc
+frozen_test_contract:
+  source_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  inventory_sha256: 5cb884693cc8022b79481e37d24e9585e4c755b1e5293909732aedc1f2aa06d4
+  sealed_member_inventory_sha256: 905383228d57a0177e141814a96a5998524d1252e51e33d962c7fda7c5375295
+  test_access_event_sha256: 1398c45bb0ca686146d982974592695dfc08f0fb08ab631ad913268ca7c2845a
+  yolo_lock_sha256: 0899521b12ddfcce8f302a9dfb2943eb2bfb26ea2092e2d839b89bd2e93a5151
+  grounded_sam_lock_sha256: 374cbbc28596e61d937556c6e9adf4d2c72959c26eb896e1e9bfb4cd1489fd9e
+  samples_per_run: 200
+  dtype: float32
+  offline: true
+  fallback_used: false
+  run_kinds_per_model: [TEST_RAW_FROZEN, TEST_PRODUCTION, TEST_CALIBRATED]
+  oracle_diagnostic: NOT_AUTHORIZED_NOT_RUN
+mac_matrix:
+  status: PLANNED
+  order:
+    - mac-yolo-test-raw-fresh-r1
+    - mac-yolo-test-production-fresh-r1
+    - mac-yolo-test-calibrated-fresh-r1
+    - mac-grounded-sam-test-raw-fresh-r1
+    - mac-grounded-sam-test-production-fresh-r1
+    - mac-grounded-sam-test-calibrated-fresh-r1
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-test-r1.sh
+  script_sha256: 11ce40e7c9a72e6592b237137f4de18ad5fecfc86ca0a0b246b7eb2956ecab8d
+  plist: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.r1.plist
+  plist_sha256: faf3bf056c2b2bf78fbbb1d280f389588447a6e7bbc50ccfa5a9f73d0c7def71
+  launch_label: com.terry.so101.benchmark.mac.test.r1
+  command: launchctl bootstrap gui/501 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.r1.plist
+  runtime_python: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-ef254-r2/install/so101_demo_py
+  device: mps
+  output_parent: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test/macos
+linux_matrix:
+  status: PLANNED_AFTER_VALID_MAC
+  order:
+    - linux-grounded-sam-test-raw-fresh-r1
+    - linux-grounded-sam-test-production-fresh-r1
+    - linux-grounded-sam-test-calibrated-fresh-r1
+    - linux-yolo-test-raw-fresh-r1
+    - linux-yolo-test-production-fresh-r1
+    - linux-yolo-test-calibrated-fresh-r1
+  local_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-test-r1.sh
+  remote_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-test-r1.sh
+  script_sha256: eab9cc15a34d5989ee212ed198e522e1d2a607cd27cbb74fdc53560466a70647
+  command: /bin/bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-test-r1.sh
+  runtime_python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py
+  device: cuda
+  output_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test/linux
+execution_gate:
+  - run Mac first through the native launchd context required for MPS
+  - validate all six Mac manifests, 200-record denominators, source/mask SHA chains, native MPS, FP32, no fallback, and production/replay equality before transferring or starting Linux
+  - stop on the first invalid run; never resume, overwrite, hide, or replace an invalid formal output under the same semantic identity
+  - keep every threshold lock and test access anchor byte-unchanged
+stop_criteria:
+  - output or launch-label collision, script digest mismatch, command failure, invalid manifest, missing or duplicate sample, asset/config/source drift, fallback, timeout, OOM, or DetectorPort/replay disagreement
+test_model_process_started: false
+deletion: none
+next_command: commit and push CP-044, synchronize ai-station, create only the two registered output parents, verify all twelve output names and the Mac launch label remain absent, then start Mac only
+decision: FORMAL_TEST_MATRIX_FROZEN_READY_FOR_MAC
+```
