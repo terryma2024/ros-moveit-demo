@@ -1,3 +1,5 @@
+"""Low-frequency perception benchmark regression tests."""
+
 from __future__ import annotations
 
 import csv

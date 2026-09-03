@@ -6,7 +6,10 @@
     "two_cups": 2,
     "cup_near_bottle": 1
   },
-  "models": ["yolo_seg", "grounded_sam"],
+  "models": [
+    "yolo_seg",
+    "grounded_sam"
+  ],
   "ranking_scores": [0.91, 0.82],
   "sam_quality": 0.88
 }
