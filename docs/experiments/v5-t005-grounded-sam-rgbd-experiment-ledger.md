@@ -2763,3 +2763,57 @@ deletion_candidates:
 next_command: commit and push CP-030, synchronize ai-station, verify all targets/label absent and launch artifact digests, then start both one-time actual dry-runs
 decision: RUN_FRESH_ACTUAL_DRY_RUN_ON_NATIVE_MPS_AND_CUDA
 ```
+
+## Checkpoint CP-031 — Linux actual dry-run R2 replacement lock
+
+```yaml
+checkpoint_id: CP-031
+experiment_id: EXP-079
+status: PREREGISTERED_LINUX_DRY_RUN_R2
+source_commit: d0d5731a23af6c3b70ad8b1c151be8ca7185d531
+mac_dry_run_r1:
+  status: VALID
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1
+  evidence_index_sha256: 09e27e5f88d8b3b5aae6891cc7b8eb3d11d0433f270454825e855b713322a28a
+  manifest_sha256: e56e53272fdd513b2d54ae6a1126a25ac33133db2fd7cd51d7934f681af826e4
+  execution_mode: actual
+  run_kind: NON_FORMAL_DRY_RUN
+  sample_count: 8
+  scenario_counts: {no_cup: 2, one_cup_distractors: 2, two_cups: 2, cup_near_bottle: 2}
+  model_record_count: 16
+  records_per_model: {yolo_seg: 8, grounded_sam: 8}
+  device: mps
+  dtype: float32
+  fallback_used: false
+  source_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+  config_sha256: 4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160
+  artifact_index_entries: 510
+  all_index_sha256_match: true
+  test_path_count: 0
+  launchd_job_removed: true
+linux_r1:
+  status: INVALID_PRESTART
+  first_bad_boundary: output parent did not exist
+  error: OUTPUT_ROOT_PARENT_INVALID
+  output_created: false
+  model_loaded: false
+  inference_run: false
+  test_semantic_content_accessed: false
+linux_r2:
+  parent_to_create_once: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r2
+  command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark dry-run --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r2 --platform linux --device cuda --dtype float32 --dataset-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json --dataset-archive-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --inventory-sha256 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2 --weights /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/best.pt --weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --model-root /data/work/so101-models/grounded-sam-v2-scipy-lock --manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --source-commit ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+success_criteria:
+  - create only the registered parent while linux-r2 remains absent, then execute once
+  - CP-030 frozen dry-run contract passes on CUDA and all evidence-index SHA values match
+  - no test member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - parent is not a real directory, output collision, command failure, provenance mismatch, missing record, artifact SHA mismatch, fallback, or test access
+retained_runs:
+  - all CP-030 retained runs and valid Mac R1 evidence
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-030; absent Linux R1 name is not an artifact
+next_command: commit and push CP-031, synchronize ai-station, create the registered dry-run parent once, verify linux-r2 remains absent, then run the exact R2 command once
+decision: CREATE_REGISTERED_PARENT_THEN_RUN_LINUX_R2
+```
