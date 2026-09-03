@@ -3970,3 +3970,55 @@ deletion: none
 next_command: commit and publish CP-050, then change only the tracked seed namespace test and observe RED
 decision: GENERATE_NEW_UNBIASED_DATASET_WITH_DISJOINT_SEEDS
 ```
+
+## Checkpoint CP-051 — Post-fix dataset generation lock
+
+```yaml
+checkpoint_id: CP-051
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-050
+status: READY_FOR_ONE_GENERATION
+source_commit: 5e3891d4814bb86dcd9242241d15599a125736c8
+source_sync:
+  local: 5e3891d4814bb86dcd9242241d15599a125736c8
+  gitee: 5e3891d4814bb86dcd9242241d15599a125736c8
+  ai_station: 5e3891d4814bb86dcd9242241d15599a125736c8
+tdd:
+  red: one expected failure after changing only the tracked seed expectation
+  green: 26 passed in 0.07 s after changing fresh_dataset.yaml to the preregistered seed namespace
+tracked_config:
+  path: src/so101_demo_py/config/perception_benchmark/fresh_dataset.yaml
+  seed_starts: {train: 700000, val: 800000, test: 900000}
+linux_build:
+  mode: fresh scoped non-symlink install
+  underlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/setup.bash
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  py_path_order:
+    - /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+    - /usr/lib/python3/dist-packages
+  package: so101_demo_py
+  required_checks:
+    - installed fresh_dataset.yaml is a regular non-symlink file whose SHA256 equals the tracked source
+    - generator entrypoint shebang selects /data/work/venvs/so101-grounded-sam/bin/python
+generation:
+  config: <fresh-build>/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/fresh_dataset.yaml
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-postfix-r4
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  checksum: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz.sha256
+  generator_commit: 5e3891d4814bb86dcd9242241d15599a125736c8
+  environment: MUJOCO_GL=egl and PYTHONNOUSERSITE=1
+  command: generate_yolo_seg_dataset --config <exact installed regular fresh_dataset.yaml> --output-root <exact absent raw-postfix-r4> --generator-commit 5e3891d4814bb86dcd9242241d15599a125736c8
+success_and_access_contract:
+  - generate exactly 880 samples and 2641 payload artifacts before dataset-manifest.json
+  - validate manifest counts, source identity, seed ranges, and val semantics only
+  - do not open any images/test, labels/test, or truth/test member before both fresh calibration locks verify
+  - archive sealing may record only safe member names, counts, and byte digests
+preflight:
+  - all three generation targets are absent and non-symlink
+  - no benchmark, dataset-generator, Grounded-SAM, MuJoCo, ROS, or tmux process is active
+  - stop on any source, config, target, count, semantic, or runtime drift and retain evidence
+deletion: none
+next_command: commit and publish CP-051, synchronize ai-station, then perform the fresh scoped build and one exact generation
+decision: RUN_ONE_POSTFIX_DATASET_GENERATION
+```
