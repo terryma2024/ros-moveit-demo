@@ -2936,3 +2936,52 @@ deletion_candidates:
 next_command: commit and push CP-033, synchronize ai-station, create the two registered parents, verify R2 targets absent, copy and verify linux-val-r2.sh, then execute it once
 decision: CREATE_REMOTE_PARENTS_THEN_TRANSFER_AND_RUN_LINUX_R2
 ```
+
+## Checkpoint CP-034 — joint cross-platform calibration lock
+
+```yaml
+checkpoint_id: CP-034
+experiment_id: EXP-079
+status: PREREGISTERED_JOINT_CALIBRATION
+source_commit: 12a5aa0207d72a7c703c5832be242e529e531c8f
+benchmark_code_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+validated_runs:
+  macos_yolo: {records: 200, record_inventory_sha256: 52bda6fa1f323ed423d9ae6709a28898be930176afb78ab518cbea8910e8fc7e, manifest_sha256: da47af73acd5b4cf912e17e9dd7eb50de764fca98c213a570401856672df6032}
+  macos_grounded_sam: {records: 200, record_inventory_sha256: 182815997bb5c11a0383618c3d5068bd2e65afb1498ab4c0d34fea2c5ed3f99b, manifest_sha256: b18f166191d2c60c827e56fd7d6e89afe2eb5d651863662fd0829ad11e7f27f1}
+  linux_yolo: {records: 200, record_inventory_sha256: 21936b306168b0321fa35cc7d77766ed0953762c6f72771ccb5c26efa824e49d, manifest_sha256: 50e0ec450412e5f79ae775c4f30b51cfba9883884fb9dfa4ccb97dfc24d8ebc6}
+  linux_grounded_sam: {records: 200, record_inventory_sha256: afc44d45fb86a2cd25a8255c78b393acbb7802f99f5f51dfe13838daa314a6ac, manifest_sha256: cc55e31881dd963de2d0524859e2335601358e207fb0a7a640a0bd151ec191e9}
+  common: {status: VALID, error_count: 0, record_statuses: [OK], timed_out: false, oom: false, fallback_used: false, full_runner_integrity_check: PASS}
+mac_transfer:
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r1.tar.gz
+  remote_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r1.tar.gz
+  source_roots:
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val/macos/yolo-r1
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val/macos/grounded-sam-r1
+  durable_destination: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos
+  policy: all archive and destination targets must be absent; source trees must contain no symlink; archive only macos/yolo-r1 and macos/grounded-sam-r1; inspect member paths and link types before one extraction; verify both runs again after extraction
+expectation_anchors:
+  remote_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations
+  macos_yolo_seg: cd2b119ec8eb160d0c73c0e3ab202ceb0f7f24a332c3436ba8e585bad2ee8a9b
+  macos_grounded_sam: 6e5adccb253fab9b6df1e6966d1a53cc99a1c96cfa72ea4fec10c0b959e32b48
+  linux_yolo_seg: cf0d7a75048329f98a3008bb65766bdae2a51f4f480753a6bdf23e841022d31e
+  linux_grounded_sam: 9e1271a928a7df958f63841adb7df65e4a0aa85287f12ca7a39286271ec5bff7
+calibration:
+  order: [yolo_seg, grounded_sam]
+  yolo_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/yolo-r1
+  grounded_sam_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1
+  common: {dataset_archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6, inventory_sha256: 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2, source_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4, selection_scope: joint_macos_linux_val_only}
+success_criteria:
+  - both staged Mac runs revalidate byte-for-byte against independent expectations on ai-station
+  - each calibration consumes both 200-sample platform runs and the same 200 validation truths, then writes one threshold-lock.json
+  - calibration uses only the frozen grid, reports all metrics by platform/scenario, and does not weaken fail-closed selection rules
+  - no test member is extracted, parsed, rasterized, displayed, inferred, or used for threshold selection
+stop_criteria:
+  - any transfer/output collision, archive unsafe member, byte mismatch, run expectation failure, calibration failure, non-deployable lock, unsafe unique selection, or test access
+retained_runs:
+  - all CP-033 retained runs and four valid raw validation runs
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-033; transfer archive is retained until calibration completes
+next_command: commit and push CP-034, synchronize ai-station, verify all targets absent, create and hash the Mac transfer archive, transfer/inspect/extract it once, transfer expectation anchors, and revalidate both staged Mac runs
+decision: STAGE_MAC_RUNS_THEN_CALIBRATE_JOINTLY_ON_VALIDATION_ONLY
+```
