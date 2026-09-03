@@ -25,3 +25,10 @@
 - Use standard Git commands for remote operations, for example `git push origin <branch>`.
 - Do not run `ament_uncrustify --reformat`. Use it only for read-only checks; make any required
   formatting changes explicitly with targeted patches.
+- Keep low-frequency perception comparison tests under `src/so101_demo_py/benchmark_test/`. The
+  ordinary `so101_demo_py` test gate must use `src/so101_demo_py/test/` and must not collect the
+  benchmark suite.
+- Run the benchmark test suite explicitly only when changing benchmark implementation,
+  configuration, adapters, reports, or tests, or while selecting/comparing perception models. Use
+  `colcon test --packages-select so101_demo_py --pytest-args benchmark_test` for that explicit gate.
+  Ordinary feature work outside those scopes must not run the benchmark suite.
