@@ -837,6 +837,49 @@ def test_grounded_low_floor_is_stateless_and_keeps_distinct_model_scores(
     assert not hasattr(adapter, "tracker")
 
 
+def test_grounded_accepts_fixed_text_logit_capacity_larger_than_prompt(
+    tmp_path: Path,
+) -> None:
+    """Match Grounding-DINO's fixed 256-token logits to a shorter prompt."""
+
+    class _FixedCapacityGroundingModel(_GroundingModel):
+        def __call__(self, **inputs: object) -> SimpleNamespace:
+            assert "input_ids" in inputs
+            self.call_count += 1
+            probabilities = np.full(256, 0.01, dtype=np.float32)
+            probabilities[:4] = np.asarray([0.1, 0.88, 0.79, 0.1], dtype=np.float32)
+            logits = np.log(probabilities / (1.0 - probabilities)).reshape(1, 1, 256)
+            return SimpleNamespace(logits=logits)
+
+    adapter = _grounded_adapter(
+        tmp_path,
+        grounding_model=_FixedCapacityGroundingModel(),
+    )[0]
+
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert len(result.raw_candidates) == 1
+    assert result.raw_candidates[0].grounding_text_score == pytest.approx(0.79, abs=1e-6)
+
+
+def test_grounded_rejects_text_logit_capacity_smaller_than_prompt(
+    tmp_path: Path,
+) -> None:
+    class _UndersizedGroundingModel(_GroundingModel):
+        def __call__(self, **inputs: object) -> SimpleNamespace:
+            assert "input_ids" in inputs
+            self.call_count += 1
+            return SimpleNamespace(logits=np.zeros((1, 1, 3), dtype=np.float32))
+
+    adapter = _grounded_adapter(
+        tmp_path,
+        grounding_model=_UndersizedGroundingModel(),
+    )[0]
+
+    with pytest.raises(ModelSetupError, match="grounding logits shape is invalid"):
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+
 def test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly(
     tmp_path: Path,
 ) -> None:
