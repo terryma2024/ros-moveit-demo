@@ -1970,6 +1970,43 @@ def test_public_run_loader_verifies_registered_test_lock_chain(
         load_verified_run_evidence(output_root, inventory, expectation)
 
 
+def test_runner_honors_relocated_access_log_bound_into_inventory_capability(
+    tmp_path: Path,
+) -> None:
+    lock = _formal_yolo_lock()
+    inventory, lock_path, producer_access_log = _locked_inventory(
+        tmp_path / "producer", lock, count=200
+    )
+    relocated_root = tmp_path / "relocated-dataset"
+    shutil.copytree(inventory.dataset_root, relocated_root)
+    relocated_access_log = tmp_path / "relocated-test-access.jsonl"
+    shutil.copy2(producer_access_log, relocated_access_log)
+    producer_access_log.rename(tmp_path / "producer-access-log-moved.jsonl")
+    relocated_inventory = replace(
+        inventory,
+        dataset_root=relocated_root,
+        access_log_path=relocated_access_log,
+    )
+    dataset_module._issue_inventory(relocated_inventory)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    spec = _spec(
+        relocated_inventory,
+        output_root,
+        run_id="relocated-locked",
+        run_kind=RunKind.TEST_RAW_FROZEN,
+        threshold_lock_sha256=lock.lock_sha256,
+        threshold_lock_path=lock_path,
+    )
+
+    manifest = DetectorBenchmarkRunner(
+        SyntheticAdapter(output_root), output_root
+    ).run(spec)
+
+    assert manifest.status is RunStatus.VALID
+    assert manifest.record_count == 200
+
+
 def test_round1_public_run_loader_rejects_another_valid_run_id(
     tmp_path: Path,
 ) -> None:
