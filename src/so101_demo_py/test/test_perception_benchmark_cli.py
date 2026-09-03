@@ -423,6 +423,36 @@ def test_formal_archive_rejects_internally_consistent_but_unregistered_identity(
     assert caught.value.code == "FROZEN_PROVENANCE_MISMATCH"
 
 
+def test_inspect_archive_prints_sealed_member_inventory_sha(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    archive = (
+        tmp_path
+        / "datasets/so101-v5-t004-yolo-seg-synthetic"
+        / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+    )
+    archive.parent.mkdir(parents=True)
+    archive.write_bytes(b"placeholder")
+    sealed = tmp_path / "sealed.json"
+    expected_sha = "1" * 64
+    monkeypatch.setattr(
+        perception_benchmark.DatasetArchiveVerifier,
+        "verify_archive",
+        lambda *args: SimpleNamespace(sealed_test_member_inventory_sha256=expected_sha),
+    )
+    arguments = SimpleNamespace(
+        config=CONFIG,
+        archive=archive,
+        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        sealed_member_inventory=sealed,
+    )
+
+    assert perception_benchmark._handle_inspect_archive(arguments) == 0
+    assert capsys.readouterr().out == f"{expected_sha}\n"
+
+
 def test_collect_rejects_short_source_commit_before_dataset_io(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
