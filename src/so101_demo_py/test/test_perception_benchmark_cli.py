@@ -5,11 +5,26 @@ from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from so101_demo.cli import perception_benchmark
+from so101_demo.core.detection import DetectionFrame
+from so101_demo.perception_benchmark.adapters.base import (
+    CollectionMode,
+    RawDetectionResult,
+)
 from so101_demo.perception_benchmark.calibration import ThresholdLock
-from so101_demo.perception_benchmark.contracts import RunKind
+from so101_demo.perception_benchmark.codec import atomic_write_json, encode_mask_rle, sha256_bytes
+from so101_demo.perception_benchmark.contracts import (
+    GROUNDED_SAM_MODEL_ID,
+    YOLO_MODEL_ID,
+    MaskRef,
+    RawCandidate,
+    RunKind,
+    RuntimeProvenance,
+)
 from so101_demo.perception_benchmark.reporting import verify_evidence_index
+from so101_demo.perception_benchmark.timing import PhaseTimingBreakdown
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG = PACKAGE_ROOT / "config/perception_benchmark/benchmark.yaml"
@@ -144,6 +159,180 @@ def test_dry_run_plan_is_two_per_scenario_and_never_formal() -> None:
     }
     assert len({item.image_sha256 for item in plan.samples}) == 8
     assert plan.formal is False
+
+
+def test_actual_dry_run_uses_fixed_val_images_and_both_accelerated_adapters(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    samples = tuple(
+        SimpleNamespace(
+            formal_sample_index=scenario_index * 2 + ordinal,
+            scenario=scenario,
+            image_relpath=f"images/{scenario}-{ordinal}.png",
+            image_sha256=f"{scenario_index * 2 + ordinal + 1:064x}",
+        )
+        for scenario_index, scenario in enumerate(
+            ("no_cup", "one_cup_distractors", "two_cups", "cup_near_bottle")
+        )
+        for ordinal in range(2)
+    )
+    inventory = SimpleNamespace(
+        split="val",
+        inventory_sha256="a" * 64,
+        archive_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        scenario_counts={scenario: 50 for scenario in perception_benchmark._SCENARIOS},
+        samples=samples,
+    )
+    monkeypatch.setattr(perception_benchmark, "_inventory", lambda *args: inventory)
+    monkeypatch.setattr(
+        perception_benchmark,
+        "_load_actual_dry_frame",
+        lambda *args: DetectionFrame(
+            rgb8=np.zeros((4, 5, 3), dtype=np.uint8),
+            source_stamp_ns=1,
+            source_frame_id="val-image",
+        ),
+    )
+
+    class FakeAdapter:
+        def __init__(self, model: str, output: Path) -> None:
+            self.model = model
+            self.model_id = YOLO_MODEL_ID if model == "yolo_seg" else GROUNDED_SAM_MODEL_ID
+            self.runtime_device = "mps"
+            self.output = output
+            self.index = 0
+
+        def collect(self, frame: DetectionFrame, mode: CollectionMode) -> RawDetectionResult:
+            mask = np.zeros((frame.image_height, frame.image_width), dtype=bool)
+            mask[1:3, 1:4] = True
+            relative = (
+                f"benchmark-masks/{self.model}/collection-{self.index:06d}/candidate.rle.json"
+            )
+            atomic_write_json(self.output / relative, encode_mask_rle(mask))
+            self.index += 1
+            score_source = "class_confidence" if self.model == "yolo_seg" else "grounding_box_score"
+            candidate = RawCandidate(
+                candidate_id="candidate",
+                label="plastic_cup",
+                bbox_xyxy=(1.0, 1.0, 4.0, 3.0),
+                mask=MaskRef(
+                    relative_path=relative,
+                    sha256=sha256_bytes(mask.astype(np.uint8).tobytes(order="C")),
+                    pixel_count=int(mask.sum()),
+                    image_width=frame.image_width,
+                    image_height=frame.image_height,
+                ),
+                ranking_score=0.8,
+                ranking_score_source=score_source,
+                class_confidence=0.8 if self.model == "yolo_seg" else None,
+                grounding_box_score=0.8 if self.model == "grounded_sam" else None,
+                grounding_text_score=0.7 if self.model == "grounded_sam" else None,
+                sam_quality=0.9 if self.model == "grounded_sam" else None,
+            )
+            return RawDetectionResult(
+                model_id=self.model_id,
+                runtime_device="mps",
+                dtype="float32",
+                collection_mode=mode,
+                raw_candidates=(candidate,),
+                phase_timings=PhaseTimingBreakdown(1.0, 2.0, None, 3.0, None, 6.0),
+                resource_samples=(),
+                fallback_used=False,
+                irreversible_limits={},
+            )
+
+    monkeypatch.setattr(
+        perception_benchmark,
+        "_raw_adapter",
+        lambda arguments, config: FakeAdapter(arguments.model, arguments.output_root),
+    )
+    monkeypatch.setattr(
+        perception_benchmark,
+        "_runtime_provenance",
+        lambda arguments: RuntimeProvenance(
+            runtime_device="mps",
+            runtime_name="fake-runtime",
+            runtime_version="1.0",
+            weights_sha256=(
+                arguments.weights_sha256
+                if arguments.model == "yolo_seg"
+                else arguments.manifest_sha256
+            ),
+            environment={"python": "test"},
+        ),
+    )
+    output = tmp_path / "actual-dry-run"
+
+    result = perception_benchmark.main(
+        [
+            "dry-run",
+            "--config",
+            str(CONFIG),
+            "--output-root",
+            str(output),
+            "--platform",
+            "macos",
+            "--device",
+            "mps",
+            "--dtype",
+            "float32",
+            "--dataset-inventory",
+            str(tmp_path / "val-open" / "inventory.json"),
+            "--dataset-archive-sha256",
+            inventory.archive_sha256,
+            "--inventory-sha256",
+            inventory.inventory_sha256,
+            "--weights",
+            str(tmp_path / "best.pt"),
+            "--weights-sha256",
+            "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
+            "--model-root",
+            str(tmp_path / "grounded-sam"),
+            "--manifest-sha256",
+            "838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3",
+            "--source-commit",
+            "1ab9cdfc939dc623bf6b51f5ca2025b826b1190f",
+        ]
+    )
+
+    assert result == 0
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["execution_mode"] == "actual"
+    assert manifest["formal"] is False
+    assert manifest["platform"] == "macos"
+    assert manifest["device"] == "mps"
+    assert manifest["sample_count"] == 8
+    assert manifest["model_record_count"] == 16
+    assert manifest["records_per_model"] == {"grounded_sam": 8, "yolo_seg": 8}
+    assert [item["image_sha256"] for item in manifest["samples"]] == [
+        sample.image_sha256 for sample in samples
+    ]
+    assert len(tuple((output / "records").glob("*.json"))) == 16
+    assert len(tuple((output / "benchmark-masks").rglob("*.json"))) == 16
+    assert (output / "report.json").is_file()
+    assert (output / "report.md").is_file()
+    verify_evidence_index(output)
+
+
+def test_actual_dry_run_rejects_fixture_mixing_before_output(tmp_path: Path) -> None:
+    output = tmp_path / "mixed"
+    result = perception_benchmark.main(
+        [
+            "dry-run",
+            "--config",
+            str(CONFIG),
+            "--output-root",
+            str(output),
+            "--adapter-fixture",
+            str(FIXTURE),
+            "--platform",
+            "macos",
+        ]
+    )
+
+    assert result == 2
+    assert not output.exists()
 
 
 def test_dry_run_is_byte_deterministic_and_index_detects_tampering(tmp_path: Path) -> None:
