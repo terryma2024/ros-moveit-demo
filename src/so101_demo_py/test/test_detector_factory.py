@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from so101_demo.adapters.perception.detector_factory import (
     DetectorFactoryOptions,
     build_detector,
@@ -15,13 +14,13 @@ from so101_demo.adapters.perception.detector_factory import (
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
 
-
 LOCKED_DEPENDENCIES = {
     "Pillow": "12.3.0",
     "PyYAML": "6.0.2",
     "huggingface-hub": "0.34.4",
     "mujoco": "3.12.0",
     "safetensors": "0.6.2",
+    "scipy": "1.17.1",
     "tokenizers": "0.22.0",
     "torch": "2.13.0",
     "torchvision": "0.28.0",
