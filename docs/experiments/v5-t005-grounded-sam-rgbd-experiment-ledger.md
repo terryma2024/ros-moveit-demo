@@ -3788,3 +3788,54 @@ deletion: none
 next_command: add and run the focused RED regression test before changing reconciliation code
 decision: ROOT_CAUSE_CONFIRMED_FIX_RECONCILIATION_WITH_TDD
 ```
+
+## Checkpoint CP-048 — YOLO production reconciliation fix passes Mac benchmark gate
+
+```yaml
+checkpoint_id: CP-048
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-047
+change:
+  production_reconciliation:
+    - preserve low-floor raw mask artifacts byte-unchanged
+    - for yolo_seg mapping only, apply the production _trim_mask_boundary transform to the verified raw mask before computing its comparison SHA-256
+    - preserve exact class, bbox, confidence, score provenance, frame, model, weights, device, selected-candidate, and one-to-one checks
+  test_fixture: production YOLO candidates now include the same boundary normalization as the production adapter
+tdd:
+  red:
+    command: PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-ef254-r2/install/so101_demo_py/lib/python3.11/site-packages /Users/matianyi/ros2_jazzy/.venv/bin/python -m pytest -q src/so101_demo_py/benchmark_test/test_perception_benchmark_runner.py -k yolo_production_trimmed_mask_maps_to_canonical_raw_candidate
+    result: 1 failed, 125 deselected
+    failure: PRODUCTION_CANDIDATE_MAPPING_INVALID
+  focused_green:
+    result: 4 passed, 122 deselected
+  runner_green:
+    result: 126 passed in 65.23s
+  adapter_green:
+    result: 88 passed, 1 warning in 2.05s
+static_checks:
+  ruff: 0.15.20 PASS
+  compileall: PASS
+  git_diff_check: PASS
+mac_fresh_build:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-mapfix-r3
+  discovery_scope: src/so101_demo_py
+  underlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-ef254-r2/install
+  result: 1 package finished
+  package_duration_s: 1.58
+  total_duration_s: 1.66
+  note: two prior setup attempts selected so101_demo_py while discovering the whole workspace and correctly failed before tests because dependency package.sh files were absent from their new install-base; restricting --base-paths to src/so101_demo_py reused the verified underlay and avoided rebuilding unrelated ROS packages
+mac_benchmark_gate:
+  command: colcon test --base-paths src/so101_demo_py --packages-select so101_demo_py --pytest-args benchmark_test
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-build-mapfix-r3
+  result: 563 tests, 0 errors, 0 failures, 0 skipped
+  pytest_duration_s: 300.63
+  colcon_duration: 5min 5s
+benchmark_state:
+  current_open_test: remains INVALID and diagnostic-only
+  post_fix_formal_ranking: requires a new sealed held-out split
+  pick_place_claim: not established by this code gate
+deletion: none
+next_command: commit and publish the fix plus CP-048, synchronize ai-station, then build a fresh Linux scoped overlay and run the same complete benchmark gate
+decision: MAC_CODE_GATE_PASS_PENDING_LINUX_GATE
+```
