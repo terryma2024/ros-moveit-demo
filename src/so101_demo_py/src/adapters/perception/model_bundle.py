@@ -17,9 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
-
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
-
 
 _PIPELINE_ID = "grounding-dino-tiny+sam2.1-hiera-tiny"
 _PROMPT_PROFILE = {"plastic_cup": "plastic cup."}
@@ -29,6 +27,7 @@ _LOCKED_DEPENDENCIES = {
     "huggingface-hub": "0.34.4",
     "mujoco": "3.12.0",
     "safetensors": "0.6.2",
+    "scipy": "1.17.1",
     "tokenizers": "0.22.0",
     "torch": "2.13.0",
     "torchvision": "0.28.0",
