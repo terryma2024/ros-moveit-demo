@@ -47,6 +47,7 @@ Split = Literal["val", "test"]
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _EXPECTED_SAMPLE_COUNT = 200
 _EXPECTED_IMAGE_SIZE = (640, 480)
+_LABEL_COORDINATE_FORMAT = ".9f"
 _EXPECTED_SCENARIO_COUNTS = {
     "no_cup": 50,
     "one_cup_distractors": 50,
@@ -1172,7 +1173,7 @@ class DatasetArchiveVerifier:
             truth = _read_truth_bytes(truth_payload, split)
             label_polygons = _read_label_polygons_bytes(label_payload)
             truth_polygons = _truth_polygons(truth)
-            if label_polygons != truth_polygons:
+            if label_polygons != _at_label_coordinate_precision(truth_polygons):
                 raise DatasetVerificationError("LABEL_TRUTH_POLYGON_MISMATCH")
             scenario = truth["scenario"]
             scenarios[scenario] += 1
@@ -1413,6 +1414,21 @@ def _read_label_polygons_bytes(
             raise DatasetVerificationError("LABEL_DOCUMENT_INVALID")
         polygons.append(tuple(zip(values[::2], values[1::2], strict=True)))
     return tuple(polygons)
+
+
+def _at_label_coordinate_precision(
+    polygons: tuple[tuple[tuple[Decimal, Decimal], ...], ...],
+) -> tuple[tuple[tuple[Decimal, Decimal], ...], ...]:
+    return tuple(
+        tuple(
+            (
+                Decimal(format(float(x), _LABEL_COORDINATE_FORMAT)),
+                Decimal(format(float(y), _LABEL_COORDINATE_FORMAT)),
+            )
+            for x, y in polygon
+        )
+        for polygon in polygons
+    )
 
 
 def _read_regular_bound_file(
@@ -1825,7 +1841,9 @@ def _verify_inventory_documents_and_samples(
         current_image_shas.add(sample.image_sha256)
         truth = _read_truth_bytes(truth_payload, split)
         truth_polygons = _truth_polygons(truth)
-        if _read_label_polygons_bytes(label_payload) != truth_polygons:
+        if _read_label_polygons_bytes(label_payload) != _at_label_coordinate_precision(
+            truth_polygons
+        ):
             raise DatasetVerificationError("LABEL_TRUTH_POLYGON_MISMATCH")
         if truth["scenario"] != sample.scenario or len(truth_polygons) != sample.truth_count:
             raise DatasetVerificationError("TRUTH_DOCUMENT_INVALID")
