@@ -2497,3 +2497,63 @@ deletion_candidates:
 next_command: verify the exact package metadata binding, commit and push CP-025, synchronize ai-station, then run the R3 inspect command once
 decision: BIND_INSTALLED_SITE_PACKAGES_THEN_INSPECT
 ```
+
+## Checkpoint CP-026 — fresh validation materialized, test remains sealed
+
+```yaml
+checkpoint_id: CP-026
+experiment_id: EXP-079
+status: VALID_DATASET_PREPARATION
+source_commit: f63a65aa616eaa852d49dc7130de3b25eea63e7b
+archive_asset:
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  size_bytes: 39612523
+  mode: '0444'
+  source_retained: true
+sealed_test:
+  inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r3.json
+  inventory_sha256: 905383228d57a0177e141814a96a5998524d1252e51e33d962c7fda7c5375295
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  member_count: 600
+  artifact_counts: {images: 200, labels: 200, truth: 200}
+  unique_member_paths: 600
+  scenario_counts: null
+  semantic_content_opened: false
+  extracted: false
+  rasterized: false
+  displayed: false
+  inferred: false
+open_val:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3
+  inventory_sha256: 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  truth_count_by_scenario: {no_cup: 0, one_cup_distractors: 1, two_cups: 2, cup_near_bottle: 1}
+  unique_formal_sample_indices: 200
+  unique_artifact_paths: 600
+  regular_file_count_including_inventory_and_archive_anchor: 602
+  symlink_count: 0
+  test_path_count: 0
+  all_source_files_exist: true
+  all_source_sha256_match: true
+cp_025_result:
+  package_metadata_version: 0.1.0
+  package_module: so101_demo
+  inspect: PASS
+  prepare_val: PASS
+  output_names_reused_or_overwritten: false
+retained_runs:
+  - all CP-025 retained runs
+  - immutable archive asset and checksum
+  - sealed-test-members-r3.json
+  - val-open-r3
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-025; no valid CP-026 artifact is a deletion candidate
+next_change:
+  - bind exact Mac and Linux native runtimes to the fresh validation inventory and unchanged frozen model assets
+  - run offline/no-fallback dry-run on both platforms before any 200-sample validation inference
+  - keep test sealed until both model/platform validation runs and joint threshold locks pass
+decision: PROCEED_TO_CROSS_PLATFORM_DRY_RUN_KEEP_TEST_SEALED
+```
