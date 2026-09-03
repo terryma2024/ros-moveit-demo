@@ -2451,3 +2451,49 @@ deletion_candidates:
 next_command: commit and push CP-024, synchronize the isolated ai-station checkout, verify all replacement targets are absent, then copy and inspect once
 decision: COPY_WITH_FROZEN_SUFFIX_THEN_PREPARE_VAL
 ```
+
+## Checkpoint CP-025 — installed-runtime environment replacement lock
+
+```yaml
+checkpoint_id: CP-025
+experiment_id: EXP-079
+status: PREREGISTERED_REPLACEMENT
+source_commit: 22e61f44685bca6445fcc31790484b07d6f3f3c9
+cp_024_copy_result:
+  status: VALID
+  target_archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  target_archive_size_bytes: 39612523
+  target_archive_mode: '0444'
+  target_checksum_mode: '0444'
+  source_retained: true
+cp_024_inspect_result:
+  status: INVALID_PRESTART
+  first_bad_boundary: console entry point could not discover so101-demo-py package metadata because the non-symlink install site-packages directory was absent from sys.path
+  error: importlib.metadata.PackageNotFoundError No package metadata was found for so101-demo-py
+  archive_opened: false
+  sealed_member_inventory_created: false
+  val_output_created: false
+  test_semantic_content_accessed: false
+runtime_binding:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  pythonpath: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages
+  usersite: disabled
+replacement_outputs:
+  sealed_member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r3.json
+  val_output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3
+replacement_commands:
+  inspect: PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark inspect-archive --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --sealed-member-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r3.json
+  prepare_val: PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark prepare-dataset --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --split val --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3
+success_criteria:
+  - package metadata resolves from the exact non-symlink installed copy
+  - CP-024 seal and val criteria remain unchanged
+stop_criteria:
+  - any R3 target already exists, runtime binding differs, command fails, or test semantic access occurs
+retained_runs:
+  - all CP-024 retained runs, immutable asset copy, and absent R2 output names
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-024
+next_command: verify the exact package metadata binding, commit and push CP-025, synchronize ai-station, then run the R3 inspect command once
+decision: BIND_INSTALLED_SITE_PACKAGES_THEN_INSPECT
+```
