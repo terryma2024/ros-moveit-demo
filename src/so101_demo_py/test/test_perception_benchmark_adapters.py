@@ -11,7 +11,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.adapters.perception.yolo_seg import YoloResultError
 from so101_demo.application.object_pose import TargetSelector
@@ -42,9 +41,9 @@ from so101_demo.perception_benchmark.calibration import (
 )
 from so101_demo.perception_benchmark.codec import decode_mask_rle, sha256_bytes
 from so101_demo.perception_benchmark.contracts import (
-    DecisionOutput,
     GROUNDED_SAM_MODEL_ID,
     YOLO_MODEL_ID,
+    DecisionOutput,
 )
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
@@ -167,13 +166,18 @@ class _RecordingDetectorPort:
 
 
 class _YoloResult:
-    def __init__(self, *, dtype: np.dtype[Any] = np.dtype(np.float32)) -> None:
+    def __init__(
+        self,
+        *,
+        dtype: np.dtype[Any] = np.dtype(np.float32),
+        mask_dtype: np.dtype[Any] | None = None,
+    ) -> None:
         self.boxes = SimpleNamespace(
             xyxy=np.asarray([[3.0, 2.0, 13.0, 10.0]], dtype=dtype),
             cls=np.asarray([0.0], dtype=dtype),
             conf=np.asarray([0.82], dtype=dtype),
         )
-        mask = np.zeros((1, 16, 20), dtype=dtype)
+        mask = np.zeros((1, 16, 20), dtype=mask_dtype or dtype)
         mask[0, 2:10, 3:13] = 1.0
         self.masks = SimpleNamespace(data=mask)
 
@@ -215,19 +219,19 @@ class _YoloModel:
         move_on_predict: bool = False,
         parameter_devices: tuple[str, ...] | None = None,
         parameter_dtypes: tuple[np.dtype[Any], ...] | None = None,
+        mask_dtype: np.dtype[Any] | None = None,
         error: Exception | None = None,
     ) -> None:
         self.device = device
         self.dtype = dtype
         self.move_on_predict = move_on_predict
+        self.mask_dtype = mask_dtype
         self.error = error
         devices = parameter_devices or (device,)
         dtypes = parameter_dtypes or tuple(dtype for _ in devices)
         self.model = _ParameterModule(devices, dtypes)
         self.predict_calls: list[dict[str, object]] = []
-        self.predictor = SimpleNamespace(
-            args=SimpleNamespace(conf=0.25, iou=0.70, imgsz=640)
-        )
+        self.predictor = SimpleNamespace(args=SimpleNamespace(conf=0.25, iou=0.70, imgsz=640))
 
     def predict(self, **kwargs: object) -> list[_YoloResult]:
         self.predict_calls.append(kwargs)
@@ -236,7 +240,7 @@ class _YoloModel:
             self.model.move(self.device)
         if self.error is not None:
             raise self.error
-        return [_YoloResult(dtype=self.dtype)]
+        return [_YoloResult(dtype=self.dtype, mask_dtype=self.mask_dtype)]
 
 
 class _GroundingTokenizer:
@@ -438,16 +442,10 @@ def _grounded_adapter(
 
 
 @pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
-def test_both_adapters_emit_same_raw_contract(
-    tmp_path: Path, model: str
-) -> None:
+def test_both_adapters_emit_same_raw_contract(tmp_path: Path, model: str) -> None:
     """Catch either model bypassing the shared immutable raw schema."""
 
-    adapter = (
-        _yolo_adapter(tmp_path)
-        if model == "yolo"
-        else _grounded_adapter(tmp_path)[0]
-    )
+    adapter = _yolo_adapter(tmp_path) if model == "yolo" else _grounded_adapter(tmp_path)[0]
     result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
 
     assert isinstance(result, RawDetectionResult)
@@ -495,9 +493,7 @@ def test_yolo_raw_adapter_rejects_noncanonical_identity_before_model_use(
         f"{GROUNDED_SAM_MODEL_ID}-suffix",
     ),
 )
-def test_grounded_raw_adapter_rejects_noncanonical_identity(
-    tmp_path: Path, model_id: str
-) -> None:
+def test_grounded_raw_adapter_rejects_noncanonical_identity(tmp_path: Path, model_id: str) -> None:
     torch_api = _TorchApi()
 
     with pytest.raises(ValueError, match="model_id"):
@@ -526,11 +522,7 @@ def test_grounded_raw_adapter_rejects_noncanonical_identity(
 def test_raw_detection_result_rejects_near_identity_with_candidates(
     tmp_path: Path, model_id: str, model: str
 ) -> None:
-    adapter = (
-        _yolo_adapter(tmp_path)
-        if model == "yolo"
-        else _grounded_adapter(tmp_path)[0]
-    )
+    adapter = _yolo_adapter(tmp_path) if model == "yolo" else _grounded_adapter(tmp_path)[0]
     result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
 
     with pytest.raises(ValueError, match="model_id"):
@@ -538,9 +530,7 @@ def test_raw_detection_result_rejects_near_identity_with_candidates(
 
 
 @pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
-def test_resource_sampling_failure_has_typed_adapter_boundary(
-    tmp_path: Path, model: str
-) -> None:
+def test_resource_sampling_failure_has_typed_adapter_boundary(tmp_path: Path, model: str) -> None:
     """Catch raw telemetry failures escaping without a machine-readable type."""
 
     expected = ValueError("opaque failure 731")
@@ -637,9 +627,7 @@ def test_result_schema_value_error_is_not_reclassified_as_resource_sampling(
 
 
 @pytest.mark.parametrize("model", ("yolo", "grounded_sam"))
-def test_successful_resource_sampling_is_preserved(
-    tmp_path: Path, model: str
-) -> None:
+def test_successful_resource_sampling_is_preserved(tmp_path: Path, model: str) -> None:
     """Catch the typed failure boundary changing successful resource records."""
 
     sample = ResourceSample(4096, 10.0, 1, 2, 3.0, 4.0, 5.0)
@@ -663,9 +651,7 @@ def test_yolo_low_floor_uses_exact_irreversible_settings_and_class_score(
     """Catch a raw YOLO run using a higher floor or hiding NMS/max-det loss."""
 
     model = _YoloModel()
-    result = _yolo_adapter(tmp_path, model=model).collect(
-        _frame(), CollectionMode.LOW_FLOOR
-    )
+    result = _yolo_adapter(tmp_path, model=model).collect(_frame(), CollectionMode.LOW_FLOOR)
 
     assert len(model.predict_calls) == 1
     call = model.predict_calls[0]
@@ -742,9 +728,7 @@ def test_mask_artifact_store_rejects_preexisting_symlink_escape(
         namespace.symlink_to(outside, target_is_directory=True)
     else:
         namespace.mkdir(parents=True)
-        (namespace / "collection-000000").symlink_to(
-            outside, target_is_directory=True
-        )
+        (namespace / "collection-000000").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError, match="symlink"):
         _yolo_adapter(evidence_root)
@@ -762,12 +746,7 @@ def test_mask_write_rejects_collection_swapped_to_outside_symlink(
 
     class _SwappingYoloModel(_YoloModel):
         def predict(self, **kwargs: object) -> list[_YoloResult]:
-            collection = (
-                tmp_path
-                / "benchmark-masks"
-                / "yolo-seg"
-                / "collection-000000"
-            )
+            collection = tmp_path / "benchmark-masks" / "yolo-seg" / "collection-000000"
             collection.rmdir()
             collection.symlink_to(outside, target_is_directory=True)
             return super().predict(**kwargs)
@@ -830,9 +809,7 @@ def test_grounded_low_floor_is_stateless_and_keeps_distinct_model_scores(
 ) -> None:
     """Catch prompt drift, tracker reuse, score multiplication, or a SAM quality rank."""
 
-    adapter, processor, grounding_model, sam_processor, sam_model = _grounded_adapter(
-        tmp_path
-    )
+    adapter, processor, grounding_model, sam_processor, sam_model = _grounded_adapter(tmp_path)
     first = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
     second = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
 
@@ -876,9 +853,7 @@ def test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly(
     processor = Sam2Processor(image_processor=Sam2ImageProcessorFast())
     logits = torch.zeros((1, 1, 1, 16, 20), dtype=torch.float32)
     logits[0, 0, 0, 2:10, 3:13] = 1.0
-    processed = processor.post_process_masks(
-        logits, torch.tensor([[16, 20]], dtype=torch.int64)
-    )
+    processed = processor.post_process_masks(logits, torch.tensor([[16, 20]], dtype=torch.int64))
 
     assert len(processed) == 1
     assert processed[0].dtype is torch.bool
@@ -890,9 +865,7 @@ def test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly(
     assert fake_processed[0].dtype == np.bool_
     np.testing.assert_array_equal(fake_processed[0], processed[0].numpy())
 
-    result = _grounded_adapter(tmp_path)[0].collect(
-        _frame(), CollectionMode.LOW_FLOOR
-    )
+    result = _grounded_adapter(tmp_path)[0].collect(_frame(), CollectionMode.LOW_FLOOR)
     mask_ref = result.raw_candidates[0].mask
     decoded = decode_mask_rle(
         json.loads((tmp_path / mask_ref.relative_path).read_text(encoding="utf-8"))
@@ -960,9 +933,7 @@ def test_calibrated_yolo_exception_synchronizes_without_swallowing_cause(
             expected_sha256=hashlib.sha256(b"raising-weights").hexdigest(),
             requested_device="mps",
             model_id="plastic-cup-yolo11s-seg-v2",
-            thresholds=YoloThresholds(
-                Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
-            ),
+            thresholds=YoloThresholds(Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640),
             torch_api=torch_api,
             model_factory=lambda _: _YoloModel(error=expected),
         )
@@ -978,9 +949,7 @@ def test_production_observation_calls_real_port_and_real_target_selector() -> No
     detector = _RecordingDetectorPort(_batch(_candidate("cup-7")))
     frame = _frame()
 
-    observed = run_production_detector_port(
-        detector, frame, selector_threshold=0.50
-    )
+    observed = run_production_detector_port(detector, frame, selector_threshold=0.50)
 
     assert detector.detect_calls == [(frame, DetectionQuery("plastic_cup"))]
     assert observed.decision is DecisionOutput.UNIQUE
@@ -1057,7 +1026,9 @@ def test_production_observation_fails_if_selector_mutates_batch(
 
     original_select = TargetSelector.select
 
-    def mutating_select(self: TargetSelector, *args: object, **kwargs: object) -> DetectionCandidate:
+    def mutating_select(
+        self: TargetSelector, *args: object, **kwargs: object
+    ) -> DetectionCandidate:
         selected = original_select(self, *args, **kwargs)  # type: ignore[arg-type]
         selected.mask.setflags(write=True)
         selected.mask[2, 3] = False
@@ -1100,11 +1071,14 @@ def test_configured_production_builder_requires_a_real_detect_method(
         "build_detector",
         lambda options: SimpleNamespace(detector=expected),
     )
-    assert build_production_detector_port(
-        SimpleNamespace(
-            requested_device="mps", allow_cpu_fallback=False, backend="grounded_sam"
+    assert (
+        build_production_detector_port(
+            SimpleNamespace(
+                requested_device="mps", allow_cpu_fallback=False, backend="grounded_sam"
+            )
         )
-    ) is expected
+        is expected
+    )
 
 
 def test_production_builder_rejects_fallback_device_mismatch_and_live_config_drift(
@@ -1170,9 +1144,7 @@ def _safe_metrics() -> PlatformCalibrationMetrics:
 def _lock(model: str) -> ThresholdLock:
     selected: YoloThresholds | GroundedSamBenchmarkThresholds
     if model == "yolo_seg":
-        selected = YoloThresholds(
-            Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
-        )
+        selected = YoloThresholds(Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640)
         grid_version = "yolo-seg-grid/v1"
     else:
         selected = GroundedSamBenchmarkThresholds(
@@ -1214,9 +1186,7 @@ def test_calibrated_builder_configures_existing_grounded_detector_from_lock(
     import so101_demo.perception_benchmark.adapters.base as base_module
 
     captured: list[dict[str, object]] = []
-    detector = _RecordingDetectorPort(
-        _batch(_candidate("cup")), model_id=GROUNDED_SAM_MODEL_ID
-    )
+    detector = _RecordingDetectorPort(_batch(_candidate("cup")), model_id=GROUNDED_SAM_MODEL_ID)
     detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
     detector._sam_model = _ParameterModule()  # type: ignore[attr-defined]
 
@@ -1255,9 +1225,7 @@ def test_calibrated_grounded_builder_rejects_noncanonical_detector_identity(
 ) -> None:
     import so101_demo.perception_benchmark.adapters.base as base_module
 
-    detector = _RecordingDetectorPort(
-        _batch(_candidate("cup")), model_id="grounded-sam-wrong"
-    )
+    detector = _RecordingDetectorPort(_batch(_candidate("cup")), model_id="grounded-sam-wrong")
     detector._grounding_model = _ParameterModule()  # type: ignore[attr-defined]
     detector._sam_model = _ParameterModule()  # type: ignore[attr-defined]
     monkeypatch.setattr(base_module, "verify_model_bundle", lambda root, sha: "bundle")
@@ -1272,9 +1240,7 @@ def test_calibrated_grounded_builder_rejects_noncanonical_detector_identity(
     )
 
     with pytest.raises(ValueError, match="model_id"):
-        build_calibrated_detector_port(
-            "grounded_sam", _lock("grounded_sam"), assets
-        )
+        build_calibrated_detector_port("grounded_sam", _lock("grounded_sam"), assets)
 
 
 def test_yolo_calibrated_detector_implements_real_detect_port(
@@ -1291,9 +1257,7 @@ def test_yolo_calibrated_detector_implements_real_detect_port(
         expected_sha256=hashlib.sha256(b"weights").hexdigest(),
         requested_device="mps",
         model_id="plastic-cup-yolo11s-seg-v2",
-        thresholds=YoloThresholds(
-            Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
-        ),
+        thresholds=YoloThresholds(Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640),
         torch_api=torch_api,
         model_factory=lambda _: model,
     )
@@ -1323,9 +1287,7 @@ def test_yolo_calibrated_detector_rejects_identity_before_model_load(
             expected_sha256="a" * 64,
             requested_device="mps",
             model_id=f"{YOLO_MODEL_ID}-suffix",
-            thresholds=YoloThresholds(
-                Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
-            ),
+            thresholds=YoloThresholds(Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640),
             torch_api=_TorchApi(),
             model_factory=model_factory,
         )
@@ -1340,9 +1302,7 @@ def test_yolo_allows_first_prediction_to_move_verified_model_to_device(
 
     model = _YoloModel(device="cpu", move_on_predict=True)
 
-    result = _yolo_adapter(tmp_path, model=model).collect(
-        _frame(), CollectionMode.LOW_FLOOR
-    )
+    result = _yolo_adapter(tmp_path, model=model).collect(_frame(), CollectionMode.LOW_FLOOR)
 
     assert result.runtime_device == "mps"
     assert model.device == "mps"
@@ -1480,9 +1440,7 @@ def test_assets_and_raw_result_reject_cpu_fallback_non_fp32_and_hash_mismatch(
             expected_sha256="f" * 64,
             requested_device="mps",
             model_id="plastic-cup-yolo11s-seg-v2",
-            thresholds=YoloThresholds(
-                Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640
-            ),
+            thresholds=YoloThresholds(Decimal("0.50"), Decimal("0.70"), Decimal("0.50"), 640),
             torch_api=_TorchApi(),
             model_factory=lambda _: _YoloModel(),
         )
@@ -1504,10 +1462,35 @@ def test_yolo_collection_rejects_device_or_dtype_mismatch(
     """Catch reported MPS/FP32 provenance disagreeing with actual model output."""
 
     with pytest.raises(ModelSetupError, match=message):
-        adapter = _yolo_adapter(
-            tmp_path, model=_YoloModel(device=device, dtype=dtype)
-        )
+        adapter = _yolo_adapter(tmp_path, model=_YoloModel(device=device, dtype=dtype))
         adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+
+def test_yolo_collection_accepts_binary_uint8_result_masks_from_fp32_mps_model(
+    tmp_path: Path,
+) -> None:
+    """Ultralytics may materialize postprocessed binary masks as uint8."""
+
+    result = _yolo_adapter(
+        tmp_path,
+        model=_YoloModel(mask_dtype=np.dtype(np.uint8)),
+    ).collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert result.dtype == "float32"
+    assert result.runtime_device == "mps"
+    assert len(result.raw_candidates) == 1
+
+
+def test_yolo_collection_rejects_float16_result_masks_from_fp32_mps_model(
+    tmp_path: Path,
+) -> None:
+    """Keep the mask-storage exception limited to lossless binary encodings."""
+
+    with pytest.raises(ModelSetupError, match="NON_FP32_RUNTIME"):
+        _yolo_adapter(
+            tmp_path,
+            model=_YoloModel(mask_dtype=np.dtype(np.float16)),
+        ).collect(_frame(), CollectionMode.LOW_FLOOR)
 
 
 @pytest.mark.parametrize(
@@ -1648,6 +1631,4 @@ def test_calibrated_grounded_builder_rejects_actual_device_or_dtype_mismatch(
     )
 
     with pytest.raises(ModelSetupError, match=message):
-        build_calibrated_detector_port(
-            "grounded_sam", _lock("grounded_sam"), assets
-        )
+        build_calibrated_detector_port("grounded_sam", _lock("grounded_sam"), assets)
