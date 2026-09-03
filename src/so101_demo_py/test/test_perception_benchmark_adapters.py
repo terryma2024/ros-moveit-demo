@@ -410,6 +410,7 @@ def _grounded_adapter(
     evidence_root: Path,
     *,
     torch_api: _TorchApi | None = None,
+    grounding_processor: _GroundingProcessor | None = None,
     grounding_model: _GroundingModel | None = None,
     sam_model: _SamModel | None = None,
     resource_sampler: Any | None = None,
@@ -421,7 +422,7 @@ def _grounded_adapter(
     _SamModel,
 ]:
     torch_api = torch_api or _TorchApi()
-    grounding_processor = _GroundingProcessor()
+    grounding_processor = grounding_processor or _GroundingProcessor()
     grounding_model = grounding_model or _GroundingModel()
     sam_processor = _SamProcessor()
     sam_model = sam_model or _SamModel()
@@ -869,6 +870,31 @@ def test_grounded_low_floor_is_stateless_and_keeps_distinct_model_scores(
     assert candidate.sam_quality == pytest.approx(0.84)
     assert second.raw_candidates[0].candidate_id == candidate.candidate_id
     assert not hasattr(adapter, "tracker")
+
+
+def test_grounded_low_floor_retains_the_fixed_prompt_with_terminal_punctuation(
+    tmp_path: Path,
+) -> None:
+    """Catch display punctuation removing a real proposal before calibration."""
+
+    class _PunctuatedGroundingProcessor(_GroundingProcessor):
+        def post_process_grounded_object_detection(
+            self, outputs: object, **kwargs: object
+        ) -> list[dict[str, object]]:
+            results = super().post_process_grounded_object_detection(outputs, **kwargs)
+            results[0]["text_labels"] = ["plastic cup."]
+            return results
+
+    adapter = _grounded_adapter(
+        tmp_path,
+        grounding_processor=_PunctuatedGroundingProcessor(),
+    )[0]
+
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert len(result.raw_candidates) == 1
+    assert result.raw_candidates[0].grounding_box_score == pytest.approx(0.91)
+    assert result.raw_candidates[0].sam_quality == pytest.approx(0.84)
 
 
 def test_grounded_accepts_fixed_text_logit_capacity_larger_than_prompt(
