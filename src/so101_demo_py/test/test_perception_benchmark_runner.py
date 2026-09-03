@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 from dataclasses import replace
 from decimal import Decimal
@@ -1772,6 +1773,37 @@ def test_public_run_loader_returns_immutable_full_verified_evidence(
         loaded.extended_record_documents[0]["platform"] = "linux"  # type: ignore[index]
     with pytest.raises(TypeError):
         loaded.manifest.runtime_environment["fixture"] = "changed"  # type: ignore[index]
+
+
+def test_public_run_loader_accepts_verified_terminal_tree_relocation(
+    tmp_path: Path,
+) -> None:
+    inventory = _synthetic_inventory(tmp_path, 200)
+    producer_root = tmp_path / "producer" / "run"
+    producer_root.mkdir(parents=True)
+    expected_manifest = DetectorBenchmarkRunner(
+        SyntheticAdapter(producer_root), producer_root
+    ).run(_spec(inventory, producer_root))
+    relocated_root = tmp_path / "durable" / "renamed-run"
+    shutil.copytree(producer_root, relocated_root)
+
+    checkpoint = json.loads((relocated_root / "checkpoint.json").read_bytes())
+    assert checkpoint["records_dir"] == str(producer_root / "records")
+
+    loaded = load_verified_run_evidence(
+        relocated_root, inventory, _evidence_expectation()
+    )
+
+    assert loaded.evidence_root == relocated_root.resolve(strict=True)
+    assert loaded.manifest == expected_manifest
+    assert len(loaded.records) == 200
+
+    checkpoint["records_dir"] = str(tmp_path / "not-records")
+    atomic_write_json(relocated_root / "checkpoint.json", checkpoint)
+    with pytest.raises(RunIntegrityError, match="RESUME_RECORDS_DIRECTORY_CHANGED"):
+        load_verified_run_evidence(
+            relocated_root, inventory, _evidence_expectation()
+        )
 
 
 @pytest.mark.parametrize(
