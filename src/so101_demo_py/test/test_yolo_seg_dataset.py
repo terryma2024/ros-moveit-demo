@@ -359,7 +359,7 @@ def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> N
 
     assert config.split_counts == {"train": 480, "val": 200, "test": 200}
     assert config.seed_starts == {
-        "train": 400000,
-        "val": 500000,
-        "test": 600000,
+        "train": 700000,
+        "val": 800000,
+        "test": 900000,
     }
