@@ -4528,3 +4528,65 @@ test_state:
 next_command: preregister the exact post-fix archive, sealed-member inventory, YOLO lock, Grounded-SAM lock, one-time access log, four platform-model test run IDs, aggregation outputs, and all fail-closed stop conditions before opening test once
 decision: PREREGISTER_ONE_TIME_FROZEN_TEST_MATRIX
 ```
+
+## Checkpoint CP-062 — Post-fix one-time test unlock preregistration
+
+```yaml
+checkpoint_id: CP-062
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-061
+status: READY_FOR_ONE_TIME_POSTFIX_TEST_ACCESS
+source_state:
+  calibration_code_commit: f4500933d238ad391f048eb7ef51d82d6ff4fced
+  ledger_head_before_preregistration: 84b6e9e8ca6e524068448e0436b8d44294041758
+  prediction_and_lock_source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+  installed_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r15
+sealed_input:
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-postfix-r4.json
+  member_inventory_sha256: 4ac8407aec15d8c19da653dd34b932e50ba42fa9aa492a7b4adedc2147666b81
+  member_counts: {images: 200, labels: 200, truth: 200}
+  semantic_content_opened_before_unlock: false
+threshold_locks:
+  yolo:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/yolo-r1/threshold-lock.json
+    file_sha256: 1c2f7e270123e72115a30a673a697cb07bdab9f295e6c429172995d1ade7bac1
+    internal_sha256: bbe200f0f46bb035a78a22e7524e0f401175f99d41ce6067fd888aacd8644df6
+    mtime_epoch: 1788469128
+    state: {formal: true, deployable: true, outcome: SAFE_CALIBRATED}
+  grounded_sam:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/grounded-sam-r3/threshold-lock.json
+    file_sha256: 8b0d24ca6c8c28ffb6f9e8c6d7be7c4dabb3916a198f8a0e6f594fb6faebce3e
+    internal_sha256: 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+    mtime_epoch: 1788470728
+    state: {formal: true, deployable: true, outcome: SAFE_CALIBRATED}
+one_time_unlock:
+  access_log: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/test-access-r1.jsonl
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+  prereq_check_script_sha256: b6041690e0a7e6ce1f860aeaf99725472f43cded8a770f9be986e484cd679f37
+  precondition: both targets are absent non-symlink paths and the access event is appended before any test member is decoded
+  command: PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r15/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r15/install/so101_demo_py/lib/so101_demo_py/perception_benchmark unlock-test --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r15/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz --expected-sha256 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832 --sealed-member-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-postfix-r4.json --yolo-threshold-lock /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/yolo-r1/threshold-lock.json --grounded-sam-threshold-lock /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/grounded-sam-r3/threshold-lock.json --access-log /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/test-access-r1.jsonl --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+post_unlock_frozen_matrix:
+  samples_per_run: 200
+  platforms: {macos: mps, linux: cuda}
+  models: [yolo_seg, grounded_sam]
+  run_kinds: [TEST_RAW_FROZEN, TEST_PRODUCTION, TEST_CALIBRATED]
+  total_runs: 12
+  oracle_diagnostic: NOT_AUTHORIZED_NOT_RUN
+  mac_output_parent: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos
+  linux_output_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-postfix-r4/linux
+  aggregation_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/report/postfix-r4-r1
+success_criteria:
+  - exactly one access event binds both verified internal lock SHA-256 values and the unchanged sealed member inventory
+  - test inventory has 200 unique samples and exactly 50 samples for each of the four frozen scenarios
+  - all 600 extracted source artifacts are regular files with verified source SHA-256 values
+  - no threshold, prompt, model, grid, matching rule, calibration lock, or benchmark objective changes after test access
+stop_criteria:
+  - existing target, lock/seal/archive mismatch, access-event ordering failure, unsafe path, malformed truth, non-200 denominator, or scenario-count mismatch
+  - any post-unlock attempt to recalibrate or alter a frozen lock
+deletion: none
+next_command: commit and push CP-062, synchronize ai-station, rerun the prerequisite check, then execute the exact unlock command once
+decision: EXECUTE_ONE_TIME_POSTFIX_TEST_UNLOCK_AFTER_COMMIT
+```
