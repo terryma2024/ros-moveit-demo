@@ -304,12 +304,18 @@ def build_labeled_sample(
     seed: int,
     scenario: DatasetScenario,
 ) -> LabeledSample:
+    active_cup_bodies = {
+        DatasetScenario.NO_CUP: frozenset(),
+        DatasetScenario.ONE_CUP_DISTRACTORS: frozenset({"plastic_cup"}),
+        DatasetScenario.TWO_CUPS: frozenset({"plastic_cup", "plastic_cup_b"}),
+        DatasetScenario.CUP_NEAR_BOTTLE: frozenset({"plastic_cup"}),
+    }[scenario]
     visible_geom_ids = np.unique(render.geom_ids[render.geom_ids >= 0])
     if any(geom_id >= len(render.geom_body_ids) for geom_id in visible_geom_ids):
         raise ValueError("segmentation contains an out-of-range geom ID")
     instances: list[LabeledInstance] = []
     for body_id, body_name in sorted(render.body_names.items()):
-        if body_name != "plastic_cup" and not body_name.startswith("plastic_cup_"):
+        if body_name not in active_cup_bodies:
             continue
         target_geoms = np.flatnonzero(render.geom_body_ids == body_id)
         mask = np.isin(render.geom_ids, target_geoms)
