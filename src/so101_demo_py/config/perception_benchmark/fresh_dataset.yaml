@@ -7,6 +7,6 @@ split_counts:
   val: 200
   test: 200
 seed_starts:
-  train: 400000
-  val: 500000
-  test: 600000
+  train: 700000
+  val: 800000
+  test: 900000
