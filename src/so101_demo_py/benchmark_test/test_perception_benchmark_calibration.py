@@ -771,6 +771,32 @@ def test_grounded_parallel_precompute_is_lock_equivalent(tmp_path: Path) -> None
     assert parallel.lock_sha256 == serial.lock_sha256
 
 
+def test_grounded_workers_parallelize_precompute_and_grid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    map_calls = 0
+
+    class InlineExecutor:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            initializer = kwargs.get("initializer")
+            if initializer is not None:
+                initializer(*kwargs.get("initargs", ()))
+
+        def map(self, function, values, *, chunksize: int = 1):
+            nonlocal map_calls
+            map_calls += 1
+            return map(function, values)
+
+        def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
+            return None
+
+    monkeypatch.setattr(calibration_module, "ProcessPoolExecutor", InlineExecutor)
+
+    _calibrate(tmp_path, "grounded_sam", workers=2)
+
+    assert map_calls == 2
+
+
 def test_formal_calibration_requires_exact_two_hundred_shared_identities(
     tmp_path: Path,
 ) -> None:
