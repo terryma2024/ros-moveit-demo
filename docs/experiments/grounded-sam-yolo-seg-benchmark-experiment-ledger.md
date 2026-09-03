@@ -724,3 +724,28 @@ This checkpoint was completed at `2026-09-03T08:44:20Z`, after the first R11 com
 - Both copied Mac lock files remain byte-identical to their verified durable R9 locks and retain the exact identities committed by the sole test-access event. Their local copy mtimes necessarily postdate that event. `_verify_threshold_lock_chain()` verifies canonical lock content, recomputed lock identity, model, formal two-platform denominator, source commit, and membership of the exact lock identity in immutable `inventory.test_access.threshold_lock_sha256s`; its additional local-file mtime comparison is therefore host-copy metadata, not portable proof of calibration-before-test order.
 - R12 remediation boundary: add a runner regression in which a canonical, registered lock is copied after the test event while preserving its bytes, prove RED, and remove only the local mtime comparison. Keep canonical lock verification, exact lock identity, registered-event membership, sole access event, source/model/formal checks, inventory capability, and all frozen inference settings unchanged. A lock with changed content or an unregistered identity must still fail closed.
 - The remaining R11 rows stay `PLANNED` and cannot run. After a minimal committed fix and exact Mac/Linux build/regression evidence, lock fresh R12 IDs and absent output roots. R10 and R11 invalid roots remain retained and excluded from every metric.
+
+## CP-BENCH-037 — Task 14 R12 preserved-lock-metadata correction and run lock
+
+This checkpoint was completed at `2026-09-03T08:46:32Z`, before any R12 model command. It supersedes only the proposed source-remediation sentence in CP-BENCH-036; the R11 failure evidence remains terminal and unchanged.
+
+- Source review found an existing `posthoc` security regression that intentionally rejects a lock file written after test access. Removing the mtime gate would weaken that fail-closed guarantee, so no R12 source change was made. Exact reader/runtime commit, source bundle, Mac/Linux overlays, and the 556/556 Mac plus 554+2 Linux regression results remain those in CP-BENCH-035.
+- Durable original lock mtimes are YOLO epoch `1788418336` and Grounded-SAM epoch `1788420792`; the sole access event is epoch `1788420935`. Both locks therefore predate test access. New absent Mac directory `calibration/r12-locks-preserved` received the two durable files with `scp -p`, preserving these mtimes and mode `0444`. File SHA-256 values remain YOLO `cc7bcadef41ee2a327e05da9231a6972e2f41f20abe542c3c67903c19964246f` and Grounded-SAM `0cd863d1147102e92f601a6382c5f80203d7acdda8ac6a445a4e8c1dec80d934`; lock identities remain unchanged. The R9 locks, inventory, and access log were not rewritten, and no second access event or test extraction occurred.
+- R12 commands are exactly the CP-BENCH-035 R11 substitutions, with every run ID/output leaf changed from `r11` to `r12`. Mac only changes its threshold-lock paths to `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/calibration/r12-locks-preserved/yolo.json` or `grounded-sam.json`; Linux continues to use the durable original R9 lock paths. Every other frozen anchor is unchanged. All 12 R12 output roots were confirmed absent.
+
+Frozen R12 sequential matrix:
+
+1. `EXP-BENCH-TEST-MAC-YOLO-RAW-R12` = `RUNNING`: `mac-yolo-test-raw-r12`, `TEST_RAW_FROZEN`, local `test/mac/yolo-raw-r12`.
+2. `EXP-BENCH-TEST-MAC-GROUNDED-RAW-R12` = `PLANNED`: `mac-grounded-sam-test-raw-r12`, `TEST_RAW_FROZEN`, local `test/mac/grounded-sam-raw-r12`.
+3. `EXP-BENCH-TEST-MAC-GROUNDED-PRODUCTION-R12` = `PLANNED`: `mac-grounded-sam-test-production-r12`, `TEST_PRODUCTION`, local `test/mac/grounded-sam-production-r12`.
+4. `EXP-BENCH-TEST-MAC-YOLO-PRODUCTION-R12` = `PLANNED`: `mac-yolo-test-production-r12`, `TEST_PRODUCTION`, local `test/mac/yolo-production-r12`.
+5. `EXP-BENCH-TEST-MAC-YOLO-CHARACTERIZATION-R12` = `PLANNED`: `mac-yolo-test-characterization-r12`, `TEST_CHARACTERIZATION`, local `test/mac/yolo-characterization-r12`.
+6. `EXP-BENCH-TEST-MAC-GROUNDED-CALIBRATED-R12` = `PLANNED`: `mac-grounded-sam-test-calibrated-r12`, `TEST_CALIBRATED`, local `test/mac/grounded-sam-calibrated-r12`.
+7. `EXP-BENCH-TEST-LINUX-GROUNDED-RAW-R12` = `PLANNED`: `linux-grounded-sam-test-raw-r12`, `TEST_RAW_FROZEN`, durable `test/linux/grounded-sam-raw-r12`.
+8. `EXP-BENCH-TEST-LINUX-YOLO-RAW-R12` = `PLANNED`: `linux-yolo-test-raw-r12`, `TEST_RAW_FROZEN`, durable `test/linux/yolo-raw-r12`.
+9. `EXP-BENCH-TEST-LINUX-YOLO-PRODUCTION-R12` = `PLANNED`: `linux-yolo-test-production-r12`, `TEST_PRODUCTION`, durable `test/linux/yolo-production-r12`.
+10. `EXP-BENCH-TEST-LINUX-GROUNDED-PRODUCTION-R12` = `PLANNED`: `linux-grounded-sam-test-production-r12`, `TEST_PRODUCTION`, durable `test/linux/grounded-sam-production-r12`.
+11. `EXP-BENCH-TEST-LINUX-GROUNDED-CALIBRATED-R12` = `PLANNED`: `linux-grounded-sam-test-calibrated-r12`, `TEST_CALIBRATED`, durable `test/linux/grounded-sam-calibrated-r12`.
+12. `EXP-BENCH-TEST-LINUX-YOLO-CHARACTERIZATION-R12` = `PLANNED`: `linux-yolo-test-characterization-r12`, `TEST_CHARACTERIZATION`, durable `test/linux/yolo-characterization-r12`.
+
+Execution, evidence-index, independent verification, invalidation, no-resume, and no-tuning rules remain exactly CP-BENCH-035. R10 and R11 are retained invalid diagnostics and excluded from all metrics.
