@@ -97,12 +97,12 @@ _SCENARIOS = (
 _MODELS = ("yolo_seg", "grounded_sam")
 _INDEX_SCHEMA = "so101-perception-benchmark/evidence-index/v1"
 _INDEX_SEMANTICS = "payload files only; evidence-index.json is excluded to avoid self-reference"
-_CONFIG_SHA256 = "52d7686168ecaeff933eb5a0fac38f0fefd13a52ebc88b33d655ab4a67b39f99"
+_CONFIG_SHA256 = "4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160"
 _ARCHIVE_ID = (
-    "datasets/so101-v5-t004-yolo-seg-synthetic/"
-    "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+    "datasets/so101-v5-t005-grounded-sam-fresh/"
+    "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
 )
-_ARCHIVE_SHA256 = "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"
+_ARCHIVE_SHA256 = "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"
 _YOLO_WEIGHTS_SHA256 = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 _GROUNDED_MANIFEST_SHA256 = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
 _GROUNDING_DINO_REVISION = "a2bb814dd30d776dcf7e30523b00659f4f141c71"

@@ -65,7 +65,9 @@ def test_setup_has_one_console_entry_and_packages_benchmark_yaml() -> None:
 def test_config_contains_frozen_literals() -> None:
     text = CONFIG.read_text()
     for literal in (
-        "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1",
+        "datasets/so101-v5-t005-grounded-sam-fresh/"
+        "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz",
+        "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6",
         "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
         "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
         "a2bb814dd30d776dcf7e30523b00659f4f141c71",
@@ -75,6 +77,9 @@ def test_config_contains_frozen_literals() -> None:
         "cold_processes: 3",
         "seed: 20260902",
         "repetitions: 10000",
+        "/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/"
+        "20260901-b55c869/remediation/exp-079",
+        "/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079",
     ):
         assert literal in text
     assert "nms:\n        source:" in text
@@ -91,11 +96,11 @@ def test_unlock_without_verified_locks_is_typed_error(
             "--archive",
             str(
                 tmp_path
-                / "datasets/so101-v5-t004-yolo-seg-synthetic"
-                / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+                / "datasets/so101-v5-t005-grounded-sam-fresh"
+                / "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
             ),
             "--expected-sha256",
-            "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1",
+            "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6",
             "--sealed-member-inventory",
             str(tmp_path / "sealed.json"),
             "--yolo-threshold-lock",
@@ -187,7 +192,7 @@ def test_actual_dry_run_uses_fixed_val_images_and_both_accelerated_adapters(
     inventory = SimpleNamespace(
         split="val",
         inventory_sha256="a" * 64,
-        archive_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        archive_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         scenario_counts={scenario: 50 for scenario in perception_benchmark._SCENARIOS},
         samples=samples,
     )
@@ -416,7 +421,7 @@ def test_inventory_forwards_explicit_relocated_test_access_log(
     arguments = SimpleNamespace(
         split="test",
         dataset_archive_sha256=(
-            "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"
+            "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"
         ),
         dataset_inventory=tmp_path / "test-open/inventory.json",
         inventory_sha256="1" * 64,
@@ -643,7 +648,7 @@ def test_formal_archive_rejects_internally_consistent_but_unregistered_identity(
     arguments = SimpleNamespace(
         config=CONFIG,
         archive=tmp_path / "different.tar.gz",
-        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        expected_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         sealed_member_inventory=tmp_path / "sealed.json",
     )
 
@@ -660,8 +665,8 @@ def test_inspect_archive_prints_sealed_member_inventory_sha(
 ) -> None:
     archive = (
         tmp_path
-        / "datasets/so101-v5-t004-yolo-seg-synthetic"
-        / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+        / "datasets/so101-v5-t005-grounded-sam-fresh"
+        / "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
     )
     archive.parent.mkdir(parents=True)
     archive.write_bytes(b"placeholder")
@@ -675,7 +680,7 @@ def test_inspect_archive_prints_sealed_member_inventory_sha(
     arguments = SimpleNamespace(
         config=CONFIG,
         archive=archive,
-        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        expected_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         sealed_member_inventory=sealed,
     )
 
@@ -744,7 +749,7 @@ def _calibration_arguments(tmp_path: Path) -> SimpleNamespace:
         config=CONFIG,
         model="yolo_seg",
         dataset_inventory=tmp_path / "dataset" / "inventory.json",
-        dataset_archive_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        dataset_archive_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         inventory_sha256="b" * 64,
         mac_run_root=tmp_path / "mac-run",
         mac_run_expectation=tmp_path / "mac-expectation.json",
@@ -920,10 +925,10 @@ def test_unlock_preflights_output_before_appending_access_event(
         config=CONFIG,
         archive=(
             tmp_path
-            / "datasets/so101-v5-t004-yolo-seg-synthetic"
-            / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+            / "datasets/so101-v5-t005-grounded-sam-fresh"
+            / "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
         ),
-        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        expected_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         sealed_member_inventory=tmp_path / "sealed.json",
         yolo_threshold_lock=tmp_path / "yolo.json",
         grounded_sam_threshold_lock=tmp_path / "grounded.json",
@@ -947,8 +952,8 @@ def test_unlock_checks_sealed_inventory_against_archive_before_access_event(
 ) -> None:
     archive = (
         tmp_path
-        / "datasets/so101-v5-t004-yolo-seg-synthetic"
-        / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+        / "datasets/so101-v5-t005-grounded-sam-fresh"
+        / "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
     )
     archive.parent.mkdir(parents=True)
     archive.write_bytes(b"placeholder")
@@ -957,7 +962,7 @@ def test_unlock_checks_sealed_inventory_against_archive_before_access_event(
     arguments = SimpleNamespace(
         config=CONFIG,
         archive=archive,
-        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        expected_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         sealed_member_inventory=tmp_path / "sealed.json",
         yolo_threshold_lock=tmp_path / "yolo.json",
         grounded_sam_threshold_lock=tmp_path / "grounded.json",
@@ -1177,7 +1182,7 @@ def test_collect_uses_shared_output_preflight_before_dataset_or_adapter_boundary
         manifest_sha256=None,
         source_commit="6" * 40,
         config=CONFIG,
-        dataset_archive_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        dataset_archive_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         output_root=alias_parent / "formal-run",
     )
     monkeypatch.setattr(
@@ -1203,8 +1208,8 @@ def test_unlock_rechecks_output_after_archive_verify_before_access_event(
 ) -> None:
     archive = (
         tmp_path
-        / "datasets/so101-v5-t004-yolo-seg-synthetic"
-        / "so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz"
+        / "datasets/so101-v5-t005-grounded-sam-fresh"
+        / "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
     )
     archive.parent.mkdir(parents=True)
     archive.write_bytes(b"placeholder")
@@ -1215,7 +1220,7 @@ def test_unlock_rechecks_output_after_archive_verify_before_access_event(
     arguments = SimpleNamespace(
         config=CONFIG,
         archive=archive,
-        expected_sha256=("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+        expected_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         sealed_member_inventory=tmp_path / "sealed.json",
         yolo_threshold_lock=tmp_path / "yolo.json",
         grounded_sam_threshold_lock=tmp_path / "grounded.json",
@@ -1255,7 +1260,7 @@ def _aggregation_plan_document(tmp_path: Path) -> dict[str, object]:
         "schema_version": "so101-perception-benchmark/aggregation-plan-v1",
         "dataset": {
             "root": str(tmp_path / "test-dataset"),
-            "archive_sha256": ("c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"),
+            "archive_sha256": ("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
             "inventory_sha256": "1" * 64,
             "test_access_event_sha256": "2" * 64,
             "sealed_member_inventory_sha256": "3" * 64,
