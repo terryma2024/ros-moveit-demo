@@ -1975,7 +1975,7 @@ split cannot be reused for a fix, recalibration, or model ranking.
 
 ```yaml
 experiment_id: EXP-078
-status: RUNNING
+status: VALID_SUCCESS
 prior_experiment: EXP-076_and_CP-BENCH-038
 hypothesis: punctuation-sensitive equality at the Grounding DINO decoded-label boundary drops a real low-floor plastic_cup proposal before calibration
 prediction: a real-adapter unit case whose postprocessor returns plastic cup. will produce zero candidates before the fix, while the desired contract requires one candidate with unchanged DINO and SAM scores
@@ -2007,11 +2007,53 @@ commands:
     exit_code: 1_EXPECTED_2_FAILURES
   - command: complete test_grounded_sam_postprocess.py and test_perception_benchmark_adapters.py GREEN pytest
     exit_code: 0
+  - command: Linux r1 built so101_demo_py over the canonical overlay without ignoring unselected workspace packages
+    exit_code: 1_INVALID_BUILD_BOUNDARY
+  - command: Linux r2 invoked system colcon from the model venv without exposing colcon-core to that interpreter
+    exit_code: 1_INVALID_BUILD_ENVIRONMENT
+  - command: Linux r3 expanded the build to so101_mujoco_support under the model venv
+    exit_code: 1_INVALID_BUILD_SCOPE
+  - command: Linux r4 selected only so101_demo_py, ignored every unselected same-workspace package, and allowed the intentional override
+    exit_code: 0_WRONG_RUNTIME_SHEBANG
+  - command: Linux r5 ran /usr/bin/colcon with the Grounded-SAM venv interpreter and the same single-package boundary
+    exit_code: 0
+  - command: Linux focused pytest with the r5 build package first, model venv dependencies, and system pytest
+    exit_code: 0
 observed:
   - first invocation did not collect because the plan's historical PYTHONPATH layout no longer maps the installed so101_demo package; it is INVALID and not RED evidence
   - functional RED executed both real conversion boundaries and failed 2/2 because plastic cup. produced zero raw candidates and one fewer production proposal; JUnit SHA256 1e6134fa9125367f317d8b8a7ac90ed763c27dbc1e039e55157cb85864c76a71
   - Mac focused GREEN passed 95/95 in 5.34 s; JUnit SHA256 1284ef78c68535126a0c7c58240b028f16b0cb178bb652c08d53c566cfad72ea
-conclusion: PENDING
-decision: PENDING
-next_experiment: EXP-079_FRESH_VALIDATION_DESIGN_AFTER_GREEN
+  - Linux r1-r3 were invalid build-boundary probes and produced no runtime or ROS graph evidence; r4 built the right package but its console scripts used /usr/bin/python3, so it was not accepted as model-runtime provenance
+  - Linux r5 resolved the boundary without installing anything: so101_demo_py prefix is /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-078/linux-r5/install/so101_demo_py, rgbd_object_pose shebang is /data/work/venvs/so101-grounded-sam/bin/python, and the loaded postprocessor came from the r5 build symlink
+  - Linux focused GREEN passed 95/95 in 7.25 s; JUnit SHA256 6c935a5e6579bc9492edb956ab96aae02fb2c547c18373cafed9fa091ecd1abf
+conclusion: punctuation normalization fixes the incomplete candidate boundary on both platforms while preserving the fixed prompt, model outputs, thresholds, and fail-closed downstream contracts
+decision: KEEP
+next_experiment: EXP-079_FRESH_VALIDATION_DESIGN
+```
+
+## Checkpoint CP-017 — label remediation green
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-078
+source_commit_under_test: db927278995be5c63d62766c96ac462b7c882b9e
+change_scope: decoded-label comparison only; Unicode punctuation becomes a word separator before case-folded whitespace-normalized equality
+mac_test: 95 passed; JUnit SHA256 1284ef78c68535126a0c7c58240b028f16b0cb178bb652c08d53c566cfad72ea
+linux_test: 95 passed; JUnit SHA256 6c935a5e6579bc9492edb956ab96aae02fb2c547c18373cafed9fa091ecd1abf
+linux_runtime_provenance:
+  checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-078/linux-r5/install/so101_demo_py
+  runtime_python: /data/work/venvs/so101-grounded-sam/bin/python
+owned_processes: NONE_STARTED_BY_EXP_078
+retained_runs:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-078
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-078/linux-r5 on ai-station
+archived_runs: []
+deletion_candidates:
+  - Linux r1-r4 build probes, only after explicit user authorization
+qualification_boundary:
+  - the opened R12 test split is permanently excluded from remediation, recalibration, threshold selection, and model ranking
+  - EXP-078 is unit and build provenance evidence; it does not reopen CP-016 or count toward a four-scene or PickPlace pass
+next_command: prewrite EXP-079 fresh-validation and newly sealed-test design before any new model inference
+decision: DESIGN_FRESH_DATA_ROUTE
 ```
