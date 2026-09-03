@@ -11,7 +11,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 import numpy as np
-
 from so101_demo.adapters.perception.model_runtime import (
     ModelSetupError,
     RequestedDevice,
@@ -36,7 +35,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     _validate_accelerated_component,
 )
 from so101_demo.perception_benchmark.calibration import YoloThresholds
-from so101_demo.perception_benchmark.contracts import RawCandidate, YOLO_MODEL_ID
+from so101_demo.perception_benchmark.contracts import YOLO_MODEL_ID, RawCandidate
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,
     PhaseTimer,
@@ -66,9 +65,20 @@ def _assert_model_device_and_dtype(
     _validate_accelerated_component(model, requested_device, "YOLO model")
     if any(array.dtype != np.float32 for array in arrays):
         observed = sorted({array.dtype.name for array in arrays})
-        raise ModelSetupError(
-            "NON_FP32_RUNTIME", f"observed output dtypes {observed}"
-        )
+        raise ModelSetupError("NON_FP32_RUNTIME", f"observed output dtypes {observed}")
+
+
+def _assert_mask_storage_dtype(masks: np.ndarray) -> None:
+    if masks.dtype == np.float32:
+        return
+    if masks.dtype in {np.dtype(np.bool_), np.dtype(np.uint8)} and bool(
+        np.logical_or(masks == 0, masks == 1).all()
+    ):
+        return
+    raise ModelSetupError(
+        "NON_FP32_RUNTIME",
+        f"observed unsupported mask storage dtype {masks.dtype.name}",
+    )
 
 
 def _resize_mask(mask: np.ndarray, height: int, width: int) -> np.ndarray:
@@ -186,9 +196,7 @@ class YoloRawAdapter:
         _require_yolo_model_id(model_id)
         verified_sha256 = verify_weights(Path(weights_path), expected_sha256)
         if requested_device not in {"mps", "cuda"}:
-            raise ModelSetupError(
-                "DEVICE_UNAVAILABLE", "formal YOLO requires mps or cuda"
-            )
+            raise ModelSetupError("DEVICE_UNAVAILABLE", "formal YOLO requires mps or cuda")
         if torch_api is None:
             torch_api = importlib.import_module("torch")
         runtime_device = select_runtime_device(requested_device, False, torch_api)
@@ -245,8 +253,9 @@ class YoloRawAdapter:
         _assert_model_device_and_dtype(
             self._model,
             self.runtime_device,
-            (boxes, classes, confidences, masks),
+            (boxes, classes, confidences),
         )
+        _assert_mask_storage_dtype(masks)
         candidates: list[RawCandidate] = []
         for index in range(count):
             class_value = float(classes[index])
@@ -281,17 +290,13 @@ class YoloRawAdapter:
             )
         return tuple(candidates)
 
-    def collect(
-        self, frame: DetectionFrame, mode: CollectionMode
-    ) -> RawDetectionResult:
+    def collect(self, frame: DetectionFrame, mode: CollectionMode) -> RawDetectionResult:
         if not isinstance(frame, DetectionFrame):
             raise ValueError("frame must be a DetectionFrame")
         if CollectionMode(mode) is not CollectionMode.LOW_FLOOR:
             raise ValueError("YOLO collection mode is unsupported")
         collection = self._artifact_store.begin_collection()
-        with PhaseTimer(
-            self._synchronizer, monotonic_ns=self._monotonic_ns
-        ) as timer:
+        with PhaseTimer(self._synchronizer, monotonic_ns=self._monotonic_ns) as timer:
             source = np.array(frame.rgb8, copy=True)
             timer.mark("preprocess")
             try:
@@ -325,9 +330,7 @@ class YoloRawAdapter:
             dtype="float32",
             collection_mode=CollectionMode.LOW_FLOOR,
             raw_candidates=candidates,
-            phase_timings=timer.to_timings(
-                sam_applicable=False, selector_applicable=False
-            ),
+            phase_timings=timer.to_timings(sam_applicable=False, selector_applicable=False),
             resource_samples=(resource_sample,),
             fallback_used=False,
             irreversible_limits={"nms_iou": 0.90, "max_det": 300},
@@ -351,9 +354,7 @@ class YoloCalibratedDetector:
     ) -> None:
         _require_yolo_model_id(model_id)
         if requested_device not in {"mps", "cuda"}:
-            raise ModelSetupError(
-                "DEVICE_UNAVAILABLE", "calibrated YOLO requires mps or cuda"
-            )
+            raise ModelSetupError("DEVICE_UNAVAILABLE", "calibrated YOLO requires mps or cuda")
         if not isinstance(thresholds, YoloThresholds):
             raise ValueError("thresholds must be YoloThresholds")
         started_ns = monotonic_ns()
@@ -361,9 +362,7 @@ class YoloCalibratedDetector:
         if torch_api is None:
             torch_api = importlib.import_module("torch")
         self._torch = torch_api
-        self.runtime_device = select_runtime_device(
-            requested_device, False, self._torch
-        )
+        self.runtime_device = select_runtime_device(requested_device, False, self._torch)
         self._synchronizer = DeviceSynchronizer(self._torch, self.runtime_device)
         if model_factory is None:
             model_factory = importlib.import_module("ultralytics").YOLO
@@ -392,9 +391,7 @@ class YoloCalibratedDetector:
             try:
                 self._synchronizer.synchronize()
             except Exception as sync_error:
-                error.add_note(
-                    f"accelerator synchronization also failed: {sync_error}"
-                )
+                error.add_note(f"accelerator synchronization also failed: {sync_error}")
             raise YoloResultError(f"INFERENCE_FAILED: {error}") from error
         self._synchronizer.synchronize()
         if not isinstance(results, (list, tuple)) or len(results) != 1:
@@ -402,9 +399,7 @@ class YoloCalibratedDetector:
         _assert_model_device_and_dtype(self._model, self.runtime_device)
         return results[0]
 
-    def detect(
-        self, frame: DetectionFrame, query: DetectionQuery
-    ) -> DetectionBatch:
+    def detect(self, frame: DetectionFrame, query: DetectionQuery) -> DetectionBatch:
         if not isinstance(query, DetectionQuery) or query.class_id != "plastic_cup":
             raise YoloResultError("UNSUPPORTED_DETECTION_QUERY")
         started_ns = self._monotonic_ns()
