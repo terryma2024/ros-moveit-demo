@@ -7,7 +7,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
     encode_mask_rle,
@@ -52,9 +51,7 @@ def _truth(
     return TruthInstance(
         instance_id=instance_id,
         label="plastic_cup",
-        mask=_write_mask(
-            root, f"truth-{instance_id}", pixels, directory=directory
-        ),
+        mask=_write_mask(root, f"truth-{instance_id}", pixels, directory=directory),
     )
 
 
@@ -66,9 +63,7 @@ def _candidate(
     *,
     directory: str = "masks",
 ) -> RawCandidate:
-    mask = _write_mask(
-        root, f"candidate-{candidate_id}", pixels, directory=directory
-    )
+    mask = _write_mask(root, f"candidate-{candidate_id}", pixels, directory=directory)
     return RawCandidate(
         candidate_id=candidate_id,
         label="plastic_cup",
@@ -125,6 +120,38 @@ def test_rectangular_assignment_maximizes_total_iou(tmp_path: Path) -> None:
         ("t0", "b", 0.5),
         ("t1", "a", 1.0),
     ]
+
+
+def test_precomputed_iou_assignment_is_identical_to_mask_decode_path(
+    tmp_path: Path,
+) -> None:
+    truth = (
+        _truth(tmp_path, "t2", [[0, 0, 0, 1]]),
+        _truth(tmp_path, "t0", [[1, 1, 0, 0]]),
+        _truth(tmp_path, "t1", [[1, 0, 0, 0]]),
+    )
+    candidates = (
+        _candidate(tmp_path, "b", 0.8, [[0, 1, 0, 0]]),
+        _candidate(tmp_path, "a", 0.9, [[1, 0, 0, 0]]),
+    )
+    cached_ious = {
+        ("t0", "a"): 0.5,
+        ("t0", "b"): 0.5,
+        ("t1", "a"): 1.0,
+        ("t1", "b"): 0.0,
+        ("t2", "a"): 0.0,
+        ("t2", "b"): 0.0,
+    }
+
+    decoded = maximize_mask_iou_assignment(truth, candidates, tmp_path)
+    cached = maximize_mask_iou_assignment(
+        truth,
+        candidates,
+        tmp_path,
+        precomputed_ious=cached_ious,
+    )
+
+    assert cached == decoded
 
 
 def test_equal_iou_tie_uses_ranking_score_then_candidate_id(tmp_path: Path) -> None:
@@ -207,9 +234,7 @@ def test_assignment_handles_either_empty_side_without_synthetic_matches(tmp_path
 
 
 @pytest.mark.parametrize("field", ["sha256", "pixel_count", "image_width"])
-def test_assignment_reads_masks_through_verified_codec(
-    tmp_path: Path, field: str
-) -> None:
+def test_assignment_reads_masks_through_verified_codec(tmp_path: Path, field: str) -> None:
     truth = _truth(tmp_path, "t0", [[1, 0], [0, 0]])
     candidate = _candidate(tmp_path, "a", 0.9, [[1, 0], [0, 0]])
     invalid_values: dict[str, object] = {
@@ -260,10 +285,7 @@ def test_assignment_supports_separate_roots_without_changing_tie_order(
         candidate_evidence_root=candidate_root,
     )
 
-    assert [
-        (match.truth_instance_id, match.candidate_id, match.iou)
-        for match in matches
-    ] == [
+    assert [(match.truth_instance_id, match.candidate_id, match.iou) for match in matches] == [
         ("t0", "z", 1.0),
         ("t1", "a", 1.0),
     ]

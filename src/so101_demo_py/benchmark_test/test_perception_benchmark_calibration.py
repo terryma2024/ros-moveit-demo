@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError, replace
-from decimal import Decimal
 import hashlib
 import json
+from dataclasses import FrozenInstanceError, replace
+from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
 import pytest
-
+import so101_demo.perception_benchmark.calibration as calibration_module
 from so101_demo.perception_benchmark.calibration import (
     CalibrationError,
     CalibrationResult,
@@ -18,8 +18,8 @@ from so101_demo.perception_benchmark.calibration import (
     PlatformCalibrationMetrics,
     ThresholdLock,
     YoloThresholds,
-    calibration_key,
     calibrate_joint_platform_val,
+    calibration_key,
     enumerate_grounded_sam_grid,
     enumerate_yolo_grid,
     select_calibration_result,
@@ -33,8 +33,9 @@ from so101_demo.perception_benchmark.codec import (
     sha256_bytes,
 )
 from so101_demo.perception_benchmark.contracts import (
-    DecisionOutput,
     GROUNDED_SAM_MODEL_ID,
+    YOLO_MODEL_ID,
+    DecisionOutput,
     MaskRef,
     PhaseTimings,
     PredictionRecord,
@@ -44,10 +45,8 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthInstance,
     TruthSample,
-    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.dataset import TestSeal as DatasetTestSeal
-
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -154,9 +153,7 @@ def _record(
         image_sha256=image_sha,
         image_width=20,
         image_height=20,
-        model_id=(
-            YOLO_MODEL_ID if model == "yolo_seg" else GROUNDED_SAM_MODEL_ID
-        ),
+        model_id=(YOLO_MODEL_ID if model == "yolo_seg" else GROUNDED_SAM_MODEL_ID),
         runtime_provenance=RuntimeProvenance(
             runtime_device="mps" if platform == "macos" else "cuda",
             runtime_name=model,
@@ -291,7 +288,7 @@ def _fixture(
     return mac, linux, truths
 
 
-def _calibrate(root: Path, model: str):
+def _calibrate(root: Path, model: str, **options: object):
     mac, linux, truths = _fixture(root, model)
     return calibrate_joint_platform_val(
         model=model,
@@ -304,6 +301,7 @@ def _calibrate(root: Path, model: str):
         linux_prediction_inventory_sha256=SHA_C,
         source_commit=SOURCE_COMMIT,
         fixture_mode=True,
+        **options,
     )
 
 
@@ -353,12 +351,8 @@ def test_grids_have_exact_decimal_counts_endpoints_and_fixed_values() -> None:
     assert {point.nms_iou for point in yolo} == {
         Decimal(f"{value / 100:.2f}") for value in range(30, 91, 10)
     }
-    assert yolo[0] == YoloThresholds(
-        Decimal("0.05"), Decimal("0.30"), Decimal("0.05"), 640
-    )
-    assert yolo[-1] == YoloThresholds(
-        Decimal("0.95"), Decimal("0.90"), Decimal("0.95"), 640
-    )
+    assert yolo[0] == YoloThresholds(Decimal("0.05"), Decimal("0.30"), Decimal("0.05"), 640)
+    assert yolo[-1] == YoloThresholds(Decimal("0.95"), Decimal("0.90"), Decimal("0.95"), 640)
 
     assert len(grounded) == 32400
     assert {point.box_threshold for point in grounded} == {
@@ -398,8 +392,7 @@ def test_configs_are_immutable_and_normalize_decimal_json_without_float_drift() 
     grounded = _grounded_thresholds(max_mask_area_ratio=Decimal("0.50"))
 
     assert yolo.normalized_json == (
-        '{"conf":"0.50","imgsz":640,"nms_iou":"0.50",'
-        '"target_confidence_threshold":"0.50"}'
+        '{"conf":"0.50","imgsz":640,"nms_iou":"0.50","target_confidence_threshold":"0.50"}'
     )
     assert grounded.normalized_json == (
         '{"box_threshold":"0.50","duplicate_iou":"0.85",'
@@ -467,9 +460,7 @@ def test_yolo_nms_suppresses_overlap_at_the_configured_iou_boundary() -> None:
         _candidate(ref, "a", (0.0, 0.0, 3.0, 1.0), model="yolo_seg", box_score=0.80),
     )
 
-    assert [
-        item.candidate_id for item in _yolo_thresholds().filter_candidates(candidates)
-    ] == ["a"]
+    assert [item.candidate_id for item in _yolo_thresholds().filter_candidates(candidates)] == ["a"]
 
 
 def test_grounded_filter_uses_box_text_dedup_sam_geometry_then_selector() -> None:
@@ -478,20 +469,38 @@ def test_grounded_filter_uses_box_text_dedup_sam_geometry_then_selector() -> Non
     oversized = _mask_ref(name="oversized.json", pixels=401)
     candidates = (
         _candidate(valid, "box-low", (0.0, 2.0, 3.0, 3.0), model="grounded_sam", box_score=0.49),
-        _candidate(valid, "text-low", (4.0, 2.0, 7.0, 3.0), model="grounded_sam", box_score=0.90, text_score=0.49),
-        _candidate(valid, "sam-low", (8.0, 2.0, 11.0, 3.0), model="grounded_sam", box_score=0.90, sam_quality=0.49),
+        _candidate(
+            valid,
+            "text-low",
+            (4.0, 2.0, 7.0, 3.0),
+            model="grounded_sam",
+            box_score=0.90,
+            text_score=0.49,
+        ),
+        _candidate(
+            valid,
+            "sam-low",
+            (8.0, 2.0, 11.0, 3.0),
+            model="grounded_sam",
+            box_score=0.90,
+            sam_quality=0.49,
+        ),
         _candidate(tiny, "tiny", (12.0, 2.0, 15.0, 3.0), model="grounded_sam", box_score=0.90),
-        _candidate(oversized, "oversized", (16.0, 2.0, 19.0, 3.0), model="grounded_sam", box_score=0.90),
-        _candidate(valid, "selector-low", (20.0, 2.0, 23.0, 3.0), model="grounded_sam", box_score=0.79),
-        _candidate(valid, "selector-edge", (24.0, 2.0, 27.0, 3.0), model="grounded_sam", box_score=0.80),
+        _candidate(
+            oversized, "oversized", (16.0, 2.0, 19.0, 3.0), model="grounded_sam", box_score=0.90
+        ),
+        _candidate(
+            valid, "selector-low", (20.0, 2.0, 23.0, 3.0), model="grounded_sam", box_score=0.79
+        ),
+        _candidate(
+            valid, "selector-edge", (24.0, 2.0, 27.0, 3.0), model="grounded_sam", box_score=0.80
+        ),
     )
-    thresholds = _grounded_thresholds(
-        target_confidence_threshold=Decimal("0.80")
-    )
+    thresholds = _grounded_thresholds(target_confidence_threshold=Decimal("0.80"))
 
-    assert [
-        item.candidate_id for item in thresholds.filter_candidates(candidates)
-    ] == ["selector-edge"]
+    assert [item.candidate_id for item in thresholds.filter_candidates(candidates)] == [
+        "selector-edge"
+    ]
 
 
 def test_grounded_dedup_matches_existing_box_iou_semantics_and_is_id_stable() -> None:
@@ -508,14 +517,32 @@ def test_grounded_dedup_matches_existing_box_iou_semantics_and_is_id_stable() ->
     )
 
     assert [item.candidate_id for item in thresholds.filter_candidates(candidates)] == ["a"]
-    assert thresholds.filter_candidates(tuple(reversed(candidates))) == thresholds.filter_candidates(candidates)
+    assert thresholds.filter_candidates(
+        tuple(reversed(candidates))
+    ) == thresholds.filter_candidates(candidates)
 
 
 def test_grounded_dedup_precedes_sam_gate_and_ranking_stays_box_score() -> None:
     ref = _mask_ref()
     candidates = (
-        _candidate(ref, "winner", (0.0, 0.0, 37.0, 1.0), model="grounded_sam", box_score=0.90, text_score=0.50, sam_quality=0.49),
-        _candidate(ref, "inferior", (3.0, 0.0, 40.0, 1.0), model="grounded_sam", box_score=0.80, text_score=0.99, sam_quality=0.99),
+        _candidate(
+            ref,
+            "winner",
+            (0.0, 0.0, 37.0, 1.0),
+            model="grounded_sam",
+            box_score=0.90,
+            text_score=0.50,
+            sam_quality=0.49,
+        ),
+        _candidate(
+            ref,
+            "inferior",
+            (3.0, 0.0, 40.0, 1.0),
+            model="grounded_sam",
+            box_score=0.80,
+            text_score=0.99,
+            sam_quality=0.99,
+        ),
     )
 
     assert _grounded_thresholds().filter_candidates(candidates) == ()
@@ -661,10 +688,10 @@ def test_comparator_level_seven_is_canonical_json_and_selection_is_order_indepen
     )
 
 
-def test_all_unsafe_characterization_ignores_unsafe_magnitude_and_freezes_best_remaining_point() -> None:
-    better_objective = _point(
-        _yolo_thresholds(), merged_macro=0.9, mac_unsafe=2, linux_unsafe=2
-    )
+def test_all_unsafe_characterization_ignores_unsafe_magnitude_and_freezes_best_remaining_point() -> (
+    None
+):
+    better_objective = _point(_yolo_thresholds(), merged_macro=0.9, mac_unsafe=2, linux_unsafe=2)
     fewer_unsafe = _point(
         _yolo_thresholds(conf=Decimal("0.55")),
         merged_macro=0.8,
@@ -684,14 +711,64 @@ def test_joint_calibration_uses_val_only_verified_masks_and_zero_unsafe_gate(
 ) -> None:
     lock = _calibrate(tmp_path, "yolo_seg")
 
-    assert lock.selected == YoloThresholds(
-        Decimal("0.80"), Decimal("0.30"), Decimal("0.80"), 640
-    )
+    assert lock.selected == YoloThresholds(Decimal("0.80"), Decimal("0.30"), Decimal("0.80"), 640)
     assert lock.outcome == "SAFE_CALIBRATED"
     assert lock.deployable is True
     assert lock.platform_metrics["macos"].unsafe_unique_rate == 0.0
     assert lock.platform_metrics["linux"].unsafe_unique_rate == 0.0
     assert lock.platform_metrics["macos"].sample_count == 3
+
+
+def test_grounded_calibration_reuses_box_text_dedup_across_grid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = 0
+    original = calibration_module._deduplicate_boxes
+
+    def counted(*args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(calibration_module, "_deduplicate_boxes", counted)
+
+    _calibrate(tmp_path, "grounded_sam", workers=1)
+
+    assert calls == 2 * 3 * 18 * 10
+
+
+def test_grounded_calibration_reports_monotonic_phase_progress(
+    tmp_path: Path,
+) -> None:
+    events = []
+
+    _calibrate(
+        tmp_path,
+        "grounded_sam",
+        workers=1,
+        progress_callback=events.append,
+    )
+
+    phases = [event.phase for event in events]
+    assert phases[0] == "verify"
+    assert "precompute" in phases
+    assert "grid" in phases
+    assert phases[-1] == "finalize"
+    for phase in ("verify", "precompute", "grid", "finalize"):
+        phase_events = [event for event in events if event.phase == phase]
+        assert phase_events[-1].completed == phase_events[-1].total
+        assert [event.completed for event in phase_events] == sorted(
+            event.completed for event in phase_events
+        )
+    assert [event for event in events if event.phase == "grid"][-1].total == 32400
+
+
+def test_grounded_parallel_precompute_is_lock_equivalent(tmp_path: Path) -> None:
+    serial = _calibrate(tmp_path, "grounded_sam", workers=1)
+    parallel = _calibrate(tmp_path, "grounded_sam", workers=2)
+
+    assert parallel == serial
+    assert parallel.lock_sha256 == serial.lock_sha256
 
 
 def test_formal_calibration_requires_exact_two_hundred_shared_identities(
@@ -873,9 +950,7 @@ def test_calibration_rejects_mismatched_platform_inventory_and_bad_mask_payload(
 def _rehash(document: dict[str, object]) -> None:
     unhashed = dict(document)
     unhashed.pop("lock_sha256", None)
-    document["lock_sha256"] = hashlib.sha256(
-        canonical_json_bytes(unhashed)
-    ).hexdigest()
+    document["lock_sha256"] = hashlib.sha256(canonical_json_bytes(unhashed)).hexdigest()
 
 
 def _formalized_lock(lock: ThresholdLock) -> ThresholdLock:
@@ -936,9 +1011,7 @@ def test_threshold_lock_verifier_rejects_formality_or_actual_count_mismatch(
     value: object,
     error: str,
 ) -> None:
-    path = write_threshold_lock(
-        tmp_path / "lock.json", _calibrate(tmp_path / "run", "yolo_seg")
-    )
+    path = write_threshold_lock(tmp_path / "lock.json", _calibrate(tmp_path / "run", "yolo_seg"))
     document = json.loads(path.read_text())
     document[field] = value
     _rehash(document)
@@ -984,9 +1057,7 @@ def test_threshold_lock_verifier_rejects_non_integer_fixed_config_fields(
     field: str,
     value: object,
 ) -> None:
-    path = write_threshold_lock(
-        tmp_path / "lock.json", _calibrate(tmp_path / "run", model)
-    )
+    path = write_threshold_lock(tmp_path / "lock.json", _calibrate(tmp_path / "run", model))
     document = json.loads(path.read_text())
     document["selected"][field] = value
     _rehash(document)
@@ -1006,7 +1077,9 @@ def test_threshold_lock_verifier_rejects_changed_selected_and_bound_inventory(
     with pytest.raises(CalibrationError, match="THRESHOLD_LOCK_HASH_MISMATCH"):
         verify_threshold_lock(path)
 
-    path = write_threshold_lock(tmp_path / "lock-2.json", _calibrate(tmp_path / "run-2", "yolo_seg"))
+    path = write_threshold_lock(
+        tmp_path / "lock-2.json", _calibrate(tmp_path / "run-2", "yolo_seg")
+    )
     document = json.loads(path.read_text())
     document["mac_prediction_inventory_sha256"] = "d" * 64
     path.write_bytes(canonical_json_bytes(document))
@@ -1049,7 +1122,9 @@ def test_threshold_lock_verifier_rejects_noncanonical_or_inconsistent_metrics(
     with pytest.raises(CalibrationError, match="THRESHOLD_LOCK_NOT_CANONICAL"):
         verify_threshold_lock(path)
 
-    path = write_threshold_lock(tmp_path / "lock-2.json", _calibrate(tmp_path / "run-2", "yolo_seg"))
+    path = write_threshold_lock(
+        tmp_path / "lock-2.json", _calibrate(tmp_path / "run-2", "yolo_seg")
+    )
     document = json.loads(path.read_text())
     document["objective_metrics"]["min_platform_macro_f1"] = 0.123
     _rehash(document)
@@ -1128,9 +1203,7 @@ def test_test_seal_rejects_two_yolo_locks_before_appending_access_event(
         tmp_path / "first.json",
         _formalized_lock(_calibrate(tmp_path / "first", "yolo_seg")),
     )
-    second_lock = _formalized_lock(
-        _calibrate(tmp_path / "second", "yolo_seg")
-    )
+    second_lock = _formalized_lock(_calibrate(tmp_path / "second", "yolo_seg"))
     second_lock = replace(
         second_lock,
         linux_prediction_inventory_sha256="e" * 64,
@@ -1170,9 +1243,7 @@ def test_test_seal_requires_shared_val_inventory_and_source_before_access_event(
         tmp_path / "yolo.json",
         _formalized_lock(_calibrate(tmp_path / "yolo", "yolo_seg")),
     )
-    grounded_lock = _formalized_lock(
-        _calibrate(tmp_path / "grounded", "grounded_sam")
-    )
+    grounded_lock = _formalized_lock(_calibrate(tmp_path / "grounded", "grounded_sam"))
     grounded_lock = replace(
         grounded_lock,
         **{field: value, "lock_sha256": "0" * 64},
