@@ -2557,3 +2557,60 @@ next_change:
   - keep test sealed until both model/platform validation runs and joint threshold locks pass
 decision: PROCEED_TO_CROSS_PLATFORM_DRY_RUN_KEEP_TEST_SEALED
 ```
+
+## Checkpoint CP-027 — cross-platform dry-run and Mac MPS remediation lock
+
+```yaml
+checkpoint_id: CP-027
+experiment_id: EXP-079
+status: PREREGISTERED_RUNTIME_REMEDIATION
+source_commit: 8dc09265448113271a8d72e3b107ae5c21bdd83a
+benchmark_code_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+frozen_dataset:
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  inventory_sha256: 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2
+  linux_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json
+  mac_copy_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/val-open-macos-r1
+  copy_policy: target must be absent; copy once from ai-station; verify inventory SHA, 600 source file SHAs, 200 samples, four scenarios of 50, and no test path
+frozen_assets:
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  mac_yolo_weights: /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/assets/best.pt
+  linux_yolo_weights: /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/best.pt
+  grounded_sam_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  mac_model_root: /Users/matianyi/Models/so101/grounded-sam-v2-scipy-lock
+  linux_model_root: /data/work/so101-models/grounded-sam-v2-scipy-lock
+device_preflight:
+  linux: {torch: 2.13.0+cu130, cuda_available: true, device_count: 1}
+  mac:
+    hardware: Apple M5 with Metal support
+    existing_torch: 2.13.0
+    mps_built: true
+    mps_available: false
+    tensor_probe: RuntimeError The MPS backend is supported on macOS 14.0+
+    matching_upstream_issue: https://github.com/pytorch/pytorch/issues/177819
+mac_runtime_overlay:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-runtime-torch-nightly-20260903-r1
+  torch: 2.15.0.dev20260903
+  torchvision: 0.30.0.dev20260903
+  index: https://download.pytorch.org/whl/nightly/cpu
+  install_policy: target must be absent; install exact versions with --no-deps and --target; do not modify the ROS virtual environment
+  probe: PYTHONNOUSERSITE=1 PYTHONPATH=<overlay> /Users/matianyi/ros2_jazzy/.venv/bin/python -c <verify exact versions, mps built/available, and allocate one MPS tensor>
+dry_run:
+  mac_output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1
+  linux_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r1
+  policy: outputs must be absent; offline; actual adapters; FP32; native MPS/CUDA; no CPU fallback; eight validation samples with two per scenario; both models; no test access
+success_criteria:
+  - isolated Mac overlay MPS tensor probe passes without modifying the base virtual environment
+  - Mac copy inventory and all 600 source artifact SHAs equal Linux CP-026 evidence
+  - each dry-run writes 8 records per model, reports fallback_used false, and binds the frozen assets, config, inventory, archive, and benchmark code commit
+  - no test member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - overlay install/probe failure, copied-data mismatch, any output collision, fallback, wrong device/dtype, missing record, or test access
+retained_runs:
+  - all CP-026 retained runs
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-026; failed isolated overlay is a candidate only after explicit authorization
+next_command: commit and push CP-027, synchronize ai-station, verify output targets absent, install the isolated Mac runtime overlay, and run the MPS tensor probe
+decision: REMEDIATE_MPS_IN_ISOLATED_OVERLAY_BEFORE_DRY_RUN
+```
