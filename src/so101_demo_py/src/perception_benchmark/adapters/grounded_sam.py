@@ -11,6 +11,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 import numpy as np
+from so101_demo.adapters.perception.grounded_sam_postprocess import (
+    grounding_label_matches_prompt,
+)
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
 from so101_demo.adapters.perception.model_runtime import (
     ModelSetupError,
@@ -353,7 +356,7 @@ class GroundedSamRawAdapter:
         query_indices = _query_indices(result, scores, probabilities)
         proposals: list[tuple[tuple[float, float, float, float], float, float]] = []
         for index, label in enumerate(labels):
-            if label != "plastic cup":
+            if not grounding_label_matches_prompt(label, _PROMPT):
                 continue
             box_score = float(scores[index])
             query_probabilities = probabilities[query_indices[index]]

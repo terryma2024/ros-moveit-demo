@@ -126,8 +126,8 @@ def test_grounding_suppresses_a_duplicate_at_the_exact_iou_threshold() -> None:
     ]
 
 
-def test_grounding_keeps_only_the_exact_cup_label_below_the_count_limit() -> None:
-    """Catch dropping the exact-label filter while the detector result remains structurally valid."""
+def test_grounding_keeps_prompt_equivalent_labels_but_rejects_other_phrases() -> None:
+    """Catch display punctuation changing the one fixed prompt's semantic identity."""
 
     proposals = convert_grounding_results(
         boxes=np.array(
@@ -142,6 +142,7 @@ def test_grounding_keeps_only_the_exact_cup_label_below_the_count_limit() -> Non
 
     assert [(proposal.confidence, proposal.bbox_xyxy) for proposal in proposals] == [
         (0.91, (10.0, 10.0, 40.0, 50.0)),
+        (0.73, (110.0, 10.0, 140.0, 50.0)),
     ]
 
 

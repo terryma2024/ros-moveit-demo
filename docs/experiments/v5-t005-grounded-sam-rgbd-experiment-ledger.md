@@ -1964,3 +1964,54 @@ remaining_boundary:
 next_command: user decision required for model/data/prompt architecture improvement beyond the approved fixed plus one-variable threshold route; no further Task 11 experiment authorized
 decision: STOP_MODEL_CAPABILITY_NOT_MET
 ```
+
+## Post-benchmark candidate-label remediation
+
+The separate Grounded-SAM / YOLO-Seg benchmark reached terminal `INVALID` at
+`CP-BENCH-038`: the Transformers postprocessor emitted both `plastic cup` and
+`plastic cup.` for the same fixed prompt, while the low-floor raw adapter retained only the first
+literal. This makes the old calibration candidate space incomplete. The already opened R12 test
+split cannot be reused for a fix, recalibration, or model ranking.
+
+```yaml
+experiment_id: EXP-078
+status: RUNNING
+prior_experiment: EXP-076_and_CP-BENCH-038
+hypothesis: punctuation-sensitive equality at the Grounding DINO decoded-label boundary drops a real low-floor plastic_cup proposal before calibration
+prediction: a real-adapter unit case whose postprocessor returns plastic cup. will produce zero candidates before the fix, while the desired contract requires one candidate with unchanged DINO and SAM scores
+single_variable: normalize decoded Grounding DINO label punctuation before comparison with the one fixed plastic cup. prompt; no model, prompt, threshold, mask, selector, depth, TF, or motion change
+lifecycle: ISOLATED_STACK
+preconditions:
+  - local, Gitee, and ai-station source are synchronized at e06e1b8fbe94ae1b22e187e2864a7742f4c4721b
+  - no ROS, MuJoCo, MoveIt, Grounded-SAM, or tmux process is active on ai-station
+  - the R12 benchmark test split remains read-only and is not used by this experiment
+success_criteria:
+  - the new raw-adapter regression fails before production modification because plastic cup. is dropped
+  - after one scoped source change, plastic cup and plastic cup. retain equivalent proposals and an unrelated phrase remains rejected
+  - focused adapter and production postprocess regressions pass on both synchronized platforms before any new model run
+failure_criteria:
+  - punctuation-equivalent label is still dropped or an unrelated decoded phrase is accepted
+invalid_criteria:
+  - any old test prediction, truth mask, scene truth, or threshold is used to choose label behavior
+provenance:
+  source_commit: e06e1b8fbe94ae1b22e187e2864a7742f4c4721b
+  local_worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
+  linux_checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  development_evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-078
+  ros_domain_id: NOT_APPLICABLE_UNIT_TEST
+  gz_partition: NOT_APPLICABLE_UNIT_TEST
+commands:
+  - command: initial focused RED invocation without the candidate overlay
+    exit_code: 4_INVALID_ENVIRONMENT_COLLECTION_ERROR
+  - command: two-boundary focused RED pytest with install-rebase-final-r15 overlay
+    exit_code: 1_EXPECTED_2_FAILURES
+  - command: complete test_grounded_sam_postprocess.py and test_perception_benchmark_adapters.py GREEN pytest
+    exit_code: 0
+observed:
+  - first invocation did not collect because the plan's historical PYTHONPATH layout no longer maps the installed so101_demo package; it is INVALID and not RED evidence
+  - functional RED executed both real conversion boundaries and failed 2/2 because plastic cup. produced zero raw candidates and one fewer production proposal; JUnit SHA256 1e6134fa9125367f317d8b8a7ac90ed763c27dbc1e039e55157cb85864c76a71
+  - Mac focused GREEN passed 95/95 in 5.34 s; JUnit SHA256 1284ef78c68535126a0c7c58240b028f16b0cb178bb652c08d53c566cfad72ea
+conclusion: PENDING
+decision: PENDING
+next_experiment: EXP-079_FRESH_VALIDATION_DESIGN_AFTER_GREEN
+```
