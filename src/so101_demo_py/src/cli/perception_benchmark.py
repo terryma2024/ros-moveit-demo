@@ -10,6 +10,7 @@ import platform
 import re
 import sys
 import tempfile
+import time
 from collections import Counter
 from dataclasses import asdict, dataclass, fields, replace
 from functools import partial
@@ -39,6 +40,7 @@ from so101_demo.perception_benchmark.adapters import (
 )
 from so101_demo.perception_benchmark.calibration import (
     CalibrationError,
+    CalibrationProgress,
     calibrate_joint_platform_val,
     unlock_test_seal,
     verify_threshold_lock,
@@ -99,8 +101,7 @@ _INDEX_SCHEMA = "so101-perception-benchmark/evidence-index/v1"
 _INDEX_SEMANTICS = "payload files only; evidence-index.json is excluded to avoid self-reference"
 _CONFIG_SHA256 = "4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160"
 _ARCHIVE_ID = (
-    "datasets/so101-v5-t005-grounded-sam-fresh/"
-    "so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
+    "datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz"
 )
 _ARCHIVE_SHA256 = "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"
 _YOLO_WEIGHTS_SHA256 = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
@@ -1355,7 +1356,7 @@ def _validate_val_run_provenance(
         raise BenchmarkError("RUN_PROVENANCE_MISMATCH")
 
 
-def _safe_rehome_mask(mask_ref: object, source: Path) -> np.ndarray:
+def _safe_rehome_mask(mask_ref: object, source: Path) -> bytes:
     relative_value = getattr(mask_ref, "relative_path", None)
     if not isinstance(relative_value, str):
         raise BenchmarkError("CALIBRATION_MASK_INVALID")
@@ -1380,10 +1381,46 @@ def _safe_rehome_mask(mask_ref: object, source: Path) -> np.ndarray:
         or not resolved.is_relative_to(root)
     ):
         raise BenchmarkError("CALIBRATION_MASK_INVALID")
-    return read_mask(mask_ref, root)
+    try:
+        payload = target.read_bytes()
+        read_mask(mask_ref, root)
+        after = target.lstat()
+    except (OSError, ValueError) as error:
+        raise BenchmarkError("CALIBRATION_MASK_INVALID") from error
+    before_identity = (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+    )
+    after_identity = (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+    )
+    if before_identity != after_identity:
+        raise BenchmarkError("CALIBRATION_MASK_INVALID")
+    return payload
+
+
+def _print_calibration_progress(event: CalibrationProgress) -> None:
+    percent = 100.0 * event.completed / event.total
+    print(
+        "CALIBRATION_PROGRESS "
+        f"phase={event.phase} completed={event.completed} total={event.total} "
+        f"percent={percent:.1f} elapsed={event.elapsed_seconds:.1f}s",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _handle_calibrate(arguments: argparse.Namespace) -> int:
+    workers = getattr(arguments, "calibration_workers", 1)
+    if type(workers) is not int or not 1 <= workers <= 64:
+        raise BenchmarkError("CALIBRATION_WORKERS_INVALID")
+    progress_started_at = time.monotonic()
+    _print_calibration_progress(CalibrationProgress("verify", 0, 1, 0.0))
     config = _load_frozen_config(arguments.config)
     _bind_dataset_sha(arguments.dataset_archive_sha256, config)
     _source_commit(arguments.source_commit)
@@ -1422,16 +1459,44 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
         arguments=arguments,
         config=config,
     )
+    _print_calibration_progress(
+        CalibrationProgress("verify", 1, 1, time.monotonic() - progress_started_at)
+    )
     arguments.output_root.mkdir(parents=False, mode=0o700)
     mask_root = arguments.output_root / "calibration-masks"
     mask_root.mkdir()
+    rehome_total = sum(
+        len(record.raw_candidates) for record in (*mac.records, *linux.records)
+    ) + sum(len(truth.instances) for truth in truths)
+    rehome_total = max(1, rehome_total)
+    rehome_completed = 0
+    rehome_step = max(1, rehome_total // 100)
+    _print_calibration_progress(
+        CalibrationProgress("rehome", 0, rehome_total, time.monotonic() - progress_started_at)
+    )
 
     def rehome_mask(mask_ref: object, source: Path, relative: str):
-        mask = _safe_rehome_mask(mask_ref, source)
+        nonlocal rehome_completed
+        payload = _safe_rehome_mask(mask_ref, source)
         destination = mask_root / relative
         if destination.exists() or destination.is_symlink():
             raise BenchmarkError("CALIBRATION_MASK_OVERWRITE")
-        atomic_write_json(destination, encode_mask_rle(mask))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with destination.open("xb") as handle:
+                handle.write(payload)
+        except FileExistsError as error:
+            raise BenchmarkError("CALIBRATION_MASK_OVERWRITE") from error
+        rehome_completed += 1
+        if rehome_completed == rehome_total or rehome_completed % rehome_step == 0:
+            _print_calibration_progress(
+                CalibrationProgress(
+                    "rehome",
+                    rehome_completed,
+                    rehome_total,
+                    time.monotonic() - progress_started_at,
+                )
+            )
         return replace(mask_ref, relative_path=relative)
 
     def rehome(records: tuple[PredictionRecord, ...], source: Path, platform: str):
@@ -1471,6 +1536,10 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
     mac_records = rehome(mac.records, mac.evidence_root, "macos")
     linux_records = rehome(linux.records, linux.evidence_root, "linux")
     rehomed_truths = rehome_truths()
+    if rehome_completed == 0:
+        _print_calibration_progress(
+            CalibrationProgress("rehome", 1, 1, time.monotonic() - progress_started_at)
+        )
     lock = calibrate_joint_platform_val(
         arguments.model,
         mac_records,
@@ -1481,6 +1550,9 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
         mac_prediction_inventory_sha256=mac.manifest.record_inventory_sha256,
         linux_prediction_inventory_sha256=linux.manifest.record_inventory_sha256,
         source_commit=mac.manifest.source_commit,
+        workers=workers,
+        progress_callback=_print_calibration_progress,
+        progress_started_at=progress_started_at,
     )
     write_threshold_lock(arguments.output_root / "threshold-lock.json", lock)
     _write_index(arguments.output_root)
@@ -1909,6 +1981,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--linux-run-expectation-sha256", required=True)
     calibrate.add_argument("--source-commit", required=True)
     calibrate.add_argument("--output-root", type=Path, required=True)
+    calibrate.add_argument("--calibration-workers", type=int, default=1)
     calibrate.set_defaults(handler=_handle_calibrate)
 
     aggregate = commands.add_parser("aggregate")

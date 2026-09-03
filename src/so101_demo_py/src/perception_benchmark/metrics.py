@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
 import numpy as np
-
 from so101_demo.perception_benchmark.codec import read_mask
 from so101_demo.perception_benchmark.contracts import (
     PredictionRecord,
@@ -20,6 +19,7 @@ from so101_demo.perception_benchmark.contracts import (
 from so101_demo.perception_benchmark.matching import (
     MaskMatch,
     _hungarian_minimize,
+    _precomputed_iou_matrix,
     mask_iou,
     maximize_mask_iou_assignment,
 )
@@ -66,9 +66,7 @@ class ImageMetricInput:
             raise ValueError("matches must contain MaskMatch values")
         truth_ids = [match.truth_instance_id for match in matches]
         candidate_ids = [match.candidate_id for match in matches]
-        if len(truth_ids) != len(set(truth_ids)) or len(candidate_ids) != len(
-            set(candidate_ids)
-        ):
+        if len(truth_ids) != len(set(truth_ids)) or len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("matches must be one-to-one")
         if len(matches) > min(self.truth_count, self.candidate_count):
             raise ValueError("matches exceed truth or candidate count")
@@ -126,22 +124,14 @@ def summarize_image_metrics(
             raise ValueError("samples must contain ImageMetricInput values")
         total_truth += sample.truth_count
         total_candidates += sample.candidate_count
-        qualified_ious.extend(
-            match.iou for match in sample.matches if match.iou >= threshold
-        )
+        qualified_ious.extend(match.iou for match in sample.matches if match.iou >= threshold)
     true_positive = len(qualified_ious)
     false_positive = total_candidates - true_positive
     false_negative = total_truth - true_positive
     precision_denominator = true_positive + false_positive
     recall_denominator = true_positive + false_negative
-    precision = (
-        None
-        if precision_denominator == 0
-        else float(true_positive / precision_denominator)
-    )
-    recall = (
-        None if recall_denominator == 0 else float(true_positive / recall_denominator)
-    )
+    precision = None if precision_denominator == 0 else float(true_positive / precision_denominator)
+    recall = None if recall_denominator == 0 else float(true_positive / recall_denominator)
     mean_iou = float(np.mean(qualified_ious)) if qualified_ious else None
     mean_dice = (
         float(np.mean([(2.0 * iou) / (1.0 + iou) for iou in qualified_ious]))
@@ -203,9 +193,7 @@ def interpolated_ap(recall: np.ndarray, precision: np.ndarray) -> float | None:
         raise ValueError("recall and precision must have the same shape")
     if precision_values.size == 0:
         return None
-    if not np.all(np.isfinite(recall_values)) or not np.all(
-        np.isfinite(precision_values)
-    ):
+    if not np.all(np.isfinite(recall_values)) or not np.all(np.isfinite(precision_values)):
         raise ValueError("recall and precision must be finite")
     if np.any((recall_values < 0.0) | (recall_values > 1.0)) or np.any(
         (precision_values < 0.0) | (precision_values > 1.0)
@@ -213,12 +201,7 @@ def interpolated_ap(recall: np.ndarray, precision: np.ndarray) -> float | None:
         raise ValueError("recall and precision must be in [0, 1]")
     levels = np.linspace(0.0, 1.0, 101)
     return float(
-        np.mean(
-            [
-                np.max(precision_values[recall_values >= level], initial=0.0)
-                for level in levels
-            ]
-        )
+        np.mean([np.max(precision_values[recall_values >= level], initial=0.0) for level in levels])
     )
 
 
@@ -242,6 +225,7 @@ def _ap_at_threshold(
     threshold: float,
     *,
     candidate_evidence_root: Path | None = None,
+    precomputed_ious: Mapping[int, Mapping[tuple[str, str], float]] | None = None,
 ) -> float | None:
     total_truth = sum(len(sample.instances) for sample in truths_by_index.values())
     if total_truth == 0:
@@ -255,12 +239,17 @@ def _ap_at_threshold(
         selected = selected_by_index.setdefault(sample_index, [])
         selected.append(candidate)
         sample = truths_by_index[sample_index]
+        try:
+            sample_ious = None if precomputed_ious is None else precomputed_ious[sample_index]
+        except KeyError as error:
+            raise ValueError("precomputed_ious does not cover every image") from error
         matched_by_index[sample_index] = _thresholded_match_count(
             sample.instances,
             tuple(selected),
             evidence_root,
             threshold,
             candidate_evidence_root=candidate_evidence_root,
+            precomputed_ious=sample_ious,
         )
         current_total = sum(matched_by_index.values())
         if current_total < previous_total:
@@ -278,6 +267,7 @@ def _thresholded_match_count(
     threshold: float,
     *,
     candidate_evidence_root: Path | None = None,
+    precomputed_ious: Mapping[tuple[str, str], float] | None = None,
 ) -> int:
     ordered_truth = tuple(sorted(truth, key=lambda item: item.instance_id))
     ordered_candidates = tuple(
@@ -285,28 +275,26 @@ def _thresholded_match_count(
     )
     if not ordered_truth or not ordered_candidates:
         return 0
-    candidate_root = (
-        evidence_root
-        if candidate_evidence_root is None
-        else candidate_evidence_root
-    )
-    truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
-    candidate_masks = tuple(
-        read_mask(item.mask, candidate_root) for item in ordered_candidates
-    )
-    ious = np.asarray(
-        [
-            [mask_iou(truth_mask, candidate_mask) for candidate_mask in candidate_masks]
-            for truth_mask in truth_masks
-        ],
-        dtype=np.float64,
-    )
+    if precomputed_ious is None:
+        candidate_root = (
+            evidence_root if candidate_evidence_root is None else candidate_evidence_root
+        )
+        truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
+        candidate_masks = tuple(read_mask(item.mask, candidate_root) for item in ordered_candidates)
+        ious = np.asarray(
+            [
+                [mask_iou(truth_mask, candidate_mask) for candidate_mask in candidate_masks]
+                for truth_mask in truth_masks
+            ],
+            dtype=np.float64,
+        )
+    else:
+        ious = _precomputed_iou_matrix(ordered_truth, ordered_candidates, precomputed_ious)
     eligible = ious >= threshold
     cardinality_weight = float(min(ious.shape) + 1)
     assignment = _hungarian_minimize(-(eligible * cardinality_weight + ious))
     return sum(
-        column is not None and bool(eligible[row, column])
-        for row, column in enumerate(assignment)
+        column is not None and bool(eligible[row, column]) for row, column in enumerate(assignment)
     )
 
 
@@ -317,6 +305,7 @@ def compute_ap(
     iou_thresholds: Sequence[float],
     *,
     candidate_evidence_root: Path | None = None,
+    precomputed_ious: Mapping[int, Mapping[tuple[str, str], float]] | None = None,
 ) -> ApSummary:
     truth_items = tuple(truths)
     record_items = tuple(records)
@@ -360,6 +349,7 @@ def compute_ap(
                 evidence_root,
                 threshold,
                 candidate_evidence_root=candidate_evidence_root,
+                precomputed_ious=precomputed_ious,
             ),
         )
         for threshold in thresholds
@@ -367,12 +357,8 @@ def compute_ap(
     values = [value for _, value in by_threshold if value is not None]
     return ApSummary(
         by_iou_threshold=by_threshold,
-        mask_ap50=next(
-            (value for threshold, value in by_threshold if threshold == 0.50), None
-        ),
-        mask_ap75=next(
-            (value for threshold, value in by_threshold if threshold == 0.75), None
-        ),
+        mask_ap50=next((value for threshold, value in by_threshold if threshold == 0.50), None),
+        mask_ap75=next((value for threshold, value in by_threshold if threshold == 0.75), None),
         mask_map=float(np.mean(values)) if values else None,
     )
 
@@ -380,11 +366,7 @@ def compute_ap(
 def _bootstrap_parameters(seed: int, repetitions: int) -> None:
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
-    if (
-        isinstance(repetitions, bool)
-        or not isinstance(repetitions, int)
-        or repetitions <= 0
-    ):
+    if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions <= 0:
         raise ValueError("repetitions must be a positive integer")
 
 
@@ -457,11 +439,7 @@ def bootstrap_paired_image_metrics(
     values = np.empty(repetitions, dtype=np.float64)
     for repetition in range(repetitions):
         selected = rng.integers(0, len(indices), size=len(indices))
-        first_value = _finite_metric(
-            metric(tuple(aligned_first[index] for index in selected))
-        )
-        second_value = _finite_metric(
-            metric(tuple(aligned_second[index] for index in selected))
-        )
+        first_value = _finite_metric(metric(tuple(aligned_first[index] for index in selected)))
+        second_value = _finite_metric(metric(tuple(aligned_second[index] for index in selected)))
         values[repetition] = first_value - second_value
     return _interval(values)
