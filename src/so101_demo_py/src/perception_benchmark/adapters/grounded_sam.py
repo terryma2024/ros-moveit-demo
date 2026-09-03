@@ -11,7 +11,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 import numpy as np
-
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
 from so101_demo.adapters.perception.model_runtime import (
     ModelSetupError,
@@ -35,17 +34,13 @@ from so101_demo.perception_benchmark.timing import (
     ResourceSampler,
 )
 
-
 _PROMPT = "plastic cup."
 
 
 def _force_offline_environment() -> None:
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
         os.environ[name] = "1"
-    if any(
-        os.environ.get(name) != "1"
-        for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
-    ):
+    if any(os.environ.get(name) != "1" for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")):
         raise ModelSetupError(
             "OFFLINE_MODE_REQUIRED",
             "HF_HUB_OFFLINE and TRANSFORMERS_OFFLINE must equal 1",
@@ -109,16 +104,13 @@ def _token_strings(processor: Any, input_ids: np.ndarray) -> tuple[str, ...]:
         )
     tokens = tokenizer.convert_ids_to_tokens([int(value) for value in input_ids])
     if not isinstance(tokens, Sequence) or len(tokens) != len(input_ids):
-        raise ModelSetupError(
-            "RESULT_CONTRACT_INVALID", "grounding token conversion is invalid"
-        )
+        raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding token conversion is invalid")
     return tuple(str(token).lower() for token in tokens)
 
 
 def _phrase_positions(tokens: tuple[str, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
     normalized = tuple(
-        token.replace("##", "").replace("ġ", "").replace("▁", "")
-        for token in tokens
+        token.replace("##", "").replace("ġ", "").replace("▁", "") for token in tokens
     )
     plastic = tuple(index for index, token in enumerate(normalized) if "plastic" in token)
     cup = tuple(index for index, token in enumerate(normalized) if "cup" in token)
@@ -136,9 +128,7 @@ def _query_indices(
     if "query_indices" in result:
         values = _to_numpy(result["query_indices"])
         if values.shape != scores.shape or not np.issubdtype(values.dtype, np.integer):
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "grounding query_indices are invalid"
-            )
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding query_indices are invalid")
         indices = tuple(int(value) for value in values)
     else:
         query_scores = probabilities.max(axis=1)
@@ -161,9 +151,7 @@ def _query_indices(
             matched.append(index)
         indices = tuple(matched)
     if any(index < 0 or index >= probabilities.shape[0] for index in indices):
-        raise ModelSetupError(
-            "RESULT_CONTRACT_INVALID", "grounding query index is out of range"
-        )
+        raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding query index is out of range")
     return indices
 
 
@@ -187,9 +175,7 @@ class GroundedSamRawAdapter:
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
         if model_id != GROUNDED_SAM_MODEL_ID:
-            raise ValueError(
-                "model_id must equal the canonical Grounded-SAM benchmark ID"
-            )
+            raise ValueError("model_id must equal the canonical Grounded-SAM benchmark ID")
         if runtime_device not in {"mps", "cuda"}:
             raise ValueError("formal Grounded-SAM collection requires mps or cuda")
         if synchronizer.device != runtime_device or resource_sampler.device != runtime_device:
@@ -237,9 +223,7 @@ class GroundedSamRawAdapter:
                 "MODEL_UNAVAILABLE", f"bundle is not a local regular directory: {root}"
             )
         if requested_device not in {"mps", "cuda"}:
-            raise ModelSetupError(
-                "DEVICE_UNAVAILABLE", "formal Grounded-SAM requires mps or cuda"
-            )
+            raise ModelSetupError("DEVICE_UNAVAILABLE", "formal Grounded-SAM requires mps or cuda")
         bundle = verify_model_bundle(root, expected_manifest_sha256)
         _force_offline_environment()
         if torch_api is None:
@@ -271,14 +255,12 @@ class GroundedSamRawAdapter:
         def sam_model_default(path: Path, *, local_files_only: bool) -> Any:
             nonlocal transformers
             transformers = transformers or importlib.import_module("transformers")
-            return transformers.Sam2Model.from_pretrained(
-                path, local_files_only=local_files_only
-            )
+            return transformers.Sam2Model.from_pretrained(path, local_files_only=local_files_only)
 
         try:
-            grounding_processor = (
-                grounding_processor_loader or grounding_processor_default
-            )(bundle.detector_dir, local_files_only=True)
+            grounding_processor = (grounding_processor_loader or grounding_processor_default)(
+                bundle.detector_dir, local_files_only=True
+            )
             grounding_model = _prepare_model(
                 (grounding_model_loader or grounding_model_default)(
                     bundle.detector_dir, local_files_only=True
@@ -310,9 +292,7 @@ class GroundedSamRawAdapter:
             sam_processor=sam_processor,
             sam_model=sam_model,
             synchronizer=synchronizer,
-            resource_sampler=ResourceSampler(
-                torch_api=torch_api, device=runtime_device
-            ),
+            resource_sampler=ResourceSampler(torch_api=torch_api, device=runtime_device),
             monotonic_ns=monotonic_ns,
         )
 
@@ -329,13 +309,9 @@ class GroundedSamRawAdapter:
                 "RESULT_CONTRACT_INVALID", "grounding inputs/outputs are incomplete"
             ) from error
         if input_ids.ndim != 2 or input_ids.shape[0] != 1:
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "grounding input_ids shape is invalid"
-            )
-        if logits.ndim != 3 or logits.shape[0] != 1 or logits.shape[2] != input_ids.shape[1]:
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "grounding logits shape is invalid"
-            )
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding input_ids shape is invalid")
+        if logits.ndim != 3 or logits.shape[0] != 1 or logits.shape[2] < input_ids.shape[1]:
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding logits shape is invalid")
         if logits.dtype != np.float32:
             raise ModelSetupError(
                 "NON_FP32_RUNTIME", f"grounding logits dtype is {logits.dtype.name}"
@@ -353,9 +329,7 @@ class GroundedSamRawAdapter:
             )
         result = results[0]
         if not isinstance(result, Mapping):
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "grounding result must be a mapping"
-            )
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding result must be a mapping")
         try:
             boxes = _to_numpy(result["boxes"])
             scores = _to_numpy(result["scores"])
@@ -372,9 +346,7 @@ class GroundedSamRawAdapter:
             or scores.shape != (len(boxes),)
             or len(labels) != len(boxes)
         ):
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "grounding result arrays are invalid"
-            )
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding result arrays are invalid")
         probabilities = _sigmoid(logits[0])
         tokens = _token_strings(self._grounding_processor, input_ids[0])
         plastic_positions, cup_positions = _phrase_positions(tokens)
@@ -411,9 +383,7 @@ class GroundedSamRawAdapter:
         frame: DetectionFrame,
         proposals: tuple[tuple[tuple[float, float, float, float], float, float], ...],
     ) -> tuple[np.ndarray, np.ndarray]:
-        input_boxes = np.asarray(
-            [[proposal[0] for proposal in proposals]], dtype=np.float32
-        )
+        input_boxes = np.asarray([[proposal[0] for proposal in proposals]], dtype=np.float32)
         inputs = _move_inputs(
             self._sam_processor(
                 images=frame.rgb8,
@@ -448,9 +418,7 @@ class GroundedSamRawAdapter:
             or masks.shape[2:] != (frame.image_height, frame.image_width)
             or qualities.shape != masks.shape[:2]
         ):
-            raise ModelSetupError(
-                "RESULT_CONTRACT_INVALID", "SAM result arrays are invalid"
-            )
+            raise ModelSetupError("RESULT_CONTRACT_INVALID", "SAM result arrays are invalid")
         return masks, qualities
 
     def _candidates(
@@ -494,21 +462,15 @@ class GroundedSamRawAdapter:
             )
         return tuple(candidates)
 
-    def collect(
-        self, frame: DetectionFrame, mode: CollectionMode
-    ) -> RawDetectionResult:
+    def collect(self, frame: DetectionFrame, mode: CollectionMode) -> RawDetectionResult:
         if not isinstance(frame, DetectionFrame):
             raise ValueError("frame must be a DetectionFrame")
         if CollectionMode(mode) is not CollectionMode.LOW_FLOOR:
             raise ValueError("Grounded-SAM collection mode is unsupported")
-        _validate_component(
-            self._grounding_model, self.runtime_device, "grounding model"
-        )
+        _validate_component(self._grounding_model, self.runtime_device, "grounding model")
         _validate_component(self._sam_model, self.runtime_device, "SAM model")
         collection = self._artifact_store.begin_collection()
-        with PhaseTimer(
-            self._synchronizer, monotonic_ns=self._monotonic_ns
-        ) as timer:
+        with PhaseTimer(self._synchronizer, monotonic_ns=self._monotonic_ns) as timer:
             grounding_inputs = _move_inputs(
                 self._grounding_processor(
                     images=frame.rgb8,
@@ -523,9 +485,7 @@ class GroundedSamRawAdapter:
             if proposals:
                 masks, qualities = self._sam(frame, proposals)
                 timer.mark("sam")
-                candidates = self._candidates(
-                    frame, collection, proposals, masks, qualities
-                )
+                candidates = self._candidates(frame, collection, proposals, masks, qualities)
             else:
                 masks = np.empty((0, 0, frame.image_height, frame.image_width))
                 qualities = np.empty((0, 0))
@@ -534,9 +494,7 @@ class GroundedSamRawAdapter:
         try:
             resource_sample = self._resource_sampler.sample()
         except Exception as error:
-            raise ResourceSamplingError(
-                "Grounded-SAM resource sampling failed"
-            ) from error
+            raise ResourceSamplingError("Grounded-SAM resource sampling failed") from error
         return RawDetectionResult(
             model_id=self.model_id,
             runtime_device=self.runtime_device,
