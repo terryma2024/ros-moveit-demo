@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import unicodedata
 from dataclasses import dataclass
 from numbers import Real
 from typing import Any, Sequence, cast
@@ -107,6 +108,23 @@ def prompt_for_query(query: DetectionQuery) -> str:
     return "plastic cup."
 
 
+def grounding_label_matches_prompt(label: object, prompt: str) -> bool:
+    """Compare a decoded label with its fixed prompt without display punctuation."""
+
+    if not isinstance(label, str) or not isinstance(prompt, str):
+        return False
+
+    def normalize(value: str) -> str:
+        without_punctuation = "".join(
+            " " if unicodedata.category(character).startswith("P") else character.casefold()
+            for character in value
+        )
+        return " ".join(without_punctuation.split())
+
+    normalized_prompt = normalize(prompt)
+    return bool(normalized_prompt) and normalize(label) == normalized_prompt
+
+
 def _as_float_array(value: Any, name: str) -> np.ndarray:
     try:
         array = np.asarray(value, dtype=np.float64)
@@ -168,7 +186,9 @@ def convert_grounding_results(
         )
         if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
             raise _contract_error(f"box {index} is outside the frame")
-        if labels[index] != "plastic cup" or score_array[index] < thresholds.box_threshold:
+        if not grounding_label_matches_prompt(
+            labels[index], prompt_for_query(query)
+        ) or score_array[index] < thresholds.box_threshold:
             continue
         normalized.append(GroundingProposal(clipped, float(score_array[index])))
 
