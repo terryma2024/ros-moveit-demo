@@ -1425,34 +1425,56 @@ def _handle_calibrate(arguments: argparse.Namespace) -> int:
     mask_root = arguments.output_root / "calibration-masks"
     mask_root.mkdir()
 
+    def rehome_mask(mask_ref: object, source: Path, relative: str):
+        mask = _safe_rehome_mask(mask_ref, source)
+        destination = mask_root / relative
+        if destination.exists() or destination.is_symlink():
+            raise BenchmarkError("CALIBRATION_MASK_OVERWRITE")
+        atomic_write_json(destination, encode_mask_rle(mask))
+        return replace(mask_ref, relative_path=relative)
+
     def rehome(records: tuple[PredictionRecord, ...], source: Path, platform: str):
         updated = []
         for record in records:
             candidates = []
             for candidate in record.raw_candidates:
-                mask = _safe_rehome_mask(candidate.mask, source)
                 if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", candidate.candidate_id) is None:
                     raise BenchmarkError("CALIBRATION_MASK_INVALID")
                 relative = (
                     f"{platform}/{record.formal_sample_index:06d}/{candidate.candidate_id}.json"
                 )
-                destination = mask_root / relative
-                if destination.exists() or destination.is_symlink():
-                    raise BenchmarkError("CALIBRATION_MASK_OVERWRITE")
-                atomic_write_json(destination, encode_mask_rle(mask))
                 candidates.append(
-                    replace(candidate, mask=replace(candidate.mask, relative_path=relative))
+                    replace(
+                        candidate,
+                        mask=rehome_mask(candidate.mask, source, relative),
+                    )
                 )
             updated.append(replace(record, raw_candidates=tuple(candidates)))
         return tuple(updated)
 
+    def rehome_truths():
+        updated = []
+        for truth in truths:
+            instances = []
+            for ordinal, instance in enumerate(truth.instances):
+                relative = f"truth/{truth.formal_sample_index:06d}/{ordinal:06d}.json"
+                instances.append(
+                    replace(
+                        instance,
+                        mask=rehome_mask(instance.mask, inventory.dataset_root, relative),
+                    )
+                )
+            updated.append(replace(truth, instances=tuple(instances)))
+        return tuple(updated)
+
     mac_records = rehome(mac.records, mac.evidence_root, "macos")
     linux_records = rehome(linux.records, linux.evidence_root, "linux")
+    rehomed_truths = rehome_truths()
     lock = calibrate_joint_platform_val(
         arguments.model,
         mac_records,
         linux_records,
-        truths,
+        rehomed_truths,
         inventory.inventory_sha256,
         evidence_root=mask_root,
         mac_prediction_inventory_sha256=mac.manifest.record_inventory_sha256,
