@@ -2985,3 +2985,46 @@ deletion_candidates:
 next_command: commit and push CP-034, synchronize ai-station, verify all targets absent, create and hash the Mac transfer archive, transfer/inspect/extract it once, transfer expectation anchors, and revalidate both staged Mac runs
 decision: STAGE_MAC_RUNS_THEN_CALIBRATE_JOINTLY_ON_VALIDATION_ONLY
 ```
+
+## Checkpoint CP-035 — AppleDouble-free Mac transfer archive replacement lock
+
+```yaml
+checkpoint_id: CP-035
+experiment_id: EXP-079
+status: PREREGISTERED_TRANSFER_ARCHIVE_R2
+source_commit: 7e8f2bb9f368d227ac51d12fa29db5429daf23e1
+cp_034_transfer_r1:
+  status: INVALID_PRETRANSFER
+  archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r1.tar.gz
+  sha256: 21b5a9b8ca9c8847a28e209ea858e4e97dfb5f9b38e62f5e239b18d01428429c
+  size_bytes: 13040765
+  member_count: 48858
+  first_bad_boundary: strict allowed-prefix audit found two macOS AppleDouble files outside the run roots
+  rejected_members: [macos/._yolo-r1, macos/._grounded-sam-r1]
+  link_member_count: 0
+  transferred: false
+  extracted: false
+  durable_destination_created: false
+  test_semantic_content_accessed: false
+replacement_r2:
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r2.tar.gz
+  local_checksum: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r2.tar.gz.sha256
+  remote_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r2.tar.gz
+  generation: COPYFILE_DISABLE=1 tar -czf <local_archive> -C <exp-079/val> macos/yolo-r1 macos/grounded-sam-r1
+  policy: all R2 targets absent; exactly two allowed run-root prefixes; no absolute or dot-dot path; no symlink, hardlink, AppleDouble, or extended-attribute member; transfer once; inspect again before extraction
+  durable_destination: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos
+success_criteria:
+  - R2 local and remote bytes share one recorded SHA-256
+  - member audit returns zero unsafe/link/AppleDouble/extended-attribute members
+  - CP-034 staging revalidation, expectation, calibration, and test-seal criteria remain unchanged
+stop_criteria:
+  - any target collision, digest mismatch, unsafe member, extraction error, staged-run verification failure, calibration failure, or test access
+retained_runs:
+  - all CP-034 retained runs
+  - invalid R1 transfer archive and checksum retained for audit
+archived_runs: []
+deletion_candidates:
+  - invalid mac-val-r1.tar.gz and adjacent checksum, only after explicit user authorization
+next_command: commit and push CP-035, synchronize ai-station, verify all R2 targets absent, generate R2 with COPYFILE_DISABLE=1, audit and hash it, then transfer once
+decision: REPACK_WITHOUT_APPLEDOUBLE_BEFORE_TRANSFER
+```
