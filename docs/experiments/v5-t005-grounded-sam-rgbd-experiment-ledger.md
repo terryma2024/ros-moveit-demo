@@ -4120,3 +4120,30 @@ deletion: none
 next_command: publish CP-053, update the frozen-literal test and observe RED, then perform only the archive/config rebind
 decision: RUN_POSTFIX_CONFIG_REBIND_TDD_ONLY
 ```
+
+## Checkpoint CP-054 — Post-fix immutable asset registration lock
+
+```yaml
+checkpoint_id: CP-054
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-053
+status: READY_FOR_IMMUTABLE_COPY
+immutable_asset_copy:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  source_checksum: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz.sha256
+  target: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  target_checksum: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz.sha256
+  required_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  policy: require absent targets, copy once, verify bytes, retain source, set both targets read-only, and never overwrite
+config_rebind_target:
+  archive_id: datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+access_boundary:
+  - copying and hashing are mechanical byte operations
+  - do not list, extract, parse, rasterize, display, or infer any test semantic member
+  - test remains sealed after the copy
+deletion: none
+next_command: publish CP-054, synchronize ai-station, perform the absent-target copy and digest verification, then start the config rebind TDD
+decision: COPY_FROZEN_ARCHIVE_TO_REGISTERED_ASSET_PATH
+```
