@@ -2211,3 +2211,49 @@ deletion_candidates:
 next_command: commit CP-019, synchronize ai-station, and run replacement_generation exactly once
 decision: RUN_REPLACEMENT_DATASET_GENERATION
 ```
+
+## EXP-080 — scenario-authoritative instance labels
+
+```yaml
+experiment_id: EXP-080
+status: PLANNED
+prior_experiment: EXP-079_DATASET_INVALID
+hypothesis: moving inactive cup bodies to 2,2,2 does not guarantee zero segmentation pixels, while build_labeled_sample currently accepts every visible cup-named body without checking whether that body is active in the selected scenario
+prediction: a synthetic no_cup render containing stray cup-body geom IDs will incorrectly produce cup instances before the fix; after one scenario-authoritative body filter it will produce zero, one, or two instances exactly as the scenario permits
+invalid_dataset:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-2603e6c9-r2
+  status: INVALID_LABEL_SEMANTICS
+  archive: ABSENT
+  generated_samples: 880
+  observed_manifest_class_instance_total: 1760
+  expected_manifest_class_instance_total: 880
+  open_val_summary: every one of the four 50-image val scenarios reported visible_instance_count 2
+  open_val_diagnostic: seed 500000 no_cup had two label rows; plastic_cup and plastic_cup_b masks contained only 8 and 11 scattered pixels before convex hull
+  test_access: no images/test, labels/test, or truth/test file was opened; only top-level manifest/counts/member names were read
+single_variable: before converting geom IDs to masks, restrict eligible cup body names to none for no_cup, plastic_cup for one_cup_distractors and cup_near_bottle, and plastic_cup plus plastic_cup_b for two_cups
+unchanged:
+  - MJCF, hidden position, renderer, camera and color randomization
+  - split counts, seed starts, image size, polygon implementation and output schema
+  - models, prompt, thresholds, selection, depth, TF and motion
+tdd:
+  - add a RawRender with both cup body IDs visible while the scenario declares zero or one active cup
+  - prove RED because inactive bodies are currently retained
+  - implement only the scenario-to-body allowlist and keep a two-cup control
+success_criteria:
+  - focused labels produce exact 0/1/2 counts and expected body names
+  - existing dataset and archive-security tests remain green on Mac and Linux
+  - a fresh replacement dataset has class_instance_totals plastic_cup 880 and val configured/visible counts agree for all 200 open samples
+invalid_criteria:
+  - any test-split file content is opened before new threshold locks
+  - a label is repaired after generation rather than regenerated from exact committed source
+  - inactive-body filtering is inferred from pixels, confidence, color, or test metrics instead of the scenario contract
+retained_runs:
+  - all CP-019 retained runs
+  - invalid raw-2603e6c9-r2 directory
+  - local open-val diagnostic under /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val-diagnostic
+archived_runs: []
+deletion_candidates:
+  - invalid raw-2603e6c9-r2, only after explicit user authorization
+next_command: commit EXP-080 preregistration, add only the scenario-label regression, and observe RED
+decision: RUN_EXP_080_TDD_ONLY
+```
