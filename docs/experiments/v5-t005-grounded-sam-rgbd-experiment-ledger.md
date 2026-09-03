@@ -3336,3 +3336,72 @@ static_gates:
 next_command: commit and push the implementation checkpoint, fast-forward ai-station, build a fresh Linux overlay, and repeat the explicit benchmark gate before grounded-sam-r2
 decision: LOCAL_IMPLEMENTATION_QUALIFIED_PENDING_LINUX_AND_FORMAL_RUN
 ```
+
+## Checkpoint CP-041 — Linux qualification and grounded-sam-r2 preregistration
+
+```yaml
+checkpoint_id: CP-041
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-040
+runner_source:
+  branch: codex/v5-t004-yolo-seg-rgbd
+  commit: 92b0e4919ceec953f0d1635ffcfde1a2fcb31b06
+  checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+linux_overlay:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5
+  install_mode: regular files; no symlink-install
+  packages: mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, so101_mujoco_support, so101_teleop, so101_demo_py
+  build_result: PASS
+  build_elapsed: 49.7 seconds
+  runner_shebang: /data/work/venvs/so101-grounded-sam/bin/python
+  installed_calibration_sha256: 97b915f2b12a05ce7e21255070e3a89519c331295e8e4f0fe6ea967b06eb1dac
+  source_calibration_sha256: 97b915f2b12a05ce7e21255070e3a89519c331295e8e4f0fe6ea967b06eb1dac
+linux_gate_diagnostics:
+  system_python_attempt:
+    result: ENVIRONMENT_INVALID_AND_INTERRUPTED
+    evidence:
+      - /usr/bin/python3 resolved Pillow 10.2.0 instead of the pinned 12.3.0
+      - /usr/bin/python3 did not provide torch
+      - the new calibration, CLI, matching, and metrics groups had already passed
+  slow_tmp_attempt:
+    result: INTERRUPTED_FOR_STORAGE_REMEDIATION
+    elapsed_before_stop: 12 minutes 43 seconds
+    observation: pytest was blocked in D state while dataset archive tests wrote to the SATA-backed /tmp filesystem
+    deletion: none
+  qualified_environment:
+    python: /data/work/venvs/so101-grounded-sam/bin/python
+    pillow: 12.3.0
+    torch: 2.13.0+cu130
+    pytest_tmpdir: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime-tmp/linux-benchmark-r5-nvme
+linux_benchmark_gate:
+  command_contract: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  result: PASS
+  summary: 562 tests, 0 errors, 0 failures, 2 skipped
+  pytest_summary: 560 passed, 2 skipped
+  elapsed: 10 minutes 43 seconds
+  test_result_command: colcon test-result --test-result-base /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/build --verbose
+formal_grounded_sam_r2:
+  model: grounded_sam
+  grid_version: grounded-sam-grid/v1
+  grid_points: 32400
+  calibration_workers: 8
+  inference_during_calibration: false
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2
+  progress_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/grounded-sam-r2-calibrate.log
+  preconditions:
+    - output path is absent immediately before launch
+    - dataset inventory, both validation roots, and both expectation documents are present
+    - expectation SHA-256 values equal the CP-037 preregistration
+    - test split remains sealed and inaccessible to calibration
+  command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/lib/python3.12/site-packages /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/lib/so101_demo_py/perception_benchmark calibrate --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --model grounded_sam --dataset-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json --dataset-archive-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --inventory-sha256 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2 --mac-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos/grounded-sam-r1 --mac-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/macos-grounded_sam.json --mac-run-expectation-sha256 6e5adccb253fab9b6df1e6966d1a53cc99a1c96cfa72ea4fec10c0b959e32b48 --linux-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/grounded-sam-r1 --linux-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/linux-grounded_sam.json --linux-run-expectation-sha256 9e1271a928a7df958f63841adb7df65e4a0aa85287f12ca7a39286271ec5bff7 --source-commit ef254f6025d8de42ce42a6cc6871e703fc86fbd4 --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2 --calibration-workers 8
+success_criteria:
+  - command exits zero and writes self-consistent threshold-lock.json plus evidence-index.json
+  - result is formal, deployable, SAFE_CALIBRATED, and has zero unsafe unique selections on both platforms
+  - progress covers verify, rehome, precompute, grid, and finalize with bounded monotonic counts
+  - wall time materially improves on the interrupted baseline of more than 49 minutes
+stop_criteria:
+  - output collision, evidence verification failure, test-split access, nonzero command, missing or malformed lock/index, non-deployable result, or unsafe outcome
+next_command: commit and push CP-041, fast-forward the isolated ai-station checkout, reverify the output path is absent, then execute the exact formal command with combined stdout and stderr captured in the registered progress log
+decision: LINUX_QUALIFIED_READY_TO_RUN_GROUNDED_SAM_R2
+```
