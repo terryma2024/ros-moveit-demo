@@ -3728,3 +3728,63 @@ deletion: none
 next_command: commit and publish CP-046, synchronize ai-station, then run one bounded validation-only YOLO raw/production diagnostic on Mac MPS
 decision: FORMAL_BENCHMARK_INVALID_STOP_AND_DIAGNOSE_ON_VALIDATION
 ```
+
+## Checkpoint CP-047 — Validation-only diagnosis confirms deterministic YOLO mask mismatch
+
+```yaml
+checkpoint_id: CP-047
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-046
+diagnostic:
+  scope: validation-only first sample; no test image accessed
+  platform: macos
+  device: mps
+  image: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/val-open-macos-r1/images/val/000500138.png
+  image_sha256: 009a14cbc849e90410d79e57f35ac0622bef244ba936eb12cd206650ed225d18
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-yolo-val-mask-map-diagnostic-r1.py
+  script_sha256: 4a438b7deb4b06ee07602ab08478f79c9f99ea717668e727baa01496fd4d5d33
+  launch_label: com.terry.so101.benchmark.mac.yolo-map-diagnostic.r1
+  exit_code: 0
+  stdout: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-yolo-val-mask-map-diagnostic-r1.stdout.log
+  stdout_sha256: f5032e9aba9437b36a81ddfe83c0b41eece4f070aeab5d66a6228f2ede630fdc
+  stderr: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-yolo-val-mask-map-diagnostic-r1.stderr.log
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  launchd_job_removed_after_exit: true
+observations:
+  raw_candidate_count: 2
+  production_candidate_count: 2
+  candidate_0:
+    exact_box_conf_raw_matches: 1
+    mask_sha_matches: 0
+    raw_pixels: 4285
+    production_pixels: 3816
+    mask_iou: 0.8905484247374562
+    raw_sha256: 32f0206fd6d473ae92cf964a92b21b604b652242a82c6782b935369edf98f353
+    production_sha256: 856bfad1eda6b6793c7cb2a0762098a0a15a6478f4a51f148ffcc9a3ab70bc41
+  candidate_1:
+    exact_box_conf_raw_matches: 1
+    mask_sha_matches: 0
+    raw_pixels: 3861
+    production_pixels: 3421
+    mask_iou: 0.886039886039886
+    raw_sha256: cb53bc8a02b9740f285d23c3ecc41f83773173645b79979ea681d14da392ffad
+    production_sha256: a982df55e10125f9515c427d2786023090ce0eca7bc30b80356c24fbc2ce3080
+  invariant:
+    - for both candidates, raw resize output equals production pre-trim output byte-for-byte
+    - the production two-pass boundary trim alone changes the mask SHA-256
+root_cause: the reconciliation contract compares the production-trimmed mask to the untrimmed low-floor raw mask without applying the production normalization
+excluded_hypotheses:
+  - MPS nondeterminism in bbox or confidence
+  - candidate ordering ambiguity on this reproducer
+  - different weights or input frame
+remediation_contract:
+  - preserve low-floor raw evidence and calibration semantics unchanged
+  - normalize YOLO raw masks through the same deterministic production boundary transform only for reconciliation
+  - preserve exact class, bbox, confidence, one-to-one, frame, model, weights, device, and selected-candidate checks
+  - add a regression test that fails before the code change and passes after it
+  - require a new sealed held-out split for any post-fix formal ranking
+deletion: none
+next_command: add and run the focused RED regression test before changing reconciliation code
+decision: ROOT_CAUSE_CONFIRMED_FIX_RECONCILIATION_WITH_TDD
+```
