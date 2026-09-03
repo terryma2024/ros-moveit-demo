@@ -3915,3 +3915,58 @@ deletion: none
 next_command: commit and publish CP-049, then preregister and generate a fresh post-fix benchmark dataset without accessing its test members
 decision: CODE_FIX_CROSS_PLATFORM_QUALIFIED_PREPARE_FRESH_FORMAL_DATASET
 ```
+
+## Checkpoint CP-050 — Post-fix sealed benchmark dataset preregistration
+
+```yaml
+checkpoint_id: CP-050
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-049
+hypothesis: a benchmark dataset generated from a disjoint seed namespace after the qualified reconciliation fix can provide a new unbiased held-out test split without changing model weights, prompts, runtime devices, or evaluation policy
+single_variable:
+  seed_starts: {train: 700000, val: 800000, test: 900000}
+unchanged:
+  - MJCF, camera, image size, scene distributions, split counts, label semantics, archive format, and security rules
+  - YOLO-Seg and Grounded-SAM model bytes and identities
+  - plastic cup prompt, low-floor settings, calibration grids, objective, tie-breakers, unsafe-unique fail-closed gate, FP32, native MPS/CUDA, offline, and no fallback
+counts:
+  train: 480
+  val: 200
+  test: 200
+  scenarios_per_val_or_test: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+seed_ranges:
+  train: [700000, 700479]
+  val: [800000, 800199]
+  test: [900000, 900199]
+disjoint_from_prior_ranges:
+  train: [400000, 400479]
+  val: [500000, 500199]
+  test: [600000, 600199]
+generation_targets:
+  raw_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-postfix-r4
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  checksum: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz.sha256
+execution_order:
+  - change only fresh_dataset.yaml seed_starts with one tracked-config regression and pass the focused dataset tests
+  - publish and synchronize the exact generator commit
+  - fresh non-symlink scoped Linux build under the qualified Grounded-SAM venv
+  - generate 880 samples exactly once into the absent raw root
+  - validate dataset-manifest.json and val semantics; do not read test image, label, or truth content
+  - create one deterministic archive and adjacent checksum, then seal test member names and digests without semantic access
+  - bind benchmark.yaml and CLI immutable constants to the new archive under TDD
+  - run fresh Mac/Linux val inference, calibrate from val only, unlock test exactly once, and execute one frozen formal test matrix
+success_criteria:
+  - 880 samples, 2641 payload artifacts before manifest, 880 total plastic_cup instances, and no symlinks
+  - val scenario and visible instance counts match the frozen contract
+  - archive and checksum are immutable and test semantic content remains unopened until both new locks verify
+invalid_criteria:
+  - any old test metric, prediction, or truth influences seeds, generation, thresholds, ranking, or acceptance
+  - any post-fix test semantic member is opened before both locks verify
+  - any target collision, source/config drift, count mismatch, hidden fallback, or overwrite
+stop_criteria:
+  - stop on the first invalid condition and retain all evidence
+deletion: none
+next_command: commit and publish CP-050, then change only the tracked seed namespace test and observe RED
+decision: GENERATE_NEW_UNBIASED_DATASET_WITH_DISJOINT_SEEDS
+```
