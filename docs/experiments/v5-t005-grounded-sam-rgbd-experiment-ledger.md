@@ -4239,3 +4239,59 @@ deletion: none
 next_command: publish CP-056, synchronize ai-station, run inspect-archive once, verify its non-semantic seal, then run prepare-dataset for val once
 decision: CREATE_POSTFIX_SEAL_AND_OPEN_VAL_ONLY
 ```
+
+## Checkpoint CP-057 — Post-fix val inference lock
+
+```yaml
+checkpoint_id: CP-057
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-056
+status: READY_FOR_FRESH_VAL_INFERENCE
+source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+sealed_test:
+  inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-postfix-r4.json
+  inventory_sha256: 4ac8407aec15d8c19da653dd34b932e50ba42fa9aa492a7b4adedc2147666b81
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  member_counts: {images: 200, labels: 200, truth: 200}
+  scenario_counts_present: false
+  semantic_content_opened: false
+val_dataset:
+  linux_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-postfix-r4
+  macos_copy_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/val-open-postfix-r4-macos
+  inventory_sha256: 141d79acd2aa3758f4ee90056b14aab0f105d74778f193a998bc341ae6ce59b3
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  test_access: null
+  preparation_script_sha256: c2822c6822dbb26b455d975c004f13c026a4310e4e7c53d5fd588a97962e5db4
+models:
+  yolo:
+    id: plastic-cup-yolo11s-seg-v2
+    sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+    macos_path: /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/assets/best.pt
+    linux_path: /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/best.pt
+  grounded_sam:
+    id: grounding-dino-tiny+sam2.1-hiera-tiny
+    manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+    macos_root: /Users/matianyi/Models/so101/grounded-sam-v2-scipy-lock
+    linux_root: /data/work/so101-models/grounded-sam-v2-scipy-lock
+runs_in_order:
+  - {run_id: mac-yolo-val-postfix-r4, platform: macos, device: mps, model: yolo_seg, output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val-postfix-r4/macos/yolo-r1}
+  - {run_id: mac-grounded-sam-val-postfix-r4, platform: macos, device: mps, model: grounded_sam, output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val-postfix-r4/macos/grounded-sam-r1}
+  - {run_id: linux-yolo-val-postfix-r4, platform: linux, device: cuda, model: yolo_seg, output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/linux/yolo-r1}
+  - {run_id: linux-grounded-sam-val-postfix-r4, platform: linux, device: cuda, model: grounded_sam, output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/linux/grounded-sam-r1}
+run_contract:
+  split: val
+  run_kind: VAL_RAW
+  dtype: float32
+  offline: true
+  cpu_fallback: forbidden
+  adapter_settings: unchanged low-floor settings from benchmark.yaml
+  output_targets: must be absent and non-symlink
+  progress: report completed sample count without opening test
+stop_criteria:
+  - any source/config/archive/inventory/model/device/dtype mismatch, fallback, output collision, non-200 record inventory, inference error, or test access
+deletion: none
+next_command: publish CP-057, transfer and verify val-only data to macOS, then run the four fresh VAL_RAW jobs in the frozen order
+decision: RUN_FRESH_POSTFIX_VAL_MATRIX_ONLY
+```
