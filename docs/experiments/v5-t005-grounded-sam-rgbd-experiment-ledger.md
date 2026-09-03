@@ -4295,3 +4295,63 @@ deletion: none
 next_command: publish CP-057, transfer and verify val-only data to macOS, then run the four fresh VAL_RAW jobs in the frozen order
 decision: RUN_FRESH_POSTFIX_VAL_MATRIX_ONLY
 ```
+
+## Checkpoint CP-058 — Post-fix YOLO joint calibration lock
+
+```yaml
+checkpoint_id: CP-058
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-057
+status: READY_FOR_YOLO_JOINT_CALIBRATION
+benchmark_code_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+validated_runs:
+  macos_yolo: {records: 200, manifest_sha256: 5a49cbecc576773f66f0b78a832d492fc69e4e1e5c39b56eea940db88505dad7, record_inventory_sha256: d17efad482c9fc21c3031dfd018aba4e5219fa5281bdf4c89f6723e79b282f0d, expectation_sha256: 360a9af1168bfd25e966e842d3ae3d12df7977ccea365878e0dd71be887611ae}
+  macos_grounded_sam: {records: 200, manifest_sha256: 5d22e725b20c04cb8c9f0ab7ee1eb1db62d18986426dc3271790a8f1159d558e, record_inventory_sha256: 3b286d1a7afa7fc0372e6920a0afac42a70033f4e2632f2db562c84fe1d90772, expectation_sha256: 8d46ccbd0e3a6f9c1180abf8ecaa7cabcc8d3b76b490d406439dd28aa60377d3}
+  linux_yolo: {records: 200, manifest_sha256: 9327fb0a1778fe1bd8568bde1ce62cffdcbbe977c6c7d3a4920c1653277c0c1c, record_inventory_sha256: 6fba019ce9b77f124c81b518fe582a924198634368682c7bb618384d574ec33c, expectation_sha256: bff9bfe6a369d8114b0f5cef5b15a580c609060f0dda69d5d0f25aa8f89cdf9d}
+  linux_grounded_sam: {records: 200, manifest_sha256: 830e217e0fff39e28099a954ac293d9839c0502670041f0b01da2457ba930be4, record_inventory_sha256: 1c16e200591165ad92fe23954be959409ca5bb7614ce8ddbc805b3df65869655, expectation_sha256: d2794b732dcfa27a784ef3dace71e44c9907ebff4a50f9636fdc5f8220c667e7}
+  common: {status: VALID, error_count: 0, record_count: 200, dtype: float32, fallback_used: false, full_runner_integrity_check: PASS}
+macos_execution:
+  launchd_script_sha256: 1d24d4804c40e204de39b4b572212ecea9ff8ea4d5e3be16aef1450da992f2e4
+  launchd_plist_sha256: aed3ea31478df52b518487b0d2df660b6b122dd40d8e3ae8768ea77a08d0e457
+  launchd_exit_code: 0
+  launchd_job_removed: true
+  native_device: mps
+linux_execution:
+  script_sha256: b65da88ed29cea91162b2863723979e86422153ffd23cf889a4cb6e380f71f92
+  command_exit_code: 0
+  native_device: cuda
+mac_stage:
+  archive_sha256: 5a9d7723b84af19a26167a88fbfc40d4d247240cbe096458cee762269ce250a0
+  size_bytes: 11039902
+  member_count: 24456
+  unsafe_member_count: 0
+  link_member_count: 0
+  remote_tar_warning_count: 0
+  staged_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/macos
+  staged_revalidation: PASS
+yolo_calibration:
+  dataset_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-postfix-r4/inventory.json
+  dataset_archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  inventory_sha256: 141d79acd2aa3758f4ee90056b14aab0f105d74778f193a998bc341ae6ce59b3
+  mac_run: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/macos/yolo-r1
+  mac_expectation: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/expectations/macos-yolo_seg.json
+  mac_expectation_sha256: 360a9af1168bfd25e966e842d3ae3d12df7977ccea365878e0dd71be887611ae
+  linux_run: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-postfix-r4/linux/yolo-r1
+  linux_expectation: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/expectations/linux-yolo_seg.json
+  linux_expectation_sha256: bff9bfe6a369d8114b0f5cef5b15a580c609060f0dda69d5d0f25aa8f89cdf9d
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/yolo-r1
+  progress_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/yolo-postfix-r4-calibrate.log
+  workers: 8
+calibration_contract:
+  - only the frozen val inventory and two validated YOLO VAL_RAW runs are inputs
+  - grid, objective, matching, tie-break, safety metrics, and zero unsafe-unique gate remain unchanged
+  - inference_during_calibration must be false; progress must cover verify, rehome, precompute, grid, and finalize
+  - result must be formal, deployable, SAFE_CALIBRATED, and have zero unsafe unique selections on both platforms
+  - test remains sealed and inaccessible
+stop_criteria:
+  - output collision, expectation/evidence mismatch, nonzero command, inference call, malformed or non-deployable lock, unsafe outcome, or test access
+deletion: none
+next_command: publish CP-058, synchronize ai-station, execute and validate YOLO calibration only, then separately lock Grounded-SAM calibration
+decision: RUN_POSTFIX_YOLO_CALIBRATION_THEN_GATE_GROUNDED_SAM
+```
