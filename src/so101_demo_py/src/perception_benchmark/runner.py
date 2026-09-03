@@ -735,6 +735,7 @@ def _verify_inventory(
             _validate_persisted_access(
                 document.get("test_access"),
                 inventory.test_access_event_sha256,
+                inventory.access_log_path,
             )
         except DatasetVerificationError as error:
             raise RunIntegrityError("INVENTORY_ACCESS_CHAIN_INVALID") from error
