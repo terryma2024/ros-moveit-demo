@@ -1017,6 +1017,7 @@ def _inventory(arguments: argparse.Namespace, config: Mapping[str, Any]):
                     arguments.yolo_lock_sha256,
                     arguments.grounded_sam_lock_sha256,
                 ),
+                "expected_access_log_path": arguments.test_access_log,
             }
         )
     return load_dataset_inventory(arguments.dataset_inventory.parent, **kwargs)
@@ -1810,6 +1811,7 @@ def _add_dataset_anchors(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sealed-member-inventory-sha256")
     parser.add_argument("--yolo-lock-sha256")
     parser.add_argument("--grounded-sam-lock-sha256")
+    parser.add_argument("--test-access-log", type=Path)
 
 
 def _add_model_assets(parser: argparse.ArgumentParser) -> None:

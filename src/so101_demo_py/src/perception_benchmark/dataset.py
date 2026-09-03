@@ -194,12 +194,18 @@ class DatasetInventory:
     scenario_counts: Mapping[str, int]
     samples: tuple[DatasetSampleRef, ...]
     test_access_event_sha256: str | None
+    access_log_path: Path | None = field(default=None, repr=False, compare=False)
     _capability: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "dataset_root", Path(self.dataset_root))
         object.__setattr__(self, "scenario_counts", MappingProxyType(dict(self.scenario_counts)))
         object.__setattr__(self, "samples", tuple(self.samples))
+        if self.access_log_path is not None:
+            access_log_path = Path(self.access_log_path)
+            if not access_log_path.is_absolute():
+                raise ValueError("access_log_path must be absolute")
+            object.__setattr__(self, "access_log_path", access_log_path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1265,6 +1271,7 @@ class DatasetArchiveVerifier:
             dict(scenarios),
             ordered,
             None if access_grant is None else access_grant.event_sha256,
+            None if access_grant is None else test_seal.access_log_path,
         )
 
 
@@ -1280,6 +1287,7 @@ def _inventory_capability(inventory: DatasetInventory) -> str:
         tuple(sorted(inventory.scenario_counts.items())),
         inventory.samples,
         inventory.test_access_event_sha256,
+        inventory.access_log_path,
     )
 
 
@@ -1624,7 +1632,11 @@ def _verify_truth_mask_refs(
         raise DatasetVerificationError("INVENTORY_TREE_MISMATCH")
 
 
-def _validate_persisted_access(test_access: object, event_sha: str | None) -> None:
+def _validate_persisted_access(
+    test_access: object,
+    event_sha: str | None,
+    access_log_path_override: Path | None = None,
+) -> None:
     if not isinstance(test_access, Mapping):
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     expected_keys = {
@@ -1673,7 +1685,14 @@ def _validate_persisted_access(test_access: object, event_sha: str | None) -> No
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID")
     expected_event = {**without_sha, "event_sha256": event_sha}
     try:
-        events = _parse_canonical_access_log(_read_pinned_absolute_file(Path(access_log_path)))
+        effective_access_log = (
+            Path(access_log_path)
+            if access_log_path_override is None
+            else access_log_path_override
+        )
+        events = _parse_canonical_access_log(
+            _read_pinned_absolute_file(effective_access_log)
+        )
     except DatasetVerificationError as error:
         raise DatasetVerificationError("INVENTORY_ACCESS_CHAIN_INVALID") from error
     if events != (expected_event,):
@@ -1764,7 +1783,11 @@ def _verify_inventory_documents_and_samples(
         raise DatasetVerificationError("INVENTORY_INTEGRITY_INVALID")
     if split == "test":
         _require_sha256(inventory.test_access_event_sha256, "TEST_SEALED")
-        _validate_persisted_access(document.get("test_access"), inventory.test_access_event_sha256)
+        _validate_persisted_access(
+            document.get("test_access"),
+            inventory.test_access_event_sha256,
+            inventory.access_log_path,
+        )
     elif inventory.test_access_event_sha256 is not None or document.get("test_access") is not None:
         raise DatasetVerificationError("TRUTH_INVENTORY_MISMATCH")
     raw_samples = document.get("samples")
@@ -1865,6 +1888,7 @@ def load_dataset_inventory(
     expected_test_access_event_sha256: str | None = None,
     expected_sealed_member_inventory_sha256: str | None = None,
     expected_threshold_lock_sha256s: tuple[str, str] | None = None,
+    expected_access_log_path: Path | None = None,
 ) -> DatasetInventory:
     """Load one formal persisted inventory and reissue only a local capability.
 
@@ -1890,12 +1914,14 @@ def load_dataset_inventory(
                 expected_test_access_event_sha256,
                 expected_sealed_member_inventory_sha256,
                 expected_threshold_lock_sha256s,
+                expected_access_log_path,
             )
         ):
             raise DatasetVerificationError("VAL_EXTERNAL_TEST_ANCHOR_CONFLICT")
         normalized_event_sha = None
         normalized_sealed_sha = None
         normalized_locks = None
+        normalized_access_log_path = None
     else:
         normalized_event_sha = _require_sha256(
             expected_test_access_event_sha256,
@@ -1916,6 +1942,12 @@ def load_dataset_inventory(
         )
         if normalized_locks[0] == normalized_locks[1]:
             raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_INVALID")
+        if expected_access_log_path is None:
+            normalized_access_log_path = None
+        else:
+            normalized_access_log_path = Path(expected_access_log_path)
+            if not normalized_access_log_path.is_absolute():
+                raise DatasetVerificationError("INVENTORY_EXTERNAL_ANCHOR_INVALID")
     try:
         pinned_root = _PinnedDirectory.open(Path(dataset_root))
     except _PinnedFileError as error:
@@ -2046,6 +2078,7 @@ def load_dataset_inventory(
             scenario_counts=dict(scenario_counts),
             samples=tuple(samples),
             test_access_event_sha256=event_sha,
+            access_log_path=normalized_access_log_path,
         )
         _verify_inventory_and_tree(
             root,
