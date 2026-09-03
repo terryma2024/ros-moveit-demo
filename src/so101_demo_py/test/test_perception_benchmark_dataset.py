@@ -439,6 +439,32 @@ def test_open_split_rejects_invalid_formal_semantics(
         )
 
 
+def test_open_split_accepts_generator_nine_decimal_label_precision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        globals(),
+        "_POLYGON",
+        (
+            (0.2500000004, 0.2500000004),
+            (0.7499999996, 0.2500000004),
+            (0.5000000004, 0.7499999996),
+        ),
+    )
+    archive = build_fixture_archive(tmp_path)
+
+    inventory = DatasetArchiveVerifier().verify_and_extract_split(
+        archive,
+        sha256_file(archive),
+        tmp_path / "test-open",
+        "test",
+        _verified_unlocked_seal(archive, tmp_path),
+    )
+
+    assert len(inventory.samples) == 200
+
+
 def test_test_access_event_is_hash_linked_and_records_utc_time(tmp_path: Path) -> None:
     seal = _unlocked_seal(tmp_path)
 
