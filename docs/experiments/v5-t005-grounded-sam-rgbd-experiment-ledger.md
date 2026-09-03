@@ -4491,3 +4491,40 @@ retention:
 next_command: publish CP-060, synchronize ai-station, run the full Linux benchmark gate, then preregister one immutable test unlock using the existing seal plus the YOLO and Grounded-SAM threshold-lock SHA values
 decision: QUALITY_INSUFFICIENT_BUT_PROCEED_TO_FROZEN_TEST_BENCHMARK
 ```
+
+## Checkpoint CP-061 — Parallel calibration dual-platform qualification
+
+```yaml
+checkpoint_id: CP-061
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-060
+status: READY_FOR_TEST_UNLOCK_PREREGISTRATION
+source_state:
+  calibration_code_commit: f4500933d238ad391f048eb7ef51d82d6ff4fced
+  ledger_head: 4602f7cf23b429ffcb2807d0454e90e8122d1bea
+  package_tree_diff_between_commits: none
+  gitee_head: 4602f7cf23b429ffcb2807d0454e90e8122d1bea
+  ai_station_head: 4602f7cf23b429ffcb2807d0454e90e8122d1bea
+linux_benchmark_gate:
+  command_contract: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  collected: 564
+  passed: 562
+  skipped_platform_conditions: 2
+  errors: 0
+  failures: 0
+  pytest_seconds: 646.82
+  colcon_seconds: 648
+  junit: 564 tests, 0 errors, 0 failures, 2 skipped
+  script_sha256: 03f70d3065d9d138c60a7e4cee2ae4dd7edc71ddda4923d90a27ac2e7f48dc86
+script_launch_note:
+  - the first outer SHA assertion used an incorrect expected literal and stopped before the script executed
+  - the script was launched once only after its transferred SHA was read back and matched the value above
+  - the unique runtime temporary root is retained under the registered EXP-079 evidence root
+test_state:
+  sealed: true
+  semantic_content_opened: false
+  test_inference_run: false
+next_command: preregister the exact post-fix archive, sealed-member inventory, YOLO lock, Grounded-SAM lock, one-time access log, four platform-model test run IDs, aggregation outputs, and all fail-closed stop conditions before opening test once
+decision: PREREGISTER_ONE_TIME_FROZEN_TEST_MATRIX
+```
