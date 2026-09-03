@@ -60,7 +60,7 @@ def test_config_contains_frozen_literals() -> None:
     for literal in (
         "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1",
         "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
-        "838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3",
+        "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
         "a2bb814dd30d776dcf7e30523b00659f4f141c71",
         "de431c4043854a71d8101e17995dfe596bf101a5",
         "source: resolved_ultralytics_predictor_args",
@@ -290,7 +290,7 @@ def test_actual_dry_run_uses_fixed_val_images_and_both_accelerated_adapters(
             "--model-root",
             str(tmp_path / "grounded-sam"),
             "--manifest-sha256",
-            "838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3",
+            "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
             "--source-commit",
             "1ab9cdfc939dc623bf6b51f5ca2025b826b1190f",
         ]
