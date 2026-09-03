@@ -14,7 +14,12 @@ from so101_demo.perception_benchmark.adapters.base import (
     RawDetectionResult,
 )
 from so101_demo.perception_benchmark.calibration import ThresholdLock
-from so101_demo.perception_benchmark.codec import atomic_write_json, encode_mask_rle, sha256_bytes
+from so101_demo.perception_benchmark.codec import (
+    atomic_write_json,
+    encode_mask_rle,
+    read_mask,
+    sha256_bytes,
+)
 from so101_demo.perception_benchmark.contracts import (
     GROUNDED_SAM_MODEL_ID,
     YOLO_MODEL_ID,
@@ -22,6 +27,8 @@ from so101_demo.perception_benchmark.contracts import (
     RawCandidate,
     RunKind,
     RuntimeProvenance,
+    TruthInstance,
+    TruthSample,
 )
 from so101_demo.perception_benchmark.reporting import verify_evidence_index
 from so101_demo.perception_benchmark.timing import PhaseTimingBreakdown
@@ -733,6 +740,74 @@ def _patch_calibration_loaders(
     monkeypatch.setattr(
         perception_benchmark, "load_verified_run_evidence", lambda *a, **k: next(loaded)
     )
+
+
+def test_calibration_rehomes_truth_masks_with_prediction_masks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    arguments = _calibration_arguments(tmp_path)
+    arguments.dataset_inventory.parent.mkdir()
+    mask = np.array([[True, False], [False, True]], dtype=bool)
+    atomic_write_json(
+        arguments.dataset_inventory.parent / "truth-mask.rle.json",
+        encode_mask_rle(mask),
+    )
+    truth = TruthSample(
+        formal_sample_index=0,
+        split="val",
+        scenario="synthetic",
+        image_relpath="images/0.png",
+        image_sha256="1" * 64,
+        image_width=2,
+        image_height=2,
+        instances=(
+            TruthInstance(
+                instance_id="truth-0",
+                label="plastic_cup",
+                mask=MaskRef(
+                    relative_path="truth-mask.rle.json",
+                    sha256=sha256_bytes(mask.astype(np.uint8).tobytes(order="C")),
+                    pixel_count=2,
+                    image_width=2,
+                    image_height=2,
+                ),
+            ),
+        ),
+    )
+    config_sha = perception_benchmark.sha256_bytes(CONFIG.read_bytes())
+    mac = _verified_val_run(
+        arguments.mac_run_root,
+        platform="macos",
+        source_commit=arguments.source_commit,
+        config_sha256=config_sha,
+    )
+    linux = _verified_val_run(
+        arguments.linux_run_root,
+        platform="linux",
+        source_commit=arguments.source_commit,
+        config_sha256=config_sha,
+    )
+    _patch_calibration_loaders(monkeypatch, arguments, mac, linux)
+    monkeypatch.setattr(
+        perception_benchmark, "load_truth_samples", lambda *a, **k: (truth,)
+    )
+
+    def verify_rehomed(*values: object, **options: object) -> SimpleNamespace:
+        rehomed_truth = values[3][0]  # type: ignore[index]
+        evidence_root = options["evidence_root"]
+        assert rehomed_truth.instances[0].mask.relative_path.startswith("truth/")
+        assert np.array_equal(
+            read_mask(rehomed_truth.instances[0].mask, evidence_root), mask
+        )
+        return SimpleNamespace(lock_sha256="e" * 64)
+
+    monkeypatch.setattr(
+        perception_benchmark, "calibrate_joint_platform_val", verify_rehomed
+    )
+    monkeypatch.setattr(perception_benchmark, "write_threshold_lock", lambda *a: None)
+    monkeypatch.setattr(perception_benchmark, "_write_index", lambda *a: None)
+
+    assert perception_benchmark._handle_calibrate(arguments) == 0
 
 
 def test_calibration_rejects_cross_platform_provenance_mismatch(
