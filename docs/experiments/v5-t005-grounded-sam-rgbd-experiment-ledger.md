@@ -4022,3 +4022,35 @@ deletion: none
 next_command: commit and publish CP-051, synchronize ai-station, then perform the fresh scoped build and one exact generation
 decision: RUN_ONE_POSTFIX_DATASET_GENERATION
 ```
+
+## Checkpoint CP-052 — Unrelated tmux preflight exception
+
+```yaml
+checkpoint_id: CP-052
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-051
+cp051_attempts:
+  r1: INVALID_PRESTART because the transfer check used an incorrect expected script SHA; local and remote actual SHA256 were both 2e4a3450442642be782c8b4923aeece5d6bd8ad486ae105ecd872d3eadff85df
+  r2: STOPPED_PRESTART because the literal no-tmux guard found an existing unrelated session
+observed_tmux:
+  session: codex
+  window: 0
+  pane: 0
+  current_command: codex
+  current_path: /data/work/microduck_rl
+  relation_to_experiment: none
+target_state:
+  raw_root: absent
+  archive: absent
+  checksum: absent
+  fresh_build_root: absent
+revised_preflight:
+  - preserve and do not alter the unrelated codex tmux session
+  - require no active benchmark, dataset-generator, Grounded-SAM, MuJoCo, or ROS process
+  - require no tmux pane whose command or current path belongs to this experiment
+  - keep every remaining CP-051 source, build, target, access, and stop condition unchanged
+deletion: none
+next_command: publish CP-052, synchronize ai-station, then rerun the scoped preflight and build without touching the unrelated session
+decision: PROCEED_WITH_UNRELATED_TMUX_PRESERVED
+```
