@@ -2170,3 +2170,44 @@ deletion_candidates:
 next_command: commit CP-018, synchronize ai-station, run the one exact generation command, and stop before archive/config rebinding
 decision: RUN_ONE_FRESH_DATASET_GENERATION
 ```
+
+## Checkpoint CP-019 — non-symlink dataset generation replacement
+
+```yaml
+checkpoint_id: CP-019
+experiment_id: EXP-079
+supersedes: CP-018 generation command only
+cp018_result: INVALID_PRESTART
+cp018_observed:
+  - generate_yolo_seg_dataset returned dataset config must be a regular file before output-root creation
+  - r2 had correctly packaged fresh_dataset.yaml, but --symlink-install made the installed path a symlink and the fail-closed config reader rejected it
+  - raw-e0c6d029 and its archive target remain absent; no image, label, truth, model, simulator, or ROS output was produced
+replacement_build:
+  id: linux-build-r3
+  mode: non-symlink install
+  checkout_head: 2603e6c958831a31a99ee3bc092f49588a97cea6
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r3/install/so101_demo_py
+  config_type: regular file
+  generator_python: /data/work/venvs/so101-grounded-sam/bin/python
+  loaded_module: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r3/install/so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/perception/mujoco_dataset.py
+  focused_test: 22 passed in 2.74 s; JUnit SHA256 81c2ed663a8898955b7f4e52c50a68f5c05281862ba17e1a4a3f3619c6ddad2b
+replacement_generation:
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r3/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/fresh_dataset.yaml
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-2603e6c9-r2
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-2603e6c9-r2.tar.gz
+  generator_commit: 2603e6c958831a31a99ee3bc092f49588a97cea6
+  environment: MUJOCO_GL=egl and PYTHONNOUSERSITE=1
+  success_and_access_contract: exactly CP-018
+preflight:
+  - replacement output and archive targets must be absent and non-symlink
+  - installed config must remain a regular file with SHA256 matching the tracked file at checkout HEAD
+  - no Grounded-SAM, benchmark, dataset-generator, MuJoCo, ROS, or tmux process may be active
+retained_runs:
+  - all CP-018 retained runs
+  - linux-build-r3
+archived_runs: []
+deletion_candidates:
+  - CP-018 r1 plus r2 symlink build, only after explicit user authorization
+next_command: commit CP-019, synchronize ai-station, and run replacement_generation exactly once
+decision: RUN_REPLACEMENT_DATASET_GENERATION
+```
