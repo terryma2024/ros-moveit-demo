@@ -26,7 +26,7 @@ models:
       selector_min_confidence: {start: 0.05, stop: 0.95, step: 0.05}
   grounded_sam:
     model_id: grounding-dino-tiny+sam2.1-hiera-tiny
-    manifest_sha256: 838c5154ae7587e01dc437c2e1d5da2572b9265951677731bc9c7793fbebb8b3
+    manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
     grounding_dino_revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
     sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
     prompt: plastic cup.
