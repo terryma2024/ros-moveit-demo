@@ -4407,3 +4407,87 @@ deletion: none
 next_command: publish CP-059, synchronize ai-station, execute the optimized Grounded-SAM calibration once, and verify its lock and evidence before any test unlock
 decision: RUN_POSTFIX_GROUNDED_SAM_NUMERICAL_CALIBRATION_ONLY
 ```
+
+## Checkpoint CP-060 — Parallel Grounded-SAM grid calibration result
+
+```yaml
+checkpoint_id: CP-060
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-059
+status: READY_FOR_LINUX_FULL_BENCHMARK_AND_TEST_UNLOCK_PREREGISTRATION
+calibration_implementation:
+  commit: f4500933d238ad391f048eb7ef51d82d6ff4fced
+  prediction_evidence_source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+  behavior:
+    - Grounding DINO and SAM inference remain absent from calibration
+    - 400 aligned platform records precompute mask IoUs and Grounding box/text prefix states once
+    - the 32400-point Grounded-SAM grid is partitioned across 8 process workers
+    - result delivery preserves original grid order, objective, tie-break, safety gate, and lock SHA semantics
+  tdd:
+    red: the worker-plumbing test observed one process-pool map because only precompute was parallel
+    first_green: the same test observed separate precompute and grid maps
+    spawn_regression: macOS initially rejected mappingproxy serialization across process boundaries
+    spawn_fix: RuntimeProvenance and CalibrationResult rebuild through validated constructors during process transfer
+  macos:
+    fresh_scoped_build_seconds: 2.53
+    focused_calibration_tests: 61 passed in 7.09 s
+    benchmark_gate: 564 passed, 0 failed, 0 skipped in 311 s
+    junit: 564 tests, 0 errors, 0 failures, 0 skipped
+    compileall: PASS
+    diff_check: PASS
+  linux:
+    fresh_scoped_build_seconds: 1.33
+    focused_calibration_tests: 61 passed in 14.41 s
+    build_script_sha256: 8e6b6b87d39ac87a2d22c5a6fef7c16eeacda90c2e1345df61100e1e2d99b6df
+grounded_sam_calibration:
+  status: VALID
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/grounded-sam-r3
+  workers: 8
+  grid_points: 32400
+  total_seconds: 162.9
+  precompute_complete_seconds: 62.2
+  grid_complete_seconds: 162.7
+  prior_cached_serial_total_seconds: 224.9
+  additional_parallel_speedup: 1.38x
+  inference_during_calibration: false
+  calibration_script_sha256: 6d990422fd74dbf563947043bdc2966aaa6d312325d18b115650fcbf9b0d0d48
+  inspection_script_sha256: 7b5066828d96bd9078f51da483d01584331f88446a62afa977c767b4b99d3429
+  threshold_lock_file_sha256: 8b0d24ca6c8c28ffb6f9e8c6d7be7c4dabb3916a198f8a0e6f594fb6faebce3e
+  threshold_lock_internal_sha256: 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+  evidence_index_sha256: 6cee20a21103df7d814bec38e37ebdf1feab9d66fe286e262adf9cc3fbb03672
+  progress_log_sha256: 526c059a73b2b87321f7a054eddad2f5c0965728be287f9ffebbfc7c678afa10
+  verified_evidence_entries: 22688
+  retained_file_count: 22689
+  retained_size_bytes: 36190885
+  verification: {formal: true, deployable: true, outcome: SAFE_CALIBRATED, unsafe_unique_macos: 0, unsafe_unique_linux: 0, verify_evidence: PASS}
+  selected: {box_threshold: '0.25', text_threshold: '0.25', sam_quality: '0.90', target_confidence_threshold: '0.25', duplicate_iou: '0.85', min_mask_pixels: 64, max_mask_area_ratio: '0.50'}
+  objective: {min_platform_macro_f1: 0.14046946863361034, merged_macro_f1: 0.14046946863361034, merged_mask_ap50_95: 0.04389862194172733, min_platform_two_cup_recall: 0.0}
+  platform_metrics:
+    macos: {macro_f1: 0.14046946863361034, mask_ap50_95: 0.0441781521868619, two_cup_both_matched_recall: 0.0, unsafe_unique_count: 0}
+    linux: {macro_f1: 0.14046946863361034, mask_ap50_95: 0.04385782452222347, two_cup_both_matched_recall: 0.0, unsafe_unique_count: 0}
+  interpretation: the fail-closed safety gate passes, but recognition quality and two-cup recall do not establish multi-object or PickPlace readiness
+superseded_attempts:
+  - run: grounded-sam-r1
+    outcome: manually interrupted before any formal output at grid 3 percent and 204.4 s after observing the grid was serial
+    archived_log: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-aborted-r1/progress.log
+    archived_log_sha256: 5a0ce8da4525d4750b71fcccd0b872d89781cd217089fe943207b2d3196cf956
+  - run: grounded-sam-r2
+    outcome: fail-closed RUN_PROVENANCE_MISMATCH before output because the calibration implementation commit was incorrectly supplied as the VAL_RAW source commit
+    archived_log: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-rejected-r2/progress.log
+    archived_log_sha256: c4d10f1200e95dd90326abefce35d3273854e4e645d41901a5b56aa021e59e36
+test_state:
+  sealed: true
+  semantic_content_opened: false
+  test_inference_run: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/yolo-r1
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/postfix-r4/grounded-sam-r3
+  archived_runs:
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-aborted-r1
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-rejected-r2
+  deletion_candidates: none
+next_command: publish CP-060, synchronize ai-station, run the full Linux benchmark gate, then preregister one immutable test unlock using the existing seal plus the YOLO and Grounded-SAM threshold-lock SHA values
+decision: QUALITY_INSUFFICIENT_BUT_PROCEED_TO_FROZEN_TEST_BENCHMARK
+```
