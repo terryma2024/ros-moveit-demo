@@ -1,3 +1,5 @@
+"""Low-frequency perception benchmark regression tests."""
+
 from __future__ import annotations
 
 import json
@@ -35,7 +37,7 @@ from so101_demo.perception_benchmark.timing import PhaseTimingBreakdown
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG = PACKAGE_ROOT / "config/perception_benchmark/benchmark.yaml"
-FIXTURE = PACKAGE_ROOT / "test/fixtures/perception_benchmark/dry-run-adapters.json"
+FIXTURE = PACKAGE_ROOT / "benchmark_test/fixtures/perception_benchmark/dry-run-adapters.json"
 
 
 def test_parser_exposes_exact_subcommands() -> None:
