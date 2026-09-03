@@ -1113,6 +1113,14 @@ def _mask_sha256(value: np.ndarray) -> str:
     return _sha256(value.astype(np.uint8, copy=False).tobytes(order="C"))
 
 
+def _production_mask_sha256(spec: RunSpec, value: np.ndarray) -> str:
+    if spec.model == "yolo_seg":
+        from so101_demo.adapters.perception.yolo_seg import _trim_mask_boundary
+
+        value = _trim_mask_boundary(value)
+    return _mask_sha256(value)
+
+
 def _matches_production_candidate(
     spec: RunSpec,
     raw: RawCandidate,
@@ -1159,7 +1167,8 @@ def _reconcile_production_candidates(
     ):
         raise RunIntegrityError("PRODUCTION_BATCH_IDENTITY_MISMATCH")
     raw_mask_shas = {
-        raw.candidate_id: _mask_sha256(
+        raw.candidate_id: _production_mask_sha256(
+            spec,
             _read_verified_adapter_mask(raw.mask, source_root)[0]
         )
         for raw in result.raw_candidates
