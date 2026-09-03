@@ -702,6 +702,38 @@ def test_mask_artifacts_are_lossless_relative_fsynced_and_never_overwritten(
     assert artifact.read_bytes() == original
 
 
+def test_zero_candidate_collection_is_representable_in_evidence_index(
+    tmp_path: Path,
+) -> None:
+    """Keep a durable file carrier for frames that correctly yield no masks."""
+
+    from so101_demo.cli.perception_benchmark import _write_index
+
+    class _EmptyYoloModel(_YoloModel):
+        def predict(self, **kwargs: object) -> list[SimpleNamespace]:
+            self.predict_calls.append(kwargs)
+            return [
+                SimpleNamespace(
+                    boxes=SimpleNamespace(
+                        xyxy=np.empty((0, 4), dtype=np.float32),
+                        cls=np.empty((0,), dtype=np.float32),
+                        conf=np.empty((0,), dtype=np.float32),
+                    ),
+                    masks=None,
+                )
+            ]
+
+    result = _yolo_adapter(tmp_path, model=_EmptyYoloModel()).collect(
+        _frame(), CollectionMode.LOW_FLOOR
+    )
+
+    assert result.raw_candidates == ()
+    index = _write_index(tmp_path)
+    assert [entry.relative_path for entry in index.entries] == [
+        "benchmark-masks/yolo-seg/collection-000000/collection.json"
+    ]
+
+
 @pytest.mark.parametrize(
     "symlink_level",
     ("evidence-root", "benchmark-masks", "namespace", "collection"),
@@ -747,6 +779,7 @@ def test_mask_write_rejects_collection_swapped_to_outside_symlink(
     class _SwappingYoloModel(_YoloModel):
         def predict(self, **kwargs: object) -> list[_YoloResult]:
             collection = tmp_path / "benchmark-masks" / "yolo-seg" / "collection-000000"
+            (collection / "collection.json").unlink()
             collection.rmdir()
             collection.symlink_to(outside, target_is_directory=True)
             return super().predict(**kwargs)
@@ -786,6 +819,7 @@ def test_mask_artifact_directory_entries_are_fsynced_before_result(
         benchmark_masks,
         collection,
         namespace,
+        collection,
         collection,
     ]
 

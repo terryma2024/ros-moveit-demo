@@ -283,7 +283,36 @@ class _MaskArtifactStore:
                     continue
                 if not created:
                     continue
+                self._write_collection_marker(relative)
                 return relative
+
+    def _write_collection_marker(self, collection: PurePosixPath) -> None:
+        target = self.root / collection / "collection.json"
+        payload = canonical_json_bytes(
+            {
+                "schema_version": "so101-perception-benchmark/mask-collection-v1",
+                "namespace": self._namespace.as_posix(),
+                "collection": collection.name,
+            }
+        )
+        parent_descriptor = _open_directory_no_follow(target.parent)
+        try:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            file_descriptor = os.open(
+                target.name,
+                flags,
+                0o600,
+                dir_fd=parent_descriptor,
+            )
+            with os.fdopen(file_descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
+        _fsync_directory(target.parent)
 
     def write_mask(self, relative_path: str | PurePosixPath, mask: np.ndarray) -> MaskRef:
         relative = PurePosixPath(relative_path)
