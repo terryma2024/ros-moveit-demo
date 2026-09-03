@@ -3675,3 +3675,56 @@ stop_criteria:
 next_command: commit and push CP-045, synchronize ai-station, create the absent R2 lock target, copy both locks with scp -p and verify timestamps plus digests, then start Mac R2 only
 decision: REPLACE_PREINFERENCE_INVALID_MAC_R1_WITH_TIMESTAMP_PRESERVING_R2
 ```
+
+## Checkpoint CP-046 — Mac formal test R2 stopped on YOLO production mapping
+
+```yaml
+checkpoint_id: CP-046
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-045
+mac_r2:
+  status: INVALID_STOPPED
+  yolo_raw:
+    run_id: mac-yolo-test-raw-fresh-r2
+    output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test/macos/yolo-raw-r2
+    status: VALID
+    record_count: 200
+    started_at: 2026-09-03T18:20:26.855118+00:00
+    ended_at: 2026-09-03T18:20:35.518689+00:00
+    record_inventory_sha256: c8f51715eb5670fa62446021fc0f556872410802d029484254b594eeb4023e23
+  yolo_production:
+    run_id: mac-yolo-test-production-fresh-r2
+    output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test/macos/yolo-production-r2
+    status: INVALID
+    invalid_reason: PRODUCTION_CANDIDATE_MAPPING_INVALID
+    record_count: 0
+    started_at: 2026-09-03T18:20:39.482966+00:00
+    ended_at: 2026-09-03T18:20:39.782679+00:00
+    model_inference_started: true
+  remaining_mac_outputs:
+    - yolo-calibrated-r2: ABSENT
+    - grounded-sam-raw-r2: ABSENT
+    - grounded-sam-production-r2: ABSENT
+    - grounded-sam-calibrated-r2: ABSENT
+  launchd_job_removed_after_exit: true
+linux_r1:
+  status: NOT_STARTED
+  all_six_outputs_absent: true
+interpretation:
+  - the production run is invalid evidence, not a zero detector score
+  - the runner stopped before writing the first production record, as required by the fail-closed mapping contract
+  - the held-out test split is open and may now be used only for diagnosis; it cannot be reused for an unbiased ranking after a semantic code fix
+first_source_inconsistency:
+  - YoloRawAdapter._convert stores the nearest-resized binary mask without boundary trimming
+  - convert_yolo_result, used by the production detector, applies _trim_mask_boundary after the same nearest resize
+  - _matches_production_candidate requires the observed mask SHA-256 to equal the raw mask SHA-256 byte-for-byte
+  - therefore a non-empty production candidate whose boundary changes cannot map to its raw counterpart even when model weights, frame, box, class, and confidence agree
+diagnostic_boundary:
+  - do not change thresholds, locks, current test records, or current test outputs
+  - reproduce on validation data only and compare the first raw and production candidates field-by-field
+  - add diagnostic visibility and a regression test before changing reconciliation semantics
+deletion: none
+next_command: commit and publish CP-046, synchronize ai-station, then run one bounded validation-only YOLO raw/production diagnostic on Mac MPS
+decision: FORMAL_BENCHMARK_INVALID_STOP_AND_DIAGNOSE_ON_VALIDATION
+```
