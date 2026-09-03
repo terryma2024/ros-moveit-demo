@@ -3475,3 +3475,46 @@ deletion: none
 next_command: validate both formal locks together, then follow the preregistered test-seal and formal held-out test workflow without changing either lock
 decision: VALID_VAL_LOCK_PERFORMANCE_OPTIMIZATION_COMPLETE_MODEL_CAPABILITY_NOT_ESTABLISHED
 ```
+
+## Checkpoint CP-043 — one-time fresh test unlock preregistration
+
+```yaml
+checkpoint_id: CP-043
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-042
+lock_verification:
+  yolo:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/yolo-r1/threshold-lock.json
+    file_sha256: c8b166f263077713e79b6ae33394efd7fbe37b39353ea3933d6da5c8e120b2d8
+    internal_sha256: 0899521b12ddfcce8f302a9dfb2943eb2bfb26ea2092e2d839b89bd2e93a5151
+    state: {formal: true, deployable: true, outcome: SAFE_CALIBRATED}
+    evidence_index_sha256: 28c997133fc962cc38b95777748e7eed81a415b90ae9a4252c19d694a7aebf72
+  grounded_sam:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2/threshold-lock.json
+    file_sha256: 9ad6d9a0f8c21575a4dc9e5d3cea5fc8da3e450493ec12cd3f9cf0add9d4c3bc
+    internal_sha256: 374cbbc28596e61d937556c6e9adf4d2c72959c26eb896e1e9bfb4cd1489fd9e
+    state: {formal: true, deployable: true, outcome: SAFE_CALIBRATED}
+    evidence_index_sha256: 49d918767da78ad730dd7b2bf3568ee0ad58bdd6199c6b4e88c7a1f6a7b99e7b
+sealed_input:
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r3.json
+  member_inventory_sha256: 905383228d57a0177e141814a96a5998524d1252e51e33d962c7fda7c5375295
+  member_count: 600
+  semantic_content_opened_before_unlock: false
+one_time_unlock:
+  access_log: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/test-access-r1.jsonl
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-r1
+  precondition: both targets are absent and the access event is appended before any test member is decoded
+  command: PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/lib/so101_demo_py/perception_benchmark unlock-test --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-92b0-cp041-r5/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --sealed-member-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r3.json --yolo-threshold-lock /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/yolo-r1/threshold-lock.json --grounded-sam-threshold-lock /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2/threshold-lock.json --access-log /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/test-access-r1.jsonl --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-r1
+success_criteria:
+  - exactly one access event exists and binds both verified internal lock SHA-256 values plus the sealed member inventory
+  - test inventory contains 200 unique samples and exactly 50 no_cup, 50 one_cup_distractors, 50 two_cups, and 50 cup_near_bottle samples
+  - all 600 extracted source artifacts are regular files with verified source SHA-256 values
+  - no threshold, prompt, model, grid, matching rule, or calibration result changes after opening test
+stop_criteria:
+  - existing target, lock/seal/archive mismatch, access-event ordering failure, path safety failure, count/scenario mismatch, or malformed test truth
+next_command: commit and push CP-043, synchronize ai-station, reverify both targets are absent, then execute the exact one-time unlock command
+decision: READY_FOR_ONE_TIME_TEST_ACCESS
+```
