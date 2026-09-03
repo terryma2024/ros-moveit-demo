@@ -715,3 +715,12 @@ Frozen R11 sequential matrix:
 12. `EXP-BENCH-TEST-LINUX-YOLO-CHARACTERIZATION-R11` = `PLANNED`: `linux-yolo-test-characterization-r11`, `TEST_CHARACTERIZATION`, durable `test/linux/yolo-characterization-r11`.
 
 Run strictly in this order with no concurrent model process. After each command, write and independently verify a complete evidence index before transitioning the next row to `RUNNING`. Any failure is terminal for only its fresh R11 root; do not resume, overwrite, tune, or reuse an invalid row. R10 remains retained invalid evidence and cannot enter metrics.
+
+## CP-BENCH-036 — Task 14 R11 threshold-lock copy-time failure
+
+This checkpoint was completed at `2026-09-03T08:44:20Z`, after the first R11 command failed and before any source remediation or another model command.
+
+- `EXP-BENCH-TEST-MAC-YOLO-RAW-R11` is terminal `INVALID`. The exact CP-BENCH-035 command returned exit code `2` with `RUN_INVALID: THRESHOLD_LOCK_POSTDATES_TEST_ACCESS`. Its retained output `test/mac/yolo-raw-r11` contains only a zero-record invalid manifest, SHA-256 `9dee2d2a2c51aeed37b0735dfa2c5de070e4bb1d3bb9d0e298f2e0b3d37055e7`; no adapter construction or model inference ran.
+- Both copied Mac lock files remain byte-identical to their verified durable R9 locks and retain the exact identities committed by the sole test-access event. Their local copy mtimes necessarily postdate that event. `_verify_threshold_lock_chain()` verifies canonical lock content, recomputed lock identity, model, formal two-platform denominator, source commit, and membership of the exact lock identity in immutable `inventory.test_access.threshold_lock_sha256s`; its additional local-file mtime comparison is therefore host-copy metadata, not portable proof of calibration-before-test order.
+- R12 remediation boundary: add a runner regression in which a canonical, registered lock is copied after the test event while preserving its bytes, prove RED, and remove only the local mtime comparison. Keep canonical lock verification, exact lock identity, registered-event membership, sole access event, source/model/formal checks, inventory capability, and all frozen inference settings unchanged. A lock with changed content or an unregistered identity must still fail closed.
+- The remaining R11 rows stay `PLANNED` and cannot run. After a minimal committed fix and exact Mac/Linux build/regression evidence, lock fresh R12 IDs and absent output roots. R10 and R11 invalid roots remain retained and excluded from every metric.
