@@ -3405,3 +3405,73 @@ stop_criteria:
 next_command: commit and push CP-041, fast-forward the isolated ai-station checkout, reverify the output path is absent, then execute the exact formal command with combined stdout and stderr captured in the registered progress log
 decision: LINUX_QUALIFIED_READY_TO_RUN_GROUNDED_SAM_R2
 ```
+
+## Checkpoint CP-042 — optimized grounded-sam-r2 calibration result
+
+```yaml
+checkpoint_id: CP-042
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-041
+run:
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2
+  progress_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/grounded-sam-r2-calibrate.log
+  command_exit_code: 0
+  workers: 8
+  grid_points_completed: 32400
+  inference_during_calibration: false
+timing:
+  first_input_verification_seconds: 27.4
+  mask_rehome_seconds: 18.4
+  second_output_verification_seconds: 14.5
+  parallel_precompute_seconds: 2.6
+  grid_seconds: 161.8
+  finalize_seconds: 0.2
+  total_seconds: 224.9
+  interrupted_baseline_seconds_lower_bound: 2940
+  speedup_lower_bound: 13.07x
+progress_contract:
+  phases_observed: [verify, rehome, verify, precompute, grid, finalize]
+  monotonic_bounded_counts: true
+  progress_log_lines: 311
+artifacts:
+  file_count: 22641
+  total_bytes: 36910115
+  threshold_lock_file_sha256: 9ad6d9a0f8c21575a4dc9e5d3cea5fc8da3e450493ec12cd3f9cf0add9d4c3bc
+  threshold_lock_internal_sha256: 374cbbc28596e61d937556c6e9adf4d2c72959c26eb896e1e9bfb4cd1489fd9e
+  evidence_index_sha256: 49d918767da78ad730dd7b2bf3568ee0ad58bdd6199c6b4e88c7a1f6a7b99e7b
+  progress_log_sha256: c23f7a6ff319258fc837adfac330f9e0b4bec09397a2beed364f80fbb011a355
+verification:
+  verify_evidence: PASS
+  verify_threshold_lock: PASS
+  formal: true
+  deployable: true
+  outcome: SAFE_CALIBRATED
+  platform_sample_counts: {macos: 200, linux: 200}
+selected:
+  box_threshold: '0.05'
+  text_threshold: '0.05'
+  sam_quality: '0.80'
+  target_confidence_threshold: '0.05'
+  duplicate_iou: '0.85'
+  min_mask_pixels: 64
+  max_mask_area_ratio: '0.50'
+objective_metrics:
+  min_platform_macro_f1: 0.13333333333333333
+  merged_macro_f1: 0.13333333333333333
+  merged_mask_ap50_95: 0.034306845877090666
+  min_platform_two_cup_recall: 0.08
+platform_metrics:
+  macos: {sample_count: 200, error_count: 0, macro_f1: 0.13333333333333333, mask_ap50_95: 0.034484790802431935, unsafe_unique_count: 0, unsafe_unique_denominator: 100, unsafe_unique_rate: 0.0, two_cup_both_matched_recall: 0.08}
+  linux: {sample_count: 200, error_count: 0, macro_f1: 0.13333333333333333, mask_ap50_95: 0.03450188880901818, unsafe_unique_count: 0, unsafe_unique_denominator: 100, unsafe_unique_rate: 0.0, two_cup_both_matched_recall: 0.08}
+interpretation:
+  - SAFE_CALIBRATED and deployable describe the frozen fail-closed unsafe-unique gate only
+  - macro-F1 0.1333, merged mask AP50-95 0.0343, and two-cup both-matched recall 0.08 do not establish useful model capability or Pick & Place readiness
+  - no threshold, metric, matching rule, tie-break, or test seal was changed by the performance optimization
+retained_runs:
+  - grounded-sam-r2 and its progress log
+  - all CP-041 build and benchmark evidence, including both interrupted diagnostic attempts
+deletion: none
+next_command: validate both formal locks together, then follow the preregistered test-seal and formal held-out test workflow without changing either lock
+decision: VALID_VAL_LOCK_PERFORMANCE_OPTIMIZATION_COMPLETE_MODEL_CAPABILITY_NOT_ESTABLISHED
+```
