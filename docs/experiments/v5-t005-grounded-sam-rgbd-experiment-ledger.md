@@ -2652,3 +2652,42 @@ deletion_candidates:
 next_command: commit and push CP-028, verify the script digest and output absence, then run the exact command once from ordinary macOS Terminal
 decision: PROVE_NATIVE_MPS_OUTSIDE_CODEX_RUNTIME
 ```
+
+## Checkpoint CP-029 — launchd-native MPS probe replacement lock
+
+```yaml
+checkpoint_id: CP-029
+experiment_id: EXP-079
+status: PREREGISTERED_LAUNCHD_PROBE
+source_commit: 43d2db12aa734d6441d437ebe6d2e81a0b7b7131
+cp_028_result:
+  status: BLOCKED_BEFORE_EXECUTION
+  first_bad_boundary: computer-use safety policy rejects control of both Apple Terminal and Ghostty
+  command_entered: false
+  probe_script_executed: false
+  output_created: false
+  system_or_application_setting_changed: false
+replacement_probe:
+  launcher: launchctl submit
+  label: com.terry.so101.mps-probe-r2
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-launchd-mps-probe-r2.sh
+  script_sha256: 3b3fcb1fb9cb35bdbd73c3030a88fde181c313e9315bb9711b1bedb6aeb9cc97
+  command: launchctl submit -l com.terry.so101.mps-probe-r2 -- /bin/zsh /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-launchd-mps-probe-r2.sh
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-launchd-mps-probe-r2.json
+  output_policy: output and temporary path must be absent; write once; chmod 0444; read launchd last exit status; remove only the completed ephemeral launchd job, never evidence
+success_criteria:
+  - launchd creates a process outside the Codex sandbox context using the unchanged base Python and torch 2.13.0
+  - CODEX_CI and CODEX_SANDBOX are absent in the probe process
+  - mps_built and mps_available are true
+  - one tensor is allocated on mps:0 and read back as 1.0
+stop_criteria:
+  - label collision, output collision, script digest mismatch, nonzero launchd exit, Codex sandbox markers, MPS false, allocation failure, or CPU tensor
+retained_runs:
+  - all CP-028 retained runs
+  - native Terminal R1 script remains retained but was not executed
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-028
+next_command: commit and push CP-029, verify script digest/output absence/label absence, submit the ephemeral launchd job once, then inspect its exit state and immutable output
+decision: PROVE_NATIVE_MPS_VIA_EPHEMERAL_LAUNCHD_JOB
+```
