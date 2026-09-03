@@ -3839,3 +3839,79 @@ deletion: none
 next_command: commit and publish the fix plus CP-048, synchronize ai-station, then build a fresh Linux scoped overlay and run the same complete benchmark gate
 decision: MAC_CODE_GATE_PASS_PENDING_LINUX_GATE
 ```
+
+## Checkpoint CP-049 — Cross-platform code qualification complete
+
+```yaml
+checkpoint_id: CP-049
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-048
+source:
+  branch: codex/v5-t004-yolo-seg-rgbd
+  commit: 5c2224e2dbfaf92f43c06935bb4c7457a4c64bf8
+  remote_sha: 5c2224e2dbfaf92f43c06935bb4c7457a4c64bf8
+linux_environment_diagnostics:
+  attempt_r6:
+    result: PREBUILD_INVALID
+    cause: Bash setup sourced after set -u and referenced an unset COLCON_TRACE
+    model_or_test_started: false
+  attempt_r7:
+    result: BUILD_ONLY_ENVIRONMENT_INVALID
+    build_duration_s: 1.30
+    cause: system /usr/bin/python3 shebang; not used for tests
+  attempt_r8:
+    result: BUILD_ONLY_ENVIRONMENT_INVALID
+    build_duration_s: 1.22
+    cause: PATH alone did not change the Python interpreter owned by /usr/bin/colcon
+  attempt_r9:
+    result: TEST_ENVIRONMENT_INVALID
+    build_duration_s: 1.46
+    test_summary: 501 passed, 60 failed, 2 skipped
+    common_failure: RASTERIZER_VERSION_MISMATCH
+    cause: system dist-packages preceded venv site-packages through PYTHONPATH and selected Pillow 10.2 instead of pinned Pillow 12.3
+  attempt_r10:
+    result: PREBUILD_INVALID
+    cause: colcon_core was added only inside the parent wrapper process and was unavailable to the setuptools subprocess
+    model_or_test_started: false
+  retention: all diagnostic roots retained; no deletion
+linux_qualified_overlay:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-mapfix-r11
+  build_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-mapfix-build-r6.sh
+  build_script_sha256: 03046564f8348b1f1789426c65d8d5f596e1b97a52ebea60fc0926e0d0323e3a
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-mapfix-test-r6.sh
+  test_script_sha256: 3e5bda3c34c7f6a492bbd9703b48d046f3289550654b9157d8534b3268d6f7dd
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  dependency_order:
+    - /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+    - /usr/lib/python3/dist-packages
+  pillow: 12.3.0
+  runner_shebang: /data/work/venvs/so101-grounded-sam/bin/python
+  build_result: PASS
+  package_duration_s: 1.15
+  total_duration_s: 1.28
+linux_benchmark_gate:
+  runtime_tmp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime-tmp/linux-mapfix-r11
+  command_contract: colcon test --base-paths src/so101_demo_py --packages-select so101_demo_py --pytest-args benchmark_test
+  pytest_result: 561 passed, 2 skipped
+  pytest_duration_s: 643.63
+  colcon_duration: 10min 45s
+  test_result: 563 tests, 0 errors, 0 failures, 2 skipped
+cross_platform_gate:
+  macos: PASS_563_OF_563
+  linux: PASS_561_PLUS_2_SKIPPED
+  code_fix: QUALIFIED
+optimized_iteration_policy:
+  - use focused tests for the changed behavior during RED/GREEN iteration
+  - use runner-only tests for reconciliation changes before the full gate
+  - build only src/so101_demo_py against a verified underlay; measured fresh build is 1.28 to 1.66 seconds instead of rebuilding all ROS dependencies
+  - run the complete benchmark_test gate only for benchmark core changes and release qualification
+  - on Linux place pytest TMPDIR on the registered NVMe evidence root and keep venv site-packages before system ROS dist-packages
+formal_benchmark_state:
+  old_test_split: INVALID_DIAGNOSTIC_ONLY
+  next_requirement: new independently sealed held-out split, fresh validation inference, fresh calibration locks, one-time test unlock, and one frozen test matrix
+  pick_place_claim: not yet established
+deletion: none
+next_command: commit and publish CP-049, then preregister and generate a fresh post-fix benchmark dataset without accessing its test members
+decision: CODE_FIX_CROSS_PLATFORM_QUALIFIED_PREPARE_FRESH_FORMAL_DATASET
+```
