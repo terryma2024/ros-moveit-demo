@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 import so101_demo.perception_benchmark.dataset as dataset_module
 from PIL import Image
+from so101_demo.adapters.perception.yolo_seg import _trim_mask_boundary
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 from so101_demo.perception_benchmark.adapters import (
     CollectionMode,
@@ -1208,6 +1209,7 @@ def _production_candidate(
 ) -> DetectionCandidate:
     mask = np.zeros((16, 20), dtype=bool)
     mask[2 + mask_offset : 8 + mask_offset, 3:10] = True
+    mask = _trim_mask_boundary(mask)
     return DetectionCandidate(
         instance_id=instance_id,
         class_id="plastic_cup",
@@ -1271,6 +1273,43 @@ def test_production_local_id_maps_to_canonical_raw_id_and_subset_evidence(
         "yolo-000"
     ]
     assert record["raw_candidates"][0]["class_confidence"] == 0.9
+
+
+def test_yolo_production_trimmed_mask_maps_to_canonical_raw_candidate(
+    tmp_path: Path,
+) -> None:
+    """Map the deterministic production boundary trim without weakening identity."""
+
+    lock = _formal_yolo_lock()
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticAdapter(output_root)
+
+    def observe(frame: object) -> ProductionObservation:
+        batch = _production_batch(frame, (_production_candidate(frame),))
+        return ProductionObservation(
+            DecisionOutput.UNIQUE, batch, "0", None, None, None, 0.25
+        )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            run_id="production-trimmed-mask-map",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is RunStatus.VALID
+    record = _record(output_root, 0)
+    assert record["selected_candidate_id"] == "yolo-000"
+    assert [item["candidate_id"] for item in record["raw_candidates"]] == [
+        "yolo-000"
+    ]
 
 
 @pytest.mark.parametrize("mapping_failure", ("ambiguous", "non-injective"))
