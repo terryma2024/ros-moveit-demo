@@ -441,6 +441,17 @@ class CalibrationResult:
             _optional_probability("merged_mask_ap50_95", self.merged_mask_ap50_95),
         )
 
+    def __reduce__(self):
+        return (
+            type(self),
+            (
+                self.selected,
+                dict(self.platform_metrics),
+                self.merged_macro_f1,
+                self.merged_mask_ap50_95,
+            ),
+        )
+
     @property
     def deployable(self) -> bool:
         return all(_platform_is_safe(metrics) for metrics in self.platform_metrics.values())
@@ -1029,6 +1040,37 @@ class _PlatformEvaluation:
     frozen_metrics: PlatformCalibrationMetrics
 
 
+@dataclass(frozen=True, slots=True)
+class _GridEvaluationContext:
+    model: ModelName
+    mac: tuple[PredictionRecord, ...]
+    linux: tuple[PredictionRecord, ...]
+    truths: tuple[TruthSample, ...]
+    evidence_root: Path
+    grounded_prefixes: Mapping[
+        str,
+        tuple[Mapping[tuple[Decimal, Decimal], tuple[RawCandidate, ...]], ...],
+    ]
+    precomputed_ious: Mapping[
+        str,
+        Mapping[int, Mapping[tuple[str, str], float]],
+    ]
+
+
+_GRID_WORKER_CONTEXT: _GridEvaluationContext | None = None
+_GRID_WORKER_PLATFORM_CACHE: dict[
+    tuple[str, tuple[tuple[int, str, tuple[str, ...]], ...]],
+    _PlatformEvaluation,
+] = {}
+_GRID_WORKER_MERGED_CACHE: dict[
+    tuple[
+        tuple[tuple[int, str, tuple[str, ...]], ...],
+        tuple[tuple[int, str, tuple[str, ...]], ...],
+    ],
+    tuple[float, float | None],
+] = {}
+
+
 def _evaluate_platform(
     filtered_records: tuple[PredictionRecord, ...],
     truths: tuple[TruthSample, ...],
@@ -1148,6 +1190,116 @@ def _merged_ap(
     ).mask_map
 
 
+def _evaluate_grid_config(
+    config: YoloThresholds | GroundedSamBenchmarkThresholds,
+    context: _GridEvaluationContext,
+    platform_cache: dict[
+        tuple[str, tuple[tuple[int, str, tuple[str, ...]], ...]],
+        _PlatformEvaluation,
+    ],
+    merged_cache: dict[
+        tuple[
+            tuple[tuple[int, str, tuple[str, ...]], ...],
+            tuple[tuple[int, str, tuple[str, ...]], ...],
+        ],
+        tuple[float, float | None],
+    ],
+) -> CalibrationResult:
+    if isinstance(config, GroundedSamBenchmarkThresholds):
+        prefix_key = (config.box_threshold, config.text_threshold)
+        mac_candidates = tuple(
+            _filter_precomputed_grounded(config, candidates[prefix_key])
+            for candidates in context.grounded_prefixes["macos"]
+        )
+        linux_candidates = tuple(
+            _filter_precomputed_grounded(config, candidates[prefix_key])
+            for candidates in context.grounded_prefixes["linux"]
+        )
+    else:
+        mac_candidates = tuple(
+            config.filter_candidates(record.raw_candidates) for record in context.mac
+        )
+        linux_candidates = tuple(
+            config.filter_candidates(record.raw_candidates) for record in context.linux
+        )
+    mac_signature = _selection_signature(context.mac, mac_candidates)
+    linux_signature = _selection_signature(context.linux, linux_candidates)
+    mac_key = ("macos", mac_signature)
+    linux_key = ("linux", linux_signature)
+    if mac_key not in platform_cache:
+        mac_filtered = tuple(
+            _record_with_candidates(record, candidates)
+            for record, candidates in zip(context.mac, mac_candidates, strict=True)
+        )
+        platform_cache[mac_key] = _evaluate_platform(
+            mac_filtered,
+            context.truths,
+            context.evidence_root,
+            context.precomputed_ious["macos"],
+        )
+    if linux_key not in platform_cache:
+        linux_filtered = tuple(
+            _record_with_candidates(record, candidates)
+            for record, candidates in zip(context.linux, linux_candidates, strict=True)
+        )
+        platform_cache[linux_key] = _evaluate_platform(
+            linux_filtered,
+            context.truths,
+            context.evidence_root,
+            context.precomputed_ious["linux"],
+        )
+    mac_evaluation = platform_cache[mac_key]
+    linux_evaluation = platform_cache[linux_key]
+    merged_key = (mac_signature, linux_signature)
+    if merged_key not in merged_cache:
+        merged_cache[merged_key] = (
+            _combined_macro_f1(
+                mac_evaluation.decision_metrics,
+                linux_evaluation.decision_metrics,
+            ),
+            _merged_ap(
+                mac_evaluation.records,
+                linux_evaluation.records,
+                context.truths,
+                context.evidence_root,
+                context.precomputed_ious["macos"],
+                context.precomputed_ious["linux"],
+            ),
+        )
+    merged_macro, merged_mask_ap = merged_cache[merged_key]
+    return CalibrationResult(
+        selected=config,
+        platform_metrics={
+            "macos": mac_evaluation.frozen_metrics,
+            "linux": linux_evaluation.frozen_metrics,
+        },
+        merged_macro_f1=merged_macro,
+        merged_mask_ap50_95=merged_mask_ap,
+    )
+
+
+def _initialize_grid_worker(context: _GridEvaluationContext) -> None:
+    global _GRID_WORKER_CONTEXT
+    global _GRID_WORKER_PLATFORM_CACHE
+    global _GRID_WORKER_MERGED_CACHE
+    _GRID_WORKER_CONTEXT = context
+    _GRID_WORKER_PLATFORM_CACHE = {}
+    _GRID_WORKER_MERGED_CACHE = {}
+
+
+def _evaluate_grid_worker(
+    config: YoloThresholds | GroundedSamBenchmarkThresholds,
+) -> CalibrationResult:
+    if _GRID_WORKER_CONTEXT is None:
+        raise RuntimeError("calibration grid worker is not initialized")
+    return _evaluate_grid_config(
+        config,
+        _GRID_WORKER_CONTEXT,
+        _GRID_WORKER_PLATFORM_CACHE,
+        _GRID_WORKER_MERGED_CACHE,
+    )
+
+
 def calibrate_joint_platform_val(
     model: str,
     mac_records: Sequence[PredictionRecord],
@@ -1219,103 +1371,71 @@ def calibrate_joint_platform_val(
     grid = (
         enumerate_yolo_grid() if normalized_model == "yolo_seg" else enumerate_grounded_sam_grid()
     )
-    platform_cache: dict[
-        tuple[str, tuple[tuple[int, str, tuple[str, ...]], ...]],
-        _PlatformEvaluation,
-    ] = {}
-    merged_cache: dict[
-        tuple[
-            tuple[tuple[int, str, tuple[str, ...]], ...],
-            tuple[tuple[int, str, tuple[str, ...]], ...],
-        ],
-        tuple[float, float | None],
-    ] = {}
     points: list[CalibrationResult] = []
     grid_total = 2527 if normalized_model == "yolo_seg" else 32400
     grid_step = max(1, grid_total // 100)
-    _emit_progress(progress_callback, "grid", 0, grid_total, started_at)
-    for grid_completed, config in enumerate(grid, start=1):
-        if isinstance(config, GroundedSamBenchmarkThresholds):
-            prefix_key = (config.box_threshold, config.text_threshold)
-            mac_candidates = tuple(
-                _filter_precomputed_grounded(config, candidates[prefix_key])
-                for candidates in grounded_prefixes["macos"]
-            )
-            linux_candidates = tuple(
-                _filter_precomputed_grounded(config, candidates[prefix_key])
-                for candidates in grounded_prefixes["linux"]
-            )
-        else:
-            mac_candidates = tuple(
-                config.filter_candidates(record.raw_candidates) for record in mac
-            )
-            linux_candidates = tuple(
-                config.filter_candidates(record.raw_candidates) for record in linux
-            )
-        mac_signature = _selection_signature(mac, mac_candidates)
-        linux_signature = _selection_signature(linux, linux_candidates)
-        mac_key = ("macos", mac_signature)
-        linux_key = ("linux", linux_signature)
-        if mac_key not in platform_cache:
-            mac_filtered = tuple(
-                _record_with_candidates(record, candidates)
-                for record, candidates in zip(mac, mac_candidates, strict=True)
-            )
-            platform_cache[mac_key] = _evaluate_platform(
-                mac_filtered,
-                truth_items,
-                root,
-                precomputed_ious["macos"],
-            )
-        if linux_key not in platform_cache:
-            linux_filtered = tuple(
-                _record_with_candidates(record, candidates)
-                for record, candidates in zip(linux, linux_candidates, strict=True)
-            )
-            platform_cache[linux_key] = _evaluate_platform(
-                linux_filtered,
-                truth_items,
-                root,
-                precomputed_ious["linux"],
-            )
-        mac_evaluation = platform_cache[mac_key]
-        linux_evaluation = platform_cache[linux_key]
-        merged_key = (mac_signature, linux_signature)
-        if merged_key not in merged_cache:
-            merged_cache[merged_key] = (
-                _combined_macro_f1(
-                    mac_evaluation.decision_metrics,
-                    linux_evaluation.decision_metrics,
-                ),
-                _merged_ap(
-                    mac_evaluation.records,
-                    linux_evaluation.records,
-                    truth_items,
-                    root,
-                    precomputed_ious["macos"],
-                    precomputed_ious["linux"],
-                ),
-            )
-        merged_macro, merged_mask_ap = merged_cache[merged_key]
-        points.append(
-            CalibrationResult(
-                selected=config,
-                platform_metrics={
-                    "macos": mac_evaluation.frozen_metrics,
-                    "linux": linux_evaluation.frozen_metrics,
-                },
-                merged_macro_f1=merged_macro,
-                merged_mask_ap50_95=merged_mask_ap,
-            )
+    context = _GridEvaluationContext(
+        normalized_model,
+        mac,
+        linux,
+        truth_items,
+        root,
+        {
+            platform: tuple(dict(prefixes) for prefixes in platform_values)
+            for platform, platform_values in grounded_prefixes.items()
+        },
+        {
+            platform: {
+                sample_index: dict(values)
+                for sample_index, values in platform_values.items()
+            }
+            for platform, platform_values in precomputed_ious.items()
+        },
+    )
+    grid_executor = None
+    if normalized_model == "grounded_sam" and workers > 1:
+        grid_executor = ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_initialize_grid_worker,
+            initargs=(context,),
         )
-        if grid_completed == grid_total or grid_completed % grid_step == 0:
-            _emit_progress(
-                progress_callback,
-                "grid",
-                grid_completed,
-                grid_total,
-                started_at,
-            )
+        results = grid_executor.map(
+            _evaluate_grid_worker,
+            grid,
+            chunksize=len(decimal_range("0.50", "0.95", "0.05"))
+            * len(decimal_range("0.05", "0.90", "0.05")),
+        )
+    else:
+        platform_cache: dict[
+            tuple[str, tuple[tuple[int, str, tuple[str, ...]], ...]],
+            _PlatformEvaluation,
+        ] = {}
+        merged_cache: dict[
+            tuple[
+                tuple[tuple[int, str, tuple[str, ...]], ...],
+                tuple[tuple[int, str, tuple[str, ...]], ...],
+            ],
+            tuple[float, float | None],
+        ] = {}
+        results = (
+            _evaluate_grid_config(config, context, platform_cache, merged_cache)
+            for config in grid
+        )
+    _emit_progress(progress_callback, "grid", 0, grid_total, started_at)
+    try:
+        for grid_completed, point in enumerate(results, start=1):
+            points.append(point)
+            if grid_completed == grid_total or grid_completed % grid_step == 0:
+                _emit_progress(
+                    progress_callback,
+                    "grid",
+                    grid_completed,
+                    grid_total,
+                    started_at,
+                )
+    finally:
+        if grid_executor is not None:
+            grid_executor.shutdown(wait=True, cancel_futures=True)
     _emit_progress(progress_callback, "finalize", 0, 1, started_at)
     result = select_calibration_result(points)
     lock = ThresholdLock(
