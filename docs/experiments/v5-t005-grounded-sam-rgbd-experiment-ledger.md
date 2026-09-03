@@ -2817,3 +2817,75 @@ deletion_candidates:
 next_command: commit and push CP-031, synchronize ai-station, create the registered dry-run parent once, verify linux-r2 remains absent, then run the exact R2 command once
 decision: CREATE_REGISTERED_PARENT_THEN_RUN_LINUX_R2
 ```
+
+## Checkpoint CP-032 — fresh 200-sample validation collection lock
+
+```yaml
+checkpoint_id: CP-032
+experiment_id: EXP-079
+status: PREREGISTERED_VAL_RAW_COLLECTION
+source_commit: 253fcd5c1dd530892c2ac1cffd6fe58d1d4ec3d1
+benchmark_code_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+dry_run_results:
+  macos:
+    status: VALID
+    output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1
+    evidence_index_sha256: 09e27e5f88d8b3b5aae6891cc7b8eb3d11d0433f270454825e855b713322a28a
+    manifest_sha256: e56e53272fdd513b2d54ae6a1126a25ac33133db2fd7cd51d7934f681af826e4
+    index_entries: 510
+    device: mps
+  linux:
+    status: VALID
+    output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r2
+    evidence_index_sha256: 3787acacbe0125b5a27f65148e8bcc045a8cd563783cf07e9225e5d57f69be83
+    manifest_sha256: bfd78965abcfa367a4acf2ec1a7ef0eb563671a48ea2255bfcd414b9295713de
+    index_entries: 514
+    device: cuda
+  shared_contract: {execution_mode: actual, run_kind: NON_FORMAL_DRY_RUN, sample_count: 8, model_record_count: 16, records_per_model: {yolo_seg: 8, grounded_sam: 8}, dtype: float32, fallback_used: false, all_index_sha256_match: true, test_path_count: 0}
+frozen_val:
+  archive_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  inventory_sha256: 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  collection_mode: LOW_FLOOR
+  run_kind: VAL_RAW
+  dtype: float32
+  offline: true
+  fallback_used: false
+mac_collection:
+  order: [yolo_seg, grounded_sam]
+  label: com.terry.so101.benchmark.mac.val.r1
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-val-r1.sh
+  script_sha256: 3f2fe60a8090aa3bed614de453a42a7cde116e9f6876eed9c0866ab4f0fed4b0
+  plist: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.val.r1.plist
+  plist_sha256: 3590b380f758af1bac5ae7ba79aa28d11923d6d17e05bf675c61ef6778ac6422
+  command: launchctl bootstrap gui/501 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.val.r1.plist
+  outputs:
+    yolo_seg: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val/macos/yolo-r1
+    grounded_sam: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/val/macos/grounded-sam-r1
+linux_collection:
+  order: [yolo_seg, grounded_sam]
+  local_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r1.sh
+  remote_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r1.sh
+  script_sha256: 7a0802c374183ed2e108c705e486587de8ee4995c800f992142115059b2d4cc1
+  command: /bin/bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-val-r1.sh
+  outputs:
+    yolo_seg: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/yolo-r1
+    grounded_sam: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/grounded-sam-r1
+success_criteria:
+  - execute Mac first and Linux only after both Mac model runs validate
+  - each run has status VALID, exactly 200 records and one record per formal sample index, frozen provenance, native device, FP32, no fallback, no timeout, and no OOM
+  - every record/mask/index artifact exists and matches the evidence index SHA-256
+  - raw outputs are retained unchanged for joint calibration; no threshold is selected per platform
+  - no test member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - any parent/script/label/output collision, command failure, invalid manifest, missing/duplicate record, artifact SHA mismatch, fallback, timeout, OOM, or test access
+retained_runs:
+  - all CP-031 retained runs and both valid dry-runs
+  - Mac and Linux validation launch artifacts
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-031
+next_command: commit and push CP-032, synchronize ai-station, verify both platform output parents and all four outputs/label/script targets, then run Mac validation only
+decision: COLLECT_MAC_THEN_LINUX_VAL_RAW_WITH_TEST_SEALED
+```
