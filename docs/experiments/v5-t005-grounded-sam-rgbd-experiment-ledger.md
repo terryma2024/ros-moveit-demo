@@ -3138,3 +3138,92 @@ deletion_candidates:
 next_command: commit and push CP-037, synchronize the isolated ai-station task checkout without touching /data/work/ws_moveit, verify both output paths remain absent, then run and validate YOLO calibration only
 decision: RUN_YOLO_JOINT_VAL_CALIBRATION_THEN_GATE_GROUNDED_SAM
 ```
+
+## Checkpoint CP-038 — Grounded-SAM calibration performance remediation A+B
+
+```yaml
+checkpoint_id: CP-038
+date: 2026-09-04
+experiment_id: EXP-079
+scope: optimize the numerical Grounded-SAM joint validation calibration and rerun it without changing the frozen grid, matching semantics, safety gates, tie-break, or sealed-test boundary
+execution_mode: inline
+authorization:
+  user_choice: A+B
+  option_a: precompute and reuse deterministic numerical intermediates; do not execute Grounding DINO or SAM inference during calibration
+  option_b: use bounded multiprocessing for independent numerical precomputation
+source_state:
+  local_branch: codex/v5-t004-yolo-seg-rgbd
+  local_head: ead617cbef30efa1a0db960bf625b61205339b04
+  local_upstream_before_sync: 1cde365c
+  ai_station_checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  ai_station_head_before_sync: 1cde365c
+  rebase: already completed by the user; do not rebase again
+registered_evidence_roots:
+  local: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+  durable: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+baseline:
+  command_kind: calibrate grounded_sam
+  inference_during_calibration: false
+  grid_points: 32400
+  observed_cpu: approximately 99 percent of one CPU core
+  observed_rss: approximately 139 MB and stable
+  elapsed_before_stop: more than 49 minutes
+  partial_output:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1
+    files: 22639
+    apparent_size: approximately 104 MB
+    threshold_lock_present: false
+    evidence_index_present: false
+    validity: INVALID_INTERRUPTED_TRANSACTION
+  stopped_process: remote PID 2246519 was matched to the exact calibration command, sent SIGINT, and verified stopped
+root_cause_hypotheses:
+  H1: the 32400-point grid repeats Grounded-SAM box/text filtering and duplicate suppression for every sam-quality and selector combination; theoretical duplicate-suppression calls are 12960000 across 400 platform records
+  H2: every previously unseen selection signature repeatedly reads and decodes RLE masks for AP, assignment, and scenario metrics
+  H3: calibration mask rehoming decodes and re-encodes every verified 640x480 mask and fsyncs one JSON file at a time
+frozen_semantics:
+  grid_version: grounded-sam-grid/v1
+  grid_points: 32400
+  selection_and_tie_break: unchanged
+  matching_and_metric_values: unchanged
+  fail_closed_gates: unchanged
+  test_split_access: forbidden
+implementation_contract:
+  - precompute Grounded-SAM box/text plus duplicate-suppression states once per record and threshold pair
+  - precompute reusable truth-candidate IoU values without changing float evaluation or deterministic assignment
+  - use bounded multiprocessing only for independent precomputation; serial and parallel threshold locks must be byte-equivalent
+  - preserve already verified RLE JSON bytes when rehoming, while retaining secure source validation and exclusive destination creation
+  - emit flushed phase progress for verify, rehome, precompute, grid, and finalize, including completed, total, percent, and elapsed time
+  - preserve the public calibration API through optional arguments and keep a deterministic one-worker path
+test_first_contract:
+  - a failing test proves duplicate suppression is reused across sam-quality and selector points
+  - a failing test proves progress phase and monotonic-count behavior
+  - a failing test proves workers=1 and workers=2 yield the same complete threshold lock
+  - a failing CLI test proves calibration worker selection and progress output
+  - a failing rehome test proves verified RLE bytes are copied without overwrite
+remote_partial_archive_plan:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1
+  target: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1-interrupted-cp038
+  action: compute deterministic file inventory hash and file/byte counts before and after a recoverable move; do not delete evidence
+optimized_run:
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r2
+  precondition: path absent before start and optimized source built into a fresh isolated overlay
+success_criteria:
+  - targeted RED tests fail for the intended missing behaviors, then pass after implementation
+  - serial and two-worker fixture calibrations produce identical lock documents and lock_sha256 values
+  - explicit benchmark suite passes from the isolated package build
+  - grounded-sam-r2 writes a self-consistent threshold-lock.json and evidence-index.json
+  - grounded-sam-r2 is formal, deployable, SAFE_CALIBRATED, and has zero unsafe unique selections on both platforms
+  - wall time and phase timings are captured and materially improve on the interrupted baseline
+stop_criteria:
+  - any metric, selected threshold, safety result, or lock differs between the serial reference and parallel path
+  - output collision, evidence verification failure, test-split access, nonzero calibration exit, missing lock/index, non-deployable lock, or unsafe outcome
+retained_runs:
+  - all CP-037 retained runs
+  - valid yolo-r1 calibration lock and evidence index
+  - interrupted grounded-sam-r1 retained until its inventory-preserving archive move is verified
+archived_runs: []
+deletion_candidates:
+  - invalid mac-val-r1.tar.gz and mac-val-r2.tar.gz with adjacent local checksums, only after explicit user authorization
+next_command: commit and push this preregistration checkpoint, synchronize the isolated ai-station checkout, archive grounded-sam-r1 without deletion, then add and run the RED tests
+decision: EXECUTE_CALIBRATION_OPTIMIZATION_A_PLUS_B
+```
