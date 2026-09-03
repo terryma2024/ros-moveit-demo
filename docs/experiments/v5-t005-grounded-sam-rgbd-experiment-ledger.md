@@ -2303,3 +2303,54 @@ deletion_candidates:
 next_command: commit CP-021, synchronize ai-station, generate raw-650f3398-r3 once, validate only manifest and val, then create one deterministic archive and checksum
 decision: RUN_CORRECTED_DATASET_GENERATION
 ```
+
+## Checkpoint CP-022 — corrected fresh archive frozen
+
+```yaml
+checkpoint_id: CP-022
+experiment_id: EXP-079
+status: RUNNING_CONFIG_REBIND
+dataset_generation: VALID
+source_commit: 650f3398fb9e6eb5cc3b9ae6f15afc0bb1d858f7
+raw_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-650f3398-r3
+manifest:
+  generator_commit: 650f3398fb9e6eb5cc3b9ae6f15afc0bb1d858f7
+  mjcf_sha256: d40494c9f88294840d8e8a90859c6a28dc361149b5878b785b787ea96c61e083
+  sample_count: 880
+  payload_artifact_count: 2641
+  total_file_count_including_manifest: 2642
+  symlink_count: 0
+  split_counts: {train: 480, val: 200, test: 200}
+  seed_ranges: {train: [400000, 400479], val: [500000, 500199], test: [600000, 600199]}
+  class_instance_totals: {plastic_cup: 880}
+open_val_validation:
+  status: PASS
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  visible_instances: {no_cup: 0, one_cup_distractors: 1, two_cups: 2, cup_near_bottle: 1}
+  checks: truth configured/visible/list counts, label row count, RGB 640x480 mode and PNG verification
+sealed_test_state:
+  member_name_counts: {images: 200, labels: 200, truth: 200}
+  semantic_content_opened: false
+  model_inference_run: false
+archive:
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  size_bytes: 39612523
+  member_count: 2655
+  link_member_count: 0
+  mode: '0444'
+checksum_file: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz.sha256
+retained_runs:
+  - all CP-021 retained runs
+  - corrected raw root, archive, and checksum above
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-021; corrected archive is not a deletion candidate
+next_change:
+  - rebind benchmark.yaml archive ID/SHA and registered evidence roots to EXP-079
+  - update only the CLI immutable archive/config constants and exact tests required by that rebind
+  - preserve all model revisions, model bytes, prompt, thresholds, grid, device, dtype, offline, no-fallback, sample-count, scenario, timing, and test-seal contracts
+next_command: add a frozen-config regression for the new archive and observe RED before editing benchmark.yaml or CLI constants
+decision: RUN_CONFIG_REBIND_TDD_ONLY
+```
