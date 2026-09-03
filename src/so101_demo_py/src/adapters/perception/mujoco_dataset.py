@@ -123,6 +123,7 @@ class DatasetConfig:
     camera_name: str = "task_camera"
     image_width: int = 640
     image_height: int = 480
+    seed_starts: Mapping[str, int] | None = None
 
     def __post_init__(self) -> None:
         path = Path(self.mjcf_path)
@@ -139,24 +140,43 @@ class DatasetConfig:
             raise ValueError("generator_commit must be non-empty")
         if self.image_width <= 0 or self.image_height <= 0:
             raise ValueError("image dimensions must be positive")
+        starts = dict(_SEED_STARTS if self.seed_starts is None else self.seed_starts)
+        split_seed_plan(counts, starts)
         object.__setattr__(self, "mjcf_path", path)
         object.__setattr__(self, "split_counts", MappingProxyType(counts))
+        object.__setattr__(self, "seed_starts", MappingProxyType(starts))
 
 
 _SEED_STARTS = {"train": 100000, "val": 200000, "test": 300000}
+_MAX_SEED = 999_999_999
 
 
-def split_seed_plan(split_counts: Mapping[str, int]) -> dict[str, tuple[int, ...]]:
+def split_seed_plan(
+    split_counts: Mapping[str, int],
+    seed_starts: Mapping[str, int] | None = None,
+) -> dict[str, tuple[int, ...]]:
     counts = dict(split_counts)
     if set(counts) != set(_SEED_STARTS):
         raise ValueError("split counts must contain train, val, and test")
+    starts = dict(_SEED_STARTS if seed_starts is None else seed_starts)
+    if set(starts) != set(_SEED_STARTS):
+        raise ValueError("seed_starts must contain train, val, and test")
     result: dict[str, tuple[int, ...]] = {}
     for split in ("train", "val", "test"):
         count = counts[split]
         if not isinstance(count, int) or count <= 0:
             raise ValueError("split counts must be positive integers")
-        start = _SEED_STARTS[split]
+        start = starts[split]
+        if type(start) is not int or start < 0:
+            raise ValueError("seed starts must be nonnegative integers")
+        if count > _MAX_SEED - start + 1:
+            raise ValueError("seed range exceeds the nine-digit namespace")
         result[split] = tuple(range(start, start + count))
+    split_names = tuple(result)
+    for index, left in enumerate(split_names):
+        for right in split_names[index + 1 :]:
+            if set(result[left]).intersection(result[right]):
+                raise ValueError("seed ranges must be disjoint")
     return result
 
 
@@ -216,6 +236,10 @@ def load_dataset_config(
     raw_counts = document["split_counts"]
     if not isinstance(raw_counts, dict):
         raise ValueError("split_counts must be a mapping")
+    raw_seed_starts = document.get("seed_starts")
+    if raw_seed_starts is not None and not isinstance(raw_seed_starts, dict):
+        raise ValueError("seed_starts must be a mapping")
+    split_seed_plan(raw_counts, raw_seed_starts)
     counts = limited_split_counts(raw_counts, sample_limit)
     return DatasetConfig(
         mjcf_path=mjcf,
@@ -224,6 +248,7 @@ def load_dataset_config(
         camera_name=str(document["camera_name"]),
         image_width=int(document["image_width"]),
         image_height=int(document["image_height"]),
+        seed_starts=raw_seed_starts,
     )
 
 
@@ -339,7 +364,7 @@ def generate_dataset(
     root.mkdir(parents=True, mode=0o700)
     owned_renderer = renderer is None
     active_renderer = renderer or MuJoCoDatasetRenderer(config)
-    seeds = split_seed_plan(config.split_counts)
+    seeds = split_seed_plan(config.split_counts, config.seed_starts)
     scenarios = tuple(DatasetScenario)
     samples: list[dict[str, Any]] = []
     artifacts: list[str] = []
@@ -415,6 +440,9 @@ def generate_dataset(
             "sample_count": len(samples),
             "split_counts": {
                 split: config.split_counts[split] for split in sorted(config.split_counts)
+            },
+            "seed_starts": {
+                split: config.seed_starts[split] for split in sorted(config.seed_starts)
             },
             "seed_ranges": {
                 split: [values[0], values[-1]] for split, values in seeds.items()
