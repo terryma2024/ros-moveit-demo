@@ -2406,3 +2406,48 @@ deletion_candidates:
 next_command: commit CP-023, synchronize ai-station, run inspect_command once, verify its non-semantic seal, then run val_command once
 decision: PREPARE_FRESH_VAL_KEEP_TEST_SEALED
 ```
+
+## Checkpoint CP-024 — replacement archive-binding preparation lock
+
+```yaml
+checkpoint_id: CP-024
+experiment_id: EXP-079
+status: PREREGISTERED_REPLACEMENT
+source_commit: 7a802d23f1663e4a6af108cb963d136346e7ba40
+supersedes_command_only: CP-023 dataset_preparation
+cp_023_terminal_result:
+  status: INVALID_PRESTART
+  first_bad_boundary: inspect-archive rejected the direct archive path because its trailing path components did not equal the frozen logical archive ID
+  error: FROZEN_PROVENANCE_MISMATCH
+  archive_sha256_verified: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  config_sha256_verified: 4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160
+  sealed_member_inventory_created: false
+  val_output_created: false
+  test_semantic_content_accessed: false
+immutable_asset_copy:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  target: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz
+  checksum_target: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz.sha256
+  required_sha256: d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6
+  policy: require absent targets, copy once, verify bytes, retain source, make archive read-only, never overwrite
+replacement_outputs:
+  sealed_member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r2.json
+  val_output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r2
+replacement_commands:
+  inspect: /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark inspect-archive --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --sealed-member-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-r2.json
+  prepare_val: /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark prepare-dataset --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --archive /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-fresh/so101-v5-t005-grounded-sam-fresh-650f3398-r3.tar.gz --expected-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --split val --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r2
+success_criteria:
+  - copied archive and adjacent checksum have the frozen digest and the archive is read-only
+  - seal contains exactly 200 image, 200 label, and 200 truth test members while scenario_counts remains null
+  - val inventory contains exactly 200 unique samples and 50 per scenario
+  - val output contains no test path and no test semantic member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - any target already exists, digest differs, command fails, or test semantic access occurs
+retained_runs:
+  - all CP-023 retained runs and both absent R1 output names
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-023
+next_command: commit and push CP-024, synchronize the isolated ai-station checkout, verify all replacement targets are absent, then copy and inspect once
+decision: COPY_WITH_FROZEN_SUFFIX_THEN_PREPARE_VAL
+```
