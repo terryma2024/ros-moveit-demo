@@ -2381,8 +2381,7 @@ def load_verified_run_evidence(
             _verify_current_images(
                 inventory, pinned_root=pinned_inventory_root
             )
-            records_dir = root / "records"
-            if checkpoint.records_dir != records_dir:
+            if checkpoint.records_dir.name != "records" or ".." in checkpoint.records_dir.parts:
                 raise RunIntegrityError("RESUME_RECORDS_DIRECTORY_CHANGED")
             _verify_loaded_expectation(
                 manifest,
