@@ -3028,3 +3028,49 @@ deletion_candidates:
 next_command: commit and push CP-035, synchronize ai-station, verify all R2 targets absent, generate R2 with COPYFILE_DISABLE=1, audit and hash it, then transfer once
 decision: REPACK_WITHOUT_APPLEDOUBLE_BEFORE_TRANSFER
 ```
+
+## Checkpoint CP-036 — xattr-free Mac transfer archive replacement lock
+
+```yaml
+checkpoint_id: CP-036
+experiment_id: EXP-079
+status: PREREGISTERED_TRANSFER_ARCHIVE_R3
+source_commit: aed4c72d305a01129a130f555d419d0708a4ee1d
+cp_035_transfer_r2:
+  status: INVALID_PREEXTRACTION
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r2.tar.gz
+  remote_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r2.tar.gz
+  sha256: de8f7f959f6d4a76bf0fa6d242eec903ed940131d60d48fb77c07c3334137476
+  size_bytes: 12258414
+  member_count: 24429
+  prefix_counts: {macos/yolo-r1: 1188, macos/grounded-sam-r1: 23241}
+  unsafe_path_count: 0
+  link_member_count: 0
+  appledouble_member_count: 0
+  first_bad_boundary: ai-station GNU tar reported LIBARCHIVE.xattr.com.apple.provenance PAX extended headers during the pre-extraction member audit
+  source_confirmation: both source manifest files carry com.apple.provenance
+  extracted: false
+  durable_destination_created: false
+  test_semantic_content_accessed: false
+replacement_r3:
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r3.tar.gz
+  local_checksum: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r3.tar.gz.sha256
+  remote_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r3.tar.gz
+  generation: COPYFILE_DISABLE=1 tar --no-xattrs --format ustar -czf <local_archive> -C <exp-079/val> macos/yolo-r1 macos/grounded-sam-r1
+  policy: all R3 targets absent; exactly two allowed run-root prefixes; no absolute or dot-dot path; no symlink, hardlink, AppleDouble, PAX xattr, ACL, or extended-attribute member; transfer once; inspect again before extraction
+  durable_destination: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos
+success_criteria:
+  - R3 local and remote bytes share one recorded SHA-256
+  - both local and ai-station audits report zero unsafe, link, AppleDouble, ACL, and extended-attribute members
+  - CP-034 staging revalidation, expectation, calibration, and test-seal criteria remain unchanged
+stop_criteria:
+  - unsupported archive option, any target collision, digest mismatch, unsafe member, extraction error, staged-run verification failure, calibration failure, or test access
+retained_runs:
+  - all CP-035 retained runs
+  - invalid R2 transfer archive remains on both hosts for audit
+archived_runs: []
+deletion_candidates:
+  - invalid mac-val-r1.tar.gz and mac-val-r2.tar.gz with adjacent local checksums, only after explicit user authorization
+next_command: commit and push CP-036, synchronize ai-station, verify the archive options and all R3 targets, create and audit R3 locally, then transfer and audit it once before extraction
+decision: REPACK_WITHOUT_PAX_XATTR_BEFORE_TRANSFER
+```
