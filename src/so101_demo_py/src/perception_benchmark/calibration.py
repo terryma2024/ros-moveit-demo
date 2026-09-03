@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
-from decimal import Decimal
 import hashlib
-from itertools import product
 import json
 import math
-from pathlib import Path
 import re
+import time
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, replace
+from decimal import Decimal
+from itertools import product
+from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Callable, Literal
 
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
@@ -25,6 +27,7 @@ from so101_demo.perception_benchmark.contracts import (
     RawCandidate,
     RecordStatus,
     RunKind,
+    TruthInstance,
     TruthSample,
     model_id_for_name,
 )
@@ -34,14 +37,14 @@ from so101_demo.perception_benchmark.decisions import (
     aggregate_decisions,
     aggregate_scenarios,
 )
-from so101_demo.perception_benchmark.matching import maximize_mask_iou_assignment
+from so101_demo.perception_benchmark.matching import (
+    mask_iou,
+    maximize_mask_iou_assignment,
+)
 from so101_demo.perception_benchmark.metrics import ImageMetricInput, compute_ap
 
-
 ModelName = Literal["yolo_seg", "grounded_sam"]
-CalibrationOutcome = Literal[
-    "SAFE_CALIBRATED", "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"
-]
+CalibrationOutcome = Literal["SAFE_CALIBRATED", "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"]
 ThresholdConfig = "YoloThresholds | GroundedSamBenchmarkThresholds"
 
 LOCK_SCHEMA_VERSION = "so101-threshold-lock/v1"
@@ -59,6 +62,54 @@ _AP_THRESHOLDS = tuple(value / 100 for value in range(50, 96, 5))
 
 class CalibrationError(ValueError):
     """Stable fail-closed calibration or threshold-lock error."""
+
+
+ProgressPhase = Literal["verify", "rehome", "precompute", "grid", "finalize"]
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationProgress:
+    """One bounded calibration progress observation."""
+
+    phase: ProgressPhase
+    completed: int
+    total: int
+    elapsed_seconds: float
+
+    def __post_init__(self) -> None:
+        if self.phase not in {"verify", "rehome", "precompute", "grid", "finalize"}:
+            raise ValueError("calibration progress phase is invalid")
+        if (
+            type(self.completed) is not int
+            or type(self.total) is not int
+            or self.completed < 0
+            or self.total <= 0
+            or self.completed > self.total
+        ):
+            raise ValueError("calibration progress counts are invalid")
+        if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0.0:
+            raise ValueError("calibration progress elapsed_seconds is invalid")
+
+
+ProgressCallback = Callable[[CalibrationProgress], None]
+
+
+def _emit_progress(
+    callback: ProgressCallback | None,
+    phase: ProgressPhase,
+    completed: int,
+    total: int,
+    started_at: float,
+) -> None:
+    if callback is not None:
+        callback(
+            CalibrationProgress(
+                phase,
+                completed,
+                total,
+                max(0.0, time.monotonic() - started_at),
+            )
+        )
 
 
 def _decimal_probability(name: str, value: object) -> Decimal:
@@ -97,16 +148,11 @@ def _box_iou(
 def _deduplicate_boxes(
     candidates: Sequence[RawCandidate], threshold: Decimal
 ) -> tuple[RawCandidate, ...]:
-    ordered = tuple(
-        sorted(candidates, key=lambda item: (-item.ranking_score, item.candidate_id))
-    )
+    ordered = tuple(sorted(candidates, key=lambda item: (-item.ranking_score, item.candidate_id)))
     kept: list[RawCandidate] = []
     limit = float(threshold)
     for candidate in ordered:
-        if all(
-            _box_iou(candidate.bbox_xyxy, previous.bbox_xyxy) < limit
-            for previous in kept
-        ):
+        if all(_box_iou(candidate.bbox_xyxy, previous.bbox_xyxy) < limit for previous in kept):
             kept.append(candidate)
     return tuple(kept)
 
@@ -120,9 +166,7 @@ class YoloThresholds:
 
     def __post_init__(self) -> None:
         for name in ("conf", "nms_iou", "target_confidence_threshold"):
-            object.__setattr__(
-                self, name, _decimal_probability(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _decimal_probability(name, getattr(self, name)))
         if type(self.imgsz) is not int or self.imgsz != 640:
             raise ValueError("imgsz must be the fixed integer 640")
 
@@ -130,9 +174,7 @@ class YoloThresholds:
         return {
             "conf": _decimal_document(self.conf),
             "nms_iou": _decimal_document(self.nms_iou),
-            "target_confidence_threshold": _decimal_document(
-                self.target_confidence_threshold
-            ),
+            "target_confidence_threshold": _decimal_document(self.target_confidence_threshold),
             "imgsz": self.imgsz,
         }
 
@@ -144,9 +186,7 @@ class YoloThresholds:
     def safety_preference_key(self) -> tuple[Decimal, ...]:
         return (-self.conf, -self.target_confidence_threshold, self.nms_iou)
 
-    def filter_candidates(
-        self, candidates: tuple[RawCandidate, ...]
-    ) -> tuple[RawCandidate, ...]:
+    def filter_candidates(self, candidates: tuple[RawCandidate, ...]) -> tuple[RawCandidate, ...]:
         class_filtered = tuple(
             candidate
             for candidate in candidates
@@ -180,9 +220,7 @@ class GroundedSamBenchmarkThresholds:
             "duplicate_iou",
             "max_mask_area_ratio",
         ):
-            object.__setattr__(
-                self, name, _decimal_probability(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _decimal_probability(name, getattr(self, name)))
         if self.duplicate_iou != Decimal("0.85"):
             raise ValueError("duplicate_iou must be fixed at 0.85")
         if type(self.min_mask_pixels) is not int or self.min_mask_pixels != 64:
@@ -195,9 +233,7 @@ class GroundedSamBenchmarkThresholds:
             "box_threshold": _decimal_document(self.box_threshold),
             "text_threshold": _decimal_document(self.text_threshold),
             "sam_quality": _decimal_document(self.sam_quality),
-            "target_confidence_threshold": _decimal_document(
-                self.target_confidence_threshold
-            ),
+            "target_confidence_threshold": _decimal_document(self.target_confidence_threshold),
             "duplicate_iou": _decimal_document(self.duplicate_iou),
             "min_mask_pixels": self.min_mask_pixels,
             "max_mask_area_ratio": _decimal_document(self.max_mask_area_ratio),
@@ -216,9 +252,7 @@ class GroundedSamBenchmarkThresholds:
             -self.target_confidence_threshold,
         )
 
-    def filter_candidates(
-        self, candidates: tuple[RawCandidate, ...]
-    ) -> tuple[RawCandidate, ...]:
+    def filter_candidates(self, candidates: tuple[RawCandidate, ...]) -> tuple[RawCandidate, ...]:
         grounding_filtered = tuple(
             candidate
             for candidate in candidates
@@ -239,8 +273,7 @@ class GroundedSamBenchmarkThresholds:
                 / (candidate.mask.image_width * candidate.mask.image_height)
             )
             <= float(self.max_mask_area_ratio)
-            and candidate.ranking_score
-            >= float(self.target_confidence_threshold)
+            and candidate.ranking_score >= float(self.target_confidence_threshold)
         )
 
 
@@ -255,6 +288,14 @@ def decimal_range(start: str, stop: str, step: str) -> tuple[Decimal, ...]:
         values.append(current.quantize(_TWO_DECIMAL))
         current += increment
     return tuple(values)
+
+
+_GROUNDING_PREFIX_GRID = tuple(
+    product(
+        decimal_range("0.05", "0.90", "0.05"),
+        decimal_range("0.05", "0.50", "0.05"),
+    )
+)
 
 
 def enumerate_yolo_grid() -> Iterator[YoloThresholds]:
@@ -331,20 +372,14 @@ class PlatformCalibrationMetrics:
         if self.error_count > self.sample_count:
             raise ValueError("error_count must not exceed sample_count")
         if self.unsafe_unique_count > self.unsafe_unique_denominator:
-            raise ValueError(
-                "unsafe_unique_count must not exceed unsafe_unique_denominator"
-            )
-        object.__setattr__(
-            self, "macro_f1", _required_probability("macro_f1", self.macro_f1)
-        )
+            raise ValueError("unsafe_unique_count must not exceed unsafe_unique_denominator")
+        object.__setattr__(self, "macro_f1", _required_probability("macro_f1", self.macro_f1))
         for name in (
             "mask_ap50_95",
             "unsafe_unique_rate",
             "two_cup_both_matched_recall",
         ):
-            object.__setattr__(
-                self, name, _optional_probability(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _optional_probability(name, getattr(self, name)))
         expected_rate = (
             None
             if self.unsafe_unique_denominator == 0
@@ -387,14 +422,11 @@ class CalibrationResult:
     merged_mask_ap50_95: float | None
 
     def __post_init__(self) -> None:
-        if not isinstance(
-            self.selected, (YoloThresholds, GroundedSamBenchmarkThresholds)
-        ):
+        if not isinstance(self.selected, (YoloThresholds, GroundedSamBenchmarkThresholds)):
             raise ValueError("selected must be a supported threshold config")
         metrics = dict(self.platform_metrics)
         if set(metrics) != {"macos", "linux"} or not all(
-            isinstance(value, PlatformCalibrationMetrics)
-            for value in metrics.values()
+            isinstance(value, PlatformCalibrationMetrics) for value in metrics.values()
         ):
             raise ValueError("platform_metrics must contain macos and linux")
         object.__setattr__(self, "platform_metrics", MappingProxyType(metrics))
@@ -406,25 +438,16 @@ class CalibrationResult:
         object.__setattr__(
             self,
             "merged_mask_ap50_95",
-            _optional_probability(
-                "merged_mask_ap50_95", self.merged_mask_ap50_95
-            ),
+            _optional_probability("merged_mask_ap50_95", self.merged_mask_ap50_95),
         )
 
     @property
     def deployable(self) -> bool:
-        return all(
-            _platform_is_safe(metrics)
-            for metrics in self.platform_metrics.values()
-        )
+        return all(_platform_is_safe(metrics) for metrics in self.platform_metrics.values())
 
     @property
     def outcome(self) -> CalibrationOutcome:
-        return (
-            "SAFE_CALIBRATED"
-            if self.deployable
-            else "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"
-        )
+        return "SAFE_CALIBRATED" if self.deployable else "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"
 
 
 def calibration_key(point: CalibrationResult) -> tuple[object, ...]:
@@ -464,13 +487,9 @@ class ObjectiveCalibrationMetrics:
 
     def __post_init__(self) -> None:
         for name in ("min_platform_macro_f1", "merged_macro_f1"):
-            object.__setattr__(
-                self, name, _required_probability(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _required_probability(name, getattr(self, name)))
         for name in ("merged_mask_ap50_95", "min_platform_two_cup_recall"):
-            object.__setattr__(
-                self, name, _optional_probability(name, getattr(self, name))
-            )
+            object.__setattr__(self, name, _optional_probability(name, getattr(self, name)))
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -486,11 +505,7 @@ def _objective_metrics(result: CalibrationResult) -> ObjectiveCalibrationMetrics
     linux = result.platform_metrics["linux"]
     mac_two = mac.two_cup_both_matched_recall
     linux_two = linux.two_cup_both_matched_recall
-    minimum_two = (
-        None
-        if mac_two is None or linux_two is None
-        else min(mac_two, linux_two)
-    )
+    minimum_two = None if mac_two is None or linux_two is None else min(mac_two, linux_two)
     return ObjectiveCalibrationMetrics(
         min(mac.macro_f1, linux.macro_f1),
         result.merged_macro_f1,
@@ -536,13 +551,15 @@ class ThresholdLock:
             "linux_prediction_inventory_sha256",
             "lock_sha256",
         ):
-            if not isinstance(getattr(self, name), str) or _SHA256.fullmatch(
-                getattr(self, name)
-            ) is None:
+            if (
+                not isinstance(getattr(self, name), str)
+                or _SHA256.fullmatch(getattr(self, name)) is None
+            ):
                 raise ValueError(f"{name} is invalid")
-        if not isinstance(self.source_commit, str) or _SOURCE_COMMIT.fullmatch(
-            self.source_commit
-        ) is None:
+        if (
+            not isinstance(self.source_commit, str)
+            or _SOURCE_COMMIT.fullmatch(self.source_commit) is None
+        ):
             raise ValueError("source_commit is invalid")
         if type(self.formal) is not bool:
             raise ValueError("formal must be a bool")
@@ -551,9 +568,7 @@ class ThresholdLock:
             type(value) is not int or value <= 0 for value in sample_counts.values()
         ):
             raise ValueError("platform_sample_counts are invalid")
-        object.__setattr__(
-            self, "platform_sample_counts", MappingProxyType(sample_counts)
-        )
+        object.__setattr__(self, "platform_sample_counts", MappingProxyType(sample_counts))
         if self.model == "yolo_seg" and not isinstance(self.selected, YoloThresholds):
             raise ValueError("selected config does not match model")
         if self.model == "grounded_sam" and not isinstance(
@@ -564,8 +579,7 @@ class ThresholdLock:
             raise ValueError("objective_metrics is invalid")
         metrics = dict(self.platform_metrics)
         if set(metrics) != {"macos", "linux"} or not all(
-            isinstance(value, PlatformCalibrationMetrics)
-            for value in metrics.values()
+            isinstance(value, PlatformCalibrationMetrics) for value in metrics.values()
         ):
             raise ValueError("platform_metrics is invalid")
         object.__setattr__(self, "platform_metrics", MappingProxyType(metrics))
@@ -580,25 +594,19 @@ class ThresholdLock:
         linux = metrics["linux"]
         minimum_two = (
             None
-            if mac.two_cup_both_matched_recall is None
-            or linux.two_cup_both_matched_recall is None
+            if mac.two_cup_both_matched_recall is None or linux.two_cup_both_matched_recall is None
             else min(
                 mac.two_cup_both_matched_recall,
                 linux.two_cup_both_matched_recall,
             )
         )
         if (
-            self.objective_metrics.min_platform_macro_f1
-            != min(mac.macro_f1, linux.macro_f1)
+            self.objective_metrics.min_platform_macro_f1 != min(mac.macro_f1, linux.macro_f1)
             or self.objective_metrics.min_platform_two_cup_recall != minimum_two
         ):
             raise ValueError("objective_metrics do not match platform_metrics")
         safe = all(_platform_is_safe(value) for value in metrics.values())
-        if (
-            self.outcome == "SAFE_CALIBRATED"
-            and self.deployable is True
-            and safe
-        ):
+        if self.outcome == "SAFE_CALIBRATED" and self.deployable is True and safe:
             return
         if (
             self.outcome == "UNSAFE_CALIBRATION_NO_FEASIBLE_POINT"
@@ -615,18 +623,11 @@ class ThresholdLock:
         return replace(self, lock_sha256=digest)
 
 
-def _platform_document(
-    values: Mapping[str, PlatformCalibrationMetrics]
-) -> dict[str, object]:
-    return {
-        platform: values[platform].to_document()
-        for platform in ("macos", "linux")
-    }
+def _platform_document(values: Mapping[str, PlatformCalibrationMetrics]) -> dict[str, object]:
+    return {platform: values[platform].to_document() for platform in ("macos", "linux")}
 
 
-def _threshold_lock_document(
-    lock: ThresholdLock, *, include_sha: bool
-) -> dict[str, object]:
+def _threshold_lock_document(lock: ThresholdLock, *, include_sha: bool) -> dict[str, object]:
     document: dict[str, object] = {
         "schema_version": lock.schema_version,
         "model": lock.model,
@@ -638,8 +639,7 @@ def _threshold_lock_document(
         "linux_prediction_inventory_sha256": lock.linux_prediction_inventory_sha256,
         "formal": lock.formal,
         "platform_sample_counts": {
-            platform: lock.platform_sample_counts[platform]
-            for platform in ("macos", "linux")
+            platform: lock.platform_sample_counts[platform] for platform in ("macos", "linux")
         },
         "selected": lock.selected.to_document(),
         "outcome": lock.outcome,
@@ -674,8 +674,7 @@ def _validate_record(record: object) -> PredictionRecord:
         raise CalibrationError("TASK1_RECORD_CONTRACT_INVALID")
     try:
         candidates = tuple(
-            replace(candidate, mask=replace(candidate.mask))
-            for candidate in record.raw_candidates
+            replace(candidate, mask=replace(candidate.mask)) for candidate in record.raw_candidates
         )
         return replace(
             record,
@@ -692,8 +691,7 @@ def _validate_truth(truth: object) -> TruthSample:
         raise CalibrationError("TASK1_TRUTH_CONTRACT_INVALID")
     try:
         instances = tuple(
-            replace(instance, mask=replace(instance.mask))
-            for instance in truth.instances
+            replace(instance, mask=replace(instance.mask)) for instance in truth.instances
         )
         return replace(truth, instances=instances)
     except (TypeError, ValueError) as error:
@@ -747,23 +745,16 @@ def _validate_inputs(
     truth_items = tuple(_validate_truth(truth) for truth in truths)
     if not mac or not linux or not truth_items:
         raise CalibrationError("CALIBRATION_INVENTORY_EMPTY")
-    if any(
-        item.split != "val"
-        for item in (*mac, *linux, *truth_items)
-    ):
+    if any(item.split != "val" for item in (*mac, *linux, *truth_items)):
         raise CalibrationError("CALIBRATION_VAL_ONLY")
     if any(
-        record.run_kind is not RunKind.VAL_RAW
-        or record.threshold_lock_sha256 is not None
+        record.run_kind is not RunKind.VAL_RAW or record.threshold_lock_sha256 is not None
         for record in (*mac, *linux)
     ):
         raise CalibrationError("CALIBRATION_VAL_ONLY")
     if any(record.record_status is RecordStatus.ERROR for record in (*mac, *linux)):
         raise CalibrationError("CALIBRATION_ERROR_RECORD_FORBIDDEN")
-    if any(
-        not _candidate_model_matches(record, normalized_model)
-        for record in (*mac, *linux)
-    ):
+    if any(not _candidate_model_matches(record, normalized_model) for record in (*mac, *linux)):
         raise CalibrationError("CALIBRATION_MODEL_MISMATCH")
 
     mac_identities = tuple(_identity(record) for record in mac)
@@ -779,9 +770,7 @@ def _validate_inputs(
     if set(mac_identities) != set(truth_identities):
         raise CalibrationError("CALIBRATION_TRUTH_IDENTITY_MISMATCH")
     if not fixture_mode and (
-        len(mac_identities) != 200
-        or len(linux_identities) != 200
-        or len(truth_identities) != 200
+        len(mac_identities) != 200 or len(linux_identities) != 200 or len(truth_identities) != 200
     ):
         raise CalibrationError("FORMAL_VAL_INVENTORY_INVALID")
 
@@ -790,12 +779,8 @@ def _validate_inputs(
     truths_by_identity = {_identity(truth): truth for truth in truth_items}
     ordered_identities = tuple(sorted(truths_by_identity))
     ordered_mac = tuple(mac_by_identity[identity] for identity in ordered_identities)
-    ordered_linux = tuple(
-        linux_by_identity[identity] for identity in ordered_identities
-    )
-    ordered_truths = tuple(
-        truths_by_identity[identity] for identity in ordered_identities
-    )
+    ordered_linux = tuple(linux_by_identity[identity] for identity in ordered_identities)
+    ordered_truths = tuple(truths_by_identity[identity] for identity in ordered_identities)
     for platform_records in (ordered_mac, ordered_linux):
         for record, truth in zip(platform_records, ordered_truths, strict=True):
             if (
@@ -896,6 +881,148 @@ def _selection_signature(
 
 
 @dataclass(frozen=True, slots=True)
+class _RecordPrecomputeTask:
+    platform: Literal["macos", "linux"]
+    ordinal: int
+    model: ModelName
+    candidates: tuple[RawCandidate, ...]
+    truth_instances: tuple[TruthInstance, ...]
+    evidence_root: str
+
+
+@dataclass(frozen=True, slots=True)
+class _RecordPrecompute:
+    platform: Literal["macos", "linux"]
+    ordinal: int
+    grounded_prefixes: tuple[tuple[Decimal, Decimal, tuple[RawCandidate, ...]], ...]
+    ious: tuple[tuple[str, str, float], ...]
+
+
+def _precompute_record(task: _RecordPrecomputeTask) -> _RecordPrecompute:
+    grounded_prefixes: list[tuple[Decimal, Decimal, tuple[RawCandidate, ...]]] = []
+    if task.model == "grounded_sam":
+        for box_threshold, text_threshold in _GROUNDING_PREFIX_GRID:
+            grounding_filtered = tuple(
+                candidate
+                for candidate in task.candidates
+                if candidate.grounding_box_score is not None
+                and candidate.grounding_text_score is not None
+                and candidate.grounding_box_score >= float(box_threshold)
+                and candidate.grounding_text_score >= float(text_threshold)
+            )
+            grounded_prefixes.append(
+                (
+                    box_threshold,
+                    text_threshold,
+                    _deduplicate_boxes(grounding_filtered, Decimal("0.85")),
+                )
+            )
+
+    root = Path(task.evidence_root)
+    truth_masks = tuple(
+        (instance.instance_id, read_mask(instance.mask, root)) for instance in task.truth_instances
+    )
+    candidate_masks = tuple(
+        (candidate.candidate_id, read_mask(candidate.mask, root)) for candidate in task.candidates
+    )
+    ious = tuple(
+        (truth_id, candidate_id, mask_iou(truth_mask, candidate_mask))
+        for truth_id, truth_mask in truth_masks
+        for candidate_id, candidate_mask in candidate_masks
+    )
+    return _RecordPrecompute(
+        task.platform,
+        task.ordinal,
+        tuple(grounded_prefixes),
+        ious,
+    )
+
+
+def _filter_precomputed_grounded(
+    config: GroundedSamBenchmarkThresholds,
+    candidates: tuple[RawCandidate, ...],
+) -> tuple[RawCandidate, ...]:
+    return tuple(
+        candidate
+        for candidate in candidates
+        if candidate.sam_quality is not None
+        and candidate.sam_quality >= float(config.sam_quality)
+        and candidate.mask.pixel_count >= config.min_mask_pixels
+        and (
+            candidate.mask.pixel_count / (candidate.mask.image_width * candidate.mask.image_height)
+        )
+        <= float(config.max_mask_area_ratio)
+        and candidate.ranking_score >= float(config.target_confidence_threshold)
+    )
+
+
+def _precompute_records(
+    model: ModelName,
+    mac: tuple[PredictionRecord, ...],
+    linux: tuple[PredictionRecord, ...],
+    truths: tuple[TruthSample, ...],
+    evidence_root: Path,
+    workers: int,
+    callback: ProgressCallback | None,
+    started_at: float,
+) -> tuple[
+    Mapping[str, tuple[Mapping[tuple[Decimal, Decimal], tuple[RawCandidate, ...]], ...]],
+    Mapping[str, Mapping[int, Mapping[tuple[str, str], float]]],
+]:
+    tasks = tuple(
+        _RecordPrecomputeTask(
+            platform,
+            ordinal,
+            model,
+            record.raw_candidates,
+            truth.instances,
+            str(evidence_root),
+        )
+        for platform, records in (("macos", mac), ("linux", linux))
+        for ordinal, (record, truth) in enumerate(zip(records, truths, strict=True))
+    )
+    total = len(tasks)
+    _emit_progress(callback, "precompute", 0, total, started_at)
+    if workers == 1:
+        results = map(_precompute_record, tasks)
+        executor = None
+    else:
+        executor = ProcessPoolExecutor(max_workers=workers)
+        chunksize = max(1, total // (workers * 4))
+        results = executor.map(_precompute_record, tasks, chunksize=chunksize)
+
+    grounded: dict[str, list[Mapping[tuple[Decimal, Decimal], tuple[RawCandidate, ...]]]] = {
+        "macos": [{} for _ in mac],
+        "linux": [{} for _ in linux],
+    }
+    ious: dict[str, dict[int, Mapping[tuple[str, str], float]]] = {
+        "macos": {},
+        "linux": {},
+    }
+    step = max(1, total // 100)
+    try:
+        for completed, result in enumerate(results, start=1):
+            grounded[result.platform][result.ordinal] = {
+                (box, text): candidates for box, text, candidates in result.grounded_prefixes
+            }
+            record = (mac if result.platform == "macos" else linux)[result.ordinal]
+            ious[result.platform][record.formal_sample_index] = {
+                (truth_id, candidate_id): value for truth_id, candidate_id, value in result.ious
+            }
+            if completed == total or completed % step == 0:
+                _emit_progress(callback, "precompute", completed, total, started_at)
+    finally:
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=True)
+    return (
+        MappingProxyType({platform: tuple(values) for platform, values in grounded.items()}),
+        MappingProxyType(
+            {platform: MappingProxyType(dict(values)) for platform, values in ious.items()}
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class _PlatformEvaluation:
     records: tuple[PredictionRecord, ...]
     decision_metrics: DecisionMetrics
@@ -906,14 +1033,24 @@ def _evaluate_platform(
     filtered_records: tuple[PredictionRecord, ...],
     truths: tuple[TruthSample, ...],
     evidence_root: Path,
+    precomputed_ious: Mapping[int, Mapping[tuple[str, str], float]],
 ) -> _PlatformEvaluation:
     decisions = aggregate_decisions(filtered_records, truths)
-    ap = compute_ap(filtered_records, truths, evidence_root, _AP_THRESHOLDS)
+    ap = compute_ap(
+        filtered_records,
+        truths,
+        evidence_root,
+        _AP_THRESHOLDS,
+        precomputed_ious=precomputed_ious,
+    )
     matches: dict[tuple[int, str], ImageMetricInput] = {}
     for record, truth in zip(filtered_records, truths, strict=True):
         assigned = (
             maximize_mask_iou_assignment(
-                truth.instances, record.raw_candidates, evidence_root
+                truth.instances,
+                record.raw_candidates,
+                evidence_root,
+                precomputed_ious=precomputed_ious[record.formal_sample_index],
             )
             if truth.instances and record.raw_candidates
             else ()
@@ -925,9 +1062,7 @@ def _evaluate_platform(
             candidate_count=len(record.raw_candidates),
             matches=assigned,
         )
-    scenarios = aggregate_scenarios(
-        filtered_records, truths, matches, evidence_root
-    )
+    scenarios = aggregate_scenarios(filtered_records, truths, matches, evidence_root)
     two_cup = scenarios.get("two_cups")
     if decisions.macro_f1 is None:
         raise CalibrationError("CALIBRATION_FULL_DENOMINATOR_REQUIRED")
@@ -946,9 +1081,7 @@ def _evaluate_platform(
     return _PlatformEvaluation(filtered_records, decisions, metrics)
 
 
-def _combined_macro_f1(
-    first: DecisionMetrics, second: DecisionMetrics
-) -> float:
+def _combined_macro_f1(first: DecisionMetrics, second: DecisionMetrics) -> float:
     truth_classes = ("0", "1", "2+")
     expected = {
         "0": DecisionOutput.NOT_FOUND.value,
@@ -958,25 +1091,19 @@ def _combined_macro_f1(
     scores: list[float] = []
     for truth_class in truth_classes:
         output = expected[truth_class]
-        true_positive = (
-            first.confusion[truth_class][output]
-            + second.confusion[truth_class][output]
-        )
+        true_positive = first.confusion[truth_class][output] + second.confusion[truth_class][output]
         false_positive = sum(
             first.confusion[other][output] + second.confusion[other][output]
             for other in truth_classes
             if other != truth_class
         )
         false_negative = sum(
-            first.confusion[truth_class][actual]
-            + second.confusion[truth_class][actual]
+            first.confusion[truth_class][actual] + second.confusion[truth_class][actual]
             for actual in ("NOT_FOUND", "UNIQUE", "AMBIGUOUS", "ERROR")
             if actual != output
         )
         denominator = 2 * true_positive + false_positive + false_negative
-        scores.append(
-            0.0 if denominator == 0 else (2.0 * true_positive) / denominator
-        )
+        scores.append(0.0 if denominator == 0 else (2.0 * true_positive) / denominator)
     return float(sum(scores) / len(scores))
 
 
@@ -1001,14 +1128,23 @@ def _merged_ap(
     linux_records: Sequence[PredictionRecord],
     truths: Sequence[TruthSample],
     evidence_root: Path,
+    mac_precomputed_ious: Mapping[int, Mapping[tuple[str, str], float]],
+    linux_precomputed_ious: Mapping[int, Mapping[tuple[str, str], float]],
 ) -> float | None:
     mac_remapped, mac_truths = _remap_for_merged(mac_records, truths, 0)
     linux_remapped, linux_truths = _remap_for_merged(linux_records, truths, 1)
+    merged_ious = {
+        sample_index * 2: values for sample_index, values in mac_precomputed_ious.items()
+    }
+    merged_ious.update(
+        {sample_index * 2 + 1: values for sample_index, values in linux_precomputed_ious.items()}
+    )
     return compute_ap(
         mac_remapped + linux_remapped,
         mac_truths + linux_truths,
         evidence_root,
         _AP_THRESHOLDS,
+        precomputed_ious=merged_ious,
     ).mask_map
 
 
@@ -1024,8 +1160,27 @@ def calibrate_joint_platform_val(
     linux_prediction_inventory_sha256: str,
     source_commit: str,
     fixture_mode: bool = False,
+    workers: int = 1,
+    progress_callback: ProgressCallback | None = None,
+    progress_started_at: float | None = None,
 ) -> ThresholdLock:
     """Calibrate one exact grid over aligned macOS and Linux val records."""
+
+    if type(workers) is not int or not 1 <= workers <= 64:
+        raise CalibrationError("CALIBRATION_WORKERS_INVALID")
+    if progress_callback is not None and not callable(progress_callback):
+        raise CalibrationError("CALIBRATION_PROGRESS_CALLBACK_INVALID")
+    if progress_started_at is None:
+        started_at = time.monotonic()
+    elif (
+        isinstance(progress_started_at, bool)
+        or not isinstance(progress_started_at, (int, float))
+        or not math.isfinite(progress_started_at)
+    ):
+        raise CalibrationError("CALIBRATION_PROGRESS_CONFIG_INVALID")
+    else:
+        started_at = float(progress_started_at)
+    _emit_progress(progress_callback, "verify", 0, 1, started_at)
 
     (
         normalized_model,
@@ -1049,11 +1204,20 @@ def calibrate_joint_platform_val(
         source_commit,
         fixture_mode,
     )
+    _emit_progress(progress_callback, "verify", 1, 1, started_at)
+    grounded_prefixes, precomputed_ious = _precompute_records(
+        normalized_model,
+        mac,
+        linux,
+        truth_items,
+        root,
+        workers,
+        progress_callback,
+        started_at,
+    )
     grid: Iterator[YoloThresholds | GroundedSamBenchmarkThresholds]
     grid = (
-        enumerate_yolo_grid()
-        if normalized_model == "yolo_seg"
-        else enumerate_grounded_sam_grid()
+        enumerate_yolo_grid() if normalized_model == "yolo_seg" else enumerate_grounded_sam_grid()
     )
     platform_cache: dict[
         tuple[str, tuple[tuple[int, str, tuple[str, ...]], ...]],
@@ -1067,13 +1231,27 @@ def calibrate_joint_platform_val(
         tuple[float, float | None],
     ] = {}
     points: list[CalibrationResult] = []
-    for config in grid:
-        mac_candidates = tuple(
-            config.filter_candidates(record.raw_candidates) for record in mac
-        )
-        linux_candidates = tuple(
-            config.filter_candidates(record.raw_candidates) for record in linux
-        )
+    grid_total = 2527 if normalized_model == "yolo_seg" else 32400
+    grid_step = max(1, grid_total // 100)
+    _emit_progress(progress_callback, "grid", 0, grid_total, started_at)
+    for grid_completed, config in enumerate(grid, start=1):
+        if isinstance(config, GroundedSamBenchmarkThresholds):
+            prefix_key = (config.box_threshold, config.text_threshold)
+            mac_candidates = tuple(
+                _filter_precomputed_grounded(config, candidates[prefix_key])
+                for candidates in grounded_prefixes["macos"]
+            )
+            linux_candidates = tuple(
+                _filter_precomputed_grounded(config, candidates[prefix_key])
+                for candidates in grounded_prefixes["linux"]
+            )
+        else:
+            mac_candidates = tuple(
+                config.filter_candidates(record.raw_candidates) for record in mac
+            )
+            linux_candidates = tuple(
+                config.filter_candidates(record.raw_candidates) for record in linux
+            )
         mac_signature = _selection_signature(mac, mac_candidates)
         linux_signature = _selection_signature(linux, linux_candidates)
         mac_key = ("macos", mac_signature)
@@ -1084,17 +1262,21 @@ def calibrate_joint_platform_val(
                 for record, candidates in zip(mac, mac_candidates, strict=True)
             )
             platform_cache[mac_key] = _evaluate_platform(
-                mac_filtered, truth_items, root
+                mac_filtered,
+                truth_items,
+                root,
+                precomputed_ious["macos"],
             )
         if linux_key not in platform_cache:
             linux_filtered = tuple(
                 _record_with_candidates(record, candidates)
-                for record, candidates in zip(
-                    linux, linux_candidates, strict=True
-                )
+                for record, candidates in zip(linux, linux_candidates, strict=True)
             )
             platform_cache[linux_key] = _evaluate_platform(
-                linux_filtered, truth_items, root
+                linux_filtered,
+                truth_items,
+                root,
+                precomputed_ious["linux"],
             )
         mac_evaluation = platform_cache[mac_key]
         linux_evaluation = platform_cache[linux_key]
@@ -1110,6 +1292,8 @@ def calibrate_joint_platform_val(
                     linux_evaluation.records,
                     truth_items,
                     root,
+                    precomputed_ious["macos"],
+                    precomputed_ious["linux"],
                 ),
             )
         merged_macro, merged_mask_ap = merged_cache[merged_key]
@@ -1124,6 +1308,15 @@ def calibrate_joint_platform_val(
                 merged_mask_ap50_95=merged_mask_ap,
             )
         )
+        if grid_completed == grid_total or grid_completed % grid_step == 0:
+            _emit_progress(
+                progress_callback,
+                "grid",
+                grid_completed,
+                grid_total,
+                started_at,
+            )
+    _emit_progress(progress_callback, "finalize", 0, 1, started_at)
     result = select_calibration_result(points)
     lock = ThresholdLock(
         schema_version=LOCK_SCHEMA_VERSION,
@@ -1144,7 +1337,9 @@ def calibrate_joint_platform_val(
         platform_metrics=result.platform_metrics,
         lock_sha256="0" * 64,
     )
-    return lock.with_recomputed_sha256()
+    finalized = lock.with_recomputed_sha256()
+    _emit_progress(progress_callback, "finalize", 1, 1, started_at)
+    return finalized
 
 
 def write_threshold_lock(path: Path, lock: ThresholdLock) -> Path:
@@ -1192,8 +1387,7 @@ def _parse_selected(
             if (
                 config.conf not in decimal_range("0.05", "0.95", "0.05")
                 or config.nms_iou not in decimal_range("0.30", "0.90", "0.10")
-                or config.target_confidence_threshold
-                not in decimal_range("0.05", "0.95", "0.05")
+                or config.target_confidence_threshold not in decimal_range("0.05", "0.95", "0.05")
             ):
                 raise CalibrationError("THRESHOLD_LOCK_SELECTED_INVALID")
             return config
@@ -1223,8 +1417,7 @@ def _parse_selected(
             config.box_threshold not in decimal_range("0.05", "0.90", "0.05")
             or config.text_threshold not in decimal_range("0.05", "0.50", "0.05")
             or config.sam_quality not in decimal_range("0.50", "0.95", "0.05")
-            or config.target_confidence_threshold
-            not in decimal_range("0.05", "0.90", "0.05")
+            or config.target_confidence_threshold not in decimal_range("0.05", "0.90", "0.05")
         ):
             raise CalibrationError("THRESHOLD_LOCK_SELECTED_INVALID")
         return config
@@ -1235,9 +1428,7 @@ def _parse_selected(
 
 
 def _parse_platform_metrics(document: object) -> Mapping[str, PlatformCalibrationMetrics]:
-    platforms = _exact_keys(
-        document, {"macos", "linux"}, "THRESHOLD_LOCK_METRICS_INVALID"
-    )
+    platforms = _exact_keys(document, {"macos", "linux"}, "THRESHOLD_LOCK_METRICS_INVALID")
     expected = {
         "sample_count",
         "error_count",
@@ -1251,9 +1442,7 @@ def _parse_platform_metrics(document: object) -> Mapping[str, PlatformCalibratio
     result: dict[str, PlatformCalibrationMetrics] = {}
     try:
         for platform in ("macos", "linux"):
-            values = _exact_keys(
-                platforms[platform], expected, "THRESHOLD_LOCK_METRICS_INVALID"
-            )
+            values = _exact_keys(platforms[platform], expected, "THRESHOLD_LOCK_METRICS_INVALID")
             result[platform] = PlatformCalibrationMetrics(**values)  # type: ignore[arg-type]
     except CalibrationError:
         raise
@@ -1326,9 +1515,7 @@ def verify_threshold_lock(path: Path) -> ThresholdLock:
         "platform_metrics",
         "lock_sha256",
     }
-    values = _exact_keys(
-        document, expected_keys, "THRESHOLD_LOCK_DOCUMENT_INVALID"
-    )
+    values = _exact_keys(document, expected_keys, "THRESHOLD_LOCK_DOCUMENT_INVALID")
     stored_sha = _validated_sha(values["lock_sha256"])
     unhashed = dict(values)
     unhashed.pop("lock_sha256")
@@ -1348,16 +1535,12 @@ def verify_threshold_lock(path: Path) -> ThresholdLock:
         raise CalibrationError("THRESHOLD_LOCK_VERSION_INVALID")
     val_inventory_sha = _validated_sha(values["val_inventory_sha256"])
     mac_inventory_sha = _validated_sha(values["mac_prediction_inventory_sha256"])
-    linux_inventory_sha = _validated_sha(
-        values["linux_prediction_inventory_sha256"]
-    )
+    linux_inventory_sha = _validated_sha(values["linux_prediction_inventory_sha256"])
     commit = _validated_source_commit(values["source_commit"])
     if type(values["formal"]) is not bool:
         raise CalibrationError("THRESHOLD_LOCK_FORMALITY_INVALID")
     formal = values["formal"]
-    platform_sample_counts = _parse_platform_sample_counts(
-        values["platform_sample_counts"]
-    )
+    platform_sample_counts = _parse_platform_sample_counts(values["platform_sample_counts"])
     selected = _parse_selected(model, values["selected"])
     platform_metrics = _parse_platform_metrics(values["platform_metrics"])
     if any(
@@ -1452,6 +1635,7 @@ def unlock_test_seal(
 
 __all__ = (
     "CalibrationError",
+    "CalibrationProgress",
     "CalibrationResult",
     "GroundedSamBenchmarkThresholds",
     "ObjectiveCalibrationMetrics",

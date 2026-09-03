@@ -3227,3 +3227,112 @@ deletion_candidates:
 next_command: commit and push this preregistration checkpoint, synchronize the isolated ai-station checkout, archive grounded-sam-r1 without deletion, then add and run the RED tests
 decision: EXECUTE_CALIBRATION_OPTIMIZATION_A_PLUS_B
 ```
+
+## Checkpoint CP-039 — calibration optimization implementation and local gates
+
+```yaml
+checkpoint_id: CP-039
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-038
+source_before_implementation: f589e5b9b957552e84696aec41a8466e9c18820e
+ai_station_sync_before_implementation:
+  checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  head: f589e5b9b957552e84696aec41a8466e9c18820e
+  method: git pull --ff-only gitee codex/v5-t004-yolo-seg-rgbd
+interrupted_run_archive:
+  source_absent_after_move: true
+  target: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1-interrupted-cp038
+  canonical_relative_inventory_sha256_before: c07ae6efe613b7a0a3a6bbe6507ad195c66dfb997427efd6713e0697b1af75c1
+  canonical_relative_inventory_sha256_after: c07ae6efe613b7a0a3a6bbe6507ad195c66dfb997427efd6713e0697b1af75c1
+  file_count_before: 22639
+  file_count_after: 22639
+  total_bytes_before: 33144554
+  total_bytes_after: 33144554
+  deletion: none
+implementation:
+  grounded_prefix_cache: box/text filtering and duplicate suppression are precomputed for all 180 prefix pairs per platform record, then reused across sam-quality and selector dimensions
+  mask_iou_cache: every truth-candidate IoU is computed once per platform image and reused by AP plus deterministic maximum-IoU assignment
+  multiprocessing: independent per-record prefix and IoU precomputation accepts 1 through 64 workers; worker payload excludes unpicklable runtime provenance
+  progress: verify, rehome, precompute, grid, and finalize report bounded counts, percentage, and elapsed seconds to stderr with flush
+  mask_rehome: securely validates source identity and MaskRef semantics, then copies the already verified RLE bytes through exclusive-create output instead of Python decode/re-encode plus per-file fsync
+  unchanged:
+    - grounded-sam-grid/v1 and all 32400 points
+    - threshold comparisons and duplicate IoU 0.85
+    - AP IoU thresholds, Hungarian assignment, scenario metrics, safety gates, tie-break, and lock schema
+red_gate:
+  command_scope: five targeted new behavior tests
+  result: 5 failed as intended
+  observed_failures:
+    - calibrate_joint_platform_val rejected workers
+    - progress callback was absent
+    - calibrate parser lacked calibration_workers
+    - handler did not forward workers
+    - rehome path did not preserve source RLE bytes
+green_targeted_gate:
+  result: 5 passed in 1.85 seconds
+  includes: serial/two-worker exact threshold-lock equality
+expanded_local_gate:
+  scope: calibration, metrics, matching, and CLI benchmark modules
+  result: 147 passed in 7.66 seconds
+  semantic_equivalence_tests:
+    - cached maximum-IoU assignment equals mask-decode path
+    - cached AP equals mask-decode path
+static_gates:
+  compileall: PASS
+  ruff_version: 0.15.20
+  ruff_check: PASS
+  ruff_format_check: PASS
+known_environment_note:
+  - the repository worktree metadata has a stale common core.worktree, so every Git operation is explicitly bound with GIT_WORK_TREE plus the linked-worktree git-dir; the filesystem content itself is intact
+  - the first local RED attempt used the wrong package path and was discarded as environment setup evidence; the recorded RED result came from a fresh setup.py build under the registered evidence root
+remaining_gates:
+  - commit and push only the eight implementation/test files plus this ledger checkpoint
+  - fast-forward the isolated ai-station checkout
+  - build so101_demo_py into a fresh Linux overlay
+  - run the explicit benchmark_test colcon gate
+  - verify grounded-sam-r2 is absent, then run the formal 32400-point calibration with multiple workers and capture all phase timings
+retained_runs:
+  - all CP-038 retained runs
+  - optimized local test builds and logs under /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-cp038
+archived_runs:
+  - grounded-sam-r1-interrupted-cp038 at the verified archived path above
+deletion_candidates:
+  - invalid mac-val-r1.tar.gz and mac-val-r2.tar.gz with adjacent local checksums, only after explicit user authorization
+next_command: commit and push CP-039, synchronize ai-station, then execute fresh Linux build and explicit benchmark suite
+decision: IMPLEMENTATION_LOCALLY_GREEN_PENDING_LINUX_GATE
+```
+
+## Checkpoint CP-040 — explicit local benchmark gate
+
+```yaml
+checkpoint_id: CP-040
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-039
+registered_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+first_build_attempt:
+  output: local-gate-cp039
+  result: ENVIRONMENT_INVALID
+  reason: only the ROS base was sourced, so the isolated build could not resolve the existing MuJoCo, teleop, and SO-101 support dependency prefixes
+  tests_started: false
+qualified_local_build:
+  output: local-gate-cp039-r2
+  dependency_overlay: install-rebase-final-r15 plus the ROS Jazzy base
+  package: so101_demo_py
+  result: PASS
+  elapsed: 2.33 seconds package time
+explicit_benchmark_gate:
+  command_contract: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  result: PASS
+  summary: 562 tests, 0 errors, 0 failures, 0 skipped
+  elapsed: 5 minutes 9 seconds
+  scope_note: only benchmark_test was collected; the ordinary package suite and unrelated packages were not run
+  observed_cost: dataset archive and seal tests consumed approximately 123 seconds; this dominates the suite independently of calibration grid execution
+static_gates:
+  compileall: PASS
+  ruff_0_15_20_check: PASS
+  ruff_0_15_20_format_check: PASS
+next_command: commit and push the implementation checkpoint, fast-forward ai-station, build a fresh Linux overlay, and repeat the explicit benchmark gate before grounded-sam-r2
+decision: LOCAL_IMPLEMENTATION_QUALIFIED_PENDING_LINUX_AND_FORMAL_RUN
+```
