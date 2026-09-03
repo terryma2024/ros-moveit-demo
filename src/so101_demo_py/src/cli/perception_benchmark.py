@@ -487,7 +487,7 @@ def _handle_inspect_archive(arguments: argparse.Namespace) -> int:
         arguments.expected_sha256,
         arguments.sealed_member_inventory,
     )
-    print(result.sealed_test_inventory_sha256)
+    print(result.sealed_test_member_inventory_sha256)
     return 0
 
 
