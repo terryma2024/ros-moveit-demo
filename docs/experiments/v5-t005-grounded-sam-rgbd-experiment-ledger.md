@@ -2121,3 +2121,52 @@ deletion_candidates: [none added before execution]
 next_command: commit this preregistration, then add only the seed-start regression tests and observe RED before implementation
 decision: RUN_TDD_SEED_NAMESPACE_ONLY
 ```
+
+## Checkpoint CP-018 — fresh dataset generation lock
+
+```yaml
+checkpoint_id: CP-018
+experiment_id: EXP-079
+status: RUNNING_DATASET_GENERATION
+source_commit: e0c6d029ef13c93f6649bc93da94bb95d1e6f807
+tdd:
+  initial_red: 8 failed and 11 passed; JUnit SHA256 b58b7fc725c05cfd139b8eaaf2ec64ea7d8a5bc0b1311e751e274584e4d21270
+  review_red: sample_limit hid a full-range overlap before the second fix
+  mac_green: 104 passed in 133.49 s; JUnit SHA256 391d45f39c6280d314c54b63810838d822d00dca8b86e57a271dc13311a1c7ed
+  linux_green: 102 passed and 2 platform-condition skips in 1257.47 s; JUnit SHA256 a35c9f2b1796ac64fb0dc8603372950c69d6df5059c73fd01c6d19c8654ff94c
+  static: py_compile and git diff --check passed; Ruff unavailable in the selected Mac and Linux environments, so no Ruff result is claimed
+linux_build:
+  r1: INVALID_PREBUILD because --log-base followed the build subcommand; no package, model, ROS, or dataset command ran
+  r2: VALID; one package finished
+  checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  package_prefix: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r2/install/so101_demo_py
+  loaded_module: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r2/build/so101_demo_py/so101_demo/adapters/perception/mujoco_dataset.py
+  generator_python: /data/work/venvs/so101-grounded-sam/bin/python
+generation:
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r2/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/fresh_dataset.yaml
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-e0c6d029
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-fresh-e0c6d029.tar.gz
+  environment: MUJOCO_GL=egl and PYTHONNOUSERSITE=1
+  command: generate_yolo_seg_dataset --config <exact installed fresh_dataset.yaml> --output-root <absent raw-e0c6d029> --generator-commit e0c6d029ef13c93f6649bc93da94bb95d1e6f807
+generation_success:
+  - exactly 880 samples and 2641 payload artifacts before dataset-manifest.json
+  - manifest source/MJCF/image-size/count/seed-range fields exactly match EXP-079
+  - deterministic archive is written once, hashed, and never overwritten
+generation_access_boundary:
+  - validator may read dataset-manifest.json and val metadata
+  - no command may open an images/test, labels/test, or truth/test member before both new locks verify
+  - archive sealing may record only safe member names, counts, and byte digests
+preflight:
+  - local, Gitee, and ai-station source read back e0c6d029ef13c93f6649bc93da94bb95d1e6f807
+  - raw output and archive targets must be absent and non-symlink before generation
+  - no Grounded-SAM, benchmark, MuJoCo, ROS, or tmux process may be active
+retained_runs:
+  - all CP-017 retained runs
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+  - Linux build r1 and r2
+archived_runs: []
+deletion_candidates:
+  - Linux build r1 only, after explicit user authorization
+next_command: commit CP-018, synchronize ai-station, run the one exact generation command, and stop before archive/config rebinding
+decision: RUN_ONE_FRESH_DATASET_GENERATION
+```
