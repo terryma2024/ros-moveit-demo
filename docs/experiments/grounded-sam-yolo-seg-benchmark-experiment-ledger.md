@@ -5,15 +5,17 @@ success_contract: 两平台两模型完整 val 200 与 test 200；无跳样本�
 worktree: /Users/matianyi/.codex/worktrees/5b15/moveit-demo
 branch: codex/v5-t004-yolo-seg-rgbd
 base_commit: 08c9fc0f0998f4df60c123b9affe8ea1be62b32f
-current_commit: 608fc83c9a4ec6d42c8acca945f80881a163329b
+current_commit: 5fa2f68fb9a83f987a65a480f43794b1f35a1ff1
 evidence_root: /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1
 debug_evidence_root: /tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1
-latest_checkpoint: CP-BENCH-001
-next_experiment: EXP-BENCH-001
-confirmed_conclusions: []
-disproven_routes: []
+latest_checkpoint: CP-BENCH-042
+next_experiment: NONE
+confirmed_conclusions:
+  - CP-BENCH-038 proved the current formal benchmark is terminal INVALID at the Grounded-SAM production/replay boundary.
+disproven_routes:
+  - Reusing the opened R12 test split for a punctuation-label fix and recalibration is forbidden by CP-BENCH-038.
 open_hypotheses:
-  - Both frozen model configurations can complete the formal macOS and Linux benchmark without skipped samples.
+  - Punctuation-independent raw candidate retention can support fresh validation, calibration, and a new sealed test split.
 ---
 
 # Grounded-SAM / YOLO-Seg Benchmark Experiment Ledger
@@ -794,3 +796,13 @@ This checkpoint was completed at `2026-09-03T19:32:00+08:00`, after rebasing the
 - A fresh post-rebase `so101_demo_py` overlay `build/install/log-rebase-final-r14` built successfully. Its broad test invocation produced 1695 passes and 11 environment-contract failures: ten could not resolve the linked worktree from a `/tmp` working directory, and one expected `so101_mujoco_support` in the candidate overlay although only `so101_demo_py` had been selected.
 - A corrected candidate overlay `build/install/log-rebase-final-r15` built both `so101_mujoco_support` and `so101_demo_py` with `Python3_EXECUTABLE=/Users/matianyi/ros2_jazzy/.venv/bin/python3`. With the linked-worktree `GIT_DIR` and `GIT_WORK_TREE` exported, every file implicated by the 11 environment failures plus both launch suites passed: 213 passed, zero failed. JUnit `/tmp/so101-debug-grounded-sam-yolo-benchmark-20260902-ab-v1/tests/post-rebase/mac-r15-targeted.xml` has SHA-256 `cc17d98f89fcdfa92e94160ba7b8e73c5133b92f6906e2a0c37b7e54ba585490`.
 - `git diff --check origin/main..HEAD` passed. All existing benchmark evidence and untracked build/install/log overlays were retained; archived runs: none; nothing was deleted.
+
+## CP-BENCH-042 — Gitee and ai-station source synchronization
+
+This checkpoint was completed at `2026-09-03T19:58:28+08:00`, after the user explicitly authorized a Gitee push that skips the unsupported LFS object upload.
+
+- Gitee rejected the first ordinary push because its current repository plan does not support Git LFS. The user then explicitly authorized `GIT_LFS_SKIP_PUSH=1`. A non-force fast-forward push advanced `origin/codex/v5-t004-yolo-seg-rgbd` from `097756ae795004ea892c2df64cff3793f4f65b89` to `5fa2f68fb9a83f987a65a480f43794b1f35a1ff1`; `git ls-remote` returned the same commit.
+- Gitee contains the dataset LFS pointer but not object `c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1`. The immutable complete dataset remains available from the GitHub commit linked in `docs/guides/so101-yolo-seg-rgbd-perception-pick-place-source-guide.md`. ai-station fetch, checkout, and pull therefore used `GIT_LFS_SKIP_SMUDGE=1` rather than treating Gitee as a dataset object store.
+- Canonical ai-station workspace `/data/work/ws_moveit` remained untouched on branch `main` at `e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4`, with no tracked changes. The existing isolated checkout `/data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11` added a `gitee` remote without changing its bundle-backed `origin`, switched from detached `b3a4c602f11d4fccf762a4ec75fbeb6db2316803` to local tracking branch `codex/v5-t004-yolo-seg-rgbd`, and completed `git pull --ff-only gitee codex/v5-t004-yolo-seg-rgbd` as already up to date.
+- Local and ai-station commit are both `5fa2f68fb9a83f987a65a480f43794b1f35a1ff1`; full tree is `14f80361dd2f23fdcae23ff33d863fdcf1a69404`; `src/so101_demo_py` tree is `7f3ca506621b12ab088db62241c1abb88214caaf`; submodule is `71bc9346cf93d6227a6678fcacf63f3e18acfcba`. Both tracked trees were clean.
+- ai-station local backup branch `codex/backup-benchmark-pre-rebase-20260903` now anchors the prior detached commit `b3a4c602f11d4fccf762a4ec75fbeb6db2316803`, preserving provenance for existing benchmark overlays and JUnit evidence. Its three untracked build/install/log roots remain retained. No tmux session or SO-101 runtime process was active; no source, build artifact, model, dataset, or evidence was deleted.
