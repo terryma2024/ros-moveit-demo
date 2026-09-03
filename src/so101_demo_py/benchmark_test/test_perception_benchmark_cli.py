@@ -54,6 +54,10 @@ def test_parser_exposes_exact_subcommands() -> None:
         "aggregate",
         "verify-evidence",
     }
+    calibrate = action.choices["calibrate"]
+    workers = next(item for item in calibrate._actions if item.dest == "calibration_workers")
+    assert workers.default == 1
+    assert workers.type is int
 
 
 def test_setup_has_one_console_entry_and_packages_benchmark_yaml() -> None:
@@ -79,8 +83,7 @@ def test_config_contains_frozen_literals() -> None:
         "cold_processes: 3",
         "seed: 20260902",
         "repetitions: 10000",
-        "/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/"
-        "20260901-b55c869/remediation/exp-079",
+        "/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079",
         "/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079",
     ):
         assert literal in text
@@ -422,9 +425,7 @@ def test_inventory_forwards_explicit_relocated_test_access_log(
     access_log = tmp_path / "test-access.jsonl"
     arguments = SimpleNamespace(
         split="test",
-        dataset_archive_sha256=(
-            "d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"
-        ),
+        dataset_archive_sha256=("d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6"),
         dataset_inventory=tmp_path / "test-open/inventory.json",
         inventory_sha256="1" * 64,
         test_access_event_sha256="2" * 64,
@@ -442,9 +443,7 @@ def test_inventory_forwards_explicit_relocated_test_access_log(
 
     monkeypatch.setattr(perception_benchmark, "load_dataset_inventory", capture)
 
-    perception_benchmark._inventory(
-        arguments, perception_benchmark._load_frozen_config(CONFIG)
-    )
+    perception_benchmark._inventory(arguments, perception_benchmark._load_frozen_config(CONFIG))
 
     assert captured["root"] == arguments.dataset_inventory.parent
     assert captured["expected_access_log_path"] == access_log
@@ -784,15 +783,16 @@ def _patch_calibration_loaders(
 
 
 def test_calibration_rehomes_truth_masks_with_prediction_masks(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     arguments = _calibration_arguments(tmp_path)
+    arguments.calibration_workers = 2
     arguments.dataset_inventory.parent.mkdir()
     mask = np.array([[True, False], [False, True]], dtype=bool)
-    atomic_write_json(
-        arguments.dataset_inventory.parent / "truth-mask.rle.json",
-        encode_mask_rle(mask),
-    )
+    source_payload = b'{ "size": [2, 2], "counts": [0, 1, 2, 1] }\n'
+    (arguments.dataset_inventory.parent / "truth-mask.rle.json").write_bytes(source_payload)
     truth = TruthSample(
         formal_sample_index=0,
         split="val",
@@ -829,26 +829,28 @@ def test_calibration_rehomes_truth_masks_with_prediction_masks(
         config_sha256=config_sha,
     )
     _patch_calibration_loaders(monkeypatch, arguments, mac, linux)
-    monkeypatch.setattr(
-        perception_benchmark, "load_truth_samples", lambda *a, **k: (truth,)
-    )
+    monkeypatch.setattr(perception_benchmark, "load_truth_samples", lambda *a, **k: (truth,))
 
     def verify_rehomed(*values: object, **options: object) -> SimpleNamespace:
         rehomed_truth = values[3][0]  # type: ignore[index]
         evidence_root = options["evidence_root"]
+        assert options["workers"] == 2
         assert rehomed_truth.instances[0].mask.relative_path.startswith("truth/")
-        assert np.array_equal(
-            read_mask(rehomed_truth.instances[0].mask, evidence_root), mask
-        )
+        assert np.array_equal(read_mask(rehomed_truth.instances[0].mask, evidence_root), mask)
+        assert (
+            evidence_root / rehomed_truth.instances[0].mask.relative_path
+        ).read_bytes() == source_payload
         return SimpleNamespace(lock_sha256="e" * 64)
 
-    monkeypatch.setattr(
-        perception_benchmark, "calibrate_joint_platform_val", verify_rehomed
-    )
+    monkeypatch.setattr(perception_benchmark, "calibrate_joint_platform_val", verify_rehomed)
     monkeypatch.setattr(perception_benchmark, "write_threshold_lock", lambda *a: None)
     monkeypatch.setattr(perception_benchmark, "_write_index", lambda *a: None)
 
     assert perception_benchmark._handle_calibrate(arguments) == 0
+    progress = capsys.readouterr().err
+    assert "phase=verify" in progress
+    assert "phase=rehome" in progress
+    assert "elapsed=" in progress
 
 
 def test_calibration_rejects_cross_platform_provenance_mismatch(

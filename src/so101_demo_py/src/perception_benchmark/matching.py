@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from fractions import Fraction
-import math
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import numpy as np
-
 from so101_demo.perception_benchmark.codec import read_mask
 from so101_demo.perception_benchmark.contracts import RawCandidate, TruthInstance
 
@@ -155,9 +154,7 @@ def _optimal_edges(
     )
 
 
-def _exact_edge_total(
-    values: np.ndarray, edges: Sequence[tuple[int, int]]
-) -> Fraction:
+def _exact_edge_total(values: np.ndarray, edges: Sequence[tuple[int, int]]) -> Fraction:
     return sum(
         (Fraction.from_float(float(values[row, column])) for row, column in edges),
         start=Fraction(),
@@ -178,11 +175,7 @@ def _lexicographic_maximize(values: np.ndarray) -> tuple[int | None, ...]:
     target_total = _exact_edge_total(values, target_edges)
     required_edges = min(row_count, column_count)
     edge_priority = sorted(
-        (
-            (row, column)
-            for row in range(row_count)
-            for column in range(column_count)
-        ),
+        ((row, column) for row in range(row_count) for column in range(column_count)),
         key=lambda edge: (-values[edge], edge[1], edge[0]),
     )
 
@@ -193,13 +186,9 @@ def _lexicographic_maximize(values: np.ndarray) -> tuple[int | None, ...]:
         if row in locked_rows or column in locked_columns:
             continue
         trial = (*locked, (row, column))
-        residual_rows = tuple(
-            item for item in all_rows if item not in locked_rows and item != row
-        )
+        residual_rows = tuple(item for item in all_rows if item not in locked_rows and item != row)
         residual_columns = tuple(
-            item
-            for item in all_columns
-            if item not in locked_columns and item != column
+            item for item in all_columns if item not in locked_columns and item != column
         )
         residual_edges = _optimal_edges(values, residual_rows, residual_columns)
         if len(trial) + len(residual_edges) != required_edges:
@@ -220,12 +209,36 @@ def _lexicographic_maximize(values: np.ndarray) -> tuple[int | None, ...]:
     return tuple(assignment)
 
 
+def _precomputed_iou_matrix(
+    truth: Sequence[TruthInstance],
+    candidates: Sequence[RawCandidate],
+    values: Mapping[tuple[str, str], float],
+) -> np.ndarray:
+    try:
+        matrix = np.asarray(
+            [
+                [
+                    values[(truth_item.instance_id, candidate.candidate_id)]
+                    for candidate in candidates
+                ]
+                for truth_item in truth
+            ],
+            dtype=np.float64,
+        )
+    except KeyError as error:
+        raise ValueError("precomputed_ious does not cover every mask pair") from error
+    if not np.all(np.isfinite(matrix)) or np.any((matrix < 0.0) | (matrix > 1.0)):
+        raise ValueError("precomputed_ious must contain finite values in [0, 1]")
+    return matrix
+
+
 def maximize_mask_iou_assignment(
     truth: Sequence[TruthInstance],
     candidates: Sequence[RawCandidate],
     evidence_root: Path,
     *,
     candidate_evidence_root: Path | None = None,
+    precomputed_ious: Mapping[tuple[str, str], float] | None = None,
 ) -> tuple[MaskMatch, ...]:
     """Maximize total mask IoU with stable truth and candidate ordering."""
 
@@ -235,22 +248,21 @@ def maximize_mask_iou_assignment(
     )
     if not ordered_truth or not ordered_candidates:
         return ()
-    candidate_root = (
-        evidence_root
-        if candidate_evidence_root is None
-        else candidate_evidence_root
-    )
-    truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
-    candidate_masks = tuple(
-        read_mask(item.mask, candidate_root) for item in ordered_candidates
-    )
-    ious = np.asarray(
-        [
-            [mask_iou(truth_mask, candidate_mask) for candidate_mask in candidate_masks]
-            for truth_mask in truth_masks
-        ],
-        dtype=np.float64,
-    )
+    if precomputed_ious is None:
+        candidate_root = (
+            evidence_root if candidate_evidence_root is None else candidate_evidence_root
+        )
+        truth_masks = tuple(read_mask(item.mask, evidence_root) for item in ordered_truth)
+        candidate_masks = tuple(read_mask(item.mask, candidate_root) for item in ordered_candidates)
+        ious = np.asarray(
+            [
+                [mask_iou(truth_mask, candidate_mask) for candidate_mask in candidate_masks]
+                for truth_mask in truth_masks
+            ],
+            dtype=np.float64,
+        )
+    else:
+        ious = _precomputed_iou_matrix(ordered_truth, ordered_candidates, precomputed_ious)
     row_to_column = _lexicographic_maximize(ious)
     return tuple(
         MaskMatch(

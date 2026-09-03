@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 import pytest
-
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
     encode_mask_rle,
     sha256_bytes,
 )
 from so101_demo.perception_benchmark.contracts import (
-    DecisionOutput,
     GROUNDED_SAM_MODEL_ID,
+    YOLO_MODEL_ID,
+    DecisionOutput,
     MaskRef,
     PhaseTimings,
     PredictionRecord,
@@ -27,7 +27,6 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthInstance,
     TruthSample,
-    YOLO_MODEL_ID,
 )
 from so101_demo.perception_benchmark.matching import MaskMatch
 from so101_demo.perception_benchmark.metrics import (
@@ -190,9 +189,7 @@ def test_empty_truth_empty_prediction_has_no_synthetic_iou(tmp_path: Path) -> No
 
 def test_one_empty_side_uses_null_zero_denominator_semantics(tmp_path: Path) -> None:
     truth = _truth_sample(tmp_path, 0, ([[1, 0], [0, 0]],)).instances
-    candidate = (
-        _candidate(tmp_path, 0, "c0", 0.9, [[1, 0], [0, 0]]),
-    )
+    candidate = (_candidate(tmp_path, 0, "c0", 0.9, [[1, 0], [0, 0]]),)
 
     missing_prediction = compute_image_metrics(truth, (), tmp_path, iou_threshold=0.50)
     missing_truth = compute_image_metrics((), candidate, tmp_path, iou_threshold=0.50)
@@ -286,6 +283,36 @@ def test_ap_ranks_globally_and_rematches_each_image_prefix(tmp_path: Path) -> No
     assert summary.by_iou_threshold == ((0.5, pytest.approx(0.8349834983498351)),)
 
 
+def test_precomputed_iou_ap_is_identical_to_mask_decode_path(tmp_path: Path) -> None:
+    first = _truth_sample(tmp_path, 0, ([[1, 0], [0, 0]],))
+    second = _truth_sample(tmp_path, 1, ([[1, 0], [0, 0]],))
+    records = (
+        _record(first, (_candidate(tmp_path, 0, "tp0", 0.9, [[1, 0], [0, 0]]),)),
+        _record(
+            second,
+            (
+                _candidate(tmp_path, 1, "fp", 0.8, [[0, 0], [0, 1]]),
+                _candidate(tmp_path, 1, "tp1", 0.7, [[1, 0], [0, 0]]),
+            ),
+        ),
+    )
+    cached_ious = {
+        0: {("t0", "tp0"): 1.0},
+        1: {("t0", "fp"): 0.0, ("t0", "tp1"): 1.0},
+    }
+
+    decoded = compute_ap(records, (first, second), tmp_path, (0.50, 0.75))
+    cached = compute_ap(
+        records,
+        (first, second),
+        tmp_path,
+        (0.50, 0.75),
+        precomputed_ious=cached_ious,
+    )
+
+    assert cached == decoded
+
+
 def test_ap_supports_separate_truth_and_candidate_roots(tmp_path: Path) -> None:
     truth_root = tmp_path / "truth-root"
     candidate_root = tmp_path / "candidate-root"
@@ -323,15 +350,9 @@ def test_ap_threshold_matching_keeps_true_positive_count_monotonic(tmp_path: Pat
         ),
     )
     candidates = (
-        _candidate(
-            tmp_path, 0, "c0", 0.9, [[1, 1, 1, 0, 1, 0, 0, 0, 1, 0]]
-        ),
-        _candidate(
-            tmp_path, 0, "c1", 0.8, [[0, 1, 1, 1, 1, 0, 0, 0, 0, 0]]
-        ),
-        _candidate(
-            tmp_path, 0, "c2", 0.7, [[0, 1, 0, 0, 0, 0, 1, 0, 1, 1]]
-        ),
+        _candidate(tmp_path, 0, "c0", 0.9, [[1, 1, 1, 0, 1, 0, 0, 0, 1, 0]]),
+        _candidate(tmp_path, 0, "c1", 0.8, [[0, 1, 1, 1, 1, 0, 0, 0, 0, 0]]),
+        _candidate(tmp_path, 0, "c2", 0.7, [[0, 1, 0, 0, 0, 0, 1, 0, 1, 1]]),
     )
 
     summary = compute_ap((_record(sample, candidates),), (sample,), tmp_path, (0.50,))
@@ -422,12 +443,8 @@ def _mean_truth_count(samples: tuple[ImageMetricInput, ...]) -> float:
 def test_image_bootstrap_has_frozen_seed_and_deterministic_sha() -> None:
     samples = _bootstrap_samples((0, 1, 4))
 
-    first = bootstrap_image_metrics(
-        samples, _mean_truth_count, seed=20260902, repetitions=10
-    )
-    second = bootstrap_image_metrics(
-        samples, _mean_truth_count, seed=20260902, repetitions=10
-    )
+    first = bootstrap_image_metrics(samples, _mean_truth_count, seed=20260902, repetitions=10)
+    second = bootstrap_image_metrics(samples, _mean_truth_count, seed=20260902, repetitions=10)
     first_sha = hashlib.sha256(
         json.dumps(asdict(first), sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
