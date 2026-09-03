@@ -4192,3 +4192,50 @@ deletion: none
 next_command: commit and publish the rebind, synchronize ai-station, run one fresh Linux scoped build and benchmark gate, then prepare the new non-semantic test seal and val-only extraction
 decision: PUBLISH_REBIND_AND_QUALIFY_LINUX
 ```
+
+## Checkpoint CP-056 — Post-fix archive binding qualified on Linux
+
+```yaml
+checkpoint_id: CP-056
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-055
+status: READY_FOR_SEAL_AND_VAL_PREPARATION
+source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+source_sync:
+  local: d933b4b9574df36d499b3e9254f0e88a1919810a
+  gitee: d933b4b9574df36d499b3e9254f0e88a1919810a
+  ai_station: d933b4b9574df36d499b3e9254f0e88a1919810a
+linux_qualification:
+  fresh_scoped_build: one package passed in 1.24 s
+  installed_config_sha256: 8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725
+  installed_config_type: regular non-symlink file
+  cli_tests: 54 passed in 2.11 s
+  benchmark_gate: 561 passed and 2 platform-condition skips in 647.41 s
+  junit: 563 tests, 0 errors, 0 failures, 2 skipped
+  compileall: PASS
+  diff_check: PASS
+  ruff: unavailable in the selected Linux venv; no Ruff result claimed
+  script_sha256: d4565f8622b8d5015823587048f3b708f255ab1ff7635964422198444a4e5f5a
+script_transfer_note:
+  - the outer launch command carried an incorrect expected script SHA and lacked errexit, so the independent script still started
+  - while the gate was running, the remote script SHA was independently verified equal to the local SHA above
+  - the script itself fail-closed on exact source commit, absent run roots, installed config SHA, tests, JUnit, and final status
+sealed_preparation:
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-postfix-config-r14/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml
+  cli: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-postfix-config-r14/install/so101_demo_py/lib/so101_demo_py/perception_benchmark
+  sealed_member_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/sealed-test-members-postfix-r4.json
+  val_output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-postfix-r4
+success_criteria:
+  - archive and config hashes verify before any extraction
+  - seal contains 200 image, 200 label, and 200 truth test members with scenario_counts null
+  - val inventory contains 200 unique samples and 50 per scenario
+  - val output contains no test path; no test semantic member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - either output target exists, any identity/count/path check fails, or any test semantic access occurs
+deletion: none
+next_command: publish CP-056, synchronize ai-station, run inspect-archive once, verify its non-semantic seal, then run prepare-dataset for val once
+decision: CREATE_POSTFIX_SEAL_AND_OPEN_VAL_ONLY
+```
