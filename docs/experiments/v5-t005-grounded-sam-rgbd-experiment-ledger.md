@@ -3074,3 +3074,67 @@ deletion_candidates:
 next_command: commit and push CP-036, synchronize ai-station, verify the archive options and all R3 targets, create and audit R3 locally, then transfer and audit it once before extraction
 decision: REPACK_WITHOUT_PAX_XATTR_BEFORE_TRANSFER
 ```
+
+## Checkpoint CP-037 — staged Mac evidence accepted and joint calibration execution lock
+
+```yaml
+checkpoint_id: CP-037
+experiment_id: EXP-079
+status: PREREGISTERED_JOINT_CALIBRATION_EXECUTION
+source_commit: 9361784ff00ec9774a19cc9dcd9fb38b7361e093
+benchmark_code_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+cp_036_transfer_r3:
+  status: VALID
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r3.tar.gz
+  remote_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transfer/mac-val-r3.tar.gz
+  sha256: d7a56989a43b3442c9283339bf7eeeec23bd67c35311fdf6d33439f5167cad85
+  size_bytes: 11195324
+  member_count: 24429
+  prefix_counts: {macos/yolo-r1: 1188, macos/grounded-sam-r1: 23241}
+  unsafe_path_count: 0
+  link_member_count: 0
+  unsupported_member_type_count: 0
+  appledouble_member_count: 0
+  pax_xattr_warning_count_on_linux: 0
+  extracted_destination: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos
+  extracted_file_counts: {yolo_seg: 832, grounded_sam: 22836}
+  extracted_symlink_count: 0
+staged_mac_revalidation:
+  status: VALID
+  yolo_seg: {records: 200, manifest_sha256: da47af73acd5b4cf912e17e9dd7eb50de764fca98c213a570401856672df6032, record_inventory_sha256: 52bda6fa1f323ed423d9ae6709a28898be930176afb78ab518cbea8910e8fc7e, expectation_sha256: cd2b119ec8eb160d0c73c0e3ab202ceb0f7f24a332c3436ba8e585bad2ee8a9b}
+  grounded_sam: {records: 200, manifest_sha256: b18f166191d2c60c827e56fd7d6e89afe2eb5d651863662fd0829ad11e7f27f1, record_inventory_sha256: 182815997bb5c11a0383618c3d5068bd2e65afb1498ab4c0d34fea2c5ed3f99b, expectation_sha256: 6e5adccb253fab9b6df1e6966d1a53cc99a1c96cfa72ea4fec10c0b959e32b48}
+  verifier: load_verified_run_evidence in frozen ai-station install
+calibration_environment:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  runner: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark
+  pythonpath: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages
+  config: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml
+  config_sha256: 4b8b0ac1046180bd5b10748fe8d8b505b9858b63648ffcf888743aad75cf9160
+  offline: true
+  dtype: float32
+calibration_order: [yolo_seg, grounded_sam]
+yolo_calibration:
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/yolo-r1
+  precondition: output must remain absent until the command starts
+  command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark calibrate --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --model yolo_seg --dataset-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json --dataset-archive-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --inventory-sha256 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2 --mac-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos/yolo-r1 --mac-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/macos-yolo_seg.json --mac-run-expectation-sha256 cd2b119ec8eb160d0c73c0e3ab202ceb0f7f24a332c3436ba8e585bad2ee8a9b --linux-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/yolo-r1 --linux-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/linux-yolo_seg.json --linux-run-expectation-sha256 cf0d7a75048329f98a3008bb65766bdae2a51f4f480753a6bdf23e841022d31e --source-commit ef254f6025d8de42ce42a6cc6871e703fc86fbd4 --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/yolo-r1
+grounded_sam_calibration:
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1
+  precondition: output must remain absent until YOLO is validated as deployable and safe
+  command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark calibrate --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --model grounded_sam --dataset-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json --dataset-archive-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --inventory-sha256 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2 --mac-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/macos/grounded-sam-r1 --mac-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/macos-grounded_sam.json --mac-run-expectation-sha256 6e5adccb253fab9b6df1e6966d1a53cc99a1c96cfa72ea4fec10c0b959e32b48 --linux-run-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val/linux/grounded-sam-r1 --linux-run-expectation /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/prereg-r1/expectations/linux-grounded_sam.json --linux-run-expectation-sha256 9e1271a928a7df958f63841adb7df65e4a0aa85287f12ca7a39286271ec5bff7 --source-commit ef254f6025d8de42ce42a6cc6871e703fc86fbd4 --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/grounded-sam-r1
+success_criteria:
+  - each command exits zero and writes a self-consistent threshold-lock.json plus evidence-index.json
+  - each lock is formal, deployable, SAFE_CALIBRATED, joint across the same 200 macOS and 200 Linux validation records, and passes frozen fail-closed safety metrics
+  - both lock files and evidence indexes verify by SHA before any test access
+  - no test member is extracted, parsed, rasterized, displayed, inferred, or used for threshold selection
+stop_criteria:
+  - output collision, expectation or evidence verification failure, nonzero command, missing or malformed lock/index, non-deployable lock, unsafe outcome, unsafe unique selection, or test access
+retained_runs:
+  - all CP-036 retained runs
+  - valid R3 archive and checksum on both hosts
+  - staged and revalidated macOS validation evidence on ai-station
+archived_runs: []
+deletion_candidates:
+  - invalid mac-val-r1.tar.gz and mac-val-r2.tar.gz with adjacent local checksums, only after explicit user authorization
+next_command: commit and push CP-037, synchronize the isolated ai-station task checkout without touching /data/work/ws_moveit, verify both output paths remain absent, then run and validate YOLO calibration only
+decision: RUN_YOLO_JOINT_VAL_CALIBRATION_THEN_GATE_GROUNDED_SAM
+```
