@@ -4147,3 +4147,48 @@ deletion: none
 next_command: publish CP-054, synchronize ai-station, perform the absent-target copy and digest verification, then start the config rebind TDD
 decision: COPY_FROZEN_ARCHIVE_TO_REGISTERED_ASSET_PATH
 ```
+
+## Checkpoint CP-055 — Post-fix archive binding qualified on macOS
+
+```yaml
+checkpoint_id: CP-055
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-054
+status: READY_FOR_LINUX_QUALIFICATION
+asset_registration:
+  r1: INVALID_PRECOPY because the command used an incorrect full expected checkout SHA; target remained absent
+  r2: VALID
+  target: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/assets/datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  size_bytes: 39461148
+  mode: '0444'
+  semantic_test_content_opened: false
+config_rebind:
+  archive_id: datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  config_sha256: 8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725
+  changed_files:
+    - src/so101_demo_py/config/perception_benchmark/benchmark.yaml
+    - src/so101_demo_py/src/cli/perception_benchmark.py
+    - src/so101_demo_py/benchmark_test/test_perception_benchmark_cli.py
+tdd:
+  red: frozen-literal test failed once because benchmark.yaml still named the prior archive
+  first_green: 1 passed in 0.08 s after the config and immutable constants changed
+  fixture_drift: 10 of 54 CLI tests correctly failed closed because their fixtures still supplied the prior registered archive
+  fixture_fix: bind those fixtures to shared post-fix archive constants without weakening any production check
+  cli_green: 54 passed in 0.94 s
+macos_qualification:
+  fresh_build: one package passed in 0.72 s; nonfatal LaunchServices notification error observed after success
+  benchmark_gate: 563 passed, 0 failed, 0 skipped in 300.78 s
+  junit: 563 tests, 0 errors, 0 failures, 0 skipped
+  compileall: PASS
+  diff_check: PASS
+  ruff: unavailable in the selected macOS environment; no Ruff result claimed
+unchanged:
+  - all model bytes, revisions, IDs, prompts, grids, thresholds, matching, objectives, tie-breaks, runtime device/dtype, offline/no-fallback, and unsafe-unique gates
+  - test remains sealed; no fresh model inference, calibration, or test unlock has run
+deletion: none
+next_command: commit and publish the rebind, synchronize ai-station, run one fresh Linux scoped build and benchmark gate, then prepare the new non-semantic test seal and val-only extraction
+decision: PUBLISH_REBIND_AND_QUALIFY_LINUX
+```
