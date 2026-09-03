@@ -1312,6 +1312,73 @@ def test_yolo_production_trimmed_mask_maps_to_canonical_raw_candidate(
     ]
 
 
+@pytest.mark.parametrize(
+    ("quality_steps", "expected_status"),
+    ((1, RunStatus.VALID), (2, RunStatus.INVALID)),
+)
+def test_grounded_production_mapping_accepts_only_one_float32_quality_ulp(
+    tmp_path: Path, quality_steps: int, expected_status: RunStatus
+) -> None:
+    """Allow float32 readback noise without admitting a wider quality mismatch."""
+
+    lock = _formal_yolo_lock(model="grounded_sam")
+    inventory, lock_path, _ = _locked_inventory(tmp_path / "locked", lock)
+    output_root = tmp_path / "run"
+    output_root.mkdir()
+    adapter = SyntheticGroundedAdapter(output_root)
+
+    def observe(frame: object) -> ProductionObservation:
+        mask = np.zeros((16, 20), dtype=bool)
+        mask[3:11, 4:12] = True
+        quality = np.float32(0.92)
+        for _ in range(quality_steps):
+            quality = np.nextafter(quality, np.float32(1.0), dtype=np.float32)
+        candidate = DetectionCandidate(
+            instance_id="0",
+            class_id="plastic_cup",
+            confidence=0.81,
+            bbox_xyxy=(4.0, 3.0, 12.0, 11.0),
+            mask=mask,
+            source_stamp_ns=frame.source_stamp_ns,  # type: ignore[attr-defined]
+            source_frame_id=frame.source_frame_id,  # type: ignore[attr-defined]
+            image_width=20,
+            image_height=16,
+            segmentation_quality=float(quality),
+        )
+        batch = DetectionBatch(
+            model_id=GROUNDED_SAM_MODEL_ID,
+            weights_sha256=SHA_B,
+            runtime_device="mps",
+            inference_latency_ms=1.0,
+            image_width=20,
+            image_height=16,
+            candidates=(candidate,),
+        )
+        return ProductionObservation(
+            DecisionOutput.UNIQUE, batch, "0", None, None, None, 0.25
+        )
+
+    manifest = DetectorBenchmarkRunner(adapter, output_root).run(
+        _spec(
+            inventory,
+            output_root,
+            model="grounded_sam",
+            run_id="grounded-production-float32-quality-ulp",
+            run_kind=RunKind.TEST_PRODUCTION,
+            threshold_lock_sha256=lock.lock_sha256,
+            threshold_lock_path=lock_path,
+            production_observer=observe,
+        )
+    )
+
+    assert manifest.status is expected_status
+    if expected_status is RunStatus.VALID:
+        record = _record(output_root, 0)
+        assert record["selected_candidate_id"] == "grounded-sam-000"
+    else:
+        assert manifest.invalid_reason == "PRODUCTION_CANDIDATE_MAPPING_INVALID"
+
+
 @pytest.mark.parametrize("mapping_failure", ("ambiguous", "non-injective"))
 def test_production_mapping_requires_one_to_one_unambiguous_evidence(
     tmp_path: Path, mapping_failure: str
