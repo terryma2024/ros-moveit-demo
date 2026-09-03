@@ -191,6 +191,33 @@ def test_object_id_labels_preserve_zero_one_or_two_instances(cup_count: int) -> 
         assert all(0.0 <= coordinate <= 1.0 for point in instance.polygon_xy for coordinate in point)
 
 
+@pytest.mark.parametrize(
+    ("scenario", "expected_names"),
+    [
+        (DatasetScenario.NO_CUP, []),
+        (DatasetScenario.ONE_CUP_DISTRACTORS, ["plastic_cup"]),
+        (DatasetScenario.CUP_NEAR_BOTTLE, ["plastic_cup"]),
+        (DatasetScenario.TWO_CUPS, ["plastic_cup", "plastic_cup_b"]),
+    ],
+)
+def test_scenario_contract_excludes_inactive_cup_body_ids(
+    scenario: DatasetScenario,
+    expected_names: list[str],
+) -> None:
+    render_with_stray_inactive_ids = _raw_render(
+        cup_count=2,
+        cup_rgba=(1.0, 0.4, 0.0, 1.0),
+    )
+
+    sample = build_labeled_sample(
+        render_with_stray_inactive_ids,
+        seed=42,
+        scenario=scenario,
+    )
+
+    assert [instance.body_name for instance in sample.instances] == expected_names
+
+
 def test_material_color_is_not_used_to_build_labels() -> None:
     orange = build_labeled_sample(
         _raw_render(cup_count=2, cup_rgba=(1.0, 0.4, 0.0, 1.0)),
