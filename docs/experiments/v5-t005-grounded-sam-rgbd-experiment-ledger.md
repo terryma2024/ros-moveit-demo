@@ -3614,3 +3614,64 @@ deletion: none
 next_command: commit and push CP-044, synchronize ai-station, create only the two registered output parents, verify all twelve output names and the Mac launch label remain absent, then start Mac only
 decision: FORMAL_TEST_MATRIX_FROZEN_READY_FOR_MAC
 ```
+
+## Checkpoint CP-045 — Mac formal test R2 timestamp-preserving replacement
+
+```yaml
+checkpoint_id: CP-045
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-044
+mac_r1:
+  status: INVALID_PREINFERENCE
+  first_run: mac-yolo-test-raw-fresh-r1
+  first_bad_boundary: local threshold-lock file receipt time was later than the frozen test access event
+  error: THRESHOLD_LOCK_POSTDATES_TEST_ACCESS
+  record_count: 0
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test/macos/yolo-raw-r1
+  retained_files: [manifest.json]
+  model_inference_started: false
+  remaining_five_r1_outputs_created: false
+  launchd_job_removed_after_exit: true
+  deletion: none
+root_cause:
+  - the R1 lock transfer preserved bytes but not source mtimes
+  - local yolo and Grounded-SAM lock mtimes were 2026-09-04T02:11:48Z and 2026-09-04T02:11:51Z
+  - the access event was 2026-09-04T02:10:09Z on the Mac filesystem view
+  - durable source lock mtimes were 2026-09-03T15:35:34Z and 2026-09-03T17:52:28Z UTC, both before the 2026-09-03T17:58:27Z access event
+replacement_single_variable: preserve the two durable source lock mtimes with scp -p; keep lock bytes, dataset, access event, models, config, source, run order, thresholds, and all acceptance rules unchanged
+mac_r2:
+  status: PLANNED
+  lock_target: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/calibration/macos-locks-r2
+  lock_copy_policy:
+    - target must be absent
+    - copy each durable threshold-lock.json exactly once with scp -p
+    - verify file SHA-256 and internal lock SHA-256
+    - require both local lock mtimes to precede the frozen test access event
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-test-r2.sh
+  script_sha256: 1afc6fd036b0393993a7e3c1acdfba0d17a4a40b71c7398f62283f75d79aff9a
+  plist: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.r2.plist
+  plist_sha256: cc1cd66a9a646a346b8deee20b03e23877509bbc10a7a8580cfd8f3f6967fce4
+  launch_label: com.terry.so101.benchmark.mac.test.r2
+  command: launchctl bootstrap gui/501 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.r2.plist
+  order:
+    - mac-yolo-test-raw-fresh-r2
+    - mac-yolo-test-production-fresh-r2
+    - mac-yolo-test-calibrated-fresh-r2
+    - mac-grounded-sam-test-raw-fresh-r2
+    - mac-grounded-sam-test-production-fresh-r2
+    - mac-grounded-sam-test-calibrated-fresh-r2
+  outputs:
+    - yolo-raw-r2
+    - yolo-production-r2
+    - yolo-calibrated-r2
+    - grounded-sam-raw-r2
+    - grounded-sam-production-r2
+    - grounded-sam-calibrated-r2
+  frozen_contract: identical to CP-044 except for new run/output/label identities and timestamp-preserving local lock receipts
+linux_matrix: remains PLANNED_AFTER_VALID_MAC with unchanged R1 script and output identities
+stop_criteria:
+  - any R2 target or label collision, copied lock digest mismatch, copied lock mtime after the access event, command failure, invalid run, fallback, timeout, OOM, or production/replay disagreement
+next_command: commit and push CP-045, synchronize ai-station, create the absent R2 lock target, copy both locks with scp -p and verify timestamps plus digests, then start Mac R2 only
+decision: REPLACE_PREINFERENCE_INVALID_MAC_R1_WITH_TIMESTAMP_PRESERVING_R2
+```
