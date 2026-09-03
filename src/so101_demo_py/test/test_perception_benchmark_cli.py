@@ -409,6 +409,40 @@ def test_collect_rejects_fixture_and_val_lock_at_argument_gate() -> None:
     assert fixture_error.value.code == 2
 
 
+def test_inventory_forwards_explicit_relocated_test_access_log(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    access_log = tmp_path / "test-access.jsonl"
+    arguments = SimpleNamespace(
+        split="test",
+        dataset_archive_sha256=(
+            "c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1"
+        ),
+        dataset_inventory=tmp_path / "test-open/inventory.json",
+        inventory_sha256="1" * 64,
+        test_access_event_sha256="2" * 64,
+        sealed_member_inventory_sha256="3" * 64,
+        yolo_lock_sha256="4" * 64,
+        grounded_sam_lock_sha256="5" * 64,
+        test_access_log=access_log,
+    )
+    captured: dict[str, object] = {}
+
+    def capture(root: Path, **options: object) -> object:
+        captured["root"] = root
+        captured.update(options)
+        return object()
+
+    monkeypatch.setattr(perception_benchmark, "load_dataset_inventory", capture)
+
+    perception_benchmark._inventory(
+        arguments, perception_benchmark._load_frozen_config(CONFIG)
+    )
+
+    assert captured["root"] == arguments.dataset_inventory.parent
+    assert captured["expected_access_log_path"] == access_log
+
+
 def test_oracle_requires_explicit_acknowledgement(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
