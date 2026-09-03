@@ -4,6 +4,7 @@ import errno
 import hashlib
 import json
 import os
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -1196,6 +1197,33 @@ def test_public_test_inventory_loader_rejects_changed_access_or_lock_chain(
         load_dataset_inventory(root, **anchors)
 
 
+def test_public_test_inventory_loader_accepts_explicit_relocated_access_log(
+    tmp_path: Path,
+) -> None:
+    archive = build_fixture_archive(tmp_path)
+    seal = _verified_unlocked_seal(archive, tmp_path)
+    producer_root = tmp_path / "producer-test-open"
+    DatasetArchiveVerifier().verify_and_extract_split(
+        archive, sha256_file(archive), producer_root, "test", seal
+    )
+    relocated_root = tmp_path / "relocated-test-open"
+    shutil.copytree(producer_root, relocated_root)
+    relocated_access_log = tmp_path / "relocated-test-access.jsonl"
+    shutil.copy2(seal.access_log_path, relocated_access_log)
+    seal.access_log_path.rename(tmp_path / "producer-access-log-moved.jsonl")
+
+    inventory = load_dataset_inventory(
+        relocated_root,
+        **_public_inventory_anchors(relocated_root, "test"),
+        expected_access_log_path=relocated_access_log,
+    )
+
+    assert len(load_truth_samples(relocated_root, "test", inventory)) == 200
+    relocated_access_log.write_bytes(relocated_access_log.read_bytes() + b"{}\n")
+    with pytest.raises(DatasetVerificationError, match="INVENTORY_ACCESS_CHAIN_INVALID"):
+        load_truth_samples(relocated_root, "test", inventory)
+
+
 def test_round1_public_inventory_loader_requires_all_external_val_anchors(
     tmp_path: Path,
 ) -> None:
@@ -1280,6 +1308,7 @@ def test_round1_public_val_inventory_rejects_test_access_anchors(
             expected_test_access_event_sha256="a" * 64,
             expected_sealed_member_inventory_sha256="b" * 64,
             expected_threshold_lock_sha256s=("c" * 64, "d" * 64),
+            expected_access_log_path=tmp_path / "test-access.jsonl",
         )
 
 
