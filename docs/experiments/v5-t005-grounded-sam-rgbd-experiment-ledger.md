@@ -2691,3 +2691,75 @@ deletion_candidates:
 next_command: commit and push CP-029, verify script digest/output absence/label absence, submit the ephemeral launchd job once, then inspect its exit state and immutable output
 decision: PROVE_NATIVE_MPS_VIA_EPHEMERAL_LAUNCHD_JOB
 ```
+
+## Checkpoint CP-030 — fresh cross-platform actual dry-run lock
+
+```yaml
+checkpoint_id: CP-030
+experiment_id: EXP-079
+status: PREREGISTERED_ACTUAL_DRY_RUN
+source_commit: 44e53538f7c458ff8a7bc0bf4bb1fb1be83374a1
+benchmark_code_commit: ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+cp_029_result:
+  status: VALID_NATIVE_MPS
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-launchd-mps-probe-r2.json
+  output_sha256: 2cfc694cbfba6b30359e25009b4c03c198301ea2dc7f48404189effffc1bf980
+  output_mode: '0444'
+  platform: macOS-26.6.2-arm64-arm-64bit
+  python: 3.11.15
+  torch: 2.13.0
+  codex_ci: null
+  codex_sandbox: null
+  mps_built: true
+  mps_available: true
+  tensor_device: mps:0
+  tensor_value: 1.0
+  launchd_note: first run succeeded and created immutable evidence; launchctl submit scheduled a second run which failed closed on output collision; the job was then removed and evidence retained
+mac_val_copy:
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/val-open-macos-r1
+  inventory_sha256: 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  unique_artifact_paths: 600
+  all_source_sha256_match: true
+  symlink_count: 0
+  test_path_count: 0
+mac_launch:
+  label: com.terry.so101.benchmark.mac.dryrun.r1
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-dry-run-r1.sh
+  script_sha256: 84a63c19dfa5ba0ba82d019fc3e4c78e7c5e4b5d7f603bd3ce476e0e2c3c7bab
+  plist: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.dryrun.r1.plist
+  plist_sha256: 6915f6e17e025604b771306d0b07cdb5e8d7c0dc5379d413d3723fdfe1aa7b95
+  command: launchctl bootstrap gui/501 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.dryrun.r1.plist
+  output: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1
+  stdout: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1.stdout.log
+  stderr: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dry-run/macos-r1.stderr.log
+linux_launch:
+  command: HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONNOUSERSITE=1 PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/python3.12/site-packages /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/lib/so101_demo_py/perception_benchmark dry-run --config /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-ef254-r1/install/so101_demo_py/share/so101_demo_py/config/perception_benchmark/benchmark.yaml --output-root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r1 --platform linux --device cuda --dtype float32 --dataset-inventory /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/val-open-r3/inventory.json --dataset-archive-sha256 d27206350f839c2d2c6bcfff9a6a16509be3648a9053b899d1f6ef286bbe8ac6 --inventory-sha256 500b61e69771e3098628b20b5c4b01926d41df7dad1ffc3a7023be34405638b2 --weights /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/best.pt --weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --model-root /data/work/so101-models/grounded-sam-v2-scipy-lock --manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --source-commit ef254f6025d8de42ce42a6cc6871e703fc86fbd4
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dry-run/linux-r1
+frozen_contract:
+  execution_mode: actual
+  run_kind: NON_FORMAL_DRY_RUN
+  sample_count: 8
+  scenarios_per_platform: {no_cup: 2, one_cup_distractors: 2, two_cups: 2, cup_near_bottle: 2}
+  models: [yolo_seg, grounded_sam]
+  records_per_model: 8
+  dtype: float32
+  devices: {macos: mps, linux: cuda}
+  offline: true
+  fallback_used: false
+success_criteria:
+  - both one-time commands exit zero with immutable provenance-bound evidence indexes
+  - both manifests report actual mode, eight samples, 16 records, eight per model, native device, FP32, and no fallback
+  - every record and mask in each evidence index exists and matches its SHA-256
+  - no test member is extracted, parsed, rasterized, displayed, or inferred
+stop_criteria:
+  - any target or launch label collision, nonzero exit, provenance mismatch, missing record, artifact SHA mismatch, fallback, or test access
+retained_runs:
+  - all CP-029 retained runs and CP-030 launch artifacts
+archived_runs: []
+deletion_candidates:
+  - unchanged from CP-029
+next_command: commit and push CP-030, synchronize ai-station, verify all targets/label absent and launch artifact digests, then start both one-time actual dry-runs
+decision: RUN_FRESH_ACTUAL_DRY_RUN_ON_NATIVE_MPS_AND_CUDA
+```
