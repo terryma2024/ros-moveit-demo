@@ -285,6 +285,18 @@ class RuntimeProvenance:
             raise ValueError("environment must map non-empty strings to non-empty strings")
         object.__setattr__(self, "environment", MappingProxyType(environment))
 
+    def __reduce__(self):
+        return (
+            type(self),
+            (
+                self.runtime_device,
+                self.runtime_name,
+                self.runtime_version,
+                self.weights_sha256,
+                dict(self.environment),
+            ),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class PredictionRecord:
