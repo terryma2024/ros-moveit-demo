@@ -4641,3 +4641,114 @@ retention:
 next_command: after explicit authorization for this exact payload and destination, create one immutable transfer archive, verify its SHA and path safety, copy it to the registered Mac temporary root, preserve both lock mtimes with scp -p, and preregister the twelve-run frozen matrix
 decision: STOP_BEFORE_CROSS_ENV_TEST_DATA_TRANSFER
 ```
+
+## Checkpoint CP-064 — Mac test 数据落地与冻结评测矩阵预注册
+
+```yaml
+checkpoint_id: CP-064
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-063
+status: READY_FOR_MAC_FROZEN_TEST
+authorization:
+  received: true
+  scope: ai-station 与本 Mac 之间的通信和数据复制
+source_state:
+  workspace_head: 6649cf5717c31d27660947e4ceb88caf6f58a8e5
+  ai_station_head: 6649cf5717c31d27660947e4ceb88caf6f58a8e5
+  calibration_implementation_commit: f4500933d238ad391f048eb7ef51d82d6ff4fced
+  prediction_and_lock_source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+  benchmark_config_sha256: 8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725
+test_transfer:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+  remote_archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1-transfer.tar.gz
+  local_archive: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-postfix-r4-r1-transfer.tar.gz
+  local_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-postfix-r4-macos-r1
+  archive_sha256: 9983581a5db05506f9a795968eeccad892d55896cc182a621a671dccf0baf652
+  archive_size_bytes: 9074263
+  tar_members: {total: 609, regular_files: 602, directories: 7, links: 0}
+  path_safety: PASS
+  inventory_sha256: 72d38c392889d9f1d8095f24d148f31bd2915a5f36fc62b123f6625fc7e76dd2
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  dataset_files_after_access_event: true
+test_access:
+  event_sha256: c77c2dcf6772ba708f03d6e910ffd5e9323d7c47a9e915fa8ed33c96cef6f76f
+  granted_at: 2026-09-03T21:44:12.975261+00:00
+  local_access_log: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/calibration/postfix-r4/test-access-r1.jsonl
+  access_log_sha256: c5179c15b5f0586a93e9ba48d2a47d2cd3ce7e2dbed65b85dff8a3fcbe7d10e4
+threshold_locks:
+  yolo:
+    local_path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/calibration/macos-locks-postfix-r4-r1/yolo-r1/threshold-lock.json
+    file_sha256: 1c2f7e270123e72115a30a673a697cb07bdab9f295e6c429172995d1ade7bac1
+    internal_sha256: bbe200f0f46bb035a78a22e7524e0f401175f99d41ce6067fd888aacd8644df6
+    mtime_epoch: 1788469128
+  grounded_sam:
+    local_path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/calibration/macos-locks-postfix-r4-r1/grounded-sam-r3/threshold-lock.json
+    file_sha256: 8b0d24ca6c8c28ffb6f9e8c6d7be7c4dabb3916a198f8a0e6f594fb6faebce3e
+    internal_sha256: 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+    mtime_epoch: 1788470728
+  both_locks_before_access_event: true
+fixed_assets:
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_sam_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  archive_sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  sealed_member_inventory_sha256: 4ac8407aec15d8c19da653dd34b932e50ba42fa9aa492a7b4adedc2147666b81
+macos_matrix:
+  platform: macos
+  device: mps
+  dtype: float32
+  output_parent: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos
+  installed_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-grid-parallel-r1
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/mac-test-postfix-r4-r1.sh
+  script_sha256: 7a9a3341fc18adbb000cee7809bf84d498105a10a1bae407ff893f09bd662de9
+  launch_plist: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.postfix.r4.r1.plist
+  launch_plist_sha256: 65b87500834ec4806b8efe0af0b0cdeffb15edf7b267fc7ee46097d6e813b6a4
+  launch_label: com.terry.so101.benchmark.mac.test.postfix.r4.r1
+  launch_command: launchctl bootstrap gui/501 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/com.terry.so101.benchmark.mac.test.postfix.r4.r1.plist
+  runs:
+    - {run_id: mac-yolo-test-raw-postfix-r4-r1, run_kind: TEST_RAW_FROZEN, output: yolo-raw-r1}
+    - {run_id: mac-yolo-test-production-postfix-r4-r1, run_kind: TEST_PRODUCTION, output: yolo-production-r1}
+    - {run_id: mac-yolo-test-calibrated-postfix-r4-r1, run_kind: TEST_CALIBRATED, output: yolo-calibrated-r1}
+    - {run_id: mac-grounded-sam-test-raw-postfix-r4-r1, run_kind: TEST_RAW_FROZEN, output: grounded-sam-raw-r1}
+    - {run_id: mac-grounded-sam-test-production-postfix-r4-r1, run_kind: TEST_PRODUCTION, output: grounded-sam-production-r1}
+    - {run_id: mac-grounded-sam-test-calibrated-postfix-r4-r1, run_kind: TEST_CALIBRATED, output: grounded-sam-calibrated-r1}
+linux_matrix:
+  platform: linux
+  device: cuda
+  dtype: float32
+  output_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-postfix-r4/linux
+  installed_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r15
+  local_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-test-postfix-r4-r1.sh
+  remote_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-test-postfix-r4-r1.sh
+  script_sha256: 39cee700c1d7f7a3d1dfc906659bf1923c85c40ae700465466c2b455f9b85a9f
+  runs:
+    - {run_id: linux-grounded-sam-test-raw-postfix-r4-r1, run_kind: TEST_RAW_FROZEN, output: grounded-sam-raw-r1}
+    - {run_id: linux-grounded-sam-test-production-postfix-r4-r1, run_kind: TEST_PRODUCTION, output: grounded-sam-production-r1}
+    - {run_id: linux-grounded-sam-test-calibrated-postfix-r4-r1, run_kind: TEST_CALIBRATED, output: grounded-sam-calibrated-r1}
+    - {run_id: linux-yolo-test-raw-postfix-r4-r1, run_kind: TEST_RAW_FROZEN, output: yolo-raw-r1}
+    - {run_id: linux-yolo-test-production-postfix-r4-r1, run_kind: TEST_PRODUCTION, output: yolo-production-r1}
+    - {run_id: linux-yolo-test-calibrated-postfix-r4-r1, run_kind: TEST_CALIBRATED, output: yolo-calibrated-r1}
+execution_contract:
+  - Mac 六个 run 先按上表顺序执行；全部验证通过后才运行 Linux
+  - Linux 采用相反的模型顺序，不并发占用 GPU
+  - 每个 run 固定 200 个样本；错误样本保留在分母中
+  - TEST_PRODUCTION 与 TEST_CALIBRATED 必须经过 DetectorPort 和真实 TargetSelector，并与冻结 raw replay 一致
+  - 不运行 ORACLE_DIAGNOSTIC，不改 prompt、模型、grid、threshold、matching、objective 或 threshold-lock
+stop_criteria:
+  - 输出目录碰撞、MPS/CUDA 不可用、CPU fallback、FP32 不符、输入 SHA 或 access chain 不符
+  - 缺样本、顺序变化、manifest INVALID、port/replay 不一致、证据 SHA 无法回读
+  - Mac 任一 run 无效时不得启动 Linux
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/test-open-postfix-r4-r1-transfer.tar.gz
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-postfix-r4-r1-transfer.tar.gz
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/dataset/test-open-postfix-r4-macos-r1
+  archived_runs:
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-aborted-r1
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-calibration-rejected-r2
+  deletion_candidates: none
+next_command: commit and push CP-064, synchronize ai-station, create the two empty test output parents, then launch the Mac plist exactly once
+decision: RUN_MAC_FROZEN_TEST_MATRIX_AFTER_COMMIT
+```
