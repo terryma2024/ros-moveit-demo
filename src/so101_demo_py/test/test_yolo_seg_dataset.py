@@ -47,6 +47,37 @@ def test_split_seed_ranges_are_fixed_and_disjoint() -> None:
     assert not (set(plan["val"]) & set(plan["test"]))
 
 
+def test_split_seed_ranges_accept_explicit_disjoint_starts() -> None:
+    plan = split_seed_plan(
+        {"train": 4, "val": 4, "test": 4},
+        {"train": 400000, "val": 500000, "test": 600000},
+    )
+
+    assert plan == {
+        "train": tuple(range(400000, 400004)),
+        "val": tuple(range(500000, 500004)),
+        "test": tuple(range(600000, 600004)),
+    }
+
+
+@pytest.mark.parametrize(
+    "seed_starts",
+    [
+        {"train": 400000, "val": 500000},
+        {"train": 400000, "val": 500000, "test": 600000, "extra": 700000},
+        {"train": True, "val": 500000, "test": 600000},
+        {"train": -1, "val": 500000, "test": 600000},
+        {"train": 999999998, "val": 500000, "test": 600000},
+        {"train": 400000, "val": 400003, "test": 600000},
+    ],
+)
+def test_split_seed_ranges_reject_invalid_or_overlapping_starts(
+    seed_starts: dict[str, int],
+) -> None:
+    with pytest.raises(ValueError, match="seed"):
+        split_seed_plan({"train": 4, "val": 4, "test": 4}, seed_starts)
+
+
 def test_twelve_sample_limit_keeps_all_splits_and_scenarios() -> None:
     assert limited_split_counts(
         {"train": 800, "val": 200, "test": 200}, 12
@@ -76,6 +107,71 @@ def test_config_resolves_mjcf_relative_to_config_file(tmp_path: Path) -> None:
 
     assert config.mjcf_path == fixture
     assert config.generator_commit == "commit-123"
+
+
+def test_config_loads_explicit_seed_starts(tmp_path: Path) -> None:
+    fixture = tmp_path / "assets/fixture.xml"
+    fixture.parent.mkdir()
+    fixture.write_text("<mujoco/>", encoding="utf-8")
+    config_path = tmp_path / "config/dataset.yaml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps(
+            {
+                "mjcf_path": "../assets/fixture.xml",
+                "camera_name": "task_camera",
+                "image_width": 640,
+                "image_height": 480,
+                "split_counts": {"train": 4, "val": 4, "test": 4},
+                "seed_starts": {
+                    "train": 400000,
+                    "val": 500000,
+                    "test": 600000,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_dataset_config(config_path, generator_commit="commit-456")
+
+    assert dict(config.seed_starts) == {
+        "train": 400000,
+        "val": 500000,
+        "test": 600000,
+    }
+
+
+def test_sample_limit_cannot_hide_full_seed_range_overlap(tmp_path: Path) -> None:
+    fixture = tmp_path / "assets/fixture.xml"
+    fixture.parent.mkdir()
+    fixture.write_text("<mujoco/>", encoding="utf-8")
+    config_path = tmp_path / "config/dataset.yaml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        json.dumps(
+            {
+                "mjcf_path": "../assets/fixture.xml",
+                "camera_name": "task_camera",
+                "image_width": 640,
+                "image_height": 480,
+                "split_counts": {"train": 800, "val": 200, "test": 200},
+                "seed_starts": {
+                    "train": 400000,
+                    "val": 400500,
+                    "test": 600000,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="seed ranges must be disjoint"):
+        load_dataset_config(
+            config_path,
+            generator_commit="commit-789",
+            sample_limit=12,
+        )
 
 
 @pytest.mark.parametrize("cup_count", (0, 1, 2))
@@ -159,6 +255,25 @@ def test_dataset_manifest_and_labels_are_reproducible(tmp_path: Path) -> None:
     assert json.loads((tmp_path / "first/dataset-manifest.json").read_text()) == first
 
 
+def test_dataset_manifest_records_explicit_seed_ranges(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture.xml"
+    fixture.write_text("<mujoco/>", encoding="utf-8")
+    config = DatasetConfig(
+        mjcf_path=fixture,
+        split_counts={"train": 4, "val": 4, "test": 4},
+        generator_commit="fresh-data-commit",
+        seed_starts={"train": 400000, "val": 500000, "test": 600000},
+    )
+
+    manifest = generate_dataset(config, tmp_path / "fresh", renderer=_FakeRenderer())
+
+    assert manifest["seed_ranges"] == {
+        "train": [400000, 400003],
+        "val": [500000, 500003],
+        "test": [600000, 600003],
+    }
+
+
 def test_generate_dataset_refuses_existing_output_root(tmp_path: Path) -> None:
     fixture = tmp_path / "fixture.xml"
     fixture.write_text("<mujoco/>", encoding="utf-8")
@@ -205,3 +320,19 @@ def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -
         if element.attrib.get("name") == "plastic_cup"
     )
     assert len(target_body.findall("geom")) == 26
+
+
+def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> None:
+    config_path = (
+        Path(__file__).parents[1]
+        / "config/perception_benchmark/fresh_dataset.yaml"
+    )
+
+    config = load_dataset_config(config_path, generator_commit="fresh-source")
+
+    assert config.split_counts == {"train": 480, "val": 200, "test": 200}
+    assert config.seed_starts == {
+        "train": 400000,
+        "val": 500000,
+        "test": 600000,
+    }
