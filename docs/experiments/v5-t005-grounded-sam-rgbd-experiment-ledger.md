@@ -4054,3 +4054,69 @@ deletion: none
 next_command: publish CP-052, synchronize ai-station, then rerun the scoped preflight and build without touching the unrelated session
 decision: PROCEED_WITH_UNRELATED_TMUX_PRESERVED
 ```
+
+## Checkpoint CP-053 — Post-fix fresh archive frozen
+
+```yaml
+checkpoint_id: CP-053
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-052
+status: READY_FOR_CONFIG_REBIND
+generator_source_commit: 5e3891d4814bb86dcd9242241d15599a125736c8
+execution_checkout_head: 938d4d93c02b5553aa2ab49e0c50e77fd7961451
+package_tree_diff_from_generator_source: none under src/so101_demo_py
+build:
+  r12: INVALID_PREBUILD because sourced setup.bash referenced unset COLCON_TRACE under nounset; retained and no package or dataset command ran
+  r13: VALID
+  mode: fresh scoped non-symlink install
+  elapsed: 1.13 s
+  installed_config_sha256: ae9583598ed665be8a3e1a3c1c8e51af6d47da1deead9276b030aba52072015e
+  installed_config_type: regular non-symlink file
+  generator_shebang: '#!/data/work/venvs/so101-grounded-sam/bin/python'
+  script_sha256: 331fba12ce3d96857bffad808570c69c120ca24b4781079aa643469521ca9bc3
+generation:
+  status: VALID
+  raw_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/raw-postfix-r4
+  generator_commit: 5e3891d4814bb86dcd9242241d15599a125736c8
+  sample_count: 880
+  script_sha256: ca12cdd9d22d86a4ea6d557a43752cccd07ad43ecb07642c44cb54b5c17ee037
+  progress: file-count reports only; no test content read
+manifest:
+  sha256: 609c57da57c65c1a6cbf1f4898b38d71dff14c90544069b7d65266960dadbe1a
+  mjcf_sha256: d40494c9f88294840d8e8a90859c6a28dc361149b5878b785b787ea96c61e083
+  payload_artifact_count: 2641
+  total_file_count_including_manifest: 2642
+  symlink_count: 0
+  split_counts: {train: 480, val: 200, test: 200}
+  seed_ranges: {train: [700000, 700479], val: [800000, 800199], test: [900000, 900199]}
+  class_instance_totals: {plastic_cup: 880}
+open_val_validation:
+  status: PASS
+  sample_count: 200
+  scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+  visible_instances: {no_cup: 0, one_cup_distractors: 1, two_cups: 2, cup_near_bottle: 1}
+  checks: truth visible/list counts, label row count, and RGB 640x480 PNG metadata
+  script_sha256: c3479388330614cd6b36ac08bb060edb9fe2420e6368c8c2a8f0f5493597738c
+archive:
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz
+  checksum_file: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/dataset/so101-v5-t005-grounded-sam-postfix-r4.tar.gz.sha256
+  sha256: 8424de68a8cc18961ab4732cba3c2486161f733b638638c82da6e1761e3ac832
+  size_bytes: 39461148
+  member_count: 2655
+  link_member_count: 0
+  mode: '0444'
+  checksum_mode: '0444'
+  script_sha256: 07bad36060f3088879747844e362d5b936d21f6c7d22f287b9ae0262635fc686
+sealed_test_state:
+  member_name_counts: {images: 200, labels: 200, truth: 200}
+  semantic_content_opened: false
+  model_inference_run: false
+  archive_creation: mechanical byte packaging only
+next_change:
+  - under TDD, rebind benchmark.yaml archive ID/SHA and the CLI immutable config/archive constants
+  - preserve every model, prompt, grid, matching, calibration, device, offline, no-fallback, safety, and sealed-test rule
+deletion: none
+next_command: publish CP-053, update the frozen-literal test and observe RED, then perform only the archive/config rebind
+decision: RUN_POSTFIX_CONFIG_REBIND_TDD_ONLY
+```
