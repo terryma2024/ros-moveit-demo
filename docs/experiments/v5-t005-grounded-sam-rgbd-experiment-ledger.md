@@ -5619,9 +5619,10 @@ retention:
 
 ```yaml
 experiment_id: EXP-079-GROUNDING-DINO-DATA-CONVERSION-R1
-status: RUNNING
+status: VALID_AWAITING_DATA_SCOPE_DECISION
 recorded_at: 2026-09-04T15:44:00+08:00
 started_at: 2026-09-04T15:46:00+08:00
+conversion_completed_at: 2026-09-04T16:08:00+08:00
 prior_checkpoint: CP-072
 hypothesis: 已归档的 YOLO-Seg 合成数据包含明确 split、polygon 和 truth metadata，可无损转换成 prompt 固定为 cup. 的 Grounding DINO box inventory，并保持 test sealed
 prediction: 安全解包、转换器 RED 到 GREEN、两次独立转换得到相同成员与 inventory SHA，train/val/test 无交叉，test 内容在 checkpoint 和阈值冻结前不被训练或选择代码读取
@@ -5802,4 +5803,93 @@ retention:
     - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-secondary-cup-red-r4
     - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-secondary-cup-green-r5
     - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-secondary-cup-r35-ordinary
+```
+
+## Checkpoint CP-074 — Stage C inventories frozen; data-scope decision required
+
+```yaml
+checkpoint: CP-074
+status: VALID_AWAITING_USER_DECISION
+recorded_at: 2026-09-04T16:08:00+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-CONVERSION-R2
+converter_commit: 1f90c37fccc9d3d942efa9cdbdca5576295e51e1
+source:
+  archive_sha256: c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1
+  extracted_tree_inventory_sha256: 08c878180cdc7dab43798a37dccc27fac9d717c1387f1970e131d2c48f4ea8ac
+  extracted_files: 3605
+  generator_commit: 2be8df09302feabffc7f028b16c90d06867f8055
+  mjcf_sha256: d40494c9f88294840d8e8a90859c6a28dc361149b5878b785b787ea96c61e083
+conversion:
+  primary:
+    run_id: stage-c-conversion-r2
+    output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r2
+    exit_code: 0
+    elapsed_ms: 428
+  independent_repro:
+    run_id: stage-c-conversion-r2-repro
+    output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r2-repro
+    exit_code: 0
+    elapsed_ms: 431
+  outputs_byte_identical: true
+  tree_inventory_sha256_both: be1274c4c01abd0e733a21d06f0ef0b8a327cbcc718890ee5c599b6e94fbcb3b
+  file_modes: read-only 0444 after readback
+inventories:
+  train:
+    images: 800
+    instances: 800
+    sha256: e40354905b18b08624338b7455027d692df0c3809a99a9070c25338abe2b4eee
+  val:
+    images: 200
+    instances: 200
+    sha256: 5728aaaee556d9749541c447b9c2e7b39f88fb0d62470d18a45b1a627cb47a69
+  test:
+    images: 200
+    sealed: true
+    boxes_present: false
+    scenario_present: false
+    sha256: df9d9fbf55fbffa3d0ebcb764d19c64cc403701673c006929bf09d2974d0fcd8
+  dataset_profile_sha256: 2d7319c9afd6dc31aeb105b352eeba0e7a5bef31d4160bd9c0d5c5f82e1dd92b
+  split_members_pairwise_disjoint: true
+  prompt: cup.
+  normalized_class: cup
+profile:
+  train:
+    area_bucket_counts: {small: 0, medium: 800, large: 0}
+    scenario_counts: {no_cup: 200, one_cup_distractors: 200, two_cups: 200, cup_near_bottle: 200}
+    visible_cup_count_per_image: {'0': 200, '1': 400, '2': 200}
+    fully_hidden_instances: 0
+  val:
+    area_bucket_counts: {small: 0, medium: 200, large: 0}
+    scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50}
+    visible_cup_count_per_image: {'0': 50, '1': 100, '2': 50}
+    fully_hidden_instances: 0
+  unsupported_truth_fields: {background: unknown, lighting: unknown, partial_occlusion: unknown}
+decision_boundary:
+  triggered: true
+  evidence:
+    - no train or val box falls in the COCO small bucket required for the preregistered small-target Recall metric
+    - multi-cup coverage exists, but there are no fully hidden instances and partial occlusion cannot be established from source truth
+    - the external baseline weakness specifically includes small targets, so beginning training would leave a required failure slice uncovered
+  forbidden_until_user_decision:
+    - changing generator scenarios, camera/object ranges, split quotas, or seed namespaces
+    - starting the Grounding DINO smoke or formal training run
+    - opening the sealed synthetic test
+    - running the final COCO100 candidate
+external_non_regression:
+  coco100_access_during_stage_c: none
+  rule: final frozen candidate only, one run; never train, select, or tune on COCO100
+benchmark:
+  r30_preserved_without_rerun: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78, storage: SATA_HDD}
+  next_full_benchmark: only when required by a later code or model change, using a fresh registered NVMe scratch and elapsed-time comparison
+next_action_requires_user: choose whether to authorize a bounded new MuJoCo dataset version covering small/far cups and explicit occlusion truth, or knowingly proceed with the frozen medium-only r2 train/val data
+retention:
+  retained_runs:
+    - verified source archive copy and read-only extraction r1
+    - read-only converted dataset r2
+    - read-only independent reproducibility dataset r2-repro
+    - all Stage C conversion, TDD, build, test, and readback logs
+  archived_runs: []
+  deletion_candidates:
+    - all registered Stage C NVMe scratch trees; explicit user authorization required before deletion
 ```
