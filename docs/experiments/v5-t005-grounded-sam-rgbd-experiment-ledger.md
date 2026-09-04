@@ -6314,3 +6314,132 @@ retention:
   deletion_candidates:
     - r57-r60 registered NVMe scratch trees; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-079 — bounded r3 dataset frozen and reproducible
+
+```yaml
+checkpoint: CP-079
+status: VALID_STAGE_C_DATA_FROZEN
+recorded_at: 2026-09-04T17:31:27+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+execution_commit: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+remote_sha_before_generation: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+preflight:
+  r61:
+    status: INVALID_BEFORE_DIRECTORY_OR_DATA_CREATION
+    failure: zsh reserved path array was used as a loop variable, so mkdir was unavailable and the shell exited before any run, scratch, or output directory was created
+    disposition: run ID retired and never reused
+  r62:
+    status: VALID
+    source_archive_r1_sha256_readback: c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1
+    old_r2_tree_inventory_sha256_readback: be1274c4c01abd0e733a21d06f0ef0b8a327cbcc718890ee5c599b6e94fbcb3b
+    old_r2_repro_tree_inventory_sha256_readback: be1274c4c01abd0e733a21d06f0ef0b8a327cbcc718890ee5c599b6e94fbcb3b
+    old_r2_modes: {files: '0444', directories: '0555'}
+    planned_output_collision_count: 0
+    python: /data/work/venvs/so101-grounded-sam/bin/python
+    tempfile: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-formal-generation-r62/tmp
+    overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-augmentation-r52/install
+formal_generation:
+  run_id: stage-c-formal-generation-r62
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  generator_cli_status: OK
+  generator_cli_sample_count: 1800
+  generator_stderr_empty: true
+  wrapper_exit_capture: INVALID_AFTER_GENERATOR_RETURN because zsh status is read-only
+  validity_recovery: CLI OK is printed only after the complete manifest is fsync-persisted; manifest, exact artifact set, counts, and hashes all passed independent readback without rerunning generation
+  recovered_elapsed_ms_from_provenance_to_manifest_mtime: 71048
+  schema_version: 2
+  generator_commit: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  source_tree_inventory_sha256: 0533e0356a385d4cff8b6b0e3b250b95be75af365ce75181ea3a3c7888df30b1
+  files: 5402
+  artifacts_in_manifest: 5401
+  split_counts: {train: 1200, val: 300, test: 300}
+  seed_ranges:
+    train: [410000000, 410001199]
+    val: [420000000, 420000299]
+    test: [440000000, 440000299]
+  seeds_unique_and_splits_disjoint: true
+  scenario_quotas:
+    train: {no_cup: 200, one_cup_distractors: 200, two_cups: 200, cup_near_bottle: 200, small_far_cup: 200, partially_occluded_cup: 200}
+    val: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+    test: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+  class_instance_total: 1800
+  environment: {MUJOCO_GL: egl, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', PYTHONNOUSERSITE: '1'}
+test_seal:
+  replacement_namespace_generated_once: [440000000, 440000299]
+  image_label_truth_members: 900
+  member_modes: '0444'
+  directory_modes: '0555'
+  annotation_content_read: false
+  preview_preflight_tuning_or_selection: none
+archive:
+  run_id: stage-c-archive-r64
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/archives/so101-v5-t005-cup-small-occlusion-r3.tar.gz
+  sha256: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+  bytes: 70104939
+  elapsed_ms: 1866
+  regular_file_members: 5402
+  symlink_or_special_members: 0
+  reproducibility: sorted GNU tar with zero mtime and numeric zero owner/group, gzip -n
+  publication: verified scratch artifact atomically hard-linked no-clobber into the preregistered final path
+conversion:
+  primary:
+    run_id: stage-c-conversion-r3-primary-r65
+    output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+    exit_code: 0
+    elapsed_ms: 975
+  independent_repro:
+    run_id: stage-c-conversion-r3-repro-r66
+    output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3-repro
+    exit_code: 0
+    elapsed_ms: 974
+  primary_repro_byte_identical: true
+  tree_inventory_sha256_both: 1567c002dc9ec6f9a627eec0d201b03c2395ee809178423f1ae3657ffeb27a13
+  dataset_profile_sha256: a5ede14b4af18910915dd9c8d204921b836d2d97691466e6b38c8ad2f4f20d04
+  test_sealed_members_sha256: 7a0fa1bd72933a389cb2e734f2c5b50c46219f5fb4c6f481add2409127d7ba7d
+  train_inventory_sha256: 376146b8b7d9c7adc8c9ff4e22d5302188fe33cb2bfc0765458521088247e9ea
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  source_archive_sha256_bound: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+  source_manifest_sha256_bound: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  converter_commit: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+  class_name: cup
+  prompt: cup.
+  test: {sample_count: 300, sealed: true, boxes_present: false, scenario_present: false, opaque_hash_members_only: true}
+profile:
+  train:
+    images: 1200
+    instances: 1200
+    area_bucket_counts: {small: 200, medium: 332, large: 668}
+    scenario_counts: {no_cup: 200, one_cup_distractors: 200, two_cups: 200, cup_near_bottle: 200, small_far_cup: 200, partially_occluded_cup: 200}
+    visible_cup_count_per_image: {'0': 200, '1': 800, '2': 200}
+    partial_occlusion: {measured_none: 0, measured_partial: 200, unmeasured: 1000}
+    fully_hidden_instances: 0
+  val:
+    images: 300
+    instances: 300
+    area_bucket_counts: {small: 50, medium: 87, large: 163}
+    scenario_counts: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+    visible_cup_count_per_image: {'0': 50, '1': 200, '2': 50}
+    partial_occlusion: {measured_none: 0, measured_partial: 50, unmeasured: 250}
+    fully_hidden_instances: 0
+freeze:
+  source_files: '0444'
+  source_directories: '0555'
+  primary_conversion_files: '0444'
+  primary_conversion_directories: '0555'
+  repro_conversion_files: '0444'
+  repro_conversion_directories: '0555'
+boundaries:
+  old_r2_r2_repro_source_archive_and_prior_evidence_modified: false
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden until all Linux gates and four preset PickPlace runs succeed
+next_action: Gitee-sync CP-079, then begin Stage D with a separately preregistered smoke-training run against read-only r3 train/val only; do not open the sealed synthetic test
+retention:
+  retained_runs: [r62 formal source, r63 readback, r64 archive and durable staging hardlink, r65 primary conversion, r66 repro conversion, r67 readback]
+  archived_runs: []
+  deletion_candidates:
+    - all r62, r64, r65, and r66 registered NVMe scratch trees, including the r64 staged archive hardlink; do not delete without explicit user authorization
+```
