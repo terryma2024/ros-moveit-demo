@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 from PIL import Image
+from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
 from so101_demo.perception_benchmark.calibration import GroundedSamBenchmarkThresholds
@@ -27,8 +28,11 @@ from so101_demo.perception_benchmark.codec import (
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
 from so101_demo.perception_benchmark.dataset import rasterize_polygon
 from so101_demo.training.grounding_dino_dataset import (
+    BoundingBox,
+    GroundingDinoDatasetError,
     _boxes_match,
     _label_polygons,
+    binary_mask_to_box,
     polygon_to_box,
 )
 from so101_demo.training.grounding_dino_finetune import box_iou
@@ -244,6 +248,48 @@ def _safe_val_member(root: Path, value: object, kind: str, seed: int) -> Path:
     return target
 
 
+def _visible_mask_from_truth(
+    instance: object,
+    *,
+    width: int,
+    height: int,
+    expected_pixel_count: object,
+) -> tuple[np.ndarray, BoundingBox] | None:
+    if not isinstance(instance, Mapping):
+        raise ValCalibrationError("VAL_ANNOTATION_INVALID", "truth instance")
+    fields = {
+        "mask_shape_hw",
+        "visible_mask_rle_counts",
+        "visible_mask_sha256",
+    }
+    present = fields.intersection(instance)
+    if not present:
+        return None
+    if present != fields:
+        raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "incomplete fields")
+    try:
+        mask = decode_binary_mask_rle(
+            instance["visible_mask_rle_counts"], instance["mask_shape_hw"]
+        )
+    except (KeyError, ValueError) as error:
+        raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "RLE") from error
+    actual_hash = hashlib.sha256(mask.astype(np.uint8).tobytes(order="C")).hexdigest()
+    if (
+        mask.shape != (height, width)
+        or type(expected_pixel_count) is not int
+        or int(mask.sum()) != expected_pixel_count
+        or instance.get("visible_pixel_count") != expected_pixel_count
+        or instance.get("visible_mask_sha256") != actual_hash
+    ):
+        raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "identity")
+    try:
+        box = binary_mask_to_box(mask, width, height)
+    except GroundingDinoDatasetError as error:
+        raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "box") from error
+    mask.setflags(write=False)
+    return mask, box
+
+
 def load_locked_val_dataset(
     *,
     inventory_path: Path,
@@ -361,10 +407,17 @@ def load_locked_val_dataset(
             or truth_document.get("scenario") != item["scenario"]
             or len(polygons) != len(item["boxes"])
             or item.get("visible_instance_count") != len(polygons)
+            or not isinstance(truth_document.get("instances"), list)
+            or len(truth_document["instances"]) != len(polygons)
         ):
             raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index))
         truths: list[Mapping[str, Any]] = []
-        for polygon, box_document in zip(polygons, item["boxes"], strict=True):
+        for polygon, box_document, truth_instance in zip(
+            polygons,
+            item["boxes"],
+            truth_document["instances"],
+            strict=True,
+        ):
             if (
                 not isinstance(box_document, Mapping)
                 or box_document.get("class_name") != "cup"
@@ -381,11 +434,23 @@ def load_locked_val_dataset(
                 raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index)) from error
             if not _boxes_match(converted, expected_box):
                 raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index))
-            mask = rasterize_polygon(tuple(polygon), width, height)
-            mask.setflags(write=False)
+            visible = _visible_mask_from_truth(
+                truth_instance,
+                width=width,
+                height=height,
+                expected_pixel_count=box_document.get("visible_pixel_count"),
+            )
+            canonical_box = converted
+            if visible is None:
+                mask = rasterize_polygon(tuple(polygon), width, height)
+                mask.setflags(write=False)
+            else:
+                mask, canonical_box = visible
+                if not _boxes_match(canonical_box, expected_box):
+                    raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "box identity")
             truths.append(
                 {
-                    "absolute_xyxy": converted.absolute_xyxy,
+                    "absolute_xyxy": canonical_box.absolute_xyxy,
                     "visible_pixel_count": box_document.get("visible_pixel_count"),
                     "occlusion": box_document.get("occlusion"),
                     "mask": mask,
