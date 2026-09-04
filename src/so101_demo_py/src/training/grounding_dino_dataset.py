@@ -18,6 +18,7 @@ import yaml
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _SPLITS = ("train", "val", "test")
+_CUP_BODY_NAMES = frozenset({"plastic_cup", "plastic_cup_b"})
 _SAMPLE_FIELDS = {
     "configured_cup_count",
     "image",
@@ -329,8 +330,11 @@ def _truth_instances(
         raise _fail("TRUTH_MISMATCH", f"{member}: instances differ from visible count")
     normalized: list[dict[str, Any]] = []
     for index, instance in enumerate(instances):
-        if not isinstance(instance, Mapping) or instance.get("body_name") != "plastic_cup":
-            raise _fail("CLASS_INVALID", f"{member}: instance {index} is not plastic_cup")
+        if not isinstance(instance, Mapping) or instance.get("body_name") not in _CUP_BODY_NAMES:
+            raise _fail(
+                "CLASS_INVALID",
+                f"{member}: instance {index} is not a registered cup body",
+            )
         visible_pixels = instance.get("visible_pixel_count")
         if (
             isinstance(visible_pixels, bool)

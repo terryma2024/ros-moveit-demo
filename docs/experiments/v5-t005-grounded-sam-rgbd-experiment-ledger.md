@@ -5746,3 +5746,60 @@ retention:
   deletion_candidates:
     - all Stage C scratch roots for red-r1 through red-r3, green-r1 through green-r3, build r31 through r34, and ordinary tests r33 and r34; none deleted
 ```
+
+## Stage C source-contract correction — secondary cup body
+
+```yaml
+experiment_id: EXP-079-GROUNDING-DINO-DATA-CONVERSION-R2
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T16:08:00+08:00
+prior_checkpoint: CP-073
+failed_conversion:
+  run_id: stage-c-conversion-r1
+  execution_commit: 04a5d0c6d98b1dade3253d011267724b4c2053c7
+  exit_code: 1
+  elapsed_ms: 120
+  failure: 'CLASS_INVALID: truth/train/000100002.json: instance 1 is not plastic_cup'
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r1
+  output_created: false
+  disposition: INVALID_PRESERVED_PATH_RETIRED
+root_cause:
+  source_contract: the generator registers plastic_cup and plastic_cup_b as two bodies of the same class for the two_cups scenario
+  source_readback: train and val truth contain 750 plastic_cup instances and 250 plastic_cup_b instances
+  defect: the initial converter allowed only the primary body literal instead of normalizing both registered cup bodies
+correction:
+  single_variable: accept exactly the generator-registered body set [plastic_cup, plastic_cup_b] before normalizing both to cup and cup.
+  unrelated_body_policy: fail closed with CLASS_INVALID
+tdd:
+  red_r4:
+    result: 6 passed, 4 failed at the secondary cup identity
+    exit_code: 1
+    elapsed_ms: 360
+    junit_sha256: 3c478432073e8c20a4b3685bc8fb56fce67819ee6e68da28fe46e5e9242ea700
+  green_r5:
+    result: 10 passed, 0 failed
+    exit_code: 0
+    elapsed_ms: 371
+    junit_sha256: 96a0730bfd6e04cdd151f999d4b77817135826d0e486d2808c469dd1fc2b6a19
+ordinary_gate:
+  run_id: linux-test-stage-c-secondary-cup-r35-ordinary
+  environment: valid seven-package r34 overlay
+  scope: src/so101_demo_py/test only
+  result: {passed: 1177, failed: 0, errors: 0, skipped: 0}
+  exit_code: 0
+  elapsed_ms: 12322
+  junit_sha256: a442f810eaeb3a2e2d97704478a37c9223de7725a00e7b3b1c3b253c9f81f705
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-secondary-cup-r35-ordinary/tmp
+next_destinations:
+  converted_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r2
+  reproducibility_rerun: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r2-repro
+  collision_preflight: both absent
+retention:
+  retained_runs: [stage-c-conversion-r1 failure logs, secondary-cup RED r4, GREEN r5, ordinary r35]
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-secondary-cup-red-r4
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-secondary-cup-green-r5
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-secondary-cup-r35-ordinary
+```
