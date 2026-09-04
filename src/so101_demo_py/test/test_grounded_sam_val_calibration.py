@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from so101_demo.adapters.perception.mujoco_dataset import encode_binary_mask_rle
 from so101_demo.perception_benchmark.codec import canonical_json_bytes, encode_mask_rle
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
 from so101_demo.training.grounded_sam_val_calibration import (
@@ -264,12 +265,34 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
     from PIL import Image
 
     Image.fromarray(np.zeros((16, 16, 3), dtype=np.uint8)).save(image)
-    label.write_text("0 0.125 0.125 0.625 0.125 0.625 0.625 0.125 0.625\n")
+    label.write_text("0 0.133333333 0.133333333 0.6 0.133333333 0.6 0.6 0.133333333 0.6\n")
+    visible_mask = np.zeros((16, 16), dtype=bool)
+    visible_mask[2:6, 2:6] = True
+    visible_mask[8:10, 8:10] = True
     truth.write_bytes(
         canonical_json_bytes(
             {
                 "configured_cup_count": 1,
-                "instances": [],
+                "instances": [
+                    {
+                        "body_id": 4,
+                        "body_name": "plastic_cup",
+                        "mask_shape_hw": [16, 16],
+                        "occlusion_measured": False,
+                        "occlusion_state": "unmeasured",
+                        "polygon_xy": [
+                            [2.0 / 15.0, 2.0 / 15.0],
+                            [0.6, 2.0 / 15.0],
+                            [0.6, 0.6],
+                            [2.0 / 15.0, 0.6],
+                        ],
+                        "visible_mask_rle_counts": list(encode_binary_mask_rle(visible_mask)),
+                        "visible_mask_sha256": hashlib.sha256(
+                            visible_mask.astype(np.uint8).tobytes(order="C")
+                        ).hexdigest(),
+                        "visible_pixel_count": 20,
+                    }
+                ],
                 "scenario": "small_far_cup",
                 "seed": 420000000,
                 "split": "val",
@@ -291,12 +314,12 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
             {
                 "boxes": [
                     {
-                        "absolute_xyxy": [2.0, 2.0, 10.0, 10.0],
+                        "absolute_xyxy": [2.0, 2.0, 9.0, 9.0],
                         "class_name": "cup",
-                        "normalized_xyxy": [0.125, 0.125, 0.625, 0.625],
+                        "normalized_xyxy": [2.0 / 15.0, 2.0 / 15.0, 0.6, 0.6],
                         "occlusion": None,
                         "text": "cup.",
-                        "visible_pixel_count": 64,
+                        "visible_pixel_count": 20,
                     }
                 ],
                 "configured_cup_count": 1,
@@ -338,8 +361,9 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
 
     assert len(loaded.samples) == 1
     assert loaded.samples[0].scenario == "small_far_cup"
-    assert loaded.samples[0].truths[0]["visible_pixel_count"] == 64
-    assert int(loaded.samples[0].truths[0]["mask"].sum()) == 64
+    assert loaded.samples[0].truths[0]["visible_pixel_count"] == 20
+    assert np.array_equal(loaded.samples[0].truths[0]["mask"], visible_mask)
+    assert loaded.samples[0].truths[0]["absolute_xyxy"] == (2.0, 2.0, 9.0, 9.0)
 
 
 def test_calibration_evidence_is_exclusive_and_hash_bound(tmp_path: Path) -> None:

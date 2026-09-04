@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from so101_demo.adapters.perception.mujoco_dataset import (
     DatasetConfig,
     DatasetScenario,
     RawRender,
+    decode_binary_mask_rle,
     generate_dataset,
 )
 from so101_demo.training.grounding_dino_dataset import (
@@ -108,6 +110,23 @@ def test_schema_v2_conversion_verifies_occlusion_and_profiles_small_targets(
     assert profile["test"] == {"sample_count": 1, "sealed": True}
 
 
+def test_schema_v2_truth_persists_visible_rle_for_unmeasured_instance(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+
+    truth = json.loads((source / "truth/val/420000000.json").read_text(encoding="utf-8"))
+    instance = truth["instances"][0]
+    mask = decode_binary_mask_rle(instance["visible_mask_rle_counts"], instance["mask_shape_hw"])
+
+    assert instance["occlusion_measured"] is False
+    assert (
+        instance["visible_mask_sha256"]
+        == hashlib.sha256(mask.astype(np.uint8).tobytes(order="C")).hexdigest()
+    )
+    assert int(mask.sum()) == instance["visible_pixel_count"] == 64
+
+
 def test_schema_v2_conversion_fails_closed_on_tampered_occlusion_rle(
     tmp_path: Path,
 ) -> None:
@@ -118,6 +137,24 @@ def test_schema_v2_conversion_fails_closed_on_tampered_occlusion_rle(
     truth_path.write_text(json.dumps(truth), encoding="utf-8")
 
     with pytest.raises(GroundingDinoDatasetError, match="OCCLUSION_TRUTH_INVALID"):
+        convert_dataset(
+            source,
+            tmp_path / "converted",
+            source_archive_sha256="a" * 64,
+            converter_commit="b" * 40,
+        )
+
+
+def test_schema_v2_conversion_fails_closed_on_tampered_unmeasured_visible_rle(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    truth_path = source / "truth/val/420000000.json"
+    truth = json.loads(truth_path.read_text(encoding="utf-8"))
+    truth["instances"][0]["visible_mask_rle_counts"][-1] += 1
+    truth_path.write_text(json.dumps(truth), encoding="utf-8")
+
+    with pytest.raises(GroundingDinoDatasetError, match="VISIBLE_TRUTH_INVALID"):
         convert_dataset(
             source,
             tmp_path / "converted",
