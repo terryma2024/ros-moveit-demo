@@ -5893,3 +5893,151 @@ retention:
   deletion_candidates:
     - all registered Stage C NVMe scratch trees; explicit user authorization required before deletion
 ```
+
+## Stage C bounded small/far and partial-occlusion dataset expansion
+
+```yaml
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+status: PLANNED
+recorded_at: 2026-09-04T16:28:00+08:00
+prior_checkpoint: CP-074
+authorization:
+  decision: create a bounded new MuJoCo dataset version before Grounding DINO training
+  scope: add small/far cups and verifiable explicit partial-occlusion truth
+  unchanged_contracts:
+    normalized_class: cup
+    prompt: cup.
+    sam: frozen SAM 2.1 Hiera Tiny, stateless per frame
+lifecycle: NEW_DURABLE_DATA_VERSION
+immutability:
+  forbidden_mutation:
+    - read-only YOLO-Seg source extraction r1
+    - read-only Grounding DINO conversion r2
+    - read-only Grounding DINO conversion r2-repro
+    - source archive and all prior evidence
+  output_collision_policy: output roots must not exist; allocate a new run ID after any failed creation
+dataset_contract:
+  schema_version: 2
+  image_size: [640, 480]
+  camera_name: task_camera
+  split_counts: {train: 1200, val: 300, test: 300}
+  scenario_quotas:
+    train:
+      no_cup: 200
+      one_cup_distractors: 200
+      two_cups: 200
+      cup_near_bottle: 200
+      small_far_cup: 200
+      partially_occluded_cup: 200
+    val:
+      no_cup: 50
+      one_cup_distractors: 50
+      two_cups: 50
+      cup_near_bottle: 50
+      small_far_cup: 50
+      partially_occluded_cup: 50
+    test:
+      no_cup: 50
+      one_cup_distractors: 50
+      two_cups: 50
+      cup_near_bottle: 50
+      small_far_cup: 50
+      partially_occluded_cup: 50
+  seed_namespace:
+    train: [410000000, 410001199]
+    val: [420000000, 420000299]
+    test: [430000000, 430000299]
+    independence: disjoint from r2 defaults 100000/200000/300000 and fresh benchmark 700000/800000/900000
+  split_rules:
+    - seeds, image members, label members, and truth members are pairwise disjoint across train, val, and test
+    - scenario schedule is quota-derived and deterministic within each split
+    - test labels and truth become opaque sealed members before training, checkpoint selection, or threshold tuning
+    - COCO100 is never mounted or read during generation, training, selection, or threshold tuning
+scene_geometry:
+  mjcf: src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml
+  base_camera_position_m: [0.65, -0.65, 0.55]
+  base_camera_xyaxes: [0.707, 0.707, 0.0, -0.371, 0.371, 0.851]
+  ordinary_camera_xyz_jitter_m: [-0.015, 0.015]
+  ordinary_cup_a:
+    center_m: [0.02, -0.28, 0.165]
+    xy_jitter_m: [-0.045, 0.045]
+  ordinary_cup_b:
+    center_m: [-0.09, -0.31, 0.165]
+    xy_jitter_m: [-0.025, 0.025]
+  ordinary_bottle:
+    center_m: [0.11, -0.22, 0.19]
+    xy_jitter_m: [-0.025, 0.025]
+  small_far_cup:
+    cup_center_m: [0.02, -0.28, 0.165]
+    cup_xy_jitter_m: [-0.045, 0.045]
+    camera_retreat_along_local_positive_z_m: [0.90, 1.20]
+    ordinary_camera_xyz_jitter_m: [-0.015, 0.015]
+    acceptance:
+      visible_bbox_area_px2: {minimum_exclusive: 0, maximum_exclusive: 1024}
+      visible_pixel_count_minimum: 64
+      maximum_deterministic_attempts: 64
+  partially_occluded_cup:
+    cup_center_m: [0.02, -0.28, 0.165]
+    cup_xy_jitter_m: [-0.025, 0.025]
+    bottle_z_m: 0.19
+    bottle_longitudinal_offset_toward_camera_m: [0.055, 0.105]
+    bottle_perpendicular_offset_m: [-0.025, 0.025]
+    ordinary_camera_xyz_jitter_m: [-0.015, 0.015]
+    acceptance:
+      visible_fraction_inclusive: [0.35, 0.80]
+      visible_pixel_count_minimum: 64
+      occluded_pixel_count_minimum: 1
+      maximum_deterministic_attempts: 64
+truth_contract:
+  visible_truth: MuJoCo geom/body-ID segmentation, never material color
+  partial_occlusion_reference: paired segmentation render with the declared orange_bottle occluder hidden and all cup/camera state unchanged
+  measured_instance_fields:
+    - body_id
+    - body_name
+    - visible_pixel_count
+    - polygon_xy
+    - mask_shape_hw
+    - visible_mask_rle_counts
+    - visible_mask_sha256
+    - amodal_pixel_count
+    - amodal_mask_rle_counts
+    - amodal_mask_sha256
+    - occluded_pixel_count
+    - visible_fraction
+    - occlusion_state
+    - occluder_body_name
+    - occlusion_reference
+  verification_rules:
+    - both RLE masks decode to the declared image shape and hashes
+    - visible mask is a subset of the paired amodal mask
+    - pixel counts and visible_fraction recompute exactly from decoded masks
+    - partially_occluded_cup must satisfy the registered acceptance band and declare orange_bottle
+    - unsupported ordinary-scene occlusion remains unmeasured rather than inferred
+planned_outputs:
+  source_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  source_archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/archives/so101-v5-t005-cup-small-occlusion-r3.tar.gz
+  converted_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+  reproducibility_rerun: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3-repro
+provenance:
+  planning_commit: adcfc0e1f87d6b271407ba029e3cc284310bb88e
+  generator_commit: TO_BE_FROZEN_AFTER_GREEN_CODE_GATE
+  overlay: TO_BE_NEW_SEVEN_PACKAGE_SYMLINK_OVERLAY
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: UNSET_DATASET_GENERATION_NO_ROS_GRAPH
+  gz_partition: UNSET_DATASET_GENERATION_NO_GAZEBO_TRANSPORT
+tdd_and_gates:
+  - first add failing tests for quotas, split exclusion, RLE truth validation, small acceptance, paired occlusion, deterministic retry, and fail-closed exhaustion
+  - focused RED to GREEN uses a unique registered NVMe scratch with TMPDIR/TMP/TEMP preflight from the locked Python
+  - build a fresh seven-package symlink overlay and run the ordinary src/so101_demo_py/test gate
+  - run the explicit benchmark gate once because the new model/data selection path changes benchmark inputs; preserve r30 and compare elapsed time without rerunning r30
+  - archive and convert only after code and gates are GREEN; read back every SHA and dataset profile before marking VALID
+failure_criteria:
+  - output collision, seed or member overlap, quota mismatch, nondeterministic schedule, retry exhaustion, malformed RLE, non-subset visible mask, truth mismatch, CPU fallback, provenance mismatch, or any sealed-test access before freeze
+external_non_regression:
+  coco100: final frozen checkpoint only, exactly one run, never used for training, checkpoint selection, or threshold tuning
+retention:
+  retained_runs: [all new source, archive, conversion, code-gate, and readback evidence]
+  archived_runs: []
+  deletion_candidates: [future per-run NVMe scratch trees; never delete without explicit user authorization]
+next_action: commit and Gitee-sync this PLANNED contract before adding tests or generating data
+```
