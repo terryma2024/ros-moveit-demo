@@ -9087,3 +9087,122 @@ retention:
   archived_runs: []
   deletion_candidates: [all r215-r222 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-106 — corrected raw succeeds but the frozen SAM grid is recall-limited
+
+```yaml
+checkpoint: CP-106
+status: TERMINAL_FAILED_VAL_SMALL_MULTI_RECALL
+recorded_at: 2026-09-04T23:27:52+08:00
+stage: E_RAW_PROMPT_TOKEN_GATING_VAL
+experiment_id: EXP-079-STAGE-E-RAW-PROMPT-TOKEN-GATING-R1
+prior_checkpoint: CP-105
+source_commit: 26ed5238ed999676cb0234d80122139ce00ade15
+preflight:
+  run_id: stage-e-val-raw-r2-preflight-r223
+  local_remote_sha_match: true
+  r27: absent
+  training_process_matches: 0
+  gpu_compute_processes: 0
+  candidate_lock_sha256: 49cb6e11152447fa32c1f91442fe973206be2d526104f7cdcd1f911c889b5a17
+  r189_r191_immutable: true
+  planned_outputs_absent: true
+val_raw:
+  run_id: stage-e-val-raw-r2-r224
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  samples: 300
+  records: 300
+  inference_errors: 0
+  fallback_count: 0
+  runtime: {device: cuda, dtype: float32}
+  raw_candidates: 9213
+  record_inventory_sha256: 996fbacc8eea4a29fb73e458b148071a270fa5f720c487012040f6c406745a4c
+  manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  elapsed_ms: 265857
+  tree: {files: 9814, directories: 304, bytes: 16217116, inventory_sha256: 0f24a2ac9b788f1542f289ef9eab862b1fd9e8a19d59d777fa9d09eeebc0faf9, file_mode: '0444', directory_mode: '0555'}
+  run_log_sha256: 866d52672aaca6e07cfe4ee54b030c4ce4ee6948201ce30972c9871cc82df721
+  exit_log_sha256: 7a7050aec4e88735efd15234cc5da0a822795f180159191e8b34a358cfec3405
+raw_readback:
+  run_id: stage-e-val-raw-r2-readback-r225
+  status: VALID_READ_ONLY
+  records_with_candidates: 300
+  grounding_box_score: {min: 0.010000409558415413, median: 0.01891401968896389, max: 0.4896116256713867, ge_0_25: 309}
+  grounding_text_score: {min: 0.010000408627092838, median: 0.01891401968896389, max: 0.4896116256713867, ge_0_25: 309}
+  sam_quality: {min: 7.958870185120759e-08, median: 0.8661025166511536, max: 0.9619256258010864, ge_0_25: 7625}
+  readback_sha256: 335e0914308eee988ecb3182908e5b994cdfb19e0aa8bd39ba3e223aa21cf345
+offline_calibration:
+  run_id: stage-e-val-calibration-r2-r226
+  status: VALID_COMPUTATION_FAILED_PERFORMANCE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-calibration-r2
+  grid: ['0.50', '0.60', '0.70', '0.75', '0.80', '0.85', '0.90']
+  selected_sam_quality: '0.50'
+  selected: {tp: 210, fp: 8, fn: 90, precision: 0.963302752293578, recall: 0.70, f1: 0.8108108108108107, small_far_recall: 0.36, multi_cup_recall: 0.55, no_cup_unique_count: 0}
+  scenario_tp: {one_cup_distractors: 45, cup_near_bottle: 46, partially_occluded_cup: 46, small_far_cup: 18, two_cups: 55}
+  manifest_sha256: ee1daa63806cf3fd70a6dacc10b6ec395d174ffe58ce2d5a2261d948d51907d1
+  report_sha256: b1a6c0d5d755028b0d5c0656a12adb1fe44fd6e06e94b3a664e52dfdfeee7d8a
+  elapsed_ms: 6107
+  tree: {files: 2, directories: 1, bytes: 5991, inventory_sha256: a9f06e20674d64381478fd26f2a4a939e2a0c11d7d4de72b4693a948a30cce08, file_mode: '0444', directory_mode: '0555'}
+decision:
+  result: failed_performance
+  reason: selected full-pipeline val small/far recall 0.36 and multi-cup recall 0.55 are materially inadequate versus the same checkpoint DINO-only 0.78 and 0.79
+  candidate_lock_r2: forbidden
+  production_replay: not_started
+  raw_r2_rerun: forbidden
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  linux_pickplace: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister a lower SAM-quality val grid with truth-mask IoU safety and replay immutable r224 offline
+retention:
+  retained_runs: [r223-r226, immutable raw-r2 and calibration-r2]
+  archived_runs: []
+  deletion_candidates: [r224-r226 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E lower SAM-quality mask-aware validation
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-QUALITY-LOW-GRID-R1
+status: PLANNED
+recorded_at: 2026-09-04T23:27:52+08:00
+prior_checkpoint: CP-106
+hypothesis: the prior grid's lower bound of 0.50 removes many DINO-valid small and multi-cup proposals; lower frozen-SAM quality cutoffs may recover them, but a candidate is a safe true positive only when its persisted SAM mask reaches truth IoU at least 0.80
+prediction: offline replay of the immutable r224 masks identifies whether a lower SAM-quality threshold improves mask-qualified F1, small/far recall, and multi-cup recall without creating a no-cup UNIQUE decision
+single_variable: SAM quality threshold only; extend the preregistered grid downward while retaining the epoch-7 detector, cup. prompt, DINO 0.25/0.25, selector 0.25, duplicate IoU 0.85, minimum 64 pixels, maximum mask ratio 0.50, maximum 16 candidates, frozen stateless SAM, and all data
+frozen_grid:
+  sam_quality: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  dino_box_threshold: '0.25'
+  dino_text_threshold: '0.25'
+  truth_box_iou_threshold: '0.50'
+  truth_mask_iou_threshold: '0.80'
+selection_order:
+  - highest mask-qualified full-pipeline val F1
+  - highest mask-qualified recall
+  - highest mask-qualified small/far recall
+  - highest mask-qualified multi-cup recall
+  - zero no-cup UNIQUE selections
+  - higher SAM quality threshold
+  - fewer false positives
+execution_contract:
+  - TDD a separate mask-aware selector; keep the prior calibration results immutable
+  - load and hash-read every persisted r224 candidate mask and every val truth mask; do not run DINO or SAM inference
+  - a bbox match whose mask IoU is below 0.80 counts as one FP and one FN, not a TP
+  - persist per-grid TP/FP/FN, decisions, scenario recall, mask-pass/fail counts and IoU summary in a new exclusive output
+  - run the ordinary test gate; do not rerun the benchmark because no benchmark implementation, configuration, adapter, report, or benchmark_test member changes
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-mask-aware-calibration-r3
+success_boundary: only a val result with zero errors and materially improved mask-qualified small/multi recall may proceed to production replay and a new candidate lock
+failure_boundary: if no low-grid point is adequate, do not open sealed test or COCO100; return to train/val-only model or data remediation
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: write mask-aware selector RED tests before implementation
+retention:
+  retained_runs: [all CP-106 evidence, immutable r224 raw]
+  archived_runs: []
+  deletion_candidates: []
+```
