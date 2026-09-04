@@ -59,6 +59,8 @@ setup(
             "rgbd_object_pose = so101_demo.cli.rgbd_object_pose:main",
             "generate_yolo_seg_dataset = "
             "so101_demo.cli.generate_yolo_seg_dataset:main",
+            "prepare_grounding_dino_dataset = "
+            "so101_demo.cli.prepare_grounding_dino_dataset:main",
             "train_yolo_seg = so101_demo.cli.train_yolo_seg:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
