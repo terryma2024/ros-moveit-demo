@@ -11464,3 +11464,45 @@ retention:
   deletion_candidates: [r282 scratch after readback; do not delete without explicit user authorization]
 next_action: commit and push this frozen PLANNED checkpoint, then create the RED synthetic contract
 ```
+
+## Checkpoint CP-135 — residual-attribution synthetic contract is RED
+
+```yaml
+checkpoint: CP-135
+status: RED_VALID
+recorded_at: 2026-09-05T07:08:49+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-134
+source_commit: dfcf4cdd2c2a2b531be993f50aa0b8cf05038c9e
+run_id: stage-e-corrected-truth-residual-red-r282
+result:
+  expected: RED
+  exit_code: 1
+  reason: corrected_truth_residual_attribution_r1.py does not exist
+  output_root_created: false
+contract_cases:
+  - exact mask passes unchanged IoU 0.80 gate
+  - prediction subset is UNDER_SEGMENTATION
+  - prediction superset is LEAKAGE
+  - equal false-positive and false-negative areas are MIXED
+  - fragmented truth reports two 8-connected components and one singleton
+  - no-truth, detector-miss, mask-pass, and mask-fail sample attribution
+provenance:
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_corrected_truth_residual_attribution_r1.py
+  test_script_sha256: 19c9a0fd422b60acc981313560e3b0d57d30f44cd85b6d698307a78b81341642
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-residual-red-r282/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-corrected-truth-residual-red-r282
+  preflight_sha256: 935d53e222d3517116caf69eb85c58a9964a5db1c9c9e2d17583c849a708f1e6
+  run_log_sha256: 4376157c2b70ddab659f5613ba005758d0c4ab16e5ff6b010b005e125de77a2d
+  exit_sha256: 4b721d21a55867b799e2f85f95b6de13ccf2d24c113c7a0c1ee0087250d3dadd
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused}
+retention:
+  retained_runs: [r282 RED evidence and scratch, all CP-134 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r282 RED scratch; do not delete without explicit user authorization]
+next_action: implement only the frozen component, comparison, attribution, and evidence-generation contract; rerun on a new scratch path
+```
