@@ -19,10 +19,10 @@ from so101_demo.training.grounded_sam_val_calibration import (
     collect_val_raw,
     load_locked_val_dataset,
     load_verified_raw_records,
+    select_mask_aware_sam_quality_threshold,
     select_sam_quality_threshold,
     write_calibration_evidence,
 )
-
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -194,6 +194,62 @@ def test_grid_selection_rejects_unregistered_thresholds() -> None:
             raw_candidates_by_sample=((),),
             quality_grid=("0.51",),
         )
+
+
+def test_low_grid_selection_requires_truth_mask_iou_and_counts_mask_failure(
+    tmp_path: Path,
+) -> None:
+    truth_mask = np.zeros((16, 16), dtype=bool)
+    truth_mask[1:9, 1:9] = True
+    failed_mask = np.zeros((16, 16), dtype=bool)
+    failed_mask[8:16, 8:16] = True
+    truth = {
+        "absolute_xyxy": (1.0, 1.0, 9.0, 9.0),
+        "visible_pixel_count": 64,
+        "occlusion": None,
+        "mask": truth_mask,
+    }
+    dataset = ValDataset(
+        inventory_sha256=SHA_A,
+        source_manifest_sha256=SHA_B,
+        samples=(
+            _sample(0, "small_far_cup", (truth,)),
+            _sample(1, "two_cups", (truth,)),
+        ),
+        scenario_counts={"small_far_cup": 1, "two_cups": 1},
+    )
+
+    def stored_candidate(name: str, mask: np.ndarray) -> RawCandidate:
+        path = tmp_path / name
+        path.write_bytes(canonical_json_bytes(encode_mask_rle(mask)))
+        return replace(
+            _candidate(name, quality=0.15),
+            mask=MaskRef(
+                relative_path=name,
+                sha256=hashlib.sha256(mask.astype(np.uint8).tobytes()).hexdigest(),
+                pixel_count=int(mask.sum()),
+                image_width=16,
+                image_height=16,
+            ),
+        )
+
+    selected, points = select_mask_aware_sam_quality_threshold(
+        dataset=dataset,
+        raw_candidates_by_sample=(
+            (stored_candidate("good.json", truth_mask),),
+            (stored_candidate("bad.json", failed_mask),),
+        ),
+        raw_evidence_root=tmp_path,
+        quality_grid=("0.00", "0.10", "0.20"),
+    )
+
+    assert selected["sam_quality"] == "0.10"
+    assert selected["totals"] == {"fn": 1, "fp": 1, "tp": 1}
+    assert selected["mask_metrics"]["pass_count"] == 1
+    assert selected["mask_metrics"]["fail_count"] == 1
+    assert selected["small_far_recall"] == 1.0
+    assert selected["multi_cup_recall"] == 0.0
+    assert [point["sam_quality"] for point in points] == ["0.00", "0.10", "0.20"]
 
 
 def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None:
