@@ -11264,3 +11264,113 @@ retention:
   archived_runs: []
   deletion_candidates: [r279-r280 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-133 — corrected truth improves mask results but does not qualify candidate
+
+```yaml
+checkpoint: CP-133
+status: DECISION_BOUNDARY_CORRECTED_TRUTH_STILL_FAILS
+recorded_at: 2026-09-05T01:34:00+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-132
+source_commit: c0e191c460baab5a144704f1f47a347ac15938e9
+gitee_remote_sha_at_launch: c0e191c460baab5a144704f1f47a347ac15938e9
+offline_reevaluation:
+  run_id: stage-e-corrected-truth-mask-aware-calibration-r281
+  status: VALID_IMMUTABLE
+  exit_code: 0
+  elapsed_ms: 7950
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r4-epoch7-mask-aware-calibration-r2
+  inference_rerun: false
+  samples: 300
+  raw_manifest_sha256_before_and_after: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  script_sha256: 63dc83c2a81a79d923e8cff21c247b07e9c978c8291e8f886457106716662a13
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-mask-aware-calibration-r281/tmp
+  tempfile_preflight: exact resolved match
+truth_rebind:
+  raw_val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  raw_source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  truth_val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  truth_source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  sample_count: 300
+  sample_identity_sha256: 13c943df1aad31af8c3f3ab801a4d87433a59dd32550da943244b5731db499ea
+  identity_fields: [formal_sample_index, seed, scenario, configured_cup_count, image_sha256]
+frozen_contract:
+  detector_thresholds: {box: '0.25', text: '0.25'}
+  sam_quality_grid: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  truth_box_iou: '0.50'
+  truth_mask_iou: '0.80'
+  detector: existing frozen epoch-7 Grounding DINO
+  sam: existing frozen stateless-per-frame SAM 2.1 Hiera Tiny
+selected_corrected_truth:
+  sam_quality: '0.50'
+  totals: {tp: 47, fp: 171, fn: 253}
+  precision: 0.21559633027522937
+  recall: 0.15666666666666668
+  f1: 0.1814671814671815
+  small_far_recall: 0.0
+  multi_cup_recall: 0.06
+  no_cup_unique_count: 0
+  decisions: {AMBIGUOUS: 6, NOT_FOUND: 88, UNIQUE: 206}
+  mask_metrics: {bbox_match_count: 210, pass_count: 47, fail_count: 163, minimum_iou: 0.0002638290387828687, median_iou: 0.4762032183255852, maximum_iou: 0.9859180687637161, threshold: 0.80}
+  scenario_tp_fn:
+    cup_near_bottle: {tp: 14, fn: 36}
+    one_cup_distractors: {tp: 24, fn: 26}
+    partially_occluded_cup: {tp: 3, fn: 47}
+    small_far_cup: {tp: 0, fn: 50}
+    two_cups: {tp: 6, fn: 94}
+grid_readback:
+  quality_0_00: {tp: 48, fp: 206, fn: 252, f1: 0.17328519855595667, bbox_matches: 240, mask_pass: 48}
+  quality_0_10: {tp: 48, fp: 194, fn: 252, f1: 0.17712177121771217, bbox_matches: 230, mask_pass: 48}
+  quality_0_20: {tp: 48, fp: 186, fn: 252, f1: 0.17977528089887643, bbox_matches: 225, mask_pass: 48}
+  quality_0_30: {tp: 47, fp: 181, fn: 253, f1: 0.17803030303030304, bbox_matches: 219, mask_pass: 47}
+  quality_0_40: {tp: 47, fp: 179, fn: 253, f1: 0.17870722433460076, bbox_matches: 218, mask_pass: 47}
+  quality_0_50: {tp: 47, fp: 171, fn: 253, f1: 0.1814671814671815, bbox_matches: 210, mask_pass: 47}
+historical_polygon_truth_comparison:
+  r242_selected: {sam_quality: '0.00', tp: 5, fp: 249, fn: 295, recall: 0.016666666666666666, f1: 0.018050541516245487, mask_pass: 5, mask_fail: 235}
+  corrected_delta: {tp: 42, mask_pass: 42, recall_absolute: 0.14, f1_absolute: 0.163416640150936}
+  conclusion: CP-113's no-mask-signal causal attribution and direct SAM-change recommendation remain withdrawn; polygon truth materially suppressed valid masks
+decision:
+  result: CORRECTED_TRUTH_IMPROVES_BUT_DOES_NOT_RECOVER
+  reason: only 47 of 300 truths pass the unchanged mask-IoU 0.80 gate, with zero small/far recall and 0.06 multi-cup recall
+  next_boundary: do not open sealed synthetic test, COCO100, PickPlace, or Mac and do not fine-tune or replace SAM without a new user-authorized experiment
+  recommended_next_scope: train/val-only residual attribution with corrected overlays and component-level raw-mask analysis before selecting any SAM intervention
+output_readback:
+  files: 4
+  directories: 1
+  bytes: 8570
+  writable_members: 0
+  symlinks: 0
+  tree_inventory_sha256: 0eb6894d12539d9554b8c458070085261806ddff78f48bb087391ed8d4c28702
+  manifest_sha256: 69c16ee6eb9791e7cf60403d859a4bd8f0b164a977620c5150148d930077e945
+  report_sha256: 280ee198fa09cb2ba803697c02cd06cc50b1a8e5f94248a5f1999fb885ea85d4
+  truth_rebind_receipt_sha256: 82f2e89aeaeaaa3ff04ae00d3f480942b9f6331aee01504311967c54b3576b16
+  rebound_manifest_sha256: ceefa765f1c549a5d33963a9cb85af9c49b87759c627b314b8842ef6dc0becb6
+run_evidence_sha256:
+  preflight: 8d7889129d694df5ae05e333519114f0c1aed96f464ef9844e2943ce669e48d3
+  command: f6631007b15a00e12cecb38ff918376d6ddf8534141fbc443f0555868d3a0d63
+  run_log: dac43173f41f6f21c1e3a0594637595a15fdc2b53387654e1219130c2bc38f7b
+  stderr: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit: 0ae3536214d7c0dace85d13bade5139894ba8f68db0db0a3d49b514407d69ff2
+  readback: 34c9964dae26423c6ae598663a53f617a415bbb80369a1775da7808a5928ce35
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+  mask_iou_gate: '0.80 unchanged'
+benchmark_status:
+  r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  latest_valid_explicit_gate: r222
+  rerun: false
+  reason: no benchmark-owned changes and no benchmark was launched merely to measure NVMe optimization
+next_action: stop at this preregistered decision boundary for user direction; keep SAM unchanged and all downstream sealed
+retention:
+  retained_runs: [r281 immutable corrected-truth evaluation, r279-r280 build/test evidence, r275 invalid evidence, r272-r274 reconstructed data and evidence, failure-overlays-r3]
+  archived_runs: []
+  deletion_candidates: [all r272-r281 registered NVMe scratch trees plus r260-r271 scratch trees; do not delete without explicit user authorization]
+```
