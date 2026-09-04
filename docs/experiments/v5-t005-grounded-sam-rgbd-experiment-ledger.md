@@ -7959,3 +7959,76 @@ retention:
   archived_runs: []
   deletion_candidates: [r135-r141 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-096 — immutable fine-tuned Grounded-SAM bundle published
+
+```yaml
+checkpoint: CP-096
+status: VALID_IMMUTABLE_BUNDLE_READY_FOR_CANDIDATE_LOCK
+recorded_at: 2026-09-04T21:32:00+08:00
+stage: E_BUNDLE_PREPARATION
+experiment_id: EXP-079-STAGE-E-FINETUNED-BUNDLE-R1
+prior_checkpoint: CP-095
+run_id: stage-e-compose-finetuned-bundle-r142
+source_commit: b0ad3ef39a154f3fbc51d3aba48f8e31bdde91e5
+inputs:
+  detector_checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-formal-r1/checkpoints/epoch-007
+  detector_checkpoint_manifest_sha256: 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  frozen_sam_source_bundle: /data/work/so101-models/grounded-sam-v2-scipy-lock
+  frozen_sam_source_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+output:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1
+  destination_previously_absent: true
+  publish_mode: exclusive rename; no overwrite
+  schema_version: 2
+  manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  pipeline_id: grounding-dino-tiny+sam2.1-hiera-tiny
+  target_class_id: cup
+  prompt: cup.
+  completed_epoch: 7
+  manifest_members: 16
+  regular_files_including_manifest: 17
+  directories: 3
+  symlinks: 0
+  bytes: 1002260027
+  training_state_present: false
+  file_modes: '0444'
+  directory_modes: '0555'
+selected_val_metrics:
+  box_threshold: 0.25
+  text_threshold: 0.25
+  tp: 261
+  fp: 48
+  fn: 39
+  precision: 0.8446601941747572
+  recall: 0.87
+  f1: 0.8571428571428571
+  small_target_recall: 0.78
+  multi_cup_recall: 0.79
+readback:
+  compose_exit_code: 0
+  compose_elapsed_ms: 4067
+  pre_freeze_verify: valid
+  post_freeze_verify: valid
+  source_checkpoint_manifest_after: 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  source_sam_manifest_after: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  file_inventory_sha256: d083181ade3b567631165f3e0ff191a9813c3279772b7c6c728ed5e5823a9fef
+  permissions_readback_sha256: fc50833e5ad97bbe6c5d8be88a294abc985ae05e0908170f8dc32ccbe4eac367
+provenance:
+  runtime_python: /data/work/venvs/so101-grounded-sam/bin/python
+  loaded_module: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-finetuned-bundle-r136/build/so101_demo_py/so101_demo/adapters/perception/model_bundle.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-compose-finetuned-bundle-r142/tmp
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_runtime_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+conclusion: the exact val-selected epoch-7 detector and previously verified frozen SAM snapshot are now bound in one read-only schema-v2 generic-cup bundle; no source artifact was modified
+next_action: create and verify an immutable candidate lock binding this bundle, cup. prompt, DINO 0.25/0.25 thresholds, frozen SAM identity and threshold, production mapping IoU 0.98, and deterministic selector rules before any sealed-test access
+retention:
+  retained_runs: [stage-e-compose-finetuned-bundle-r142, immutable durable bundle]
+  archived_runs: []
+  deletion_candidates: [r142 NVMe scratch tree; do not delete without explicit user authorization]
+```
