@@ -10261,3 +10261,446 @@ retention:
   archived_runs: []
   deletion_candidates: [future per-run NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-117 — lossless truth code GREEN; first fresh-overlay build invalid
+
+```yaml
+checkpoint: CP-117
+status: CODE_GREEN_BUILD_RETRY_PLANNED
+recorded_at: 2026-09-05T00:54:00+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-116
+tdd_red:
+  run_id: stage-e-lossless-truth-red-r260
+  status: VALID_EXPECTED_RED
+  exit_code: 1
+  elapsed_ms: 506
+  result: 2 failed in 0.30s
+  observed_failures:
+    - generated unmeasured truth lacks visible_mask_rle_counts
+    - val loader follows polygon rasterization instead of the supplied exact visible RLE
+  junit_sha256: 9b1ca68329caef2c66b73c2d12f4843445883123bcb63ae8a19a57b3bdda9b2c
+tdd_focused_green:
+  run_id: stage-e-lossless-truth-green-r261
+  status: VALID_GREEN
+  exit_code: 0
+  elapsed_ms: 469
+  result: 2 passed in 0.26s
+  junit_sha256: 495f3f371aa763a99372769163a04cc6f7ba50b1857d63de9e7ce5fbc8f42cbc
+related_ordinary_tests:
+  run_id: stage-e-lossless-truth-related-r262
+  status: VALID_GREEN
+  exit_code: 0
+  elapsed_ms: 1633
+  result: 32 passed in 1.42s
+  collected:
+    - test_yolo_seg_dataset_augmented.py
+    - test_grounding_dino_dataset.py
+    - test_grounding_dino_dataset_augmented.py
+    - test_grounded_sam_val_calibration.py
+  benchmark_collection: none
+  junit_sha256: d1f33ee0ff05bcf2d82bc69b87b814d99f2f8e6328bfcfedcbbe0e5ec57d70ac
+implementation_readback:
+  generator: every visible instance now persists mask_shape_hw, visible_mask_rle_counts, and visible_mask_sha256
+  loader: a complete visible RLE is decoded, shape/count/hash checked, and used as canonical mask and bbox; polygon is fallback only when no RLE fields exist
+  invariant: exact pixels retained with no morphology, component filtering, convexification, or IoU-gate change
+invalid_build:
+  run_id: linux-build-stage-e-lossless-truth-r263
+  status: INVALID_ENVIRONMENT_BEFORE_PACKAGE_BUILD
+  exit_code: 1
+  elapsed_ms: 19485
+  packages_finished: 0
+  failure: CMake selected /usr/bin/python3, whose inherited PYTHONPATH omitted /opt/ros/jazzy/lib/python3.12/site-packages and therefore could not import ament_package
+  code_failure: false
+  build_log_sha256: 708262b2a85bf50ae5ddf80c8820bb647d3a43e9503a4d175c24313014eb09db
+  command_sha256: 6df8679897f48d1e9e3c786173be4b3ee4fa9ccb1f1773ff88598fe617003044
+  exit_log_sha256: 4549006e01e784052f19926ca2f44b5a38c122921c10754b1fbe697f31417598
+  tempfile_preflight_sha256: df55d69b0b834628b410c4d4fbc7827b740501a0310f384b341afaa978bf9124
+  retained_build_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r263
+  retained_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-lossless-truth-r263/tmp
+recovery_preflight:
+  command: PYTHONPATH=/opt/ros/jazzy/lib/python3.12/site-packages:/usr/lib/python3/dist-packages /usr/bin/python3 -c 'import ament_package,colcon_core'
+  status: passed
+replacement_build:
+  run_id: linux-build-stage-e-lossless-truth-r264
+  status: PLANNED
+  single_variable: add the ROS Jazzy Python site-packages directory to PYTHONPATH; retain the same source commit, seven-package selection, r26 lodepng cache, locked colcon driver, and disconnected FetchContent policy
+  output_collision_policy: allocate a fresh absent run, build, install, log, and NVMe scratch tree; never reuse r263
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_expected_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute fresh r264, read back all seven installed prefixes and the so101_demo source symlink, then run the full ordinary non-benchmark gate with a new NVMe scratch
+retention:
+  retained_runs: [r260 RED, r261 focused GREEN, r262 related GREEN, r263 invalid build evidence]
+  archived_runs: []
+  deletion_candidates: [r260 through r263 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-118 — fresh overlay valid; ordinary gate receipt retry planned
+
+```yaml
+checkpoint: CP-118
+status: BUILD_VALID_ORDINARY_RECEIPT_RETRY_PLANNED
+recorded_at: 2026-09-05T00:58:09+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-117
+build:
+  run_id: linux-build-stage-e-lossless-truth-r264
+  status: VALID
+  packages_finished: 7
+  exit_code: 0
+  elapsed_ms: 56480
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r264
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-lossless-truth-r264/tmp
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  tempfile_preflight: exact resolved match
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  package_prefix_readback: all seven resolve inside the r264 install root
+  so101_demo_source_readback: build/so101_demo_py/so101_demo resolves to the current isolated checkout src/so101_demo_py/src
+  lodepng: {head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, tracked_files: 26, worktree: clean, fsck_strict: passed, network_fetch: false}
+  command_sha256: 88ce000658092032ac00a4d2b3e361d74f837769a2fae8c914a8f0166068056
+  build_log_sha256: 38a76601348d0128dd7f23f26456efc03e5243b37821aa6c05ce5993b5eecfde
+  exit_log_sha256: e8a17c93018c11fc5b0ae3bbb64eb00dc66aa089fc2fae1c83bbebdff5740b52
+  tempfile_preflight_sha256: 75886c25254815fed473f7d1a57f5c5d5a0bcef463e25979d02b56902d697aea
+  lodepng_fsck_sha256: 87fd0ea0a20896b110d48a60b864814bdec9c740b93cabea6b9c76b7bffedcd4
+invalid_ordinary_wrapper:
+  run_id: linux-test-stage-e-lossless-truth-r265-ordinary
+  status: INVALID_MISSING_EXIT_RECEIPT_AFTER_PASSING_TESTS
+  observed_test_result: {passed: 1228, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.08}
+  colcon_test_result: 1228 tests, 0 errors, 0 failures, 0 skipped
+  invalid_reason: the evidence wrapper assigned to zsh's read-only status parameter after copying JUnit, so it terminated before writing exit.log
+  code_failure: false
+  output_reuse: forbidden
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-lossless-truth-r265-ordinary/tmp
+  pytest_xml_sha256: 5194045e401e4b34ecce308a2272dd8f7447363ed2df3f011e0473865dd09b58
+  command_sha256: d14dc6a74a1f92e7dc7df756dae1801f7b5edf3650241df98310183d4efaeef3
+  preflight_sha256: a2565310bb1978fd4ddba3ef62c31036edb8ac32604d177cfcf59b651efcad80
+  colcon_test_log_sha256: 0ec2b9d19fa260236dc64dd0bf86cd5581aff6428a63e9022a830ac961c344b8
+  colcon_test_result_log_sha256: 1fde9599dd1afdf52d73da8e13edbf62376ba0f106d032122ce85ca2c5564bad
+replacement_ordinary_gate:
+  run_id: linux-test-stage-e-lossless-truth-r266-ordinary
+  status: PLANNED
+  single_variable: rename the wrapper-local receipt variable from status to gate_status; retain the same overlay, test selection, Python and dependency provenance, and NVMe policy
+  benchmark_collection: forbidden
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute fresh r266 and require both colcon and test-result exit receipts plus copied JUnit before accepting the ordinary gate
+retention:
+  retained_runs: [r264 valid overlay, r265 invalid wrapper evidence]
+  archived_runs: []
+  deletion_candidates: [r264 and r265 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-119 — ordinary gate valid; converter and bbox RED extension planned
+
+```yaml
+checkpoint: CP-119
+status: ORDINARY_GREEN_ADDITIONAL_TDD_RED_PLANNED
+recorded_at: 2026-09-05T01:00:00+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-118
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-lossless-truth-r266-ordinary
+  status: VALID_PASS
+  result: {passed: 1228, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.28}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14255
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r264
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  dependencies: {Pillow: 12.3.0, pytest: 7.4.4, torch: 2.13.0+cu130, transformers: 4.56.2, colcon_core: 0.21.0}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-lossless-truth-r266-ordinary/tmp
+  basetemp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-lossless-truth-r266-ordinary/tmp/pytest-basetemp
+  tempfile_preflight: exact resolved match
+  benchmark_collection: none
+  source_commit: 42278f498bd1827c86b529990e6e0d6db36044e3
+  source_diff_sha256: 375696906b335b46180e514e962ef1b8629e916df57537caeadb672d72381b41
+  command_sha256: d2f8b0a14b54f7442c0f1a201a580b45e9a8a120be0260332db870db6861f146
+  preflight_sha256: c3b9c9d414a39a6a05fc480cae6ec82876ffa7fb3f9f471d8973c82254456c2f
+  colcon_test_log_sha256: 199853c4ddb14946ae65cdd374dde7054fa00736425d4ce416241b1691a009a8
+  colcon_test_result_log_sha256: 1fde9599dd1afdf52d73da8e13edbf62376ba0f106d032122ce85ca2c5564bad
+  junit_sha256: bbde24d2e127b8a7e11d227b128a61a4a0b95d4d701e31a76506350949ac6192
+  exit_log_sha256: 2482c1a1bcd4fc9fff9a7aa950262aff82cde80f24954c92acd35690bf9d94c9
+explicit_benchmark_gate:
+  status: NOT_RUN
+  reason: no benchmark implementation, configuration, adapter, report, or benchmark_test member changed; preserve valid r222 and r30
+review_gap:
+  - schema-v2 conversion currently validates visible RLE only when occlusion_measured is true, so an unmeasured exact truth mask can be tampered without detection
+  - val loading now uses the exact mask pixels but still exposes the polygon-derived absolute box instead of deriving canonical coordinates from that mask
+additional_tdd:
+  red_run_id: stage-e-lossless-truth-converter-bbox-red-r267
+  expected_failures:
+    - conversion does not fail closed on a corrupted unmeasured visible RLE
+    - loaded canonical bbox differs from the exact visible-mask extent
+  single_variable: complete the already preregistered universal-RLE validation and mask-derived-box implementation contract
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: add only the two regression assertions and run focused r267 RED before changing converter or bbox implementation
+retention:
+  retained_runs: [r266 valid ordinary evidence, r264 overlay, r265 invalid wrapper evidence]
+  archived_runs: []
+  deletion_candidates: [r264 through r266 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-120 — universal RLE validation and exact bbox GREEN
+
+```yaml
+checkpoint: CP-120
+status: EXTENDED_TDD_GREEN_RELATED_GATE_PLANNED
+recorded_at: 2026-09-05T01:04:00+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-119
+extended_tdd:
+  red:
+    run_id: stage-e-lossless-truth-converter-bbox-red-r267
+    status: VALID_EXPECTED_RED
+    result: 2 failed in 0.30s
+    exit_code: 1
+    elapsed_ms: 590
+    failures:
+      - val loader exposed polygon-scaled absolute bbox rather than exact visible-mask pixel extent
+      - schema-v2 converter accepted a tampered unmeasured visible RLE
+    junit_sha256: 52fbe54a494a1ec1ee18601be6d9b6f32b0d4f19a73e19644a707dc31134aea2
+    command_sha256: 2d2daeb7ca3436c27bc734fcf4dcd20d8df07f7a3a46869329b29912a0e51d15
+    preflight_sha256: 27921e794a81a419113cd8b8fbb67e91b590b9637fe6dcc16f4fff7b2482fc3e
+    pytest_log_sha256: 06f0751af802cd41441019d8d2d265cddf9c4240a305d73b3e67e7dfb3a95d3e
+    exit_log_sha256: ee31f5a525444ce9f72ba1e919b48adae6d34caf8f28a247e50a611a8766747f
+  green:
+    run_id: stage-e-lossless-truth-converter-bbox-green-r268
+    status: VALID_GREEN
+    result: 2 passed in 0.29s
+    exit_code: 0
+    elapsed_ms: 571
+    junit_sha256: 62a0c43f240edc5e1327d9a12f0e7faea2ff741d79e9014b6214a22fbe88518a
+    command_sha256: acd9d08fd75f069d62d02d6ea16b5ef05d9e44e7e57c8a121fd39c30eafa5c6b
+    preflight_sha256: 5d4ba75a4559a4d45c14f885c237e462d67c70e8eb7e8b2fea3068dc1fbe5a61
+    pytest_log_sha256: b4688631e0457056db49a323814a69798e69560627ce6f2ba136bf6cc92e1989
+    exit_log_sha256: 9960ddff2661e8de92a897edfbd18b8d83244c64b011ed6690d9a43bbf65d2d6
+implementation_readback:
+  - binary_mask_to_box derives normalized coordinates using the generator's width-minus-one and height-minus-one convention while retaining exact absolute nonzero-pixel extrema
+  - schema-v2 conversion validates complete visible-mask fields whenever any are present, including unmeasured instances, and verifies RLE shape, visible count, SHA256, and polygon-bbox identity
+  - measured-occlusion validation reuses the already verified visible mask and retains every amodal, paired-reference, fraction, state, and occluder check
+  - val loading requires the inventory box to agree with the verified mask box and exposes the exact absolute mask extent
+compatibility:
+  schema_v1: unchanged
+  schema_v2_without_any_visible_rle_fields: polygon fallback remains readable
+  schema_v2_with_partial_or_invalid_visible_rle_fields: fail closed
+static_checks:
+  ruff: {version: 0.15.20, executable: /home/lenovo/.local/bin/ruff, lint: passed}
+  diff_check: passed
+  format_diagnostic: repository files contain pre-existing ruff-format drift outside this change; new touched expressions were aligned explicitly and no bulk unrelated rewrite was made
+next_runs:
+  related_tests: stage-e-lossless-truth-related-r269
+  fresh_overlay: linux-build-stage-e-lossless-truth-r270
+  formal_ordinary_gate: linux-test-stage-e-lossless-truth-r271-ordinary
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: run the related ordinary module set, then build and read back a new seven-package overlay before the final full ordinary gate
+retention:
+  retained_runs: [r267 RED, r268 GREEN, all CP-119 evidence]
+  archived_runs: []
+  deletion_candidates: [r267 and r268 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-121 — related lossless-truth tests GREEN
+
+```yaml
+checkpoint: CP-121
+status: RELATED_GREEN_FRESH_OVERLAY_PLANNED
+recorded_at: 2026-09-05T01:05:31+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-120
+related_ordinary_tests:
+  run_id: stage-e-lossless-truth-related-r269
+  status: VALID_GREEN
+  result: 33 passed in 1.54s
+  exit_code: 0
+  elapsed_ms: 1827
+  collected:
+    - test_yolo_seg_dataset_augmented.py
+    - test_grounding_dino_dataset.py
+    - test_grounding_dino_dataset_augmented.py
+    - test_grounded_sam_val_calibration.py
+  benchmark_collection: none
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-lossless-truth-related-r269/tmp
+  tempfile_preflight: exact resolved match
+  junit_sha256: bf5f30111fc8970e5f7ecd3d8945ba09ca9fef43c2116306783bc24283222fa8
+  command_sha256: c050839de4ed6191f30797a21f6b519dbc9c729b3144e7a12eddb4f052a12ee1
+  preflight_sha256: f7b3b3bd9672deaf4c6a0dc57af37d3f63a3429eac1f64aa1897f43ed098ebe1
+  pytest_log_sha256: 57cb48befb43f5e3418b9b2f40bdf819874f4ee4207085b90c5098e33fdef9a5
+  exit_log_sha256: 2b8d58a35345dc5e5f0f838726a4fb1f820d565969109c1347566ce47b22a0ec
+static_readback:
+  ruff_0_15_20_lint: passed
+  git_diff_check: passed
+fresh_build:
+  run_id: linux-build-stage-e-lossless-truth-r270
+  status: PLANNED
+  rationale: r264 predates the completed universal converter validation and exact-mask bbox implementation
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  network_fetch: forbidden
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: build and read back fresh r270, then run the final full ordinary test gate against it
+retention:
+  retained_runs: [r269 related GREEN, all CP-120 evidence]
+  archived_runs: []
+  deletion_candidates: [r269 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-122 — final-code fresh overlay valid
+
+```yaml
+checkpoint: CP-122
+status: BUILD_VALID_FINAL_ORDINARY_GATE_PLANNED
+recorded_at: 2026-09-05T01:07:24+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-121
+build:
+  run_id: linux-build-stage-e-lossless-truth-r270
+  status: VALID
+  packages_finished: 7
+  exit_code: 0
+  elapsed_ms: 56013
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r270
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-lossless-truth-r270/tmp
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  tempfile_preflight: exact resolved match
+  source_commit: 42278f498bd1827c86b529990e6e0d6db36044e3
+  source_diff_sha256: cc9757817175d7bf0220e84d9a603d7534476fc2b10485181db5d3481cddf110
+  package_prefix_readback: all seven resolve inside the r270 install root
+  so101_demo_source_readback: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src
+  lodepng: {head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, tracked_files: 26, worktree: clean, fsck_strict: passed, network_fetch: false}
+  command_sha256: 048308e89da985b87e63553eddba48f2f46fbacb5e6780acf51a96ea94a9508c
+  build_log_sha256: 2b46b158611ec65ecde5ae9143a493376c6226b1aa2023711abbd54445ed3ddd
+  exit_log_sha256: cb682ab291f70c42d92cbfe12cf2e37b274627fdfbab6da4d931421bc576c13b
+  tempfile_preflight_sha256: 3f363067c5be324df74698363027f4d9516fa6a5855528ad14731146d9657be2
+  lodepng_fsck_sha256: 87fd0ea0a20896b110d48a60b864814bdec9c740b93cabea6b9c76b7bffedcd4
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-lossless-truth-r271-ordinary
+  status: PLANNED
+  collection: src/so101_demo_py/test only
+  benchmark_collection: forbidden
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r270
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute r271 with a unique NVMe scratch and require fresh JUnit, colcon exit, and test-result exit readback
+retention:
+  retained_runs: [r270 fresh overlay, all CP-121 evidence]
+  archived_runs: []
+  deletion_candidates: [r270 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-123 — lossless truth implementation fully GREEN
+
+```yaml
+checkpoint: CP-123
+status: CODE_COMPLETE_SYNC_AND_RECONSTRUCTION_PLANNED
+recorded_at: 2026-09-05T01:08:48+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+prior_checkpoint: CP-122
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-lossless-truth-r271-ordinary
+  status: VALID_PASS
+  result: {passed: 1229, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.17}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14140
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r270
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  dependencies: {Pillow: 12.3.0, pytest: 7.4.4, torch: 2.13.0+cu130, transformers: 4.56.2, colcon_core: 0.21.0}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-lossless-truth-r271-ordinary/tmp
+  basetemp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-lossless-truth-r271-ordinary/tmp/pytest-basetemp
+  tempfile_preflight: exact resolved match
+  benchmark_collection: none
+  source_commit: 42278f498bd1827c86b529990e6e0d6db36044e3
+  source_diff_sha256: cc9757817175d7bf0220e84d9a603d7534476fc2b10485181db5d3481cddf110
+  command_sha256: 41a14e26a15b6e47fbfff251fe5ff56c6319ae7bcc704dd5086a66f26f6b3b15
+  preflight_sha256: 33865af43a6047f6543597ff3d84d3a0491f18d5e58b07e736de1442f86e498c
+  colcon_test_log_sha256: ab72692ac91251c576cef61cad43963b6f8f40e9f0cdf4cb8fb7ea6f94ef4d29
+  colcon_test_result_log_sha256: 37c8bde63220947855174f309b359580ff8d08bad0d71a9fcdc74b07edf72649
+  junit_sha256: f76fc188edd136e8652a70b843c411bb2c3ceb123215a8a8b93fc58058f8d60c
+  exit_log_sha256: 33ff9253e6b3d8c7c7e786ac93c7957256d894ad1815f614f39978865c5a670d
+verification:
+  focused_red_green: passed
+  extended_converter_bbox_red_green: passed
+  related_tests: 33 passed
+  ruff_0_15_20_lint: passed
+  python_compile: passed
+  git_diff_check: passed
+explicit_benchmark_gate:
+  status: NOT_RUN
+  reason: no benchmark implementation, configuration, adapter, report, or benchmark_test member changed; preserve valid r222 and r30 without rerun
+sync_contract:
+  owned_files:
+    - docs/experiments/v5-t005-grounded-sam-rgbd-experiment-ledger.md
+    - src/so101_demo_py/src/adapters/perception/mujoco_dataset.py
+    - src/so101_demo_py/src/training/grounding_dino_dataset.py
+    - src/so101_demo_py/src/training/grounded_sam_val_calibration.py
+    - src/so101_demo_py/test/test_grounded_sam_val_calibration.py
+    - src/so101_demo_py/test/test_grounding_dino_dataset_augmented.py
+  remote: gitee
+  required_base: b91a4b56d30bc971e7c2d64465516b9d7a49b299
+  rule_readback: root AGENTS.md ai-station NVMe scratch requirement must remain present
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-RECONSTRUCTION-R1
+  status: PLANNED
+  source_read_only: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  converted_read_only: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+  primary_source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  primary_converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless
+  repro_source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless-repro
+  repro_converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless-repro
+  run_ids: [stage-e-lossless-truth-reconstruct-r272, stage-e-lossless-truth-reconstruct-repro-r273]
+  readable_splits: [train, val]
+  forbidden_members: [test, test-sealed-members.json]
+  reconstruction: rerender each immutable r3 train/val seed and scenario, require exact body/count/polygon/label agreement, then preserve exact raw visible RLE for every instance
+  copy_contract: image and label bytes remain identical; truth changes only by universal visible RLE fields and generator provenance; no source mutation
+  conversion_contract: build train and val inventories only, validating exact visible RLE and mask-derived boxes; generic class cup and prompt cup. remain fixed
+  reproducibility: primary and independent repro trees must have identical relative member bytes and inventory hashes
+  output_collision_policy: all four outputs and per-run scratch roots must be absent; fail closed and retire any partially created root
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit only owned code/tests/ledger, fetch and rebase if required, verify the b91 rule, ordinary-push and read back the Gitee SHA, then execute r272/r273 without opening any test member
+retention:
+  retained_runs: [r271 formal ordinary evidence, r270 overlay, all CP-122 evidence]
+  archived_runs: []
+  deletion_candidates: [r271 registered NVMe scratch tree; do not delete without explicit user authorization]
+```

@@ -104,6 +104,35 @@ def polygon_to_box(
     )
 
 
+def binary_mask_to_box(mask: Any, image_width: int, image_height: int) -> BoundingBox:
+    """Return the exact nonzero-pixel extent of a visible binary mask."""
+
+    width = _positive_dimension(image_width, "image_width")
+    height = _positive_dimension(image_height, "image_height")
+    if getattr(mask, "shape", None) != (height, width):
+        raise _fail("VISIBLE_TRUTH_INVALID", "mask shape differs from image")
+    rows, columns = mask.nonzero()
+    if len(rows) == 0:
+        raise _fail("VISIBLE_TRUTH_INVALID", "mask is empty")
+    left = int(columns.min())
+    top = int(rows.min())
+    right = int(columns.max())
+    bottom = int(rows.max())
+    if right <= left or bottom <= top:
+        raise _fail("VISIBLE_TRUTH_INVALID", "mask produces a degenerate box")
+    x_scale = max(1, width - 1)
+    y_scale = max(1, height - 1)
+    return BoundingBox(
+        normalized_xyxy=(
+            left / x_scale,
+            top / y_scale,
+            right / x_scale,
+            bottom / y_scale,
+        ),
+        absolute_xyxy=(float(left), float(top), float(right), float(bottom)),
+    )
+
+
 def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -398,12 +427,52 @@ def _truth_instances(
                     "OCCLUSION_TRUTH_INVALID",
                     f"{member}: instance {index} measurement state invalid",
                 )
-            if measured:
+            visible_fields = {
+                "mask_shape_hw",
+                "visible_mask_rle_counts",
+                "visible_mask_sha256",
+            }
+            present_visible_fields = visible_fields.intersection(instance)
+            visible_mask = None
+            if present_visible_fields:
+                if present_visible_fields != visible_fields:
+                    raise _fail(
+                        "VISIBLE_TRUTH_INVALID",
+                        f"{member}: instance {index} visible-mask fields are incomplete",
+                    )
                 try:
                     visible_mask = decode_binary_mask_rle(
                         instance.get("visible_mask_rle_counts"),
                         instance.get("mask_shape_hw"),
                     )
+                    visible_box = binary_mask_to_box(
+                        visible_mask,
+                        image_width,
+                        image_height,
+                    )
+                except (GroundingDinoDatasetError, ValueError) as error:
+                    raise _fail(
+                        "VISIBLE_TRUTH_INVALID",
+                        f"{member}: instance {index}: {error}",
+                    ) from error
+                visible_hash = _sha256_bytes(visible_mask.astype("uint8").tobytes(order="C"))
+                if (
+                    instance.get("visible_mask_sha256") != visible_hash
+                    or int(visible_mask.sum()) != visible_pixels
+                    or not _boxes_match(truth_box, visible_box)
+                ):
+                    raise _fail(
+                        "VISIBLE_TRUTH_INVALID",
+                        f"{member}: instance {index} mask, count, hash, or box differs",
+                    )
+                truth_box = visible_box
+            if measured:
+                if visible_mask is None:
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} visible mask is absent",
+                    )
+                try:
                     paired_reference_mask = decode_binary_mask_rle(
                         instance.get("paired_reference_mask_rle_counts"),
                         instance.get("mask_shape_hw"),
@@ -417,12 +486,6 @@ def _truth_instances(
                         "OCCLUSION_TRUTH_INVALID",
                         f"{member}: instance {index}: {error}",
                     ) from error
-                if visible_mask.shape != (image_height, image_width):
-                    raise _fail(
-                        "OCCLUSION_TRUTH_INVALID",
-                        f"{member}: instance {index} mask shape differs from image",
-                    )
-                visible_hash = _sha256_bytes(visible_mask.astype("uint8").tobytes(order="C"))
                 paired_reference_hash = _sha256_bytes(
                     paired_reference_mask.astype("uint8").tobytes(order="C")
                 )
@@ -432,10 +495,8 @@ def _truth_instances(
                 occluded_pixels = amodal_pixels - visible_pixels
                 fraction = visible_pixels / amodal_pixels if amodal_pixels else -1.0
                 if (
-                    instance.get("visible_mask_sha256") != visible_hash
-                    or instance.get("paired_reference_mask_sha256") != paired_reference_hash
+                    instance.get("paired_reference_mask_sha256") != paired_reference_hash
                     or instance.get("amodal_mask_sha256") != amodal_hash
-                    or int(visible_mask.sum()) != visible_pixels
                     or instance.get("paired_reference_pixel_count") != paired_reference_pixels
                     or instance.get("amodal_pixel_count") != amodal_pixels
                     or instance.get("occluded_pixel_count") != occluded_pixels

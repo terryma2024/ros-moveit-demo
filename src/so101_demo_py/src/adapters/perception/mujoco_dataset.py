@@ -691,7 +691,10 @@ def _truth_instance_document(instance: LabeledInstance) -> dict[str, Any]:
     document: dict[str, Any] = {
         "body_id": instance.body_id,
         "body_name": instance.body_name,
+        "mask_shape_hw": list(instance.mask.shape),
         "visible_pixel_count": instance.visible_pixel_count,
+        "visible_mask_rle_counts": list(encode_binary_mask_rle(instance.mask)),
+        "visible_mask_sha256": _mask_sha256(instance.mask),
         "polygon_xy": [list(point) for point in instance.polygon_xy],
         "occlusion_measured": instance.occlusion_measured,
         "occlusion_state": instance.occlusion_state,
@@ -706,9 +709,6 @@ def _truth_instance_document(instance: LabeledInstance) -> dict[str, Any]:
     assert instance.visible_fraction is not None
     document.update(
         {
-            "mask_shape_hw": list(instance.mask.shape),
-            "visible_mask_rle_counts": list(encode_binary_mask_rle(instance.mask)),
-            "visible_mask_sha256": _mask_sha256(instance.mask),
             "paired_reference_pixel_count": instance.paired_reference_pixel_count,
             "paired_reference_mask_rle_counts": list(
                 encode_binary_mask_rle(instance.paired_reference_mask)
