@@ -5948,9 +5948,11 @@ dataset_contract:
     val: [420000000, 420000299]
     test: [430000000, 430000299]
     independence: disjoint from r2 defaults 100000/200000/300000 and fresh benchmark 700000/800000/900000
+    bounded_attempt_seed_derivation: numpy SeedSequence([sample_seed, scenario_ordinal, attempt_index])
   split_rules:
     - seeds, image members, label members, and truth members are pairwise disjoint across train, val, and test
     - scenario schedule is quota-derived and deterministic within each split
+    - scenario schedule round-robin order is [no_cup, one_cup_distractors, two_cups, cup_near_bottle, small_far_cup, partially_occluded_cup]
     - test labels and truth become opaque sealed members before training, checkpoint selection, or threshold tuning
     - COCO100 is never mounted or read during generation, training, selection, or threshold tuning
 scene_geometry:
@@ -5971,6 +5973,7 @@ scene_geometry:
     cup_center_m: [0.02, -0.28, 0.165]
     cup_xy_jitter_m: [-0.045, 0.045]
     camera_retreat_along_local_positive_z_m: [0.90, 1.20]
+    local_positive_z_definition: normalized third column of the immutable MuJoCo camera rotation matrix
     ordinary_camera_xyz_jitter_m: [-0.015, 0.015]
     acceptance:
       visible_bbox_area_px2: {minimum_exclusive: 0, maximum_exclusive: 1024}
