@@ -8316,3 +8316,87 @@ retention:
   archived_runs: []
   deletion_candidates: [r144-r159 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-099 — fresh carrier overlay and ordinary gate complete
+
+```yaml
+checkpoint: CP-099
+status: VALID_FRESH_BUILD_AND_ORDINARY_GATE_SYNTHETIC_TEST_STILL_SEALED
+recorded_at: 2026-09-04T21:44:00+08:00
+stage: E_SYNTHETIC_TEST_CARRIER_BUILD_GATE
+experiment_id: EXP-079-STAGE-E-SYNTHETIC-TEST-R1
+prior_checkpoint: CP-098
+source_commit: 28aa926932bc0b73ffb89cb3edce9df900d9b516
+gitee_readback_before_build:
+  branch: codex/v5-t004-yolo-seg-rgbd
+  remote_sha: 28aa926932bc0b73ffb89cb3edce9df900d9b516
+  root_agents_nvme_rule_present: true
+fresh_overlay:
+  run_id: linux-build-stage-e-synthetic-test-carrier-r160
+  status: VALID
+  package_count: 7
+  result: 7 packages finished in 55.8 seconds
+  exit_code: 0
+  elapsed_ms: 55889
+  build_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-synthetic-test-carrier-r160/build
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-synthetic-test-carrier-r160/install
+  source_mode: symlink install resolves to the isolated checkout
+  carrier_module_readback: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-synthetic-test-carrier-r160/build/so101_demo_py/so101_demo/training/frozen_candidate_evaluation.py
+  cli_module_readback: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-synthetic-test-carrier-r160/build/so101_demo_py/so101_demo/cli/evaluate_grounded_sam_frozen_candidate.py
+  console_entrypoint_present: true
+  console_entrypoint_help_exit_code: 0
+  lodepng_cache: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  lodepng_tracked_files: 26
+  lodepng_status: clean before and after build
+  lodepng_fsck: valid before and after build
+  fetchcontent_fully_disconnected: true
+  network_fetch: none
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-synthetic-test-carrier-r160/tmp
+  tempfile_preflight: locked and build Python resolved exactly to the run-specific NVMe scratch
+ordinary_gate_recovery:
+  invalid_runs:
+    - run_id: linux-test-stage-e-synthetic-test-carrier-r161-ordinary
+      status: INVALID_HARNESS_NO_TEST_RESULT
+      cause: venv-only PYTHONPATH omitted colcon-core metadata, so colcon did not start and no JUnit existed
+    - run_id: linux-test-stage-e-synthetic-test-carrier-r162-ordinary
+      status: INVALID_COLLECTION_ENVIRONMENT
+      cause: colcon ran with locked ML dependencies but explicit PYTHONPATH omitted /opt/ros/jazzy/lib/python3.12/site-packages; 19 ROS module collection errors occurred
+      result: {errors: 19, failures: 0}
+      exit_code: 2
+      test_result_exit_code: 1
+      junit_sha256: f5db2d16b3ce30f8126c3de7a7dd2a8af5edc369de1eee76170aeb024d93ebd0
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-synthetic-test-carrier-r163-ordinary
+  status: VALID
+  scope: src/so101_demo_py/test only; benchmark_test excluded
+  command: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon test --packages-select so101_demo_py --pytest-args test
+  result: {passed: 1217, failed: 0, errors: 0, skipped: 0, pytest_seconds: 12.93}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 13757
+  driver: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  pythonpath_order: locked venv, ROS Jazzy, system dist-packages
+  dependencies: {Pillow: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2, colcon_core: 0.21.0}
+  ros_preflight: rclpy, launch, and ament_index_python loaded from /opt/ros/jazzy/lib/python3.12/site-packages
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-synthetic-test-carrier-r163-ordinary/tmp
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+  tempfile_preflight: exact resolved match to the run-specific scratch
+  junit_sha256: 6a2681b437e50301ac1c087ff64525f41aa6d8544f4822373c5d04472191e6fd
+benchmark_gate:
+  rerun: false
+  reason: carrier implementation is outside benchmark_test and does not change benchmark adapters, configuration, reports, or tests; valid r141 remains the required explicit benchmark gate
+  preserved_r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+sealed_boundaries:
+  synthetic_test_annotation_access: none
+  formal_output_absent: true
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+conclusion: the committed one-time carrier is installed from a fresh offline seven-package overlay and the complete ordinary source test gate passes under the locked ML plus ROS environment
+next_action: commit and push this checkpoint, reverify the immutable r143 lock, absent formal output, CUDA runtime, source/seal hashes and Microduck pause, then start the single formal synthetic-test run
+retention:
+  retained_runs: [r160 fresh overlay, r161-r162 invalid environment evidence, r163 valid ordinary gate]
+  archived_runs: []
+  deletion_candidates: [r160-r163 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
