@@ -4914,3 +4914,89 @@ retention:
   deletion_candidates: none
 decision: RUN_MAC_R2_AFTER_CP066_SYNC
 ```
+
+## Checkpoint CP-067 — 稳定候选身份对账与 r3 重跑预注册
+
+```yaml
+checkpoint_id: CP-067
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-066
+status: READY_FOR_MAC_R3
+mac_r2_failure:
+  run_id: mac-grounded-sam-test-production-postfix-r4-r2
+  status: INVALID
+  invalid_reason: PRODUCTION_CANDIDATE_MAPPING_INVALID
+  completed_records: 10
+  failed_sample_index: 10
+  failed_image_relpath: images/test/000900022.png
+  manifest_sha256: 71c9b3566ac93b8550d3f807a9ff7f8f9e110d462f00379c9b65c777305994de
+  calibrated_started: false
+  linux_formal_started: false
+  archive: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-mac-grounded-sam-test-production-postfix-r4-r2-invalid.tar.gz
+  archive_sha256: 1f7248fbaf4a1202e54fbf8bda26d96caa499154bd6b1d37b6c29ce7d90ce493
+  extracted_archive_root: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-mac-grounded-sam-test-production-postfix-r4-r2-invalid
+diagnosis:
+  mode: non-formal implementation mismatch diagnosis
+  repeated_inference_count: 3
+  raw_candidate_count: 57
+  production_candidate_count: 3
+  finding: 三次诊断都显示 bbox、Grounding confidence 和 mask SHA-256 完全相等；候选 grounded-sam-001 的 SAM quality 固定相差 2 个 float32 ULP
+  raw_sam_quality: 0.942948579788208
+  production_sam_quality: 0.9429484605789185
+  float32_ulp_distance: 2
+  mask_iou: 1.0
+  threshold_tuning_performed: false
+  diagnosis_json_sha256: 3935810e96385e03a8ea00aba649b583e1fce8844b35723308fc8cfc5a7b090a
+  durable_archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/grounded-production-mapping-r2.tar.gz
+  durable_archive_sha256: a51f6482cccd13d97416555c4c55c0d0d7b9b690674198dca5906469dfc7d636
+stable_identity_fix:
+  commit: c7c2488f5827d264cacc61f01313d1c2cf0ded2c
+  runner_sha256: 388b3b8afde22063f9624f64e4b21a0c2d45dca8fa9dc7dc0602daa2560ad79a
+  contract: Grounded-SAM 候选身份由 class_id、bbox、Grounding confidence 和 mask SHA-256 唯一映射；SAM quality 两侧必须存在，但不作为身份键
+  fail_closed: 稳定身份字段对应零个或多个 raw 候选时仍判为 PRODUCTION_CANDIDATE_MAPPING_INVALID
+  detector_output_changed: false
+  prompt_model_grid_threshold_metric_matching_objective_changed: false
+  evidence_reconciliation_rule_changed: true
+verification:
+  red: 2 ULP 用例在修复前按预期 INVALID
+  focused: 5 passed
+  runner_file: 129 passed in 62.54s
+  mac_benchmark_gate: 567 passed, 0 errors, 0 failures, 0 skipped in 344.02s
+  mac_junit_sha256: 39d2408d1c127a723c5cbe2043f25341f744ec4b594ee9dc397d7e5dfe8c26a9
+  linux_benchmark_gate: 565 passed, 2 skipped, 0 errors, 0 failures in 641.19s
+  linux_junit_sha256: 9de08c7f4ac26b9903bcffb2b95736249a59a0cc7e71aa190c18b49c77771883
+formal_r3:
+  mac_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-grid-parallel-r4
+  linux_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r20
+  installed_runner_sha256: 388b3b8afde22063f9624f64e4b21a0c2d45dca8fa9dc7dc0602daa2560ad79a
+  installed_config_sha256: 8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725
+  mac_script_sha256: 6ffd4f7401f35fc147cdf5ac46d2610a33d9c70e191ea563403f757912587f2c
+  mac_plist_sha256: a48a01ea663c5b90aec2420c3c432acf305f1c610e999dad2a7d765ce244b6e0
+  linux_script_sha256: 292d66ddf9738e8f9b94efecb4e9f4f7acf102f546a0af10d571250fa13e4312
+  mac_runs:
+    - mac-grounded-sam-test-production-postfix-r4-r3
+    - mac-grounded-sam-test-calibrated-postfix-r4-r3
+  linux_runs:
+    - linux-grounded-sam-test-raw-postfix-r4-r3
+    - linux-grounded-sam-test-production-postfix-r4-r3
+    - linux-grounded-sam-test-calibrated-postfix-r4-r3
+    - linux-yolo-test-raw-postfix-r4-r3
+    - linux-yolo-test-production-postfix-r4-r3
+    - linux-yolo-test-calibrated-postfix-r4-r3
+execution_order:
+  - 提交并同步 CP-067
+  - Mac r3 两组均完整 VALID 后才允许启动 Linux r3
+  - Linux 启动前必须确认无其他 GPU compute process；当前观察到 /data/work/microduck_rl/.venv/bin/python3 占用 13784 MiB，因此暂不启动 Linux
+  - 任一输出碰撞、manifest INVALID、CPU fallback 或冻结 SHA 不符，立即停止且不复用 run ID
+retention:
+  retained_runs:
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-mapping-fix-r3
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-grid-parallel-r4
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r20
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime-tmp/linux-grid-parallel-r20
+  archived_runs:
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-mac-grounded-sam-test-production-postfix-r4-r2-invalid
+  deletion_candidates: none
+decision: RUN_MAC_R3_AFTER_CP067_SYNC
+```
