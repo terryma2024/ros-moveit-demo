@@ -20,6 +20,16 @@
   `/data/work/so101-debug-*` path. Register the root in the task ledger, and at completion report
   retained runs, archived runs, and deletion candidates. Do not delete evidence without explicit
   user authorization.
+- On `ai-station` only, any pytest or benchmark run that creates fsync-heavy temporary fixtures must
+  use a unique, previously nonexistent scratch directory on the `/data` NVMe filesystem under the
+  task's registered durable evidence root, for example
+  `/data/work/so101-evidence/<task-family>/<run-id>/scratch/<test-run-id>/tmp`. Before starting
+  `pytest` or `colcon test`, set `TMPDIR`, `TMP`, and `TEMP` to that directory and use the exact test
+  Python executable to verify that `tempfile.gettempdir()` resolves inside it; fail closed if it
+  does not. Record the scratch path and elapsed time with the test evidence, classify the scratch
+  tree as a deletion candidate after readback, and do not delete it without explicit user
+  authorization. Do not apply this `/data` path rule on macOS or other hosts, and do not disable
+  `fsync`, filesystem journaling, or integrity checks or substitute `tmpfs` to make the test faster.
 - The `origin` remote is hosted on Gitee, not GitHub.
 - Do not use the `gh` CLI for remote push, pull request, or repository operations in this workspace.
 - Use standard Git commands for remote operations, for example `git push origin <branch>`.
