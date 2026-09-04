@@ -932,6 +932,104 @@ def test_grounded_low_floor_supports_single_token_generic_cup_profile(
     assert result.raw_candidates[0].grounding_text_score == pytest.approx(0.79, abs=1e-6)
 
 
+def test_grounded_low_floor_uses_prompt_token_score_when_decoded_label_is_noisy(
+    tmp_path: Path,
+) -> None:
+    """Keep the generic cup query when a low text floor expands its decoded phrase."""
+
+    class CupTokenizer:
+        def convert_ids_to_tokens(self, ids: list[int]) -> list[str]:
+            return [{101: "[CLS]", 12: "cup", 102: "[SEP]"}[value] for value in ids]
+
+    class NoisyCupProcessor(_GroundingProcessor):
+        tokenizer = CupTokenizer()
+
+        def __call__(self, **kwargs: object) -> dict[str, np.ndarray]:
+            self.calls.append(kwargs)
+            return {"input_ids": np.asarray([[101, 12, 102]], dtype=np.int64)}
+
+        def post_process_grounded_object_detection(
+            self, outputs: object, **kwargs: object
+        ) -> list[dict[str, object]]:
+            del outputs
+            self.postprocess_calls.append(kwargs)
+            return [
+                {
+                    "boxes": np.asarray([[3.0, 2.0, 13.0, 10.0]], dtype=np.float32),
+                    "scores": np.asarray([0.79], dtype=np.float32),
+                    "text_labels": ["[CLS] cup. [SEP]"],
+                    "query_indices": np.asarray([0], dtype=np.int64),
+                }
+            ]
+
+    class CupModel(_GroundingModel):
+        def __call__(self, **inputs: object) -> SimpleNamespace:
+            assert "input_ids" in inputs
+            self.call_count += 1
+            probabilities = np.asarray([0.1, 0.79, 0.1], dtype=np.float32)
+            logits = np.log(probabilities / (1.0 - probabilities)).reshape(1, 1, 3)
+            return SimpleNamespace(logits=logits)
+
+    result = _grounded_adapter(
+        tmp_path,
+        grounding_processor=NoisyCupProcessor(),
+        grounding_model=CupModel(),
+        target_class_id="cup",
+        prompt="cup.",
+    )[0].collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert len(result.raw_candidates) == 1
+    assert result.raw_candidates[0].grounding_box_score == pytest.approx(0.79)
+    assert result.raw_candidates[0].grounding_text_score == pytest.approx(0.79, abs=1e-6)
+
+
+def test_grounded_low_floor_rejects_query_below_prompt_token_floor(tmp_path: Path) -> None:
+    """Reject a box-only response whose mapped generic cup token score is below 0.01."""
+
+    class CupTokenizer:
+        def convert_ids_to_tokens(self, ids: list[int]) -> list[str]:
+            return [{101: "[CLS]", 12: "cup", 102: "[SEP]"}[value] for value in ids]
+
+    class CupProcessor(_GroundingProcessor):
+        tokenizer = CupTokenizer()
+
+        def __call__(self, **kwargs: object) -> dict[str, np.ndarray]:
+            self.calls.append(kwargs)
+            return {"input_ids": np.asarray([[101, 12, 102]], dtype=np.int64)}
+
+        def post_process_grounded_object_detection(
+            self, outputs: object, **kwargs: object
+        ) -> list[dict[str, object]]:
+            del outputs
+            self.postprocess_calls.append(kwargs)
+            return [
+                {
+                    "boxes": np.asarray([[3.0, 2.0, 13.0, 10.0]], dtype=np.float32),
+                    "scores": np.asarray([0.91], dtype=np.float32),
+                    "text_labels": ["cup"],
+                    "query_indices": np.asarray([0], dtype=np.int64),
+                }
+            ]
+
+    class WeakCupModel(_GroundingModel):
+        def __call__(self, **inputs: object) -> SimpleNamespace:
+            assert "input_ids" in inputs
+            self.call_count += 1
+            probabilities = np.asarray([0.91, 0.005, 0.1], dtype=np.float32)
+            logits = np.log(probabilities / (1.0 - probabilities)).reshape(1, 1, 3)
+            return SimpleNamespace(logits=logits)
+
+    result = _grounded_adapter(
+        tmp_path,
+        grounding_processor=CupProcessor(),
+        grounding_model=WeakCupModel(),
+        target_class_id="cup",
+        prompt="cup.",
+    )[0].collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert result.raw_candidates == ()
+
+
 def test_grounded_low_floor_retains_the_fixed_prompt_with_terminal_punctuation(
     tmp_path: Path,
 ) -> None:
