@@ -96,6 +96,37 @@ def enable_grounding_dino_gradient_checkpointing(
     return "so101-grounding-dino-layer-keyword-non-reentrant"
 
 
+def _validate_fresh_reload_statistics(
+    *,
+    device_type: str,
+    active_token_count: int,
+    active_logits_finite: bool,
+    logits_nan_count: int,
+    logits_posinf_count: int,
+    logits_neginf_count: int,
+    inactive_logits_neginf_count: int,
+    pred_boxes_finite: bool,
+) -> None:
+    counts = (
+        active_token_count,
+        logits_nan_count,
+        logits_posinf_count,
+        logits_neginf_count,
+        inactive_logits_neginf_count,
+    )
+    if (
+        device_type != "cuda"
+        or any(type(value) is not int or value < 0 for value in counts)
+        or active_token_count == 0
+        or active_logits_finite is not True
+        or logits_nan_count != 0
+        or logits_posinf_count != 0
+        or logits_neginf_count != inactive_logits_neginf_count
+        or pred_boxes_finite is not True
+    ):
+        raise RuntimeError("FRESH_RELOAD_INFERENCE_INVALID")
+
+
 def _validate_sha_mapping(root: Path, expected: dict[str, str]) -> None:
     if root.is_symlink() or not root.is_dir():
         raise RuntimeError(f"BASE_MODEL_INVALID: {root}")
@@ -885,16 +916,49 @@ def verify_checkpoint_in_fresh_process(
     inputs = {key: value.to(device) for key, value in encoded.items()}
     with torch.inference_mode():
         outputs = model(**inputs)
-    finite = bool(torch.isfinite(outputs.logits).all() and torch.isfinite(outputs.pred_boxes).all())
-    if not finite or outputs.logits.device.type != "cuda":
+    logits = outputs.logits
+    pred_boxes = outputs.pred_boxes
+    attention_mask = inputs["attention_mask"]
+    if (
+        logits.ndim != 3
+        or pred_boxes.ndim != 3
+        or attention_mask.ndim != 2
+        or attention_mask.shape[0] != logits.shape[0]
+        or attention_mask.shape[1] > logits.shape[2]
+    ):
         raise RuntimeError("FRESH_RELOAD_INFERENCE_INVALID")
+    token_mask = torch.zeros(
+        (logits.shape[0], logits.shape[2]), dtype=torch.bool, device=logits.device
+    )
+    token_mask[:, : attention_mask.shape[1]] = attention_mask.to(
+        device=logits.device, dtype=torch.bool
+    )
+    active_mask = token_mask.unsqueeze(1).expand_as(logits)
+    inactive_mask = ~active_mask
+    statistics = {
+        "device_type": (
+            logits.device.type
+            if pred_boxes.device.type == logits.device.type
+            else "device-mismatch"
+        ),
+        "active_token_count": int(attention_mask.sum().item()),
+        "active_logits_finite": bool(torch.isfinite(logits[active_mask]).all()),
+        "logits_nan_count": int(torch.isnan(logits).sum().item()),
+        "logits_posinf_count": int(torch.isposinf(logits).sum().item()),
+        "logits_neginf_count": int(torch.isneginf(logits).sum().item()),
+        "inactive_logits_neginf_count": int(torch.isneginf(logits[inactive_mask]).sum().item()),
+        "pred_boxes_finite": bool(torch.isfinite(pred_boxes).all()),
+    }
+    _validate_fresh_reload_statistics(**statistics)
     document = {
         "status": "VALID",
-        "device": str(outputs.logits.device),
+        "device": str(logits.device),
         "cpu_fallback": False,
         "input_token_count": int(inputs["input_ids"].numel()),
-        "query_count": int(outputs.pred_boxes.shape[1]),
-        "finite_outputs": finite,
+        "query_count": int(pred_boxes.shape[1]),
+        "finite_outputs": True,
+        "active_logits_finite": statistics["active_logits_finite"],
+        "masked_negative_infinity_count": statistics["inactive_logits_neginf_count"],
         "checkpoint_manifest_sha256": verified.manifest_sha256,
         "prompt": contract["data"]["prompt"],
     }
