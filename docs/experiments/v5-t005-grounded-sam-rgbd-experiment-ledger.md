@@ -5161,3 +5161,54 @@ retention:
     - Linux production r3 remains retained in place pending verified archival move
   deletion_candidates: none
 ```
+
+## Checkpoint CP-070 — ai-station tmux 接手计划
+
+```yaml
+checkpoint: CP-070
+status: HANDOFF_READY
+recorded_at: 2026-09-04T12:39:00+08:00
+source_commit_before_plan_update: f6f03b645c44b10a212f81047da304fc63a6c214
+source_branch: codex/v5-t004-yolo-seg-rgbd
+executor:
+  host: ai-station
+  tmux_session: codex
+  checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  mode: existing Codex session; no subagents
+evidence_roots:
+  temporary: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+  durable: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+completed_before_handoff:
+  mapping_fix_commit: f6f03b645c44b10a212f81047da304fc63a6c214
+  gitee_remote_sha_verified: true
+  ai_station_checkout_synced: true
+  coco100_durable_copy: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external/coco100-baseline-handoff-r1
+  coco100_manifest_entries: 419
+  coco100_manifest_verification: PASS
+linux_build_diagnostics:
+  r21_to_r25: environment and overlay provenance diagnostics; retained
+  r26:
+    build: PASS
+    packages_in_same_overlay: 7
+    ordinary_tests: {passed: 1158, failed: 9, total: 1167}
+    failure_boundary: regular Python install path is outside the Git worktree, so source commit provenance cannot resolve
+  r27:
+    build: STOPPED_INVALID
+    failure_boundary: lodepng FetchContent clone stalled for more than five minutes with no CPU or output
+    preserved_local_cache: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+    next_run_id: linux-build-r28
+handoff_plan: docs/superpowers/plans/2026-09-04-grounding-dino-tiny-cup-finetune-linux-first.md
+hard_gates:
+  - finish r28 symlink overlay and both Linux test suites
+  - rerun only old-model production mapping validation, not valid raw inference
+  - build immutable YOLO-polygon-to-DINO-box inventories
+  - select checkpoint only on synthetic val
+  - run synthetic test and COCO100 once after freeze
+  - pass COCO100 noninferiority and selection safety before PickPlace
+  - pass all four Linux presets before any Mac migration
+  - keep Microduck paused until this entire task completes and the user permits resume
+retention:
+  retained_runs: all r21-r27 diagnostics and CP-068/CP-069 evidence
+  archived_runs: none newly moved
+  deletion_candidates: none
+```
