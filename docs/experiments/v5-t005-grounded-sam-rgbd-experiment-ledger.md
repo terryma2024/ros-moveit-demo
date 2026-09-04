@@ -7356,3 +7356,117 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-090 — masked-logit fresh reload gate GREEN
+
+```yaml
+checkpoint: CP-090
+status: VALID
+recorded_at: 2026-09-04T19:19:24+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-089
+source_commit_before_checkpoint: 5f1c184e94a6a69bec0a915a97fefce5e44674cc
+fix:
+  production_file: src/so101_demo_py/src/training/grounding_dino_runtime.py
+  behavior:
+    - construct an explicit fixed-width token mask from the processor attention mask
+    - require every active prompt-token logit to be finite
+    - reject any NaN or positive infinity in all logit slots
+    - permit negative infinity only in inactive padding slots
+    - require all predicted boxes finite and both output tensors on CUDA
+    - record the accepted masked-negative-infinity count in fresh reload evidence
+tdd:
+  red:
+    run_id: stage-d-fresh-reload-mask-red-r112
+    status: VALID_RED
+    result: collection failed only because the new validation helper did not exist
+    exit_code: 2
+    elapsed_ms: 308
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-fresh-reload-mask-red-r112/tmp
+    junit_sha256: a7ee80024234d77b6fc29362d867820e7b9e608c34b3df2a2c52918893ece62e
+  green:
+    run_id: stage-d-fresh-reload-mask-green-r113
+    status: VALID
+    result: {passed: 8, failed: 0}
+    exit_code: 0
+    elapsed_ms: 270
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-fresh-reload-mask-green-r113/tmp
+    junit_sha256: 90a1f38b808939fb4d4637bd9a818e826ccd1f647155cc578d9237ecc56a26aa
+  related_gate:
+    run_id: stage-d-fresh-reload-mask-related-r114
+    status: VALID
+    result: {passed: 38, failed: 0}
+    exit_code: 0
+    elapsed_ms: 869
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-fresh-reload-mask-related-r114/tmp
+    junit_sha256: 98f221f410c03bba4d5322595b49140b618a6dd7f778b8bfa6dd42c94d35c259
+  invalid_static_wrapper:
+    run_id: stage-d-fresh-reload-mask-static-r115
+    status: INVALID
+    reason: a set-plus-e command group continued after the formatter check failed and its later successful command overwrote the exit status
+    checks_log_sha256: ed1aa74e2a241b24e1edcb956f26f4874b6f0a5b1d1bd89dba3ff804e94c0b00
+  valid_static_gate:
+    run_id: stage-d-fresh-reload-mask-static-r116
+    status: VALID
+    checks: [ruff check, ruff format --check, in-memory compile, git diff --check]
+    exit_code: 0
+    elapsed_ms: 111
+    checks_log_sha256: 568285fa027458297603203a1d4ba1c904342d14ea7c3a3be05e297569835399
+fresh_overlay:
+  invalid_run:
+    run_id: linux-build-stage-d-fresh-reload-mask-r117
+    status: INVALID
+    reason: all seven packages built successfully, but readback aborted because setup.bash referenced optional COLCON_TRACE under nounset
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-fresh-reload-mask-r117/tmp
+  valid_run:
+    run_id: linux-build-stage-d-fresh-reload-mask-r118
+    status: VALID
+    package_count: 7
+    symlink_install: true
+    exit_code: 0
+    elapsed_ms: 56543
+    source_commit: 5f1c184e94a6a69bec0a915a97fefce5e44674cc
+    lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+    lodepng_tracked_files: 26
+    lodepng_validation: clean Git state, all tracked files present, full fsck valid
+    lodepng_network_fetch: none
+    fetchcontent_fully_disconnected: true
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-fresh-reload-mask-r118/tmp
+    preflight_sha256: 4476f007c900fc6c98805c4935e85e764d98c0a4cd808a3a5032e27dd52a1d7e
+    overlay_readback_sha256: 21bd6e6d63ba0881dd7dea30df7492936c0f7a62c5fa0d01aaef4e78d0463383
+    installed_runtime_sha256: b348b96260475f747c12cc8a347a98183db9de147e081f19d2604b12a3e894e8
+ordinary_gate:
+  run_id: linux-test-stage-d-fresh-reload-mask-r119-ordinary
+  status: VALID
+  scope: src/so101_demo_py/test only
+  result: {passed: 1203, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14132
+  locked_python: /data/work/venvs/so101-grounded-sam/bin/python
+  actual_test_python: /usr/bin/python3
+  tempfile_preflight: both resolved exactly to the new run-specific NVMe scratch on /dev/nvme0n1p5
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-d-fresh-reload-mask-r119-ordinary/tmp
+  preflight_sha256: dc68d8d1c92e6a0ea7ee1c6764a282cc40b4923805887f83d1d53680f40a154f
+  exit_log_sha256: 057b55c91616dab594dda28845dfbdf83b64ae50b97609bda6b5af5e96ed2547
+  junit_sha256: b8fbbbc227e38795d2c8ff6fba6c2db672d868527300ece3d3b61016484fee2f
+benchmark_gate:
+  status: NOT_RUN_BY_CONTRACT
+  reason: this training fresh-reload correction changes no benchmark implementation, configuration, adapter, report, test, selected checkpoint, or threshold
+  preserved_valid_benchmarks:
+    r30_hdd_baseline: {result: 571 passed, 2 skipped, exit_code: 0, pytest_seconds: 3210.78}
+    latest: linux-test-stage-c-augmentation-r59-benchmark
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only the owned runtime, test, and checkpoint; Gitee-sync; build a new non-colliding gcfix3 image; then preflight smoke-r4 with a new output root
+retention:
+  retained_runs: [r112-r114 TDD evidence, r115 invalid static evidence, r116 valid static evidence, r117 invalid overlay, r118 valid overlay, r119 ordinary gate]
+  archived_runs: []
+  deletion_candidates:
+    - all r112-r119 registered NVMe scratch trees; do not delete without explicit user authorization
+```
