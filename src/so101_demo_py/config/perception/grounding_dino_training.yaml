@@ -1,0 +1,69 @@
+schema_version: 1
+model:
+  model_id: IDEA-Research/grounding-dino-tiny
+  revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  files:
+    .gitattributes: 11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361
+    README.md: cf46f74c7b6850f1d5cbe406028324d8798148726016d46a69a365b4a2d3e89f
+    added_tokens.json: 909e96cb32d92ce728a01bc99850cbba26196d74115c17ebeb019275412588f2
+    config.json: eec82c5ab66e16df12a9a212e68ac011779927c2536cf9078658e35d85f0c67a
+    model.safetensors: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+    preprocessor_config.json: 8454179ba95e2ad22947835aad7b45862a601fc0055ab88bf1ee70892d3aea60
+    pytorch_model.bin: f4d69c8403b9a569d90362c5fe8c6ea93dee4c8f08166df5b39e5eca8d227bbe
+    special_tokens_map.json: b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3
+    tokenizer.json: d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66
+    tokenizer_config.json: d40ab645b68211910b9170d22433d43186a6ec8ee6fd10ba170524b25bf4fb56
+    vocab.txt: 07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3
+data:
+  source_archive_sha256: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  generator_commit: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+  converter_commit: 2b94ff24c2507828c9681f73af80a6a8972acbcd
+  train_inventory_sha256: 376146b8b7d9c7adc8c9ff4e22d5302188fe33cb2bfc0765458521088247e9ea
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  train_sample_count: 1200
+  val_sample_count: 300
+  class_name: cup
+  prompt: cup.
+training:
+  seed: 20260904
+  optimizer: AdamW
+  learning_rate: 0.00001
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0001
+  scheduler: linear_decay
+  warmup_ratio: 0.10
+  epochs: 8
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 0.1
+  train_precision: bfloat16_autocast
+  validation_precision: float32
+  checkpoint_precision: float32
+  gradient_checkpointing: true
+  data_workers: 2
+  checkpoint_frequency_epochs: 1
+  deterministic_algorithms: true
+  cudnn_benchmark: false
+  cudnn_deterministic: true
+  cublas_workspace_config: ':4096:8'
+  disable_flash_sdp: true
+  disable_memory_efficient_sdp: true
+  augmentations: none
+smoke:
+  epochs: 1
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  samples_per_scenario: 1
+  expected_train_samples: 6
+  expected_val_samples: 6
+validation:
+  box_iou_threshold: 0.50
+  box_threshold_grid: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  text_threshold_grid: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  small_area_max_exclusive_px2: 1024.0
+  multi_cup_scenario: two_cups
+  threshold_rank_descending: [f1, recall, small_target_recall, multi_cup_recall, negative_fp, box_threshold, text_threshold]
+  checkpoint_rank_descending: [f1, recall, small_target_recall, multi_cup_recall, negative_fp, negative_epoch]
