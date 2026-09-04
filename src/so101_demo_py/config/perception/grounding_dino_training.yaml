@@ -46,6 +46,7 @@ training:
   data_workers: 2
   checkpoint_frequency_epochs: 1
   deterministic_algorithms: true
+  deterministic_warn_only: true
   cudnn_benchmark: false
   cudnn_deterministic: true
   cublas_workspace_config: ':4096:8'
