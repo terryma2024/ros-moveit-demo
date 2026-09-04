@@ -7470,3 +7470,50 @@ retention:
   deletion_candidates:
     - all r112-r119 registered NVMe scratch trees; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-091 — gcfix3 training image frozen
+
+```yaml
+checkpoint: CP-091
+status: VALID
+recorded_at: 2026-09-04T19:21:16+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-090
+implementation:
+  commit: 5acaf0067927c39e00243317c18ff7a0cc7abc58
+  gitee_remote_sha: 5acaf0067927c39e00243317c18ff7a0cc7abc58
+image_build:
+  run_id: stage-d-training-image-gcfix3-build-r120
+  status: VALID
+  source_commit: 5acaf0067927c39e00243317c18ff7a0cc7abc58
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix3
+  image_id: sha256:d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550
+  image_size_bytes: 5141826447
+  collision_preflight: absent
+  exit_code: 0
+  elapsed_ms: 12802
+  runtime_sha256: b348b96260475f747c12cc8a347a98183db9de147e081f19d2604b12a3e894e8
+  training_config_sha256: 67e37e917ba7240ab2fafc35a4f3aba5125aeb7094a66803d11d774290cc41c9
+  versions: {torch: 2.13.0+cu130, torchvision: 0.28.0+cu130, transformers: 4.56.2, cuda: '13.0'}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-training-image-gcfix3-build-r120/tmp
+  prior_gcfix2_image_preserved: sha256:bd706707f4648396c8afc3cfa095579ff3641931379df9c32b344204eed7cf12
+  evidence:
+    preflight_sha256: 5505115faa2992698b58a131c049e2d81d568762a913c259a866aa5b058b9085
+    stderr_sha256: 01c2ca435f93633eae072b1fd8a61899ad34c52b08f0286192ca5e5107719b98
+    exit_log_sha256: 5690db8bef1555ea49fb73bf4d2727da6209f116e9b7663c457c6f147c4d6af2
+    image_inspect_sha256: 30142281a602ab20813f89237c10ffb08b1fa239777d26af25457cd189360049
+    version_code_readback_sha256: 9a4f2a353ea204b327ab6c2245838a91e9b80d6167a62e37741b48d35c4836be
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync CP-091, then use this exact image and implementation commit for fresh smoke-r4 only after complete provenance, GPU, pause, and output-collision preflight
+retention:
+  retained_runs: [stage-d-training-image-gcfix3-build-r120]
+  archived_runs: []
+  deletion_candidates:
+    - stage-d-training-image-gcfix3-build-r120 scratch; do not delete without explicit user authorization
+```
