@@ -1,0 +1,47 @@
+mjcf_path: ../../assets/mujoco/v5_multi_object_scene.xml
+camera_name: task_camera
+image_width: 640
+image_height: 480
+split_counts:
+  train: 1200
+  val: 300
+  test: 300
+seed_starts:
+  train: 410000000
+  val: 420000000
+  test: 440000000
+scenario_quotas:
+  train:
+    no_cup: 200
+    one_cup_distractors: 200
+    two_cups: 200
+    cup_near_bottle: 200
+    small_far_cup: 200
+    partially_occluded_cup: 200
+  val:
+    no_cup: 50
+    one_cup_distractors: 50
+    two_cups: 50
+    cup_near_bottle: 50
+    small_far_cup: 50
+    partially_occluded_cup: 50
+  test:
+    no_cup: 50
+    one_cup_distractors: 50
+    two_cups: 50
+    cup_near_bottle: 50
+    small_far_cup: 50
+    partially_occluded_cup: 50
+scene_geometry:
+  ordinary_camera_jitter_m: [-0.015, 0.015]
+  cup_a_xy_jitter_m: [-0.045, 0.045]
+  cup_b_xy_jitter_m: [-0.025, 0.025]
+  bottle_xy_jitter_m: [-0.025, 0.025]
+  far_camera_retreat_m: [2.4, 3.0]
+  partial_cup_xy_jitter_m: [-0.025, 0.025]
+  partial_bottle_longitudinal_m: [0.055, 0.105]
+  partial_bottle_perpendicular_m: [-0.025, 0.025]
+  small_bbox_area_max_exclusive: 1024.0
+  visible_pixel_count_minimum: 64
+  partial_visible_fraction: [0.35, 0.8]
+  maximum_deterministic_attempts: 64
