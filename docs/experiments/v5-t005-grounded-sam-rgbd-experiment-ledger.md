@@ -8400,3 +8400,186 @@ retention:
   archived_runs: []
   deletion_candidates: [r160-r163 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-100 — first frozen candidate fails synthetic safety
+
+```yaml
+checkpoint: CP-100
+status: TERMINAL_FAILED_SAFETY_CANDIDATE_INELIGIBLE
+recorded_at: 2026-09-04T22:02:00+08:00
+stage: E_SYNTHETIC_TEST
+experiment_id: EXP-079-STAGE-E-SYNTHETIC-TEST-R1
+prior_checkpoint: CP-099
+source_commit: 3e0bea298a2f609de36fb1972aac1545e4fb01db
+preflight:
+  invalid_process_probe:
+    run_id: stage-e-synthetic-test-preflight-r164
+    status: INVALID_PREFLIGHT
+    cause: the probe command itself contained a matching microduck label; formal output remained absent and no test annotation was opened
+  valid_run:
+    run_id: stage-e-synthetic-test-preflight-r165
+    local_remote_sha_match: true
+    r27_tmux_pane: dead with exit code 2
+    nonancestor_microduck_or_training_matches: 0
+    gpu_compute_processes: 0
+    cuda: {available: true, device_count: 1, name: NVIDIA GeForce RTX 5080}
+    lock_file_sha256: 49cb6e11152447fa32c1f91442fe973206be2d526104f7cdcd1f911c889b5a17
+    lock_internal_sha256: c59a7fb341e239c643e4ca3d8aff95fcad8f7bf5d8521b1b388f40aa4647e91e
+    bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+    sealed_members_sha256: 7a0fa1bd72933a389cb2e734f2c5b50c46219f5fb4c6f481add2409127d7ba7d
+    source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+    source_archive_sha256: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+    source_mode: '0555'
+    seal_mode: '0444'
+    preflight_sha256: bb82e1c689427e95bd972668fa263f510979f34d1c09eed07aa7ea01154ded3f
+pre_access_attempt:
+  run_id: stage-e-synthetic-test-r166
+  status: INVALID_BEFORE_ACCESS
+  failure: OUTPUT_PARENT_INVALID because the registered evaluation parent did not yet exist
+  model_loaded: false
+  access_event_created: false
+  synthetic_test_annotation_access: none
+  formal_output_created: false
+formal_run:
+  run_id: stage-e-synthetic-test-r167
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/evaluation/synthetic-test-grounded-sam-cup-r3-epoch7-r1
+  status: FAILED_SAFETY
+  exit_code: 1
+  elapsed_ms: 257104
+  access_event_internal_sha256: bee0b3f815cd246d68dfae2c3108066ea8fe50897fde463747ee7247b509df2e
+  access_event_file_sha256: 74a90a4a4517acf1f08d451ee876834dd5ea088819a8b72175a6e7b9d0c3fb23
+  manifest_sha256: 19c6018a4172f1f34accdaf94b1f5272570a8acdccdcdb4920f9ca145c37d7ae
+  report_sha256: 53724b36fe9270221a562e72de919f98034a51add4548e5e5535665d03e2a3d7
+  record_inventory_sha256: b77890aeff39061fdbeebc4252357b69365bea0dddeabd7dce0a28c049b6fbce
+  denominator: {samples: 300, records: 300, missing: 0}
+  scenario_records: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+  runtime: {device: cuda, dtype: float32, fallback_count: 0, inference_errors: 0}
+  evidence: {raw_collections: 300, raw_masks: 6425, production_masks: 74, missing_production_masks: 0}
+  safety_failures: {mapping_errors: 74, calibrated_production_parity_errors: 74}
+  safety_passes: {missing_samples: 0, fallback_count: 0, inference_errors: 0, missing_production_masks: 0, no_cup_unique_count: 0}
+metrics:
+  totals: {tp: 71, fp: 3, fn: 229}
+  precision: 0.9594594594594594
+  recall: 0.23666666666666666
+  f1: 0.37967914438502676
+  image_hits: 71
+  decisions: {NOT_FOUND: 226, UNIQUE: 74}
+  mean_matched_mask_iou: 0.6175041448094151
+  area_recall:
+    small: {matched: 0, truth: 50, recall: 0.0}
+    medium: {matched: 48, truth: 75, recall: 0.64}
+    large: {matched: 23, truth: 175, recall: 0.13142857142857142}
+  scenario_tp_fn_fp:
+    no_cup: {tp: 0, fn: 0, fp: 0}
+    one_cup_distractors: {tp: 19, fn: 31, fp: 2}
+    two_cups: {tp: 4, fn: 96, fp: 0}
+    cup_near_bottle: {tp: 18, fn: 32, fp: 0}
+    small_far_cup: {tp: 0, fn: 50, fp: 0}
+    partially_occluded_cup: {tp: 30, fn: 20, fp: 1}
+  occlusion_recall: {matched: 30, truth: 50, recall: 0.6}
+  multi_cup: {tp: 4, fn: 96, fp: 0}
+mapping_diagnostics:
+  invalid_r168:
+    status: INVALID_DIAGNOSTIC
+    cause: collection.json metadata was incorrectly included in the RLE glob; empty output retained
+  valid_r169:
+    root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/synthetic-test-r167-mapping-readback-r169
+    production_candidates: 74
+    best_raw_mask_iou_at_least_0_98: 46
+    best_raw_mask_iou_below_0_98: 28
+    best_raw_mask_iou: {min: 0.5834670947030498, median: 0.9893173990188915, max: 0.9998424204223133}
+    mask_iou_readback_sha256: fadce5d85b4d254393661e9b1d14fb0b6d708ff0f5149d11f04b6a1d920ad322
+    conclusion: all 74 production-bearing records failed stable identity mapping; mask batching differences alone explain only 28 below-threshold cases, so the next carrier must persist and validate raw DINO identity metadata on val before another sealed candidate
+terminal_readback:
+  run_id: stage-e-synthetic-test-terminal-readback-r170
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/synthetic-test-r167-terminal-readback-r170
+  canonical_json_and_sha_readback: valid
+  record_count: 300
+  raw_collection_count: 300
+  raw_mask_count: 6425
+  production_mask_count: 74
+  total_files: 7102
+  total_directories: 379
+  bytes: 8246168
+  file_inventory_sha256: 95e02f29dd33d98c47bd0880c620f3014f901407521d8e1a39bb7392eeae6167
+  verification_sha256: 7478d488f201be081243bacf91ef1ee27ac06105d949303ef735dfdcb8aa71ab
+  post_freeze_readback_sha256: 47daf752cad38b2b162d1038b546750e7c95e64933c1ed29625c3628c1fe04d0
+  frozen_modes: {files: '0444', directories: '0555', writeable_files: 0, writeable_directories: 0}
+eligibility:
+  synthetic_safety: failed
+  coco100: forbidden and untouched
+  linux_pickplace: forbidden
+  mac_migration: forbidden
+  threshold_or_checkpoint_selection_from_test: forbidden
+  candidate_r1: permanently ineligible
+  rationale: mapping safety failed, and independent production metrics also show very low recall with zero small/far recall and four of 100 multi-cup instances detected
+microduck: paused
+next_action: start a new train/val-only full-pipeline calibration experiment; the r167 test remains immutable historical evidence and is not used to choose any threshold
+retention:
+  retained_runs: [r164-r170, immutable r167 terminal output, r169 and r170 durable diagnostics]
+  archived_runs: []
+  deletion_candidates: [r164-r170 registered scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E train/val-only full-pipeline calibration remediation
+
+```yaml
+experiment_id: EXP-079-STAGE-E-VAL-PIPELINE-CALIBRATION-R2
+status: PLANNED
+recorded_at: 2026-09-04T22:03:00+08:00
+prior_checkpoint: CP-100
+hypothesis: the detector-only epoch-7 validation selected DINO 0.25/0.25, but the inherited frozen-SAM quality threshold 0.90 was never validated on the new r3 domain; a full-pipeline raw run and offline SAM-threshold calibration on r3 val can identify an eligible configuration without using sealed test or COCO100
+prediction: one immutable CUDA float32 val raw run preserves DINO identity metadata and masks for every proposal; an offline preregistered SAM grid improves full-pipeline val F1/recall, including small/far and multi-cup recall, while maintaining zero no-cup UNIQUE selections; an actual production replay verifies zero mapping errors before any new candidate lock
+single_variable: select only the frozen-SAM quality threshold on r3 val; keep epoch-7 detector, cup. prompt, DINO box/text 0.25/0.25, duplicate IoU 0.85, minimum 64 pixels, maximum mask ratio 0.50, maximum 16 candidates, selector confidence 0.25, and frozen stateless SAM unchanged
+lifecycle: VAL_RAW_ONCE_OFFLINE_GRID_THEN_PRODUCTION_REPLAY
+data_boundaries:
+  train_val_only: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  sealed_test_r167: immutable historical result; no threshold selection, raw rerun, or result-based threshold adjustment
+  coco100: forbidden and untouched
+frozen_grid:
+  sam_quality: ['0.50', '0.60', '0.70', '0.75', '0.80', '0.85', '0.90']
+  dino_box_threshold: '0.25'
+  dino_text_threshold: '0.25'
+  selector_confidence: '0.25'
+  duplicate_iou: '0.85'
+  minimum_mask_pixels: 64
+  maximum_mask_area_ratio: '0.50'
+  maximum_candidates: 16
+selection_order:
+  - highest full-pipeline val F1
+  - highest recall
+  - highest small/far recall
+  - highest multi-cup recall
+  - zero no-cup UNIQUE selections
+  - higher SAM quality threshold
+  - fewer false positives
+mapping_remediation_contract:
+  - first TDD raw candidate metadata persistence and immutable replay; do not infer identity from filenames or masks alone
+  - raw and actual production must match one-to-one on generic cup class, exact DINO bbox and score, then production mask IoU at least 0.98
+  - investigate any val mapping error before creating another candidate lock
+  - actual production masks, raw masks, candidate metadata, CUDA/FP32/fallback provenance, and full denominator must be durable and hash-read back
+success_criteria:
+  - val raw evidence is complete, immutable, and not rerun
+  - offline grid is deterministic and selected strictly by the frozen order
+  - selected val result has zero fallback, inference, mapping, parity, missing-mask, and no-cup UNIQUE errors
+  - selected full-pipeline val metrics are checkpointed before defining any second frozen candidate or sealed-test protocol
+failure_criteria:
+  - no grid point satisfies selection safety, mapping cannot be proven on val, or full-pipeline val small/multi recall remains materially inadequate
+invalid_criteria:
+  - any sealed-test or COCO100 access, mutable/colliding output, CPU fallback, unregistered scratch, changed detector/SAM weights, changed prompt, or grid/selection-order change after val inference begins
+planned_outputs:
+  val_raw: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r1
+  calibration: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-calibration-r1
+  production_replay: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-production-r1
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: verify the exact existing r3 val inventory and source members without touching sealed test, then TDD a reusable metadata-complete raw evidence carrier and offline calibration selector
+retention:
+  retained_runs: [all CP-100 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
