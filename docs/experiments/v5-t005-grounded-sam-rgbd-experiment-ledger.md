@@ -9296,3 +9296,117 @@ retention:
   archived_runs: []
   deletion_candidates: [r227-r235 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-108 — low SAM-quality grid fails mask-qualified validation
+
+```yaml
+checkpoint: CP-108
+status: TERMINAL_FAILED_VAL_MASK_IOU
+recorded_at: 2026-09-04T23:48:01+08:00
+stage: E_SAM_QUALITY_LOW_GRID_VAL
+experiment_id: EXP-079-STAGE-E-SAM-QUALITY-LOW-GRID-R1
+prior_checkpoint: CP-107
+source_commit: 72d1d971a818ee8f9fd0ae22b62a02e38d93fac4
+gitee_remote_sha: 72d1d971a818ee8f9fd0ae22b62a02e38d93fac4
+preflight:
+  run_id: stage-e-mask-aware-calibration-preflight-r241
+  status: VALID
+  local_remote_sha_match: true
+  raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  raw_writable_files: 0
+  raw_writable_directories: 0
+  training_process_matches: 0
+  output_absent: true
+  rejected_runs:
+    - {run_id: r238, cause: pipefail treated the expected zero-match pgrep status as failure}
+    - {run_id: r239, cause: same zero-match pipeline status before receipt write}
+    - {run_id: r240, cause: the preflight shell matched its own command line containing the paused-workload name}
+offline_calibration:
+  run_id: stage-e-mask-aware-calibration-r242
+  status: VALID_COMPUTATION_FAILED_PERFORMANCE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-mask-aware-calibration-r3
+  immutable_raw: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  inference_rerun: false
+  grid: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  selected_sam_quality: '0.00'
+  selected: {tp: 5, fp: 249, fn: 295, precision: 0.01968503937007874, recall: 0.016666666666666666, f1: 0.018050541516245487, small_far_recall: 0.08, multi_cup_recall: 0.0, no_cup_unique_count: 0}
+  selected_mask_metrics: {bbox_match_count: 240, pass_count: 5, fail_count: 235, truth_iou_threshold: 0.80, minimum_iou: 0.01045596981518194, median_iou: 0.608024619706006, maximum_iou: 0.8673469387755102}
+  grid_f1: {'0.00': 0.018050541516245487, '0.10': 0.007380073800738007, '0.20': 0.00749063670411985, '0.30': 0.007575757575757576, '0.40': 0.0076045627376425855, '0.50': 0.007722007722007721}
+  elapsed_ms: 7490
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-mask-aware-calibration-r242/tmp
+  tempfile_preflight: exact resolved match
+  tree: {files: 2, directories: 1, bytes: 7128, inventory_sha256: 6e6acae183cb760ded7cca21af15e81ecb30042212221ac95ecc2b4193f4ffe3, file_mode: '0444', directory_mode: '0555'}
+  manifest_sha256: d213a8734ccddfbc8a6a45c0d0033f073f518f6e87c2f489e018c277ec6a7115
+  report_sha256: f3a6e393c288f874fc105a371223d6d0f1add9ffc4beaee86bb8233075f2d1af
+  run_log_sha256: 0746ef37023b3bb80c36d3215e70f64932afd48d7f11e7e3914c521c61a7e017
+  exit_log_sha256: 1aa90ec8b99b1f031d9a5f3d3b834dfaeab7400f6c4bf5f4362c507f662e7bf3
+full_readback:
+  run_id: stage-e-mask-aware-calibration-readback-r243
+  status: VALID_READ_ONLY
+  samples: 300
+  candidate_masks_hash_read: 9213
+  candidate_mask_readback_sha256: cc9a3c9029f5c1ad054c9b4592ee9b5de1f7a8d66202e72e067e79692a870e3f
+  truth_masks_read: 300
+  truth_mask_readback_sha256: c9e39935beb6684ba47497cec9c90d2e2bb5d345bcf8946ed005b70927973d3b
+  readback_sha256: c39ee4d339ce7af748056bb0eca6ba4226080fb22f411184c8bb287c228ea6fb
+  elapsed_ms: 13906
+decision:
+  result: failed_performance
+  reason: lowering the quality cutoff recovers bbox candidates but 235 of 240 selected bbox matches fail the frozen mask IoU 0.80 truth gate; threshold tuning cannot remediate mask geometry
+  candidate_lock_r2: forbidden
+  production_replay: forbidden
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  linux_pickplace: forbidden
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: perform one preregistered train/val-only failure-attribution replay over immutable r224 to separate missing boxes, ranking choice, and SAM mask geometry before choosing the next model remediation
+retention:
+  retained_runs: [r238-r243, immutable r224 raw, immutable mask-aware calibration-r3]
+  archived_runs: []
+  deletion_candidates: [r242-r243 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E train/val-only SAM mask failure attribution
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-MASK-FAILURE-ATTRIBUTION-R1
+status: PLANNED
+recorded_at: 2026-09-04T23:48:01+08:00
+prior_checkpoint: CP-108
+hypothesis: the low mask-qualified score is caused either by absent bbox-valid proposals, ranking a geometrically weaker proposal, or frozen SAM masks remaining below IoU 0.80 even for the best available bbox-valid proposal
+prediction: an immutable-r224 offline attribution report will identify one dominant failure bucket without any new inference or threshold selection
+frozen_inputs:
+  raw_run: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  dino_thresholds: {box: '0.25', text: '0.25'}
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+  sam_quality_threshold: '0.00'
+analysis_contract:
+  - preserve production-order greedy ranking and report its per-match bbox IoU, mask IoU, SAM quality, and scenario
+  - for each truth, separately compute the best mask IoU among bbox-valid candidates as an explicitly diagnostic oracle; never use the oracle to select a production threshold
+  - partition every truth into no bbox-valid proposal, selected mask pass, selected mask fail with oracle pass, and selected plus oracle mask fail
+  - persist per-scenario counts, fixed 0.10-wide bbox/mask IoU histograms, rank-versus-oracle gap, and deterministic hashes
+  - read and hash-verify every r224 candidate mask; run no DINO or SAM inference
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-mask-failure-attribution-r4
+decision_rule:
+  missing_bbox_dominant: continue Grounding DINO train/val model remediation on the authorized r3 dataset
+  oracle_pass_gap_dominant: remediate fixed production proposal ranking using train/val evidence under RED to GREEN
+  oracle_mask_fail_dominant: keep SAM frozen and remediate Grounding DINO box localization or authorized synthetic train/val coverage; do not relax the truth gate from COCO or sealed results
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push CP-108 plus this PLANNED experiment, then execute the offline attribution once
+retention:
+  retained_runs: [all CP-108 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
