@@ -6443,3 +6443,149 @@ retention:
   deletion_candidates:
     - all r62, r64, r65, and r66 registered NVMe scratch trees, including the r64 staged archive hardlink; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-080 — Stage D training implementation and runs preregistered
+
+```yaml
+checkpoint: CP-080
+status: PLANNED
+recorded_at: 2026-09-04T17:37:26+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-079
+planning_commit: cfcd75859a43fe982ad181b2644316cbc5c6b030
+approved_scope: fine-tune only Grounding DINO Tiny on frozen r3 synthetic train, select only on frozen r3 synthetic val, and keep SAM frozen and absent from training
+environment_preflight:
+  run_id: stage-d-environment-preflight-r68
+  status: VALID
+  host: ai-station direct execution, no SSH
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  python_version: 3.12.3
+  torch: 2.13.0+cu130
+  cuda_runtime: '13.0'
+  transformers: 4.56.2
+  Pillow: 12.3.0
+  scipy: 1.17.1
+  gpu: NVIDIA GeForce RTX 5080
+  gpu_uuid: GPU-0b7689c1-877a-b915-12aa-c9b9f86aa190
+  compute_capability: '12.0'
+  gpu_memory_mib: 16303
+  bf16_supported: true
+  competing_training_processes: 0
+  microduck: paused
+  data_filesystem: /dev/nvme0n1p5 mounted at /data
+  data_available_bytes: 293622063104
+base_model:
+  model_id: IDEA-Research/grounding-dino-tiny
+  revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  read_only_host_root: /data/work/so101-models/grounded-sam-v2-scipy-lock/grounding-dino-tiny
+  bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  detector_files_verified: 11
+  model_safetensors_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+  preprocessor_config_sha256: 8454179ba95e2ad22947835aad7b45862a601fc0055ab88bf1ee70892d3aea60
+  loading: local_files_only and use_safetensors; fail closed on revision or file SHA mismatch
+data:
+  source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  converted_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  train_inventory_sha256: 376146b8b7d9c7adc8c9ff4e22d5302188fe33cb2bfc0765458521088247e9ea
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  source_archive_sha256: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+  class_name: cup
+  prompt: cup.
+  training_container_mounts:
+    - train image directory read-only
+    - val image directory read-only
+    - train inventory file read-only
+    - val inventory file read-only
+    - detector base-model directory read-only
+  forbidden_mounts: [synthetic test images, synthetic test labels, synthetic test truth, test-sealed-members.json, COCO100, SAM model]
+implementation_contract:
+  entrypoint: train_grounding_dino
+  container_runner: scripts/grounding-dino-training-container.sh
+  dockerfile: src/so101_demo_py/docker/grounding-dino-training/Dockerfile
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2
+  local_dependency_layer_source_image_id: sha256:16d37de42970f68e46940c4a1f374c080a50c89063ec09ebd455dce25f6c3249
+  network_during_training: none
+  device: cuda:0 only; CPU fallback forbidden
+  output: new absent child below a durable output parent; no overwrite
+  artifacts:
+    - canonical resolved config and environment inventory
+    - verified data and base-model SHA inventory
+    - fsync-persisted per-epoch JSONL metrics with ETA, loss, TP, FP, FN, Precision, Recall, F1, small Recall, multi-cup Recall, and peak GPU memory
+    - atomic complete epoch checkpoint whose SHA manifest is published last
+    - optimizer, scheduler, epoch, and RNG state for verified resume into a new output root
+    - immutable frozen-model manifest selected mechanically from val
+  smoke_reload: selected smoke checkpoint must reload in a fresh Python process and complete inference on one val image
+training_contract:
+  seed: 20260904
+  all_model_parameters_trainable: true
+  optimizer: AdamW
+  learning_rate: 0.00001
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0001
+  scheduler: linear_decay
+  warmup_ratio: 0.10
+  epochs: 8
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  effective_batch_size: 4
+  max_grad_norm: 0.1
+  precision: {training: bfloat16_autocast, validation: float32, checkpoint_weights: float32}
+  gradient_checkpointing: true
+  image_preprocessing: exact base GroundingDinoProcessor resize, rescale, normalize, and pad configuration
+  augmentations: none beyond the frozen rendered dataset
+  data_workers: 2
+  deterministic:
+    cudnn_benchmark: false
+    cudnn_deterministic: true
+    deterministic_algorithms: true
+    cublas_workspace_config: ':4096:8'
+    flash_and_memory_efficient_sdp: disabled
+  checkpoint_frequency_epochs: 1
+smoke:
+  planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r1
+  collision_preflight: absent
+  epochs: 1
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  exact_subset: first deterministic sample from each of the six registered scenarios in train and val
+  counts: {train: 6, val: 6}
+  required_proofs: [nonempty cup text tokens, valid normalized center-format labels including an empty negative target, finite non-null loss, successful backward and optimizer step, complete checkpoint SHA, fresh-process reload and one-image CUDA inference]
+formal:
+  planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-formal-r1
+  collision_preflight: absent
+  counts: {train: 1200, val: 300}
+  launch: only after smoke is VALID; long run in a dedicated tmux window
+validation_and_selection:
+  box_iou_threshold: 0.50
+  box_threshold_grid: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  text_threshold_grid: [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  matching: per-image predictions sorted by descending score, each matched to the highest-IoU unmatched truth at IoU >= 0.50
+  small_truth: absolute box area below 1024 px2
+  multi_cup_truth: truth instances in registered two_cups images
+  threshold_rank_descending: [F1, Recall, small_target_Recall, multi_cup_Recall, negative_FP, box_threshold, text_threshold]
+  checkpoint_rank_descending: [F1, Recall, small_target_Recall, multi_cup_Recall, negative_FP, negative_epoch]
+  selection_source: synthetic val only
+  manual_image_selection: forbidden
+resume:
+  source: only a complete checkpoint with a valid SHA manifest, matching frozen config, base model, and dataset identities
+  destination: a new absent run root; never overwrite or continue a failed/completed directory
+  restored_state: [model, optimizer, scheduler, completed_epoch, Python RNG, NumPy RNG, Torch CPU RNG, Torch CUDA RNG]
+sealed_boundaries:
+  synthetic_test: remains sealed and inaccessible until checkpoint plus thresholds are frozen
+  coco100: zero access and not mounted; final frozen candidate non-regression once only
+  sam: frozen, stateless per frame, and not loaded during detector training
+  mac: no migration before Linux synthetic safety, COCO100, and four preset PickPlace gates pass
+tdd:
+  - first add failing tests for config/provenance validation, train-val-only path confinement, COCO box conversion, negative targets, rank ordering, checkpoint completeness/resume, CUDA fail-closed, container mounts, network isolation, and output collision
+  - implement minimal production code to turn RED to GREEN
+  - build a fresh seven-package symlink overlay, then run the ordinary gate
+  - run the explicit benchmark gate only if benchmark implementation, configuration, adapters, reports, tests, or a selected model input changes; do not rerun r30 or r59 merely for the training tool
+next_action: commit and Gitee-sync this PLANNED contract, then add the Stage D RED tests before implementation
+retention:
+  retained_runs: [r68 environment and base-model readback]
+  archived_runs: []
+  deletion_candidates: []
+```
