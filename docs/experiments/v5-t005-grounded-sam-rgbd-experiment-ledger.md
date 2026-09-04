@@ -8105,3 +8105,56 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-097 — frozen candidate lock complete
+
+```yaml
+checkpoint: CP-097
+status: VALID_FROZEN_CANDIDATE_LOCKED_SYNTHETIC_TEST_NOT_OPENED
+recorded_at: 2026-09-04T21:43:00+08:00
+stage: E_FROZEN_CANDIDATE
+experiment_id: EXP-079-STAGE-E-FROZEN-CANDIDATE-R1
+prior_checkpoint: CP-096
+run_id: stage-e-frozen-candidate-lock-r143
+creation_commit: 4fb0b9de758ee2cfc67981441e30c9d0900ec032
+gated_implementation_commit: ee787f058bd91110956bcee49f30eebfee849648
+lock:
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/frozen-cup-r3-epoch7-r1/threshold-lock.json
+  schema_version: so101-grounded-sam-frozen-candidate/v1
+  internal_lock_sha256: c59a7fb341e239c643e4ca3d8aff95fcad8f7bf5d8521b1b388f40aa4647e91e
+  file_sha256: 49cb6e11152447fa32c1f91442fe973206be2d526104f7cdcd1f911c889b5a17
+  bytes: 2691
+  file_mode: '0444'
+  directory_mode: '0555'
+  canonical_json: true
+bound_identity:
+  bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  detector_model_sha256: 700ef987164408d1ef5be1c93b69b895d1a1c3537d0fbbfcc55940c4901e924c
+  checkpoint_manifest_sha256: 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  sam_transformers_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  sam_source_bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  prompt_profile: {cup: cup.}
+  production_thresholds: {box: '0.25', text: '0.25', sam_quality: '0.90', selector_confidence: '0.25', duplicate_iou: '0.85', minimum_mask_pixels: 64, maximum_mask_area_ratio: '0.50', maximum_candidates: 16}
+  production_candidate_mask_iou_threshold: '0.98'
+  selector_contract: exactly one eligible generic-cup candidate; zero is TARGET_NOT_FOUND and multiple is TARGET_AMBIGUOUS
+  sam_contract: frozen and stateless per frame using only current-frame DINO boxes
+  synthetic_test_sealed_members_sha256: 7a0fa1bd72933a389cb2e734f2c5b50c46219f5fb4c6f481add2409127d7ba7d
+readback:
+  internal_digest: valid before and after freeze
+  external_model_and_seal_hashes: valid
+  output_collision: none
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-frozen-candidate-lock-r143/tmp
+  tempfile_preflight: exact resolved match
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+sealed_boundaries:
+  synthetic_test_annotation_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+conclusion: checkpoint, prompt, DINO/SAM thresholds, frozen SAM identity, mapping IoU, selector behavior, and exact sealed-test identity are immutable before test access
+next_action: preregister and TDD the one-time synthetic-test opening and raw-to-production evaluation carrier; only after its verifier and fail-closed gates are GREEN may test truth be opened exactly once
+retention:
+  retained_runs: [r143 lock and readbacks]
+  archived_runs: []
+  deletion_candidates: [r143 NVMe scratch tree; do not delete without explicit user authorization]
+```
