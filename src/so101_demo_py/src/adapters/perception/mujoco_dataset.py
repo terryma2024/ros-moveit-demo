@@ -5,14 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass
+from collections import Counter
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 import numpy as np
-
 from so101_demo.runtime.point_cloud_preview import write_png_rgb8
 from so101_demo.runtime.task_artifacts import atomic_json
 
@@ -22,6 +23,8 @@ class DatasetScenario(str, Enum):
     ONE_CUP_DISTRACTORS = "one_cup_distractors"
     TWO_CUPS = "two_cups"
     CUP_NEAR_BOTTLE = "cup_near_bottle"
+    SMALL_FAR_CUP = "small_far_cup"
+    PARTIALLY_OCCLUDED_CUP = "partially_occluded_cup"
 
     @property
     def cup_count(self) -> int:
@@ -30,6 +33,8 @@ class DatasetScenario(str, Enum):
             DatasetScenario.ONE_CUP_DISTRACTORS: 1,
             DatasetScenario.TWO_CUPS: 2,
             DatasetScenario.CUP_NEAR_BOTTLE: 1,
+            DatasetScenario.SMALL_FAR_CUP: 1,
+            DatasetScenario.PARTIALLY_OCCLUDED_CUP: 1,
         }[self]
 
     @classmethod
@@ -50,17 +55,31 @@ class RawRender:
     geom_ids: np.ndarray
     geom_body_ids: np.ndarray
     body_names: Mapping[int, str]
+    amodal_geom_ids: np.ndarray | None = None
+    occluder_body_name: str | None = None
+    occlusion_reference: str | None = None
 
     def __post_init__(self) -> None:
         rgb = np.array(self.rgb8, dtype=np.uint8, copy=True)
         geom_ids = np.array(self.geom_ids, dtype=np.int32, copy=True)
         geom_body_ids = np.array(self.geom_body_ids, dtype=np.int32, copy=True)
+        amodal_geom_ids = (
+            None
+            if self.amodal_geom_ids is None
+            else np.array(self.amodal_geom_ids, dtype=np.int32, copy=True)
+        )
         if rgb.ndim != 3 or rgb.shape[2] != 3:
             raise ValueError("RGB render must have HxWx3 dimensions")
         if geom_ids.ndim != 2 or geom_ids.shape != rgb.shape[:2]:
             raise ValueError("RGB and object-ID dimensions must match")
         if geom_body_ids.ndim != 1:
             raise ValueError("geom_body_ids must be one-dimensional")
+        if amodal_geom_ids is not None and amodal_geom_ids.shape != geom_ids.shape:
+            raise ValueError("visible and amodal object-ID dimensions must match")
+        if (amodal_geom_ids is None) != (self.occluder_body_name is None):
+            raise ValueError("amodal truth and occluder body name must be provided together")
+        if (amodal_geom_ids is None) != (self.occlusion_reference is None):
+            raise ValueError("amodal truth and occlusion reference must be provided together")
         normalized_names: dict[int, str] = {}
         for body_id, name in self.body_names.items():
             if int(body_id) < 0 or not isinstance(name, str) or not name:
@@ -69,9 +88,12 @@ class RawRender:
         rgb.setflags(write=False)
         geom_ids.setflags(write=False)
         geom_body_ids.setflags(write=False)
+        if amodal_geom_ids is not None:
+            amodal_geom_ids.setflags(write=False)
         object.__setattr__(self, "rgb8", rgb)
         object.__setattr__(self, "geom_ids", geom_ids)
         object.__setattr__(self, "geom_body_ids", geom_body_ids)
+        object.__setattr__(self, "amodal_geom_ids", amodal_geom_ids)
         object.__setattr__(self, "body_names", MappingProxyType(normalized_names))
 
 
@@ -81,21 +103,82 @@ class LabeledInstance:
     body_name: str
     mask: np.ndarray
     polygon_xy: tuple[tuple[float, float], ...]
+    amodal_mask: np.ndarray | None = None
+    paired_reference_mask: np.ndarray | None = None
+    occluder_body_name: str | None = None
+    occlusion_reference: str | None = None
 
     def __post_init__(self) -> None:
         mask = np.array(self.mask, dtype=bool, copy=True)
+        amodal_mask = (
+            None if self.amodal_mask is None else np.array(self.amodal_mask, dtype=bool, copy=True)
+        )
+        paired_reference_mask = (
+            None
+            if self.paired_reference_mask is None
+            else np.array(self.paired_reference_mask, dtype=bool, copy=True)
+        )
         if mask.ndim != 2 or not mask.any():
             raise ValueError("instance mask must be a non-empty 2D mask")
         if len(self.polygon_xy) < 3:
             raise ValueError("instance polygon must have at least three points")
-        if any(
-            not (0.0 <= coordinate <= 1.0)
-            for point in self.polygon_xy
-            for coordinate in point
-        ):
+        if any(not (0.0 <= coordinate <= 1.0) for point in self.polygon_xy for coordinate in point):
             raise ValueError("instance polygon coordinates must be normalized")
+        if amodal_mask is not None:
+            if amodal_mask.shape != mask.shape or not amodal_mask.any():
+                raise ValueError("amodal mask must be non-empty and match visible mask")
+            if paired_reference_mask is None or paired_reference_mask.shape != mask.shape:
+                raise ValueError("paired-reference mask must match measured masks")
+            if not np.array_equal(amodal_mask, mask | paired_reference_mask):
+                raise ValueError("amodal mask must equal visible union paired-reference mask")
+            if not self.occluder_body_name or not self.occlusion_reference:
+                raise ValueError("measured occlusion requires its occluder and reference")
+            amodal_mask.setflags(write=False)
+            paired_reference_mask.setflags(write=False)
+        elif self.occluder_body_name is not None or self.occlusion_reference is not None:
+            raise ValueError("unmeasured occlusion cannot declare an occluder or reference")
+        elif paired_reference_mask is not None:
+            raise ValueError("unmeasured occlusion cannot include a paired-reference mask")
         mask.setflags(write=False)
         object.__setattr__(self, "mask", mask)
+        object.__setattr__(self, "amodal_mask", amodal_mask)
+        object.__setattr__(self, "paired_reference_mask", paired_reference_mask)
+
+    @property
+    def visible_pixel_count(self) -> int:
+        return int(self.mask.sum())
+
+    @property
+    def occlusion_measured(self) -> bool:
+        return self.amodal_mask is not None
+
+    @property
+    def amodal_pixel_count(self) -> int | None:
+        return None if self.amodal_mask is None else int(self.amodal_mask.sum())
+
+    @property
+    def paired_reference_pixel_count(self) -> int | None:
+        if self.paired_reference_mask is None:
+            return None
+        return int(self.paired_reference_mask.sum())
+
+    @property
+    def occluded_pixel_count(self) -> int | None:
+        if self.amodal_mask is None:
+            return None
+        return int(self.amodal_mask.sum() - self.mask.sum())
+
+    @property
+    def visible_fraction(self) -> float | None:
+        if self.amodal_mask is None:
+            return None
+        return self.visible_pixel_count / int(self.amodal_mask.sum())
+
+    @property
+    def occlusion_state(self) -> str:
+        if self.amodal_mask is None:
+            return "unmeasured"
+        return "partial" if self.occluded_pixel_count else "none"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +199,59 @@ class LabeledSample:
 
 
 @dataclass(frozen=True, slots=True)
+class SceneGeometry:
+    ordinary_camera_jitter_m: tuple[float, float] = (-0.015, 0.015)
+    cup_a_xy_jitter_m: tuple[float, float] = (-0.045, 0.045)
+    cup_b_xy_jitter_m: tuple[float, float] = (-0.025, 0.025)
+    bottle_xy_jitter_m: tuple[float, float] = (-0.025, 0.025)
+    far_camera_retreat_m: tuple[float, float] = (2.4, 3.0)
+    partial_cup_xy_jitter_m: tuple[float, float] = (-0.025, 0.025)
+    partial_bottle_longitudinal_m: tuple[float, float] = (0.055, 0.105)
+    partial_bottle_perpendicular_m: tuple[float, float] = (-0.025, 0.025)
+    small_bbox_area_max_exclusive: float = 1024.0
+    visible_pixel_count_minimum: int = 64
+    partial_visible_fraction: tuple[float, float] = (0.35, 0.8)
+    maximum_deterministic_attempts: int = 64
+
+    def __post_init__(self) -> None:
+        range_names = (
+            "ordinary_camera_jitter_m",
+            "cup_a_xy_jitter_m",
+            "cup_b_xy_jitter_m",
+            "bottle_xy_jitter_m",
+            "far_camera_retreat_m",
+            "partial_cup_xy_jitter_m",
+            "partial_bottle_longitudinal_m",
+            "partial_bottle_perpendicular_m",
+            "partial_visible_fraction",
+        )
+        for name in range_names:
+            value = tuple(float(item) for item in getattr(self, name))
+            if len(value) != 2 or value[0] >= value[1]:
+                raise ValueError(f"{name} must be an increasing two-value range")
+            object.__setattr__(self, name, value)
+        if self.far_camera_retreat_m[0] <= 0.0:
+            raise ValueError("far camera retreat must be positive")
+        if not 0.0 < self.partial_visible_fraction[0] < self.partial_visible_fraction[1] < 1.0:
+            raise ValueError("partial visible fraction must be strictly within (0, 1)")
+        if self.small_bbox_area_max_exclusive <= 0.0:
+            raise ValueError("small bbox area threshold must be positive")
+        if self.visible_pixel_count_minimum <= 0:
+            raise ValueError("visible pixel minimum must be positive")
+        if self.maximum_deterministic_attempts <= 0:
+            raise ValueError("maximum deterministic attempts must be positive")
+
+    @classmethod
+    def from_mapping(cls, document: Mapping[str, Any] | None) -> "SceneGeometry":
+        if document is None:
+            return cls()
+        expected = set(asdict(cls()))
+        if set(document) != expected:
+            raise ValueError("scene_geometry must contain exactly the registered fields")
+        return cls(**dict(document))
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetConfig:
     mjcf_path: Path
     split_counts: Mapping[str, int]
@@ -124,6 +260,8 @@ class DatasetConfig:
     image_width: int = 640
     image_height: int = 480
     seed_starts: Mapping[str, int] | None = None
+    scenario_quotas: Mapping[str, Mapping[str, int]] | None = None
+    geometry: SceneGeometry = SceneGeometry()
 
     def __post_init__(self) -> None:
         path = Path(self.mjcf_path)
@@ -142,13 +280,73 @@ class DatasetConfig:
             raise ValueError("image dimensions must be positive")
         starts = dict(_SEED_STARTS if self.seed_starts is None else self.seed_starts)
         split_seed_plan(counts, starts)
+        quotas = _validated_scenario_quotas(counts, self.scenario_quotas)
         object.__setattr__(self, "mjcf_path", path)
         object.__setattr__(self, "split_counts", MappingProxyType(counts))
         object.__setattr__(self, "seed_starts", MappingProxyType(starts))
+        object.__setattr__(
+            self,
+            "scenario_quotas",
+            None
+            if quotas is None
+            else MappingProxyType(
+                {split: MappingProxyType(values) for split, values in quotas.items()}
+            ),
+        )
 
 
 _SEED_STARTS = {"train": 100000, "val": 200000, "test": 300000}
 _MAX_SEED = 999_999_999
+
+
+def _validated_scenario_quotas(
+    split_counts: Mapping[str, int],
+    scenario_quotas: Mapping[str, Mapping[str, int]] | None,
+) -> dict[str, dict[str, int]] | None:
+    if scenario_quotas is None:
+        return None
+    if set(scenario_quotas) != {"train", "val", "test"}:
+        raise ValueError("scenario quotas must contain train, val, and test")
+    known = {scenario.value for scenario in DatasetScenario}
+    result: dict[str, dict[str, int]] = {}
+    for split in ("train", "val", "test"):
+        raw = scenario_quotas[split]
+        if not isinstance(raw, Mapping) or not raw or not set(raw) <= known:
+            raise ValueError("scenario quotas contain an unknown or empty scenario mapping")
+        normalized = dict(raw)
+        if any(type(value) is not int or value <= 0 for value in normalized.values()):
+            raise ValueError("scenario quotas must be positive integers")
+        if sum(normalized.values()) != split_counts[split]:
+            raise ValueError("scenario quotas must sum to the configured split count")
+        result[split] = normalized
+    return result
+
+
+def scenario_plan(config: DatasetConfig) -> dict[str, tuple[DatasetScenario, ...]]:
+    """Return the deterministic quota-derived scenario schedule for every split."""
+
+    result: dict[str, tuple[DatasetScenario, ...]] = {}
+    for split in ("train", "val", "test"):
+        if config.scenario_quotas is None:
+            scenarios = tuple(DatasetScenario)
+            result[split] = tuple(
+                scenarios[index % len(scenarios)] for index in range(config.split_counts[split])
+            )
+            continue
+        remaining = dict(config.scenario_quotas[split])
+        scheduled: list[DatasetScenario] = []
+        while remaining:
+            for scenario in DatasetScenario:
+                count = remaining.get(scenario.value, 0)
+                if count <= 0:
+                    continue
+                scheduled.append(scenario)
+                if count == 1:
+                    del remaining[scenario.value]
+                else:
+                    remaining[scenario.value] = count - 1
+        result[split] = tuple(scheduled)
+    return result
 
 
 def split_seed_plan(
@@ -240,6 +438,11 @@ def load_dataset_config(
     if raw_seed_starts is not None and not isinstance(raw_seed_starts, dict):
         raise ValueError("seed_starts must be a mapping")
     split_seed_plan(raw_counts, raw_seed_starts)
+    raw_scenario_quotas = document.get("scenario_quotas")
+    if raw_scenario_quotas is not None and not isinstance(raw_scenario_quotas, dict):
+        raise ValueError("scenario_quotas must be a mapping")
+    if sample_limit is not None and raw_scenario_quotas is not None:
+        raise ValueError("sample_limit cannot alter preregistered scenario quotas")
     counts = limited_split_counts(raw_counts, sample_limit)
     return DatasetConfig(
         mjcf_path=mjcf,
@@ -249,6 +452,8 @@ def load_dataset_config(
         image_width=int(document["image_width"]),
         image_height=int(document["image_height"]),
         seed_starts=raw_seed_starts,
+        scenario_quotas=raw_scenario_quotas,
+        geometry=SceneGeometry.from_mapping(document.get("scene_geometry")),
     )
 
 
@@ -262,9 +467,9 @@ def _convex_hull(points: list[tuple[int, int]]) -> list[tuple[int, int]]:
         first: tuple[int, int],
         second: tuple[int, int],
     ) -> int:
-        return (first[0] - origin[0]) * (second[1] - origin[1]) - (
-            first[1] - origin[1]
-        ) * (second[0] - origin[0])
+        return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (
+            second[0] - origin[0]
+        )
 
     lower: list[tuple[int, int]] = []
     for point in unique:
@@ -298,6 +503,60 @@ def _polygon_from_mask(mask: np.ndarray) -> tuple[tuple[float, float], ...]:
     )
 
 
+def encode_binary_mask_rle(mask: np.ndarray) -> tuple[int, ...]:
+    """Encode a row-major binary mask as alternating zero/one run lengths."""
+
+    normalized = np.asarray(mask, dtype=bool)
+    if normalized.ndim != 2:
+        raise ValueError("binary mask must be two-dimensional")
+    flat = normalized.reshape(-1)
+    counts: list[int] = []
+    expected = False
+    run = 0
+    for value in flat:
+        bit = bool(value)
+        if bit == expected:
+            run += 1
+        else:
+            counts.append(run)
+            expected = bit
+            run = 1
+    counts.append(run)
+    return tuple(counts)
+
+
+def decode_binary_mask_rle(counts: Any, shape_hw: Any) -> np.ndarray:
+    """Decode the canonical row-major alternating binary-mask RLE."""
+
+    if (
+        not isinstance(shape_hw, (tuple, list))
+        or len(shape_hw) != 2
+        or any(type(value) is not int or value <= 0 for value in shape_hw)
+    ):
+        raise ValueError("mask shape must contain two positive integers")
+    if (
+        not isinstance(counts, (tuple, list))
+        or not counts
+        or any(type(value) is not int or value < 0 for value in counts)
+    ):
+        raise ValueError("mask RLE counts must be nonnegative integers")
+    total = int(shape_hw[0]) * int(shape_hw[1])
+    if sum(counts) != total:
+        raise ValueError("mask RLE counts do not match the declared shape")
+    flat = np.empty(total, dtype=bool)
+    offset = 0
+    value = False
+    for count in counts:
+        flat[offset : offset + count] = value
+        offset += count
+        value = not value
+    return flat.reshape((int(shape_hw[0]), int(shape_hw[1])))
+
+
+def _mask_sha256(mask: np.ndarray) -> str:
+    return hashlib.sha256(np.asarray(mask, dtype=np.uint8).tobytes(order="C")).hexdigest()
+
+
 def build_labeled_sample(
     render: RawRender,
     *,
@@ -309,6 +568,8 @@ def build_labeled_sample(
         DatasetScenario.ONE_CUP_DISTRACTORS: frozenset({"plastic_cup"}),
         DatasetScenario.TWO_CUPS: frozenset({"plastic_cup", "plastic_cup_b"}),
         DatasetScenario.CUP_NEAR_BOTTLE: frozenset({"plastic_cup"}),
+        DatasetScenario.SMALL_FAR_CUP: frozenset({"plastic_cup"}),
+        DatasetScenario.PARTIALLY_OCCLUDED_CUP: frozenset({"plastic_cup"}),
     }[scenario]
     visible_geom_ids = np.unique(render.geom_ids[render.geom_ids >= 0])
     if any(geom_id >= len(render.geom_body_ids) for geom_id in visible_geom_ids):
@@ -321,15 +582,85 @@ def build_labeled_sample(
         mask = np.isin(render.geom_ids, target_geoms)
         if not mask.any():
             continue
+        paired_reference_mask = (
+            None
+            if render.amodal_geom_ids is None
+            else np.isin(render.amodal_geom_ids, target_geoms)
+        )
+        amodal_mask = None if paired_reference_mask is None else mask | paired_reference_mask
         instances.append(
             LabeledInstance(
                 body_id=body_id,
                 body_name=body_name,
                 mask=mask,
                 polygon_xy=_polygon_from_mask(mask),
+                amodal_mask=amodal_mask,
+                paired_reference_mask=paired_reference_mask,
+                occluder_body_name=render.occluder_body_name,
+                occlusion_reference=render.occlusion_reference,
             )
         )
     return LabeledSample(seed, scenario, render.rgb8, tuple(instances))
+
+
+def _bbox_area_px2(instance: LabeledInstance) -> float:
+    height, width = instance.mask.shape
+    x_values = [point[0] for point in instance.polygon_xy]
+    y_values = [point[1] for point in instance.polygon_xy]
+    return (max(x_values) - min(x_values)) * width * (max(y_values) - min(y_values)) * height
+
+
+def _sample_meets_acceptance(sample: LabeledSample, geometry: SceneGeometry) -> bool:
+    if sample.scenario == DatasetScenario.SMALL_FAR_CUP:
+        if len(sample.instances) != 1:
+            return False
+        instance = sample.instances[0]
+        return (
+            instance.visible_pixel_count >= geometry.visible_pixel_count_minimum
+            and 0.0 < _bbox_area_px2(instance) < geometry.small_bbox_area_max_exclusive
+        )
+    if sample.scenario == DatasetScenario.PARTIALLY_OCCLUDED_CUP:
+        if len(sample.instances) != 1:
+            return False
+        instance = sample.instances[0]
+        fraction = instance.visible_fraction
+        return (
+            instance.occlusion_measured
+            and instance.occlusion_state == "partial"
+            and instance.visible_pixel_count >= geometry.visible_pixel_count_minimum
+            and instance.occluded_pixel_count is not None
+            and instance.occluded_pixel_count >= 1
+            and fraction is not None
+            and geometry.partial_visible_fraction[0]
+            <= fraction
+            <= geometry.partial_visible_fraction[1]
+        )
+    return True
+
+
+def select_bounded_render(
+    seed: int,
+    scenario: DatasetScenario,
+    render_attempt: Callable[[np.random.Generator], RawRender],
+    geometry: SceneGeometry,
+) -> RawRender:
+    """Select the first deterministic render satisfying an augmented scenario gate."""
+
+    bounded = scenario in {
+        DatasetScenario.SMALL_FAR_CUP,
+        DatasetScenario.PARTIALLY_OCCLUDED_CUP,
+    }
+    attempts = geometry.maximum_deterministic_attempts if bounded else 1
+    scenario_ordinal = tuple(DatasetScenario).index(scenario)
+    for attempt_index in range(attempts):
+        random = np.random.default_rng(
+            np.random.SeedSequence([seed, scenario_ordinal, attempt_index])
+        )
+        render = render_attempt(random)
+        sample = build_labeled_sample(render, seed=seed, scenario=scenario)
+        if _sample_meets_acceptance(sample, geometry):
+            return render
+    raise RuntimeError(f"{scenario.value} failed {attempts} deterministic attempts for seed {seed}")
 
 
 class DatasetRenderer(Protocol):
@@ -350,12 +681,70 @@ def _label_text(sample: LabeledSample) -> str:
     rows = []
     for instance in sample.instances:
         coordinates = " ".join(
-            f"{coordinate:.9f}"
-            for point in instance.polygon_xy
-            for coordinate in point
+            f"{coordinate:.9f}" for point in instance.polygon_xy for coordinate in point
         )
         rows.append(f"0 {coordinates}")
     return "" if not rows else "\n".join(rows) + "\n"
+
+
+def _truth_instance_document(instance: LabeledInstance) -> dict[str, Any]:
+    document: dict[str, Any] = {
+        "body_id": instance.body_id,
+        "body_name": instance.body_name,
+        "visible_pixel_count": instance.visible_pixel_count,
+        "polygon_xy": [list(point) for point in instance.polygon_xy],
+        "occlusion_measured": instance.occlusion_measured,
+        "occlusion_state": instance.occlusion_state,
+    }
+    if not instance.occlusion_measured:
+        return document
+    assert instance.amodal_mask is not None
+    assert instance.paired_reference_mask is not None
+    assert instance.amodal_pixel_count is not None
+    assert instance.paired_reference_pixel_count is not None
+    assert instance.occluded_pixel_count is not None
+    assert instance.visible_fraction is not None
+    document.update(
+        {
+            "mask_shape_hw": list(instance.mask.shape),
+            "visible_mask_rle_counts": list(encode_binary_mask_rle(instance.mask)),
+            "visible_mask_sha256": _mask_sha256(instance.mask),
+            "paired_reference_pixel_count": instance.paired_reference_pixel_count,
+            "paired_reference_mask_rle_counts": list(
+                encode_binary_mask_rle(instance.paired_reference_mask)
+            ),
+            "paired_reference_mask_sha256": _mask_sha256(instance.paired_reference_mask),
+            "amodal_pixel_count": instance.amodal_pixel_count,
+            "amodal_mask_rle_counts": list(encode_binary_mask_rle(instance.amodal_mask)),
+            "amodal_mask_sha256": _mask_sha256(instance.amodal_mask),
+            "occluded_pixel_count": instance.occluded_pixel_count,
+            "visible_fraction": instance.visible_fraction,
+            "occluder_body_name": instance.occluder_body_name,
+            "occlusion_reference": instance.occlusion_reference,
+        }
+    )
+    return document
+
+
+def _resolved_scenario_quotas(
+    schedules: Mapping[str, tuple[DatasetScenario, ...]],
+) -> dict[str, dict[str, int]]:
+    return {
+        split: dict(
+            sorted(
+                Counter(scenario.value for scenario in schedule).items(),
+                key=lambda item: tuple(DatasetScenario).index(DatasetScenario(item[0])),
+            )
+        )
+        for split, schedule in schedules.items()
+    }
+
+
+def _scene_geometry_document(geometry: SceneGeometry) -> dict[str, Any]:
+    return {
+        name: list(value) if isinstance(value, tuple) else value
+        for name, value in asdict(geometry).items()
+    }
 
 
 def generate_dataset(
@@ -371,14 +760,13 @@ def generate_dataset(
     owned_renderer = renderer is None
     active_renderer = renderer or MuJoCoDatasetRenderer(config)
     seeds = split_seed_plan(config.split_counts, config.seed_starts)
-    scenarios = tuple(DatasetScenario)
+    schedules = scenario_plan(config)
     samples: list[dict[str, Any]] = []
     artifacts: list[str] = []
     class_instance_total = 0
     try:
         for split in ("train", "val", "test"):
-            for index, seed in enumerate(seeds[split]):
-                scenario = scenarios[index % len(scenarios)]
+            for seed, scenario in zip(seeds[split], schedules[split], strict=True):
                 sample = build_labeled_sample(
                     active_renderer.render(seed, scenario),
                     seed=seed,
@@ -400,15 +788,7 @@ def generate_dataset(
                         "scenario": scenario.value,
                         "configured_cup_count": scenario.cup_count,
                         "visible_instance_count": len(sample.instances),
-                        "instances": [
-                            {
-                                "body_id": item.body_id,
-                                "body_name": item.body_name,
-                                "visible_pixel_count": int(item.mask.sum()),
-                                "polygon_xy": [list(point) for point in item.polygon_xy],
-                            }
-                            for item in sample.instances
-                        ],
+                        "instances": [_truth_instance_document(item) for item in sample.instances],
                     },
                 )
                 relative_paths = (image_relative, label_relative, truth_relative)
@@ -437,7 +817,7 @@ def generate_dataset(
         _exclusive_text(root / "dataset.yaml", dataset_yaml)
         artifacts.append("dataset.yaml")
         manifest: dict[str, Any] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "generator_commit": config.generator_commit,
             "mjcf_sha256": hashlib.sha256(config.mjcf_path.read_bytes()).hexdigest(),
             "camera_name": config.camera_name,
@@ -450,8 +830,15 @@ def generate_dataset(
             "seed_starts": {
                 split: config.seed_starts[split] for split in sorted(config.seed_starts)
             },
-            "seed_ranges": {
-                split: [values[0], values[-1]] for split, values in seeds.items()
+            "seed_ranges": {split: [values[0], values[-1]] for split, values in seeds.items()},
+            "scenario_quotas": _resolved_scenario_quotas(schedules),
+            "scene_geometry": _scene_geometry_document(config.geometry),
+            "truth_contract": {
+                "mask_order": "row_major",
+                "mask_rle": "alternating_zero_one_counts_starting_with_zero",
+                "mask_sha256": "sha256_uint8_row_major_bytes",
+                "partial_occlusion_reference": "visible_union_paired_segmentation_with_declared_occluder_hidden",
+                "canonical_amodal": "visible_bitwise_union_paired_reference",
             },
             "class_instance_totals": {"plastic_cup": class_instance_total},
             "samples": samples,
@@ -481,9 +868,10 @@ class MuJoCoDatasetRenderer:
             height=config.image_height,
             width=config.image_width,
         )
-        self._base_camera_position = np.array(
-            self._model.cam_pos[self._camera_id()], copy=True
-        )
+        self._base_camera_position = np.array(self._model.cam_pos[self._camera_id()], copy=True)
+        camera_rotation = np.asarray(self._model.cam_mat0[self._camera_id()]).reshape(3, 3)
+        self._camera_local_positive_z = np.array(camera_rotation[:, 2], copy=True)
+        self._camera_local_positive_z /= np.linalg.norm(self._camera_local_positive_z)
 
     def _camera_id(self) -> int:
         identifier = self._mujoco.mj_name2id(
@@ -509,18 +897,40 @@ class MuJoCoDatasetRenderer:
         dof_address = int(self._model.jnt_dofadr[identifier])
         self._data.qvel[dof_address : dof_address + 6] = 0.0
 
-    def _prepare(self, seed: int, scenario: DatasetScenario) -> None:
-        random = np.random.default_rng(seed)
+    def _prepare(self, random: np.random.Generator, scenario: DatasetScenario) -> None:
         self._mujoco.mj_resetData(self._model, self._data)
+        geometry = self._config.geometry
         hidden = np.array((2.0, 2.0, 2.0))
         cup_a = np.array((0.02, -0.28, 0.165))
-        cup_a[:2] += random.uniform(-0.045, 0.045, size=2)
+        cup_a_jitter = (
+            geometry.partial_cup_xy_jitter_m
+            if scenario == DatasetScenario.PARTIALLY_OCCLUDED_CUP
+            else geometry.cup_a_xy_jitter_m
+        )
+        cup_a[:2] += random.uniform(*cup_a_jitter, size=2)
         cup_b = np.array((-0.09, -0.31, 0.165))
-        cup_b[:2] += random.uniform(-0.025, 0.025, size=2)
+        cup_b[:2] += random.uniform(*geometry.cup_b_xy_jitter_m, size=2)
         bottle = np.array((0.11, -0.22, 0.19))
-        bottle[:2] += random.uniform(-0.025, 0.025, size=2)
+        bottle[:2] += random.uniform(*geometry.bottle_xy_jitter_m, size=2)
         if scenario == DatasetScenario.CUP_NEAR_BOTTLE:
             bottle[:2] = cup_a[:2] + np.array((0.075, 0.0))
+        camera_id = self._camera_id()
+        camera_position = self._base_camera_position + random.uniform(
+            *geometry.ordinary_camera_jitter_m, size=3
+        )
+        if scenario == DatasetScenario.SMALL_FAR_CUP:
+            camera_position += self._camera_local_positive_z * random.uniform(
+                *geometry.far_camera_retreat_m
+            )
+        if scenario == DatasetScenario.PARTIALLY_OCCLUDED_CUP:
+            toward_camera = camera_position[:2] - cup_a[:2]
+            toward_camera /= np.linalg.norm(toward_camera)
+            perpendicular = np.array((-toward_camera[1], toward_camera[0]))
+            bottle[:2] = (
+                cup_a[:2]
+                + toward_camera * random.uniform(*geometry.partial_bottle_longitudinal_m)
+                + perpendicular * random.uniform(*geometry.partial_bottle_perpendicular_m)
+            )
         self._set_free_joint_position(
             "cup_free_joint", cup_a if scenario.cup_count >= 1 else hidden
         )
@@ -528,10 +938,7 @@ class MuJoCoDatasetRenderer:
             "cup_b_free_joint", cup_b if scenario.cup_count == 2 else hidden
         )
         self._set_free_joint_position("bottle_free_joint", bottle)
-        camera_id = self._camera_id()
-        self._model.cam_pos[camera_id] = self._base_camera_position + random.uniform(
-            -0.015, 0.015, size=3
-        )
+        self._model.cam_pos[camera_id] = camera_position
         for material_name in ("cup_a_material", "cup_b_material", "bottle_material"):
             material_id = self._mujoco.mj_name2id(
                 self._model,
@@ -555,15 +962,28 @@ class MuJoCoDatasetRenderer:
             result[second_is_type] = segmentation[:, :, 0][second_is_type]
         return result
 
-    def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
-        self._prepare(seed, scenario)
-        self._renderer.disable_segmentation_rendering()
-        self._renderer.update_scene(self._data, camera=self._config.camera_name)
-        rgb = np.array(self._renderer.render(), dtype=np.uint8, copy=True)
+    def _segmentation(self) -> np.ndarray:
         self._renderer.enable_segmentation_rendering()
         self._renderer.update_scene(self._data, camera=self._config.camera_name)
         segmentation = np.array(self._renderer.render(), copy=True)
         self._renderer.disable_segmentation_rendering()
+        return self._geom_ids(segmentation)
+
+    def _render_attempt(self, random: np.random.Generator, scenario: DatasetScenario) -> RawRender:
+        self._prepare(random, scenario)
+        self._renderer.disable_segmentation_rendering()
+        self._renderer.update_scene(self._data, camera=self._config.camera_name)
+        rgb = np.array(self._renderer.render(), dtype=np.uint8, copy=True)
+        visible_geom_ids = self._segmentation()
+        amodal_geom_ids = None
+        occluder_body_name = None
+        occlusion_reference = None
+        if scenario == DatasetScenario.PARTIALLY_OCCLUDED_CUP:
+            self._set_free_joint_position("bottle_free_joint", np.array((2.0, 2.0, 2.0)))
+            self._mujoco.mj_forward(self._model, self._data)
+            amodal_geom_ids = self._segmentation()
+            occluder_body_name = "orange_bottle"
+            occlusion_reference = "visible_union_paired_segmentation_with_declared_occluder_hidden"
         body_names = {
             body_id: name
             for body_id in range(self._model.nbody)
@@ -576,9 +996,20 @@ class MuJoCoDatasetRenderer:
         }
         return RawRender(
             rgb8=rgb,
-            geom_ids=self._geom_ids(segmentation),
+            geom_ids=visible_geom_ids,
             geom_body_ids=np.asarray(self._model.geom_bodyid),
             body_names=body_names,
+            amodal_geom_ids=amodal_geom_ids,
+            occluder_body_name=occluder_body_name,
+            occlusion_reference=occlusion_reference,
+        )
+
+    def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
+        return select_bounded_render(
+            seed,
+            scenario,
+            lambda random: self._render_attempt(random, scenario),
+            self._config.geometry,
         )
 
     def close(self) -> None:
