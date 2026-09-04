@@ -62,7 +62,8 @@ def test_detection_frame_rejects_invalid_source(
 
 def test_detection_query_accepts_only_canonical_class() -> None:
     assert DetectionQuery("plastic_cup").class_id == "plastic_cup"
-    for invalid in ("", "cup", "Plastic_Cup"):
+    assert DetectionQuery("cup").class_id == "cup"
+    for invalid in ("", "coffee_mug", "Plastic_Cup"):
         with pytest.raises(ValueError, match="class_id"):
             DetectionQuery(invalid)
 

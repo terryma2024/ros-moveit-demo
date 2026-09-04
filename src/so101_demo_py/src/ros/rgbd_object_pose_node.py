@@ -650,7 +650,9 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 frame=frame,
                 camera_info=camera_info,
                 depth_message=depth_message,
-                query=DetectionQuery("plastic_cup"),
+                query=DetectionQuery(
+                    getattr(detector, "target_class_id", "plastic_cup")
+                ),
                 confidence_threshold=options.confidence_threshold,
                 run_directory=options.evidence_root,
                 cold_start_latency_ms=(

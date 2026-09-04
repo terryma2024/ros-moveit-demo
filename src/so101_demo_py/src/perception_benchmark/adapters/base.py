@@ -454,7 +454,7 @@ def run_production_detector_port(
 ) -> ProductionObservation:
     """Run the actual object-detector port followed by the actual TargetSelector."""
 
-    query = DetectionQuery("plastic_cup")
+    query = DetectionQuery(getattr(detector, "target_class_id", "plastic_cup"))
     try:
         batch = detector.detect(frame, query)
         if not isinstance(batch, DetectionBatch):
