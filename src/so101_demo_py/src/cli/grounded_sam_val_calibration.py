@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import stat
 from pathlib import Path
 
@@ -16,8 +15,10 @@ from so101_demo.training.grounded_sam_val_calibration import (
     collect_val_raw,
     load_locked_val_dataset,
     load_verified_raw_records,
+    select_mask_aware_sam_quality_threshold,
     select_sam_quality_threshold,
     write_calibration_evidence,
+    write_mask_aware_calibration_evidence,
 )
 
 
@@ -138,6 +139,42 @@ def _calibrate(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _calibrate_mask_aware(arguments: argparse.Namespace) -> dict[str, object]:
+    dataset = _dataset(arguments)
+    raw_root = arguments.raw_run_root
+    if stat.S_IMODE(raw_root.stat().st_mode) & 0o222:
+        raise ValCalibrationError("RAW_RUN_MUTABLE", str(raw_root))
+    raw_candidates = load_verified_raw_records(
+        raw_root,
+        dataset=dataset,
+        expected_model_manifest_sha256=arguments.model_manifest_sha256,
+        expected_source_commit=arguments.raw_source_commit,
+    )
+    raw_manifest_sha = _sha256_file(raw_root / "manifest.json")
+    selected, points = select_mask_aware_sam_quality_threshold(
+        dataset=dataset,
+        raw_candidates_by_sample=raw_candidates,
+        raw_evidence_root=raw_root,
+    )
+    report = write_mask_aware_calibration_evidence(
+        output_root=arguments.output_root,
+        dataset=dataset,
+        raw_run_root=raw_root,
+        raw_manifest_sha256=raw_manifest_sha,
+        source_commit=arguments.source_commit,
+        selected=selected,
+        points=points,
+    )
+    frozen = _freeze_tree(arguments.output_root)
+    return {
+        "status": "VALID",
+        "output_root": str(arguments.output_root),
+        "selected_sam_quality": report["selected_sam_quality"],
+        "selected": report["selected"],
+        "tree": frozen,
+    }
+
+
 def _common_dataset(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--val-inventory", required=True, type=_absolute_path)
     parser.add_argument("--val-inventory-sha256", required=True)
@@ -160,9 +197,19 @@ def main(arguments: list[str] | None = None) -> int:
     calibrate.add_argument("--raw-run-root", required=True, type=_absolute_path)
     calibrate.add_argument("--raw-source-commit", required=True)
     calibrate.add_argument("--model-manifest-sha256", required=True)
+    mask_aware = subparsers.add_parser("calibrate-mask-aware")
+    _common_dataset(mask_aware)
+    mask_aware.add_argument("--raw-run-root", required=True, type=_absolute_path)
+    mask_aware.add_argument("--raw-source-commit", required=True)
+    mask_aware.add_argument("--model-manifest-sha256", required=True)
     parsed = parser.parse_args(arguments)
     try:
-        result = _collect(parsed) if parsed.command == "collect" else _calibrate(parsed)
+        if parsed.command == "collect":
+            result = _collect(parsed)
+        elif parsed.command == "calibrate":
+            result = _calibrate(parsed)
+        else:
+            result = _calibrate_mask_aware(parsed)
     except (OSError, RuntimeError, ValueError) as error:
         print(
             json.dumps(
