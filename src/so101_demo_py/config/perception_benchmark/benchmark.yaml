@@ -39,6 +39,7 @@ models:
       minimum_mask_pixels: 64
       maximum_mask_area_ratio: 0.50
       maximum_candidates: 16
+      candidate_mapping_mask_iou_threshold: 0.98
     low_floor:
       box_threshold: 0.01
       text_threshold: 0.01

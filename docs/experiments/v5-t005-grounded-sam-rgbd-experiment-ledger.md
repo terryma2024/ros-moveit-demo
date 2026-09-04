@@ -5000,3 +5000,164 @@ retention:
   deletion_candidates: none
 decision: RUN_MAC_R3_AFTER_CP067_SYNC
 ```
+
+## Checkpoint CP-068 — 通用 cup 微调与 Linux-first 路线
+
+```yaml
+checkpoint: CP-068
+status: PLANNED
+recorded_at: 2026-09-04T12:00:00+08:00
+source_commit: 32d90aebbb66896179911c22ad9d18c4d22b16de
+source_branch: codex/v5-t004-yolo-seg-rgbd
+working_tree:
+  state: DIRTY_EXPECTED
+  owned_changes:
+    - src/so101_demo_py/benchmark_test/test_perception_benchmark_runner.py
+    - src/so101_demo_py/src/perception_benchmark/runner.py
+    - docs/superpowers/specs/2026-09-04-grounding-dino-tiny-cup-finetune-linux-first-design.md
+    - docs/superpowers/plans/2026-09-04-grounding-dino-tiny-cup-finetune-linux-first.md
+    - docs/experiments/v5-t005-grounded-sam-rgbd-experiment-ledger.md
+  preserved_untracked: existing build/install/log directories remain untouched
+evidence_roots:
+  temporary: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079
+  durable: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+approved_strategy:
+  detector_target: cup
+  prompt: cup.
+  material_classification: disabled
+  segmenter: facebook/sam2.1-hiera-tiny
+  sam_training: frozen
+  sam_mode: stateless_per_frame
+  mapping_identity: [normalized_class, bbox_xyxy, grounding_box_score]
+  mapping_mask_gate: {metric: IoU, threshold: 0.98, comparison: greater_than_or_equal}
+  persisted_mask: actual production SAM mask
+  platform_order: linux_then_macos
+  linux_gate: four preset MuJoCo RGB-D PickPlace successes before Mac migration
+user_override:
+  - CP-067 required Mac completion before Linux; the user later authorized parallel Linux work.
+  - This checkpoint supersedes both orders for new-model work: Linux is now the sole first platform.
+completed_mac_baseline:
+  production_r3:
+    status: VALID
+    run_id: mac-grounded-sam-test-production-postfix-r4-r3
+    record_inventory_sha256: b110d5c1a867276cd51bd131d5726204f6bc55745036eafb11f3b01425755702
+    manifest_sha256: 75103f5d17e6b4dcc9b192df14ecdaa3d8ca147000c80d246675357b499f5439
+  calibrated_r3:
+    status: VALID
+    run_id: mac-grounded-sam-test-calibrated-postfix-r4-r3
+    record_inventory_sha256: 482c2588c611b0f90438b32954457281d7d586d31473cb1d8fa637af53427469
+    manifest_sha256: 7a2b4f48500cc2647a98fbd4cafaf257df1507903dc518bf0afbdeff2314f86e
+  interpretation: frozen pre-finetune baseline only; not a gate for new-model selection
+linux_r3:
+  raw:
+    status: VALID
+    run_id: linux-grounded-sam-test-raw-postfix-r4-r3
+    record_inventory_sha256: cc9fb30ba5472e16aa4cdbecd4cce3599a0a982dff753f4e30e7d0906b7c01a6
+    manifest_sha256: dd8ec4a929c90d6ee6dd757f5f28cc2aebc95799fadfd8eb2f120685b6fbe69d
+  production:
+    status: INVALID
+    run_id: linux-grounded-sam-test-production-postfix-r4-r3
+    invalid_reason: PRODUCTION_CANDIDATE_MAPPING_INVALID
+    completed_record_inventory_sha256: 28bc336b1fbb02aa316d22116b1f0abf90c72a5261e3a6655c47cf4094c7802c
+    manifest_sha256: a6863bb080ea1336e68184fa7211bcb2eb6a4e9097ea7954469bc1193271ea23
+  diagnostic:
+    image: images/test/000900012.png
+    raw_candidates: 77
+    production_candidates: 2
+    affected_mask_pixels: {raw: 4698, production: 4699}
+    mask_iou: 0.9997871887635668
+    repeated_runs: 3
+    conclusion: deterministic SAM batch-size boundary difference; exact mask SHA is not a valid Grounded candidate identity rule
+coco100_external_baseline:
+  handoff_root: /private/tmp/so101-grounded-dino-cup-100-handoff-20260904
+  manifest_sha256: 216fc518cefb3dd08e4246a37fad50dbe66ddfe664672e4437d25d544f4708e5
+  manifest_entries: 419
+  manifest_verification: PASS
+  provider: COCO 2017 val
+  images: 100
+  cup_instances: 247
+  prompt: cup.
+  model_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  box_iou_threshold: 0.5
+  counts: {tp: 145, fp: 48, fn: 102}
+  metrics: {precision: 0.7512953367875648, recall: 0.5870445344129555, f1: 0.6590909090909091}
+  images_with_at_least_one_true_cup: 85
+  selection: {unique: 46, ambiguous: 25, not_found: 28, inference_error: 1}
+  visible_non_cup_unique: 0
+  use: final frozen checkpoint non-regression only; never checkpoint selection or threshold tuning
+  noninferiority_gates:
+    f1_min: 0.6391
+    recall_min: 0.5670
+    images_with_at_least_one_true_cup_min: 83
+    visible_non_cup_unique_max: 0
+    inference_error_max: 1
+planned_experiments:
+  - {id: EXP-079-MAPPING-IOU-R4, status: PLANNED, unique_variable: replace exact Grounded mask identity with configured IoU gate and persist observed production mask, lifecycle: OFFLINE_TEST}
+  - {id: EXP-079-LINUX-BUILD-R21, status: PLANNED, unique_variable: exact new commit in fresh Linux overlay, lifecycle: FULL_REBUILD}
+  - {id: EXP-079-DATA-CUP-V1, status: PLANNED, unique_variable: YOLO-Seg polygon-to-cup-box conversion and immutable new split, lifecycle: OFFLINE_DATA}
+  - {id: EXP-079-DINO-FINETUNE-R1, status: PLANNED, unique_variable: fine-tune Grounding DINO Tiny while SAM remains frozen, lifecycle: TRAINING}
+  - {id: EXP-079-LINUX-TEST-FINETUNED-R1, status: PLANNED, unique_variable: frozen fine-tuned checkpoint on new sealed synthetic test, lifecycle: OFFLINE_TEST}
+  - {id: EXP-079-COCO100-FINETUNED-R1, status: PLANNED, unique_variable: frozen fine-tuned checkpoint on fixed COCO100 external set, lifecycle: OFFLINE_TEST}
+  - {id: EXP-079-LINUX-PICKPLACE-P1, status: PLANNED, preset: 1, lifecycle: FULL_RESTART}
+  - {id: EXP-079-LINUX-PICKPLACE-P2, status: PLANNED, preset: 2, lifecycle: FULL_RESTART}
+  - {id: EXP-079-LINUX-PICKPLACE-P3, status: PLANNED, preset: 3, lifecycle: FULL_RESTART}
+  - {id: EXP-079-LINUX-PICKPLACE-P4, status: PLANNED, preset: 4, lifecycle: FULL_RESTART}
+next_action: finish EXP-079-MAPPING-IOU-R4 with RED/GREEN focused tests; do not start macOS new-model work
+retention:
+  retained_runs:
+    - all CP-067 Mac valid baseline runs
+    - Linux raw r3 valid run
+    - COCO100 handoff pending durable copy and readback
+  archived_runs:
+    - Linux production r3 invalid is an archive candidate but has not been moved or deleted
+  deletion_candidates: none
+```
+
+## Checkpoint CP-069 — Grounded production mask IoU mapping GREEN
+
+```yaml
+checkpoint: CP-069
+status: VALID
+recorded_at: 2026-09-04T04:16:48Z
+experiment: EXP-079-MAPPING-IOU-R4
+source_base_commit: 32d90aebbb66896179911c22ad9d18c4d22b16de
+symptom_boundary: Linux production r3 failed at image images/test/000900012.png because one deterministic SAM boundary pixel changed when proposal batch size changed
+judgment: OBSERVED
+unique_variable: Grounded candidate mapping now requires stable DINO identity plus mask IoU at the configured 0.98 threshold, and persists the observed production mask
+implementation:
+  runner_sha256: 919ac8f5c8d724de146b4ee9c144c2c41b9da6b822ced4efb44bafeaa1aac3ec
+  cli_sha256: c3c8f85b20c4399175f6cd6352591688b6f8383e8f8f483ebb0bdae7a06b6d9f
+  benchmark_config_sha256: 511e0e6472cb774f521783982b2833c790ddc85d1cf3bad03112100ee2896a92
+  regression_test_sha256: 854a78baaa34e7523015ac7c59f48e7d22151d0c31d630ee2cfe80bc83ad55c8
+  mapping_contract:
+    identity: [class_id, bbox_xyxy, grounding_box_score]
+    mask_metric: IoU
+    mask_threshold: 0.98
+    on_multiple_or_no_match: PRODUCTION_CANDIDATE_MAPPING_INVALID
+    persisted_mask: actual production SAM mask RLE and SHA
+    yolo_semantics_changed: false
+tdd:
+  red: existing observed-mask regression failed before implementation with PRODUCTION_CANDIDATE_MAPPING_INVALID
+  focused_green: 9 passed, 126 deselected in 0.17s
+  runner_and_cli_green: 185 passed in 64.60s
+  runner_file_final_green: 135 passed in 63.27s
+  config_cli_green: 8 passed, 46 deselected in 0.11s
+documentation:
+  design_sha256: 17d9e7053541682b323d24ba3943af588baf2d974fda03afde0d0030a7c3779b
+  plan_sha256: 0d44668475e728908c2cc39662379f4d6c4ae59f91232d2427ce7a44a210d2cd
+  humanizer_zh_review: PASS
+  placeholder_scan: PASS
+  git_diff_check: PASS
+remaining_gate:
+  - commit and push exact patch
+  - ai-station pull into isolated checkout
+  - fresh Linux overlay and full ordinary plus explicit benchmark tests
+  - Linux production r4 rerun with new run ID
+next_action: commit CP-069 patch and start EXP-079-LINUX-BUILD-R21
+retention:
+  retained_runs:
+    - all CP-068 listed baseline and diagnostic evidence
+  archived_runs:
+    - Linux production r3 remains retained in place pending verified archival move
+  deletion_candidates: none
+```
