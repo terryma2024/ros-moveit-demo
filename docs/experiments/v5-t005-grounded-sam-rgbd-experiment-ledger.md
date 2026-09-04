@@ -5972,7 +5972,7 @@ scene_geometry:
   small_far_cup:
     cup_center_m: [0.02, -0.28, 0.165]
     cup_xy_jitter_m: [-0.045, 0.045]
-    camera_retreat_along_local_positive_z_m: [0.90, 1.20]
+    camera_retreat_along_local_positive_z_m: [2.40, 3.00]
     local_positive_z_definition: normalized third column of the immutable MuJoCo camera rotation matrix
     ordinary_camera_xyz_jitter_m: [-0.015, 0.015]
     acceptance:
@@ -5994,6 +5994,7 @@ scene_geometry:
 truth_contract:
   visible_truth: MuJoCo geom/body-ID segmentation, never material color
   partial_occlusion_reference: paired segmentation render with the declared orange_bottle occluder hidden and all cup/camera state unchanged
+  canonical_amodal_definition: bitwise union of the visible mask and the separately retained paired-reference mask
   measured_instance_fields:
     - body_id
     - body_name
@@ -6002,6 +6003,9 @@ truth_contract:
     - mask_shape_hw
     - visible_mask_rle_counts
     - visible_mask_sha256
+    - paired_reference_pixel_count
+    - paired_reference_mask_rle_counts
+    - paired_reference_mask_sha256
     - amodal_pixel_count
     - amodal_mask_rle_counts
     - amodal_mask_sha256
@@ -6011,8 +6015,9 @@ truth_contract:
     - occluder_body_name
     - occlusion_reference
   verification_rules:
-    - both RLE masks decode to the declared image shape and hashes
-    - visible mask is a subset of the paired amodal mask
+    - all three RLE masks decode to the declared image shape and hashes
+    - canonical amodal mask equals visible mask bitwise-unioned with the paired-reference mask
+    - visible mask is therefore a strict subset of the canonical amodal mask for accepted partial scenes
     - pixel counts and visible_fraction recompute exactly from decoded masks
     - partially_occluded_cup must satisfy the registered acceptance band and declare orange_bottle
     - unsupported ordinary-scene occlusion remains unmeasured rather than inferred
@@ -6043,4 +6048,62 @@ retention:
   archived_runs: []
   deletion_candidates: [future per-run NVMe scratch trees; never delete without explicit user authorization]
 next_action: commit and Gitee-sync this PLANNED contract before adding tests or generating data
+```
+
+## Checkpoint CP-075 — Stage C augmentation geometry preflight correction
+
+```yaml
+checkpoint: CP-075
+status: PLANNED_CONTRACT_CORRECTED_BEFORE_FORMAL_GENERATION
+recorded_at: 2026-09-04T17:02:00+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+source_commit: 1898829e2f0e93d9adb82eed26457d05c599a200
+formal_dataset_created: false
+preflight_runs:
+  r42:
+    status: INVALID_RANGE
+    failure: small_far_cup seed 410000000 exhausted 64 attempts with the preregistered 0.90-1.20 m retreat
+  r43:
+    status: VALID_DIAGNOSTIC
+    ordinary_visible_pixels: 4274
+    attempted_retreat_m: [0.90, 1.20]
+    small_visible_pixels_range: [488, 1059]
+    small_bbox_area_px2_range: [4335.79, 9186.46]
+  r44_r45:
+    status: VALID_SINGLE_VARIABLE_CAMERA_SWEEP
+    conclusion: camera local-positive-z direction and MuJoCo state propagation are correct; the original retreat magnitude was insufficient for the 26-geom cup silhouette
+  r46:
+    status: INVALID_DIAGNOSTIC_NO_SUMMARY
+    failure: strict raw paired-render subset assertion stopped aggregation before output
+  r47:
+    status: VALID_RANGE_AND_MASK_DIAGNOSTIC
+    sampled_seeds: 30 across the train, val, and sealed-test seed namespaces without reading any sealed-test annotation
+    selected_small_range_m: [2.40, 3.00]
+    selected_small_results:
+      accepted: 30
+      failed: 0
+      deterministic_attempts: {maximum: 6, mean: 2.3}
+      visible_pixels_range: [184, 292]
+      bbox_area_px2_range: [234.86, 802.92]
+    paired_render_boundary_readback:
+      attempts: 16
+      visible_pixels_range: [1215, 2538]
+      paired_reference_pixels_range: [4522, 5033]
+      visible_not_in_raw_reference_pixels_range: [4, 12]
+root_cause:
+  small_far: the physical cup remains too large in the image at 0.90-1.20 m because the registered target body comprises 26 visible/collision geoms; the actual polygon box never entered the COCO small bucket
+  partial_occlusion: independent GPU segmentation passes have a small non-monotonic raster boundary when the occluder is removed even though cup and camera transforms are unchanged
+contract_correction:
+  single_geometry_variable: replace far retreat [0.90, 1.20] m with [2.40, 3.00] m
+  explicit_truth_rule: retain the raw paired-reference mask and define canonical amodal as visible bitwise-unioned with paired-reference
+  reason: the union is the conservative amodal truth by definition, preserves every actually visible target pixel, and remains exactly reproducible and converter-verifiable
+unchanged:
+  - split counts, scenario quotas, seed namespaces, attempt derivation, prompt cup., generic cup class, and all test-sealing rules
+  - old r2, r2-repro, source archive, prior raw evidence, and COCO100 remain untouched
+next_action: revise the failing tests for the corrected amodal contract, prove RED, implement the single correction, then preflight every exact augmented seed before formal generation
+retention:
+  retained_runs: [r42, r43, r44, r45, r46, r47]
+  archived_runs: []
+  deletion_candidates: []
 ```
