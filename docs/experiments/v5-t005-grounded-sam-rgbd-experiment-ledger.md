@@ -8676,3 +8676,130 @@ retention:
   archived_runs: []
   deletion_candidates: [all r171-r186 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-102 — epoch-7 deployable score contradiction
+
+```yaml
+checkpoint: CP-102
+status: TERMINAL_FAILED_PERFORMANCE_PRODUCTION_REPLAY_FORBIDDEN
+recorded_at: 2026-09-04T22:28:51+08:00
+stage: E_VAL_PIPELINE_CALIBRATION
+experiment_id: EXP-079-STAGE-E-VAL-PIPELINE-CALIBRATION-R2
+prior_checkpoint: CP-101
+source_commit: 821810f3be60192aa0398bb3dc74254c92c853a4
+preflight:
+  invalid_r187:
+    status: INVALID_SELF_MATCH_AND_NON_FAIL_CLOSED_PROBE
+    cause: the process probe counted its own command line and the wrapper did not stop at the failed zero-match assertion
+    model_loaded: false
+    raw_output_created: false
+  valid_r188:
+    local_remote_sha_match: true
+    r27: absent and stopped
+    microduck_or_training_process_matches: 0
+    gpu_compute_processes: 0
+    all_planned_output_roots_absent: true
+    preflight_sha256: 3c3e40d0bab0421acd1370c196c9afcac23e3712cb080f5e76fcb2f0bc52fd20
+val_raw:
+  run_id: stage-e-val-raw-r189
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r1
+  source_commit: 821810f3be60192aa0398bb3dc74254c92c853a4
+  samples: 300
+  records: 300
+  inference_errors: 0
+  fallback_count: 0
+  runtime: {device: cuda, dtype: float32}
+  raw_candidates: 6264
+  record_inventory_sha256: a37c14b2ac1fa5c7046a7d4509992bc6c0241ffc95c51c678353c1cd445bdd29
+  manifest_sha256: f872f81fdc1d243acb59316196aab50b834ea635a4fd221bf65885b84e5cfd2c
+  elapsed_ms: 201133
+  tree: {files: 6865, directories: 304, bytes: 11477029, inventory_sha256: d98dee6b21a66af4b7023769c14d88f53c9bba6b18207c2d15d942cbdeb4d47f, file_mode: '0444', directory_mode: '0555'}
+  run_log_sha256: a735c2552ceee04126c4561522417aa405ca9bc869415e52e85b836abcc069db
+  exit_log_sha256: 4e38b194d81fa6c49127e4a496d195087d35361cfda4c04dccb0aac403737525
+offline_calibration:
+  run_id: stage-e-val-calibration-r191
+  status: VALID_COMPUTATION_FAILED_PERFORMANCE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-calibration-r1
+  raw_rerun: false
+  grid: ['0.50', '0.60', '0.70', '0.75', '0.80', '0.85', '0.90']
+  result_all_points: {tp: 0, fp: 0, fn: 300, precision: 0.0, recall: 0.0, f1: 0.0, no_cup_unique_count: 0}
+  tie_break_selected_sam_quality: '0.90'
+  eligibility: false
+  reason: no DINO candidate passes the fixed 0.25 box/text gates, so SAM quality cannot be calibrated
+  manifest_sha256: 0e6c07d7bdeed328b1167d3d91912caf649f57e28bcf7e85e8827c49959e96ac
+  report_sha256: 58b0e40ed68d726d1b32c7b58960cb293dc822a4c0a146ab9857a23588890b52
+  elapsed_ms: 4448
+  tree: {files: 2, directories: 1, bytes: 5458, inventory_sha256: d38abdbdc2cf3093b2511159dece8d9119ce30cc462cb5ca268f5f480a38bd52, file_mode: '0444', directory_mode: '0555'}
+score_diagnostic:
+  run_id: stage-e-val-raw-score-readback-r192
+  status: VALID_READ_ONLY
+  records_with_raw_candidates: 300
+  grounding_box_score: {min: 0.010000409558415413, median: 0.014412703923881054, max: 0.05063420161604881, ge_0_25: 0}
+  grounding_text_score: {min: 0.010000408627092838, median: 0.01441270112991333, max: 0.05063420161604881, ge_0_25: 0}
+  sam_quality: {min: 7.958900738458397e-08, median: 0.8807623386383057, max: 0.9605168104171753, ge_0_50: 5019, ge_0_90: 2595}
+  sha256: bc04c9fe8e9202481fc1ce015ece6b1a1d4862c4053b5cde290df4661b328326
+contradiction:
+  recorded_in_memory_epoch7_val: {box_threshold: 0.25, text_threshold: 0.25, tp: 261, fp: 48, fn: 39, f1: 0.8571428571428571}
+  deployable_reload_val_at_same_threshold: {tp: 0, fp: 0, fn: 300, f1: 0.0}
+  checkpoint_model_sha256: 700ef987164408d1ef5be1c93b69b895d1a1c3537d0fbbfcc55940c4901e924c
+  bundle_model_bytes_equal_checkpoint: true
+  conclusion: the recorded in-memory selection cannot be used as deployable-checkpoint evidence; saved checkpoints must be selected only after fresh reload full-val evaluation
+gates:
+  production_replay: forbidden and output absent
+  candidate_r2_lock: forbidden
+  synthetic_test_new_access: none
+  coco100_access: none
+  linux_pickplace: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and execute full-val DINO-only evaluation from each immutable saved checkpoint, using only the original threshold grid and selection order
+retention:
+  retained_runs: [r187-r192, immutable r189 raw evidence, immutable r191 calibration evidence]
+  archived_runs: []
+  deletion_candidates: [r187-r192 registered scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage D saved-checkpoint deployment revalidation
+
+```yaml
+experiment_id: EXP-079-STAGE-D-SAVED-CHECKPOINT-REVALIDATION-R1
+status: PLANNED
+recorded_at: 2026-09-04T22:30:00+08:00
+prior_checkpoint: CP-102
+hypothesis: the epoch metrics were selected from the live training model before serialization, while the actual saved checkpoint reload has a materially different score distribution; full-val fresh-reload evaluation of all eight immutable checkpoints is required before selecting any deployable detector
+prediction: strict revalidation reproduces the immutable epoch-7 raw score range and either identifies one saved checkpoint with valid original-grid metrics or proves that the existing training output is not deployable and must be superseded by a retraining workflow that evaluates every checkpoint after reload
+single_variable: checkpoint epoch 1 through 8; prompt remains cup.; validation data and the original 0.05 through 0.50 box/text grid, IoU 0.50, metric definitions, and rank order remain unchanged
+lifecycle: VERIFY_EACH_IMMUTABLE_CHECKPOINT_THEN_SELECT_OR_FAIL
+inputs:
+  training_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-formal-r1
+  checkpoint_epochs: [1, 2, 3, 4, 5, 6, 7, 8]
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  prompt: cup.
+  class_name: cup
+frozen_validation:
+  box_threshold_grid: ['0.05', '0.10', '0.15', '0.20', '0.25', '0.30', '0.35', '0.40', '0.45', '0.50']
+  text_threshold_grid: ['0.05', '0.10', '0.15', '0.20', '0.25', '0.30', '0.35', '0.40', '0.45', '0.50']
+  box_iou_threshold: '0.50'
+  rank_descending: [F1, Recall, small_target_Recall, multi_cup_Recall, negative_FP, box_threshold, text_threshold, negative_epoch]
+execution_contract:
+  - TDD a fresh-reload evaluator that verifies each checkpoint manifest and every member before loading
+  - run DINO-only CUDA float32 validation once per saved checkpoint; SAM is not loaded
+  - persist all 100 threshold points, full denominator, score range, runtime provenance, and per-epoch output under a unique non-existing durable directory
+  - fail closed on CPU fallback, checkpoint mismatch, output collision, incomplete denominator, or any test/COCO access
+selection_boundary:
+  success: choose only the best fresh-reload saved checkpoint by the frozen rank, then create a new immutable bundle and restart full-pipeline val raw calibration with a new output version
+  failure: if no saved checkpoint produces a nonzero original-grid result, mark the whole r124 training output nondeployable and preregister corrected retraining with post-reload full-val selection
+planned_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/saved-checkpoint-revalidation-r1
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and sync CP-102 plus this plan, then write evaluator RED tests without model inference
+retention:
+  retained_runs: [all CP-102 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
