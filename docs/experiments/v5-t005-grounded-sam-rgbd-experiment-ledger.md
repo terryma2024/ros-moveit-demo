@@ -9834,3 +9834,73 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-113 — fixed point-plus-box prompting reaches the SAM contract decision boundary
+
+```yaml
+checkpoint: CP-113
+status: BLOCKED_SAM_CONTRACT_DECISION
+recorded_at: 2026-09-05T00:17:26+08:00
+stage: E_SAM_POINT_BOX_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-POINT-BOX-DIAGNOSTIC-R1
+prior_checkpoint: CP-112
+source_commit: 624c2c9f5d80bfc05ac901f8aaa8993927400f2a
+diagnostic:
+  run_id: stage-e-sam-point-box-diagnostic-r255
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-point-box-diagnostic-r8
+  samples: 30
+  truths: 30
+  production_candidates: 26
+  dino_inference_rerun: false
+  prompt_variants: [box_only, box_plus_point_y_0.500, box_plus_point_y_0.625, box_plus_point_y_0.750]
+  box_only_reproduction: {checked: 26, byte_mismatches: 0}
+  persisted_masks: 104
+  mask_iou_passes: {box_only: 0, box_plus_point_y_0.500: 0, box_plus_point_y_0.625: 0, box_plus_point_y_0.750: 0, truth_oracle: 0}
+  best_point_variant: box_plus_point_y_0.750
+  best_point_pass_count: 0
+  decision: no_point_signal
+  sam_runtime: {device: 'cuda:0', gpu: NVIDIA GeForce RTX 5080, dtype: float32, state: stateless_per_frame, decoder_selector: predicted_iou_argmax, mask_logit_threshold: '0.00', box_scale: '1.00'}
+  elapsed_ms: 19730
+  inference_seconds: 5.604960371216293
+  peak_cuda_memory_bytes: 3526216192
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-point-box-diagnostic-r255/tmp
+  tempfile_preflight: exact resolved match
+  script_sha256: f1df4271bb29db6e20e73cf6bbeb47a7e67918c84c44f885688abdd91c9b0a4e
+  run_log_sha256: e08b3e630012d4f81c49d15364f360e8a3b972fdcabcd8e4651e7b4b605823ec
+  report_sha256: a602b8088380eff46c8077442f2393f3d9852dc2ffa880914afcbb789cd262f9
+  manifest_sha256: 01fb0b9d21b65deb0f6b32e9bd7f9e9183f4d5f46dff8be2a98577e7b50c44c7
+readback:
+  run_id: stage-e-sam-point-box-readback-r256
+  status: VALID_READ_ONLY
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-point-box-readback-r256/tmp
+  tempfile_preflight: exact resolved match
+  tree: {files: 106, directories: 32, bytes: 174574, inventory_sha256: 6305047cf772c1b30046ec8ebcf77b2235ae655c10ec56528df46d9409939d5f, file_mode: '0444', directory_mode: '0555'}
+  readback_sha256: d14ed67d2c3a6765b7b8515a380ece743cf370272f31e973998b04ba2ffa4a9c
+decision:
+  result: no_point_signal
+  reason: every fixed point-plus-box variant and the cross-variant truth-oracle produce zero mask-IoU 0.80 passes, below the preregistered six-pass signal boundary
+  evidence_chain:
+    - r242 full-val mask-aware calibration selected mask quality 0.00 and produced only 5 of 300 mask-IoU passes
+    - r246 attribution assigned 276 of 300 truths to selected-and-oracle mask failure, with no selector-recoverable cases
+    - r249 multimask decoder diagnostic produced zero passes and a zero-pass decoder truth-oracle on the bounded subset
+    - r251 logit-cutoff diagnostic produced at most one pass globally and one pass in its truth-oracle
+    - r253 symmetric box-scale diagnostic produced at most one pass globally and two passes in its truth-oracle
+    - r255 deterministic point-plus-box diagnostic produced zero passes globally and zero passes in its truth-oracle
+  frozen_weight_prompt_or_postprocess_remediation: exhausted_without_signal
+  contract_boundary: further progress requires explicit authority to change the frozen SAM component or the mask-IoU truth gate
+  recommended_user_decision: authorize SAM component replacement or train/val-only fine-tuning followed by a newly frozen stateless-per-frame snapshot while preserving sealed-test and COCO100 boundaries
+  alternatives: [change the mask-IoU 0.80 truth gate, close the Linux-first task as failed]
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  pickplace_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: stop for explicit user input at the preregistered SAM contract decision boundary; do not create a new PLANNED experiment before that decision
+retention:
+  retained_runs: [r255-r256, immutable point-box-diagnostic-r8, all immutable r3-r7 diagnostics]
+  archived_runs: []
+  deletion_candidates: [r255-r256 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
