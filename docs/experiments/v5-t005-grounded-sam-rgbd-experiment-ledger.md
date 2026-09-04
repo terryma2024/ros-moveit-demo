@@ -9522,3 +9522,105 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-110 — bounded multimask diagnostic finds no selector signal
+
+```yaml
+checkpoint: CP-110
+status: VALID_NO_SELECTOR_SIGNAL
+recorded_at: 2026-09-05T00:01:26+08:00
+stage: E_SAM_MULTIMASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MULTIMASK-DIAGNOSTIC-R1
+prior_checkpoint: CP-109
+source_commit: b6bece53a6af23b4a70a0380e24f5f41d4844b75
+diagnostic:
+  run_id: stage-e-sam-multimask-diagnostic-r249
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-multimask-diagnostic-r5
+  subset_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  samples: 30
+  truths: 30
+  production_candidates: 26
+  dino_inference_rerun: false
+  sam_runtime: {device: 'cuda:0', gpu: NVIDIA GeForce RTX 5080, dtype: float32, state: stateless_per_frame, multimask_output: true}
+  sam_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  argmax_reproduction: {checked: 26, byte_mismatches: 0}
+  persisted_decoder_masks: 78
+  mask_iou_passes: {argmax: 0, index_0: 0, index_1: 0, index_2: 0, truth_oracle: 0}
+  oracle_additional_passes: 0
+  decision: no_selector_signal
+  elapsed_ms: 13584
+  inference_seconds: 1.6006301167653874
+  peak_cuda_memory_bytes: 3455080960
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-multimask-diagnostic-r249/tmp
+  tempfile_preflight: exact resolved match
+  script_sha256: 7cfa17f7d92c4b6d2d3deb2d6de21b32cbf5460ae830353576cd63d262e32372
+  run_log_sha256: d8de0888667ba6fe4b0661dd64deb5dc3a961e533b7970ea786aa1b02775ce21
+  report_sha256: 3e192d751b466f4e499651632b5b1b527e14661d611617ae5618057fac41ca3f
+  manifest_sha256: 7253c872878185793dc30328215e45eb8643cdbf86453de3035d621a5197c880
+readback:
+  run_id: stage-e-sam-multimask-readback-r250
+  status: VALID_READ_ONLY
+  tree: {files: 80, directories: 32, bytes: 129072, inventory_sha256: afcca84e6780a7c409f25ce1f3ac92e9b5e9dc8fb585d428c9e0f5986249d5c4, file_mode: '0444', directory_mode: '0555'}
+  readback_sha256: ceb58408c3b3c93c83a57310acc505054675b4669372e289649cbc1ab6c9b795
+decision:
+  result: no_selector_signal
+  reason: none of the three frozen decoder masks reaches truth IoU 0.80 on the bounded subset, so replacing predicted-IoU argmax cannot remediate the failure
+  production_selector_change: rejected
+  next_probe: bounded val-only SAM logit mask-threshold diagnostic using the current box prompt
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and execute one SAM-only postprocess threshold diagnostic on the same fixed val subset; do not rerun Grounding DINO
+retention:
+  retained_runs: [r249-r250, immutable multimask-diagnostic-r5]
+  archived_runs: []
+  deletion_candidates: [r249-r250 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E bounded SAM logit mask-threshold diagnostic
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-MASK-THRESHOLD-DIAGNOSTIC-R1
+status: PLANNED
+recorded_at: 2026-09-05T00:01:26+08:00
+prior_checkpoint: CP-110
+hypothesis: the frozen decoder logits contain adequate visible-cup geometry, but the default zero logit cutoff may systematically over- or under-segment the explicit truth masks
+prediction: evaluating a frozen symmetric logit cutoff grid from the same SAM forward pass will reveal whether one global truth-independent cutoff can recover mask IoU 0.80
+frozen_subset:
+  split: val
+  formal_sample_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  scenario_quota: 5 each across all six r3 scenarios
+  truth_count: 30
+frozen_runtime:
+  dino_source: immutable r224 proposals only; no Grounding DINO inference
+  dino_thresholds: {box: '0.25', text: '0.25'}
+  sam_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  sam_mode: stateless per frame, CUDA, float32, multimask_output=true, predicted-IoU argmax
+  mask_logit_threshold_grid: ['-1.00', '-0.50', '0.00', '0.50', '1.00']
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+execution_contract:
+  - execute one SAM forward pass per image and postprocess the same argmax logits at every frozen cutoff
+  - require cutoff 0.00 masks to be byte-identical to immutable r224 for every corresponding production candidate
+  - persist every cutoff mask, per-cutoff TP/FP/FN and scenario counts, plus a diagnostic truth-oracle across cutoffs
+  - the truth-oracle is diagnostic only; do not use it as a per-frame production rule
+  - no box scaling, point prompts, single-mask mode, sealed test, COCO100, or DINO inference in this experiment
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-mask-threshold-diagnostic-r6
+decision_rule:
+  global_threshold_signal: one nonzero fixed cutoff yields at least 6 mask-IoU passes on 30 truths; preregister a full-val confirmation of that single cutoff
+  heterogeneous_only: truth-oracle yields at least 6 passes but every fixed cutoff yields fewer than 6; reject global cutoff tuning
+  no_threshold_signal: truth-oracle yields fewer than 6 passes; retain cutoff 0.00 and move to prompt geometry or model/data remediation
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push CP-110 plus this PLANNED experiment, then execute the bounded SAM-only threshold diagnostic once
+retention:
+  retained_runs: [all CP-110 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
