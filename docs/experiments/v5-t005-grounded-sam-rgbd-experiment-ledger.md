@@ -10006,3 +10006,47 @@ retention:
   archived_runs: []
   deletion_candidates: [future r257 NVMe scratch if allocated; do not delete without explicit user authorization]
 ```
+
+## Stage E truth-audit bootstrap correction
+
+```yaml
+checkpoint: CP-114
+status: PLANNED_AFTER_INVALID_BOOTSTRAP
+recorded_at: 2026-09-05T00:38:10+08:00
+stage: E_TRUTH_GENERATION_AUDIT
+experiment_id: EXP-079-STAGE-E-TRUTH-GENERATION-AUDIT-R1
+prior_checkpoint: CP-113
+invalid_run:
+  run_id: stage-e-truth-generation-audit-r257
+  status: INVALID_BEFORE_DATA_ACCESS
+  exit_code: 1
+  elapsed_ms: 2442
+  failure: ModuleNotFoundError for so101_demo because PYTHONPATH named the repository src layout rather than the colcon-created so101_demo package link
+  output_created: false
+  train_or_val_member_access: none
+  synthetic_test_access: none
+  script_sha256: de9df2286d80d757390f0a11ac9463002e71e0f45445aee2977045d1f6299b68
+  preflight_sha256: 10341df12fdf2544f5dda5b8bd99bf1d5ba10ec4f14c1893021554d8da2466d3
+  run_log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: c1986cd77712361ca99e6bc8d258e63c528a4d0c5ba4d56cb91d3af9a899835c
+  exit_log_sha256: 6f445cfcab17370e7d192cca89a0f862a9b4b713b0d7a09456263dfe37e1a54f
+root_cause:
+  observed: both relative and absolute paths ending in src/so101_demo_py/src place modules such as adapters directly on sys.path and therefore cannot satisfy import so101_demo
+  verified_recovery: PYTHONPATH=/tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232/build/so101_demo_py imports so101_demo from the current-checkout symlink package
+replacement_run:
+  run_id: stage-e-truth-generation-audit-r258
+  status: PLANNED
+  single_variable: correct only Python package bootstrap; reuse the frozen r257 audit script bytes and all audit criteria
+  lifecycle: REUSE_IMMUTABLE_DATA_READ_ONLY_AUDIT
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/truth-remediation/grounding-dino-cup-r3-truth-generation-audit-r1
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-truth-generation-audit-r258/tmp
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  pythonpath: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232/build/so101_demo_py
+  output_collision_preflight: must remain absent
+  synthetic_test_truth_or_labels: forbidden
+next_action: commit and Gitee-sync CP-114, allocate fresh r258 paths, verify tempfile and package provenance, then execute the unchanged read-only audit
+retention:
+  retained_runs: [r257 invalid bootstrap evidence]
+  archived_runs: []
+  deletion_candidates: [r257 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
