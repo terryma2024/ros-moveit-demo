@@ -7517,3 +7517,84 @@ retention:
   deletion_candidates:
     - stage-d-training-image-gcfix3-build-r120 scratch; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-092 — smoke r4 complete and reload-verified
+
+```yaml
+checkpoint: CP-092
+status: VALID
+recorded_at: 2026-09-04T19:24:53+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-091
+smoke_r4:
+  run_id: stage-d-training-smoke-r121
+  status: VALID
+  source_commit: 86a529d2ce8a3b1961fc6f0c535f60903805b30b
+  gitee_remote_sha: 86a529d2ce8a3b1961fc6f0c535f60903805b30b
+  implementation_commit: 5acaf0067927c39e00243317c18ff7a0cc7abc58
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix3
+  image_id: sha256:d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r4
+  output_collision_preflight: absent
+  exit_code: 0
+  elapsed_ms: 19749
+  training_batches: 6
+  completed_epochs: 1
+  mean_loss: 57802.181966145836
+  peak_gpu_memory_bytes: 8582083584
+  checkpoint_manifest_sha256: 6d3bbb82be28d8352d1b248f8a390bb9fde185fd316485a548e030a5b07a6bf9
+  selected_metrics: {box_threshold: 0.1, text_threshold: 0.1, f1: 0.15, precision: 0.08823529411764706, recall: 0.5, small_target_recall: 1.0, multi_cup_recall: 0.0, tp: 3, fp: 31, fn: 3}
+  fresh_reload:
+    status: VALID
+    device: cuda:0
+    cpu_fallback: false
+    input_token_count: 4
+    query_count: 900
+    active_logits_finite: true
+    masked_negative_infinity_count: 226800
+    sha256: 3113d47d303def0fde746203ab2ccc6a4c127955ddcc3e1c04ff95862415c346
+  preflight:
+    train_count: 1200
+    val_count: 300
+    train_inventory_sha256: 376146b8b7d9c7adc8c9ff4e22d5302188fe33cb2bfc0765458521088247e9ea
+    val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+    compute_processes: 0
+    microduck_matching_nonancestor_processes: 0
+    network: none
+    synthetic_test_access: none
+    coco100_access: none
+    sam_mount: none
+    preflight_sha256: b7f18affac01d90b7eb002b54d34e05ef7fef0171da757209b873718353272a7
+    stdout_sha256: 43e8da97839de8931a068268266014b2740c7daddc47c49588f34784c66f00d3
+    stderr_sha256: 88715f42c94da920b48c506dcb80906e491d787213f60409bd3646e0f1b1743b
+readback:
+  invalid_run:
+    run_id: stage-d-training-smoke-readback-r122
+    status: INVALID
+    reason: complete checkpoint verification returned successfully, but the readback script then referenced a nonexistent VerifiedCheckpoint.files attribute
+  valid_run:
+    run_id: stage-d-training-smoke-readback-r123
+    status: VALID
+    exit_code: 0
+    elapsed_ms: 1318
+    checkpoint_file_count: 8
+    complete_checkpoint_hashes_verified: true
+    exact_top_level_file_set_verified: true
+    no_symlinks: true
+    identity_verified: true
+    frozen_selection_source: synthetic_val_only
+    readback_sha256: f99cde43630b234c5cf164d4fd8aec65db3f8b898516b732b70156bd117ed9db
+    run_result_sha256: a4a49e1ff620f712a89e9a4422a722845b1317dcc4bcaeb0d8da7cb63b0d4b04
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync CP-092; preflight and launch the preregistered formal-r1 output in a dedicated tmux session using the exact gcfix3 image and implementation commit; continue to forbid test and COCO100 access
+retention:
+  retained_runs: [r121 valid smoke, r122 invalid readback, r123 valid complete readback]
+  archived_runs: []
+  deletion_candidates: []
+```
