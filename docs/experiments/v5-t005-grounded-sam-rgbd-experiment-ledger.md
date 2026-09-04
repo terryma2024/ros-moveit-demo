@@ -10050,3 +10050,78 @@ retention:
   archived_runs: []
   deletion_candidates: [r257 registered NVMe scratch tree; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-115 — truth corruption reproduced; audit validity criterion corrected
+
+```yaml
+checkpoint: CP-115
+status: PLANNED_AFTER_INVALID_STRICT_RGB_GATE
+recorded_at: 2026-09-05T00:42:16+08:00
+stage: E_TRUTH_GENERATION_AUDIT
+experiment_id: EXP-079-STAGE-E-TRUTH-GENERATION-AUDIT-R1
+prior_checkpoint: CP-114
+invalid_run:
+  run_id: stage-e-truth-generation-audit-r258
+  status: INVALID_INSTRUMENTATION_CRITERION
+  exit_code: 2
+  elapsed_ms: 59541
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/truth-remediation/grounding-dino-cup-r3-truth-generation-audit-r1
+  output_status: immutable read-only INVALID evidence; never reuse or overwrite
+  invalid_reason: audit script made byte-identical RGB rerender a validity gate even though the preregistered truth audit requires segmentation/RLE identity; 106 of 1500 RGB frames differed while every truth-specific validation passed
+  truth_validation:
+    train_val_instances: 1500
+    validation_failures: 0
+    label_truth_mismatches: 0
+    persisted_partial_rle_instances: 250
+    persisted_partial_rle_vs_rerender_mismatches: 0
+    input_tree_before_and_after_sha256: 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd
+  reproduced_val_statistics:
+    instances: 300
+    area_inflation_over_10_percent: 294
+    area_inflation_over_50_percent: 253
+    median_area_inflation_ratio: 1.8728898841362804
+    raw_vs_polygon_iou_median: 0.5339344236872848
+    raw_vs_polygon_iou_below_0.80: 288
+  partial_all_splits:
+    instances: 250
+    raw_rle_vs_polygon_iou_median: 0.441574595840331
+    raw_rle_vs_polygon_iou_below_0.80: 250
+  sample_152_truth_0:
+    raw_pixels: 4946
+    polygon_pixels: 25316
+    area_inflation_ratio: 5.118479579458148
+    raw_vs_polygon_iou: 0.19537051666930005
+    raw_components: 14
+    pixels_outside_largest_component: 25
+    observation: a single isolated raw segmentation pixel at '[88,0]' becomes a convex-hull vertex and fills the top-to-cup triangle
+  report_sha256: 28953dd762e71e4bd23962568aadff932aa0bde86de43539f2d977a4eb032e6b
+  instances_sha256: 020e5fd5ce0705abf6f95254497b579797f6206ab832d48ca972bedd6040a9ee
+  manifest_sha256: 5608cea56ca3398fba65c3a05b15762b9c9677ed48c50e9dfb23d9568dab4127
+root_cause_progress:
+  observed: convex-hull rasterization reproduces the reported systematic area inflation exactly, while all persisted partial visible RLEs are bit-identical to deterministic MuJoCo rerenders
+  observed: 1466 of 1500 masks contain multiple 8-connected components; median pixels outside the largest component are 8 for train and 7 for val
+  inferred: one convex polygon is a lossy and unsafe truth representation for concave or disconnected object-ID segmentation; tiny distant components can expand it catastrophically
+  not_yet_claimed: whether the 106 RGB byte differences are harmless raster variance; quantify them in the replacement audit but do not use RGB equality as the truth-validity gate
+replacement_run:
+  run_id: stage-e-truth-generation-audit-r259
+  status: PLANNED
+  single_variable: record RGB difference magnitude and identity while removing the unregistered RGB byte-equality validity gate; retain every truth/RLE/source-mutation gate unchanged
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/truth-remediation/grounding-dino-cup-r3-truth-generation-audit-r2
+  success_criteria:
+    - all 1500 train/val instances reproduce body, count, convex-hull polygon, and label rasterization
+    - all 250 persisted partial visible RLEs match the raw MuJoCo rerender bitwise
+    - input inventory remains unchanged and test access remains none
+    - RGB mismatch magnitude and seeds are reported as an audit covariate, not used to override segmentation evidence
+  invalid_criteria: any truth/RLE mismatch, incomplete denominator, input mutation, output collision, or test access
+sealed_boundaries:
+  synthetic_test_truth_or_labels: forbidden
+  coco100_access: forbidden
+  pickplace_access: forbidden
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit and Gitee-sync CP-115, then execute r259 into a new immutable root
+retention:
+  retained_runs: [r258 immutable INVALID audit evidence]
+  archived_runs: []
+  deletion_candidates: [r258 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
