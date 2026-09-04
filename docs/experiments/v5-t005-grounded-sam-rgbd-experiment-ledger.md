@@ -9624,3 +9624,107 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-111 — bounded mask-logit threshold diagnostic finds no signal
+
+```yaml
+checkpoint: CP-111
+status: VALID_NO_THRESHOLD_SIGNAL
+recorded_at: 2026-09-05T00:06:31+08:00
+stage: E_SAM_MASK_THRESHOLD_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-THRESHOLD-DIAGNOSTIC-R1
+prior_checkpoint: CP-110
+source_commit: 469c3f6304a4641e5e21165dceb4af67e2758fe7
+diagnostic:
+  run_id: stage-e-sam-mask-threshold-diagnostic-r251
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-mask-threshold-diagnostic-r6
+  samples: 30
+  truths: 30
+  production_candidates: 26
+  dino_inference_rerun: false
+  sam_runtime: {device: 'cuda:0', gpu: NVIDIA GeForce RTX 5080, dtype: float32, state: stateless_per_frame, decoder_selector: predicted_iou_argmax}
+  cutoff_grid: ['-1.00', '-0.50', '0.00', '0.50', '1.00']
+  zero_cutoff_reproduction: {checked: 26, byte_mismatches: 0}
+  persisted_masks: 130
+  mask_iou_passes: {'-1.00': 1, '-0.50': 1, '0.00': 0, '0.50': 0, '1.00': 0, truth_oracle: 1}
+  best_nonzero_cutoff: '-0.50'
+  best_nonzero_pass_count: 1
+  decision: no_threshold_signal
+  elapsed_ms: 15491
+  inference_seconds: 1.603981850843411
+  peak_cuda_memory_bytes: 3454032384
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-mask-threshold-diagnostic-r251/tmp
+  tempfile_preflight: exact resolved match
+  script_sha256: 83ccec6540ee731564d18aafa31a1f6f32c9f8a1822c8396dbd806e8a7d67a5a
+  run_log_sha256: 473c8dab11bd1c0fe4ee4935181a73ad45cd50e327554c62afa272513f231fcf
+  report_sha256: ae3d9a14273e7e9e94055f7f73a1cbba98084dcec842726a934c710ebbd782a9
+  manifest_sha256: 1bc0e6e4807bf5b2339c1927f854b3a161a042ed6e081ab644fa4c662f7aafc6
+readback:
+  run_id: stage-e-sam-mask-threshold-readback-r252
+  status: VALID_READ_ONLY
+  tree: {files: 132, directories: 32, bytes: 183556, inventory_sha256: 0f808229fed15d71f3bb2e484f0651e52bbd88a96e5ccf5e07954444cfc852ab, file_mode: '0444', directory_mode: '0555'}
+  readback_sha256: c00f6acd4ca2ce3db9baa91daa78d6cf67be743dfebde6d3618523c9bb371ebe
+decision:
+  result: no_threshold_signal
+  reason: only one truth passes under either the best fixed cutoff or the cross-cutoff truth-oracle, far below the preregistered six-pass signal boundary
+  production_cutoff_change: rejected
+  local_bundle_usage: confirmed by the bundled README as the documented Sam2Model plus Sam2Processor image-segmentation path despite the shared sam2_video configuration warning
+  next_probe: bounded symmetric DINO-box scale diagnostic with the frozen default cutoff and argmax decoder
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and execute a single-variable box-prompt scale diagnostic on the same fixed val subset
+retention:
+  retained_runs: [r251-r252, immutable mask-threshold-diagnostic-r6]
+  archived_runs: []
+  deletion_candidates: [r251-r252 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E bounded SAM box-prompt scale diagnostic
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-BOX-SCALE-DIAGNOSTIC-R1
+status: PLANNED
+recorded_at: 2026-09-05T00:06:31+08:00
+prior_checkpoint: CP-111
+hypothesis: frozen SAM mask geometry may improve when the otherwise tight DINO box is contracted or expanded symmetrically around its center before clipping to the image
+prediction: a frozen symmetric scale grid will determine whether one global truth-independent box transform can recover mask IoU 0.80 without changing weights, decoder selection, or mask cutoff
+frozen_subset:
+  split: val
+  formal_sample_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  scenario_quota: 5 each across all six r3 scenarios
+  truth_count: 30
+frozen_runtime:
+  dino_source: immutable r224 proposals only; no Grounding DINO inference
+  dino_thresholds: {box: '0.25', text: '0.25'}
+  sam_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  sam_mode: stateless per frame, CUDA, float32, multimask_output=true, predicted-IoU argmax, mask_logit_threshold=0.00
+  box_scale_grid: ['0.90', '0.95', '1.00', '1.05', '1.10']
+  box_transform: preserve center, multiply width and height by scale, clip x to '[0,640]' and y to '[0,480]'
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+execution_contract:
+  - run frozen SAM once per scale per image using only the persisted r224 DINO boxes
+  - require scale 1.00 argmax masks to be byte-identical to immutable r224 for every corresponding production candidate
+  - persist every scaled-prompt mask, transformed box, per-scale TP/FP/FN and scenario counts, plus a diagnostic truth-oracle across scales
+  - the truth-oracle is diagnostic only and cannot become a per-frame production rule
+  - no point prompts, cutoff changes, decoder selector changes, sealed test, COCO100, or DINO inference in this experiment
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-box-scale-diagnostic-r7
+decision_rule:
+  global_scale_signal: one non-unit fixed scale yields at least 6 mask-IoU passes on 30 truths; preregister a full-val confirmation of that single scale
+  heterogeneous_only: truth-oracle yields at least 6 passes but every fixed scale yields fewer than 6; reject global box scaling
+  no_scale_signal: truth-oracle yields fewer than 6 passes; retain scale 1.00 and move to fixed point-plus-box prompting or model/data remediation
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push CP-111 plus this PLANNED experiment, then execute the bounded SAM-only scale diagnostic once
+retention:
+  retained_runs: [all CP-111 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
