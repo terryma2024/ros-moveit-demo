@@ -5614,3 +5614,135 @@ retention:
   deletion_candidates:
     - all six Stage B scratch trees below the registered durable scratch root; none deleted
 ```
+
+## Stage C deterministic YOLO-polygon conversion
+
+```yaml
+experiment_id: EXP-079-GROUNDING-DINO-DATA-CONVERSION-R1
+status: RUNNING
+recorded_at: 2026-09-04T15:44:00+08:00
+started_at: 2026-09-04T15:46:00+08:00
+prior_checkpoint: CP-072
+hypothesis: 已归档的 YOLO-Seg 合成数据包含明确 split、polygon 和 truth metadata，可无损转换成 prompt 固定为 cup. 的 Grounding DINO box inventory，并保持 test sealed
+prediction: 安全解包、转换器 RED 到 GREEN、两次独立转换得到相同成员与 inventory SHA，train/val/test 无交叉，test 内容在 checkpoint 和阈值冻结前不被训练或选择代码读取
+single_variable: 新增确定性 YOLO polygon 到 Grounding DINO cup box 的转换链；不改变原始归档
+lifecycle: NEW_DURABLE_DATA_VERSION
+source:
+  repository_lfs_pointer: datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz
+  local_pointer_oid: c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1
+  verified_archive_source: /data/work/so101-evidence/grounded-sam-yolo-seg-benchmark/20260902-ab-v1/assets-r8/datasets/so101-v5-t004-yolo-seg-synthetic/so101-v5-t004-yolo-seg-synthetic-20260831-f09cf88.tar.gz
+  archive_sha256: c0a837b0457c13d83160b1843137e0a85d6e8a6d98eb45ddf97cb9812e2cf3f1
+  archive_size_bytes: 53999319
+  tar_members: 3618
+  tar_path_preflight: safe relative regular files and directories only
+destinations:
+  source_copy_and_extraction: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-source-r1
+  converted_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r1
+  reproducibility_rerun: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r1-repro
+  collision_preflight: all absent
+provenance:
+  source_commit: 3a74a9e1ba2a1c53839dc1909d370c589e2f5786
+  prompt: cup.
+  normalized_class: cup
+  coco100_access: forbidden during conversion, profiling, and later checkpoint selection
+required_tdd:
+  - normalized and absolute xyxy conversion from YOLO polygons
+  - multiple instances, boundary-touching polygons, empty/invalid polygons, and degenerate boxes
+  - class normalization to cup and exact training text cup.
+  - image, label, source archive, and converter commit SHA provenance
+  - disjoint train, val, and sealed test membership
+  - deterministic rerun and fail-closed existing output
+success_criteria:
+  - source archive SHA and extracted manifest/truth readback pass
+  - focused converter tests pass on unique NVMe scratch
+  - train, val, and sealed new-test inventories are immutable and pairwise disjoint
+  - independent rerun yields identical member and inventory SHA values
+  - profile reports only fields supported by truth metadata and marks unsupported fields unknown
+failure_criteria:
+  - malformed polygon, split overlap, SHA mismatch, output collision, nondeterminism, or accidental test access before freeze
+decision_boundary: if the evidence-backed profile proves a required small-target, multi-cup, or occlusion coverage gap, stop before changing data scope and request the user decision required by the plan
+retention:
+  retained_runs: [source archive copy, extracted source r1, converted r1, reproducibility rerun, all conversion evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
+
+## Checkpoint CP-073 — Stage C converter code GREEN
+
+```yaml
+checkpoint: CP-073
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T16:00:00+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-CONVERSION-R1
+source_branch: codex/v5-t004-yolo-seg-rgbd
+execution_commit_before_checkpoint: 3a74a9e1ba2a1c53839dc1909d370c589e2f5786
+implementation:
+  - deterministic polygon-to-normalized-and-absolute-xyxy conversion
+  - class normalized to cup and prompt fixed to cup.
+  - train and val truth/label agreement checked fail closed
+  - source image, label, truth, archive, manifest, generator, MJCF, and converter provenance retained
+  - test label and truth bytes treated as opaque sealed members; no test scenario or box enters the converted inventories or profile
+  - output root must not exist and all JSON is canonical and fsync-persisted
+tdd:
+  red_r1: invalid harness invocation stopped before collection because locked venv Python lacked the system pytest path; wrapper then exposed a zsh PIPESTATUS mismatch; retained without reuse
+  red_r2: invalid import setup proved only that the source package was absent from PYTHONPATH; 0 collected, exit 2; retained without reuse
+  red_r3:
+    result: expected so101_demo.training module missing
+    tests_collected: 0
+    errors: 1
+    exit_code: 2
+    elapsed_ms: 363
+    junit_sha256: 313cfa19be95d085a99678ed9ad8f3ca592aae803adc3c93569afab360a5178a
+  green_r1: 9 passed and 1 failed because split-directory validation preceded the required global overlap reason; retained without reuse
+  green_r2: {passed: 10, failed: 0, elapsed_ms: 342}
+  green_r3_after_locked_ruff_format:
+    passed: 10
+    failed: 0
+    elapsed_ms: 370
+    junit_sha256: 268ee86ad117395f3cf4300090fecdc972bbe59b4fe51b3e0656827ac826ff1d
+quality:
+  ruff_version: 0.15.20
+  ruff_check: PASS
+  ruff_format_check: PASS
+  py_compile: PASS
+  git_diff_check: PASS
+overlay_diagnostics:
+  r31: invalid pre-colcon setup attempt; ROS setup.bash rejected shell nounset; no build started
+  r32: invalid because locked-venv setuptools copied so101_demo rather than producing the required source symlink
+  r33: invalid package-only topology; 1177 collected with one provenance failure because so101_mujoco_support remained in r28
+valid_overlay:
+  run_id: linux-build-stage-c-r34
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-r34
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  build_exit_code: 0
+  build_elapsed_ms: 55882
+  symlink_source: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  fetchcontent_fully_disconnected: true
+  prefix_readback: all seven packages resolve inside the r34 install root
+ordinary_gate:
+  command_scope: src/so101_demo_py/test only
+  result: {passed: 1177, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 12990
+  junit_sha256: b1069f9d4f473f42e86f2d68c307e70e847c6b47f0b29b64bcf01d3b836695f4
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-r34/install
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+test_storage:
+  filesystem: /data on NVMe
+  preflight: every pytest/colcon attempt used a unique non-existing registered scratch and the exact locked Python tempfile readback
+  semantics: fsync, ext4 journaling, integrity checks, and disk-backed behavior unchanged
+benchmark_gate:
+  status: NOT_RUN
+  reason: data-conversion code is ordinary training tooling and does not change benchmark implementation, configuration, adapters, reports, tests, or model selection
+  preserved_baseline: r30 remains immutable at 571 passed, 2 skipped, pytest 3210.78 seconds on SATA HDD
+next_command: commit and Gitee-sync the converter code, then run two independent conversions with that exact converter commit
+retention:
+  retained_runs: [stage-c source archive copy and extraction, linux-build-stage-c-r34, all RED/GREEN and overlay diagnostics]
+  archived_runs: []
+  deletion_candidates:
+    - all Stage C scratch roots for red-r1 through red-r3, green-r1 through green-r3, build r31 through r34, and ordinary tests r33 and r34; none deleted
+```
