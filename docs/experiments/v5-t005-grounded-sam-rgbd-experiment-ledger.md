@@ -9728,3 +9728,109 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-112 — bounded SAM box-scale diagnostic finds no signal
+
+```yaml
+checkpoint: CP-112
+status: VALID_NO_SCALE_SIGNAL
+recorded_at: 2026-09-05T00:11:24+08:00
+stage: E_SAM_BOX_SCALE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-BOX-SCALE-DIAGNOSTIC-R1
+prior_checkpoint: CP-111
+source_commit: bb5f21602e8a0d16702f79d797cea14ad911fb3b
+diagnostic:
+  run_id: stage-e-sam-box-scale-diagnostic-r253
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-box-scale-diagnostic-r7
+  samples: 30
+  truths: 30
+  production_candidates: 26
+  dino_inference_rerun: false
+  scale_grid: ['0.90', '0.95', '1.00', '1.05', '1.10']
+  unit_scale_reproduction: {checked: 26, byte_mismatches: 0}
+  persisted_masks: 130
+  mask_iou_passes: {'0.90': 1, '0.95': 0, '1.00': 0, '1.05': 0, '1.10': 1, truth_oracle: 2}
+  best_nonunit_scale: '1.10'
+  best_nonunit_pass_count: 1
+  decision: no_scale_signal
+  sam_runtime: {device: 'cuda:0', gpu: NVIDIA GeForce RTX 5080, dtype: float32, state: stateless_per_frame, decoder_selector: predicted_iou_argmax, mask_logit_threshold: '0.00'}
+  elapsed_ms: 21622
+  inference_seconds: 6.94398415426258
+  peak_cuda_memory_bytes: 3523911168
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-box-scale-diagnostic-r253/tmp
+  tempfile_preflight: exact resolved match
+  script_sha256: cb8aa9feec57f1b13fb91860da15d10753febf9645d94ee040d956f00d87ace7
+  run_log_sha256: e39b0403d7978220d969ed76a0649e3b877eab93317a205eec3503c2866cad3f
+  report_sha256: aa09bbafdb84f9e9d4cd138e4fc5a6526e7c8a8a3add03865836f4d1bd24f7c6
+  manifest_sha256: 058ebb14e830947aae6d7d93c4a74e432d280420b508e420408f937844e17534
+readback:
+  run_id: stage-e-sam-box-scale-readback-r254
+  status: VALID_READ_ONLY
+  tree: {files: 132, directories: 32, bytes: 207494, inventory_sha256: d875c70980be246d0ff5e9d6ea6e6ad6f9c352c8a0e41a7d9249b2c1d61e9dd5, file_mode: '0444', directory_mode: '0555'}
+  readback_sha256: 8ad54d55042e88d4b2d5911a391c956eeaf9ee5a53577efc9f6e5e6460742870
+decision:
+  result: no_scale_signal
+  reason: no fixed scale exceeds one pass and the cross-scale truth-oracle reaches only two, below the six-pass signal boundary
+  production_box_scale_change: rejected
+  next_probe: deterministic positive point plus the unchanged DINO box on the same bounded val subset
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and execute the final bounded fixed point-plus-box prompt diagnostic before declaring a SAM contract decision boundary
+retention:
+  retained_runs: [r253-r254, immutable box-scale-diagnostic-r7]
+  archived_runs: []
+  deletion_candidates: [r253-r254 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E bounded fixed point-plus-box SAM prompt diagnostic
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-POINT-BOX-DIAGNOSTIC-R1
+status: PLANNED
+recorded_at: 2026-09-05T00:11:24+08:00
+prior_checkpoint: CP-112
+hypothesis: a deterministic positive point on the cup body can disambiguate frozen SAM without truth access while retaining the DINO box as a spatial constraint
+prediction: one fixed vertical point fraction may materially improve mask IoU 0.80 on the balanced val subset without changing weights, state, decoder selection, or postprocess cutoff
+frozen_subset:
+  split: val
+  formal_sample_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  scenario_quota: 5 each across all six r3 scenarios
+  truth_count: 30
+frozen_runtime:
+  dino_source: immutable r224 proposals only; no Grounding DINO inference
+  dino_thresholds: {box: '0.25', text: '0.25'}
+  sam_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  sam_mode: stateless per frame, CUDA, float32, multimask_output=true, predicted-IoU argmax, mask_logit_threshold=0.00, box_scale=1.00
+  prompt_variants:
+    - box_only
+    - {name: box_plus_point_y_0.500, point: [box_center_x, 'box_top + 0.500 * box_height'], label: positive}
+    - {name: box_plus_point_y_0.625, point: [box_center_x, 'box_top + 0.625 * box_height'], label: positive}
+    - {name: box_plus_point_y_0.750, point: [box_center_x, 'box_top + 0.750 * box_height'], label: positive}
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+execution_contract:
+  - run frozen SAM once per prompt variant per image using only persisted r224 boxes
+  - require box_only masks to be byte-identical to immutable r224 for all corresponding production candidates
+  - persist prompt points, masks, decoder scores, per-variant TP/FP/FN and scenarios, plus a diagnostic truth-oracle across variants
+  - prompt points are functions of DINO box geometry only; truth masks never influence runtime points
+  - no scale or cutoff changes, negative points, sealed test, COCO100, or DINO inference
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-point-box-diagnostic-r8
+decision_rule:
+  global_point_signal: one fixed point variant yields at least 6 mask-IoU passes on 30 truths; preregister a full-val confirmation of that single variant
+  heterogeneous_only: truth-oracle yields at least 6 passes but every fixed point variant yields fewer than 6; reject a global point rule
+  no_point_signal: truth-oracle yields fewer than 6 passes; stop at the SAM contract decision boundary because all authorized frozen-weight prompt/postprocess remediations have failed
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push CP-112 plus this PLANNED experiment, then execute the bounded SAM-only point-plus-box diagnostic once
+retention:
+  retained_runs: [all CP-112 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
