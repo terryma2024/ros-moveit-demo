@@ -8158,3 +8158,67 @@ retention:
   archived_runs: []
   deletion_candidates: [r143 NVMe scratch tree; do not delete without explicit user authorization]
 ```
+
+## Stage E one-time synthetic test carrier
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SYNTHETIC-TEST-R1
+status: PLANNED
+recorded_at: 2026-09-04T21:50:00+08:00
+prior_checkpoint: CP-097
+hypothesis: a dedicated 300-sample carrier can verify the immutable generic-cup candidate lock, open only its bound synthetic test, and preserve low-floor raw, actual production, calibrated parity, truth metrics, and production SAM masks without changing the existing 200-sample benchmark contract
+prediction: focused tests establish fail-closed lock/test access and candidate mapping RED then GREEN; a fresh overlay ordinary gate passes; the single formal CUDA run writes exactly 300 terminal records with zero fallback, inference, mapping, parity, missing-mask, and no-cup UNIQUE safety violations
+single_variable: add the frozen-candidate verifier and one-time synthetic-test evaluator; do not change model, prompt, thresholds, test members, or COCO100 state
+lifecycle: TDD_FRESH_BUILD_THEN_ONE_TIME_FORMAL_TEST
+implementation_scope:
+  - src/so101_demo_py/src/training/frozen_candidate_evaluation.py
+  - src/so101_demo_py/src/cli/evaluate_grounded_sam_frozen_candidate.py
+  - src/so101_demo_py/test/test_frozen_candidate_evaluation.py
+  - src/so101_demo_py/setup.py only if a console entry point is required
+access_contract:
+  - verify canonical r143 lock, internal digest, read-only mode, bundle manifest, detector/SAM weights, checkpoint manifest, source manifest/archive identity, and opaque sealed-member inventory before reading any test annotation
+  - validate all 300 image/label/truth hashes and six 50-sample scenario quotas before inference
+  - create one canonical access event binding lock file SHA, internal lock SHA, sealed inventory SHA, run ID, source commit, and output root
+  - output root must not exist; a terminal INVALID or VALID run is immutable and never reused
+evaluation_contract:
+  - raw collection uses fixed 0.01/0.01 DINO floors, frozen stateless SAM, selector off, CUDA float32, and no CPU fallback
+  - production uses box/text 0.25/0.25, SAM quality 0.90, duplicate IoU 0.85, minimum 64 mask pixels, maximum mask ratio 0.50, maximum 16 candidates, and generic cup query
+  - calibrated filtering consumes the raw candidates with the same frozen thresholds and selector confidence 0.25
+  - production candidates must map one-to-one to raw candidates by exact generic-cup label, bbox and DINO score plus mask IoU >=0.98
+  - actual production SAM masks are written losslessly with SHA and pixel counts; source truth masks remain read-only
+  - report TP/FP/FN, Precision/Recall/F1, image hits, decision counts, mask metrics, area buckets, six scenarios, small/far, partial occlusion, single-cup and multi-cup strata
+safety_gates:
+  sample_count: 300
+  missing_samples: 0
+  runtime_device: cuda
+  dtype: float32
+  fallback_count: 0
+  inference_errors: 0
+  mapping_errors: 0
+  calibrated_production_parity_errors: 0
+  missing_production_masks: 0
+  no_cup_unique_count: 0
+failure_criteria:
+  - any safety gate fails; mark the candidate ineligible for COCO100 and PickPlace
+invalid_criteria:
+  - lock/provenance/seal/output mismatch, CPU fallback, collision, partial or noncanonical evidence, or access before all code gates pass
+planned_runs:
+  focused_red: stage-e-synthetic-test-carrier-red-r144
+  focused_green: stage-e-synthetic-test-carrier-green-r145
+  fresh_overlay: linux-build-stage-e-synthetic-test-carrier-r146
+  ordinary_gate: linux-test-stage-e-synthetic-test-carrier-r147-ordinary
+  formal_synthetic_test: stage-e-synthetic-test-r148
+planned_output:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/evaluation/synthetic-test-grounded-sam-cup-r3-epoch7-r1
+  currently_absent: true
+sealed_boundaries:
+  synthetic_test_annotation_access: forbidden until focused tests, fresh build, and ordinary gate are GREEN and checkpointed
+  coco100_access: forbidden until the formal synthetic test is terminal VALID
+  microduck: paused
+  mac_migration: forbidden
+next_action: write the focused RED tests without touching the real test members, then implement the minimal carrier to GREEN
+retention:
+  retained_runs: [all prior immutable evidence]
+  archived_runs: []
+  deletion_candidates: [future r144-r148 NVMe scratch trees; do not delete without explicit user authorization]
+```
