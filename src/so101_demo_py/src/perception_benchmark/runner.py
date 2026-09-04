@@ -1121,16 +1121,6 @@ def _production_mask_sha256(spec: RunSpec, value: np.ndarray) -> str:
     return _mask_sha256(value)
 
 
-def _same_or_adjacent_float32(first: float, second: float) -> bool:
-    expected = np.float32(first)
-    observed = np.float32(second)
-    return bool(
-        observed == expected
-        or observed == np.nextafter(expected, np.float32(-np.inf))
-        or observed == np.nextafter(expected, np.float32(np.inf))
-    )
-
-
 def _matches_production_candidate(
     spec: RunSpec,
     raw: RawCandidate,
@@ -1153,9 +1143,6 @@ def _matches_production_candidate(
         raw.grounding_box_score == observed.confidence
         and raw.sam_quality is not None
         and observed.segmentation_quality is not None
-        and _same_or_adjacent_float32(
-            raw.sam_quality, observed.segmentation_quality
-        )
     )
 
 
