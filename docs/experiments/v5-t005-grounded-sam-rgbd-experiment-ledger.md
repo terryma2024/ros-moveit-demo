@@ -8803,3 +8803,85 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-103 — saved-checkpoint fresh-reload evaluator GREEN
+
+```yaml
+checkpoint: CP-103
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T22:42:35+08:00
+stage: D_SAVED_CHECKPOINT_REVALIDATION_CODE
+experiment_id: EXP-079-STAGE-D-SAVED-CHECKPOINT-REVALIDATION-R1
+prior_checkpoint: CP-102
+source_head_before_commit: a31a66f453ba4ee811172861e2afeeafbc8c4185
+implementation:
+  module: src/so101_demo_py/src/training/saved_checkpoint_revalidation.py
+  module_sha256: e3b273eb6412b855790b3be8c6c0c283eb997595c2429091a5f52f4ee26e1631
+  cli: src/so101_demo_py/src/cli/revalidate_grounding_dino_checkpoint.py
+  cli_sha256: 8198b87a12f6907aac4dcaf30efd99b85a2432c38aea1ef05e075191fe5f106e
+  test: src/so101_demo_py/test/test_saved_checkpoint_revalidation.py
+  test_sha256: c2a750bf88639fa63a8540b6639188d5a596f25b24ab4c1187fc62c5bfc05e79
+contracts:
+  - verify the checkpoint manifest identity and every declared checkpoint member before loading
+  - verify every frozen val image and the hash-bound 300-sample inventory without exposing sealed test
+  - fresh-load only Grounding DINO on exactly one CUDA device and force all floating parameters to float32; SAM is not loaded
+  - reuse only the original 10 by 10 box/text threshold grid, IoU 0.50, metrics, and frozen rank
+  - require the complete denominator before exclusively writing all 100 points, score range, runtime, environment, elapsed time, and provenance
+  - output collision, CPU fallback, dtype mismatch, checkpoint mismatch, provenance mismatch, or incomplete denominator fails closed
+tdd:
+  red:
+    run_id: stage-d-saved-checkpoint-revalidation-red-r193
+    result: expected missing module during collection
+    exit_code: 2
+    junit_sha256: 6ec3299758e61fe470a8e9c90406953fa7ba253ca51d80d70f82007c67ce2873
+  invalid_environment_runs:
+    - {run_id: r194, cause: locked Python was not given the system pytest path}
+    - {run_id: r195, cause: source-layout package mapping was not on PYTHONPATH}
+    - {run_id: r199, cause: locked Python was not given the system colcon path during preflight}
+  focused_green:
+    run_id: stage-d-saved-checkpoint-revalidation-green-r196
+    result: {passed: 2, failed: 0, errors: 0, pytest_seconds: 0.15}
+    junit_sha256: 83dc208a0bafab3edcce7b906ae5f73f55eb41c73aad539072c06d60f2a10ecf
+  static_check: {tool: ruff-0.15.20, result: passed}
+build:
+  rejected_preallocation_r197: expected CMakeLists.txt was not a valid lodepng-cache member; no run directory was allocated
+  run_id: linux-build-stage-d-saved-checkpoint-r198
+  status: VALID
+  packages: 7
+  elapsed_ms: 55836
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-saved-checkpoint-r198
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-saved-checkpoint-r198/tmp
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  tempfile_preflight: exact resolved match
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  lodepng_verification: clean worktree plus git fsck --full --strict plus required source members
+  network_fetch: false
+formal_ordinary_gate:
+  preliminary_valid_run: {run_id: r200, passed: 1226, failed: 0, skipped: 0, pytest_seconds: 13.25}
+  final_run_id: linux-test-stage-d-saved-checkpoint-r201-ordinary-final
+  result: {passed: 1226, failed: 0, errors: 0, skipped: 0, pytest_seconds: 12.97}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 13957
+  junit_sha256: a2e4aaa7e3f53e0ec49dfce723b349fce893de1cb6e6cbf8594806adfd0c47de
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-saved-checkpoint-r198
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-d-saved-checkpoint-r201-ordinary-final/tmp
+  tempfile_preflight: exact resolved match
+benchmark_gate:
+  rerun: false
+  reason: this training-only evaluator changes no benchmark implementation, configuration, adapter, report, or benchmark_test member
+  preserved_r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  preserved_r141_nvme_gate: {passed: 573, skipped: 2, total: 575, pytest_seconds: 648.48, elapsed_ms: 649866}
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only CP-103 owned changes, sync safely with the Gitee branch, then evaluate immutable checkpoints epoch 1 through 8 once each
+retention:
+  retained_runs: [r193-r201, r198 overlay, r201 ordinary evidence]
+  archived_runs: []
+  deletion_candidates: [all r193-r201 registered NVMe scratch trees; do not delete without explicit user authorization]
+```

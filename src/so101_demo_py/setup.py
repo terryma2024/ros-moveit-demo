@@ -64,6 +64,8 @@ setup(
             "train_grounding_dino = so101_demo.cli.train_grounding_dino:main",
             "verify_grounding_dino_checkpoint = "
             "so101_demo.cli.verify_grounding_dino_checkpoint:main",
+            "revalidate_grounding_dino_checkpoint = "
+            "so101_demo.cli.revalidate_grounding_dino_checkpoint:main",
             "evaluate_grounded_sam_frozen_candidate = "
             "so101_demo.cli.evaluate_grounded_sam_frozen_candidate:main",
             "grounded_sam_val_calibration = "
