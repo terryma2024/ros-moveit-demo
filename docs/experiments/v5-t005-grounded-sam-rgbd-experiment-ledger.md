@@ -8032,3 +8032,76 @@ retention:
   archived_runs: []
   deletion_candidates: [r142 NVMe scratch tree; do not delete without explicit user authorization]
 ```
+
+## Stage E frozen candidate and synthetic-test evaluation
+
+```yaml
+experiment_id: EXP-079-STAGE-E-FROZEN-CANDIDATE-R1
+status: PLANNED
+recorded_at: 2026-09-04T21:38:00+08:00
+prior_checkpoint: CP-096
+hypothesis: one canonical immutable candidate lock can bind the val-selected detector, unchanged frozen SAM, generic-cup semantics, all production filters, mapping threshold, selector behavior, and sealed-test identity before any test annotation is opened
+prediction: the lock is exclusively created at the preregistered absent path, verifies its own digest and every external SHA, and leaves synthetic test plus COCO100 unopened until readback completes
+single_variable: freeze the exact Stage D/E candidate identity and already selected thresholds; perform no threshold search or model selection
+lifecycle: OFFLINE_CANDIDATE_LOCK
+preconditions:
+  - source commit is f0e6738e2e0db49363065433679f7ae2a17628f9 and the Gitee branch reads back the same SHA
+  - schema-v2 bundle is read-only and verifies at manifest SHA256 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  - detector checkpoint was selected only on synthetic val and has manifest SHA256 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  - r3 sealed member inventory is read-only with SHA256 7a0fa1bd72933a389cb2e734f2c5b50c46219f5fb4c6f481add2409127d7ba7d
+  - output root /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/frozen-cup-r3-epoch7-r1 does not exist
+frozen_candidate:
+  target_class_id: cup
+  prompt: cup.
+  detector_model_sha256: 700ef987164408d1ef5be1c93b69b895d1a1c3537d0fbbfcc55940c4901e924c
+  detector_checkpoint_manifest_sha256: 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  detector_thresholds: {box: '0.25', text: '0.25'}
+  sam_model_id: facebook/sam2.1-hiera-tiny
+  sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
+  sam_transformers_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  sam_quality_threshold: '0.90'
+  sam_state: frozen and stateless per frame
+  duplicate_iou_threshold: '0.85'
+  minimum_mask_pixels: 64
+  maximum_mask_area_ratio: '0.50'
+  maximum_candidates: 16
+  production_candidate_mask_iou_threshold: '0.98'
+  selector:
+    implementation: so101_demo.application.object_pose.TargetSelector
+    query_class: cup
+    minimum_confidence: '0.25'
+    cardinality: exactly one eligible candidate
+    zero_result: TARGET_NOT_FOUND
+    multiple_results: TARGET_AMBIGUOUS
+  threshold_provenance:
+    dino_box_text: selected on synthetic val in epoch-7 checkpoint manifest
+    frozen_sam_and_geometry_filters: carried unchanged from the existing formal lock because SAM is unchanged; no sealed-test or COCO100 tuning
+sealed_test_binding:
+  source_archive_sha256: e09ab3d8b56d79fba909ecdee28e07c31ca056d5784cbd972bd1375c0c533afc
+  source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  converted_sealed_members_sha256: 7a0fa1bd72933a389cb2e734f2c5b50c46219f5fb4c6f481add2409127d7ba7d
+  sample_count: 300
+  seed_range: [440000000, 440000299]
+  expected_scenario_quotas: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+success_criteria:
+  - canonical JSON with internal digest and exact external identity fields is created exclusively and frozen read-only
+  - complete independent readback validates bundle, detector, SAM, checkpoint, sealed-member, prompt, thresholds, mapping, and selector fields
+  - no synthetic test annotation, COCO100 member, or model result is read while creating the lock
+failure_criteria:
+  - any output collision, noncanonical document, digest mismatch, mutable dependency identity, or external SHA mismatch
+invalid_criteria:
+  - test or COCO100 access before the lock is frozen, a path outside the registered durable root, or use of a threshold not listed above
+planned_run:
+  run_id: stage-e-frozen-candidate-lock-r143
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/frozen-cup-r3-epoch7-r1/threshold-lock.json
+sealed_boundaries:
+  synthetic_test_access: forbidden until r143 is VALID and checkpointed
+  coco100_access: forbidden until the one-time synthetic test passes
+  microduck: paused
+  mac_migration: forbidden
+next_action: exclusively create and verify r143, checkpoint it, then implement the one-time synthetic-test unseal/evaluation path with TDD before opening test annotations
+retention:
+  retained_runs: [immutable bundle r142 and all prior evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
