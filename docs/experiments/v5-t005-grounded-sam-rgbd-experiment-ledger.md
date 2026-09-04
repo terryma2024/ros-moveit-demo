@@ -7097,3 +7097,117 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-087 — keyword-safe layer checkpointing GREEN
+
+```yaml
+checkpoint: CP-087
+status: VALID
+recorded_at: 2026-09-04T18:48:58+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-086
+source_commit_before_checkpoint: c1bfdda42f2d6d779e64a17f18c7409a75b1b05f
+fix:
+  production_file: src/so101_demo_py/src/training/grounding_dino_runtime.py
+  checkpointing_method: wrap each Grounding DINO decoder layer with torch.utils.checkpoint.checkpoint using use_reentrant false while preserving the exact keyword arguments
+  broken_outer_decoder_checkpointing: disabled
+  verification: every decoder layer exposes the exact locked signature, every layer is marked for checkpointing, and model.is_gradient_checkpointing reads back true
+  helper_receipt: so101-grounding-dino-layer-keyword-non-reentrant
+  determinism:
+    deterministic_algorithms: true
+    deterministic_warn_only: true
+    cudnn_benchmark: false
+    cudnn_deterministic: true
+    flash_sdp: false
+    memory_efficient_sdp: false
+  rationale: locked CUDA grid_sample backward has no deterministic implementation; warn-only preserves the audit warning and all other deterministic controls without permitting CPU fallback
+tdd:
+  red:
+    run_id: stage-d-layer-checkpoint-red-r100
+    status: VALID_RED
+    result: {passed: 10, failed: 2}
+    failures: [helper did not accept the injected checkpoint function, deterministic_warn_only was absent from the locked config]
+    exit_code: 1
+    elapsed_ms: 345
+    junit_sha256: 88152c9289cfb99693d88e7ac20da765db31d11e4df64b44fe391518d64bc94c
+  green:
+    run_id: stage-d-layer-checkpoint-green-r101
+    status: VALID
+    result: {passed: 12, failed: 0}
+    exit_code: 0
+    elapsed_ms: 307
+    junit_sha256: 81a6b250486d0482cfd1557073b19f0b88f0ecd59076d6c985e1a4bf92ae6614
+  related_gate:
+    run_id: stage-d-layer-checkpoint-related-r102
+    status: VALID
+    result: {passed: 34, failed: 0}
+    exit_code: 0
+    elapsed_ms: 909
+    junit_sha256: ba5382b5673ba5bb19ce0a8e95c044ec74bef27d30bdd461acb85596703f0c32
+  invalid_static_wrapper:
+    run_id: stage-d-layer-checkpoint-static-r103
+    status: INVALID
+    reason: shell process substitution hid the ruff failure and incorrectly recorded exit zero
+    observed_findings: [import ordering, formatting diff]
+    checks_log_sha256: d0d21566a1e78cf38e25e00f03aab0edd4e49180f9dc813b7d6869abf6bb696a
+  valid_static_gate:
+    run_id: stage-d-layer-checkpoint-static-r104
+    status: VALID
+    checks: [ruff check, ruff format --check, in-memory compile, git diff --check]
+    exit_code: 0
+    elapsed_ms: 106
+    checks_log_sha256: cf7c58171158bf30a67a549ccbc19a0d276e6154b8988f263c9919af50b095da
+fresh_overlay:
+  run_id: linux-build-stage-d-layer-checkpoint-r105
+  status: VALID
+  package_count: 7
+  symlink_install: true
+  exit_code: 0
+  elapsed_ms: 56208
+  source_commit: c1bfdda42f2d6d779e64a17f18c7409a75b1b05f
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  lodepng_tracked_files: 26
+  lodepng_validation: clean Git state, all tracked files present, full fsck valid
+  lodepng_network_fetch: none
+  fetchcontent_fully_disconnected: true
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-layer-checkpoint-r105/tmp
+  preflight_sha256: 225e693ff0c18aa41a73793b3cc32c369fba12a086b2e9cb3690832f639335cb
+  exit_log_sha256: b58f2bf8a98ccad2836c8b8315abdbcad9738a4baaf0eb35e870e9661270c26e
+  overlay_readback_sha256: 06f79143d14435c3201dc4f2cef23f36238509fe8547826c5710c6c3824861cf
+  installed_runtime_sha256: 7a36083a23878a56e402c6d12e007a49457a508c28d4697581b94ba05e6e9f67
+  installed_training_config_sha256: 67e37e917ba7240ab2fafc35a4f3aba5125aeb7094a66803d11d774290cc41c9
+ordinary_gate:
+  run_id: linux-test-stage-d-layer-checkpoint-r106-ordinary
+  status: VALID
+  scope: src/so101_demo_py/test only
+  result: {passed: 1202, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14064
+  locked_python: /data/work/venvs/so101-grounded-sam/bin/python
+  actual_test_python: /usr/bin/python3
+  tempfile_preflight: both resolved exactly to the new run-specific NVMe scratch on /dev/nvme0n1p5
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-d-layer-checkpoint-r106-ordinary/tmp
+  preflight_sha256: cafd1bda82a61fc1ed87a182e6df43cd2ad8092fc9f0b5f7f1bc3a6509bce0ce
+  exit_log_sha256: 70a6bb9085f2899344f53dc7cbc037e31779def4e2b8abaf41784380ab791b1c
+  junit_sha256: aafbe2a63228aec046e829268155bb00177742fc14540ef3424f5bb440dc1e56
+benchmark_gate:
+  status: NOT_RUN_BY_CONTRACT
+  reason: this training-only correction changes no benchmark implementation, configuration, adapter, report, test, selected checkpoint, or threshold
+  preserved_valid_benchmarks:
+    r30_hdd_baseline: {result: 571 passed, 2 skipped, exit_code: 0, pytest_seconds: 3210.78}
+    latest: linux-test-stage-c-augmentation-r59-benchmark
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only the owned fix, tests, config, and checkpoint; fetch and rebase onto the Gitee branch; verify the root AGENTS.md NVMe rule; ordinary-push and read back the remote SHA; then build the absent gcfix2 image
+retention:
+  retained_runs: [r100-r102 TDD evidence, r103 invalid static evidence, r104 valid static evidence, r105 overlay, r106 ordinary gate]
+  archived_runs: []
+  deletion_candidates:
+    - all r100-r106 registered NVMe scratch trees; do not delete without explicit user authorization
+```

@@ -8,6 +8,7 @@ PACKAGE_ROOT = Path(__file__).parents[1]
 REPOSITORY_ROOT = Path(__file__).parents[3]
 RUNNER = REPOSITORY_ROOT / "scripts/grounding-dino-training-container.sh"
 DOCKERFILE = REPOSITORY_ROOT / "src/so101_demo_py/docker/grounding-dino-training/Dockerfile"
+TRAINING_CONFIG = PACKAGE_ROOT / "config/perception/grounding_dino_training.yaml"
 
 
 def _write_fake_executable(path: Path, body: str) -> None:
@@ -208,3 +209,14 @@ def test_dockerfile_pins_locked_cuda_torch_and_transformers() -> None:
     assert "torchvision==0.28.0+cu130" in contents
     assert "transformers==4.56.2" in contents
     assert 'ENTRYPOINT ["train_grounding_dino"]' in contents
+
+
+def test_training_contract_records_the_cuda_determinism_exception() -> None:
+    contents = TRAINING_CONFIG.read_text(encoding="utf-8")
+
+    assert "  deterministic_algorithms: true\n" in contents
+    assert "  deterministic_warn_only: true\n" in contents
+    assert "  cudnn_benchmark: false\n" in contents
+    assert "  cudnn_deterministic: true\n" in contents
+    assert "  disable_flash_sdp: true\n" in contents
+    assert "  disable_memory_efficient_sdp: true\n" in contents
