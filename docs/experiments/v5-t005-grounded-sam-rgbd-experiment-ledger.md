@@ -10983,3 +10983,284 @@ retention:
   archived_runs: []
   deletion_candidates: [r272-r274 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-128 — direct corrected-truth calibration rejected unsafe provenance rebind
+
+```yaml
+checkpoint: CP-128
+status: INVALID_NO_OUTPUT_TDD_REBIND_PLANNED
+recorded_at: 2026-09-05T01:24:55+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-127
+invalid_run:
+  run_id: stage-e-corrected-truth-mask-aware-calibration-r275
+  status: INVALID_PROVENANCE_REBIND_REJECTED
+  exit_code: 1
+  elapsed_ms: 688
+  failure: 'RAW_MANIFEST_INVALID: identity'
+  cause: r224 raw manifest is correctly bound to the historical r3 val inventory and source-manifest SHA, while the direct command supplied the corrected r4 dataset identity
+  expected_behavior: true
+  output_created: false
+  inference_rerun: false
+  test_access: none
+  raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  raw_writable_members: 0
+  preflight_sha256: 281e9dfa3fde050734d9e9d5c4736e065cacd02eafcfad547b3ec6e498977a47
+  command_sha256: 5eb5f3aa60e62b724652685fed85bbb2a2de20706185d69a7c5db27e0e79793e
+  run_log_sha256: bc9c0bff09620ca1788ed84012c6dfc7ff473ed5e469df322326c06ee7535ee5
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit_log_sha256: 5596cced2f9b5f3342fa142a0e9b2bf73244bb80bb64c008cec37f841555b5f7
+root_cause:
+  first_bad_boundary: the existing calibrate-mask-aware path has one dataset parameter used for both raw-run verification and current truth evaluation
+  unsafe_shortcut_rejected: changing or bypassing the r224 manifest identity
+replacement_design:
+  helper: verify_val_truth_rebind
+  contract:
+    - verify r224 raw records and masks only against their original immutable r3 val dataset
+    - independently verify corrected truth only against immutable r4 val dataset
+    - require equal denominator and one-to-one equality of formal index, seed, scenario, configured cup count, and image SHA256
+    - allow only truth mask and inventory/source-manifest identities to differ
+    - fail closed before scoring on any identity mismatch
+  tdd_red_run: stage-e-val-truth-rebind-red-r276
+  tdd_green_run: stage-e-val-truth-rebind-green-r277
+  benchmark_scope: none; helper belongs to the training calibration module and ordinary tests
+replacement_run: stage-e-corrected-truth-mask-aware-calibration-r281
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: add the rebind identity regression test first and run r276 RED before implementing the helper
+retention:
+  retained_runs: [r275 invalid evidence, all immutable r272-r274 evidence]
+  archived_runs: []
+  deletion_candidates: [r275 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-129 — fail-closed val truth rebind helper GREEN
+
+```yaml
+checkpoint: CP-129
+status: TDD_GREEN_RELATED_AND_FULL_GATES_PLANNED
+recorded_at: 2026-09-05T01:26:41+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-128
+tdd:
+  red:
+    run_id: stage-e-val-truth-rebind-red-r276
+    status: VALID_EXPECTED_RED
+    result: collection error because verify_val_truth_rebind was absent
+    exit_code: 2
+    elapsed_ms: 534
+    junit_sha256: 81d9d5175c481515933449b8cbc040e0f7d266db61faf40c610bc42055a5f0a9
+    preflight_sha256: 2e0e24321419d888514bcc9a1321671b60a4a2245ffdc89df1552d86812c6450
+    command_sha256: 944ba5762c4138b6e72e49dd018dd290b0c19ab2d5b1266d16f1cbc78b07c48b
+    pytest_log_sha256: 4b1fffe63e123c5d58d0cc09f49ecb49a6eccb02c3f83adefbe6d81c48b09f32
+    exit_log_sha256: 53fefe25364328632baafa8c6eb7500673dfe1a8c474f9c6c3ddda610fc203ce
+  green:
+    run_id: stage-e-val-truth-rebind-green-r277
+    status: VALID_GREEN
+    result: 1 passed in 0.15s
+    exit_code: 0
+    elapsed_ms: 443
+    junit_sha256: 357320bb2dd65083449b30e20b40a51d5db48936f4a98bcd6015e4e57df393a6
+    preflight_sha256: c18c116388e35c84d9e02e0293739776c411cca53380ca848f81af3c9b53983a
+    command_sha256: f117ca8eb67e630672702b01334d8be5d671545d4e35e8b40d86f5b6accd1341
+    pytest_log_sha256: a7208068989a4b88eb56ec217b7ca861609afdafb83ce4ab18d854577cc34321
+    exit_log_sha256: 9eec6d6b3a1df49fd65faa59e7b2365978824d4602ac67eb7cc3058d1a9db226
+implementation:
+  helper: verify_val_truth_rebind
+  binding_fields: [formal_sample_index, seed, scenario, configured_cup_count, image_sha256]
+  receipt_fields: [raw_source_manifest_sha256, raw_val_inventory_sha256, truth_source_manifest_sha256, truth_val_inventory_sha256, sample_count, sample_identity_sha256]
+  mismatch_behavior: RAW_TRUTH_REBIND_INVALID before scoring
+  allowed_difference: truth annotations and their inventory/source-manifest identities only
+static_checks:
+  ruff_0_15_20_lint: passed
+  git_diff_check: passed
+next_runs:
+  related: stage-e-val-truth-rebind-related-r278
+  fresh_overlay: linux-build-stage-e-val-truth-rebind-r279
+  formal_ordinary_gate: linux-test-stage-e-val-truth-rebind-r280-ordinary
+  replacement_offline_reevaluation: stage-e-corrected-truth-mask-aware-calibration-r281
+explicit_benchmark_gate:
+  status: NOT_RUN
+  reason: training calibration helper and ordinary test only; no benchmark implementation, configuration, adapter, report, or benchmark_test member changed
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: run the full calibration ordinary test module, build a fresh overlay, and run the complete ordinary package gate before using the helper on evidence
+retention:
+  retained_runs: [r276 RED, r277 GREEN, r275 invalid evidence]
+  archived_runs: []
+  deletion_candidates: [r276-r277 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-130 — truth-rebind related module GREEN
+
+```yaml
+checkpoint: CP-130
+status: RELATED_GREEN_FRESH_OVERLAY_PLANNED
+recorded_at: 2026-09-05T01:27:35+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-129
+related_ordinary_tests:
+  run_id: stage-e-val-truth-rebind-related-r278
+  status: VALID_GREEN
+  result: 9 passed in 0.17s
+  exit_code: 0
+  elapsed_ms: 456
+  test_module: test_grounded_sam_val_calibration.py
+  benchmark_collection: none
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-val-truth-rebind-related-r278/tmp
+  tempfile_preflight: exact resolved match
+  junit_sha256: 3f380ce2e5c704aea4720272ec67b63afff38d93e21590cd03b89b2436a34158
+  preflight_sha256: 2f561bb2975c88a526d5fd01e9947ab6f07edaa4afb974fcb55badb4a3460b11
+  command_sha256: a84eb49876eeefa51bfe8175c1a5ef008880f519b75253beed8ada5cab6ec038
+  pytest_log_sha256: 47d554ab5e26fcca4894bb9465369aef7d815926264a8359e374661f0d205975
+  exit_log_sha256: 5ef1f3a49341d338a07bfef494f453af184812f748d4a4517fc063df6113d640
+static_checks:
+  ruff_0_15_20_lint: passed
+  python_compile: passed
+  git_diff_check: passed
+fresh_build:
+  run_id: linux-build-stage-e-val-truth-rebind-r279
+  status: PLANNED
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  network_fetch: forbidden
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: build/read back r279 and then run the full r280 ordinary package gate
+retention:
+  retained_runs: [r278 related GREEN, all CP-129 evidence]
+  archived_runs: []
+  deletion_candidates: [r278 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-131 — truth-rebind fresh overlay valid
+
+```yaml
+checkpoint: CP-131
+status: BUILD_VALID_FULL_ORDINARY_GATE_PLANNED
+recorded_at: 2026-09-05T01:29:28+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-130
+build:
+  run_id: linux-build-stage-e-val-truth-rebind-r279
+  status: VALID
+  packages_finished: 7
+  exit_code: 0
+  elapsed_ms: 55973
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-val-truth-rebind-r279/tmp
+  tempfile_preflight: exact resolved match
+  source_commit: 6651e4b79ac49e77542d11c6cd016cdc04ef74c2
+  source_diff_sha256: 22793648076aeb1504754454738fb8de11d40e1616bf4c27ee1979290f06fe05
+  package_prefix_readback: all seven resolve inside r279 install
+  so101_demo_source_readback: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src
+  lodepng: {head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, tracked_files: 26, worktree: clean, fsck_strict: passed, network_fetch: false}
+  command_sha256: a75cdfa6885b660fe48c63eee9d8a0d05a7fc13c0346f8b6483fd21956752c4a
+  build_log_sha256: 06d3696513c639f175e67d318ee57977294bc5fa8993599fe8740e7b8e42af7d
+  exit_log_sha256: 9f3b08b1609daff50ef233c44b76e10661ebc717f50f93b9e34800393f20dcfa
+  tempfile_preflight_sha256: 231e0cf3f49185318841d58771e72bef27f3540579f836aefe6d4e2bc6756321
+  lodepng_fsck_sha256: 87fd0ea0a20896b110d48a60b864814bdec9c740b93cabea6b9c76b7bffedcd4
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-val-truth-rebind-r280-ordinary
+  status: PLANNED
+  collection: src/so101_demo_py/test only
+  benchmark_collection: forbidden
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute r280 with a unique NVMe scratch and fresh JUnit plus both exit receipts
+retention:
+  retained_runs: [r279 fresh overlay, all CP-130 evidence]
+  archived_runs: []
+  deletion_candidates: [r279 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-132 — truth-rebind implementation fully GREEN
+
+```yaml
+checkpoint: CP-132
+status: CODE_COMPLETE_SYNC_AND_OFFLINE_REEVALUATION_PLANNED
+recorded_at: 2026-09-05T01:30:44+08:00
+stage: E_CORRECTED_TRUTH_REEVALUATION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+prior_checkpoint: CP-131
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-val-truth-rebind-r280-ordinary
+  status: VALID_PASS
+  result: {passed: 1230, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.43}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14395
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-val-truth-rebind-r280-ordinary/tmp
+  tempfile_preflight: exact resolved match
+  benchmark_collection: none
+  command_sha256: ca9b3bad69b7c686f7131a6cbdad08c65f22a415593a82acff4ff8488bdccbfb
+  preflight_sha256: cc6928a656a458c22143f2a6dd59103dd5cdbcf9e614a1738edb15019180c66f
+  colcon_test_log_sha256: ed4088604d0dca5c2e1ef7473879515e2da9b145f9d5b30a2d307b2e9a395c4a
+  colcon_test_result_log_sha256: cb100b69380dbaad3761a2b577c525c2db3baefbe13682c733a823f6841e2fea
+  junit_sha256: da4e4210391d59d671c4da92ee8435564a340a02ab788e046a57dde5a5a21ef3
+  exit_log_sha256: c0688a0e9ef4884cd13624ccbc8a8e85ae126464a8ffc246c4e60d71a59c65d3
+verification:
+  focused_red_green: passed
+  related_module: 9 passed
+  ruff_0_15_20_lint: passed
+  python_compile: passed
+  git_diff_check: passed
+explicit_benchmark_gate:
+  status: NOT_RUN
+  reason: training calibration helper and ordinary test only; no benchmark implementation, configuration, adapter, report, or benchmark_test member changed; preserve r222/r30
+replacement_reevaluation:
+  run_id: stage-e-corrected-truth-mask-aware-calibration-r281
+  status: PLANNED
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r4-epoch7-mask-aware-calibration-r2
+  raw_dataset:
+    inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3/val/inventory.json
+    inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+    source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+    source_manifest_sha256: bc4f7386b681aa298d636b7b90ea754de0e74b08e90589a4d185694eeae10780
+  truth_dataset:
+    inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless/val/inventory.json
+    inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+    source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+    source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  immutable_raw_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  raw_source_commit: 26ed5238ed999676cb0234d80122139ce00ade15
+  model_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  fixed_grid: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  thresholds: {box: '0.25', text: '0.25', truth_box_iou: '0.50', truth_mask_iou: '0.80'}
+  inference_rerun: false
+  output_collision_policy: fresh r281 run/scratch and absent r2 output required
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit only helper/test/ledger, ordinary-push and read back Gitee SHA, then create/hash the r281 offline driver and execute it
+retention:
+  retained_runs: [r280 formal ordinary evidence, r279 overlay, all r275-r278 evidence]
+  archived_runs: []
+  deletion_candidates: [r279-r280 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
