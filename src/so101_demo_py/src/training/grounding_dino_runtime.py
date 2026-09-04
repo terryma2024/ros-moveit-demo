@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -42,30 +43,57 @@ class _MetricCounts:
     multi_total: int = 0
 
 
-def enable_grounding_dino_gradient_checkpointing(model: Any) -> str:
-    """Enable the locked Transformers old-format decoder checkpointing path."""
+def enable_grounding_dino_gradient_checkpointing(
+    model: Any, *, checkpoint_function: Any | None = None
+) -> str:
+    """Install a keyword-safe checkpoint wrapper on each Grounding DINO decoder layer."""
     decoder = getattr(getattr(model, "model", None), "decoder", None)
-    enable = getattr(model, "gradient_checkpointing_enable", None)
-    old_format_setter = getattr(model, "_set_gradient_checkpointing", None)
-    if (
-        decoder is None
-        or not hasattr(decoder, "gradient_checkpointing")
-        or not callable(enable)
-        or not callable(old_format_setter)
-    ):
+    layers = getattr(decoder, "layers", None)
+    if decoder is None or not hasattr(decoder, "gradient_checkpointing") or not layers:
         raise RuntimeError("GRADIENT_CHECKPOINTING_UNSUPPORTED")
-    if getattr(model, "supports_gradient_checkpointing", None) is False:
-        model.supports_gradient_checkpointing = True
-    try:
-        enable()
-    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
-        raise RuntimeError("GRADIENT_CHECKPOINTING_UNSUPPORTED") from exc
-    if (
-        getattr(decoder, "gradient_checkpointing", None) is not True
-        or getattr(model, "is_gradient_checkpointing", None) is not True
+    expected_parameters = (
+        "hidden_states",
+        "position_embeddings",
+        "reference_points",
+        "spatial_shapes",
+        "spatial_shapes_list",
+        "level_start_index",
+        "vision_encoder_hidden_states",
+        "vision_encoder_attention_mask",
+        "text_encoder_hidden_states",
+        "text_encoder_attention_mask",
+        "self_attn_mask",
+        "output_attentions",
+    )
+    if any(
+        tuple(inspect.signature(layer.forward).parameters) != expected_parameters
+        for layer in layers
     ):
+        raise RuntimeError("GRADIENT_CHECKPOINTING_SIGNATURE_MISMATCH")
+    if checkpoint_function is None:
+        from torch.utils.checkpoint import checkpoint as checkpoint_function
+    if not callable(checkpoint_function):
+        raise RuntimeError("GRADIENT_CHECKPOINTING_UNSUPPORTED")
+
+    decoder.gradient_checkpointing = False
+    for layer in layers:
+        original_forward = layer.forward
+
+        def checkpointed_forward(
+            *args,
+            _original_forward=original_forward,
+            _layer=layer,
+            **kwargs,
+        ):
+            if not _layer.training:
+                return _original_forward(*args, **kwargs)
+            return checkpoint_function(_original_forward, *args, use_reentrant=False, **kwargs)
+
+        layer.forward = checkpointed_forward
+        layer.gradient_checkpointing = True
+    if getattr(model, "is_gradient_checkpointing", None) is not True:
         raise RuntimeError("GRADIENT_CHECKPOINTING_NOT_ENABLED")
-    return "transformers-old-format-grounding-dino-decoder"
+    return "so101-grounding-dino-layer-keyword-non-reentrant"
 
 
 def _validate_sha_mapping(root: Path, expected: dict[str, str]) -> None:
@@ -101,6 +129,12 @@ def _validate_contract(document: dict[str, Any]) -> None:
         "validation_precision": "float32",
         "checkpoint_precision": "float32",
         "augmentations": "none",
+        "deterministic_algorithms": True,
+        "deterministic_warn_only": True,
+        "cudnn_benchmark": False,
+        "cudnn_deterministic": True,
+        "disable_flash_sdp": True,
+        "disable_memory_efficient_sdp": True,
     }
     if any(training.get(key) != value for key, value in expected_training.items()):
         raise RuntimeError("CONTRACT_TRAINING_INVALID")
@@ -518,7 +552,10 @@ def run_training(
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.use_deterministic_algorithms(training_contract["deterministic_algorithms"])
+    torch.use_deterministic_algorithms(
+        training_contract["deterministic_algorithms"],
+        warn_only=training_contract["deterministic_warn_only"],
+    )
     torch.backends.cudnn.benchmark = training_contract["cudnn_benchmark"]
     torch.backends.cudnn.deterministic = training_contract["cudnn_deterministic"]
     if training_contract["disable_flash_sdp"]:
@@ -562,6 +599,12 @@ def run_training(
             "gpu_uuid": str(torch.cuda.get_device_properties(0).uuid),
             "bf16_supported": torch.cuda.is_bf16_supported(),
             "cpu_fallback": False,
+            "deterministic_algorithms_enabled": torch.are_deterministic_algorithms_enabled(),
+            "deterministic_warn_only": torch.is_deterministic_algorithms_warn_only_enabled(),
+            "cudnn_benchmark": torch.backends.cudnn.benchmark,
+            "cudnn_deterministic": torch.backends.cudnn.deterministic,
+            "flash_sdp_enabled": torch.backends.cuda.flash_sdp_enabled(),
+            "memory_efficient_sdp_enabled": torch.backends.cuda.mem_efficient_sdp_enabled(),
         },
     )
     exclusive_json(

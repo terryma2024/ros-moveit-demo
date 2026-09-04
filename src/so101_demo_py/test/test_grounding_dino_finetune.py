@@ -336,42 +336,65 @@ def test_cuda_requirement_rejects_cpu_fallback() -> None:
     assert require_cuda(available) == "cuda:0"
 
 
-def test_grounding_dino_old_format_gradient_checkpointing_is_verified() -> None:
-    decoder = SimpleNamespace(gradient_checkpointing=False)
+def test_grounding_dino_decoder_layers_use_keyword_safe_checkpointing() -> None:
+    class DecoderLayer:
+        training = True
 
-    class OldFormatGroundingDino:
-        supports_gradient_checkpointing = False
+        def forward(
+            self,
+            hidden_states,
+            position_embeddings=None,
+            reference_points=None,
+            spatial_shapes=None,
+            spatial_shapes_list=None,
+            level_start_index=None,
+            vision_encoder_hidden_states=None,
+            vision_encoder_attention_mask=None,
+            text_encoder_hidden_states=None,
+            text_encoder_attention_mask=None,
+            self_attn_mask=None,
+            output_attentions=False,
+        ):
+            return hidden_states, spatial_shapes_list, output_attentions
 
+    layer = DecoderLayer()
+    decoder = SimpleNamespace(gradient_checkpointing=True, layers=[layer])
+
+    class GroundingDino:
         def __init__(self) -> None:
             self.model = SimpleNamespace(decoder=decoder)
-            self.enable_calls = 0
-
-        def _set_gradient_checkpointing(self, module, value=False) -> None:
-            module.gradient_checkpointing = value
-
-        def gradient_checkpointing_enable(self) -> None:
-            self.enable_calls += 1
-            if not self.supports_gradient_checkpointing:
-                raise ValueError("support flag rejected old-format implementation")
-            self._set_gradient_checkpointing(self.model.decoder, value=True)
 
         @property
         def is_gradient_checkpointing(self) -> bool:
-            return self.model.decoder.gradient_checkpointing
+            return any(
+                getattr(module, "gradient_checkpointing", False)
+                for module in self.model.decoder.layers
+            )
 
-    model = OldFormatGroundingDino()
+    checkpoint_calls = []
 
-    method = enable_grounding_dino_gradient_checkpointing(model)
+    def checkpoint(function, *args, use_reentrant, **kwargs):
+        checkpoint_calls.append((use_reentrant, kwargs.copy()))
+        return function(*args, **kwargs)
 
-    assert method == "transformers-old-format-grounding-dino-decoder"
-    assert model.supports_gradient_checkpointing is True
-    assert model.enable_calls == 1
-    assert model.model.decoder.gradient_checkpointing is True
+    model = GroundingDino()
+    method = enable_grounding_dino_gradient_checkpointing(model, checkpoint_function=checkpoint)
+
+    assert method == "so101-grounding-dino-layer-keyword-non-reentrant"
+    assert model.model.decoder.gradient_checkpointing is False
+    assert layer.gradient_checkpointing is True
     assert model.is_gradient_checkpointing is True
+    assert layer.forward("hidden", spatial_shapes_list="shapes", output_attentions=True) == (
+        "hidden",
+        "shapes",
+        True,
+    )
+    assert checkpoint_calls == [
+        (False, {"spatial_shapes_list": "shapes", "output_attentions": True})
+    ]
 
     incomplete = SimpleNamespace(
-        supports_gradient_checkpointing=False,
-        gradient_checkpointing_enable=lambda: None,
+        model=SimpleNamespace(decoder=SimpleNamespace(gradient_checkpointing=True))
     )
     with pytest.raises(RuntimeError, match="GRADIENT_CHECKPOINTING_UNSUPPORTED"):
-        enable_grounding_dino_gradient_checkpointing(incomplete)
+        enable_grounding_dino_gradient_checkpointing(incomplete, checkpoint_function=checkpoint)
