@@ -9206,3 +9206,93 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-107 — mask-aware low SAM-quality calibration code GREEN
+
+```yaml
+checkpoint: CP-107
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T23:41:20+08:00
+stage: E_SAM_QUALITY_LOW_GRID_CODE
+experiment_id: EXP-079-STAGE-E-SAM-QUALITY-LOW-GRID-R1
+prior_checkpoint: CP-106
+source_head_before_commit: 132a6c123d294c9ab793f3bdc2f482082b44fdd8
+implementation:
+  module: src/so101_demo_py/src/training/grounded_sam_val_calibration.py
+  module_sha256: be90a2441f31ae2b7c753858b3f60db36cc0c5473dacf5b0c76ae88a3d78fd03
+  cli: src/so101_demo_py/src/cli/grounded_sam_val_calibration.py
+  cli_sha256: b24eca01e6dc4cb9a3d21317c5b600cb5d5df4a29842ba85fecda27dc770281c
+  test: src/so101_demo_py/test/test_grounded_sam_val_calibration.py
+  test_sha256: 968887ab587adc1b15fca8b8ed7a289436e527dd77be6e19f25f1894b6c46f95
+contract:
+  sam_quality_grid: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  fixed_dino_thresholds: {box: '0.25', text: '0.25'}
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+  bbox_match_mask_failure_accounting: {fp: 1, fn: 1, tp: 0}
+  immutable_raw_reuse: required
+  inference_rerun: false
+  exclusive_output: required
+tdd:
+  red:
+    run_id: stage-e-mask-aware-low-grid-red-r227
+    result: {errors: 1, exit_code: 2, cause: selector import absent}
+    junit_sha256: 1854c6d1f3b2290d39fa87ea64ea546362ed364c5d5c5fe8879c80d2d7c26d37
+  focused_green:
+    run_id: stage-e-mask-aware-low-grid-green-r229
+    result: {passed: 1, failed: 0, deselected: 7, pytest_seconds: 0.14}
+    junit_sha256: c980b48a0853090f645288370d5974faa96d36067cca7462edb9bbca37eb977e
+  module_green:
+    run_id: stage-e-mask-aware-module-green-r231
+    result: {passed: 8, failed: 0, pytest_seconds: 0.19}
+    junit_sha256: 2e86f596f6624600fa6022f4f901498dddf20f8e5a1fb99fc2f0c68089cd8c8f
+  rejected_runs:
+    - {run_id: r228, cause: model runtime Python has no pytest; stopped before collection}
+    - {run_id: r230, cause: actual system pytest loaded Pillow 10.2 instead of locked 12.3}
+    - {run_id: r233, cause: venv Python could not import colcon_core; stopped before test launch}
+    - {run_id: r234, result: {passed: 1226, failed: 1}, cause: system dist-packages precedence selected Pillow 10.2}
+  static_check: {tool: ruff-0.15.20, result: passed}
+build:
+  run_id: linux-build-stage-e-mask-aware-r232
+  status: VALID
+  packages: 7
+  elapsed_ms: 56148
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-mask-aware-r232/tmp
+  python: /usr/bin/python3
+  tempfile_preflight: exact resolved match
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  lodepng_verification: clean worktree plus 26 tracked members plus git fsck --full --strict plus required source members
+  network_fetch: false
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-mask-aware-r235-ordinary
+  result: {passed: 1227, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.20}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14171
+  junit_sha256: 4c9864cf1cd74b557afd3789b7fa0b637e88866c7347b953175ee0a9d7fb96d3
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232
+  python: /usr/bin/python3
+  locked_site_packages: /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+  dependencies: {Pillow: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2, colcon_core: 0.21.0}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-mask-aware-r235-ordinary/tmp
+  basetemp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-mask-aware-r235-ordinary/tmp/pytest-basetemp
+  tempfile_preflight: exact resolved match
+explicit_benchmark_gate:
+  status: NOT_RUN
+  reason: training calibration module, CLI, and ordinary test changed; no benchmark implementation, configuration, adapter, report, or benchmark_test member changed
+cli_readback:
+  run_id: stage-e-mask-aware-cli-smoke-r237
+  result: {exit_code: 0, subcommand: calibrate-mask-aware, installed_help: present}
+  rejected_run: {run_id: r236, cause: direct command name is not exported to PATH by the isolated install prefix}
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and ordinary-push CP-107, read back the Gitee SHA, then replay immutable r224 masks offline once into the preregistered exclusive r3 output
+retention:
+  retained_runs: [r227-r237, r232 overlay, r235 ordinary evidence, immutable r224 raw]
+  archived_runs: []
+  deletion_candidates: [r227-r235 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
