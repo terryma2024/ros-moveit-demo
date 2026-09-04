@@ -8998,3 +8998,92 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-105 — raw prompt-token identity GREEN
+
+```yaml
+checkpoint: CP-105
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T23:18:48+08:00
+stage: E_RAW_PROMPT_TOKEN_GATING_CODE
+experiment_id: EXP-079-STAGE-E-RAW-PROMPT-TOKEN-GATING-R1
+prior_checkpoint: CP-104
+source_head_before_commit: e2e6c82bb57e6f15956509aae18744c2133d9202
+implementation:
+  adapter: src/so101_demo_py/src/perception_benchmark/adapters/grounded_sam.py
+  adapter_sha256: b6f55c231ae041a33d620093a0f410b9c692d4e6e3ebc4d4843b4fae2161a70c
+  test: src/so101_demo_py/benchmark_test/test_perception_benchmark_adapters.py
+  test_sha256: f1d672955ce601ef4b47f1e66be7d8e6a29d1f50d359fefaff15c87e9adbc4db
+change:
+  - low-floor proposal identity no longer depends on threshold-dependent decoded text label equality
+  - generic-cup identity is established by the fixed prompt, verified prompt token positions, exact mapped query, and prompt-token text score at least 0.01
+  - box score at least 0.01, query mapping, FP32, clipping, SAM, statelessness, and all other low-floor limits remain unchanged
+tdd:
+  red:
+    run_id: stage-e-raw-prompt-token-red-r215
+    result: {failed: 1, passed: 1, deselected: 67, cause: noisy low-floor decoded label incorrectly discarded a valid cup-token query}
+    junit_sha256: 238377c39a4877c85c3a4feb286fd45981e144269876c894fff3066fbaed3208
+  focused_green:
+    run_id: stage-e-raw-prompt-token-green-r216
+    result: {passed: 2, failed: 0, deselected: 67, pytest_seconds: 0.19}
+    junit_sha256: a9a32cfa5464a3a27c5e83622600023578d9aba87bb30775c029eb65194d32fb
+  rejected_preallocation:
+    - {run_id: r217, cause: ruff import-order check stopped before directory allocation}
+    - {run_id: r218, cause: ruff import-order check stopped before directory allocation}
+  adapter_green:
+    run_id: stage-e-raw-prompt-token-adapter-green-r219
+    result: {passed: 69, failed: 0, pytest_seconds: 3.00}
+    junit_sha256: be7d0121d378c84541531b24095238c3b204b324e2716aeef996ba660a7e4a16
+  static_check: {tool: ruff-0.15.20, result: passed}
+build:
+  run_id: linux-build-stage-e-prompt-token-r220
+  status: VALID
+  packages: 7
+  elapsed_ms: 55382
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-prompt-token-r220
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-prompt-token-r220/tmp
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  tempfile_preflight: exact resolved match
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  lodepng_verification: clean worktree plus git fsck --full --strict plus required source members
+  network_fetch: false
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-prompt-token-r221-ordinary
+  result: {passed: 1226, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.05}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14054
+  junit_sha256: 8d80e3b97636462507d0a670255388009bfd2c29f8b6ce0e6662526d2581bf12
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-prompt-token-r220
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-prompt-token-r221-ordinary/tmp
+  tempfile_preflight: exact resolved match
+explicit_benchmark_gate:
+  run_id: linux-test-stage-e-prompt-token-r222-benchmark
+  reason: benchmark raw adapter and its tests changed
+  result: {passed: 575, failed: 0, errors: 0, skipped: 2, total: 577, pytest_seconds: 653.39}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 654934
+  junit_sha256: e09766e3fc4db8fd8299c6520945387c696228431995d55420fa2d268b501501
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-prompt-token-r220
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-prompt-token-r222-benchmark/tmp
+  tempfile_preflight: exact resolved match
+  filesystem: /dev/nvme0n1p5 mounted at /data as ext4
+  r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  r30_comparison: {seconds_saved: 2557.39, percent_faster: 79.650}
+  r141_nvme_baseline: {passed: 573, skipped: 2, total: 575, pytest_seconds: 648.48}
+  r141_comparison: {seconds_delta: 4.91, percent_delta: 0.757, additional_tests: 2}
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push the adapter fix, then collect the one planned corrected val raw r2
+retention:
+  retained_runs: [r215-r222, r220 overlay, r221 ordinary evidence, r222 benchmark evidence]
+  archived_runs: []
+  deletion_candidates: [all r215-r222 registered NVMe scratch trees; do not delete without explicit user authorization]
+```

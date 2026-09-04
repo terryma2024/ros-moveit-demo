@@ -11,9 +11,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 import numpy as np
-from so101_demo.adapters.perception.grounded_sam_postprocess import (
-    grounding_label_matches_prompt,
-)
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
 from so101_demo.adapters.perception.model_runtime import (
     ModelSetupError,
@@ -36,6 +33,7 @@ from so101_demo.perception_benchmark.timing import (
     PhaseTimer,
     ResourceSampler,
 )
+
 
 def _force_offline_environment() -> None:
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
@@ -369,9 +367,7 @@ class GroundedSamRawAdapter:
         phrase_positions = _phrase_positions(tokens, self._prompt)
         query_indices = _query_indices(result, scores, probabilities)
         proposals: list[tuple[tuple[float, float, float, float], float, float]] = []
-        for index, label in enumerate(labels):
-            if not grounding_label_matches_prompt(label, self._prompt):
-                continue
+        for index in range(len(labels)):
             box_score = float(scores[index])
             query_probabilities = probabilities[query_indices[index]]
             text_score = min(
