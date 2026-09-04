@@ -58,7 +58,7 @@ class DetectionQuery:
     class_id: str
 
     def __post_init__(self) -> None:
-        if self.class_id != "plastic_cup":
+        if self.class_id not in {"cup", "plastic_cup"}:
             raise ValueError("class_id is not in the detection query whitelist")
 
 
