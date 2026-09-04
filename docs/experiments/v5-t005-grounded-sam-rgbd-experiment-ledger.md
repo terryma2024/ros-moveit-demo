@@ -9904,3 +9904,105 @@ retention:
   archived_runs: []
   deletion_candidates: [r255-r256 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Correction after CP-113 — audit truth generation before changing SAM
+
+```yaml
+correction_id: CP-113-CORRECTION-TRUTH-GENERATION
+recorded_at: 2026-09-05T00:31:00+08:00
+corrects_checkpoint: CP-113
+history_policy: preserve CP-113 and all r224-r256 evidence without rewriting or deleting it
+new_evidence:
+  visualization_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/visualizations/grounded-sam-failure-overlays-r3
+  manifest_sha256: c8f9aa6a81e1f1c13d86d42b8a3b7027b12d9f2e9ba6f80f9c4837c62904ffe8
+  user_reported_observations:
+    truth_instances: 300
+    convex_hull_area_inflation_over_10_percent: 294
+    convex_hull_area_inflation_over_50_percent: 253
+    median_area_inflation_ratio: 1.8729
+    partial_instances: 50
+    partial_visible_rle_vs_polygon_median_iou: 0.4301
+    partial_visible_rle_vs_polygon_below_0.80: 50
+    sample_152: {polygon_pixels: 25316, visible_pixel_count: 4946, visual_failure: polygon forms a large triangle from the image top to the cup}
+withdrawn:
+  - CP-113 inference that frozen SAM is the established root cause
+  - CP-113 recommendation to replace or fine-tune SAM before auditing label generation
+retained_as_historical_observation:
+  - r242-r255 metrics remain valid only against the then-current polygon-derived truth and cannot qualify SAM until corrected truth is rebuilt
+new_priority: audit raw MuJoCo segmentation and visible RLE against convex-hull polygon generation, then rebuild train/val truth and reevaluate the unchanged frozen candidate
+unchanged:
+  mask_iou_gate: '0.80'
+  detector_class: generic cup
+  prompt: cup.
+  sam: unchanged frozen snapshot, stateless per frame; no replacement or fine-tuning authorized
+sealed_boundaries:
+  synthetic_test_truth_or_labels: inaccessible
+  coco100: inaccessible
+  pickplace: inaccessible
+  mac_migration: forbidden
+  microduck: paused
+```
+
+## Stage E train/val-only truth-generation audit
+
+```yaml
+experiment_id: EXP-079-STAGE-E-TRUTH-GENERATION-AUDIT-R1
+status: PLANNED
+recorded_at: 2026-09-05T00:31:00+08:00
+prior_checkpoint: CP-113
+hypothesis: _polygon_from_mask corrupts visible-mask truth by replacing all target pixels with one convex hull, bridging concavities or disconnected MuJoCo segmentation components and inflating the rasterized label
+competing_hypotheses:
+  - the decoded visible RLE is already corrupt before polygon conversion
+  - polygon rasterization conventions, rather than convex-hull construction, explain the discrepancy
+prediction: train/val visible RLE will reproduce recorded pixel counts and hashes while the current polygon rasterization will show systematic excess area, low RLE IoU, and sample 152's top-to-cup triangle
+single_variable: read-only truth representation comparison; no source dataset, model, threshold, or evaluation mutation
+lifecycle: REUSE_IMMUTABLE_DATA_READ_ONLY_AUDIT
+scope:
+  readable_splits: [train, val]
+  forbidden_splits: [test]
+  source_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  converted_dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r3
+  immutable_visual_evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/visualizations/grounded-sam-failure-overlays-r3
+  planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/truth-remediation/grounding-dino-cup-r3-truth-generation-audit-r1
+audit_contract:
+  - decode train/val visible_mask_rle_counts and verify shape, SHA256, visible_pixel_count, bbox, and sample identity against immutable truth JSON
+  - rasterize the recorded polygon independently and measure polygon area, area-inflation ratio, intersection, union, and IoU against decoded visible RLE
+  - report distributions and counts by split and scenario, with explicit partial-occlusion and sample-152 readback
+  - inventory train/val inputs before and after and fail closed on any mutation, output collision, malformed RLE, hash mismatch, or unexpected split member
+  - never enumerate, open, hash, stat, or otherwise inspect test image, label, or truth members during this experiment
+success_criteria:
+  - all train/val RLEs reproduce their declared hashes and pixel counts
+  - the audit distinguishes RLE corruption from convex-hull or rasterization information loss with per-instance evidence
+  - source and converted r3 trees remain unchanged and read-only
+failure_criteria:
+  - input mutation, output collision, RLE/hash/count mismatch, test-member access, or incomplete train/val denominator
+provenance:
+  planning_source_commit: ed80e0037fd9892d30178abfb93222a45839ce76
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: UNSET_DATA_AUDIT_NO_ROS_GRAPH
+  gz_partition: UNSET_DATA_AUDIT_NO_GAZEBO_TRANSPORT
+implementation_boundary:
+  - complete read-only audit and confirm root cause before production changes
+  - then create a focused RED regression test that fails because disconnected or concave masks cannot round-trip through the current truth representation
+  - only after valid RED, replace lossy truth generation and rebuild a new train/val-only truth version into previously nonexistent durable roots
+  - never overwrite r2, r2-repro, r3 source, r3 conversion, source archives, or prior evidence
+gates_after_fix:
+  - focused GREEN, related regression, fresh seven-package symlink overlay, ordinary src/so101_demo_py/test gate, and explicit benchmark only if benchmark-owned implementation/config/tests changed
+  - reevaluate the existing frozen Grounding DINO plus frozen stateless SAM against corrected val truth before any model change
+decision_rule:
+  convex_hull_confirmed: RLE count/hash validation passes and independent polygon rasterization reproduces systematic inflation; proceed to RED test and lossless truth reconstruction
+  rle_corrupt: decoded RLE fails its own provenance or disagrees with raw MuJoCo segmentation evidence; stop before code changes and isolate the segmentation capture boundary
+  rasterizer_only: polygon coordinates retain the mask geometry but the consumer rasterizer corrupts it; fix the consumer boundary under a separate preregistered experiment
+sealed_boundaries:
+  synthetic_test_truth_or_labels: forbidden
+  coco100_access: forbidden
+  pickplace_access: forbidden
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit and Gitee-sync this correction and PLANNED audit, then execute one read-only train/val audit as r257
+retention:
+  retained_runs: [all CP-113 evidence, failure-overlays-r3, future r257 audit]
+  archived_runs: []
+  deletion_candidates: [future r257 NVMe scratch if allocated; do not delete without explicit user authorization]
+```
