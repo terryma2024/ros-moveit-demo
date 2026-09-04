@@ -6791,3 +6791,82 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-083 — smoke r1 failed before training; checkpointing fix planned
+
+```yaml
+checkpoint: CP-083
+status: FAILED_DIAGNOSED
+recorded_at: 2026-09-04T18:21:33+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-082
+checkpoint_commit_before_record: 7e21d1ce695720ce90eea49c67672cb6c9f6a12c
+smoke_r1:
+  run_id: stage-d-training-smoke-r84
+  status: FAILED_BEFORE_TRAINING
+  implementation_commit: eb60c652b886185e52a592786f578e2bf204728b
+  image_id: sha256:820c7bb0b1b75278b8bd00c3f4e9e48f166fc2037f977c079164a3473a46b6f3
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r1
+  output_reusable: false
+  exit_code: 1
+  elapsed_ms: 5558
+  failure: GroundingDinoForObjectDetection does not support gradient checkpointing.
+  training_steps_completed: 0
+  checkpoints_written: 0
+  retained_partial_files: [resolved-config.json, environment.json, provenance.json, checkpoints directory]
+  partial_output_tree_evidence_sha256: 8a0b008a9a904a1461ca17a0027ae27d010dbcde0f24fcf97f039f6e60efcf44
+  preflight:
+    status: VALID_WITH_PROCESS_SCAN_RECOVERY
+    train_count: 1200
+    val_count: 300
+    output_collision: absent
+    gpu_compute_processes: 0
+    cuda: available
+    bf16: true
+    image_and_host_implementation_hashes: identical
+    preflight_sha256: 897c89ae5b58fa43a82554fdf05716e2479db092ebe2a8e388cc0d7e0c9e106d
+    valid_pause_scan_sha256: 7e13067a507cc96463d006dc140706a02d6dee3c9f2d99fa63231c560c131d75
+    invalid_process_checks: pgrep and the first recovery pipeline matched their own command or evidence filename; neither indicated a real process
+  stdout_sha256: 7117cbfa68239e4da24bbd82b781715699ac223a5b81bf17c450504a87879660
+  exit_log_sha256: 09bb5b55e15fa04a7c9ac993851681044d409f96ae0f3ab81d4d150428b753ac
+diagnosis:
+  locked_transformers: 4.56.2
+  model_class: GroundingDinoForObjectDetection
+  inherited_supports_gradient_checkpointing: false
+  existing_internal_support:
+    - GroundingDinoPreTrainedModel._set_gradient_checkpointing sets GroundingDinoDecoder.gradient_checkpointing
+    - GroundingDinoDecoder.forward already invokes torch.utils.checkpoint.checkpoint while training
+  invalid_probe:
+    run_id: stage-d-gradient-checkpoint-diagnostic-r85
+    status: INVALID
+    reason: docker run omitted -i, so the heredoc was not delivered and the empty Python program exited zero
+  valid_probe:
+    run_id: stage-d-gradient-checkpoint-diagnostic-r86
+    status: VALID
+    base_model_mount: read-only
+    network: none
+    before: {support_flag: false, decoder_flag: false}
+    action: set the instance support flag true, then call the library gradient_checkpointing_enable method
+    after: {support_flag: true, decoder_flag: true, is_gradient_checkpointing: true}
+    exit_code: 0
+    elapsed_ms: 3734
+    probe_sha256: 7a8d71865d36cd85fb32c6c6ead23aa9374107a29e594ca2d383bb3049c5a1e3
+planned_fix:
+  method: add a fail-closed helper for the exact Grounding DINO old-format checkpointing implementation; use the public Transformers enable method after correcting the inconsistent instance capability flag, then verify the decoder and model checkpointing flags
+  tdd: add a focused RED test before changing production code, then run focused GREEN, related, fresh overlay, and ordinary gates
+  new_smoke_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r2
+  new_smoke_collision_preflight: absent
+  formal_output: remains the preregistered absent grounding-dino-cup-r3-formal-r1 root and cannot launch until smoke r2 is valid
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync this failure checkpoint, then execute the checkpointing compatibility change RED to GREEN and build a new immutable image tag or digest before smoke r2
+retention:
+  retained_runs: [r84 failed smoke, r85 invalid diagnostic, r86 valid diagnostic]
+  archived_runs: []
+  deletion_candidates: []
+```
