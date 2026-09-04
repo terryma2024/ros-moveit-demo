@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
@@ -185,8 +186,9 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
     relative = PurePosixPath("dataset-manifest.json")
     payload = _read_bytes(source_root, relative)
     document = _json_mapping(payload, member=relative.as_posix())
-    if document.get("schema_version") != 1:
-        raise _fail("MANIFEST_INVALID", "schema_version must be 1")
+    schema_version = document.get("schema_version")
+    if schema_version not in {1, 2}:
+        raise _fail("MANIFEST_INVALID", "schema_version must be 1 or 2")
     samples = document.get("samples")
     if not isinstance(samples, list):
         raise _fail("MANIFEST_INVALID", "samples must be a list")
@@ -206,6 +208,23 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
         raise _fail("MANIFEST_INVALID", "generator_commit must be a lowercase Git SHA")
     if not isinstance(mjcf_sha256, str) or _SHA256.fullmatch(mjcf_sha256) is None:
         raise _fail("MANIFEST_INVALID", "mjcf_sha256 must be a lowercase SHA256")
+    if schema_version == 2:
+        quotas = document.get("scenario_quotas")
+        if not isinstance(quotas, Mapping) or set(quotas) != set(_SPLITS):
+            raise _fail("MANIFEST_INVALID", "scenario_quotas must contain all splits")
+        for split in _SPLITS:
+            split_quotas = quotas[split]
+            if not isinstance(split_quotas, Mapping) or any(
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                for value in split_quotas.values()
+            ):
+                raise _fail("MANIFEST_INVALID", f"scenario_quotas.{split} is invalid")
+            if sum(split_quotas.values()) != split_counts[split]:
+                raise _fail("MANIFEST_INVALID", f"scenario_quotas.{split} count mismatch")
+        if not isinstance(document.get("scene_geometry"), Mapping):
+            raise _fail("MANIFEST_INVALID", "scene_geometry must be present in schema 2")
+        if not isinstance(document.get("truth_contract"), Mapping):
+            raise _fail("MANIFEST_INVALID", "truth_contract must be present in schema 2")
     return document, payload
 
 
@@ -244,6 +263,27 @@ def _validate_manifest_members(manifest: Mapping[str, Any], samples: list[dict[s
     expected_counts = manifest["split_counts"]
     if any(actual_counts[split] != expected_counts[split] for split in _SPLITS):
         raise _fail("MANIFEST_INVALID", "split_counts do not match samples")
+    if manifest["schema_version"] == 2:
+        for split in _SPLITS:
+            actual_scenarios = Counter(
+                sample["scenario"] for sample in samples if sample["split"] == split
+            )
+            if dict(actual_scenarios) != dict(manifest["scenario_quotas"][split]):
+                raise _fail(
+                    "MANIFEST_INVALID",
+                    f"scenario_quotas.{split} do not match samples",
+                )
+
+    seed_owners: dict[int, str] = {}
+    for sample in samples:
+        seed = sample["seed"]
+        owner = seed_owners.get(seed)
+        if owner is not None:
+            raise _fail(
+                "SPLIT_SEEDS_OVERLAP",
+                f"seed {seed} appears in both {owner} and {sample['split']}",
+            )
+        seed_owners[seed] = sample["split"]
 
     seen_by_split: dict[str, set[str]] = {split: set() for split in _SPLITS}
     all_members: set[str] = set()
@@ -314,6 +354,8 @@ def _truth_instances(
     sample: Mapping[str, Any],
     image_width: int,
     image_height: int,
+    schema_version: int,
+    scene_geometry: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
     truth = _json_mapping(payload, member=member)
     for field in (
@@ -343,10 +385,139 @@ def _truth_instances(
         ):
             raise _fail("TRUTH_MISMATCH", f"{member}: instance {index} visible pixels invalid")
         truth_box = polygon_to_box(instance.get("polygon_xy", ()), image_width, image_height)
+        occlusion = None
+        if schema_version == 2:
+            measured = instance.get("occlusion_measured")
+            state = instance.get("occlusion_state")
+            if not isinstance(measured, bool) or state not in {
+                "unmeasured",
+                "none",
+                "partial",
+            }:
+                raise _fail(
+                    "OCCLUSION_TRUTH_INVALID",
+                    f"{member}: instance {index} measurement state invalid",
+                )
+            if measured:
+                try:
+                    visible_mask = decode_binary_mask_rle(
+                        instance.get("visible_mask_rle_counts"),
+                        instance.get("mask_shape_hw"),
+                    )
+                    paired_reference_mask = decode_binary_mask_rle(
+                        instance.get("paired_reference_mask_rle_counts"),
+                        instance.get("mask_shape_hw"),
+                    )
+                    amodal_mask = decode_binary_mask_rle(
+                        instance.get("amodal_mask_rle_counts"),
+                        instance.get("mask_shape_hw"),
+                    )
+                except ValueError as error:
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index}: {error}",
+                    ) from error
+                if visible_mask.shape != (image_height, image_width):
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} mask shape differs from image",
+                    )
+                visible_hash = _sha256_bytes(visible_mask.astype("uint8").tobytes(order="C"))
+                paired_reference_hash = _sha256_bytes(
+                    paired_reference_mask.astype("uint8").tobytes(order="C")
+                )
+                amodal_hash = _sha256_bytes(amodal_mask.astype("uint8").tobytes(order="C"))
+                paired_reference_pixels = int(paired_reference_mask.sum())
+                amodal_pixels = int(amodal_mask.sum())
+                occluded_pixels = amodal_pixels - visible_pixels
+                fraction = visible_pixels / amodal_pixels if amodal_pixels else -1.0
+                if (
+                    instance.get("visible_mask_sha256") != visible_hash
+                    or instance.get("paired_reference_mask_sha256") != paired_reference_hash
+                    or instance.get("amodal_mask_sha256") != amodal_hash
+                    or int(visible_mask.sum()) != visible_pixels
+                    or instance.get("paired_reference_pixel_count") != paired_reference_pixels
+                    or instance.get("amodal_pixel_count") != amodal_pixels
+                    or instance.get("occluded_pixel_count") != occluded_pixels
+                    or not isinstance(instance.get("visible_fraction"), (int, float))
+                    or not math.isclose(
+                        float(instance["visible_fraction"]),
+                        fraction,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                    or not bool((amodal_mask == (visible_mask | paired_reference_mask)).all())
+                ):
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} masks, counts, or hashes differ",
+                    )
+                expected_state = "partial" if occluded_pixels else "none"
+                if state != expected_state:
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} state differs from masks",
+                    )
+                occluder = instance.get("occluder_body_name")
+                reference = instance.get("occlusion_reference")
+                if not isinstance(occluder, str) or not isinstance(reference, str):
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} occluder provenance is absent",
+                    )
+                occlusion = {
+                    "amodal_pixel_count": amodal_pixels,
+                    "occluded_pixel_count": occluded_pixels,
+                    "occluder_body_name": occluder,
+                    "state": state,
+                    "visible_fraction": fraction,
+                }
+            elif state != "unmeasured":
+                raise _fail(
+                    "OCCLUSION_TRUTH_INVALID",
+                    f"{member}: instance {index} unmeasured state is inconsistent",
+                )
+            if sample["scenario"] == "partially_occluded_cup":
+                assert scene_geometry is not None
+                fraction_range = scene_geometry.get("partial_visible_fraction")
+                minimum_pixels = scene_geometry.get("visible_pixel_count_minimum")
+                if (
+                    occlusion is None
+                    or occlusion["state"] != "partial"
+                    or occlusion["occluder_body_name"] != "orange_bottle"
+                    or instance.get("occlusion_reference")
+                    != "visible_union_paired_segmentation_with_declared_occluder_hidden"
+                    or not isinstance(fraction_range, list)
+                    or len(fraction_range) != 2
+                    or not fraction_range[0] <= fraction <= fraction_range[1]
+                    or not isinstance(minimum_pixels, int)
+                    or visible_pixels < minimum_pixels
+                ):
+                    raise _fail(
+                        "OCCLUSION_TRUTH_INVALID",
+                        f"{member}: instance {index} violates partial-occlusion contract",
+                    )
+        if schema_version == 2 and sample["scenario"] == "small_far_cup":
+            assert scene_geometry is not None
+            left, top, right, bottom = truth_box.absolute_xyxy
+            area = (right - left) * (bottom - top)
+            threshold = scene_geometry.get("small_bbox_area_max_exclusive")
+            minimum_pixels = scene_geometry.get("visible_pixel_count_minimum")
+            if (
+                not isinstance(threshold, (int, float))
+                or not 0.0 < area < float(threshold)
+                or not isinstance(minimum_pixels, int)
+                or visible_pixels < minimum_pixels
+            ):
+                raise _fail(
+                    "SMALL_TRUTH_INVALID",
+                    f"{member}: instance {index} violates small-target contract",
+                )
         normalized.append(
             {
                 "visible_pixel_count": visible_pixels,
                 "box": truth_box,
+                "occlusion": occlusion,
             }
         )
     return normalized
@@ -369,7 +540,10 @@ def _boxes_match(left: BoundingBox, right: BoundingBox) -> bool:
 
 
 def _profile(
-    samples: list[dict[str, Any]], inventories: Mapping[str, list[dict[str, Any]]]
+    samples: list[dict[str, Any]],
+    inventories: Mapping[str, list[dict[str, Any]]],
+    *,
+    schema_version: int,
 ) -> dict[str, Any]:
     profile: dict[str, Any] = {"schema_version": 1}
     samples_by_split = {
@@ -381,6 +555,7 @@ def _profile(
         records = inventories[split]
         area_counts: Counter[str] = Counter()
         instance_count = 0
+        occlusion_counts: Counter[str] = Counter()
         for record in records:
             for box in record["boxes"]:
                 left, top, right, bottom = box["absolute_xyxy"]
@@ -388,6 +563,11 @@ def _profile(
                 bucket = "small" if area < 32**2 else "medium" if area < 96**2 else "large"
                 area_counts[bucket] += 1
                 instance_count += 1
+                occlusion = box.get("occlusion")
+                if occlusion is None:
+                    occlusion_counts["unmeasured"] += 1
+                else:
+                    occlusion_counts[f"measured_{occlusion['state']}"] += 1
         configured_count = sum(sample["configured_cup_count"] for sample in split_samples)
         visible_count = sum(sample["visible_instance_count"] for sample in split_samples)
         profile[split] = {
@@ -400,7 +580,15 @@ def _profile(
             "image_count": len(split_samples),
             "instance_count": instance_count,
             "lighting": "unknown",
-            "partial_occlusion": "unknown",
+            "partial_occlusion": (
+                "unknown"
+                if schema_version == 1
+                else {
+                    "measured_none": occlusion_counts["measured_none"],
+                    "measured_partial": occlusion_counts["measured_partial"],
+                    "unmeasured": occlusion_counts["unmeasured"],
+                }
+            ),
             "scenario_counts": dict(
                 sorted(Counter(sample["scenario"] for sample in split_samples).items())
             ),
@@ -519,6 +707,8 @@ def convert_dataset(
             sample=sample,
             image_width=width,
             image_height=height,
+            schema_version=manifest["schema_version"],
+            scene_geometry=manifest.get("scene_geometry"),
         )
         if len(polygons) != len(truth_instances):
             raise _fail("TRUTH_MISMATCH", f"{paths['label']}: label/truth instance count differs")
@@ -529,6 +719,8 @@ def convert_dataset(
                 raise _fail("TRUTH_MISMATCH", f"{paths['label']}: label/truth box differs")
             box_document = _box_document(label_box)
             box_document["visible_pixel_count"] = truth_instance["visible_pixel_count"]
+            if manifest["schema_version"] == 2:
+                box_document["occlusion"] = truth_instance["occlusion"]
             boxes.append(box_document)
         inventories[split].append(
             {
@@ -559,7 +751,11 @@ def convert_dataset(
         "source_manifest_sha256": source_manifest_sha256,
         "split": "test",
     }
-    documents["dataset-profile.json"] = _profile(samples, inventories)
+    documents["dataset-profile.json"] = _profile(
+        samples,
+        inventories,
+        schema_version=manifest["schema_version"],
+    )
     payloads = {relative: _canonical_json(document) for relative, document in documents.items()}
     output_root.mkdir(parents=True, exist_ok=False)
     for relative in sorted(payloads):
