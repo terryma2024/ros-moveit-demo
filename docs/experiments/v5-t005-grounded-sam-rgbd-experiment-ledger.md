@@ -8222,3 +8222,97 @@ retention:
   archived_runs: []
   deletion_candidates: [future r144-r148 NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-098 — one-time synthetic-test carrier TDD complete
+
+```yaml
+checkpoint: CP-098
+status: VALID_TDD_GREEN_SYNTHETIC_TEST_STILL_SEALED
+recorded_at: 2026-09-04T21:38:12+08:00
+stage: E_SYNTHETIC_TEST_CARRIER_TDD
+experiment_id: EXP-079-STAGE-E-SYNTHETIC-TEST-R1
+prior_checkpoint: CP-097
+source_commit_before_change: dd0cec7c8e1c4fb0cbb3d8f56d2a57efb45303d7
+owned_scope:
+  - src/so101_demo_py/src/training/frozen_candidate_evaluation.py
+  - src/so101_demo_py/src/cli/evaluate_grounded_sam_frozen_candidate.py
+  - src/so101_demo_py/test/test_frozen_candidate_evaluation.py
+  - src/so101_demo_py/setup.py console entry point only
+implemented_contract:
+  - verify the canonical immutable candidate lock, internal digest, exact bundle, detector, SAM, prompt, threshold, selector, and sealed-test identities before access
+  - require the source root, source manifest, sealed inventory, and every sealed image/label/truth member to be read-only and hash-bound
+  - validate every sealed member hash before parsing any annotation and enforce the exact 300-sample seed/scenario contract
+  - create one exclusive access event and RUNNING manifest before loading sealed truth; reject output collisions
+  - run fixed CUDA float32 low-floor raw collection and actual production detection with one shared frozen model instance and no CPU fallback
+  - enforce generic class cup, prompt cup., production batch provenance, maximum candidates, one-to-one exact box/score plus mask-IoU mapping, and calibrated decision parity
+  - persist every actual production SAM mask as canonical lossless RLE, then decode and hash-read it back before accepting the sample record
+  - report complete TP/FP/FN, Precision/Recall/F1, image hits, decisions, area recall, scenario metrics, small/far, partial-occlusion, single-cup, multi-cup, occlusion recall, and mask IoU
+  - terminalize initialized setup or provenance failures as INVALID without reusing the output root
+tdd_evidence:
+  initial_lock_mapping_red:
+    run_id: stage-e-synthetic-test-carrier-red-r144
+    result: {passed: 0, failed: 3, pytest_seconds: 0.12}
+    exit_code: 1
+    junit_sha256: 67616664d52ffb9594235e4781701e298dc83c5e575f20b5f9c2e8d5da2acf01
+  initial_lock_mapping_green:
+    run_id: stage-e-synthetic-test-carrier-green-r145
+    result: {passed: 3, failed: 0, pytest_seconds: 0.12}
+    exit_code: 0
+    junit_sha256: d420ff2286dc25894be1bad113765d08d574713e504f412f51e21b4427e04fd9
+  evaluator_red:
+    run_id: stage-e-synthetic-test-runner-red-r146
+    result: {passed: 3, failed: 2}
+    exit_code: 1
+    junit_sha256: 3121612fcdcf40d5d8e6655e610cfb94fddbdb8f469fb946cf5acd4705d05893
+  evaluator_fixture_reds:
+    - {run_id: stage-e-synthetic-test-runner-green-r147, cause: production fixture frame ID differed from the formal frame contract, exit_code: 1, junit_sha256: 1de443f428c5284137a5f780c042bc0d0923882984fe12e535f10328b432f509}
+    - {run_id: stage-e-synthetic-test-runner-green-r151, cause: positive fixture had four mask pixels and correctly failed the frozen minimum of 64, exit_code: 1, junit_sha256: f7af665c71d29cbbe9fd5f2d36f9eeb52dd3ed7400146db4ffc4eb8014666eef}
+  invalid_harness_runs:
+    - {run_id: stage-e-synthetic-test-runner-green-r148, status: INVALID_HARNESS, cause: zsh read-only variable prevented complete exit and elapsed evidence, junit_sha256: 32f962bcb65e74bfa68dd92da60fe1ede731e4e9e2223f3f920bd1d8fa7c602a}
+    - {run_id: stage-e-synthetic-test-runner-green-r149, status: INVALID_COLLECTION_ENVIRONMENT, cause: PYTHONPATH pointed at an unresolved egg-link site-packages directory, exit_code: 2, junit_sha256: 851b6ac5ab5ce8140b69f0d3729fc998ccdfdac9dfba58d0606abdc1c99b85b3}
+    - {run_id: stage-e-synthetic-test-runner-green-r150, status: INVALID_COLLECTION_ENVIRONMENT, cause: package_dir maps so101_demo to src and the raw source directory alone was not an import root, exit_code: 2, junit_sha256: 600bead552e3a251b5bef192bf5e26e44ca9de432d92618d438da37cc1d8f93d}
+  evaluator_green:
+    run_id: stage-e-synthetic-test-runner-green-r152
+    result: {passed: 5, failed: 0, pytest_seconds: 0.21}
+    exit_code: 0
+    elapsed_ms: 418
+    junit_sha256: 8a73083681cb4fa054ad0eab7188235b6a5c88ccecf866b0104b107e7eef1334
+  positive_loader_red_green:
+    red: {run_id: stage-e-synthetic-test-loader-positive-r153, cause: label directory was incorrectly mapped to label/test instead of labels/test, exit_code: 1, junit_sha256: 74280e150d336f90cb7da09384539159691a60cf7b882b452d28d4f9db4284f9}
+    green: {run_id: stage-e-synthetic-test-loader-positive-green-r154, passed: 2, deselected: 4, exit_code: 0, elapsed_ms: 377, junit_sha256: e08860a8e43473a03478e86474507199131275a640d9aebf0a6b35359f4fa555}
+  cli_red_green:
+    red: {run_id: stage-e-synthetic-test-cli-red-r155, cause: formal CLI did not yet exist, exit_code: 2, junit_sha256: bb475e9bf722d02924b0764b9e9a15aad7f14fee325d4a663b6b5ba8318fcf8b}
+    green: {run_id: stage-e-synthetic-test-cli-green-r156, passed: 8, exit_code: 0, elapsed_ms: 420, junit_sha256: 34823c09fad162ebaad177b3076554b29f2c033e16efe94120937a8673f5edbe}
+  evidence_completeness_red_green:
+    red: {run_id: stage-e-synthetic-test-evidence-red-r157, cause: mutable source was not rejected and strata metrics were absent, passed: 7, failed: 2, exit_code: 1, junit_sha256: 7fd96bac7b00b1c3c2176aa9d0a9ffb462b3f8420f0d022022ad89b3ad5ba27b}
+    green: {run_id: stage-e-synthetic-test-evidence-green-r158, passed: 9, failed: 0, pytest_seconds: 0.21, exit_code: 0, elapsed_ms: 412, junit_sha256: 02746e99a592ead9419a45d77d458456f43d5d913df0797e58a8f20b6fe0ed6c}
+directed_regression:
+  run_id: stage-e-synthetic-test-directed-green-r159
+  scope: frozen candidate, Grounded-SAM adapter/bundle/config/postprocess, schema-v2 bundle, Grounding-DINO dataset augmentation and fine-tuning; benchmark_test not collected
+  result: {passed: 94, failed: 0, errors: 0, skipped: 0, pytest_seconds: 0.77}
+  exit_code: 0
+  elapsed_ms: 988
+  junit_sha256: 54571af5a661321af1a943bc5ea554c4150d88a230ac01db4259d0b3994b1d8a
+static_readback:
+  ruff_check: passed
+  ruff_format_check_for_new_carrier_files: passed
+  git_diff_check: passed
+nvme_scratch_rule:
+  applied: true
+  locked_python: /data/work/venvs/so101-grounded-sam/bin/python
+  actual_pytest_python: /usr/bin/python3
+  result: both tempfile.gettempdir calls resolved exactly inside each unique exp-079 /data NVMe scratch directory
+  r30_hdd_baseline_preserved: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  full_benchmark_after_r30: r141 already valid; no benchmark rerun is required or permitted for this non-benchmark carrier change
+sealed_boundaries:
+  synthetic_test_annotation_access: none
+  formal_output_absent: true
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only the carrier scope plus this checkpoint, synchronize safely with the Gitee branch and persistent AGENTS.md rule, then build a fresh seven-package offline overlay and run the ordinary test gate before any sealed-test access
+retention:
+  retained_runs: [r144-r159 TDD and directed evidence]
+  archived_runs: []
+  deletion_candidates: [r144-r159 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
