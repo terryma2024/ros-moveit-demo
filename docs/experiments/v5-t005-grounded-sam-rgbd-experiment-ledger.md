@@ -11374,3 +11374,93 @@ retention:
   archived_runs: []
   deletion_candidates: [all r272-r281 registered NVMe scratch trees plus r260-r271 scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-134 — corrected-truth residual attribution authorized and frozen
+
+```yaml
+checkpoint: CP-134
+status: PLANNED
+recorded_at: 2026-09-05T07:04:53+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-133
+authorization: user explicitly authorized the recommended train/val-only residual-attribution experiment
+source_commit: ed5a6d90767ade26be213404e0264dfa3e1fd310
+hypothesis: >-
+  With lossless visible-mask truth, the remaining failures can be separated into detector misses,
+  box-matched SAM under-segmentation, SAM leakage, and raw-truth fragmentation; component-level
+  measurements and corrected overlays will identify whether any later SAM intervention is justified.
+scope:
+  split: val only
+  samples: 300
+  truth_instances: 300
+  inference_rerun: false
+  model_or_threshold_change: none
+  training: none
+frozen_inputs:
+  raw_run_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  corrected_calibration_report: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r4-epoch7-mask-aware-calibration-r2/report.json
+  corrected_calibration_report_sha256: 280ee198fa09cb2ba803697c02cd06cc50b1a8e5f94248a5f1999fb885ea85d4
+  val_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless/val/inventory.json
+  val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  truth_source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  truth_source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+frozen_contract:
+  detector_prompt: cup.
+  detector_class: generic cup
+  thresholds: {box: '0.25', text: '0.25', sam_quality: '0.50', truth_box_iou: '0.50', truth_mask_iou: '0.80'}
+  sam: existing frozen stateless-per-frame SAM 2.1 Hiera Tiny
+  matching: preserve production calibration matching and selected-candidate semantics
+  mask_decoding: exact persisted COCO RLE; no morphology, component filtering, convex fill, or label repair
+attribution_taxonomy:
+  sample_level: [NO_TRUTH_SAFE, DETECTOR_MISS, BOX_MATCH_MASK_PASS, BOX_MATCH_MASK_FAIL]
+  mask_fail_subtypes:
+    - LEAKAGE: prediction outside truth exceeds missing truth area
+    - UNDER_SEGMENTATION: missing truth area exceeds prediction leakage
+    - MIXED: leakage and missing truth areas are equal
+  component_metrics:
+    - truth_component_count and prediction_component_count using 8-connectivity
+    - largest_component_fraction for truth and prediction
+    - singleton_component_count for truth and prediction
+    - intersection, union, false_positive_pixels, false_negative_pixels, precision, recall, and IoU
+  aggregation: full-dataset and per-scenario counts plus quantiles; no threshold selection
+visual_contract:
+  overlay_population: deterministic worst-IoU representatives from each positive scenario and each observed failure subtype
+  overlay_panels: [source RGB, exact corrected truth, selected prediction, intersection/error composite]
+  color_key: {truth_only: red, prediction_only: blue, overlap: green}
+  captions: include formal index, seed, scenario, candidate id, scores, IoU, areas, and component metrics
+  manifest: bind every overlay to input image/truth/raw-record/mask SHA256 and analysis-record SHA256
+planned_output:
+  run_id: stage-e-corrected-truth-residual-r282
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/visualizations/grounded-sam-corrected-truth-residual-r1
+  collision_preflight: root absent and no symlink
+  expected_members: [manifest.json, report.json, records.jsonl, overlays/, montage.png]
+  freeze_on_success: recursively read-only with inventory/hash readback
+implementation_validation:
+  script_location: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/corrected_truth_residual_attribution_r1.py
+  red_first: synthetic fixture must fail until component and attribution implementation exists
+  green: synthetic exact/pass, under-segmentation, leakage, fragmented-truth, and no-truth cases pass before real-data execution
+  exact_python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-residual-r282/tmp
+  tempfile_preflight: required exact resolved containment before execution
+fail_closed:
+  - any input hash, sample identity, record count, mask hash, runtime CUDA/no-fallback, or source image hash mismatch
+  - output or scratch collision, symlink, missing selected-threshold contract, or altered input detected
+  - any access to sealed synthetic test, COCO100, PickPlace, Mac, or Microduck
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+  mask_iou_gate: '0.80 unchanged'
+decision_rule: >-
+  Report observed residual causes without tuning. Stop at a new decision boundary after immutable
+  readback; no fine-tuning, SAM replacement, threshold change, or downstream evaluation is authorized.
+retention:
+  retained_runs: [all CP-133 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r282 scratch after readback; do not delete without explicit user authorization]
+next_action: commit and push this frozen PLANNED checkpoint, then create the RED synthetic contract
+```
