@@ -6733,3 +6733,61 @@ retention:
   deletion_candidates:
     - all registered r69-r81 NVMe scratch trees; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-082 — Stage D training image frozen
+
+```yaml
+checkpoint: CP-082
+status: VALID
+recorded_at: 2026-09-04T18:15:53+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-081
+implementation_sync:
+  implementation_commit: eb60c652b886185e52a592786f578e2bf204728b
+  gitee_branch: codex/v5-t004-yolo-seg-rgbd
+  remote_before_push: c2ac68a5db7987e9e4c00c38b5ba09637bfd6a88
+  required_agents_commit_is_ancestor: b91a4b56d30bc971e7c2d64465516b9d7a49b299
+  rebase: up to date; no rewrite required
+  root_agents_nvme_rule_readback: present
+  pushed_remote_sha: eb60c652b886185e52a592786f578e2bf204728b
+  preexisting_untracked_build_install_log_directories_modified: false
+image_build:
+  run_id: stage-d-training-image-build-r82
+  status: VALID
+  source_commit: eb60c652b886185e52a592786f578e2bf204728b
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2
+  image_id: sha256:820c7bb0b1b75278b8bd00c3f4e9e48f166fc2037f977c079164a3473a46b6f3
+  image_size_bytes: 5141800305
+  entrypoint: train_grounding_dino
+  docker: {client: 29.1.3, server: 29.1.3}
+  command: scripts/grounding-dino-training-container.sh build
+  refresh_base: false
+  base_image: pinned digest and cache hit
+  target_collision_preflight: absent
+  exit_code: 0
+  elapsed_ms: 654834
+  build_note: Ubuntu noble-security restricted index timed out and apt explicitly ignored that unused index; all required packages installed successfully from available pinned sources or cache
+  version_readback:
+    torch: 2.13.0+cu130
+    torchvision: 0.28.0+cu130
+    transformers: 4.56.2
+    cuda: '13.0'
+  evidence:
+    preflight_sha256: c89aa199e3cb5a3e2cee821941e5efc92f60a4b5dadc8e58a573d61f917daeb1
+    buildkit_stderr_sha256: 0b2840c05b9e49a02c67303969ff6db358fe4409544e3c5d99b5a4146bff7a68
+    exit_log_sha256: fdab34fc2519a216b30996ae4b570b5954fb99515017dcf0d966408af80c09d5
+    image_inspect_sha256: 2636cc898443863e1b4706049c852eac03cd46720a3596c08e5592bf7a8521a5
+    version_readback_sha256: 8a12525212b19c997f5765784121ea790a0aad6a114d796e458da30c2c69a769
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync CP-082, then preflight and launch the preregistered smoke against read-only r3 train and val only; freeze and fresh-process verify the smoke checkpoint before formal training
+retention:
+  retained_runs: [stage-d-training-image-build-r82]
+  archived_runs: []
+  deletion_candidates: []
+```
