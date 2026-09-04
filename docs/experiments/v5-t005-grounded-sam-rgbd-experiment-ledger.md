@@ -4752,3 +4752,97 @@ retention:
 next_command: commit and push CP-064, synchronize ai-station, create the two empty test output parents, then launch the Mac plist exactly once
 decision: RUN_MAC_FROZEN_TEST_MATRIX_AFTER_COMMIT
 ```
+
+## Checkpoint CP-065 — Grounded-SAM 对账失败诊断与 r2 重跑预注册
+
+```yaml
+checkpoint_id: CP-065
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-064
+status: READY_FOR_R2_SYNC_BUILD_AND_MAC_RETRY
+frozen_test_policy:
+  test_access_event_sha256: c77c2dcf6772ba708f03d6e910ffd5e9323d7c47a9e915fa8ed33c96cef6f76f
+  inventory_sha256: 72d38c392889d9f1d8095f24d148f31bd2915a5f36fc62b123f6625fc7e76dd2
+  yolo_lock_sha256: bbe200f0f46bb035a78a22e7524e0f401175f99d41ce6067fd888aacd8644df6
+  grounded_sam_lock_sha256: 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+  prompt_model_grid_threshold_metric_matching_objective_changed: false
+  evidence_reconciliation_rule_changed: true
+  oracle_diagnostic_run: false
+mac_r1_results:
+  valid_runs:
+    - {run_id: mac-yolo-test-raw-postfix-r4-r1, records: 200, errors: 0, record_inventory_sha256: c920295454d0259aff4c89fb16dd821eaf35107e7c7ac6ab117298893708c03d}
+    - {run_id: mac-yolo-test-production-postfix-r4-r1, records: 200, errors: 0, record_inventory_sha256: e2236f19ef2bf8574ca503838ad12a97432c963db4d83feb3f0ce1d32635559b}
+    - {run_id: mac-yolo-test-calibrated-postfix-r4-r1, records: 200, errors: 0, record_inventory_sha256: d9d4ba0c0e1ddd8d610bc6431440cbec62061d94744e6996cd6b8ee30dd28cc2}
+    - {run_id: mac-grounded-sam-test-raw-postfix-r4-r1, records: 200, errors: 0, record_inventory_sha256: b9df4df92e9b968466cf41c8b4d6287eb455399e6ab63bc020ecfa9cdbe7a7fe}
+  invalid_run:
+    run_id: mac-grounded-sam-test-production-postfix-r4-r1
+    status: INVALID
+    invalid_reason: PRODUCTION_CANDIDATE_MAPPING_INVALID
+    completed_records: 1
+    failed_sample_index: 1
+    failed_image_relpath: images/test/000900048.png
+    linux_started_after_failure: false
+root_cause:
+  finding: 同一个 Grounded-SAM 候选在两次独立 FP32 推理中的 bbox、confidence、mask SHA-256 和 mask IoU 都完全一致，第二个候选只有 sam_quality 相差一个 float32 ULP
+  raw_sam_quality: 0.9401203393936157
+  production_sam_quality: 0.9401203989982605
+  absolute_delta: 5.960464477539063e-08
+  previous_contract: sam_quality 必须逐位相等
+  diagnosis_json_sha256: 38bcb0f41ad1014828d8c8ad7002c1ed7e0e0d243a534bc164247bd0ff3c5fb9
+  diagnostic_script_sha256: c5bd4055977919c70127edbc72d2bcf49068d48ea63dbf3034d0b94cb578e4fa
+  durable_diagnostic_archive_sha256: c1c6a661ec6637becfbb8cbc6da0d93445acc67d7c31e78bc38db36e3e427e16
+fix:
+  commit: 2ef8bc663bf1741ef03b83552216ec3801e56a0e
+  scope: 证据对账只接受相同或相邻的一个 float32 ULP；bbox、confidence、mask SHA-256 和一对一映射仍保持严格相等
+  detector_output_changed: false
+  selector_or_metric_changed: false
+verification:
+  red_test: test_grounded_production_mapping_accepts_only_one_float32_quality_ulp 在修复前按预期得到 INVALID
+  focused_after_fix: 4 passed
+  runner_file: 128 passed in 62.99s
+  benchmark_gate: 566 passed, 0 errors, 0 failures, 0 skipped in 334.95s
+  ordinary_gate: 1167 passed in 18.57s
+  installed_runner_sha256: fca7a7582427b2a0365dec270decf52de9bc0db410d42dc000db9351d7748a79
+archived_invalid_evidence:
+  directory: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-test-production-postfix-r4-r1-invalid
+  file_count: 111
+  manifest_sha256: d01df4f67f1d9d80e92be0c24d82b3ec356fbef73a1612e846da8243da6c842f
+  transfer_archive: /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-test-production-postfix-r4-r1-invalid.tar.gz
+  transfer_archive_sha256: 493e01e6a1ea7a86a07b87baf57ef08d9d9d909b33e357b1e76b98450c48b65f
+mac_r2_plan:
+  installed_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/mac-grid-parallel-r2
+  script_sha256: f4fe08c735dc136b8f535f69a65715ddf42de3477dd6ed50d7d458e1a25581d0
+  launch_plist_sha256: a615c873409ea555bfba85672588eadff87234431aaf80eb02f97bef506479e2
+  launch_label: com.terry.so101.benchmark.mac.test.postfix.r4.r2
+  runs:
+    - {run_id: mac-grounded-sam-test-production-postfix-r4-r2, run_kind: TEST_PRODUCTION, output: grounded-sam-production-r2}
+    - {run_id: mac-grounded-sam-test-calibrated-postfix-r4-r2, run_kind: TEST_CALIBRATED, output: grounded-sam-calibrated-r2}
+linux_r2_plan:
+  installed_build: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r16
+  script_sha256: 8fa7a9e499717bf9dd9d772bd32f69499e95454afc0b80f1b0f1f1d59130540e
+  runs:
+    - {run_id: linux-grounded-sam-test-raw-postfix-r4-r2, run_kind: TEST_RAW_FROZEN, output: grounded-sam-raw-r2}
+    - {run_id: linux-grounded-sam-test-production-postfix-r4-r2, run_kind: TEST_PRODUCTION, output: grounded-sam-production-r2}
+    - {run_id: linux-grounded-sam-test-calibrated-postfix-r4-r2, run_kind: TEST_CALIBRATED, output: grounded-sam-calibrated-r2}
+    - {run_id: linux-yolo-test-raw-postfix-r4-r2, run_kind: TEST_RAW_FROZEN, output: yolo-raw-r2}
+    - {run_id: linux-yolo-test-production-postfix-r4-r2, run_kind: TEST_PRODUCTION, output: yolo-production-r2}
+    - {run_id: linux-yolo-test-calibrated-postfix-r4-r2, run_kind: TEST_CALIBRATED, output: yolo-calibrated-r2}
+execution_contract:
+  - r1 的四个 VALID Mac run 原样保留，不重复运行
+  - 先同步并构建 commit 2ef8bc663bf1741ef03b83552216ec3801e56a0e，再启动两个 Mac r2 run
+  - 两个 Mac r2 run 全部 VALID 后，才允许按上表顺序启动 Linux r2
+  - 任一输出目录碰撞、manifest INVALID、CPU fallback、输入或锁 SHA 不符，立即停止且不复用 run ID
+retention:
+  retained_runs:
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos/yolo-raw-r1
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos/yolo-production-r1
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos/yolo-calibrated-r1
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test-postfix-r4/macos/grounded-sam-raw-r1
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/grounded-production-mapping-r1
+  archived_runs:
+    - /data/work/so101-evidence/archived/v5-t005-grounded-sam-rgbd/exp-079-grounded-sam-test-production-postfix-r4-r1-invalid
+  deletion_candidates: none
+next_command: commit and push CP-065, fast-forward ai-station from gitee, build linux-grid-parallel-r16 and run its benchmark gate, then launch the Mac r2 plist exactly once
+decision: RUN_MAC_R2_AFTER_SYNC_AND_DUAL_PLATFORM_BUILD_GATES
+```
