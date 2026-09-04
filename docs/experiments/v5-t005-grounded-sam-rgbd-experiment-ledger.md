@@ -7688,3 +7688,172 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Stage E fine-tuned runtime bundle and generic-cup contract
+
+```yaml
+experiment_id: EXP-079-STAGE-E-FINETUNED-BUNDLE-R1
+status: PLANNED
+recorded_at: 2026-09-04T20:23:00+08:00
+prior_checkpoint: CP-093
+hypothesis: a manifest-bound schema-v2 bundle can compose the frozen epoch-7 detector with the already verified frozen SAM snapshot and make both production and benchmark inference use generic cup. semantics without weakening schema-v1 verification
+prediction: focused RED tests fail against the current plastic_cup/plastic cup. constants, then pass only when model semantics are sourced from the verified bundle; a fresh immutable bundle readback binds every copied byte and the exact training provenance
+single_variable: add the schema-v2 fine-tuned Grounded-SAM bundle and route its one declared target class and prompt through production and benchmark adapters; preserve schema-v1 behavior
+lifecycle: OFFLINE_BUNDLE_COMPOSITION_AND_PACKAGE_TEST
+preconditions:
+  - source checkout is /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11 on branch codex/v5-t004-yolo-seg-rgbd
+  - frozen detector is epoch 7 from grounding-dino-cup-r3-formal-r1 with checkpoint manifest SHA256 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  - source SAM bundle is /data/work/so101-models/grounded-sam-v2-scipy-lock with manifest SHA256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  - prompt is cup. and normalized detector class is cup
+  - DINO box/text thresholds are 0.25/0.25; SAM remains frozen and stateless per frame
+  - synthetic test and COCO100 remain sealed and unread throughout this experiment
+success_criteria:
+  - schema-v1 bundle verification remains byte-for-byte compatible
+  - schema-v2 verification rejects malformed prompt, provenance, file sets, symlinks, hashes, and output collisions
+  - bundle composer verifies the complete checkpoint and source bundle before copying, excludes training-state.pt, copies the frozen SAM bytes, and atomically publishes only a non-existing destination
+  - production and raw benchmark adapters use cup. and emit cup for schema v2 while retaining schema-v1 plastic_cup behavior
+  - ordinary package gate and the required explicit benchmark gate pass from a fresh seven-package symlink overlay
+  - every fsync-heavy test uses a unique registered NVMe scratch with exact-Python tempfile preflight and reports elapsed time against r30 3210.78 seconds
+failure_criteria:
+  - any CPU fallback, network fetch, source/destination provenance mismatch, output collision, manifest mismatch, old-bundle regression, test failure, or sealed test/COCO100 access
+invalid_criteria:
+  - scratch reuse, wrong source commit or overlay, default /tmp tempfile resolution, incomplete JUnit/readback, or modification of the frozen checkpoint/source SAM bundle
+provenance:
+  source_commit: f47ae3dde4ef6b65ee4d54efa0e474a8c1ebf517
+  install_overlay: TO_BE_FRESH_SEVEN_PACKAGE_SYMLINK_OVERLAY
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: UNSET_OFFLINE_NO_ROS_GRAPH
+  gz_partition: UNSET_OFFLINE_NO_GAZEBO_TRANSPORT
+planned_runs:
+  focused_red: stage-e-finetuned-bundle-red-r126
+  focused_green: stage-e-finetuned-bundle-green-r127
+  fresh_overlay: linux-build-stage-e-finetuned-bundle-r128
+  ordinary_gate: linux-test-stage-e-finetuned-bundle-r129-ordinary
+  explicit_benchmark_gate: linux-test-stage-e-finetuned-bundle-r130-benchmark
+  bundle_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1
+correction_after_r126:
+  recorded_at: 2026-09-04T20:27:00+08:00
+  status: INVALID_BEFORE_COLLECTION
+  reason: /data/work/venvs/so101-grounded-sam/bin/python has no pytest module; no test was collected and no JUnit was created
+  preserved_evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-e-finetuned-bundle-red-r126
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-finetuned-bundle-red-r126/tmp
+  replacement_runs:
+    focused_red: stage-e-finetuned-bundle-red-r127
+    focused_green: stage-e-finetuned-bundle-green-r128
+    fresh_overlay: linux-build-stage-e-finetuned-bundle-r129
+    ordinary_gate: linux-test-stage-e-finetuned-bundle-r130-ordinary
+    explicit_benchmark_gate: linux-test-stage-e-finetuned-bundle-r131-benchmark
+  python_contract: both locked training Python /data/work/venvs/so101-grounded-sam/bin/python and actual pytest Python /usr/bin/python3 must resolve tempfile to the same run-specific NVMe scratch; pytest runs with /usr/bin/python3 as established by the valid colcon package gate
+correction_after_r127:
+  recorded_at: 2026-09-04T20:30:00+08:00
+  status: INVALID_DURING_COLLECTION
+  reason: inline PYTHONPATH assignment did not reach the pytest import process; four modules failed collection with No module named so101_demo before any test ran
+  junit_present: true
+  preserved_evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-e-finetuned-bundle-red-r127
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-finetuned-bundle-red-r127/tmp
+  replacement_runs:
+    focused_red: stage-e-finetuned-bundle-red-r128
+    focused_green: stage-e-finetuned-bundle-green-r129
+    fresh_overlay: linux-build-stage-e-finetuned-bundle-r130
+    ordinary_gate: linux-test-stage-e-finetuned-bundle-r131-ordinary
+    explicit_benchmark_gate: linux-test-stage-e-finetuned-bundle-r132-benchmark
+  import_contract: use env with the absolute r118 installed site-packages and read back so101_demo.__file__ before pytest
+correction_after_r128:
+  recorded_at: 2026-09-04T20:33:00+08:00
+  status: INVALID_DURING_IMPORT_PREFLIGHT_AND_COLLECTION
+  reason: the symlink-install site-packages contains an egg-link; the importable so101_demo symlink is in the r118 build/so101_demo_py parent, so the selected PYTHONPATH still could not import the package
+  junit_present: true
+  preserved_evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-e-finetuned-bundle-red-r128
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-finetuned-bundle-red-r128/tmp
+  replacement_runs:
+    focused_red: stage-e-finetuned-bundle-red-r129
+    focused_green: stage-e-finetuned-bundle-green-r130
+    fresh_overlay: linux-build-stage-e-finetuned-bundle-r131
+    ordinary_gate: linux-test-stage-e-finetuned-bundle-r132-ordinary
+    explicit_benchmark_gate: linux-test-stage-e-finetuned-bundle-r133-benchmark
+  corrected_pythonpath: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-fresh-reload-mask-r118/build/so101_demo_py
+sealed_boundaries:
+  synthetic_test_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: add focused failing tests for schema-v2 composition and manifest-driven cup prompt/class behavior, then capture the expected RED result in a unique NVMe scratch
+retention:
+  retained_runs: [all r126-r130 logs, JUnit, bundle manifests, and readbacks]
+  archived_runs: []
+  deletion_candidates: [future r126-r130 NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-094 — Stage E fine-tuned bundle contract code GREEN
+
+```yaml
+checkpoint: CP-094
+status: VALID_CODE_GREEN_PACKAGE_GATES_PENDING
+recorded_at: 2026-09-04T20:48:00+08:00
+stage: E_BUNDLE_PREPARATION
+experiment_id: EXP-079-STAGE-E-FINETUNED-BUNDLE-R1
+prior_checkpoint: CP-093
+symptom_boundary: schema-v1 bundle and both Grounded-SAM adapters hard-coded plastic_cup and plastic cup., so the frozen generic-cup checkpoint could not truthfully enter formal evaluation
+judgment: OBSERVED
+single_variable: schema-v2 immutable fine-tuned bundle plus manifest-derived Grounded-SAM target class and prompt, with schema-v1 compatibility retained
+implementation:
+  - verify schema-v2 checkpoint identity, selected-val metrics, frozen-SAM source manifest, exact files, hashes, and generic {cup: cup.} prompt profile
+  - compose only seven detector runtime files and exclude training-state.pt; copy SAM from the verified schema-v1 bundle; publish with exclusive rename
+  - allow DetectionQuery cup while retaining plastic_cup; production and benchmark paths query the detector-declared target class
+  - compute Grounding DINO text score over every declared prompt word, supporting the single-token cup. prompt
+tdd:
+  invalid_before_red:
+    - {run_id: stage-e-finetuned-bundle-red-r126, reason: locked training Python has no pytest module, collected: 0}
+    - {run_id: stage-e-finetuned-bundle-red-r127, reason: inline PYTHONPATH did not reach collection, collected: 0}
+    - {run_id: stage-e-finetuned-bundle-red-r128, reason: install site-packages held an egg-link and was not the importable symlink parent, collected: 0}
+  valid_red:
+    run_id: stage-e-finetuned-bundle-red-r129
+    result: {passed: 0, failed: 7, collected: 7}
+    exit_code: 1
+    elapsed_ms: 595
+    junit_sha256: f226f4e7f09d4edc552336bdb28704c2403acc48bc97357e13eedc841ad00449
+    failures: [composer absent, cup query rejected, generic prompt route absent, production detector generic class absent, raw adapter single-token prompt absent]
+  production_query_red:
+    run_id: stage-e-generic-production-query-red-r130
+    result: {passed: 0, failed: 1, collected: 1}
+    exit_code: 1
+    elapsed_ms: 424
+    junit_sha256: 6f535af734b0a37d46c61a565920107ef52eb70ef8dd79ea6f5a14cc1989858d
+  first_green:
+    run_id: stage-e-finetuned-bundle-green-r131
+    result: {passed: 7, failed: 1, collected: 8}
+    resolution: test expected ValueError instead of the established ModelSetupError with code MODEL_BUNDLE_INVALID; corrected the test contract
+  focused_green:
+    run_id: stage-e-finetuned-bundle-green-r132
+    result: {passed: 8, failed: 0, collected: 8}
+    exit_code: 0
+    elapsed_ms: 380
+    junit_sha256: 838bd34fbc62cd8501c00ff56465fa0b97376301266fafee39aca5a9319039b8
+  directed_first_run:
+    run_id: stage-e-finetuned-bundle-directed-r133
+    result: {passed: 187, failed: 5, collected: 192}
+    findings: three real legacy-builder NameError failures fixed; two direct-runner failures lacked locked torch/transformers packages and did not establish product failures
+  directed_green:
+    run_id: stage-e-finetuned-bundle-directed-r134
+    result: {passed: 192, failed: 0, collected: 192}
+    exit_code: 0
+    elapsed_ms: 4280
+    junit_sha256: fc914d8a2fc4091a6426a3693f326a939fcf49c99cb9e36264388239eadddcf8
+    environment: /usr/bin/python3 pytest with r118 build symlink parent plus /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+    dependency_readback: {torch: 2.13.0+cu130, transformers: 4.56.2}
+nvme_scratch:
+  preflight: every r126-r134 run resolved locked and actual test Python tempfile under its unique /data/work/so101-evidence/.../scratch/<run-id>/tmp when both interpreters were applicable
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+  deletion_candidates: all r126-r134 scratch trees; explicit user authorization required before deletion
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_runtime_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only owned changes, fetch Gitee, rebase onto b91a4b56d30bc971e7c2d64465516b9d7a49b299, verify AGENTS.md NVMe rule, ordinary-push/readback; then build a fresh seven-package symlink overlay and run ordinary plus explicit benchmark gates
+retention:
+  retained_runs: [r126-r134 logs and JUnit]
+  archived_runs: []
+  deletion_candidates: [r126-r134 NVMe scratch trees; do not delete]
+```

@@ -416,6 +416,8 @@ def _grounded_adapter(
     grounding_model: _GroundingModel | None = None,
     sam_model: _SamModel | None = None,
     resource_sampler: Any | None = None,
+    target_class_id: str = "plastic_cup",
+    prompt: str = "plastic cup.",
 ) -> tuple[
     GroundedSamRawAdapter,
     _GroundingProcessor,
@@ -440,6 +442,8 @@ def _grounded_adapter(
         sam_model=sam_model,
         synchronizer=DeviceSynchronizer(torch_api, "mps"),
         resource_sampler=resource_sampler or _resource_sampler(torch_api),
+        target_class_id=target_class_id,
+        prompt=prompt,
     )
     return adapter, grounding_processor, grounding_model, sam_processor, sam_model
 
@@ -874,6 +878,60 @@ def test_grounded_low_floor_is_stateless_and_keeps_distinct_model_scores(
     assert not hasattr(adapter, "tracker")
 
 
+def test_grounded_low_floor_supports_single_token_generic_cup_profile(
+    tmp_path: Path,
+) -> None:
+    """Catch the raw adapter requiring a plastic token after the model profile changes."""
+
+    class CupTokenizer:
+        def convert_ids_to_tokens(self, ids: list[int]) -> list[str]:
+            return [{101: "[CLS]", 12: "cup", 102: "[SEP]"}[value] for value in ids]
+
+    class CupProcessor(_GroundingProcessor):
+        tokenizer = CupTokenizer()
+
+        def __call__(self, **kwargs: object) -> dict[str, np.ndarray]:
+            self.calls.append(kwargs)
+            return {"input_ids": np.asarray([[101, 12, 102]], dtype=np.int64)}
+
+        def post_process_grounded_object_detection(
+            self, outputs: object, **kwargs: object
+        ) -> list[dict[str, object]]:
+            del outputs
+            self.postprocess_calls.append(kwargs)
+            return [
+                {
+                    "boxes": np.asarray([[3.0, 2.0, 13.0, 10.0]], dtype=np.float32),
+                    "scores": np.asarray([0.91], dtype=np.float32),
+                    "text_labels": ["cup"],
+                    "query_indices": np.asarray([0], dtype=np.int64),
+                }
+            ]
+
+    class CupModel(_GroundingModel):
+        def __call__(self, **inputs: object) -> SimpleNamespace:
+            assert "input_ids" in inputs
+            self.call_count += 1
+            probabilities = np.asarray([0.1, 0.79, 0.1], dtype=np.float32)
+            logits = np.log(probabilities / (1.0 - probabilities)).reshape(1, 1, 3)
+            return SimpleNamespace(logits=logits)
+
+    processor = CupProcessor()
+    adapter = _grounded_adapter(
+        tmp_path,
+        grounding_processor=processor,
+        grounding_model=CupModel(),
+        target_class_id="cup",
+        prompt="cup.",
+    )[0]
+
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert processor.calls[0]["text"] == "cup."
+    assert result.raw_candidates[0].label == "cup"
+    assert result.raw_candidates[0].grounding_text_score == pytest.approx(0.79, abs=1e-6)
+
+
 def test_grounded_low_floor_retains_the_fixed_prompt_with_terminal_punctuation(
     tmp_path: Path,
 ) -> None:
@@ -1060,6 +1118,21 @@ def test_production_observation_calls_real_port_and_real_target_selector() -> No
     assert observed.decision is DecisionOutput.UNIQUE
     assert observed.selected_candidate_id == "cup-7"
     assert observed.batch is detector._batch
+
+
+def test_production_observation_uses_detector_declared_generic_target_class() -> None:
+    """Catch the benchmark production path querying a fine-tuned detector as plastic_cup."""
+
+    candidate = replace(_candidate("cup-8"), class_id="cup")
+    detector = _RecordingDetectorPort(_batch(candidate), model_id=GROUNDED_SAM_MODEL_ID)
+    detector.target_class_id = "cup"  # type: ignore[attr-defined]
+    frame = _frame()
+
+    observed = run_production_detector_port(detector, frame, selector_threshold=0.50)
+
+    assert detector.detect_calls == [(frame, DetectionQuery("cup"))]
+    assert observed.decision is DecisionOutput.UNIQUE
+    assert observed.selected_candidate_id == "cup-8"
 
 
 def test_production_selector_timing_synchronizes_both_boundaries() -> None:
