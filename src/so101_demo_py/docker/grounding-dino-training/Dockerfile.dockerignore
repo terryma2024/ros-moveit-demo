@@ -1,0 +1,16 @@
+*
+!src/
+!src/so101_demo_py/
+!src/so101_demo_py/config/
+!src/so101_demo_py/config/perception/
+!src/so101_demo_py/config/perception/requirements.lock
+!src/so101_demo_py/config/perception/grounding_dino_training.yaml
+!src/so101_demo_py/package.xml
+!src/so101_demo_py/resource/
+!src/so101_demo_py/resource/so101_demo_py
+!src/so101_demo_py/setup.py
+!src/so101_demo_py/src/
+!src/so101_demo_py/src/**
+!src/so101_demo_py/docker/
+!src/so101_demo_py/docker/grounding-dino-training/
+!src/so101_demo_py/docker/grounding-dino-training/Dockerfile

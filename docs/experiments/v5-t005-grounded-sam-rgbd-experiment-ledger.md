@@ -6589,3 +6589,147 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-081 — Stage D training implementation GREEN
+
+```yaml
+checkpoint: CP-081
+status: VALID
+recorded_at: 2026-09-04T18:02:26+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-080
+source_commit_before_checkpoint: c2ac68a5db7987e9e4c00c38b5ba09637bfd6a88
+implementation:
+  config: src/so101_demo_py/config/perception/grounding_dino_training.yaml
+  pure_contract_module: src/so101_demo_py/src/training/grounding_dino_finetune.py
+  runtime_module: src/so101_demo_py/src/training/grounding_dino_runtime.py
+  train_cli: src/so101_demo_py/src/cli/train_grounding_dino.py
+  checkpoint_verifier_cli: src/so101_demo_py/src/cli/verify_grounding_dino_checkpoint.py
+  container_runner: scripts/grounding-dino-training-container.sh
+  dockerfile: src/so101_demo_py/docker/grounding-dino-training/Dockerfile
+  entrypoints: [train_grounding_dino, verify_grounding_dino_checkpoint]
+  boundaries:
+    - train and val image directories and inventory files are the only dataset mounts
+    - base detector is read-only; output parent is the only writable training mount
+    - synthetic sealed test, COCO100, and SAM are not mounted
+    - container network is none and CUDA is mandatory; CPU fallback and output collisions fail closed
+    - split inventories, paths, model files, resume checkpoint, and output manifests are verified before use
+tdd:
+  invalid_red_wrapper:
+    run_id: stage-d-training-red-r69
+    status: INVALID
+    reason: locked venv does not contain pytest, so collection did not start and no JUnit was produced
+  red:
+    run_id: stage-d-training-red-r70
+    status: VALID_RED
+    result: collection error because so101_demo.training.grounding_dino_finetune did not yet exist
+    exit_code: 2
+    junit_sha256: e954a11513d1a84be310ec1b3f790d2e1c47008e32557ad7d9de211bd98d0df8
+  first_green_attempt:
+    run_id: stage-d-training-green-r71
+    status: EXPECTED_FAILURE
+    result: {passed: 9, failed: 1}
+    failure: Dockerfile did not expose the exact transformers pin directly to the audit test
+    junit_sha256: 091deb436ce6392edb829e7d265fd4e8e5c1484fdb6355bef75c8f404cc8196b
+  green:
+    run_id: stage-d-training-green-r72
+    status: VALID
+    result: {passed: 10, failed: 0}
+    junit_sha256: 1e5e1af444dc3a670314eb5f368a15cc906e83b4976176906af2dfbbf1639815
+  post_runtime_fixes:
+    changes:
+      - serialize the CUDA device UUID before writing JSON
+      - make the smoke processor probes explicitly include positive and negative cup targets
+    run_id: stage-d-training-green-r73
+    status: VALID
+    result: {passed: 10, failed: 0}
+    junit_sha256: 02b1385827a512e6091549d11f4d21f717ca010da3203efc186dfed59d9a7d48
+  related_gate:
+    run_id: stage-d-training-related-r75
+    status: VALID
+    scope: Grounding DINO training and dataset tests plus neighboring YOLO training contracts
+    result: {passed: 32, failed: 0}
+    junit_sha256: dfdefbd22607d407ad533e4235c29b15f34d9a31b114d64dc76fd03ae2284750
+fresh_overlay:
+  run_id: linux-build-stage-d-training-r76
+  status: VALID
+  package_count: 7
+  symlink_install: true
+  lodepng_source: complete local r26 cache, no network fetch
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  exit_code: 0
+  elapsed_ms: 58107
+  source_commit: c2ac68a5db7987e9e4c00c38b5ba09637bfd6a88
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-training-r76/tmp
+  exit_log_sha256: 4d9df4ca40ba1bffedb848b35aa5fef9bc15596f255ba1ecdf5722700fce29c1
+  readback:
+    status: VALID_RECOVERY
+    explanation: symlink-install entrypoints and lexical module paths are inside r76 while final symlink targets are the byte-identical owned source files
+    evidence_sha256: 115cfeee652638879802d6d61e37c05f5d8bf32bfeb6dd70b78ffb46ce22740a
+    invalid_wrappers:
+      - set -u conflicted with colcon's optional COLCON_TRACE variable
+      - final-target assertions incorrectly rejected normal symlink-install links back to source
+ordinary_gate:
+  invalid_launches:
+    - run_id: linux-test-stage-d-training-r77-ordinary
+      status: INVALID
+      reason: sourcing r76 before invoking colcon with the venv Python hid system colcon-core metadata
+      exit_code: 1
+      elapsed_ms: 54
+      junit: absent
+    - run_id: linux-test-stage-d-training-r78-ordinary
+      status: INVALID
+      reason: the venv Python colcon preflight still lacked system colcon-core metadata
+      exit_code: 1
+      elapsed_ms: 56
+      junit: absent
+  valid_run:
+    run_id: linux-test-stage-d-training-r79-ordinary
+    status: VALID
+    scope: src/so101_demo_py/test only
+    result: {passed: 1200, failed: 0, errors: 0, skipped: 0}
+    colcon_exit_code: 0
+    test_result_exit_code: 0
+    elapsed_ms: 14330
+    overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-training-r76
+    locked_python: /data/work/venvs/so101-grounded-sam/bin/python
+    actual_test_python: /usr/bin/python3
+    colcon: /usr/bin/colcon
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-d-training-r79-ordinary/tmp
+    tempfile_preflight: both Python executables resolved exactly to the run-specific NVMe scratch
+    filesystem: /dev/nvme0n1p5 mounted at /data as ext4
+    preflight_sha256: ec82646d09730fb53e00d0f187994b6126f0085e3a141410850cd69c65e61d6e
+    exit_log_sha256: a1dc40d350b4ae476db8428879493afc921e3d5240c77afff18c76dbed516e7c
+    junit_sha256: 83be43eeb31244a3f38b8c1dcfef88553a81f48c0c99e2abdd2cdbf7fc300640
+static_checks:
+  invalid_wrapper:
+    run_id: stage-d-training-static-r80
+    status: INVALID
+    reason: assumed a nonexistent venv-local ruff and omitted pipefail, producing an incorrect wrapper exit record
+  valid_run:
+    run_id: stage-d-training-static-r81
+    status: VALID
+    ruff: 0.15.20 at /home/lenovo/.local/bin/ruff
+    shellcheck: 0.9.0 at /usr/bin/shellcheck
+    checks: [ruff check, ruff format --check, in-memory Python compile, shellcheck, git diff --check]
+    exit_code: 0
+    checks_log_sha256: 9a5653ccd045966f679550109d469b3d8b4dde4c69020dc746ca4beee9358bd2
+benchmark_gate:
+  status: NOT_RUN_BY_CONTRACT
+  reason: this stage adds the independent training tool and does not change benchmark implementation, configuration, adapters, reports, tests, or a selected model input
+  preserved_valid_benchmark: linux-test-stage-c-augmentation-r59-benchmark
+  immutable_r30_hdd_baseline_seconds: 3210.78
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden until Linux safety gates and all four preset PickPlace runs succeed
+next_action: commit only the owned implementation, tests, and this checkpoint; fetch and rebase onto the Gitee branch tip; verify the root AGENTS NVMe rule; ordinary-push and read back the remote SHA; then build the pinned training image and run the preregistered smoke
+retention:
+  retained_runs: [r69-r73 TDD, r75 related gate, r76 overlay, r77-r79 ordinary launches, r80-r81 static checks]
+  archived_runs: []
+  deletion_candidates:
+    - all registered r69-r81 NVMe scratch trees; do not delete without explicit user authorization
+```
