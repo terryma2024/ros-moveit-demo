@@ -11584,3 +11584,81 @@ retention:
   deletion_candidates: [r282-r284 scratch; do not delete without explicit user authorization]
 next_action: execute the frozen 300-sample val-only attribution once in fresh r285 scratch and absent durable output root
 ```
+
+## Checkpoint CP-138 — full corrected-truth residual attribution completed
+
+```yaml
+checkpoint: CP-138
+status: VALID_IMMUTABLE_PENDING_INDEPENDENT_READBACK
+recorded_at: 2026-09-05T07:16:37+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-137
+source_commit: cab5e830991ba0c7bd9462a89731cc4f6cc2d3a1
+run:
+  run_id: stage-e-corrected-truth-residual-r285
+  exit_code: 0
+  elapsed_ms: 11676
+  inference_rerun: false
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/visualizations/grounded-sam-corrected-truth-residual-r1
+  manifest_sha256: 03c9cd02c4c344ce975fe8ac31a46423f5a642cba4db2d9e4faeaba24e357970
+  tree_inventory_sha256: 0627d1f3196974a591aba648b458bf026269a304d4b6f0cc10828c37ca3395da
+  files: 10
+  directories: 2
+  bytes: 1128666
+  modes: {files: '0444', directories: '0555'}
+calibration_reproduction:
+  truth_count: 300
+  candidate_count: 218
+  bbox_match_count: 210
+  mask_pass_count: 47
+  mask_fail_count: 163
+  decision_counts: {AMBIGUOUS: 6, NOT_FOUND: 88, UNIQUE: 206}
+sample_attribution_counts:
+  BOX_MATCH_MASK_FAIL: 160
+  BOX_MATCH_MASK_PASS: 44
+  DETECTOR_MISS: 46
+  NO_TRUTH_SAFE: 50
+failure_subtype_counts: {LEAKAGE: 162, UNDER_SEGMENTATION: 1, MIXED: 0}
+mask_iou_quantiles:
+  minimum: 0.0002638290387828687
+  q25: 0.31646659843431596
+  median: 0.4762032183255852
+  q75: 0.7554368920204879
+  maximum: 0.9859180687637161
+component_findings:
+  truth_component_count: {minimum: 1.0, q25: 5.0, median: 7.0, q75: 8.25, maximum: 21.0}
+  truth_largest_component_fraction: {minimum: 0.7789661319073083, q25: 0.9960820829965916, median: 0.9972483373925772, q75: 0.9982837169359753, maximum: 1.0}
+  prediction_component_count: {minimum: 1.0, q25: 2.25, median: 9.0, q75: 19.0, maximum: 72.0}
+  prediction_largest_component_fraction: {minimum: 0.47844531070855306, q25: 0.758664131426833, median: 0.9593287753389017, q75: 0.9983667347645876, maximum: 1.0}
+scenario_mask_pass_fail:
+  cup_near_bottle: {pass: 14, fail: 32, detector_miss_samples: 4}
+  one_cup_distractors: {pass: 24, fail: 21, detector_miss_samples: 5}
+  partially_occluded_cup: {pass: 3, fail: 43, detector_miss_samples: 4}
+  small_far_cup: {pass: 0, fail: 18, detector_miss_samples: 32}
+  two_cups: {pass: 6, fail: 49, detector_miss_samples: 1}
+interpretation_status: >-
+  OBSERVED, not yet a model-change decision: remaining matched failures are overwhelmingly excess
+  prediction area (162/163 leakage). Exact truth often contains tiny disconnected pixels, but its
+  largest component retains a median 0.99725 of truth area, so convex-hull corruption is removed
+  without evidence that main truth bodies are generally fragmented.
+provenance:
+  script_sha256: a3999b02fa52b4596418c3c0d905d6cace960320a709d18253ee58ea9b47d100
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-residual-run-r285/tmp
+  tempfile_preflight: exact resolved match
+run_evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-corrected-truth-residual-run-r285
+  preflight_sha256: 6b7e790607709dd69d693f5f695ebe00babdfc97e50c053a6f218004534ee324
+  provenance_sha256: baeab14efd8bb6bdfbc54f91423f6b7b982b1baba0fe8e453f2f86392c389e19
+  run_log_sha256: 01553469276867c88ce90541b5655e8b5c14297481f64249c8cf3bd16f8d75fb
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit_sha256: 4a5d6a6bb4af7d05e3030ae8be541b67478f76ea26fc8d9a0af86f08e63f100c
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80'}
+retention:
+  retained_runs: [r285 immutable attribution output/evidence/scratch, all CP-137 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r282-r285 scratch; do not delete without explicit user authorization]
+next_action: commit and push this execution checkpoint, then independently verify every artifact hash/inventory and inspect the montage plus individual worst-case overlays
+```
