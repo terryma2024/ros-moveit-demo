@@ -4846,3 +4846,71 @@ retention:
 next_command: commit and push CP-065, fast-forward ai-station from gitee, build linux-grid-parallel-r16 and run its benchmark gate, then launch the Mac r2 plist exactly once
 decision: RUN_MAC_R2_AFTER_SYNC_AND_DUAL_PLATFORM_BUILD_GATES
 ```
+
+## Checkpoint CP-066 — Linux 解释器溯源修正与 r19 门禁
+
+```yaml
+checkpoint_id: CP-066
+date: 2026-09-04
+experiment_id: EXP-079
+prior_checkpoint: CP-065
+status: LINUX_R19_GATE_PASS_READY_FOR_MAC_R2
+synced_source:
+  gitee_branch: codex/v5-t004-yolo-seg-rgbd
+  gitee_sha: daa13a4816ea03d858c2ea7e23bf3a70dffea7f6
+  ai_station_checkout: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  ai_station_sha: daa13a4816ea03d858c2ea7e23bf3a70dffea7f6
+failed_environment_attempts:
+  - build: linux-grid-parallel-r16
+    finding: build 和 benchmark gate 误用了 /usr/bin/python3；dataset 测试集中失败，运行在 91% 后因持续等待 jbd2 journal 且已确定环境无效而以 SIGINT 停止
+    stdout_stderr_sha256: aa7142a658a13fdccf643fd631c121c4567db9a8c9e3b5a09f045c573771f4e3
+    formal_inference_started: false
+  - build: linux-grid-parallel-r17
+    finding: 仅激活 venv 不足以覆盖 /usr/bin/colcon 的 shebang，build command 仍使用 /usr/bin/python3
+    command_log_sha256: 08cbd8bda2442841d2e4198dc3128a69bccdaa4737b6b10b053b88e350eb751e
+    formal_inference_started: false
+  - build: linux-grid-parallel-r18
+    finding: 直接用 venv Python 执行 /usr/bin/colcon，但未补入 /usr/lib/python3/dist-packages，启动前因找不到 colcon-core 停止
+    console_log_sha256: 9df68143f07e65b3d6960d284802cf24611b9d7189c3667dcb0048f515dd1fc8
+    formal_inference_started: false
+linux_r19:
+  build_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r19
+  runtime_tmp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime-tmp/linux-grid-parallel-r19
+  interpreter: /data/work/venvs/so101-grounded-sam/bin/python
+  colcon_entrypoint: /usr/bin/colcon
+  pythonpath: /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages:/usr/lib/python3/dist-packages
+  installed_entrypoint_shebang: '#!/data/work/venvs/so101-grounded-sam/bin/python'
+  installed_runner_sha256: fca7a7582427b2a0365dec270decf52de9bc0db410d42dc000db9351d7748a79
+  installed_config_sha256: 8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725
+  build_console_sha256: addd74e032fd102dc977323986caf11ee9529552d8f8c31d11e0d1c11874fc6e
+benchmark_gate:
+  command_scope: colcon test --base-paths src/so101_demo_py --packages-select so101_demo_py --pytest-args benchmark_test
+  collected: 566
+  passed: 564
+  skipped: 2
+  errors: 0
+  failures: 0
+  elapsed_seconds: 641.68
+  junit_sha256: 30daaa459386e8de91629d92c301ddee7db2904fe1dc5e2ffde03b9344fd4366
+  result: PASS
+formal_linux_script:
+  path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/scripts/linux-test-postfix-r4-r2.sh
+  build_binding: linux-grid-parallel-r19
+  sha256: 437e1eda9a556526693a86b033a6794c6332f3c932b2c26b1944a65ab9f07be4
+freeze_and_order:
+  prompt_model_grid_threshold_metric_matching_objective_changed: false
+  test_reopened_or_retuned: false
+  mac_formal_r2_started: false
+  linux_formal_r2_started: false
+  next_allowed_action: 提交并同步 CP-066；验证 Mac r2 输出目录无碰撞、MPS 与安装 SHA 后，只启动 Mac r2 plist 一次
+retention:
+  retained_runs:
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r16
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r17
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r18-build.console.log
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-grid-parallel-r19
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime-tmp/linux-grid-parallel-r19
+  archived_runs: unchanged from CP-065
+  deletion_candidates: none
+decision: RUN_MAC_R2_AFTER_CP066_SYNC
+```
