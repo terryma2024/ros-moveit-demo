@@ -6974,3 +6974,49 @@ retention:
   deletion_candidates:
     - all r87-r95 registered NVMe scratch trees; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-085 — gcfix training image frozen
+
+```yaml
+checkpoint: CP-085
+status: VALID
+recorded_at: 2026-09-04T18:30:42+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-084
+implementation:
+  commit: 91580a70a016d351a6d0024dcd33016165430aed
+  gitee_remote_sha: 91580a70a016d351a6d0024dcd33016165430aed
+image_build:
+  run_id: stage-d-training-image-gcfix-build-r96
+  status: VALID
+  source_commit: 91580a70a016d351a6d0024dcd33016165430aed
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix1
+  image_id: sha256:cc568a981bb1fc6ac9f994f9fb21e7eb542ff6a9d0907bc696b87bdeba2d07b0
+  image_size_bytes: 5141803765
+  collision_preflight: absent
+  exit_code: 0
+  elapsed_ms: 12468
+  runtime_sha256: fa25657358a9cf8418326322cb800268f69147c45b92165be3cc7826e95438ad
+  versions: {torch: 2.13.0+cu130, torchvision: 0.28.0+cu130, transformers: 4.56.2, cuda: '13.0'}
+  prior_image_preserved:
+    image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2
+    image_id: sha256:820c7bb0b1b75278b8bd00c3f4e9e48f166fc2037f977c079164a3473a46b6f3
+  evidence:
+    preflight_sha256: 728f333d273a5e8380d1266e6d65bba63af815c7eb91eb98148cf1f5ec640a74
+    buildkit_stderr_sha256: d1618bec66d2b5528010761bb5c4d1c692f46734cdd1d1084e5e910887e26b7f
+    exit_log_sha256: 6dd740b2e26dfed10cbff569b35e28c5bbc8c7bd5d35416c436045597fb24124
+    image_inspect_sha256: eb6fe4416ff48727c29a70089695424061f715008f01af08dca6fe7f0013b3e6
+    version_code_readback_sha256: 1129f9e3ec5aa854bfb40cbb889f3360ed3867bd80f8a02f10ac6d0cbbfa0c29
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync CP-085, then use this exact image and implementation commit for a fresh smoke-r2 output after full provenance, GPU, pause, and collision preflight
+retention:
+  retained_runs: [stage-d-training-image-gcfix-build-r96]
+  archived_runs: []
+  deletion_candidates: []
+```
