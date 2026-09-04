@@ -7857,3 +7857,105 @@ retention:
   archived_runs: []
   deletion_candidates: [r126-r134 NVMe scratch trees; do not delete]
 ```
+
+## Checkpoint CP-095 — Stage E fresh overlay and package gates GREEN
+
+```yaml
+checkpoint: CP-095
+status: VALID_PACKAGE_GATES_COMPLETE_BUNDLE_COMPOSITION_PENDING
+recorded_at: 2026-09-04T21:25:00+08:00
+stage: E_BUNDLE_PREPARATION
+experiment_id: EXP-079-STAGE-E-FINETUNED-BUNDLE-R1
+prior_checkpoint: CP-094
+source_commit: ee787f058bd91110956bcee49f30eebfee849648
+source_branch: codex/v5-t004-yolo-seg-rgbd
+remote: gitee/codex/v5-t004-yolo-seg-rgbd
+remote_sha_readback: ee787f058bd91110956bcee49f30eebfee849648
+fresh_build:
+  invalid_attempt:
+    run_id: linux-build-stage-e-finetuned-bundle-r135
+    status: INVALID_POST_BUILD_READBACK
+    observed: seven packages built successfully, but a quoting error caused the post-build Python readback to exit with SyntaxError
+    rule: preserve the complete overlay and logs; do not use it as the Stage E gate
+  valid_run:
+    run_id: linux-build-stage-e-finetuned-bundle-r136
+    status: VALID
+    lifecycle: FULL_REBUILD
+    elapsed_ms: 55967
+    package_count: 7
+    install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-finetuned-bundle-r136/install
+    build_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-finetuned-bundle-r136/build
+    source_mode: symlink install resolves to the isolated checkout
+    lodepng_cache: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+    lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+    lodepng_tracked_files: 26
+    lodepng_fsck: valid
+    fetchcontent_fully_disconnected: true
+    network_fetch: none
+    tempfile_preflight: locked and build Python resolved exactly inside the unique registered NVMe scratch
+test_runner_environment_investigation:
+  initial_ordinary:
+    run_id: linux-test-stage-e-finetuned-bundle-r137-ordinary
+    result: {passed: 1208, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.46}
+    exit_code: 0
+    elapsed_ms: 14268
+    junit_sha256: 45f8d68c284c3cd98a9cc15a9ef668f7ee9f59c8a57ef5d1adf8eecc2ee9c7ae
+    note: retained as valid ordinary-source coverage, but superseded by the formal locked-runner ordinary gate below
+  invalid_benchmark:
+    run_id: linux-test-stage-e-finetuned-bundle-r138-benchmark
+    status: INVALID_ENVIRONMENT_NOT_A_PERFORMANCE_RESULT
+    result: {passed: 511, failed: 62, errors: 0, skipped: 2, total: 575, pytest_seconds: 446.50}
+    junit_sha256: 4d9dfc33d9398511f71ccd652e51b03d5e5a2f2291a760cc6af068f81037f994
+    observed_root_cause: /usr/bin/python3 selected Pillow 10.2.0 and had no torch, reproducing the previously documented r28/r57 test-runner boundary
+    conclusion: failures are runner-environment failures, not product-code regressions; elapsed time is excluded from performance comparison
+  focused_environment_recovery:
+    run_id: linux-test-stage-e-finetuned-bundle-r139-focused-env
+    status: VALID
+    result: {passed: 2, failed: 0, errors: 0, skipped: 0, pytest_seconds: 2.68}
+    elapsed_ms: 3950
+    junit_sha256: 6247e83c80bb197826d86ff25e818797d2b29b9fd030e90f098693748e6b23c0
+    driver: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+    dependencies: {Pillow: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2}
+    single_variable: put the locked venv site-packages before system dist-packages and drive colcon with the locked venv Python
+formal_ordinary_gate:
+  run_id: linux-test-stage-e-finetuned-bundle-r140-ordinary
+  status: VALID
+  scope: src/so101_demo_py/test only
+  result: {passed: 1208, failed: 0, errors: 0, skipped: 0, pytest_seconds: 13.19}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 14017
+  driver: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-finetuned-bundle-r140-ordinary/tmp
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+  tempfile_preflight: exact resolved match to the run-specific scratch
+  junit_sha256: dadc7d2f7dbeb4a597ca3deb072c54e7630be3ff0851da6839d0ee537eccfa90
+explicit_benchmark_gate:
+  run_id: linux-test-stage-e-finetuned-bundle-r141-benchmark
+  status: VALID
+  command: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  result: {passed: 573, failed: 0, errors: 0, skipped: 2, total: 575, pytest_seconds: 648.48}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 649866
+  driver: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  dependencies: {Pillow: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-finetuned-bundle-r141-benchmark/tmp
+  filesystem: /dev/nvme0n1p5 ext4 mounted at /data
+  tempfile_preflight: exact resolved match to the run-specific scratch
+  junit_sha256: d1dc6a206058fc4721cc0eb99bdb4b620eab5e809057458383ef353cdb4f99a2
+  immutable_r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  nvme_pytest_comparison: {seconds_reduced: 2562.30, speedup: 4.9512, percent_reduction: 79.803}
+  semantics_preserved: fsync, ext4 journaling, integrity checks, and ordinary disk-backed fixtures remained enabled; no tmpfs was used
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_runtime_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: compose the preregistered non-existing durable schema-v2 bundle from the frozen epoch-7 detector checkpoint and verified frozen SAM bundle, then read back every byte and freeze the published tree
+retention:
+  retained_runs: [r135 invalid overlay, r136 valid overlay, r137 ordinary, r138 invalid benchmark evidence, r139 focused recovery, r140 formal ordinary, r141 valid benchmark]
+  archived_runs: []
+  deletion_candidates: [r135-r141 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
