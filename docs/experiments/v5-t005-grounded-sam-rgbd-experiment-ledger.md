@@ -6235,3 +6235,82 @@ retention:
   deletion_candidates:
     - all registered NVMe scratch trees r36-r56 and r52; do not delete without explicit authorization
 ```
+
+## Checkpoint CP-078 — Stage C code gates complete on committed source
+
+```yaml
+checkpoint: CP-078
+status: VALID_CODE_GATES_COMPLETE_READY_FOR_FORMAL_DATASET
+recorded_at: 2026-09-04T17:20:45+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+source_commit: d38bf439ccbf7e27c38f98dccdf4975b04e985b8
+remote: gitee/codex/v5-t004-yolo-seg-rgbd
+remote_sha_readback: d38bf439ccbf7e27c38f98dccdf4975b04e985b8
+overlay:
+  run_id: linux-build-stage-c-augmentation-r52
+  install: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-augmentation-r52/install
+  package_count: 7
+  source_mode: symlink install resolves to this isolated checkout
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  fetchcontent_fully_disconnected: true
+invalid_benchmark_attempt:
+  run_id: linux-test-stage-c-augmentation-r57-benchmark
+  status: INVALID_ENVIRONMENT_NOT_A_PERFORMANCE_RESULT
+  command_driver: /usr/bin/colcon
+  failure: colcon selected /usr/bin/python3 rather than the locked Python, causing missing torch and a rasterizer-version mismatch
+  observed_only: {tests: 573, failures: 62, skipped: 2, wall_seconds: 446.294}
+  rule: preserve the evidence but do not compare this elapsed time with r30
+environment_recovery:
+  run_id: linux-test-stage-c-augmentation-r58-focused-env
+  status: VALID
+  result: {passed: 3, failed: 0, errors: 0, skipped: 0, elapsed_ms: 4178}
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  command_driver: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  dependencies: {PIL: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2, scipy: 1.17.1}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-augmentation-r58-focused-env/tmp
+  junit_sha256: b83c54158e150905f9fda139269f9beacdf0d332bce9f4ffc011af8d3ce69b37
+explicit_benchmark_gate:
+  run_id: linux-test-stage-c-augmentation-r59-benchmark
+  status: VALID
+  command: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  result: {passed: 571, failed: 0, errors: 0, skipped: 2, total: 573}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  wall_seconds: 649.214
+  pytest_seconds: 647.676
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  dependencies: {PIL: 12.3.0, torch: 2.13.0+cu130, transformers: 4.56.2, scipy: 1.17.1}
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-augmentation-r59-benchmark/tmp
+  tempfile_preflight: exact resolved match to the registered run-specific NVMe scratch
+  junit_sha256: c4efed19b6f678608b7081b665f2a5fafe20322be4e4113514ec72122ce0c8cd
+  immutable_r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  nvme_wall_comparison:
+    seconds_reduced: 2561.566
+    speedup: 4.9456
+    percent_reduction: 79.780
+    caveat: r30 reports pytest time while r59 comparison conservatively uses complete colcon wall time
+  semantics_preserved: fsync, ext4 journaling, integrity checks, and ordinary disk-backed fixtures remained enabled; no tmpfs was used
+committed_ordinary_gate:
+  run_id: linux-test-stage-c-augmentation-r60-ordinary-committed
+  status: VALID
+  scope: src/so101_demo_py/test only
+  result: {passed: 1190, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 13835
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-augmentation-r60-ordinary-committed/tmp
+  tempfile_preflight: exact resolved match to the registered run-specific NVMe scratch
+  junit_sha256: 306890fd10b52386993d30a4643be83d2b9d8be745d60ac35e8b1d70b423c84a
+sealed_boundaries:
+  replacement_test_namespace: [440000000, 440000299]
+  status: not previewed or preflighted; formal generation only
+  coco100: untouched; final frozen checkpoint non-regression only, exactly once
+next_action: generate the complete r3 dataset once into the preregistered absent durable root, immediately seal test truth and labels, archive it, convert twice, and read back hashes and train/val profiles
+retention:
+  retained_runs: [r57 invalid evidence, r58 environment recovery, r59 valid benchmark, r60 committed ordinary gate, r52 overlay]
+  archived_runs: []
+  deletion_candidates:
+    - r57-r60 registered NVMe scratch trees; do not delete without explicit user authorization
+```
