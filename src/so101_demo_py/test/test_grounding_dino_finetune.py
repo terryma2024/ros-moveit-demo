@@ -19,6 +19,7 @@ from so101_demo.training.grounding_dino_finetune import (
     verify_complete_checkpoint,
 )
 from so101_demo.training.grounding_dino_runtime import (
+    _validate_fresh_reload_statistics,
     enable_grounding_dino_gradient_checkpointing,
 )
 
@@ -398,3 +399,32 @@ def test_grounding_dino_decoder_layers_use_keyword_safe_checkpointing() -> None:
     )
     with pytest.raises(RuntimeError, match="GRADIENT_CHECKPOINTING_UNSUPPORTED"):
         enable_grounding_dino_gradient_checkpointing(incomplete, checkpoint_function=checkpoint)
+
+
+def test_fresh_reload_accepts_only_masked_negative_infinity() -> None:
+    valid = {
+        "device_type": "cuda",
+        "active_token_count": 4,
+        "active_logits_finite": True,
+        "logits_nan_count": 0,
+        "logits_posinf_count": 0,
+        "logits_neginf_count": 226800,
+        "inactive_logits_neginf_count": 226800,
+        "pred_boxes_finite": True,
+    }
+
+    _validate_fresh_reload_statistics(**valid)
+
+    invalid_overrides = (
+        {"device_type": "cpu"},
+        {"active_token_count": 0},
+        {"active_logits_finite": False},
+        {"logits_nan_count": 1},
+        {"logits_posinf_count": 1},
+        {"logits_neginf_count": 226801},
+        {"inactive_logits_neginf_count": 226799},
+        {"pred_boxes_finite": False},
+    )
+    for override in invalid_overrides:
+        with pytest.raises(RuntimeError, match="FRESH_RELOAD_INFERENCE_INVALID"):
+            _validate_fresh_reload_statistics(**{**valid, **override})
