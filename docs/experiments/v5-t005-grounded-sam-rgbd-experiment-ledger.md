@@ -7598,3 +7598,93 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-093 — formal training complete and checkpoint frozen
+
+```yaml
+checkpoint: CP-093
+status: VALID
+recorded_at: 2026-09-04T20:10:13+08:00
+stage: D_COMPLETE
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-092
+formal_training:
+  run_id: stage-d-training-formal-r124
+  status: VALID
+  tmux_session: so101-exp079-gdino-formal-r1
+  source_commit: 3407dbbed80331b7e1fae9e3564fc49e7f048179
+  gitee_remote_sha_at_launch: 3407dbbed80331b7e1fae9e3564fc49e7f048179
+  implementation_commit: 5acaf0067927c39e00243317c18ff7a0cc7abc58
+  image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix3
+  image_id: sha256:d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-formal-r1
+  output_collision_preflight: absent
+  exit_code: 0
+  elapsed_ms: 2475856
+  epochs_completed: 8
+  train_samples_per_epoch: 1200
+  val_samples_per_epoch: 300
+  preflight:
+    free_bytes_on_data: 273537024000
+    train_inventory_sha256: 376146b8b7d9c7adc8c9ff4e22d5302188fe33cb2bfc0765458521088247e9ea
+    val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+    compute_processes: 0
+    microduck_matching_nonancestor_processes: 0
+    network: none
+    synthetic_test_access: none
+    coco100_access: none
+    sam_mount: none
+    preflight_sha256: 3e9a21ef111cd0b441db86edb29c7e81a35a06355c97c326769a226dbd027aaa
+  evidence:
+    launch_script_sha256: 5ce35d021868ff7f3a1e88bc58a05f1e418a5d675c1345f933f0619b54145922
+    tmux_launch_readback_sha256: aa1ec68b40c25247d3505afa6ca07f523a9a63de74cec57839e45139e9f22fd2
+    stdout_sha256: 77ccaf54ae2215eadb0988e49e629a9c12e0f9bd469815d6369dcd0835a0134a
+    stderr_sha256: 4d4311cd8b927a8bfc1009e8d658fa140a55cea49d459ed9e57047cf366a7273
+    exit_log_sha256: b06a9a2ecbdade7f342314407dd78fff9d5002729b16189f3d639b19170b565e
+frozen_candidate:
+  selection_source: synthetic_val_only
+  selected_epoch: 7
+  prompt: cup.
+  class_name: cup
+  box_threshold: 0.25
+  text_threshold: 0.25
+  val_metrics: {f1: 0.8571428571428571, precision: 0.8446601941747572, recall: 0.87, small_target_recall: 0.78, multi_cup_recall: 0.79, tp: 261, fp: 48, fn: 39}
+  checkpoint_manifest_sha256: 2e7c3e343c13aa35feb38785ec690578aeaeef8adcc929d58a11ddf91ef05e2d
+  model_safetensors_sha256: 700ef987164408d1ef5be1c93b69b895d1a1c3537d0fbbfcc55940c4901e924c
+  model_safetensors_size: 689359096
+  config_sha256: 91d35e7af35f3a03f501a16eb6ff2358e2f2ffdf7a2106d25c4ae7dbd545ea61
+  preprocessor_config_sha256: c17fd68afb1f124bfb87a494d409925eec4201b3487c8a694dde64d9ce7109a3
+  fresh_reload:
+    status: VALID
+    device: cuda:0
+    cpu_fallback: false
+    active_logits_finite: true
+    masked_negative_infinity_count: 226800
+    sha256: 9854b52f8a9b7d5ab09e88196d43af7c516f0c01f124be93e7330abb477873e0
+readback:
+  run_id: stage-d-training-formal-readback-r125
+  status: VALID
+  exit_code: 0
+  elapsed_ms: 15801
+  checkpoint_count: 8
+  checkpoint_file_count_each: 8
+  all_checkpoint_member_hashes_verified: true
+  exact_top_level_and_checkpoint_directory_sets_verified: true
+  no_symlinks: true
+  all_identities_verified: true
+  fixed_selection_recomputed_epoch: 7
+  readback_sha256: 6ad2cf59202822db1d9d2685c19dd40a267950c0a5e0b65675a199609ef43556
+  epoch_8_manifest_sha256: 9b26b0c655dae111d730ed8149085c73f293817144cb5abdcac3c1bca5abecd2
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+stage_d_exit_condition: satisfied; one frozen checkpoint selected only by synthetic val with model, processor, config, manifest, and fresh CUDA reload hashes
+next_action: commit and Gitee-sync CP-093; begin Stage E by locking this exact checkpoint, cup. prompt, 0.25/0.25 DINO thresholds, frozen SAM 2.1 identity and threshold, mapping IoU 0.98, and selector rules before opening the sealed synthetic test exactly once
+retention:
+  retained_runs: [r124 formal training and eight complete checkpoints, r125 full readback]
+  archived_runs: []
+  deletion_candidates: []
+```
