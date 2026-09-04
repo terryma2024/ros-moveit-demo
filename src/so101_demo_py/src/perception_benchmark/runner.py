@@ -36,6 +36,7 @@ from so101_demo.perception_benchmark.calibration import (
 from so101_demo.perception_benchmark.codec import (
     canonical_json_bytes,
     decode_mask_rle,
+    encode_mask_rle,
     read_mask,
     sha256_bytes,
 )
@@ -61,6 +62,7 @@ from so101_demo.perception_benchmark.dataset import (
     _require_inventory_capability,
     _validate_persisted_access,
 )
+from so101_demo.perception_benchmark.matching import mask_iou
 from so101_demo.perception_benchmark.timing import (
     PhaseTimingBreakdown,
     ResourceSample,
@@ -245,6 +247,7 @@ class RunSpec:
     max_gpu_temperature_celsius: float | None = None
     production_observer: Callable[[DetectionFrame], ProductionObservation] | None = None
     runtime_provenance: RuntimeProvenance | None = None
+    production_candidate_mask_iou_threshold: float = 0.98
 
     def __post_init__(self) -> None:
         try:
@@ -259,6 +262,21 @@ class RunSpec:
             object.__setattr__(
                 self, "threshold_lock_path", Path(self.threshold_lock_path)
             )
+        threshold = self.production_candidate_mask_iou_threshold
+        if (
+            isinstance(threshold, bool)
+            or not isinstance(threshold, (int, float))
+            or not math.isfinite(float(threshold))
+            or not 0.0 < float(threshold) <= 1.0
+        ):
+            raise ValueError(
+                "production_candidate_mask_iou_threshold must be in (0, 1]"
+            )
+        object.__setattr__(
+            self,
+            "production_candidate_mask_iou_threshold",
+            float(threshold),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1080,6 +1098,7 @@ def _publish_candidate_masks(
     formal_sample_index: int,
     source_root: Path,
     run_root: Path,
+    observed_candidates: Mapping[str, DetectionCandidate] | None = None,
 ) -> tuple[RawCandidate, ...]:
     if not candidates:
         return ()
@@ -1096,16 +1115,39 @@ def _publish_candidate_masks(
     _create_new_directory(index_dir, run_root, "MASK_INDEX_ALREADY_EXISTS")
     published: list[RawCandidate] = []
     for candidate in candidates:
-        _, payload = _read_verified_adapter_mask(candidate.mask, source_root)
         relative = f"masks/{formal_sample_index:06d}/{candidate.candidate_id}.rle.json"
         target = run_root / relative
-        _atomic_write_new_bytes(target, payload, "MASK_WRITE_FAILED")
-        published.append(
-            replace(
+        observed = (
+            None
+            if observed_candidates is None
+            else observed_candidates.get(candidate.candidate_id)
+        )
+        if observed is None:
+            _, payload = _read_verified_adapter_mask(candidate.mask, source_root)
+            published_candidate = replace(
                 candidate,
                 mask=replace(candidate.mask, relative_path=relative),
             )
-        )
+        else:
+            value = np.asarray(observed.mask, dtype=bool)
+            payload = canonical_json_bytes(encode_mask_rle(value))
+            mask_ref = MaskRef(
+                relative_path=relative,
+                sha256=_mask_sha256(value),
+                pixel_count=int(value.sum()),
+                image_width=int(value.shape[1]),
+                image_height=int(value.shape[0]),
+            )
+            published_candidate = replace(
+                candidate,
+                bbox_xyxy=tuple(observed.bbox_xyxy),
+                mask=mask_ref,
+                ranking_score=float(observed.confidence),
+                grounding_box_score=float(observed.confidence),
+                sam_quality=float(observed.segmentation_quality),
+            )
+        _atomic_write_new_bytes(target, payload, "MASK_WRITE_FAILED")
+        published.append(published_candidate)
     return tuple(published)
 
 
@@ -1113,36 +1155,38 @@ def _mask_sha256(value: np.ndarray) -> str:
     return _sha256(value.astype(np.uint8, copy=False).tobytes(order="C"))
 
 
-def _production_mask_sha256(spec: RunSpec, value: np.ndarray) -> str:
+def _production_mask(spec: RunSpec, value: np.ndarray) -> np.ndarray:
     if spec.model == "yolo_seg":
         from so101_demo.adapters.perception.yolo_seg import _trim_mask_boundary
 
         value = _trim_mask_boundary(value)
-    return _mask_sha256(value)
+    return np.asarray(value, dtype=bool)
 
 
 def _matches_production_candidate(
     spec: RunSpec,
     raw: RawCandidate,
     observed: DetectionCandidate,
-    raw_mask_sha256: str,
+    raw_mask: np.ndarray,
 ) -> bool:
     if (
         observed.class_id != raw.label
         or tuple(observed.bbox_xyxy) != raw.bbox_xyxy
-        or _mask_sha256(observed.mask) != raw_mask_sha256
         or observed.confidence != raw.ranking_score
     ):
         return False
     if spec.model == "yolo_seg":
         return (
-            raw.class_confidence == observed.confidence
+            _mask_sha256(observed.mask) == _mask_sha256(raw_mask)
+            and raw.class_confidence == observed.confidence
             and observed.segmentation_quality is None
         )
     return (
         raw.grounding_box_score == observed.confidence
         and raw.sam_quality is not None
         and observed.segmentation_quality is not None
+        and mask_iou(raw_mask, np.asarray(observed.mask, dtype=bool))
+        >= spec.production_candidate_mask_iou_threshold
     )
 
 
@@ -1153,12 +1197,16 @@ def _reconcile_production_candidates(
     observation: ProductionObservation,
     provenance: RuntimeProvenance,
     source_root: Path,
-) -> tuple[tuple[RawCandidate, ...], str | None]:
+) -> tuple[
+    tuple[RawCandidate, ...],
+    str | None,
+    Mapping[str, DetectionCandidate],
+]:
     batch = observation.batch
     if batch is None:
         if observation.decision is not DecisionOutput.ERROR:
             raise RunIntegrityError("PRODUCTION_BATCH_REQUIRED")
-        return result.raw_candidates, None
+        return result.raw_candidates, None, {}
     if (
         batch.model_id != result.model_id
         or batch.weights_sha256 != provenance.weights_sha256
@@ -1167,8 +1215,8 @@ def _reconcile_production_candidates(
         != (frame.image_width, frame.image_height)
     ):
         raise RunIntegrityError("PRODUCTION_BATCH_IDENTITY_MISMATCH")
-    raw_mask_shas = {
-        raw.candidate_id: _production_mask_sha256(
+    raw_masks = {
+        raw.candidate_id: _production_mask(
             spec,
             _read_verified_adapter_mask(raw.mask, source_root)[0]
         )
@@ -1177,6 +1225,7 @@ def _reconcile_production_candidates(
     available = {raw.candidate_id: raw for raw in result.raw_candidates}
     mapped: list[RawCandidate] = []
     ids: dict[str, str] = {}
+    observed_by_raw_id: dict[str, DetectionCandidate] = {}
     for observed in batch.candidates:
         if (
             observed.source_stamp_ns != frame.source_stamp_ns
@@ -1192,7 +1241,7 @@ def _reconcile_production_candidates(
                 spec,
                 raw,
                 observed,
-                raw_mask_shas[raw.candidate_id],
+                raw_masks[raw.candidate_id],
             )
         ]
         if len(matches) != 1:
@@ -1201,12 +1250,14 @@ def _reconcile_production_candidates(
         available.pop(raw.candidate_id)
         mapped.append(raw)
         ids[observed.instance_id] = raw.candidate_id
+        if spec.model == "grounded_sam":
+            observed_by_raw_id[raw.candidate_id] = observed
     selected = None
     if observation.selected_candidate_id is not None:
         selected = ids.get(observation.selected_candidate_id)
         if selected is None:
             raise RunIntegrityError("PRODUCTION_SELECTED_MAPPING_INVALID")
-    return tuple(mapped), selected
+    return tuple(mapped), selected, observed_by_raw_id
 
 
 def _sanitize_observer_summary(error_type: str, summary: str) -> str:
@@ -1240,6 +1291,7 @@ def _ok_record(
     source_root: Path,
 ) -> tuple[PredictionRecord, dict[str, object]]:
     candidates = result.raw_candidates
+    observed_candidates: Mapping[str, DetectionCandidate] = {}
     selector_ms = result.phase_timings.selector_ms
     if observation is None:
         decision, selected, rejection = _decision_from_candidates(candidates)
@@ -1248,7 +1300,7 @@ def _ok_record(
         record_status = RecordStatus.OK
     else:
         decision = observation.decision
-        candidates, selected = _reconcile_production_candidates(
+        candidates, selected, observed_candidates = _reconcile_production_candidates(
             spec,
             frame,
             result,
@@ -1274,6 +1326,7 @@ def _ok_record(
         sample.formal_sample_index,
         source_root,
         run_root,
+        observed_candidates,
     )
     timed_out = False
     oom = False
@@ -1314,12 +1367,17 @@ def _ok_record(
         oom=oom,
         fallback_used=False,
     )
+    irreversible_limits = dict(result.irreversible_limits)
+    if observation is not None and spec.model == "grounded_sam":
+        irreversible_limits["production_candidate_mask_iou_threshold"] = (
+            spec.production_candidate_mask_iou_threshold
+        )
     return record, _record_document(
         record,
         spec,
         timings=result.phase_timings,
         resources=result.resource_samples,
-        irreversible_limits=result.irreversible_limits,
+        irreversible_limits=irreversible_limits,
     )
 
 

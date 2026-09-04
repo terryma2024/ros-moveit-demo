@@ -99,7 +99,7 @@ _SCENARIOS = (
 _MODELS = ("yolo_seg", "grounded_sam")
 _INDEX_SCHEMA = "so101-perception-benchmark/evidence-index/v1"
 _INDEX_SEMANTICS = "payload files only; evidence-index.json is excluded to avoid self-reference"
-_CONFIG_SHA256 = "8103b926c48b3fe006101cdc1bdf8035349f65c2def5ce33c2aaed79e0e32725"
+_CONFIG_SHA256 = "511e0e6472cb774f521783982b2833c790ddc85d1cf3bad03112100ee2896a92"
 _ARCHIVE_ID = (
     "datasets/so101-v5-t005-grounded-sam-postfix/so101-v5-t005-grounded-sam-postfix-r4.tar.gz"
 )
@@ -349,6 +349,7 @@ def _load_frozen_config(path: Path) -> Mapping[str, Any]:
             "minimum_mask_pixels": 64,
             "maximum_mask_area_ratio": 0.50,
             "maximum_candidates": 16,
+            "candidate_mapping_mask_iou_threshold": 0.98,
         }
         or dict(_mapping(grounded.get("low_floor"), "CONFIG_INVALID"))
         != {
@@ -1294,6 +1295,12 @@ def _handle_collect(arguments: argparse.Namespace) -> int:
         collection_mode=CollectionMode.LOW_FLOOR,
         production_observer=observer,
         runtime_provenance=_runtime_provenance(arguments),
+        production_candidate_mask_iou_threshold=float(
+            _mapping(
+                _frozen_model(config, "grounded_sam").get("production"),
+                "CONFIG_INVALID",
+            )["candidate_mapping_mask_iou_threshold"]
+        ),
     )
     manifest = DetectorBenchmarkRunner(adapter, arguments.output_root).run(spec)
     if manifest.status.value != "VALID":
