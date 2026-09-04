@@ -8885,3 +8885,116 @@ retention:
   archived_runs: []
   deletion_candidates: [all r193-r201 registered NVMe scratch trees; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-104 — all saved checkpoints revalidated and serialization exonerated
+
+```yaml
+checkpoint: CP-104
+status: VALID_ROOT_CAUSE_REFINED
+recorded_at: 2026-09-04T22:59:56+08:00
+stage: D_SAVED_CHECKPOINT_REVALIDATION
+experiment_id: EXP-079-STAGE-D-SAVED-CHECKPOINT-REVALIDATION-R1
+prior_checkpoint: CP-103
+source_commit: e123e8e3f00980d133e936e33821c8374a86ecde
+preflight:
+  rejected_r202: process probe matched its own audit label before any directory allocation
+  valid_run_id: stage-d-saved-checkpoint-preflight-r203
+  local_remote_sha_match: true
+  r27: absent
+  training_process_matches: 0
+  gpu_compute_processes: 0
+  checkpoint_count: 8
+  planned_root_absent: true
+  val_inventory_sha256: 7d9b24a6b61a800d31acdf4c7ebf8bbc8ec785e108c7a79c0235cc42270ac592
+  preflight_sha256: 1ed17321f9999bd58ad6904e3e592c18783545ee85b9a6f5cc7e288c0eb7a77f
+execution:
+  model: Grounding DINO Tiny only
+  prompt: cup.
+  runtime: {device: cuda:0, dtype: float32, cpu_fallback: false, sam_loaded: false}
+  samples_per_epoch: 300
+  grid_points_per_epoch: 100
+  checkpoint_member_verification: complete before each model load
+  synthetic_test_access: none
+  coco100_access: none
+  epochs:
+    - {epoch: 1, run_id: r204, box: 0.05, text: 0.05, tp: 9, fp: 32, fn: 291, f1: 0.05278592375366569, small_recall: 0.0, multi_recall: 0.06, manifest_sha256: 88aa9c8d9897dcfca8996cfdee1cbaf2f78abdb64fc9eca3276c1d1b0b2a143a, report_sha256: a165b1c76fa8ce6afea53479b330f61952822b06dccb29526d1dd9c88a622981}
+    - {epoch: 2, run_id: r205, box: 0.05, text: 0.05, tp: 15, fp: 14, fn: 285, f1: 0.0911854103343465, small_recall: 0.02, multi_recall: 0.07, manifest_sha256: d745725073d6cf1456af5832bd0114a7365d78f23a512ec777f158ae8271e197, report_sha256: 3df141964b24f074c43f8bc210100bb3087a4e23954d3f358c284be618786e08}
+    - {epoch: 3, run_id: r206, box: 0.20, text: 0.20, tp: 74, fp: 39, fn: 226, f1: 0.35835351089588374, small_recall: 0.04, multi_recall: 0.24, manifest_sha256: 39305384e936a95494115d59ccaa95454b646721be5ecd46e97f07643e300bf0, report_sha256: 9bab7f8dee160067d8628ceaf739184de9208e1e22073d2a6b88184a6e59a73c}
+    - {epoch: 4, run_id: r208, box: 0.25, text: 0.25, tp: 119, fp: 20, fn: 181, f1: 0.5421412300683371, small_recall: 0.18, multi_recall: 0.48, manifest_sha256: 75a6a85f83b9570b8272ce8492586adea6b9a9b96695d4f6132d0f57a5bb6bb5, report_sha256: f5c3251375e86200c56e449a0e77e06b4aa27e033ebfdfe4ffceb470810e7190}
+    - {epoch: 5, run_id: r209, box: 0.25, text: 0.25, tp: 268, fp: 101, fn: 32, f1: 0.8011958146487294, small_recall: 0.76, multi_recall: 0.88, manifest_sha256: 7e084b85ce512d7b79e8f12c0f946a9605f2835b205492e8dff5336338670d64, report_sha256: 6330d83252f9740fc857187d09fe46c85752c4fe98946e07366004268e606b31}
+    - {epoch: 6, run_id: r210, box: 0.30, text: 0.30, tp: 235, fp: 40, fn: 65, f1: 0.817391304347826, small_recall: 0.50, multi_recall: 0.71, manifest_sha256: 72454a70766d85c124f63e0fa6bfcbdd7b4127508176ea5923e7829327f7d3bb, report_sha256: 5ab44854bebe6727f2695ac346552b260b6df149f25d7c07b4c8b4746a291474}
+    - {epoch: 7, run_id: r211, box: 0.25, text: 0.25, tp: 261, fp: 48, fn: 39, f1: 0.8571428571428571, small_recall: 0.78, multi_recall: 0.79, manifest_sha256: 355ae77674508fcca0c2d974b69b8546d5843382815e802382d2c7b1ca614880, report_sha256: 11bc6789b29832b03a03b5a075462e2b51e0d225daa956414cab1b9fd2dfb6de}
+    - {epoch: 8, run_id: r212, box: 0.30, text: 0.30, tp: 239, fp: 32, fn: 61, f1: 0.8371278458844134, small_recall: 0.62, multi_recall: 0.71, manifest_sha256: 299995ebb279260cc45ffb7ab99f51dec1610b47dc681d5a2e826c77a03c3685, report_sha256: 763341fe8563fdc3beedf5cc3a68f94203cf88cc33f7a967dc1c36976a2083e3}
+selection:
+  run_id: stage-d-saved-checkpoint-selection-r213
+  status: VALID
+  selected_epoch: 7
+  selection_sha256: 8845a4c072cf94d264df1b891510e9995402fc201e62b8074a783c072afa9d48
+  manifest_sha256: 55120bce746ba5b34a0c101be2d3964c11fac76540a607fa216cffbaff5b48a8
+  selected_model_sha256: 700ef987164408d1ef5be1c93b69b895d1a1c3537d0fbbfcc55940c4901e924c
+  existing_epoch7_bundle_model_bytes_equal: true
+  recorded_in_memory_epoch7_metrics_exactly_reproduced: true
+  checkpoint_serialization_drift: false
+root_cause_refinement:
+  run_id: stage-d-threshold-label-semantics-r207
+  diagnostic_sha256: 2c71384087733c19592c878794a54037a0793ebe26316306b601eb6155a527b9
+  finding: Transformers box scores do not depend on text_threshold, but decoded text_labels do; exact decoded-label filtering at the 0.01 raw floor discards the high-score cup queries that decode correctly at 0.25
+  report_score_range_semantics: exact-cup normalized labels at the minimum text threshold only
+  consequence: CP-102 was not caused by checkpoint serialization; the low-floor raw adapter proposal identity gate must be corrected before another val collection
+immutable_readback:
+  run_id: stage-d-saved-checkpoint-selection-readback-r214
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/saved-checkpoint-revalidation-r1
+  tree: {files: 18, directories: 10, bytes: 169427, inventory_sha256: c1405fd70b4645103db0327169bed90b198cd9f7edc24e935146845d4e43958e, file_mode: '0444', directory_mode: '0555'}
+  readback_sha256: 8962c4d3973811bc95802d115ae63db67bc0f042101d43a00a5f43a6f991bdc2
+reuse_boundary:
+  new_epoch7_bundle: forbidden because it would be byte-equivalent to the existing immutable bundle
+  r189_raw_rerun: forbidden because the old adapter result is already valid immutable evidence
+  next_raw_output: must use a new version after the adapter fix
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  linux_pickplace: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and TDD the raw adapter prompt-token identity fix, then run required ordinary and explicit benchmark gates
+retention:
+  retained_runs: [r203-r214, complete immutable saved-checkpoint-revalidation-r1]
+  archived_runs: []
+  deletion_candidates: [r204-r213 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E raw prompt-token identity remediation
+
+```yaml
+experiment_id: EXP-079-STAGE-E-RAW-PROMPT-TOKEN-GATING-R1
+status: PLANNED
+recorded_at: 2026-09-04T22:59:56+08:00
+prior_checkpoint: CP-104
+hypothesis: the low-floor raw collector loses deployable epoch-7 proposals because Transformers reconstructs decoded labels from every token above text_threshold 0.01, while the already-computed prompt-token score is the stable single-prompt generic-cup identity signal
+prediction: accepting a low-floor proposal by the verified cup prompt token positions and text score, instead of exact equality of the threshold-dependent decoded phrase, preserves the high-score proposals and yields nonzero full-pipeline val metrics at the frozen 0.25 DINO gates
+single_variable: raw proposal identity changes from exact decoded-label equality at text threshold 0.01 to verified generic-cup prompt-token positions with text score at least 0.01; model, prompt, processor, SAM, thresholds, limits, images, and metric definitions remain unchanged
+tdd_contract:
+  - a query with a noisy low-floor decoded label but a verified cup prompt-token score above 0.01 is retained
+  - a query whose verified cup prompt-token score is below 0.01 is rejected
+  - missing prompt token positions or an unprovable query mapping fails closed
+  - stored grounding_box_score and grounding_text_score remain derived from the exact mapped query
+execution_contract:
+  - change only the low-floor benchmark raw adapter and its tests
+  - build a fresh seven-package symlink overlay from the verified r26 lodepng cache without network fetch
+  - run the ordinary gate and, because a benchmark adapter changes, the one required explicit full benchmark gate using a unique /data NVMe scratch and compare it with r30 and r141
+  - commit, ordinary-push to the existing Gitee branch, and read back the remote SHA before CUDA val inference
+  - collect one new 300-sample val raw version, then run the frozen 0.25 DINO gates and preregistered SAM-quality grid offline
+planned_outputs:
+  val_raw: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  calibration: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-calibration-r2
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: write the adapter RED test before implementation
+retention:
+  retained_runs: [all CP-104 evidence, immutable r189 and r191]
+  archived_runs: []
+  deletion_candidates: []
+```
