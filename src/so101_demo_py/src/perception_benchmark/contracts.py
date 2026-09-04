@@ -223,7 +223,7 @@ class RawCandidate:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ranking_score", _require_probability("ranking_score", self.ranking_score))
-        if not self.candidate_id or self.label != "plastic_cup":
+        if not self.candidate_id or self.label not in {"cup", "plastic_cup"}:
             raise ValueError("candidate identity is invalid")
         if not isinstance(self.mask, MaskRef):
             raise ValueError("mask must be a MaskRef")

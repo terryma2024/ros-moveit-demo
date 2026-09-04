@@ -146,6 +146,9 @@ class GroundedSamDetector:
         )
         self._bundle = bundle
         self._thresholds = thresholds
+        self.target_class_id = bundle.target_class_id
+        self._prompt_profile = dict(bundle.manifest["prompt_profile"])
+        self._prompt = bundle.prompt
         try:
             self._grounding_processor = (grounding_processor_loader or _load_grounding_processor)(
                 bundle.detector_dir, local_files_only=True
@@ -171,7 +174,7 @@ class GroundedSamDetector:
         grounding_inputs = _move_inputs(
             self._grounding_processor(
                 images=_WARMUP_RGB,
-                text="plastic cup.",
+                text=self._prompt,
                 return_tensors="pt",
             ),
             self.runtime_device,
@@ -203,7 +206,7 @@ class GroundedSamDetector:
     def _grounding_proposals(
         self, frame: DetectionFrame, query: DetectionQuery
     ) -> tuple[GroundingProposal, ...]:
-        prompt = prompt_for_query(query)
+        prompt = prompt_for_query(query, self._prompt_profile)
         grounding_inputs = _move_inputs(
             self._grounding_processor(
                 images=frame.rgb8,
@@ -245,6 +248,7 @@ class GroundedSamDetector:
             frame,
             query,
             self._thresholds,
+            self._prompt_profile,
         )
 
     def _sam_results(
@@ -318,7 +322,12 @@ class GroundedSamDetector:
             else:
                 masks, quality_scores = self._sam_results(frame, proposals)
                 candidates = convert_sam_results(
-                    proposals, masks, quality_scores, frame, self._thresholds
+                    proposals,
+                    masks,
+                    quality_scores,
+                    frame,
+                    self._thresholds,
+                    self.target_class_id,
                 )
                 self._log_mask_rejections(proposals, candidates, quality_scores)
         except GroundedSamResultError:

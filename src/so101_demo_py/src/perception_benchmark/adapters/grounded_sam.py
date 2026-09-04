@@ -37,9 +37,6 @@ from so101_demo.perception_benchmark.timing import (
     ResourceSampler,
 )
 
-_PROMPT = "plastic cup."
-
-
 def _force_offline_environment() -> None:
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
         os.environ[name] = "1"
@@ -111,18 +108,25 @@ def _token_strings(processor: Any, input_ids: np.ndarray) -> tuple[str, ...]:
     return tuple(str(token).lower() for token in tokens)
 
 
-def _phrase_positions(tokens: tuple[str, ...]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+def _phrase_positions(tokens: tuple[str, ...], prompt: str) -> tuple[tuple[int, ...], ...]:
     normalized = tuple(
         token.replace("##", "").replace("ġ", "").replace("▁", "") for token in tokens
     )
-    plastic = tuple(index for index, token in enumerate(normalized) if "plastic" in token)
-    cup = tuple(index for index, token in enumerate(normalized) if "cup" in token)
-    if not plastic or not cup:
+    words = tuple(
+        word
+        for word in prompt.casefold().replace(".", " ").split()
+        if word
+    )
+    positions = tuple(
+        tuple(index for index, token in enumerate(normalized) if word in token)
+        for word in words
+    )
+    if not words or any(not matches for matches in positions):
         raise ModelSetupError(
             "RESULT_CONTRACT_INVALID",
-            "decoded grounding tokens do not contain plastic cup",
+            "decoded grounding tokens do not contain every prompt word",
         )
-    return plastic, cup
+    return positions
 
 
 def _query_indices(
@@ -175,6 +179,8 @@ class GroundedSamRawAdapter:
         sam_model: Any,
         synchronizer: DeviceSynchronizer,
         resource_sampler: ResourceSampler,
+        target_class_id: str = "plastic_cup",
+        prompt: str = "plastic cup.",
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
         if model_id != GROUNDED_SAM_MODEL_ID:
@@ -185,10 +191,16 @@ class GroundedSamRawAdapter:
             raise ValueError("timing/resource device does not match Grounded-SAM runtime")
         if not isinstance(manifest_sha256, str) or len(manifest_sha256) != 64:
             raise ValueError("manifest_sha256 is invalid")
+        if target_class_id not in {"cup", "plastic_cup"}:
+            raise ValueError("target_class_id is invalid")
+        if not isinstance(prompt, str) or not prompt:
+            raise ValueError("prompt is invalid")
         _force_offline_environment()
         self.model_id = model_id
         self.runtime_device = runtime_device
         self._manifest_sha256 = manifest_sha256
+        self.target_class_id = target_class_id
+        self._prompt = prompt
         self._torch = torch_api
         self._grounding_processor = grounding_processor
         self._grounding_model = grounding_model
@@ -296,6 +308,8 @@ class GroundedSamRawAdapter:
             sam_model=sam_model,
             synchronizer=synchronizer,
             resource_sampler=ResourceSampler(torch_api=torch_api, device=runtime_device),
+            target_class_id=bundle.target_class_id,
+            prompt=bundle.prompt,
             monotonic_ns=monotonic_ns,
         )
 
@@ -352,17 +366,17 @@ class GroundedSamRawAdapter:
             raise ModelSetupError("RESULT_CONTRACT_INVALID", "grounding result arrays are invalid")
         probabilities = _sigmoid(logits[0])
         tokens = _token_strings(self._grounding_processor, input_ids[0])
-        plastic_positions, cup_positions = _phrase_positions(tokens)
+        phrase_positions = _phrase_positions(tokens, self._prompt)
         query_indices = _query_indices(result, scores, probabilities)
         proposals: list[tuple[tuple[float, float, float, float], float, float]] = []
         for index, label in enumerate(labels):
-            if not grounding_label_matches_prompt(label, _PROMPT):
+            if not grounding_label_matches_prompt(label, self._prompt):
                 continue
             box_score = float(scores[index])
             query_probabilities = probabilities[query_indices[index]]
             text_score = min(
-                max(float(query_probabilities[position]) for position in plastic_positions),
-                max(float(query_probabilities[position]) for position in cup_positions),
+                max(float(query_probabilities[position]) for position in positions)
+                for positions in phrase_positions
             )
             if box_score < 0.01 or text_score < 0.01:
                 continue
@@ -452,7 +466,7 @@ class GroundedSamRawAdapter:
             candidates.append(
                 RawCandidate(
                     candidate_id=candidate_id,
-                    label="plastic_cup",
+                    label=self.target_class_id,
                     bbox_xyxy=cast(tuple[float, float, float, float], bbox),
                     mask=mask_ref,
                     ranking_score=box_score,
@@ -477,7 +491,7 @@ class GroundedSamRawAdapter:
             grounding_inputs = _move_inputs(
                 self._grounding_processor(
                     images=frame.rgb8,
-                    text=_PROMPT,
+                    text=self._prompt,
                     return_tensors="pt",
                 ),
                 self.runtime_device,

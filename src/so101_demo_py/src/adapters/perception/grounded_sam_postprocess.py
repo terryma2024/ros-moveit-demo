@@ -6,6 +6,7 @@ import math
 import unicodedata
 from dataclasses import dataclass
 from numbers import Real
+from collections.abc import Mapping
 from typing import Any, Sequence, cast
 
 import numpy as np
@@ -100,12 +101,21 @@ def _contract_error(detail: str) -> GroundedSamResultError:
     return GroundedSamResultError("RESULT_CONTRACT_INVALID", detail)
 
 
-def prompt_for_query(query: DetectionQuery) -> str:
-    if not isinstance(query, DetectionQuery) or query.class_id != "plastic_cup":
+def prompt_for_query(
+    query: DetectionQuery,
+    prompt_profile: Mapping[str, str] | None = None,
+) -> str:
+    profile = {"plastic_cup": "plastic cup."} if prompt_profile is None else dict(prompt_profile)
+    if (
+        not isinstance(query, DetectionQuery)
+        or set(profile) != {query.class_id}
+        or not isinstance(profile.get(query.class_id), str)
+        or not profile[query.class_id]
+    ):
         raise GroundedSamResultError(
-            "UNSUPPORTED_DETECTION_QUERY", "only plastic_cup is supported"
+            "UNSUPPORTED_DETECTION_QUERY", "query is not declared by the model prompt profile"
         )
-    return "plastic cup."
+    return profile[query.class_id]
 
 
 def grounding_label_matches_prompt(label: object, prompt: str) -> bool:
@@ -153,8 +163,9 @@ def convert_grounding_results(
     frame: DetectionFrame,
     query: DetectionQuery,
     thresholds: GroundedSamThresholds,
+    prompt_profile: Mapping[str, str] | None = None,
 ) -> tuple[GroundingProposal, ...]:
-    prompt_for_query(query)
+    prompt = prompt_for_query(query, prompt_profile)
     box_array = _as_float_array(boxes, "boxes")
     score_array = _as_float_array(scores, "scores")
     if box_array.ndim != 2 or box_array.shape[1:] != (4,):
@@ -186,9 +197,9 @@ def convert_grounding_results(
         )
         if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
             raise _contract_error(f"box {index} is outside the frame")
-        if not grounding_label_matches_prompt(
-            labels[index], prompt_for_query(query)
-        ) or score_array[index] < thresholds.box_threshold:
+        if not grounding_label_matches_prompt(labels[index], prompt) or score_array[
+            index
+        ] < thresholds.box_threshold:
             continue
         normalized.append(GroundingProposal(clipped, float(score_array[index])))
 
@@ -259,7 +270,12 @@ def convert_sam_results(
     quality_scores: Any,
     frame: DetectionFrame,
     thresholds: GroundedSamThresholds,
+    class_id: str = "plastic_cup",
 ) -> tuple[DetectionCandidate, ...]:
+    try:
+        DetectionQuery(class_id)
+    except ValueError as error:
+        raise _contract_error("class_id must be a supported detection query") from error
     proposals = tuple(proposals)
     if any(not isinstance(proposal, GroundingProposal) or not _proposal_is_valid(proposal, frame) for proposal in proposals):
         raise _contract_error("proposals must be valid, in-frame GroundingProposal values")
@@ -286,7 +302,7 @@ def convert_sam_results(
     return tuple(
         DetectionCandidate(
             instance_id=f"grounded-sam-{index:03d}",
-            class_id="plastic_cup",
+            class_id=class_id,
             confidence=proposal.confidence,
             bbox_xyxy=proposal.bbox_xyxy,
             mask=mask,

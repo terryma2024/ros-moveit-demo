@@ -65,7 +65,7 @@ def _fake_torch(*, mps: bool) -> SimpleNamespace:
     )
 
 
-def _verified_bundle(tmp_path: Path) -> VerifiedModelBundle:
+def _verified_bundle(tmp_path: Path, *, generic_cup: bool = False) -> VerifiedModelBundle:
     detector_dir = tmp_path / "grounding-dino-tiny"
     segmenter_dir = tmp_path / "sam2.1-hiera-tiny"
     return VerifiedModelBundle(
@@ -73,7 +73,11 @@ def _verified_bundle(tmp_path: Path) -> VerifiedModelBundle:
         manifest_sha256="a" * 64,
         detector_dir=detector_dir,
         segmenter_dir=segmenter_dir,
-        manifest={},
+        manifest={
+            "prompt_profile": {"cup": "cup."}
+            if generic_cup
+            else {"plastic_cup": "plastic cup."}
+        },
     )
 
 
@@ -354,6 +358,48 @@ def test_detector_loads_both_local_models_offline_and_warms_them(
     assert detector.cold_start_latency_ms == 5.0
     assert grounding_model.call_count == 1
     assert sam_model.call_count == 1
+
+
+def test_finetuned_detector_uses_bundle_cup_prompt_and_emits_generic_class(
+    tmp_path: Path,
+) -> None:
+    """Catch production inference ignoring schema-v2 generic-cup semantics."""
+
+    class GenericProcessor(_FakeGroundingProcessor):
+        def __init__(self) -> None:
+            super().__init__()
+            self.prompts: list[str] = []
+
+        def __call__(self, *, images: np.ndarray, text: str, **kwargs: object) -> dict[str, object]:
+            self.prompts.append(text)
+            return super().__call__(images=images, **kwargs)
+
+        def post_process_grounded_object_detection(
+            self, *_args: object, **_kwargs: object
+        ) -> list[dict[str, object]]:
+            result = super().post_process_grounded_object_detection()
+            result[0]["text_labels"] = ["cup"]
+            return result
+
+    processor = GenericProcessor()
+    detector = GroundedSamDetector(
+        bundle=_verified_bundle(tmp_path, generic_cup=True),
+        thresholds=GroundedSamThresholds.defaults(),
+        requested_device="mps",
+        allow_cpu_fallback=False,
+        torch_api=_fake_torch(mps=True),
+        grounding_processor_loader=lambda *_args, **_kwargs: processor,
+        grounding_model_loader=lambda *_args, **_kwargs: _FakeGroundingModel(),
+        sam_processor_loader=lambda *_args, **_kwargs: _FakeSamProcessor(),
+        sam_model_loader=lambda *_args, **_kwargs: _FakeSamModel(),
+        monotonic_ns=iter(range(0, 100_000_000, 1_000_000)).__next__,
+    )
+
+    batch = detector.detect(_frame(), DetectionQuery("cup"))
+
+    assert processor.prompts == ["cup.", "cup."]
+    assert detector.target_class_id == "cup"
+    assert [candidate.class_id for candidate in batch.candidates] == ["cup"]
 
 
 def test_detector_construction_warms_formal_rgb_shape_and_max_candidate_sam_batch(

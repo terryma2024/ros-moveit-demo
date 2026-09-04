@@ -48,6 +48,12 @@ def test_prompt_is_fixed_for_the_whitelisted_query() -> None:
     assert prompt_for_query(DetectionQuery("plastic_cup")) == "plastic cup."
 
 
+def test_prompt_uses_the_verified_generic_cup_profile() -> None:
+    """Catch a fine-tuned bundle query being routed back to material classification."""
+
+    assert prompt_for_query(DetectionQuery("cup"), {"cup": "cup."}) == "cup."
+
+
 def test_prompt_rejects_a_bypassed_unknown_query_before_any_model_boundary() -> None:
     """Catch accepting a query object that bypassed DetectionQuery's constructor whitelist."""
 
