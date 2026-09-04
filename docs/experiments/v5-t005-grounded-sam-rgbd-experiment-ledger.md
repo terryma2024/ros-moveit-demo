@@ -7261,3 +7261,98 @@ retention:
   deletion_candidates:
     - stage-d-training-image-gcfix2-build-r107 scratch; do not delete without explicit user authorization
 ```
+
+## Checkpoint CP-089 — smoke r3 exposed valid masked logits
+
+```yaml
+checkpoint: CP-089
+status: FAILED_DIAGNOSED
+recorded_at: 2026-09-04T18:56:56+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-088
+smoke_r3:
+  run_id: stage-d-training-smoke-r108
+  status: FAILED_FRESH_RELOAD_GATE
+  source_commit: c53e2878321f6b84807546f222d44d79bc38fccd
+  gitee_remote_sha: c53e2878321f6b84807546f222d44d79bc38fccd
+  implementation_commit: c6524641cd0f91461779fe4c927aceb8391516ff
+  image_id: sha256:bd706707f4648396c8afc3cfa095579ff3641931379df9c32b344204eed7cf12
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r3
+  output_reusable: false
+  exit_code: 1
+  elapsed_ms: 20390
+  training_batches_completed: 6
+  completed_epochs: 1
+  mean_loss: 57813.883138020836
+  peak_gpu_memory_bytes: 8582083584
+  checkpoint_manifest_sha256: 88fba70befe0d5eb81305d2ad762320d140c4aa1bf9ddb501862f452446406bc
+  frozen_model_manifest_sha256: a0205507d62a801f00302d29cd8e1d2a2c1e36c35fe017b76ac88f45293ab54f
+  gradient_checkpointing_receipt_sha256: 5301a0fd25c038ceb93bc2f156819faa7db8b7129c9f9c086d9bf28325071393
+  selected_val: {box_threshold: 0.4, text_threshold: 0.4, f1: 0.125, precision: 0.1, recall: 0.16666666666666666, small_target_recall: 1.0, multi_cup_recall: 0.0, tp: 1, fp: 9, fn: 5}
+  failure: fresh process rejected the reloaded model because it required every fixed-width logit slot to be finite
+  preflight:
+    output_collision: absent
+    compute_processes: 0
+    microduck_matching_nonancestor_processes: 0
+    cpu_fallback: false
+    network: none
+    mounts: [train images read-only, val images read-only, train inventory read-only, val inventory read-only, base model read-only, new output parent read-write]
+    synthetic_test_access: none
+    coco100_access: none
+    sam_mount: none
+    preflight_sha256: 149e5d25c12bc12759a1a4567420648b0c1d3e62a2306f857366a6e5116fb8ff
+    stdout_sha256: fe0806386519eb3423c91bb7cfe4eb75263ce76e7aa65d91caba41de6cc29a7d
+    stderr_sha256: 88715f42c94da920b48c506dcb80906e491d787213f60409bd3646e0f1b1743b
+    exit_log_sha256: d5eac5b419027756f3c2128f7b193308c6c81a3d4a7d9ab630abb27f727e7884
+diagnostics:
+  checkpoint_tensor_probe:
+    run_id: stage-d-fresh-reload-diagnostic-r109
+    status: VALID_DIAGNOSTIC
+    checkpoint_mount: read-only
+    network: none
+    nonfinite_parameter_tensors: 0
+    boxes: {finite: 3600, numel: 3600, nan: 0, posinf: 0, neginf: 0, device: cuda:0}
+    logits: {finite: 3600, numel: 230400, nan: 0, posinf: 0, neginf: 226800, device: cuda:0}
+    stdout_sha256: 387e85c94d14e1bb3b6c3a145de2ce5fbdc95c48e4d153a2c95043f84f6a5475
+  invalid_ab_probe:
+    run_id: stage-d-logit-mask-ab-diagnostic-r110
+    status: INVALID
+    reason: attempted to expand the four-token input attention mask directly over the fixed 256-token output dimension
+    exit_code: 1
+  corrected_ab_probe:
+    run_id: stage-d-logit-mask-ab-diagnostic-r111
+    status: VALID_DIAGNOSTIC
+    mounts: [base model read-only, checkpoint read-only, one val image read-only]
+    network: none
+    comparison: base and checkpoint are identical on the structural logit-mask contract
+    prompt_token_slots: 4
+    output_token_slots: 256
+    active_logits_finite: true
+    active_logits_neginf: 0
+    inactive_logits_neginf: 226800
+    inactive_logits_count: 226800
+    logits_nan: 0
+    logits_posinf: 0
+    boxes_finite: true
+    device: cuda:0
+    stdout_sha256: 7e124a9ef464c6a0095e6994aa32344c0871c5fc454f949c0fdd095cfed3d171
+root_cause:
+  model_behavior: Grounding DINO emits finite logits for the four prompt tokens and negative infinity for all 252 unused fixed-width token slots; this is present in the untouched frozen base model and is valid masking behavior
+  gate_bug: verify_checkpoint_in_fresh_process used torch.isfinite over every logit slot, so it rejected the model's legitimate negative-infinity padding
+planned_fix:
+  tdd: require a RED unit test for finite active prompt logits, no NaN or positive infinity anywhere, permitted negative infinity only outside the padded active-token mask, finite boxes, and CUDA device; then GREEN, related, static, fresh overlay, and ordinary gates
+  new_image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix3
+  new_smoke_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r4
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync this diagnosed failure, then implement the fresh-reload masked-logit validation RED to GREEN; do not reuse smoke-r3
+retention:
+  retained_runs: [r108 failed smoke, r109 valid tensor diagnostic, r110 invalid A/B diagnostic, r111 valid corrected A/B diagnostic]
+  archived_runs: []
+  deletion_candidates: []
+```
