@@ -784,6 +784,66 @@ def load_verified_raw_records(
     return tuple(output)
 
 
+def verify_val_truth_rebind(
+    *,
+    raw_dataset: ValDataset,
+    truth_dataset: ValDataset,
+) -> Mapping[str, Any]:
+    """Bind verified raw records to corrected truth only for identical val images."""
+
+    if (
+        not isinstance(raw_dataset, ValDataset)
+        or not isinstance(truth_dataset, ValDataset)
+        or len(raw_dataset.samples) != len(truth_dataset.samples)
+    ):
+        raise ValCalibrationError("RAW_TRUTH_REBIND_INVALID", "denominator")
+    identities = []
+    for raw_sample, truth_sample in zip(
+        raw_dataset.samples,
+        truth_dataset.samples,
+        strict=True,
+    ):
+        raw_identity = (
+            raw_sample.formal_sample_index,
+            raw_sample.seed,
+            raw_sample.scenario,
+            raw_sample.configured_cup_count,
+            raw_sample.image_sha256,
+        )
+        truth_identity = (
+            truth_sample.formal_sample_index,
+            truth_sample.seed,
+            truth_sample.scenario,
+            truth_sample.configured_cup_count,
+            truth_sample.image_sha256,
+        )
+        if raw_identity != truth_identity:
+            raise ValCalibrationError(
+                "RAW_TRUTH_REBIND_INVALID",
+                str(raw_sample.formal_sample_index),
+            )
+        identities.append(
+            {
+                "configured_cup_count": raw_sample.configured_cup_count,
+                "formal_sample_index": raw_sample.formal_sample_index,
+                "image_sha256": raw_sample.image_sha256,
+                "scenario": raw_sample.scenario,
+                "seed": raw_sample.seed,
+            }
+        )
+    receipt = {
+        "raw_source_manifest_sha256": raw_dataset.source_manifest_sha256,
+        "raw_val_inventory_sha256": raw_dataset.inventory_sha256,
+        "sample_count": len(identities),
+        "sample_identity_sha256": hashlib.sha256(
+            canonical_json_bytes({"samples": identities})
+        ).hexdigest(),
+        "truth_source_manifest_sha256": truth_dataset.source_manifest_sha256,
+        "truth_val_inventory_sha256": truth_dataset.inventory_sha256,
+    }
+    return MappingProxyType(receipt)
+
+
 def _greedy_matches(
     candidates: Sequence[RawCandidate], truths: Sequence[Mapping[str, Any]]
 ) -> tuple[tuple[int, int], ...]:
@@ -1122,6 +1182,7 @@ __all__ = (
     "load_verified_raw_records",
     "select_mask_aware_sam_quality_threshold",
     "select_sam_quality_threshold",
+    "verify_val_truth_rebind",
     "write_mask_aware_calibration_evidence",
     "write_calibration_evidence",
 )

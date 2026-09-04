@@ -22,6 +22,7 @@ from so101_demo.training.grounded_sam_val_calibration import (
     load_verified_raw_records,
     select_mask_aware_sam_quality_threshold,
     select_sam_quality_threshold,
+    verify_val_truth_rebind,
     write_calibration_evidence,
 )
 
@@ -60,6 +61,31 @@ def _sample(index: int, scenario: str, boxes=()) -> ValSample:
         image_sha256=SHA_B,
         truths=tuple(boxes),
     )
+
+
+def test_val_truth_rebind_requires_identical_sample_and_image_identity() -> None:
+    raw_sample = _sample(0, "two_cups", ({"mask": "old"},))
+    corrected_sample = replace(
+        raw_sample,
+        image_path=Path("/corrected/images/val/420000000.png"),
+        truths=({"mask": "corrected"},),
+    )
+    raw_dataset = ValDataset(SHA_A, SHA_A, (raw_sample,), {"two_cups": 1})
+    corrected_dataset = ValDataset(SHA_B, SHA_B, (corrected_sample,), {"two_cups": 1})
+
+    receipt = verify_val_truth_rebind(
+        raw_dataset=raw_dataset,
+        truth_dataset=corrected_dataset,
+    )
+
+    assert receipt["sample_count"] == 1
+    assert len(receipt["sample_identity_sha256"]) == 64
+    mismatched = replace(
+        corrected_dataset,
+        samples=(replace(corrected_sample, image_sha256="c" * 64),),
+    )
+    with pytest.raises(ValCalibrationError, match="RAW_TRUTH_REBIND_INVALID"):
+        verify_val_truth_rebind(raw_dataset=raw_dataset, truth_dataset=mismatched)
 
 
 def test_candidate_document_round_trip_preserves_stable_identity_metadata() -> None:
