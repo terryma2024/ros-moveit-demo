@@ -11506,3 +11506,39 @@ retention:
   deletion_candidates: [r282 RED scratch; do not delete without explicit user authorization]
 next_action: implement only the frozen component, comparison, attribution, and evidence-generation contract; rerun on a new scratch path
 ```
+
+## Checkpoint CP-136 — first GREEN launch invalidated by setup-shell nounset
+
+```yaml
+checkpoint: CP-136
+status: INVALID_ENVIRONMENT_NO_TEST_EXECUTION
+recorded_at: 2026-09-05T07:13:13+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-135
+source_commit: b135d1b7e6fbd97f8ce29764235c5b54a9ebeb2f
+run_id: stage-e-corrected-truth-residual-green-r283
+result:
+  exit_code: 1
+  validity: INVALID
+  implementation_assertions_executed: 0
+  cause: shell nounset remained active while sourcing ROS and the r279 overlay, so setup aborted on AMENT_TRACE_SETUP_FILES/COLCON_TRACE and so101_demo was not importable
+  disposition: preserve evidence; never reuse r283 scratch or evidence directory
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  intended_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  overlay_package_target: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-residual-green-r283/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-corrected-truth-residual-green-r283
+  preflight_sha256: 833c17d2573d08f2be81fc31fb5a422c6ed704402c33d575f7f7d23eeaa4d1c0
+  run_log_sha256: d69b5961f3137031ae079bcd898a83ff2ba45a284e0c229339fcede4e3f837c4
+  exit_sha256: 0b6d990b62295ce0cfac6dc9037fcd0df56a700f0c961734973676aa61672655
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused}
+retention:
+  retained_runs: [r283 invalid evidence and scratch, all CP-135 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r283 scratch; do not delete without explicit user authorization]
+next_action: use a fresh r284 scratch, source with nounset disabled, read back so101_demo package provenance, then rerun the unchanged synthetic contract
+```
