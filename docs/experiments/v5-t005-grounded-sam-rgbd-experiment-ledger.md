@@ -10125,3 +10125,139 @@ retention:
   archived_runs: []
   deletion_candidates: [r258 registered NVMe scratch tree; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-116 — convex-hull truth corruption confirmed
+
+```yaml
+checkpoint: CP-116
+status: VALID_ROOT_CAUSE_CONFIRMED_AND_FIX_PLANNED
+recorded_at: 2026-09-05T00:46:00+08:00
+stage: E_TRUTH_GENERATION_AUDIT
+experiment_id: EXP-079-STAGE-E-TRUTH-GENERATION-AUDIT-R1
+prior_checkpoint: CP-115
+valid_run:
+  run_id: stage-e-truth-generation-audit-r259
+  status: VALID_IMMUTABLE
+  exit_code: 0
+  elapsed_ms: 58764
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/truth-remediation/grounding-dino-cup-r3-truth-generation-audit-r2
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-mask-aware-r232/build/so101_demo_py/so101_demo/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-truth-generation-audit-r259/tmp
+  tempfile_preflight: exact resolved match
+  train_val_instances: 1500
+  persisted_partial_rle_instances: 250
+  persisted_partial_rle_vs_raw_mismatches: 0
+  truth_or_label_mismatches: 0
+  source_tree_inventory_sha256_before_and_after: 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd
+  source_files: 4500
+  source_bytes: 64149844
+  val:
+    instances: 300
+    area_inflation_over_10_percent: 294
+    area_inflation_over_50_percent: 253
+    median_area_inflation_ratio: 1.8728898841362804
+    median_raw_vs_polygon_iou: 0.5339344236872848
+    raw_vs_polygon_iou_below_0.80: 288
+  partial_train_val:
+    instances: 250
+    area_inflation_over_10_percent: 250
+    area_inflation_over_50_percent: 247
+    median_area_inflation_ratio: 2.2646240447411805
+    median_raw_rle_vs_polygon_iou: 0.441574595840331
+    raw_rle_vs_polygon_iou_below_0.80: 250
+  sample_152_truth_0: {raw_pixels: 4946, polygon_pixels: 25316, raw_vs_polygon_iou: 0.19537051666930005, raw_components: 14, pixels_outside_largest_component: 25}
+  rgb_rerender_covariate:
+    mismatch_frames: 94
+    changed_pixels_per_frame: {minimum: 1, median: 1, maximum: 7}
+    maximum_absolute_channel_delta: 1
+    interpretation: bounded GPU raster byte variance; not a segmentation-truth validity gate
+  script_sha256: 1315066cb26c9ec62fb2fd4a774a4603ef7269f80f4382ea98dfa9587bb98f20
+  run_log_sha256: fdda6f32a7e9ce80064abaad85077b18a6599dfa30e7444f2059ea20ff24abb0
+  report_sha256: 59aae1851fb74134338fecb03cebb79ba1881df797d39822e131471d454fa2a1
+  instances_sha256: 020e5fd5ce0705abf6f95254497b579797f6206ab832d48ca972bedd6040a9ee
+  manifest_sha256: 51b82988f258cbd8bbec4c0d81e31c42d444f0456b1296797302af95557b1d23
+root_cause:
+  status: CONFIRMED
+  first_bad_boundary: _polygon_from_mask replaces every target pixel set with one convex hull
+  propagation: generator writes the hull as polygon_xy and YOLO label; load_locked_val_dataset rasterizes that polygon and treats it as SAM truth
+  evidence: raw MuJoCo segmentation agrees bitwise with all persisted partial RLEs, while independent production polygon rasterization exactly reproduces the area inflation and sample-152 triangle
+  rejected_alternatives:
+    rle_corruption: rejected by 250 of 250 bitwise raw-rerender matches
+    polygon_consumer_only: rejected because the stored polygon itself is the convex hull and label rasterization reproduces it without mismatch
+  caution: raw object-ID masks can contain multiple components and tiny distant pixels; this remediation preserves them exactly and does not introduce morphology, component filtering, or val-tuned cleanup
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+retention:
+  retained_runs: [r259 immutable valid audit, r258 immutable invalid audit, failure-overlays-r3]
+  archived_runs: []
+  deletion_candidates: [r259 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Stage E lossless train/val truth reconstruction
+
+```yaml
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-R1
+status: PLANNED
+recorded_at: 2026-09-05T00:46:00+08:00
+prior_checkpoint: CP-116
+hypothesis: persisting and consuming the exact visible MuJoCo RLE for every instance will remove convex-hull label corruption without changing the model, IoU gate, split membership, or scene distribution
+prediction: a concave or disconnected mask will round-trip bitwise through generated truth and load_locked_val_dataset will return that RLE rather than a filled convex hull
+single_variable: canonical SAM truth representation changes from rasterized convex-hull polygon to exact visible-mask RLE
+lifecycle: NEW_DURABLE_TRAIN_VAL_TRUTH_VERSION
+implementation_contract:
+  - _truth_instance_document persists mask_shape_hw, visible_mask_rle_counts, and visible_mask_sha256 for every visible instance, including occlusion-unmeasured scenes
+  - schema-v2 conversion validates any persisted visible RLE and derives its box from the exact mask; old schema remains readable but cannot qualify SAM mask truth
+  - load_locked_val_dataset verifies visible RLE count/hash/shape and uses it as canonical mask and bbox when present; it fails closed on malformed or mismatched RLE
+  - polygon_xy and YOLO text remain compatibility annotations only and cannot be used as SAM truth when a visible RLE exists
+  - exact raw mask pixels are retained; no convexification, morphology, connected-component filtering, threshold tuning, or gate relaxation
+tdd_contract:
+  red_run_id: stage-e-lossless-truth-red-r260
+  expected_failures:
+    - unmeasured generated truth omits visible RLE fields
+    - val loader returns the filled polygon instead of an explicitly supplied disconnected visible RLE
+  mutation_guards:
+    - removing universal RLE persistence fails the generator test
+    - reverting the loader to polygon rasterization fails the consumer test
+  test_scope: focused ordinary tests only; benchmark suite not collected during RED or focused GREEN
+reconstruction_contract:
+  readable_splits: [train, val]
+  forbidden_split: test
+  source_dataset_read_only: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r3
+  lossless_source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless
+  split_membership: identical train and val seeds, scenarios, and images to r3; no test members in either new root
+  class_name: cup
+  prompt: cup.
+  output_collision_policy: fail closed and retire the run/root after any creation failure
+  reproducibility: independent train/val reconstruction must produce identical inventories, truth RLE hashes, and member inventory SHA
+reevaluation_contract:
+  model: reuse the existing frozen epoch-7 Grounding DINO and frozen stateless SAM candidate evidence; no training or inference rerun
+  raw_source: immutable r224 records and masks
+  truth: corrected lossless r4 val only
+  mask_iou_gate: '0.80'
+  sealed_test_access: forbidden
+  coco100_access: forbidden
+gates:
+  - focused RED then focused GREEN with unique registered NVMe scratch and exact locked-Python tempfile preflight
+  - related ordinary tests, fresh seven-package symlink overlay, and full ordinary src/so101_demo_py/test gate
+  - explicit benchmark only if benchmark-owned implementation, configuration, adapters, reports, or tests are changed; otherwise preserve r222 and r30 without rerun
+decision_rule:
+  corrected_truth_recovers_candidate: preregister the next Linux val qualification using corrected truth; keep SAM unchanged
+  corrected_truth_still_fails: attribute remaining failure only after corrected-mask metrics; do not reuse CP-113 attribution
+sealed_boundaries:
+  synthetic_test_truth_or_labels: forbidden
+  coco100_access: forbidden
+  pickplace_access: forbidden
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit and Gitee-sync CP-116 plus this plan, then add the two focused RED regression tests before any production code change
+retention:
+  retained_runs: [all CP-116 audit evidence, future RED/GREEN and reconstructed truth versions]
+  archived_runs: []
+  deletion_candidates: [future per-run NVMe scratch trees; do not delete without explicit user authorization]
+```
