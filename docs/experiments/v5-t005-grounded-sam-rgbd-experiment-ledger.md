@@ -11542,3 +11542,45 @@ retention:
   deletion_candidates: [r283 scratch; do not delete without explicit user authorization]
 next_action: use a fresh r284 scratch, source with nounset disabled, read back so101_demo package provenance, then rerun the unchanged synthetic contract
 ```
+
+## Checkpoint CP-137 — residual-attribution synthetic contract is GREEN
+
+```yaml
+checkpoint: CP-137
+status: GREEN_VALID
+recorded_at: 2026-09-05T07:14:42+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-136
+source_commit: 668213b0ff64892e73e65dd2f5e01b716205945b
+run_id: stage-e-corrected-truth-residual-green-r284
+result:
+  exit_code: 0
+  cases: 5
+  connectivity: 8
+  mask_iou_gate: '0.80 unchanged'
+  assertions: [exact pass, under-segmentation, leakage, mixed, fragmented truth, sample attribution]
+implementation:
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/corrected_truth_residual_attribution_r1.py
+  script_sha256: a3999b02fa52b4596418c3c0d905d6cace960320a709d18253ee58ea9b47d100
+  test_script_sha256: 19c9a0fd422b60acc981313560e3b0d57d30f44cd85b6d698307a78b81341642
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  package_physical_path: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src/__init__.py
+  overlay_binding: r279 install egg-link resolves to the package physical path above
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-corrected-truth-residual-green-r284/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-corrected-truth-residual-green-r284
+  preflight_sha256: 08d2206f030e4a98e1b4e0f181c5d6f388d90f4a9b592ed5e22fe5286e8fc856
+  provenance_sha256: 668060989c7be60575e0a1f0d8395cda316195ca8bdb7332b7c316cdcaad8595
+  run_log_sha256: b7e848069d65e8849e444bb088d173f1f1d8592d7fde1b1915413aa83dd45058
+  exit_sha256: 68fddfa05015768593bc50481382b8570b51954b63a173024e6dd1443c634a50
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused}
+retention:
+  retained_runs: [r284 GREEN evidence and scratch, r283 invalid evidence and scratch, r282 RED evidence and scratch, all CP-136 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r282-r284 scratch; do not delete without explicit user authorization]
+next_action: execute the frozen 300-sample val-only attribution once in fresh r285 scratch and absent durable output root
+```
