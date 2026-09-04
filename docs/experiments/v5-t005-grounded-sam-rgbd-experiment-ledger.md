@@ -9410,3 +9410,115 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-109 — mask failure attribution isolates frozen-SAM geometry
+
+```yaml
+checkpoint: CP-109
+status: VALID_ATTRIBUTION_ORACLE_MASK_FAIL_DOMINANT
+recorded_at: 2026-09-04T23:55:51+08:00
+stage: E_SAM_MASK_FAILURE_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-SAM-MASK-FAILURE-ATTRIBUTION-R1
+prior_checkpoint: CP-108
+source_commit: 37f25ae441c5e2f76b1badfb280fcdb35be75393
+attribution:
+  run_id: stage-e-mask-failure-attribution-r246
+  status: VALID_IMMUTABLE
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-mask-failure-attribution-r4
+  script_sha256: b78f48aa4d32854227f78ef74096fb0b46d0ca24dbc79635368f20116a5bd640
+  run_log_sha256: 0351ab0983b135470e8c25f23274f724fc4e957ff029016e685049f9dae4ba37
+  report_sha256: 284221c98303d092f3ef543798a921ac30e64e55365198abb62b30de764677f3
+  manifest_sha256: 136819cb5e0cb28ec75d533aebcd5d3143c822dfbb0b6224213b4d3f858c4140
+  elapsed_ms: 14804
+  samples: 300
+  truths: 300
+  raw_candidate_masks_hash_read: 9213
+  production_candidates: 254
+  selected_bbox_matches: 240
+  partition_counts: {no_bbox_valid_proposal: 19, selected_mask_pass: 5, selected_mask_fail_or_unmatched_with_oracle_pass: 0, selected_and_oracle_mask_fail: 276}
+  selected_bbox_iou: {min: 0.5023340412616175, median: 0.9488222136620841, max: 0.9893273891937383}
+  selected_mask_iou: {min: 0.01045596981518194, median: 0.608024619706006, max: 0.8673469387755102}
+  oracle_mask_iou: {min: 0.01045596981518194, median: 0.5867716135584613, max: 0.8673469387755102}
+  oracle_minus_selected_mask_iou: {min: 0.0, median: 0.0, max: 0.0}
+  inference_rerun: false
+geometry_readback:
+  run_id: stage-e-mask-geometry-readback-r248
+  status: VALID_READ_ONLY
+  selected_matches: 240
+  mask_precision: {min: 0.04546298014473928, median: 0.7670209263545051, max: 0.9997918834547347}
+  mask_recall: {min: 0.01291673250118502, median: 0.723345894455571, max: 0.9925093632958801}
+  predicted_to_truth_area_ratio: {min: 0.24826196871543688, median: 0.9109590026349959, max: 1.5807026476578412}
+  correlation: {bbox_iou_vs_mask_iou: 0.008063759175003281, mask_area_ratio_vs_mask_iou: 0.45788029030403404}
+  partial_occlusion_median: {mask_iou: 0.5472853543063098, mask_precision: 0.6328255634938551, mask_recall: 0.821570528636928, predicted_to_truth_area_ratio: 1.1883851538062213}
+  readback_sha256: 73ca5929c4a33ebd154a16c92f6e05fc256c67ff8d40f20d85cb77807eb010c3
+  elapsed_ms: 699
+rejected_runs:
+  - {run_id: r244, cause: process filter matched its own awk process; attribution not launched}
+  - {run_id: r245, cause: audit script ruff rejected an unused import before attribution launch}
+  - {run_id: r247, cause: read-only geometry helper used the wrong raw_candidates record field name}
+decision:
+  result: oracle_mask_fail_dominant
+  reason: production ranking and truth-oracle choose the same masks, bbox localization is already tight and uncorrelated with mask IoU, while 276 truths fail even under the diagnostic oracle
+  ranking_remediation: rejected
+  threshold_relaxation: forbidden
+  next_probe: bounded val-only SAM multimask decoding diagnostic
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: preregister and run one bounded CUDA SAM-only multimask diagnostic on val indices 0 through 29; do not rerun Grounding DINO
+retention:
+  retained_runs: [r244-r248, immutable attribution-r4, immutable r224 raw]
+  archived_runs: []
+  deletion_candidates: [r244-r248 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
+
+## Stage E bounded SAM multimask selector diagnostic
+
+```yaml
+experiment_id: EXP-079-STAGE-E-SAM-MULTIMASK-DIAGNOSTIC-R1
+status: PLANNED
+recorded_at: 2026-09-04T23:55:51+08:00
+prior_checkpoint: CP-109
+hypothesis: SAM 2.1's predicted-IoU argmax may select a mask that is internally plausible but geometrically worse against explicit visible-mask truth than another one of the same frozen decoder's three multimask outputs
+prediction: a fixed balanced 30-image val subset can distinguish decoder-choice failure from a frozen-model/prompt limitation without rerunning Grounding DINO
+frozen_subset:
+  split: val
+  formal_sample_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  quota: {no_cup: 5, one_cup_distractors: 5, two_cups: 5, cup_near_bottle: 5, small_far_cup: 5, partially_occluded_cup: 5}
+  truth_count: 30
+frozen_runtime:
+  dino_source: immutable r224 proposals only; no Grounding DINO inference
+  dino_thresholds: {box: '0.25', text: '0.25'}
+  target_confidence_threshold: '0.25'
+  duplicate_iou: '0.85'
+  sam_model: frozen SAM 2.1 Hiera Tiny bundle already registered by exp-079
+  sam_mode: stateless per frame, CUDA, float32, multimask_output=true
+  truth_thresholds: {bbox_iou: '0.50', mask_iou: '0.80'}
+fixed_comparisons:
+  - current predicted-IoU argmax
+  - decoder output index 0
+  - decoder output index 1
+  - decoder output index 2
+  - diagnostic truth-oracle maximum mask IoU across the same three outputs
+execution_contract:
+  - first require rerun argmax masks to be byte-identical to the corresponding immutable r224 selected masks; any mismatch invalidates the run
+  - persist all three masks, predicted IoU scores, mask truth IoU, scenario, bbox identity, CUDA device and complete denominators in a new exclusive output
+  - the truth-oracle is diagnostic only and cannot enter production configuration or threshold selection
+  - no single-mask mode, prompt padding, point prompts, postprocess threshold changes, sealed test, or COCO100 access in this experiment
+planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-sam-multimask-diagnostic-r5
+decision_rule:
+  selector_signal: truth-oracle adds at least 6 mask-IoU passes over argmax on the 30 truths; then preregister a deployable truth-independent selector experiment under RED to GREEN
+  no_selector_signal: truth-oracle adds fewer than 6 passes; keep current argmax and move to SAM prompt/model-data remediation using train/val only
+sealed_boundaries:
+  synthetic_test_new_access: forbidden
+  coco100_access: forbidden
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push CP-109 plus this PLANNED experiment, then execute the bounded SAM-only diagnostic once
+retention:
+  retained_runs: [all CP-109 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
