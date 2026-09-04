@@ -10704,3 +10704,282 @@ retention:
   archived_runs: []
   deletion_candidates: [r271 registered NVMe scratch tree; do not delete without explicit user authorization]
 ```
+
+## Checkpoint CP-124 — lossless truth code synced; primary reconstruction armed
+
+```yaml
+checkpoint: CP-124
+status: SYNCED_PRIMARY_RECONSTRUCTION_PLANNED
+recorded_at: 2026-09-05T01:13:00+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-RECONSTRUCTION-R1
+prior_checkpoint: CP-123
+source_sync:
+  commit: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  gitee_remote_sha: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  fetch_before_rebase: complete
+  prior_remote_was_ancestor: true
+  rebase_onto_b91: up to date
+  b91_ancestor: true
+  root_agents_nvme_rule_readback: present
+  push: ordinary successful
+  untracked_build_install_log_directories: preserved
+reconstruction_script:
+  path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/reconstruct_lossless_train_val_r1.py
+  sha256: c9d4df5ad5baf5d05f178bcad1796062a072a3044a7d2868b01e3c1748092530
+  ruff_0_15_20_lint: passed
+  python_compile: passed
+  input_enumeration: exact fixed train and val seed ranges only; no recursive source traversal and no source manifest or test-sealed manifest read
+  input_integrity: require the CP-116 4500-member train/val inventory SHA256 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd before and after
+  truth_invariants:
+    - rerender each train/val seed and declared scenario using the frozen scene geometry
+    - require old truth fields to remain a semantic subset of regenerated truth
+    - require regenerated label bytes to equal old label bytes
+    - require every persisted visible RLE to equal the raw object-ID mask bitwise
+    - copy old image bytes; known bounded RGB rerender variance is not a segmentation gate
+  output_invariants:
+    - source manifest and converted inventories contain train and val only
+    - source dataset.yaml has no test entry
+    - converted inventories use exact visible-mask bounding boxes, class cup, and prompt cup.
+    - all output files and directories become read-only after validation
+preflight:
+  primary_source_output_absent: true
+  primary_converted_output_absent: true
+  repro_source_output_absent: true
+  repro_converted_output_absent: true
+  local_remote_sha_match: true
+primary_run:
+  run_id: stage-e-lossless-truth-reconstruct-r272
+  status: PLANNED
+  source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-lossless-truth-reconstruct-r272/tmp
+  output_collision_policy: fail closed; never reuse any created output
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute r272, read back immutable member counts/hashes and zero test members, then checkpoint before the independent r273 reconstruction
+retention:
+  retained_runs: [reconstruction script, all CP-123 evidence]
+  archived_runs: []
+  deletion_candidates: [future r272 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-125 — primary reconstruction bootstrap invalid before output
+
+```yaml
+checkpoint: CP-125
+status: INVALID_BEFORE_OUTPUT_REPLACEMENT_PLANNED
+recorded_at: 2026-09-05T01:15:45+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-RECONSTRUCTION-R1
+prior_checkpoint: CP-124
+invalid_run:
+  run_id: stage-e-lossless-truth-reconstruct-r272
+  status: INVALID_INVENTORY_ORDERING
+  exit_code: 1
+  elapsed_ms: 427
+  train_val_file_count: 4500
+  train_val_size_bytes: 64149844
+  observed_inventory_sha256: 2eda76d29ee654e949803291695d5fca04a6dc0d8f493deb8e1a21d270dcf1bc
+  expected_inventory_sha256: 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd
+  cause: r272 fed members to the digest in split/seed/kind loop order, while the CP-116 and r259 lock uses one global relative-path sort
+  data_corruption_or_code_failure: false
+  source_output_created: false
+  converted_output_created: false
+  test_access: none
+  preflight_sha256: 5db88aa92b1c654004bfcc46a8bd41560a0980bde791f0783a110008dd848fe4
+  command_sha256: bc91ef997d1a7630729e139b4bcd7bae2b3780dc7af33bc946068d44f6453c40
+  run_log_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: 3b677d2bab1439c367deb2c1b43b27e869e7824af119576a23bff15e29ad04b8
+  exit_log_sha256: 097b8b73ee1160ad7286194172ba2bd5c25f02a9b6649a0943c04312cc6d7833
+  script_sha256: c9d4df5ad5baf5d05f178bcad1796062a072a3044a7d2868b01e3c1748092530
+replacement:
+  primary_run_id: stage-e-lossless-truth-reconstruct-r273
+  repro_run_id: stage-e-lossless-truth-reconstruct-repro-r274
+  single_variable: collect the same exact fixed 4500 paths and sort them globally by relative path before hashing, matching the already validated r259 algorithm
+  primary_outputs: unchanged and still absent
+  repro_outputs: unchanged and still absent
+  output_collision_policy: allocate fresh r273/r274 run and scratch roots; never reuse r272
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: preserve the r272 script bytes, patch and hash a replacement script, then execute r273
+retention:
+  retained_runs: [r272 invalid evidence and script bytes]
+  archived_runs: []
+  deletion_candidates: [r272 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-126 — primary lossless train/val reconstruction valid
+
+```yaml
+checkpoint: CP-126
+status: PRIMARY_VALID_INDEPENDENT_REPRO_PLANNED
+recorded_at: 2026-09-05T01:18:40+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-RECONSTRUCTION-R1
+prior_checkpoint: CP-125
+replacement_script:
+  path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/reconstruct_lossless_train_val_r1.py
+  sha256: f7421bbf4a2c10f939ed005ae16eba404b95c22069bd20734b6480b904f1fc9d
+  only_change_from_r272: globally sort the same fixed 4500 train/val member paths before hashing
+  ruff_0_15_20_lint: passed
+  python_compile: passed
+primary_run:
+  run_id: stage-e-lossless-truth-reconstruct-r273
+  status: VALID_IMMUTABLE
+  exit_code: 0
+  elapsed_ms: 59392
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-lossless-truth-r270/build/so101_demo_py/so101_demo/__init__.py
+  source_commit: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  gitee_remote_sha: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-lossless-truth-reconstruct-r273/tmp
+  tempfile_preflight: exact resolved match
+  input_before_and_after: {file_count: 4500, size_bytes: 64149844, tree_inventory_sha256: 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd}
+  source_output:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+    files: 4502
+    size_bytes: 63049483
+    tree_inventory_sha256: 5da1adfb46a5539e3e7f574cc8604ea14401e6b574627513e79d58778bd17fc6
+    manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+    writable_members: 0
+    test_named_members: 0
+  converted_output:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless
+    files: 3
+    size_bytes: 1095891
+    tree_inventory_sha256: 5263d4cfad744ca3e58b5c25e6a4ba1c8ebf14b0b1755d3ec748d15a3008ea86
+    train_inventory_sha256: 56ae5c06cb2929be8ff8869bf8e662b2241518ba5dd1114709e2789b2825ac0a
+    val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+    manifest_sha256: 9cc9a96a99912c91a77ebdaae45f88533a927eca25ce4d70c1406590ceb5d718
+    writable_members: 0
+    test_named_members: 0
+  truth_instances: 1500
+  measured_occlusion_instances: 250
+  test_access: none
+production_loader_readback:
+  val_samples: 300
+  scenario_counts: {cup_near_bottle: 50, no_cup: 50, one_cup_distractors: 50, partially_occluded_cup: 50, small_far_cup: 50, two_cups: 50}
+  sample_152: {seed: 420000152, scenario: two_cups, truth_count: 2, truth_0_visible_pixels: 4946, truth_0_absolute_xyxy: [88.0, 0.0, 290.0, 289.0]}
+  interpretation: the isolated top pixel remains in exact raw truth and therefore in the detection bbox, but it no longer fills the destructive triangle in the canonical SAM mask
+evidence_sha256:
+  preflight: 4b5da7db32741b35167c353cea97f0ffd63ad667b5542faf23aad22a09f0ce62
+  command: bc91ef997d1a7630729e139b4bcd7bae2b3780dc7af33bc946068d44f6453c40
+  run_log: a25ff989f5968adafb5cf39c1c84f1a289e330bc8810f7ebcfce323ea9f78083
+  stderr: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit: 6367ca33a5115a98301755c0103e74d218698a10024a9e1700459ef7a09a0250
+  readback: c92c30149e6dfb48abdeef02e0f0fc5fadbd8a5f33707a98e72b477e327bbcea
+repro_run:
+  run_id: stage-e-lossless-truth-reconstruct-repro-r274
+  status: PLANNED
+  source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless-repro
+  converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless-repro
+  success: independently reconstructed relative member bytes and both tree inventory SHA256 values exactly match r273
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: execute independent r274 into the preregistered absent repro roots, then compare every relative member hash to r273
+retention:
+  retained_runs: [r273 immutable primary outputs and run evidence, r272 invalid evidence, both script versions]
+  archived_runs: []
+  deletion_candidates: [r273 registered NVMe scratch tree; do not delete without explicit user authorization]
+```
+
+## Checkpoint CP-127 — lossless reconstruction reproducible; corrected-truth reevaluation planned
+
+```yaml
+checkpoint: CP-127
+status: RECONSTRUCTION_COMPLETE_REEVALUATION_PLANNED
+recorded_at: 2026-09-05T01:21:20+08:00
+stage: E_LOSSLESS_TRAIN_VAL_TRUTH_RECONSTRUCTION
+experiment_id: EXP-079-STAGE-E-LOSSLESS-TRUTH-RECONSTRUCTION-R1
+prior_checkpoint: CP-126
+repro_run:
+  run_id: stage-e-lossless-truth-reconstruct-repro-r274
+  status: VALID_IMMUTABLE
+  exit_code: 0
+  elapsed_ms: 59274
+  script_sha256: f7421bbf4a2c10f939ed005ae16eba404b95c22069bd20734b6480b904f1fc9d
+  source_commit: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  gitee_remote_sha: 4c14e7f329c065dceaa5b5d056e58c38ae07e042
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-lossless-truth-reconstruct-repro-r274/tmp
+  tempfile_preflight: exact resolved match
+  input_before_and_after: {file_count: 4500, size_bytes: 64149844, tree_inventory_sha256: 450bca91eea3f6aa8ef092c99af50870e12c1a8566380da66f58163c6b07dbdd}
+  source_output:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless-repro
+    files: 4502
+    size_bytes: 63049483
+    tree_inventory_sha256: 5da1adfb46a5539e3e7f574cc8604ea14401e6b574627513e79d58778bd17fc6
+    manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+    writable_members: 0
+    test_named_members: 0
+  converted_output:
+    path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless-repro
+    files: 3
+    size_bytes: 1095891
+    tree_inventory_sha256: 5263d4cfad744ca3e58b5c25e6a4ba1c8ebf14b0b1755d3ec748d15a3008ea86
+    train_inventory_sha256: 56ae5c06cb2929be8ff8869bf8e662b2241518ba5dd1114709e2789b2825ac0a
+    val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+    manifest_sha256: 9cc9a96a99912c91a77ebdaae45f88533a927eca25ce4d70c1406590ceb5d718
+    writable_members: 0
+    test_named_members: 0
+reproducibility_readback:
+  primary_vs_repro_source_relative_members: {count: 4502, all_sha256_identical: true}
+  primary_vs_repro_converted_relative_members: {count: 3, all_sha256_identical: true}
+  primary_source_member_manifest_sha256: 5f0af6c67c59c75120438cf9ff8cbcab4b3a9d189cf2b741e470f8518d3cd32f
+  primary_converted_member_manifest_sha256: a7c02d400f0fe674de0d7b99ce60a1078c684dcca2396d20ed6730f98a7d5876
+evidence_sha256:
+  preflight: bf1e439e1205681ef1770cf4f6b7c847f61d13a0f7b325881d7586bb7c3d0932
+  command: b46ca078e7f4e2faa7965dbdfc39ed9869b12709573525bb51240642f425ca9b
+  run_log: dd8e499a46da46ed4e17e0a66ca535ff9ddd03abb2cf1cd6eadde7a5678865b4
+  stderr: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit: 1941358367563764d5d4535110bfb560716f95467cb31267be2c70b190f732e6
+  repro_readback: 19250aae9bf16f7941c8b1106c37896d7970ed3f2877af9f37ad7098e944e036
+reconstruction_decision: VALID_COMPLETE
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-REEVALUATION-R1
+  status: PLANNED
+  run_id: stage-e-corrected-truth-mask-aware-calibration-r275
+  lifecycle: REUSE_IMMUTABLE_RAW_OFFLINE_ONLY
+  val_inventory: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless/val/inventory.json
+  val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  immutable_raw_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  immutable_raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  raw_source_commit: 26ed5238ed999676cb0234d80122139ce00ade15
+  model_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r4-epoch7-mask-aware-calibration-r1
+  source_commit: next ledger-sync commit
+  fixed_detector_thresholds: {box: '0.25', text: '0.25'}
+  frozen_sam_quality_grid: ['0.00', '0.10', '0.20', '0.30', '0.40', '0.50']
+  mask_iou_gate: '0.80'
+  single_variable: replace polygon-rasterized val masks with verified exact visible RLE truth
+  inference_rerun: false
+  tuning_boundary: this is the preregistered frozen grid already used by r242; do not add thresholds after observing corrected results
+decision_rule:
+  recovered: corrected exact-mask metrics replace CP-113's causal interpretation and SAM remains frozen; preregister the next Linux val qualification using the selected fixed setting
+  not_recovered: stop at a new train/val decision boundary with corrected metrics; do not revive polygon-derived CP-113 attribution or change SAM without user authority
+sealed_boundaries:
+  synthetic_test_truth_or_labels: none
+  coco100_access: none
+  pickplace_access: none
+  mac_migration: forbidden
+  microduck: paused
+next_action: commit and ordinary-push the completed reconstruction checkpoint, read back Gitee SHA, then preflight and run r275 without inference
+retention:
+  retained_runs: [r274 immutable repro outputs and evidence, r273 immutable primary outputs and evidence, r272 invalid evidence, both script versions]
+  archived_runs: []
+  deletion_candidates: [r272-r274 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
