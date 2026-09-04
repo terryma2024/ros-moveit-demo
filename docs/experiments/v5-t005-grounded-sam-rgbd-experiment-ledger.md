@@ -5212,3 +5212,196 @@ retention:
   archived_runs: none newly moved
   deletion_candidates: none
 ```
+
+## Stage A Linux overlay diagnostics — r28 invalid, r29 planned
+
+```yaml
+experiment_id: EXP-079-LINUX-BUILD-R28
+status: INVALID
+prior_experiment: EXP-079-LINUX-BUILD-R27
+hypothesis: r26 的完整 lodepng 本地缓存可让新的 7-package symlink overlay 离线完成构建，并让两套测试门使用锁定的 Grounded-SAM Python 环境
+prediction: 构建不访问网络，普通 1167 项和显式 benchmark 573 项均由锁定 venv 执行且零失败
+single_variable: r28 使用 FETCHCONTENT_SOURCE_DIR_LODEPNG 指向已验证的 r26 缓存，并启用 FETCHCONTENT_FULLY_DISCONNECTED
+lifecycle: FULL_REBUILD
+preconditions:
+  - r27 精确路径无存活进程，保留的 tmux pane 已死且退出码为 2
+  - r26 lodepng checkout HEAD=ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a，git fsck 通过，26 个 tracked files 全部存在且无修改
+  - Microduck 无训练或 GPU 进程
+success_criteria:
+  - 7 个包构建成功且全部 prefix 指向 r28
+  - 普通测试 1167/1167 通过
+  - benchmark 测试 573/573 通过（允许已冻结的 skip）
+failure_criteria:
+  - 任一构建、provenance、依赖或测试门失败
+invalid_criteria:
+  - 输出碰撞、网络 fetch、错误 source commit、非锁定 Python runtime
+provenance:
+  source_commit: 00c6a8c0b47d4222580d89b568f72ae336cec769
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: NONE_OFFLINE_BUILD
+  gz_partition: NONE_OFFLINE_BUILD
+commands:
+  - command: colcon build --symlink-install --packages-select mujoco_ros2_control_msgs mujoco_ros2_control_plugins mujoco_3d_lidar mujoco_ros2_control so101_mujoco_support so101_teleop so101_demo_py --cmake-args -DFETCHCONTENT_SOURCE_DIR_LODEPNG=<r26-cache> -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+    exit_code: 0
+  - command: colcon test --packages-select so101_demo_py --pytest-args test
+    exit_code: 0
+  - command: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+    exit_code: 0_OUTER_WITH_JUNIT_FAILURES
+observed:
+  - OBSERVED r28 的 lodepng object 从 r26 cache 编译，7-package build 64 秒完成，所有 package prefix 和源码 SHA readback 通过
+  - OBSERVED 普通门为 1167 passed、0 failed、4 warnings、22.12 秒
+  - OBSERVED benchmark JUnit 为 573 total、509 passed、62 failed、2 skipped、2137.23 秒
+  - OBSERVED r28 command.log 使用 /usr/bin/python3；该解释器无 torch 且 Pillow=10.2.0，62 个失败归并为 torch 缺失和 RASTERIZER_VERSION_MISMATCH
+  - OBSERVED 锁定 venv 含 torch=2.13.0+cu130、Pillow=12.3.0；按 venv site-packages -> /usr/lib/python3/dist-packages 顺序可同时导入 torch、Pillow 和 colcon_core
+inferred:
+  - INFERRED r28 benchmark failure 属于 test runner 环境污染，不是 mapping 或业务代码回归
+conclusion: r28 构建和普通门有效，但 benchmark 由错误 Python runtime 执行，因此整轮不能计入 Stage A 成功
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/build.console.log
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/provenance-readback-r2.log
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/test-results/ordinary/pytest.xml
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/test-results/benchmark/pytest.xml
+decision: REPEAT
+next_experiment: EXP-079-LINUX-BUILD-R29
+---
+experiment_id: EXP-079-LINUX-BUILD-R29
+status: INVALID
+prior_experiment: EXP-079-LINUX-BUILD-R28
+hypothesis: r28 唯一污染源是 colcon runner 的 Python 选择；通过锁定 venv Python 启动 colcon 后，构建生成的 test command 会使用同一 venv 并消除全部 62 个环境失败
+prediction: command.log 使用 /data/work/venvs/so101-grounded-sam/bin/python，torch=2.13.0+cu130、Pillow=12.3.0，普通门和 benchmark 门零失败
+single_variable: 用锁定 venv Python 启动 /usr/bin/colcon，并显式将 venv site-packages 排在 /usr/lib/python3/dist-packages 前
+lifecycle: FULL_REBUILD
+preconditions:
+  - r29 build/install/log/output 均不存在
+  - source commit 和 CP-069 runner/config SHA 不变
+  - 继续复用只读的已验证 r26 lodepng cache，禁止网络 fetch
+success_criteria:
+  - 7-package symlink build、exact provenance、普通 1167 项和显式 benchmark 573 项门全部通过
+failure_criteria:
+  - 任一门失败
+invalid_criteria:
+  - output collision、非 venv runtime、网络 fetch、source/manifest mismatch
+provenance:
+  source_commit: 00c6a8c0b47d4222580d89b568f72ae336cec769
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r29/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  ros_domain_id: NONE_OFFLINE_BUILD
+  gz_partition: NONE_OFFLINE_BUILD
+commands:
+  - command: PYTHONPATH=<venv-site>:/usr/lib/python3/dist-packages:<ros-paths> <venv-python> /usr/bin/colcon build --symlink-install --packages-select <fixed-seven-packages> --cmake-args -DFETCHCONTENT_SOURCE_DIR_LODEPNG=<r26-cache> -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+    exit_code: 0
+observed:
+  - OBSERVED build runner 同时导入 colcon_core、torch=2.13.0+cu130 和 Pillow=12.3.0，7 个包在 61 秒内构建完成
+  - OBSERVED so101_demo_py 的 build/install 文件均为复制产物，不是指回 checkout 的 symlink；其 realpath 停留在 r29 build/install 目录
+inferred:
+  - INFERRED venv setuptools 改变 ament_python symlink-install 行为，r29 会复现 r26 的 source commit provenance 失败
+conclusion: r29 在测试前命中 non-symlink provenance invalid criterion，未运行普通或 benchmark gate
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r29
+decision: ABANDON
+next_experiment: EXP-079-LINUX-TEST-R30
+---
+experiment_id: EXP-079-LINUX-TEST-R30
+status: VALID
+prior_experiment: EXP-079-LINUX-BUILD-R29
+hypothesis: r28 symlink overlay 本身有效，62 个 benchmark failure 只由 test runner 解释器产生；保留 r28 overlay 并只用锁定 venv Python 启动 colcon test 可同时满足 source provenance 与依赖锁
+prediction: 两个 r28 失败样本先在 venv runner 下通过，command.log 使用 venv Python，随后普通 1167 项和 benchmark 573 项门通过
+single_variable: r28 build/install 不变，仅把 test orchestration 从 /usr/bin/colcon 切换为 venv Python 启动的 /usr/bin/colcon，并固定 Python path 顺序
+lifecycle: REUSE_STACK
+preconditions:
+  - r28 7-package build、symlink realpath、exact HEAD、package prefixes、runner/config SHA 和离线 lodepng provenance 已通过
+  - r28 两套旧 JUnit 已复制到独立 test-results 目录，不会被后续 test command 覆盖
+  - linux-test-r30 输出目录不存在
+success_criteria:
+  - 两个环境 RED 样本 GREEN
+  - ordinary JUnit 为 1167 tests、0 errors、0 failures
+  - benchmark JUnit 为 573 tests、0 errors、0 failures，且只有冻结的 2 skipped
+failure_criteria:
+  - 任一 focused 或 full gate 失败
+invalid_criteria:
+  - non-venv test executable、output collision、r28/source provenance drift
+provenance:
+  source_commit: 00c6a8c0b47d4222580d89b568f72ae336cec769
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon test
+  ros_domain_id: NONE_OFFLINE_TEST
+  gz_partition: NONE_OFFLINE_TEST
+commands:
+  - command: <venv-python> /usr/bin/colcon test --packages-select so101_demo_py --pytest-args benchmark_test/test_perception_benchmark_adapters.py::test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly benchmark_test/test_perception_benchmark_dataset.py::test_polygon_rule_is_round_half_up_and_includes_pillow_boundary
+    exit_code: 0
+  - command: <venv-python> /usr/bin/colcon test --packages-select so101_demo_py --pytest-args test
+    exit_code: 0
+  - command: <venv-python> /usr/bin/colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+    exit_code: 0
+observed:
+  - OBSERVED focused A/B 为 2 passed in 3.05s，覆盖 r28 的 torch 缺失与 Pillow 版本失败
+  - OBSERVED ordinary JUnit 为 1167 tests、0 failures、0 errors、0 skipped、21.297 秒
+  - OBSERVED benchmark JUnit 为 573 tests、0 failures、0 errors、2 skipped、3210.773 秒；pytest 摘要为 571 passed、2 skipped
+  - OBSERVED 三份 command.log 均使用 /data/work/venvs/so101-grounded-sam/bin/python -m pytest
+  - OBSERVED r28 import realpath 指回当前 checkout，7 个 package prefix 指向 r28，HEAD、runner SHA 和 config SHA 全部通过 readback
+  - OBSERVED 完成后 r27、Microduck training/queue 和 GPU compute process 匹配数均为 0
+inferred:
+  - INFERRED r28 的 62 个 benchmark failure 已由唯一 test-runner 变量排除，业务代码无需修改
+conclusion: r28 symlink overlay 和 venv-backed r30 test orchestration 满足 Stage A 全部退出门
+evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-test-r30
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-test-r30/test-results/ordinary/pytest.xml#sha256=5f6e5a941ddf72eb52c5bf3b044e684b761e7c95b2be6f2fc0d8063d219a6fcf
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-test-r30/test-results/benchmark/pytest.xml#sha256=82f3d0d05250afbe51f5124dbbd716bd57258f20baf49827e7765f563168e311
+decision: KEEP
+next_experiment: EXP-079-LINUX-PRODUCTION-MAPPING-R4
+```
+
+## Checkpoint CP-071 — Stage A Linux code gates complete
+
+```yaml
+checkpoint: CP-071
+status: VALID
+recorded_at: 2026-09-04T15:20:00+08:00
+stage: A
+last_valid_experiment: EXP-079-LINUX-TEST-R30
+source_commit: 00c6a8c0b47d4222580d89b568f72ae336cec769
+source_branch: codex/v5-t004-yolo-seg-rgbd
+working_tree_status:
+  owned_dirty:
+    - docs/experiments/v5-t005-grounded-sam-rgbd-experiment-ledger.md
+  preserved_untracked:
+    - build-task14-runner-access-r11/
+    - install-task14-runner-access-r11/
+    - log-task14-runner-access-r11/
+owned_processes: NONE
+preserved_processes:
+  - existing codex tmux sessions left untouched
+  - unrelated 2026-09-01 colcon version-check process left untouched
+build:
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/install
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  symlink_install: true
+  elapsed_seconds: 64
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  network_fetch: false
+provenance:
+  import_realpath: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src/__init__.py
+  package_prefixes: all seven packages resolve to linux-build-r28/install
+  runner_sha256: 919ac8f5c8d724de146b4ee9c144c2c41b9da6b822ced4efb44bafeaa1aac3ec
+  benchmark_config_sha256: 511e0e6472cb774f521783982b2833c790ddc85d1cf3bad03112100ee2896a92
+  test_runtime: /data/work/venvs/so101-grounded-sam/bin/python
+tests:
+  ordinary: {total: 1167, passed: 1167, failed: 0, errors: 0, skipped: 0, elapsed_seconds: 21.297}
+  benchmark: {total: 573, passed: 571, failed: 0, errors: 0, skipped: 2, elapsed_seconds: 3210.773}
+  colcon_test_result: 573 tests, 0 errors, 0 failures, 2 skipped
+confirmed_conclusions:
+  - r27 is stopped and the complete r26 lodepng cache can support an offline r28 build
+  - exact source provenance and both Linux test gates pass when r28 symlink build and the locked venv test runner are combined
+disproven_routes:
+  - r28 tests through /usr/bin/python3 are invalid because torch is absent and Pillow is 10.2.0
+  - a full build through venv setuptools does not produce the required so101_demo_py symlink install
+open_risks:
+  - Stage B must reuse Linux raw r3 and must not rerun Grounding DINO or SAM raw inference
+next_command: inspect linux-grounded-sam-test-raw-postfix-r4-r3 immutable artifacts and preregister a new production-only run ID
+retention:
+  retained_runs: [linux-build-r21 through linux-build-r29, linux-test-r30, CP-068 through CP-070 evidence]
+  archived_runs: []
+  deletion_candidates: []
+```
