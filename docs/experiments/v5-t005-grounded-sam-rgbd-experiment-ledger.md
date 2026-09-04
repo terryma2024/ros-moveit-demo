@@ -7020,3 +7020,80 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-086 — smoke r2 exposed locked CUDA determinism limits
+
+```yaml
+checkpoint: CP-086
+status: FAILED_DIAGNOSED
+recorded_at: 2026-09-04T18:41:11+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-085
+smoke_r2:
+  run_id: stage-d-training-smoke-r97
+  status: FAILED_BEFORE_FIRST_BACKWARD
+  implementation_commit: 91580a70a016d351a6d0024dcd33016165430aed
+  image_id: sha256:cc568a981bb1fc6ac9f994f9fb21e7eb542ff6a9d0907bc696b87bdeba2d07b0
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r2
+  output_reusable: false
+  exit_code: 1
+  elapsed_ms: 7150
+  failure: mat1 and mat2 shapes cannot be multiplied (7200x4 and 256x256)
+  training_steps_completed: 0
+  checkpoints_written: 0
+  preflight_sha256: 742a1e642f0f72bcca06314acd0fdb455f6409ec2163a71ed7bdc84becc1ebaf
+  stdout_sha256: 2b6c8aa7b4c746efb67aabdbf57bd1a48e0994f02959f219c5ddb4cf06769412
+  exit_log_sha256: cc336acdcdf828acec76a26f3f9ab849fb9e30983d786ff1064f3e990be532e3
+  partial_output_tree_evidence_sha256: 0bb95f36efaa8076adb7d98668e98e2d9e8bed3e8223e60aa1422942a42b1925
+root_cause:
+  checkpointing: locked Transformers old-format decoder wrapper omits spatial_shapes_list and shifts every later positional argument, so its existing checkpoint branch is not executable with the current decoder-layer signature
+  deterministic_cuda: Grounding DINO MultiScaleDeformableAttention directly uses torch.nn.functional.grid_sample; grid_sampler_2d_backward_cuda has no deterministic implementation in torch 2.13.0+cu130
+diagnostics:
+  strict_determinism_probe:
+    run_id: stage-d-layer-checkpoint-probe-r98
+    status: EXPECTED_FAILURE
+    checkpoint_wrapper_forward: succeeded
+    backward_failure: grid_sampler_2d_backward_cuda has no deterministic implementation under strict deterministic algorithms
+    probe_sha256: 65dd7db4a326c05ec001cf077f6e0a72f4a50c4c05818676bc3b3ef2c9fea712
+  warn_only_probe:
+    run_id: stage-d-layer-checkpoint-warn-only-probe-r99
+    status: VALID_DIAGNOSTIC
+    network: none
+    mounts: read-only base model, train images, and train inventory only
+    sample_seed: 410000001
+    prompt: cup.
+    forward: succeeded
+    backward: succeeded
+    finite_gradient_tensors: 968
+    loss_finite: true
+    peak_gpu_memory_mib: 6806.55810546875
+    deterministic_algorithms_enabled: true
+    deterministic_warn_only: true
+    known_warning: grid_sampler_2d_backward_cuda has no deterministic implementation
+    probe_note: this isolated probe did not disable memory-efficient SDP and also observed its nondeterminism warning; the formal runtime already disables both flash and memory-efficient SDP
+    probe_sha256: 73d3259e132d4126855bd7b1e4e61b43c1260f468d5e892823c3a3c1f8f5c393
+    exit_log_sha256: 8cb1e00f96bc3f38e2ff0f9c3cbf1b59d816f4a11caec607cc8e8d4f018b7419
+contract_correction:
+  checkpointing_method: per-decoder-layer torch.utils.checkpoint.checkpoint wrapper with use_reentrant false and original keyword arguments; disable the broken outer decoder checkpoint branch
+  deterministic_algorithms: true
+  deterministic_warn_only: true
+  unchanged_controls: fixed seed, CUBLAS_WORKSPACE_CONFIG :4096:8, cudnn benchmark false, cudnn deterministic true, flash SDP disabled, memory-efficient SDP disabled
+  reason: strict mode is impossible for the locked CUDA grid-sample backward; warn-only keeps the audit signal while permitting the only authorized CUDA training path
+  tdd: revise the helper test and add config validation RED before production changes, then repeat focused, related, fresh overlay, and ordinary gates
+  new_image: so101-grounding-dino-tiny-train:torch2.13.0-cu130-transformers4.56.2-gcfix2
+  new_image_collision_preflight: absent
+  new_smoke_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r3-smoke-r3
+  new_smoke_collision_preflight: absent
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and Gitee-sync this diagnosed contract correction, then implement it RED to GREEN and preserve both failed smoke roots
+retention:
+  retained_runs: [r97 failed smoke, r98 strict diagnostic, r99 warn-only diagnostic]
+  archived_runs: []
+  deletion_candidates: []
+```
