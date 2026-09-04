@@ -8583,3 +8583,96 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-101 — val metadata carrier and frozen-grid selector GREEN
+
+```yaml
+checkpoint: CP-101
+status: VALID_CODE_READY
+recorded_at: 2026-09-04T22:19:34+08:00
+stage: E_VAL_PIPELINE_CALIBRATION_CODE
+experiment_id: EXP-079-STAGE-E-VAL-PIPELINE-CALIBRATION-R2
+prior_checkpoint: CP-100
+source_head_before_commit: b2ca3062316e161f8d9a56330c20f683879df916
+implementation:
+  module: src/so101_demo_py/src/training/grounded_sam_val_calibration.py
+  module_sha256: d5db6f916a10c9cb505996e1a4f736b2da38210122f6b61bf4cd6cb2d6ef7886
+  cli: src/so101_demo_py/src/cli/grounded_sam_val_calibration.py
+  cli_sha256: bed958502622d9a9cc45a48fb37d1197807a624bb48c68c54d0f50f25362fe5d
+  test: src/so101_demo_py/test/test_grounded_sam_val_calibration.py
+  test_sha256: 4d142644220e8b54f16c9d26d727aed6fb21fe0b31a4a74e68cc67569408f565
+contracts:
+  - the loader accepts only an externally SHA-bound canonical val inventory and immutable val image, label, and truth members
+  - generic class cup and exact prompt cup. are required
+  - every raw candidate persists exact DINO bbox, ranking/box/text scores, SAM quality, ID, label, and verified mask reference
+  - CUDA, float32, no fallback, low-floor limits, complete denominator, output exclusivity, and record inventory are fail-closed
+  - the only calibration variable is the preregistered SAM quality grid [0.50, 0.60, 0.70, 0.75, 0.80, 0.85, 0.90]
+  - calibration selection follows full-pipeline F1, recall, small/far recall, multi-cup recall, no-cup UNIQUE count, higher SAM threshold, then fewer FP
+val_readback:
+  run_id: stage-e-val-dataset-readback-r179
+  status: VALID
+  samples: 300
+  scenario_counts: {cup_near_bottle: 50, no_cup: 50, one_cup_distractors: 50, partially_occluded_cup: 50, small_far_cup: 50, two_cups: 50}
+  visible_truth_count: 300
+  explicit_partial_occlusion_truth_count: 50
+  seed_range: [420000000, 420000299]
+  readback_log_sha256: 7e8696f89b3ed567a75216239b0c9bac5cf7c75d7aedd673b2580045e59df2da
+tdd:
+  invalid_environment_runs:
+    - {run_id: r171, cause: locked Python could not import pytest before collection}
+    - {run_id: r172, cause: source-to-package setuptools mapping was not present before collection}
+    - {run_id: r177, cause: system dist-packages preceded the locked Pillow 12.3.0 rasterizer}
+  red:
+    run_id: stage-e-val-calibration-core-red-r173
+    result: expected missing module at collection
+    junit_sha256: 2bcffe05a2bb00d5eb31e35f4237ca88745460f420fbd77cff75620c0f61db3f
+  intermediate:
+    - {run_id: r174, result: 3 passed and one invalid sub-64-pixel fixture failure}
+    - {run_id: r175, result: 4 passed}
+    - {run_id: r176, result: expected missing val loader import}
+    - {run_id: r178, result: 6 passed}
+    - {run_id: r180, result: expected missing raw carrier import}
+    - {run_id: r181, result: 7 passed}
+  final_focused_green:
+    run_id: stage-e-val-cli-green-r182
+    result: {passed: 7, failed: 0, errors: 0, pytest_seconds: 0.16}
+    junit_sha256: 4fac9a8cb655867fa9de926f37cf093316447418c770fdd588bafc4755d8ca53
+build:
+  run_id: linux-build-stage-e-val-calibration-r183
+  status: VALID
+  packages: 7
+  elapsed_ms: 55893
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-calibration-r183
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  network_fetch: false
+formal_ordinary_gate:
+  invalid_wrappers:
+    - {run_id: r184, cause: valid 1224-test pytest result but wrong colcon test-result base and incomplete exit receipt}
+    - {run_id: r185, cause: valid 1224-test pytest result but custom JUnit path suppressed the ament build-tree result}
+  valid_run_id: linux-test-stage-e-val-calibration-r186-ordinary
+  result: {passed: 1224, failed: 0, errors: 0, skipped: 0, pytest_seconds: 12.51}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 13476
+  junit_sha256: 870a84156b00684db8bae38828bd7103d9055fbd5f15886cbc5e89679b8c5b24
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  pillow: 12.3.0
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-val-calibration-r186-ordinary/tmp
+  tempfile_preflight: exact resolved match
+benchmark_gate:
+  rerun: false
+  reason: this train/val-only carrier adds no benchmark implementation, configuration, adapter, report, or benchmark_test change; valid r141 remains preserved
+  preserved_r30_hdd_baseline: {passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+  preserved_r141_nvme_gate: {passed: 573, skipped: 2, total: 575, pytest_seconds: 648.48, elapsed_ms: 649866}
+sealed_boundaries:
+  synthetic_test_new_access: none
+  coco100_access: none
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit and push the carrier, then run the one preregistered immutable CUDA val raw collection at the planned r1 output
+retention:
+  retained_runs: [r171-r186, r179 durable readback, r183 overlay, r186 ordinary evidence]
+  archived_runs: []
+  deletion_candidates: [all r171-r186 registered NVMe scratch trees; do not delete without explicit user authorization]
+```
