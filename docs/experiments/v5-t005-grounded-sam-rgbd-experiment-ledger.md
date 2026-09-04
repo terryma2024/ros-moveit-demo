@@ -11662,3 +11662,88 @@ retention:
   deletion_candidates: [r282-r285 scratch; do not delete without explicit user authorization]
 next_action: commit and push this execution checkpoint, then independently verify every artifact hash/inventory and inspect the montage plus individual worst-case overlays
 ```
+
+## Checkpoint CP-139 — residual attribution read back; mask-pipeline diagnostic boundary
+
+```yaml
+checkpoint: CP-139
+status: DECISION_BOUNDARY_MASK_PIPELINE_DIAGNOSTIC_REQUIRED
+recorded_at: 2026-09-05T07:21:14+08:00
+stage: E_CORRECTED_TRUTH_RESIDUAL_ATTRIBUTION
+experiment_id: EXP-079-STAGE-E-CORRECTED-TRUTH-RESIDUAL-ATTRIBUTION-R1
+prior_checkpoint: CP-138
+source_commit: 684c465170d95616a2e9d02409d56790110b1216
+independent_readback:
+  run_id: stage-e-corrected-truth-residual-readback-r286
+  status: VALID_READBACK
+  exit_code: 0
+  elapsed_ms: 69
+  records: 300
+  overlays: 6
+  files: 10
+  manifest_sha256: 03c9cd02c4c344ce975fe8ac31a46423f5a642cba4db2d9e4faeaba24e357970
+  tree_inventory_sha256: 0627d1f3196974a591aba648b458bf026269a304d4b6f0cc10828c37ca3395da
+  raw_manifest_sha256_after: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  verification: every artifact/overlay hash, analysis-record binding, canonical JSON, PNG decode, file mode, directory mode, no-symlink rule, denominator, and frozen aggregate passed
+  script_sha256: b1337c5208f6fdeadf65e43257dd45a891fc280e0a21d962c3f13f9e3258e861
+instance_level_summary:
+  run_id: stage-e-corrected-truth-residual-summary-r287
+  false_negatives: 253
+  unmatched_truth_before_mask_gate: {count: 90, fraction: 0.3557312252964427}
+  matched_mask_fail: {count: 163, fraction: 0.6442687747035574}
+  matched_failure_iou: {minimum: 0.0002638290387828687, q25: 0.27168817246317456, median: 0.4362824675324675, q75: 0.5444588796906158, maximum: 0.7879939209726444}
+  prediction_to_truth_area_ratio: {minimum: 0.834470614131631, q25: 1.6432558318307544, median: 2.134448160535117, q75: 2.821783587526528, maximum: 6.02997542997543}
+  leakage_fp_to_fn_ratio: {minimum: 1.2709977737300142, q25: 11.007674686222375, median: 46.5393607576206, q75: 88.13679245283019, maximum: 433.55555555555554}
+  severe_failure_iou_below_0_10: 21
+  passing_iou: {minimum: 0.8013476416271524, q25: 0.8849951608537119, median: 0.9273496059965405, q75: 0.9607462361527477, maximum: 0.9859180687637161}
+truth_component_audit:
+  multi_component_instances: 295
+  instances_with_singletons: 290
+  singleton_count_median: 5.0
+  largest_component_fraction_below_0_99: 11
+  interpretation: tiny disconnected MuJoCo segmentation pixels are common, but 289/300 truth instances retain at least 99 percent of their area in the largest component; no filtering was applied
+box_mask_association:
+  run_id: stage-e-corrected-truth-box-mask-association-r288
+  matches: 210
+  failing_box_iou: {minimum: 0.6283133112499677, q25: 0.8983597917970614, median: 0.9432697004669167, q75: 0.9673851372975658, maximum: 0.9936135503135671}
+  failing_box_area_ratio: {minimum: 0.7495404587929515, q25: 0.9945633052698812, median: 1.0267034317731167, q75: 1.0612726490727873, maximum: 1.4689163477564067}
+  failures_with_box_iou_at_least_0_80: {count: 141, fraction: 0.8650306748466258}
+  failures_with_box_iou_below_0_60: 0
+  failures_with_box_area_ratio_above_1_50: 0
+  box_mask_iou_spearman: {rho: 0.22539480973005543, pvalue: 0.0010046752247218555}
+visual_readback:
+  status: VALID_CONSISTENT_WITH_NUMBERS
+  montage: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/visualizations/grounded-sam-corrected-truth-residual-r1/montage.png
+  observations:
+    - sample 135 exact cup truth is red while the prediction primarily covers the adjacent bottle and robot pixels
+    - sample 152 exact cup truth remains compact while the prediction primarily covers robot pixels; the old convex-hull triangle is absent
+    - sample 142 small/far prediction covers the cup but expands from 221 truth pixels to 457 prediction pixels
+    - sample 289 is the sole area-classified UNDER_SEGMENTATION failure and visibly contains both missed truth and leaked prediction regions
+static_adapter_audit:
+  file: src/so101_demo_py/src/perception_benchmark/adapters/grounded_sam.py
+  observed_contract: _sam preserves the proposal axis; _candidates uses qualities[index] argmax and masks[index, mask_index] for the same proposal
+  finding: no source-visible proposal-axis swap was established by static inspection
+  remaining_gap: current fake tests prove tensor shapes and indexing with synthetic processor output but do not prove real SAM 2.1 raw tensor, post_process_masks, proposal, and stored-mask association on these retained failure frames
+causal_conclusion:
+  - convex-hull truth corruption was real and is corrected
+  - remaining error is not generally explained by fragmented main truth bodies or oversized/inaccurate Grounding DINO boxes
+  - high-IoU boxes plus severe leakage point to the SAM mask-generation/postprocess/association path, but retained final masks alone cannot distinguish model capability from adapter/processor behavior
+  - direct fine-tuning or replacement of SAM remains unjustified until that boundary is measured
+decision:
+  result: RESIDUAL_ATTRIBUTION_COMPLETE
+  next_boundary: a new user-authorized train/val-only fixed-sample SAM mask-pipeline diagnostic is required before any code or model intervention
+  recommended_next_scope: replay the six frozen overlay representatives plus deterministic passing controls, capture proposal boxes, raw pred_masks/iou_scores, processor postprocessed masks and stored RLE bindings, and compare frozen DINO-box versus exact-truth-box prompts diagnostically without training or threshold tuning
+tests:
+  ordinary_gate: not rerun; no repository implementation changed
+  explicit_benchmark_gate: not rerun; no benchmark-owned member changed and r30/r222 remain preserved
+evidence:
+  r286: {preflight_sha256: cdec050bf3c6151cee4532cfa0335165e14f4af059e36d853de46c307846c1fc, run_sha256: 33268bc71d40d0bd10386c6f3d7b0b9aa797d60dfb132640b37173298b55ac73, exit_sha256: d8c7dfe668654da8c35dbabc7826ebe32a1805c262a25e43f76744ec57fda32e}
+  r287: {preflight_sha256: 6e967905035dfa0d8b7878c3177ea6362afb86554243d47b5ace7746993c12ed, summary_sha256: 849b19f784140c935fc00aba8c9b83e682b83b017301da4d9cad9911f8d62616, exit_sha256: d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c}
+  r288: {preflight_sha256: 1c5f09cdfa7c89b6cde98dc289eb9fa20218e704de879e57001dd6c28025c40b, summary_sha256: 8c0da4662ea371b3e93fb0c959758992e220b37ee0d907dbac8d0605bf6cf5fc, exit_sha256: d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c}
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r285 immutable attribution output, r286-r288 readback/summary evidence and scratch, r282-r284 TDD evidence and scratch, all CP-138 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r282-r288 scratch; do not delete without explicit user authorization]
+next_action: commit and push CP-139, then stop at this decision boundary with SAM unchanged and all downstream gates sealed
+```
