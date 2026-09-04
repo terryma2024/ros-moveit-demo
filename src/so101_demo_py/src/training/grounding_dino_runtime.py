@@ -42,6 +42,32 @@ class _MetricCounts:
     multi_total: int = 0
 
 
+def enable_grounding_dino_gradient_checkpointing(model: Any) -> str:
+    """Enable the locked Transformers old-format decoder checkpointing path."""
+    decoder = getattr(getattr(model, "model", None), "decoder", None)
+    enable = getattr(model, "gradient_checkpointing_enable", None)
+    old_format_setter = getattr(model, "_set_gradient_checkpointing", None)
+    if (
+        decoder is None
+        or not hasattr(decoder, "gradient_checkpointing")
+        or not callable(enable)
+        or not callable(old_format_setter)
+    ):
+        raise RuntimeError("GRADIENT_CHECKPOINTING_UNSUPPORTED")
+    if getattr(model, "supports_gradient_checkpointing", None) is False:
+        model.supports_gradient_checkpointing = True
+    try:
+        enable()
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
+        raise RuntimeError("GRADIENT_CHECKPOINTING_UNSUPPORTED") from exc
+    if (
+        getattr(decoder, "gradient_checkpointing", None) is not True
+        or getattr(model, "is_gradient_checkpointing", None) is not True
+    ):
+        raise RuntimeError("GRADIENT_CHECKPOINTING_NOT_ENABLED")
+    return "transformers-old-format-grounding-dino-decoder"
+
+
 def _validate_sha_mapping(root: Path, expected: dict[str, str]) -> None:
     if root.is_symlink() or not root.is_dir():
         raise RuntimeError(f"BASE_MODEL_INVALID: {root}")
@@ -566,7 +592,17 @@ def run_training(
     )
     model.to(device)
     if training_contract["gradient_checkpointing"]:
-        model.gradient_checkpointing_enable()
+        checkpointing_method = enable_grounding_dino_gradient_checkpointing(model)
+    else:
+        checkpointing_method = "disabled"
+    exclusive_json(
+        output_root / "gradient-checkpointing.json",
+        {
+            "requested": training_contract["gradient_checkpointing"],
+            "method": checkpointing_method,
+            "verified": bool(getattr(model, "is_gradient_checkpointing", False)),
+        },
+    )
     model.train()
     optimizer = torch.optim.AdamW(
         model.parameters(),
