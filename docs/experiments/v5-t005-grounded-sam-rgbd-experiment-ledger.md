@@ -5399,9 +5399,218 @@ disproven_routes:
   - a full build through venv setuptools does not produce the required so101_demo_py symlink install
 open_risks:
   - Stage B must reuse Linux raw r3 and must not rerun Grounding DINO or SAM raw inference
+future_test_scratch_rule:
+  effective_after: EXP-079-LINUX-TEST-R30
+  hdd_baseline:
+    run_id: EXP-079-LINUX-TEST-R30
+    result: {total: 573, passed: 571, failed: 0, errors: 0, skipped: 2, exit_code: 0}
+    pytest_elapsed_seconds: 3210.78
+    filesystem: /tmp on /dev/sda3 rotational WDC WD10EZEX SATA HDD
+    preservation: immutable; do not rerun for timing
+  required_for_future_fsync_heavy_pytest_or_benchmark:
+    - allocate a unique, non-existing run-specific path below /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/<run-id>/tmp
+    - export TMPDIR, TMP, and TEMP to that exact NVMe path before colcon or pytest
+    - use the exact locked Python executable to print tempfile.gettempdir() and fail closed unless its resolved path is inside that run-specific scratch directory
+    - retain command log, exit log, JUnit, source commit, overlay, Python executable, scratch path, and elapsed time in the checkpoint
+    - compare only the next full benchmark already required by a code or model change against 3210.78 seconds
+    - preserve fsync, ext4 journaling, integrity checks, and disk-backed semantics; tmpfs is forbidden
+  scratch_retention: deletion candidate after evidence readback; explicit user authorization required before deletion
 next_command: inspect linux-grounded-sam-test-raw-postfix-r4-r3 immutable artifacts and preregister a new production-only run ID
 retention:
   retained_runs: [linux-build-r21 through linux-build-r29, linux-test-r30, CP-068 through CP-070 evidence]
   archived_runs: []
   deletion_candidates: []
+```
+
+## Stage B immutable raw replay — production mapping r4
+
+```yaml
+experiment_id: EXP-079-LINUX-PRODUCTION-MAPPING-R4
+status: VALID
+recorded_at: 2026-09-04T15:26:08+08:00
+started_at: 2026-09-04T15:33:00+08:00
+prior_experiment: EXP-079-LINUX-TEST-R30
+hypothesis: 已验证的 Linux raw r3 可作为不可变 low-floor 候选源；新 mapping 代码只运行真实 production detector 与 selector，能够在 mask IoU 大于等于 0.98 时完成一一映射并保存实际 production SAM mask
+prediction: 200/200 production records 完整 VALID，000900012.png 的 raw/production mask 像素为 4698/4699、IoU 为 0.9997871887635668，且不启动 raw Grounding DINO 或 raw SAM 推理
+single_variable: 将 candidate reconciliation 从 exact mask SHA 改为已提交的稳定 proposal identity 加 mask IoU 门；raw candidates 只从已验证的 r3 terminal evidence replay
+lifecycle: REUSE_IMMUTABLE_RAW_NEW_PRODUCTION
+run:
+  run_id: linux-grounded-sam-test-production-postfix-r4-r4
+  run_kind: TEST_PRODUCTION
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-postfix-r4/linux/grounded-sam-production-r4
+  output_preflight: ABSENT
+raw_replay:
+  run_id: linux-grounded-sam-test-raw-postfix-r4-r3
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-postfix-r4/linux/grounded-sam-raw-r3
+  manifest_sha256: dd8ec4a929c90d6ee6dd757f5f28cc2aebc95799fadfd8eb2f120685b6fbe69d
+  checkpoint_sha256: ffdd84d8d44e74bea49d24b55bd88d2f376d6980e88a86d3a3692f5796e9448f
+  record_inventory_sha256: cc9fb30ba5472e16aa4cdbecd4cce3599a0a982dff753f4e30e7d0906b7c01a6
+  record_count: 200
+  inference_policy: immutable replay only; raw Grounding DINO and SAM inference forbidden
+  tree_inventory_sha256_preflight: 445eb6f52efafab9fb3271f988c4cac3e75c92c77d10ccf7fc7b4b84ee9ff44e
+provenance:
+  execution_commit: 69476fd8d411f56f19bb0ec069692e0ffa9745a8
+  threshold_chain_source_commit: d933b4b9574df36d499b3e9254f0e88a1919810a
+  mapping_fix_commit: f6f03b645c44b10a212f81047da304fc63a6c214
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r28/install
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  replay_harness_sha256: c066095b45071acdca358f3190f68b718cd88cea4cbe9e1882f2e8416e40d124
+  model_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  threshold_lock_file_sha256: 8b0d24ca6c8c28ffb6f9e8c6d7be7c4dabb3916a198f8a0e6f594fb6faebce3e
+  threshold_lock_sha256: 7880140f8f0c363c6a197f24fc8c691df5598f5012336a4d638a5e828c6920ad
+  dataset_inventory_sha256: 72d38c392889d9f1d8095f24d148f31bd2915a5f36fc62b123f6625fc7e76dd2
+success_criteria:
+  - raw terminal evidence and every replayed mask verify against registered anchors before production starts
+  - CUDA float32 runtime with no CPU fallback
+  - production record denominator is 200/200 with zero mapping or inference errors
+  - production actual SAM masks are persisted for every accepted candidate
+  - 000900012.png matches by proposal identity and mask IoU at or above 0.98 without a sample-specific exception
+failure_criteria:
+  - production mapping, detector, selector, denominator, CUDA, or mask persistence failure
+invalid_criteria:
+  - raw inference rerun, raw evidence mutation, output collision, manifest mismatch, unregistered source, or CPU fallback
+calibrated_policy: start a new unique calibrated r4 run only after this production run is VALID
+result:
+  exit_code: 0
+  elapsed_seconds: 76.112596
+  record_count: 200
+  error_count: 0
+  accepted_candidates: 475
+  persisted_production_masks: 475
+  record_inventory_sha256: b716777e595ae33cd6f407f65b128dd5ba169892b9f643111173a512af869001
+  manifest_sha256: 438d62d313ae4360380d75384884dee73f7a9eae280c53b8f19fb316d4121adc
+  checkpoint_sha256: 73053e4d13a8450e60be6d4ef6fe6e39c38cfe931f17c967ff0874814b6a18bc
+  replay_provenance_sha256: 5d3975827d3310d4d428ce1899e291fa411d7fe2272def6c6d941d3f89c30e78
+  raw_tree_inventory_sha256_postrun: 445eb6f52efafab9fb3271f988c4cac3e75c92c77d10ccf7fc7b4b84ee9ff44e
+sample_readback:
+  image: images/test/000900012.png
+  production_candidate_count: 2
+  affected_candidate:
+    candidate_id: grounded-sam-000
+    raw_mask_pixels: 4698
+    production_mask_pixels: 4699
+    mask_iou: 0.9997871887635668
+    mapping_threshold: 0.98
+  second_candidate: {candidate_id: grounded-sam-001, raw_mask_pixels: 2376, production_mask_pixels: 2376, mask_iou: 1.0}
+conclusion: immutable raw r3 replay 和新的真实 production detector/selector 全量映射通过，production 实际 SAM mask 已全部持久化；允许开始 calibrated r4
+preflight_evidence:
+  - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-b-replay-preflight-r1
+  - 200/200 raw records and every referenced mask verified through load_verified_run_evidence
+  - GPU compute process count 0; Microduck match count 0; output root absent
+retention:
+  retained_runs: [linux-grounded-sam-test-raw-postfix-r4-r3]
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-replay-harness-test-r1
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-replay-harness-test-r2
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-replay-harness-test-r3
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-replay-harness-test-r4
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-production-mapping-r4
+---
+experiment_id: EXP-079-LINUX-CALIBRATED-REPLAY-R4
+status: VALID
+recorded_at: 2026-09-04T15:37:00+08:00
+started_at: 2026-09-04T15:38:00+08:00
+prior_experiment: EXP-079-LINUX-PRODUCTION-MAPPING-R4
+hypothesis: production mapping r4 已全量通过，因此同一不可变 raw r3 可以与已冻结 deployable threshold lock 经真实 calibrated detector/selector 生成完整 Linux calibrated 结果
+prediction: 200/200 records VALID、零 error、零 fallback，raw tree 前后不变，实际 calibrated SAM masks 全量持久化
+single_variable: production observer 从预设 production 阈值切换为已冻结 threshold lock；raw replay、模型、数据和 mapping contract 不变
+lifecycle: REUSE_IMMUTABLE_RAW_NEW_CALIBRATED
+run:
+  run_id: linux-grounded-sam-test-calibrated-postfix-r4-r4
+  run_kind: TEST_CALIBRATED
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-postfix-r4/linux/grounded-sam-calibrated-r4
+success_criteria:
+  - complete 200-record denominator with zero errors and no CPU fallback
+  - raw r3 verifies before execution and its tree hash is unchanged after execution
+  - all accepted calibrated production masks are persisted
+invalid_criteria:
+  - output collision, provenance mismatch, raw mutation or inference, manifest mismatch, or CPU fallback
+result:
+  exit_code: 0
+  elapsed_seconds: 81.124017
+  record_count: 200
+  error_count: 0
+  accepted_candidates: 671
+  persisted_calibrated_masks: 671
+  decision_counts: {unique: 2, ambiguous: 198, not_found: 0, error: 0}
+  record_inventory_sha256: 00662ea763c7ab1c3390bb090d1274c6a60c38f2b92daa6dbb8054ccba215da4
+  manifest_sha256: 6d00c0006d7caa0dde5bb17e4c7e579bb6b7d883fb2cb89ef1dc3ee8ae7856fc
+  checkpoint_sha256: 28754ffc55562c29e3e2de82ffcd68a6d53269ccbc3a6924b4b5d2c01579f0c3
+  replay_provenance_sha256: b1cccb37b43694114e1e344ef21b77ab16cd1df3e5fa42da7843100f45d728ed
+  raw_tree_inventory_sha256_postrun: 445eb6f52efafab9fb3271f988c4cac3e75c92c77d10ccf7fc7b4b84ee9ff44e
+conclusion: calibrated r4 全量 VALID，production 和 calibrated 两轮均未调用 raw inference，旧模型 mapping 修复验证完成；这些结果只作为 superseded baseline，不重新宣称旧模型可部署
+retention:
+  retained_runs: [linux-grounded-sam-test-production-postfix-r4-r4]
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-b-calibrated-replay-r4
+```
+
+## Checkpoint CP-072 — Stage B immutable raw replay complete
+
+```yaml
+checkpoint: CP-072
+status: VALID
+recorded_at: 2026-09-04T15:39:34+08:00
+stage: B
+source_branch: codex/v5-t004-yolo-seg-rgbd
+execution_commit_before_checkpoint: 69476fd8d411f56f19bb0ec069692e0ffa9745a8
+mapping_fix_commit: f6f03b645c44b10a212f81047da304fc63a6c214
+raw_source:
+  run_id: linux-grounded-sam-test-raw-postfix-r4-r3
+  status: VALID_IMMUTABLE_REPLAY
+  record_count: 200
+  record_inventory_sha256: cc9fb30ba5472e16aa4cdbecd4cce3599a0a982dff753f4e30e7d0906b7c01a6
+  tree_inventory_sha256_before_and_after: 445eb6f52efafab9fb3271f988c4cac3e75c92c77d10ccf7fc7b4b84ee9ff44e
+  raw_inference_rerun_count: 0
+production:
+  run_id: linux-grounded-sam-test-production-postfix-r4-r4
+  status: VALID
+  records: 200
+  errors: 0
+  accepted_candidates: 475
+  persisted_actual_masks: 475
+  elapsed_seconds: 76.112596
+  record_inventory_sha256: b716777e595ae33cd6f407f65b128dd5ba169892b9f643111173a512af869001
+  sample_000900012: {raw_pixels: 4698, production_pixels: 4699, mask_iou: 0.9997871887635668, threshold: 0.98}
+calibrated:
+  run_id: linux-grounded-sam-test-calibrated-postfix-r4-r4
+  status: VALID
+  records: 200
+  errors: 0
+  accepted_candidates: 671
+  persisted_actual_masks: 671
+  decision_counts: {unique: 2, ambiguous: 198, not_found: 0, error: 0}
+  elapsed_seconds: 81.124017
+  record_inventory_sha256: 00662ea763c7ab1c3390bb090d1274c6a60c38f2b92daa6dbb8054ccba215da4
+harness_tdd:
+  red_r1: expected module missing; JUnit retained; wrapper exit-log command then hit zsh reserved variable status and was recorded separately
+  green_r2: 2 passed in 0.14s
+  red_r3: expected tree_inventory_sha256 import missing
+  green_r4: 3 passed in 0.14s
+  harness_sha256: c066095b45071acdca358f3190f68b718cd88cea4cbe9e1882f2e8416e40d124
+  final_junit_sha256: d100756fce247251303dc9e1e12eda4316f6e7f8f8555050189861be5d876cc4
+test_storage:
+  filesystem: /data on NVMe
+  preflight: every focused pytest printed tempfile.gettempdir and matched its unique registered scratch path
+  r30_hdd_baseline_preserved: {passed: 571, skipped: 2, total: 573, pytest_elapsed_seconds: 3210.78}
+  next_full_benchmark: only when already required by a subsequent code or model change; compare against r30
+confirmed_conclusions:
+  - proposal identity plus mask IoU threshold 0.98 resolves the deterministic one-pixel SAM boundary difference without a sample-specific exception
+  - production actual SAM masks are persisted rather than substituted with raw masks
+  - production and calibrated paths can reuse terminal raw evidence without repeating expensive low-floor Grounding DINO or SAM inference
+next_stage: C — verify the frozen YOLO-Seg archive and implement deterministic polygon-to-DINO-box conversion with RED to GREEN
+remote_sync_boundary:
+  required_base: b91a4b56d30bc971e7c2d64465516b9d7a49b299
+  rule: commit only owned ledger changes, then fetch and rebase before push
+retention:
+  retained_runs:
+    - linux-grounded-sam-test-raw-postfix-r4-r3
+    - linux-grounded-sam-test-production-postfix-r4-r4
+    - linux-grounded-sam-test-calibrated-postfix-r4-r4
+    - all Stage B low-rate logs and replay harness/test files below the registered temporary root
+  archived_runs: []
+  deletion_candidates:
+    - all six Stage B scratch trees below the registered durable scratch root; none deleted
 ```
