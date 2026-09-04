@@ -84,7 +84,7 @@ def _source(root: Path) -> Path:
                     },
                     {
                         "body_id": 2,
-                        "body_name": "plastic_cup",
+                        "body_name": "plastic_cup_b",
                         "visible_pixel_count": 900,
                         "polygon_xy": polygon_b,
                     },
