@@ -6870,3 +6870,107 @@ retention:
   archived_runs: []
   deletion_candidates: []
 ```
+
+## Checkpoint CP-084 — checkpointing compatibility fix GREEN
+
+```yaml
+checkpoint: CP-084
+status: VALID
+recorded_at: 2026-09-04T18:28:48+08:00
+stage: D
+experiment_id: EXP-079-GROUNDING-DINO-TINY-CUP-FINETUNE-R1
+prior_checkpoint: CP-083
+source_commit_before_checkpoint: 371ad07b8134d5f313a5f30510ca37c4fe39100f
+fix:
+  production_file: src/so101_demo_py/src/training/grounding_dino_runtime.py
+  helper: enable_grounding_dino_gradient_checkpointing
+  behavior:
+    - require the existing Grounding DINO decoder checkpointing flag, public enable method, and old-format setter
+    - correct the inconsistent instance support flag only after those capabilities are present
+    - call the locked Transformers public gradient_checkpointing_enable method
+    - fail closed unless both decoder.gradient_checkpointing and model.is_gradient_checkpointing read back true
+    - write gradient-checkpointing.json before training starts
+tdd:
+  invalid_wrappers:
+    - run_id: stage-d-gradient-checkpoint-red-r87
+      reason: relative source PYTHONPATH did not expose the package
+    - run_id: stage-d-gradient-checkpoint-red-r88
+      reason: assumed a conventional nested package directory instead of this package_dir mapping
+  red:
+    run_id: stage-d-gradient-checkpoint-red-r89
+    status: VALID_RED
+    result: collection failed only because the new helper did not exist
+    exit_code: 2
+    junit_sha256: 851c5891c38f3010b5c3e09b6616b51abc28f3f6f881e94d41441f02781f3d1e
+  green:
+    run_id: stage-d-gradient-checkpoint-green-r90
+    status: VALID
+    result: {passed: 7, failed: 0}
+    elapsed_ms: 247
+    junit_sha256: 2d24ee0c2b162f86b65ba6cdf4a1a21eec4cc409041c594e467a7a2b52ae5cdc
+  related_gate:
+    run_id: stage-d-gradient-checkpoint-related-r91
+    status: VALID
+    result: {passed: 33, failed: 0}
+    elapsed_ms: 1086
+    junit_sha256: 8fb4a87d0320707ce72f11a6bb45ca4cd7b6489678fab8f7658e408fdf7499ab
+  static_gate:
+    run_id: stage-d-gradient-checkpoint-static-r92
+    status: VALID
+    checks: [ruff check, ruff format --check, in-memory compile, git diff --check]
+    checks_log_sha256: faf709e30bb90de3042acc93fd581bb50a047ac89bed7e0b1fdb16c61c51ebdd
+fresh_overlay:
+  invalid_preflight:
+    run_id: linux-build-stage-d-gradient-checkpoint-r93
+    status: INVALID
+    reason: incorrectly required an upstream CMakeLists.txt that is not part of the pinned lodepng commit
+    colcon_started: false
+  valid_run:
+    run_id: linux-build-stage-d-gradient-checkpoint-r94
+    status: VALID
+    package_count: 7
+    symlink_install: true
+    exit_code: 0
+    elapsed_ms: 64047
+    source_commit: 371ad07b8134d5f313a5f30510ca37c4fe39100f
+    lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+    lodepng_tracked_files: 26
+    lodepng_validation: clean Git state, all tracked files present, full fsck valid
+    lodepng_network_fetch: none
+    fetchcontent_fully_disconnected: true
+    scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-d-gradient-checkpoint-r94/tmp
+    preflight_sha256: adce434e092567318ca36aafb4151d0e4a168f391b1ac1e70a8066f708b5a2fa
+    exit_log_sha256: 4662dd9988e3a91709e223003f312ece6bdc61ca3e04ca0e666accc28072aaec
+    overlay_readback_sha256: 1e787e9ebd718e0d8da2395167c942e4b126fb970cc214d24deefd247564aa99
+ordinary_gate:
+  run_id: linux-test-stage-d-gradient-checkpoint-r95-ordinary
+  status: VALID
+  scope: src/so101_demo_py/test only
+  result: {passed: 1201, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 15243
+  locked_python: /data/work/venvs/so101-grounded-sam/bin/python
+  actual_test_python: /usr/bin/python3
+  tempfile_preflight: both resolved exactly to the new run-specific NVMe scratch
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-d-gradient-checkpoint-r95-ordinary/tmp
+  preflight_sha256: a428fd61465b6eeabcafc01a8c61eab0bff041f0a0aea9bbc3748f704a1c08fd
+  exit_log_sha256: 0a05be4331735a9b4f6d4d4b5964ca0f6724a05ed49e68a04520d6e9f589fe8b
+  junit_sha256: 9fa5e5de131de7a392e7e4880e48f02898f07176e8035b1ebb4fa6c6f52ded6d
+benchmark_gate:
+  status: NOT_RUN_BY_CONTRACT
+  reason: the training-only compatibility fix changes no benchmark implementation, configuration, adapter, report, test, selected checkpoint, or threshold
+  preserved_valid_benchmark: linux-test-stage-c-augmentation-r59-benchmark
+sealed_boundaries:
+  synthetic_test_access: none
+  coco100_access: none
+  sam_loaded: false
+  microduck: paused
+  mac_migration: forbidden
+next_action: commit only the runtime fix, test, and checkpoint; Gitee-sync; build a new non-colliding gcfix image tag; then preflight smoke r2 with the new implementation commit
+retention:
+  retained_runs: [r87-r92 TDD and static evidence, r93 invalid build preflight, r94 overlay, r95 ordinary gate]
+  archived_runs: []
+  deletion_candidates:
+    - all r87-r95 registered NVMe scratch trees; do not delete without explicit user authorization
+```

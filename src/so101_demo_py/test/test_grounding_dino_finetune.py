@@ -18,6 +18,9 @@ from so101_demo.training.grounding_dino_finetune import (
     select_best_threshold,
     verify_complete_checkpoint,
 )
+from so101_demo.training.grounding_dino_runtime import (
+    enable_grounding_dino_gradient_checkpointing,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -331,3 +334,44 @@ def test_cuda_requirement_rejects_cpu_fallback() -> None:
     with pytest.raises(RuntimeError, match="CPU_FALLBACK_FORBIDDEN"):
         require_cuda(unavailable)
     assert require_cuda(available) == "cuda:0"
+
+
+def test_grounding_dino_old_format_gradient_checkpointing_is_verified() -> None:
+    decoder = SimpleNamespace(gradient_checkpointing=False)
+
+    class OldFormatGroundingDino:
+        supports_gradient_checkpointing = False
+
+        def __init__(self) -> None:
+            self.model = SimpleNamespace(decoder=decoder)
+            self.enable_calls = 0
+
+        def _set_gradient_checkpointing(self, module, value=False) -> None:
+            module.gradient_checkpointing = value
+
+        def gradient_checkpointing_enable(self) -> None:
+            self.enable_calls += 1
+            if not self.supports_gradient_checkpointing:
+                raise ValueError("support flag rejected old-format implementation")
+            self._set_gradient_checkpointing(self.model.decoder, value=True)
+
+        @property
+        def is_gradient_checkpointing(self) -> bool:
+            return self.model.decoder.gradient_checkpointing
+
+    model = OldFormatGroundingDino()
+
+    method = enable_grounding_dino_gradient_checkpointing(model)
+
+    assert method == "transformers-old-format-grounding-dino-decoder"
+    assert model.supports_gradient_checkpointing is True
+    assert model.enable_calls == 1
+    assert model.model.decoder.gradient_checkpointing is True
+    assert model.is_gradient_checkpointing is True
+
+    incomplete = SimpleNamespace(
+        supports_gradient_checkpointing=False,
+        gradient_checkpointing_enable=lambda: None,
+    )
+    with pytest.raises(RuntimeError, match="GRADIENT_CHECKPOINTING_UNSUPPORTED"):
+        enable_grounding_dino_gradient_checkpointing(incomplete)
