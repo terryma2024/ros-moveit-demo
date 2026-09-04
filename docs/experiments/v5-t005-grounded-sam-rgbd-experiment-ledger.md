@@ -5946,8 +5946,8 @@ dataset_contract:
   seed_namespace:
     train: [410000000, 410001199]
     val: [420000000, 420000299]
-    test: [430000000, 430000299]
-    independence: disjoint from r2 defaults 100000/200000/300000 and fresh benchmark 700000/800000/900000
+    test: [440000000, 440000299]
+    independence: disjoint from r2 defaults 100000/200000/300000, fresh benchmark 700000/800000/900000, and retired diagnostic namespace 430000000-430000299
     bounded_attempt_seed_derivation: numpy SeedSequence([sample_seed, scenario_ordinal, attempt_index])
   split_rules:
     - seeds, image members, label members, and truth members are pairwise disjoint across train, val, and test
@@ -6106,4 +6106,132 @@ retention:
   retained_runs: [r42, r43, r44, r45, r46, r47]
   archived_runs: []
   deletion_candidates: []
+```
+
+## Checkpoint CP-076 — train/val geometry fixed; diagnostic test namespace retired
+
+```yaml
+checkpoint: CP-076
+status: VALID_PLANNED_BEFORE_FORMAL_GENERATION
+recorded_at: 2026-09-04T17:18:00+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+source_commit_before_code_checkpoint: a7d22f5c836634fb319569b5db1e7c1838cfe2b8
+sealed_test_boundary:
+  issue: r47 geometry diagnostics included ten seeds from the preregistered 430000000-430000299 test namespace
+  image_or_annotation_written: false
+  image_or_annotation_opened: false
+  model_training_or_selection: false
+  disposition: fail closed; retire the entire 430000000-430000299 namespace before formal generation
+  replacement_namespace: [440000000, 440000299]
+  replacement_prior_use: none
+  rule: do not preview, profile, tune, or preflight replacement test samples; generate them once in the formal dataset run and immediately seal their label/truth members
+train_val_exact_preflight:
+  run_id: stage-c-augmentation-train-val-exact-preflight-r50
+  test_namespace_accessed: false
+  result: VALID
+  small_far_cup:
+    planned_and_accepted: {train: 200, val: 50}
+    failures: 0
+    deterministic_attempts_maximum: 10
+    bbox_area_px2_range: [160.58, 939.42]
+    visible_pixels_range: [105, 302]
+  partially_occluded_cup:
+    planned_and_accepted: {train: 200, val: 50}
+    failures: 0
+    deterministic_attempts_maximum: 8
+    visible_fraction_range: [0.350858135998262, 0.5072738772928527]
+    visible_pixels_range: [1596, 2525]
+frozen_contract_after_preflight:
+  small_far_camera_retreat_m: [2.40, 3.00]
+  partial_visible_fraction_inclusive: [0.35, 0.80]
+  maximum_deterministic_attempts: 64
+  train_seed_range: [410000000, 410001199]
+  val_seed_range: [420000000, 420000299]
+  sealed_test_seed_range: [440000000, 440000299]
+  all_other_CP075_quotas_ranges_and_truth_rules: unchanged
+next_action: complete related regression, fresh overlay, ordinary gate, and required explicit benchmark before committing the generator/converter code
+retention:
+  retained_runs: [r47 contamination evidence, r48 corrected-contract RED, r49 GREEN, r50 exact train/val preflight]
+  archived_runs: []
+  deletion_candidates:
+    - r48 and r49 NVMe scratch trees; do not delete without explicit authorization
+```
+
+## Checkpoint CP-077 — augmentation generator and converter code GREEN
+
+```yaml
+checkpoint: CP-077
+status: VALID_CODE_READY_AWAITING_EXPLICIT_BENCHMARK
+recorded_at: 2026-09-04T17:42:00+08:00
+stage: C
+experiment_id: EXP-079-GROUNDING-DINO-DATA-AUGMENTATION-R3
+execution_commit_before_code_commit: a7d22f5c836634fb319569b5db1e7c1838cfe2b8
+implementation:
+  - schema-v2 quota-derived deterministic scenario scheduling with exact split and seed exclusion
+  - bounded small_far_cup and partially_occluded_cup generation using SeedSequence sample/scenario/attempt namespaces
+  - visible, raw paired-reference, and canonical amodal RLE masks with SHA and count provenance
+  - canonical amodal equals visible bitwise-unioned with paired-reference and is revalidated by the converter
+  - schema-v2 converter profiles measured partial occlusion while retaining schema-v1 compatibility
+  - converter rejects scenario-quota/sample mismatch and duplicate seeds before annotation parsing
+  - test stays opaque in conversion and the replacement 440000000 namespace has not been previewed
+tdd:
+  invalid_preflights:
+    r36: overlay source under shell nounset failed before pytest
+    r37: exact temp path matched but the preflight assertion incorrectly also required it to be its own ancestor; pytest not started
+  initial_red_r38: {exit_code: 2, result: collection failed on missing SceneGeometry API, elapsed_ms: 412}
+  initial_green_r39: {passed: 11, failed: 0, elapsed_ms: 1159}
+  related_regression_r40: {passed: 46, failed: 1, failure: tuple/list manifest readback mismatch, elapsed_ms: 1288}
+  related_green_r41: {passed: 47, failed: 0, elapsed_ms: 1254}
+  corrected_contract_red_r48: {passed: 6, failed: 3, failures: [old retreat range, missing paired-reference fields, strict raw subset assumption]}
+  corrected_contract_green_r49: {passed: 11, failed: 0, elapsed_ms: 1244}
+  manifest_red_r54: {passed: 2, failed: 2, failures: [scenario quota not reconciled, duplicate seed reached truth mismatch]}
+  manifest_green_r55:
+    passed: 49
+    failed: 0
+    elapsed_ms: 1503
+    junit_sha256: 8518383b05fd2f38dad5029983c21b41cf5687db1cf8002dc78d109129042eb1
+quality:
+  ruff_version: 0.15.20
+  ruff_check: PASS
+  ruff_format_check: PASS
+  py_compile: PASS
+  git_diff_check: PASS
+files:
+  augmented_config_sha256: c2af80e37a33e76c179c410cf428e7d7a56a46cd89024f75a5134a4e1e57e9c5
+  generator_sha256: 8b7d93491cf45db7f6dbab5f214cd435f87b3927cb77971420dd4dd6e21901be
+  converter_sha256: 65a49222884c11791c4b53075d63cf10319e27be775a67d122218809693076af
+fresh_overlay:
+  run_id: linux-build-stage-c-augmentation-r52
+  root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-augmentation-r52
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  build_exit_code: 0
+  build_elapsed_ms: 55834
+  source_mode: symlink install resolves to the isolated checkout
+  lodepng_source: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src
+  lodepng_head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a
+  fetchcontent_fully_disconnected: true
+  prefix_readback: all seven package prefixes resolve inside r52
+ordinary_gate:
+  final_run_id: linux-test-stage-c-augmentation-r56-ordinary
+  scope: src/so101_demo_py/test only
+  result: {passed: 1190, failed: 0, errors: 0, skipped: 0}
+  colcon_exit_code: 0
+  test_result_exit_code: 0
+  elapsed_ms: 13976
+  junit_sha256: 5ec565f35dbcd198b24cbec28d582b9601935a631c55977fc89ae7052cf8c4c0
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-c-augmentation-r52/install
+  python_preflight: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-c-augmentation-r56-ordinary/tmp
+benchmark_gate:
+  status: PENDING_ON_COMMITTED_CODE
+  command: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  storage_rule: fresh unique registered /data NVMe scratch with exact locked-Python tempfile preflight
+  immutable_comparison_baseline: {run_id: r30, storage: SATA_HDD, passed: 571, skipped: 2, total: 573, pytest_seconds: 3210.78}
+next_action: commit only owned code, config, tests, and CP076-CP077 ledger changes; fetch/rebase/push/readback; then run the single required explicit benchmark on that exact commit
+retention:
+  retained_runs: [r36-r56 and r52 overlay]
+  archived_runs: []
+  deletion_candidates:
+    - all registered NVMe scratch trees r36-r56 and r52; do not delete without explicit authorization
 ```
