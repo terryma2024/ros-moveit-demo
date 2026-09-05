@@ -17676,6 +17676,28 @@ retention: all evidence retained, archived none; no new deletion candidate and n
 boundaries: no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
 ```
 
+## Checkpoint CP-300 — r471 static RED reproduces all runner-review gaps
+
+```yaml
+checkpoint: CP-300
+status: VALID_STATIC_RED_FIX_IN_PROGRESS
+run_id: stage-e-generator-runtime-acceptance-runner-static-red-r471
+executor: /root/generator_build, gpt-5.6-sol high
+inputs: frozen reviewed driver e508af606576e7059679703af46c1b75785eb8eea53def90a2d6c0b12d9ed777 and runner d678bac81d3dfe9cdf7f0b772dba0676f42fb37d1e7e8456c20a919c4fe29665 copied into durable evidence
+result: {exit_code: 1, checks: 14, passed: 0, failed: 14}
+failed_contracts: fixed diagnostic and shell allowlists, symlink/duplicate/escape rejection, GPU four-key crosscheck, attempt/truth/event crosscheck, independent PNG decode, MJCF closure recompute, provenance binding, parent-to-child directory fsync, immediate GPU receipts, closure-before-model-load, explicit symlink absence, reviewed-driver preallocation hash, nonselfreferential shell launch binding
+method: independent static AST/text checker only; no driver import, MuJoCo/OpenGL import, context, render, build, pytest or production-source mutation
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-static-red-r471 with checker/input copies/result/stderr/exit receipts
+parent_readback: exact checker, frozen inputs, hashes, result JSON and exit1 read back; r470 run/scratch roots remain absent including symlinks
+next_experiment:
+  status: PLANNED_GREEN_PREP_ONLY
+  executor: same Sol high
+  scope: apply bounded fixes to temporary r470 driver/runner and require this same14-contract checker GREEN; add syntax/AST and semantic self-checks without GL/render/allocation
+  stop_after: freeze new hashes/report and parent checkpoint before Astra re-review
+retention: all r471 and earlier evidence retained, archived none; nothing deleted
+boundaries: r470 not launched; no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
+```
+
 ## Checkpoint CP-299 — r470 runner review requests bounded evidence fixes
 
 ```yaml
