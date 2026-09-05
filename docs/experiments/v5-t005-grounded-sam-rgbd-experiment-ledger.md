@@ -18690,3 +18690,30 @@ phase_plan_correction: r497 clean ordinary receipt, r498 one explicit benchmark,
 retention: r496 and all earlier evidence retained unchanged, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no repo source edit/build/benchmark/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; ordinary may legally import MuJoCo; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-337 — r497 clean ordinary gate valid; one explicit benchmark authorized
+
+```yaml
+checkpoint: CP-337
+status: VALID_ORDINARY_EXPLICIT_BENCHMARK_PLANNED
+run_id: linux-test-stage-e-generator-order-oracle-r497-ordinary-clean
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_ORDINARY_GATE, invocations: 1, tests: 1472, ordinary_cases: 1472, benchmark_cases: 0, partition_violations: 0, passed: 1472, failures: 0, errors: 0, skipped: 0, colcon_test_exit: 0, test_result_exit: 0, receipt_exit: 0, tool_exit: 0, outer_exit: 0, pytest_seconds: 23.92, colcon_elapsed_seconds: 25.52, total_elapsed_seconds: 27.309752806, warnings: 4}
+parser: sole r496 private correction uses classname-only .benchmark_test./.test. mutually exclusive partition and never testcase name; runner-vs-r496 diff SHA256 42242612f0f6cebf5087a24b7c1e40fa866d1ac7d09a61df8b36a72f520a7fe7
+source_overlay: package source/build 07dcd29a, r495 overlay all7 prefixes, checkout imports, exact locked Python, source/config/test hashes and original untracked receipts unchanged
+scratch: durable scratch/linux-test-stage-e-generator-order-oracle-r497-ordinary-clean/tmp exact tempfile preflight, explicit basetemp/cache; retained deletion candidate
+evidence: durable run-evidence/linux-test-stage-e-generator-order-oracle-r497-ordinary-clean; runner SHA256 053b14a253b041894272af7f342b93511056b97402361f1e9fe559f40be944a7; JUnit SHA256 41f454c79482504fd124fed058070effd56a6db8e65dcf3bfabd5b528cad1961; result SHA256 0985c824031c3c7aa957e97bc463378468fd960b791177afc970e1f6efd035e6; inventory SHA256 9b65651fe8b9fa47aa126f3267f1230038d1e381f8d356085a6ab1d8f1a46408
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-oracle-ordinary-clean-r497-report.md SHA256 b78bf489257e6972060688011e356a78a88cd196482f999d9bab89b4df8fdbd4
+parent_readback: complete115-line report plus JUnit/result/exits/timing/source/provenance read; clean gate accepted
+next_experiment:
+  status: PLANNED_EXPLICIT_REQUIRED_GATE
+  run_id: linux-test-stage-e-generator-nonpenetrating-r498-benchmark
+  executor: /root/generator_build, gpt-5.6-sol high
+  reason: accepted generator/converter/config/model-selection benchmark surface changed since prior valid r469; this is required qualification, not an optimization-only rerun
+  scope: exactly one colcon test process for so101_demo_py with pytest-args benchmark_test using frozen r495 build/install; require all JUnit classnames benchmark partition and ordinary0; expected fixed current suite585 total,583 pass,2 Linux-inapplicable macOS renameatx_np skips,0 failure/error and all exits0; any drift fail closed
+  scratch: fresh unique durable scratch/linux-test-stage-e-generator-nonpenetrating-r498-benchmark/tmp with TMPDIR/TMP/TEMP, actual locked-Python tempfile preflight and explicit basetemp/cache; fsync/journaling/integrity unchanged, no tmpfs
+  performance: compare pytest elapsed observationally to immutable r30 HDD3210.78s and retained r469 NVMe649.44s with suite/source caveat; never rerun r30
+  evidence: copy JUnit, complete command/logs/exits/elapsed/partition/dependencies/source/overlay/Python/prefix/import/no-drift and timing receipt; stop before generation-runner work
+retention: r497/r496 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; benchmark fixture semantics unchanged; Microduck paused; mask0.80/mapping0.98 unchanged
+```
