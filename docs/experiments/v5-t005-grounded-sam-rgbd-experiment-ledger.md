@@ -18315,3 +18315,28 @@ phase_id_correction_after_invalid: r486 fresh complete RED, r487 fix GREEN, Astr
 retention: r485 and all prior evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no production/config edit in r486, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-322 — r486 complete review-finding RED authoritative; production GREEN authorized
+
+```yaml
+checkpoint: CP-322
+status: VALID_EXPECTED_RED_FIX_GREEN_PLANNED
+run_id: stage-e-generator-train-val-review-red-r486
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_EXPECTED_RED, tests: 174, controls_passed: 141, expected_product_failures: 33, errors: 0, skips: 0, harness_errors: 0, groups: {I1: 4, I2: 10, I3: 5, I4: 8, I5: 1, M1: 5}, pytest_exit: 1, outer_exit: 1, receipt_exit: 1, elapsed_seconds: 5.674932592, stderr_bytes: 0}
+inputs: test SHA256 7e971871a0bd06f2d38539f3a384123b88c0552a1d98722365e6291d82ccb029; exact r485-to-r486 two-line fixture delta SHA256 cdbc86d55979095a146f8474f7dc58bb6a1aaf5465cdb9c341f21f933b946261; production/config exact CP321 hashes
+i5_boundary: 10x8 dimensions and all visible/paired/amodal hashes/counts/fraction/union/subset inputs independently valid; only strict-extra-pixel predicate false; discriminator-absent schema2 measured-none is rejected at OCCLUSION_TRUTH_INVALID, proving new-contract leakage
+evidence: durable run-evidence/stage-e-generator-train-val-review-red-r486 and scratch retained; JUnit SHA256 385abe9ae189da89c15d66a7f70138d6def2929451fbfb8e5284f87dcd2ed11b; result SHA256 2bef18ca4981dc469d5e3f7d13608e2ce3918f640ff377778ffc7fb4fcb3ab84; I5 readback SHA256 1969b363f57a83964a802ec0f07d69c0cd777793c01c394989ecf3df195ed918; inventory SHA256 8e4f8728748a3faa9694e4c8e6296e36ea497c0941025d6cfb57571dbd5c866e
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-review-red-r486-report.md SHA256 09389b7450d519cfb45e3343523c5b3a2dfb5ac96527214b3eb5328e60992289
+parent_readback: complete103-line report/result/grouping/I5 facts and exact live hashes read; run is authoritative and no forbidden boundary was accessed
+next_experiment:
+  status: GO_FIX_GREEN_ONLY
+  run_id: stage-e-generator-train-val-review-green-r487
+  executor: same Sol high
+  implementation: minimally fix all CP320 findings: bind exact new config to schema2/nonpenetration true and exact1200/300,450m/460m,six-equal quotas/schedule; public converter exact-version enforcement; scenario/configured/visible/unique active-body invariants with required small-far/partial target presence; no-follow exact source-tree/type/canonical seed filename inventory without reading unexpected content; scope strict-subset/new typing to new contract and preserve legacy measured-none; normalize schema/distance malformed values to fail-closed errors
+  restrictions: no test/config byte change unless a genuine r486 test defect is discovered and reported before edit; no test-only production bypass, environment condition or scenario-label runtime behavior; renderer/camera/RNG/mask generation/geometry measurement/retry/acceptance/CLI/model semantics unchanged
+  verification: AST/Ruff/config/diff gates, then exactly one focused pytest process with the same174 cases under fresh unique r487 NVMe scratch and exact Python/tempfile preflight; require174/174 pass and zero errors/skips; retain full diff/evidence and stop for parent readback plus Astra scoped re-review before commit/build
+phase_id_correction: r487 fix GREEN, Astra re-review, r488 build, r489 ordinary, r490 benchmark, r491 runner RED, r492 runner GREEN/review, r493 generation, r494 source readback, r495 archive, r496 archive readback, r497 primary conversion, r498 repro conversion, r499 freeze; each separately checkpointed
+retention: r486/r485 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
