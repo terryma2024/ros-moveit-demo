@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-278
+latest_checkpoint: CP-282
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r450 broadGREEN104passed; freeze owned fix and obtain scoped Astra medium re-review before fresh accepted-source build and deferred package gates
+next_action: r454 GREEN108passed; freeze RGBA correction and scoped Astra fix-round2 review, then fresh accepted-source build; r451 held
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17086,4 +17086,122 @@ next_experiment:
   after: fresh accepted-source seven-package build then ordinary and one required explicit benchmark gate; r444/r445 remain unlaunched
 retention: all evidence including invalidr447/r448/r449 preserved; archived none; scratch deletion candidates only, nothing deleted
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no inference/generation/training; mask0.80 and mapping0.98 unchanged
+```
+
+## Checkpoint CP-279 — Scoped review requires RGBA precedence regression
+
+```yaml
+checkpoint: CP-279
+status: FIX_ROUND1_TWO_ADDRESSED_ONE_NEW_IMPORTANT_RED_PLANNED
+source_commit: efbf872df53ee607696eff1aa2b5c1871cb24568
+remote: ordinary push to Gitee branch codex/v5-t004-yolo-seg-rgbd; ls-remote readback matches exact source SHA
+reviewer: /root/generator_review, gpt-6-astra medium
+review_report: durable coordination/generator-r443-r1/fix-1-review-report.md
+review_package_sha256: 3c6eef4dea133a2be035b545e7737feaf6cc5bfee7b8c30b779395d4a9919edc
+fix_round1: both original findings ADDRESSED; spec and quality CHANGES_REQUESTED
+new_important: helper always chooses material alpha while MuJoCo3.12.0 setMaterial permits nondefault geom RGBA override; transparent material plus opaque geom can bypass excluded-proxy visibility check
+evidence: reviewer cites version-tagged engine_vis_visualize.c setMaterial and engine_vis_init.c default groups0/1/2; parent read full report and actual helper; concrete runtime reproduction remains next experiment
+minor_deferred: descendant regression currently also removes required direct geom, so schema check masks direct coverage of descendant branch; retain for final review or focused coverage alongside fix2
+build_hold: r451 runner prepared only, bash syntax passed; build/run/scratch roots absent; fixed-source runner cannot be used after fix2 without new provenance brief
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-alpha-precedence-red-r452
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: actual MuJoCo scene-color precedence oracle plus regression rejecting opaque geom override on transparent-material proxy; converse and default-material controls
+  lifecycle: offline_test_no_stack_no_physics_step_no_RGB
+  source: efbf872d production unchanged; tests-only before RED
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+  scratch: durable scratch/stage-e-generator-alpha-precedence-red-r452/tmp; all three TMP vars and exact Python tempfile preflight required
+  evidence: durable run-evidence/stage-e-generator-alpha-precedence-red-r452; command/source/diff/preflight/JUnit/exit/time required
+  stop_after: RED report and parent checkpoint before production fix; no package/benchmark/build launch
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+retention: all artifacts retained, archived none, prior scratch deletion candidates only; no deletion
+boundaries: Microduck paused; sealed-test/COCO100/PickPlace/Mac inaccessible; no new data/model/inference; IoU gates unchanged
+```
+
+## Checkpoint CP-280 — Preserve mixed RED evidence; correct transparent-scene oracle
+
+```yaml
+checkpoint: CP-280
+status: INVALID_RED_ORACLE_FRESH_TEST_ONLY_RUN_PLANNED
+run_id: stage-e-generator-alpha-precedence-red-r452
+source_commit: efbf872df53ee607696eff1aa2b5c1871cb24568 plus owned test-only diff; production unchanged
+result: {exit_code: 1, tests: 47, passed: 45, failed: 2, errors: 0, skipped: 0, pytest_seconds: 3.09, elapsed_seconds: 3.42}
+observed: actual mjv_updateScene oracle shows opaque override RGBA1/0/0/1; required proxy rejection fails DID_NOT_RAISE, confirming production defect
+oracle_defect: fully transparent geoms omitted from MjvScene; converse control incorrectly required one scene entry rather than asserting absence
+classification: INVALID complete RED gate due to test oracle defect; observed opaque-override production failure retained, not erased or counted as passing
+parent_readback: actual exit and test-log failure summary read back; executor report confirms exact baseline production
+evidence: durable run-evidence/stage-e-generator-alpha-precedence-red-r452; command/source/preflight/static/JUnit/exit/time retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+scratch: durable scratch/stage-e-generator-alpha-precedence-red-r452/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-alpha-precedence-red-r453
+  executor: same GPT-5.6-Sol high
+  single_variable: test oracle represents fully transparent geom omission as absence, requires actual opaque entry for opaque case; no production change
+  gate: unchanged geometry tests, pre-allocation AST/Ruff, fresh uniqueNVMe scratch/preflight/full receipts; stop at RED report for parent GREEN checkpoint
+retention: r452 and all prior evidence retained; archived none; scratch deletion candidates only
+boundaries: r451 held; no generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-281 — Actual MuJoCo oracle confirms RGBA defect RED
+
+```yaml
+checkpoint: CP-281
+status: VALID_RED_NARROW_GREEN_PLANNED
+run_id: stage-e-generator-alpha-precedence-red-r453
+source_commit: efbf872df53ee607696eff1aa2b5c1871cb24568 plus owned tests only; production/assets unchanged
+result: {exit_code: 1, tests: 47, passed: 45, failed: 2, errors: 0, skipped: 0, pytest_seconds: 3.16, elapsed_seconds: 3.49}
+observed: MuJoCo mjv_updateScene includes opaque geom override but helper accepts proxy; transparent override is absent from scene but helper wrongly rejects proxy
+controls: default geom RGBA uses material color; complete direct schema plus extra descendant is rejected; all43prior tests pass
+parent_readback: full fix-2 report, actual exit and two production-boundary failure logs read back
+evidence: durable run-evidence/stage-e-generator-alpha-precedence-red-r453; full command/source/static/preflight/JUnit/exit/time retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+scratch: durable scratch/stage-e-generator-alpha-precedence-red-r453/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-alpha-precedence-green-r454
+  executor: /root/generator_build, gpt-5.6-sol high
+  single_variable: narrow effective-alpha precedence correction consistent with verified MuJoCo3.12.0; retain all other geometry and dataset policy
+  gate: geometry47 plus61existing categorical/dataset controls, expected108; static before unique NVMe allocation, actual lockedPython preflight and full receipts
+  after: parent freeze/commit only owned fix and ledger, ordinary push/readback, immutable scoped Astra medium review from efbf872d; no build/package/benchmark before disposition
+retention: all evidence retained including INVALIDr452; archived none; scratch deletion candidates only
+boundaries: r451 held; sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/inference; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-282 — RGBA precedence GREEN and scoped review planned
+
+```yaml
+checkpoint: CP-282
+status: VALID_GREEN_FIX_ROUND2_REVIEW_PLANNED
+run_id: stage-e-generator-alpha-precedence-green-r454
+source_commit: efbf872df53ee607696eff1aa2b5c1871cb24568 plus owned helper/test diff
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 108, passed: 108, failures: 0, errors: 0, skipped: 0, pytest_seconds: 4.58, elapsed_seconds: 4.90}
+scope: geometry47 plus61existing categorical/dataset controls; both r453 production failures and independent complete-direct-schema descendant control pass
+fix: exact nondefault geom RGBA alpha overrides material; exact internal default defers to assigned material or geom alpha when no material
+unchanged: geometry schema/policy, numeric contact guard, quotas, writer, detector/SAM, mask0.80/mapping0.98
+verification: AST/Ruff0.15.20/diff checks passed; full tested source hashes/diff unchanged after run; parent read source diff/exit/test log and full appended report
+evidence: durable run-evidence/stage-e-generator-alpha-precedence-green-r454; coordination/generator-r443-r1/fix-2-report.md
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+scratch: durable scratch/stage-e-generator-alpha-precedence-green-r454/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  reviewer: /root/generator_review, gpt-6-astra medium
+  fix_base: efbf872df53ee607696eff1aa2b5c1871cb24568
+  scope: one Important RGBA precedence finding and added descendant coverage; new breakage in immutable fix diff only, no duplicate test runs
+  after: accepted-source fresh seven-package build then ordinary and explicit benchmark, before actual generator acceptance/new dataset protocol
+retention: all evidence retained; archived none; r452/r453/r454 scratch deletion candidates only, nothing deleted
+boundaries: r451 held; sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/model/inference
 ```

@@ -47,6 +47,7 @@ _TASK_GEOMETRY_SCHEMA = {
     "neutral_block": (("neutral_block_visual",), ("neutral_block_collision",)),
     "base_pedestal": (("base_pedestal_visual",), ("base_pedestal_collision",)),
 }
+_DEFAULT_GEOM_RGBA = np.array((0.5, 0.5, 0.5, 1.0))
 
 
 class ScenePenetrationError(RuntimeError):
@@ -117,10 +118,13 @@ def _is_descendant_body(model: Any, candidate: int, ancestor: int) -> bool:
 
 
 def _effective_geom_alpha(model: Any, identifier: int) -> float:
+    geom_rgba = model.geom_rgba[identifier]
+    if np.any(geom_rgba != _DEFAULT_GEOM_RGBA):
+        return float(geom_rgba[3])
     material = int(model.geom_matid[identifier])
     if material >= 0:
         return float(model.mat_rgba[material, 3])
-    return float(model.geom_rgba[identifier, 3])
+    return float(geom_rgba[3])
 
 
 def _supported_visual_geoms(
