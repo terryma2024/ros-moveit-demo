@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-228
+latest_checkpoint: CP-230
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
 active_experiment: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: bounded IPC-only short bind alias RED/GREEN preflight; preserve exact long NVMe tempfile and two-worker recipe, then new r402 smoke
+next_action: commit/push r403 smoke readback, launch r404 formal8epoch from original base in owned tmux; no new model qualification yet
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15433,4 +15433,70 @@ ROS_DOMAIN_ID: not_applicable_offline
 GZ_PARTITION: not_applicable_offline
 retention: invalid r389/r397, valid/invalid IPC probes, stopped containers, scratch, scripts and all earlier evidence retained; no deletion or archival
 boundaries: Microduck paused; SAM absent; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-229 — r402 six-scenario smoke and fresh CUDA checkpoint reload passed
+
+```yaml
+checkpoint: CP-229
+status: VALID_SMOKE_INDEPENDENT_READBACK_NEXT
+run_id: stage-d-r5-training-smoke-r402
+source_commit: 2d37241f8e3298ce5c4e48d39041b95ad752267e
+gitee_sha_readback: 2d37241f8e3298ce5c4e48d39041b95ad752267e
+implementation_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+result: {exit_code: 0, elapsed_seconds: 21.56, train_samples: 6, val_samples: 6, completed_epochs: 1, batches: 6}
+output: durable training/grounding-dino-cup-r5-r1/smoke-r3
+checkpoint_manifest_sha256: 6e79301597e55bb12352ee3e2a608aceef32dce947f4f9f54dbf0fd4496347ab
+fresh_reload_sha256: 0fdfdafa810efffb14999ea0fc38b028c072c8727f71220be36bd0cf6ae86b1e
+fresh_reload: actual new Python process, CUDA0,900queries,4inputtokens, finite active logits and boxes, no CPU fallback
+smoke_metrics_only: {tp: 4, fp: 1, fn: 2, f1: 0.7272727272727272, box_threshold: 0.5, text_threshold: 0.5, mean_loss: 57816.048828125, peak_gpu_memory_bytes: 8582084096}
+interpretation: smoke verifies execution/checkpoint plumbing, not model qualification or threshold selection for production; all thresholds remain original fixed grid
+warnings: existing deterministic_warn_only CUDA grid-sampler warning and tokenizer fork warning retained; no strict bitwise determinism claim
+python: /opt/venv/bin/python
+overlay: pinned r396 image; exact installed training module SHA preflight passed
+scratch: durable scratch/stage-d-r5-training-smoke-r402/tmp with actual tempfile exact; socket-only bind alias maps same scratch/ipc, actual two-worker handoff passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment: stage-d-r5-training-smoke-readback-r403; independent file hashes, checkpoint identity, resolved numeric recipe and fresh reload consistency, no new inference
+next_after_readback: only then formal r404 from original base, not smoke checkpoint, unchanged8epoch contract in owned tmux
+retention: all smoke outputs and stopped container retained; no deletion/archival; scratch deletion candidate only
+boundaries: Microduck paused; SAM absent; no sealed/test/COCO100/PickPlace/Mac access; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-230 — Independent r403 smoke readback authorizes preregistered formal training
+
+```yaml
+checkpoint: CP-230
+status: VALID_SMOKE_READBACK_FORMAL_PLANNED
+run_id: stage-d-r5-training-smoke-readback-r403
+source_commit: 2d37241f8e3298ce5c4e48d39041b95ad752267e
+result: {exit_code: 0, elapsed_seconds: 2.66, output_files_verified: 17, new_model_forwards: 0}
+output_inventory_sha256: c19068cd6dec633c9283a8253133c8d3ed5ad2fe666d7ea60733a21e75a00d7f
+checkpoint_manifest_sha256: 6e79301597e55bb12352ee3e2a608aceef32dce947f4f9f54dbf0fd4496347ab
+fresh_reload_sha256: 0fdfdafa810efffb14999ea0fc38b028c072c8727f71220be36bd0cf6ae86b1e
+gates: complete checkpoint identity and all file bytes, numeric recipe roundtrip, exact six/six smoke counts, one100-point grid, frozen/result/epoch metrics equality, actual fresh reload CUDA proof, no forbidden mounts/access, container exited0
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+scratch: durable scratch/stage-d-r5-training-smoke-readback-r403/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+  status: PLANNED
+  prior_experiment: r402/r403 plus frozen CP-219 recipe
+  run_id: stage-d-r5-training-formal-r404
+  output: durable training/grounding-dino-cup-r5-r1/formal-r1
+  single_variable_against_original_r3_training: corrected r5 train/val truth boxes and provenance; original RGB, seeds, class/prompt, architecture and optimization recipe retained
+  source_implementation: 47e9682168937e4ff2a0a773c428f4044b6623fb in pinned r396 image
+  base: original11-file DINO base, never r3/ r5 smoke checkpoint
+  contract: f9eeb79e9a3255b1bce8b7b6e13b8245f6838501ca60bcc8b2ae8f28c342ddc4; train1200/val300;8epochs,batch1,accum4,lr1e-5,seed20260904,two workers; original grid and ranking
+  infrastructure: same validated r402 runner/bootstrap, new exact NVMe scratch and IPC-only bind alias, no network, exact allowlisted mounts; SAM not mounted
+  process_owner: create unique tmux session so101-exp079-r5-formal-r404 with direct local shell; retain stopped container so101-exp079-r5-formal-r404
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_dino_training_r3.sh formal NEXT_SYNCED_HEAD
+  success: all8epochs finite, complete checkpoint manifests/state, synthetic-val-only frozen selection, fresh CUDA reload and independent final readback
+  failure: nonfinite loss or exception; preserve and stop only owned container if stalled
+  invalid: provenance/CPU fallback/manifest/collision/forbidden mount failure; no automatic directory reuse
+next_after_formal: append independent full checkpoint readback protocol; then explicit benchmark and corrected-DINO train/val pipeline comparison with frozen SAM candidates, all/primary cohorts; no sealed access automatically authorized
+retention: all previous valid/invalid runs retained; no archival/deletion; scratch deletion candidate only
+boundaries: Microduck paused; generic cup and prompt cup.; mask IoU0.80 unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible
 ```
