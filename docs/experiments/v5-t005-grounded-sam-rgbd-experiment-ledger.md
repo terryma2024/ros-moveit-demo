@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-256
+latest_checkpoint: CP-257
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
+source_parent: 38b2486f98221148016318eb9c4a4c21a01d0137
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r427 independently reproduced all epoch4 results; r428 fixed-three-frame retained-mask visualization, no inference or gate changes
+next_action: r428 residual plots read back; r429 fixed-three-frame retained-qpos geometry audit before attributing residuals to SAM; no inference or gate changes
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16392,4 +16392,52 @@ next_run:
   readback: verify manifest and inspect all three generated panels; record observed versus inferred boundaries before recommending correction
 retention: all previous evidence retained; no archival/deletion; scratch deletion candidates only
 boundaries: no more SAM training or threshold changes during this audit; sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-257 — Retained residual plots; physical intersection hypothesis frozen
+
+```yaml
+checkpoint: CP-257
+status: VALID_RETAINED_VISUAL_AUDIT_GEOMETRY_AUDIT_PLANNED
+prior_checkpoint: CP-256
+run_id: stage-e-r5-epoch4-residual-visual-r428
+source_commit: 38b2486f98221148016318eb9c4a4c21a01d0137
+result: {exit_code: 0, elapsed_seconds: 3.48, frames: 3, new_model_forwards: 0, mujoco_renders: 0}
+output_root: durable visualizations/r5-epoch4-residuals-r1
+manifest_sha256: 915b86b7da29fe8f3dc6c07f14a608793e2ace535e3b9163840b853fb9ed65e5
+visual_readback: all three panels inspected; retained RGB, exact categorical visible RLE, real production mask and FN/FP/overlap displayed without hull conversion
+residual_pixels:
+  - {index: 104, false_negative: 688, false_positive: 8, intersection: 1292}
+  - {index: 236, false_negative: 507, false_positive: 11, intersection: 1733}
+  - {index: 242, false_negative: 425, false_positive: 58, intersection: 1637}
+observed: missing back-cup pixels are concentrated near the foreground cup opening
+hypothesis: randomized upright cups may physically intersect; the apparent opening patch may reflect invalid geometry rather than only segmentation capability
+competing_hypothesis: physically disjoint cups with legitimate projected occlusion and model omission
+source_readback: renderer assigns randomized poses then mj_forward without physics settling; cup visual walls are explicit boxes and bottoms cylinders; cup B collision is a solid cylinder, so collision-proxy intersection alone is insufficient to prove visible-wall intersection
+metrics: unchanged allF1 0.99 and primaryF1 0.988; all three sub0.80 failures retained, no additional cohort exclusions
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/stage-e-r5-epoch4-residual-visual-r428/tmp; exact tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  experiment_id: EXP-079-STAGE-E-R5-RETAINED-CUP-GEOMETRY-R1
+  status: PLANNED
+  run_id: stage-e-r5-retained-cup-geometry-r429
+  prior_experiment: stage-e-r5-epoch4-residual-visual-r428
+  lifecycle: REUSE_STACK; offline MjModel/MjData only, no ROS/Gazebo stack or rendering
+  single_variable: NONE; measure retained actual state, no regenerated seeds or moved objects
+  scope: exactly val seeds420000104/420000236/420000242; no test or other datasets
+  inputs: immutable categorical-train-val-capture-r2 manifest5efa83edf970b102d6ef09b320cd5cbef3c3a41ecad99054c4348f175e7f9500; NPZ actual visible_qpos/camera_positions/material_rgba bound to r5 truth and original RGB SHA
+  method: verify manifest-selected records and arrays; load exact MJCF and record transitive source asset hashes; restore qpos and mj_forward only; record cup positions, visual primitive transforms/sizes, explicit visual-pair signed distances, and separate collision-proxy contacts
+  independent_check: upright box-wall separating-axis overlap and analytic bottom-cylinder overlap; never infer physical wall intersection solely from outer radius or proxy contact
+  success_criteria: all provenance and state bindings pass; actual visual primitives resolve intersection versus disjoint geometry with numeric witnesses, including non-colliding visual geoms
+  invalid_criteria: input mismatch, wrong model/config, missing actual state, unsupported primitive or numerical ambiguity; fail closed without relabeling
+  evidence: unique durable run-evidence and NVMe scratch, exact Python tempfile preflight, source/overlay/command/log/exit/time, immutable report and readback
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-retained-cup-geometry-r429 audit_r5_cup_geometry_r429.py NEXT_SYNCED_HEAD
+next_after_audit: checkpoint findings before any code, data or model intervention; no automatic retraining or geometry-based metric exclusion
+working_tree: ledger-only owned change; original untracked build/install/log preserved
+owned_processes: none; original codex and so101-exp079-linux-r3 tmux sessions preserved
+retention: all evidence retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged; no training
 ```
