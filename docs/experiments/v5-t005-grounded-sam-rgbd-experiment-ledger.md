@@ -12235,3 +12235,56 @@ retention:
   deletion_candidates: [r295, r300, and r301 scratch/source candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-147, then use a new read-only full-history audit root to identify the exact official commit where the two feat_sizes fields changed and freeze the immediately compatible predecessor before dependency installation
 ```
+
+## Checkpoint CP-148 — exact bundled-config SAM 2.1 source commit identified
+
+```yaml
+checkpoint: CP-148
+status: VALID_COMPATIBLE_SOURCE_IDENTIFIED
+recorded_at: 2026-09-05T08:41:23+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-147
+source_commit: 77db3a906ddb4bc661860a3f8ebba89175b08937
+run_id: stage-e-native-sam-history-audit-r302
+result:
+  exit_code: 0
+  elapsed_ms: 1915
+  config_history_commits: 3
+  sam_2_1_introduction_commit: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  bundled_config_compatible_commit: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  compatible_config_sha256: 43e114f609a1af7efede061f5c186119d498acd31f118f300c07acf57d4a5eca
+  bundled_config_sha256: 43e114f609a1af7efede061f5c186119d498acd31f118f300c07acf57d4a5eca
+  configs_byte_equal: true
+  feat_size_change_commit: 9851575bf3ee5d310f10c1edf9625515d003a280
+  change: both memory-attention RoPE feat_sizes changed from [32, 32] to [64, 64] on 2024-12-11
+decision:
+  source_pin: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  rationale: this is the official SAM 2.1 introduction commit and its committed Hiera Tiny config is byte-identical to the bundled checkpoint config
+  current_main_rejected_for_ab: true
+  next_source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-aa9b872-r3
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-history-audit-r302
+  preflight_sha256: bf2510235e342f958bdd8c2902b42afa1658f7b4eedefea9ef7fc8ccd7461db3
+  history_audit_sha256: d835d3740812b8d24363f58dd11beea4953e3b19cddaf6f8e06722ec3285be13
+  config_history_sha256: 6665aacde322ce8e0715292999e6e1e6404a11fbd8bb26de79b70126c70069cf
+  config_patch_sha256: 77ccb7238e7fb7daf61fb36f8a4a9acaf69c86213dc178deac964d2c8a99145d
+  feat_size_history_sha256: ffe28c3d0616a3544dff6a20495894aed1cadfd9cba4b0432c4e645176f8c309
+  compatible_config_sha_file_sha256: 43e114f609a1af7efede061f5c186119d498acd31f118f300c07acf57d4a5eca
+  compatible_config_audit_sha256: d339c363cd00360a66483606a6563edda6ad148932165bfc1a03c20233a57b08
+  exit_sha256: 34dfb84725eed48ec38330b1c28691d4583fda676b0feff0c895b7f24e187679
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  history_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-history-r1
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-history-audit-r302/tmp
+  tempfile_preflight: exact resolved match
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r302 history source/evidence/scratch, all CP-147 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r302 history source/evidence/scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-148, acquire and inventory the exact aa9b872 source in a new immutable root, then construct an isolated dependency target without mutating the locked Grounded-SAM environment
+```
