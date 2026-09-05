@@ -5,6 +5,41 @@ from __future__ import annotations
 from typing import Any
 
 
+def jitter_training_box(
+    box: tuple[float, float, float, float],
+    *,
+    width: int,
+    height: int,
+    epoch: int,
+    sample_seed: int,
+    instance_index: int,
+) -> tuple[float, float, float, float]:
+    """Apply identity-seeded five-percent side jitter on the original image grid."""
+    import numpy as np
+
+    coordinates = np.asarray(box, dtype=np.float64)
+    if (
+        type(width) is not int
+        or type(height) is not int
+        or min(width, height) < 2
+        or any(type(value) is not int or value < 0 for value in (epoch, sample_seed, instance_index))
+        or coordinates.shape != (4,)
+        or not np.isfinite(coordinates).all()
+        or not (0 <= coordinates[0] < coordinates[2] <= width - 1)
+        or not (0 <= coordinates[1] < coordinates[3] <= height - 1)
+    ):
+        raise ValueError("TRAINING_BOX_INVALID")
+    generator = np.random.default_rng(
+        np.random.SeedSequence([430000079, epoch, sample_seed, instance_index])
+    )
+    box_width = coordinates[2] - coordinates[0]
+    box_height = coordinates[3] - coordinates[1]
+    offsets = generator.uniform(-0.05, 0.05, size=4)
+    result = coordinates + offsets * (box_width, box_height, box_width, box_height)
+    result = np.clip(result, (0, 0, 0, 0), (width - 1, height - 1, width - 1, height - 1))
+    return tuple(float(value) for value in result)
+
+
 def configure_decoder_training(model: Any) -> tuple[Any, ...]:
     """Freeze every parameter outside the uniquely owned mask decoder."""
     named = tuple(model.named_parameters(remove_duplicate=False))
