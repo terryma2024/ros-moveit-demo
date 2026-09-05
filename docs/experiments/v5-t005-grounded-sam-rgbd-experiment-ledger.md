@@ -13155,3 +13155,70 @@ retention:
   deletion_candidates: [r321 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-165 with remote SHA readback, then retry under unique r323 with only the preregistered corrected truth source root
 ```
+
+## Checkpoint CP-166 — Transformers single-mask diagnostic completed and H4 is not supported
+
+```yaml
+checkpoint: CP-166
+status: VALID_DIAGNOSTIC_COMPLETE_PENDING_INDEPENDENT_READBACK
+recorded_at: 2026-09-05T09:23:38+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-165
+source_commit: add39c7af5e40ae4d10a9e8b981d43c128e04be4
+run_id: stage-e-transformers-single-mask-r323
+result: {exit_code: 0, elapsed_ms: 8187, samples: 10, prompts: 20, dino_inference_rerun: false}
+aggregate:
+  mask_iou_gate: 0.80
+  single_dino_box_pass: 3/10
+  single_truth_box_pass: 2/10
+  prior_multimask_selected_dino_box_pass: 4/10
+  prior_multimask_oracle_dino_box_pass: 4/10
+control_effects:
+  retained_dino_passes: [57, 68, 127]
+  lost_dino_pass: {sample: 275, multimask_selected_iou: 0.948873, single_iou: 0.277941}
+failure_effects:
+  crossed_0_80: []
+  closest: {sample: 289, single_dino_iou: 0.773297, single_truth_iou: 0.776495, gate: 0.80}
+  unchanged_catastrophic_leakage_examples:
+    - {sample: 53, single_dino_iou: 0.000416}
+    - {sample: 135, single_dino_iou: 0.000265}
+    - {sample: 152, single_dino_iou: 0.000445}
+    - {sample: 229, single_dino_iou: 0.000264}
+causal_conclusion:
+  - H4 is not supported because single-mask mode lowers the fixed-sample pass count, loses a passing control, and rescues none of the six frozen failures
+  - production and benchmark adapters must not be changed to multimask_output false on this evidence
+  - a prompt-mode switch is not a substitute for correcting the remaining SAM capability/leakage failure class
+immutable_output:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/transformers-sam-single-mask-r1
+  manifest_sha256: dbd6a1079b5fc06c900e752249dc85501e0391103b8c860499aab3ddb187d03b
+  tree_inventory_sha256: 4cb4c5ac5974ae1e15603eef146a858831b6fff3733db3a7df06864674763de3
+  file_count: 82
+  directory_count: 5
+  size_bytes: 6094658
+  files_mode: '0444'
+  directories_mode: '0555'
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_origin: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-transformers-single-mask-r323/tmp
+  tempfile_preflight: exact resolved match
+  runtime: {device: cuda, dtype: float32, offline: true, cpu_fallback: false}
+  warning: the already-audited sam2_video versus sam2 configuration warning remained; CP-155 showed full 471/471 state binding and no missing, unexpected, or mismatched keys
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-transformers-single-mask-r323
+  preflight_sha256: 786326374319d6ee68fd7dfd8d097fbcd4935566edda49a45940d00674c5f4b3
+  inputs_sha256: 2794ff6d5f722380ff23388042bb9d10dd173bd790976d1399e95ed33c1d87ce
+  run_log_sha256: 71e18d70e07cc7cda3c3cc07d5092657c27d0b5aa35fdffcb8fe6a57deadc077
+  stderr_sha256: f6cfe73559c8f078161ed03ac34b96c7488023b07abccc9ce8b2730ec836dea9
+  exit_sha256: e51c145fc8b72a25591d9f60a30e09c6e94762909d631014dfab89fef7cf5383
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run; r30 and r222 remain preserved
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r323 immutable diagnostic, r321 invalid evidence/scratch, all CP-165 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r317-r323 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-166, independently verify all 82 artifacts and aggregates under unique r324, then inspect the frozen overlays before selecting the smallest next train/val-only SAM intervention
+```
