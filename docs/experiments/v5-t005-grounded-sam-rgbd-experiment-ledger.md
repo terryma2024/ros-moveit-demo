@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-383 — r525 review42 passes but additional fixture parent missing; r526 static preparation planned
+
+```yaml
+checkpoint: CP-383
+status: INVALID_R525_ADDITIONAL_FIXTURE_SETUP_REVIEW_GREEN_R526_PREPARATION_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r525
+executor: /root/generator_build, gpt-5.6-sol high
+result: {authoritative_green: false, launcher_invocations: 1, combined_main_invocations: 1, exits_launcher_harness: [1,1], elapsed_seconds: 60.337385293, retained: 167_accepted, review: {total: 42, controls: 36, mutation_kills: 6, accepted: true}, additional: 0/39, aggregate248: unavailable}
+failure: additional_39 received absent `work/additional`, then attempted `terminal_root.mkdir()` without first creating its parent and raised FileNotFoundError before its first case; candidate driver/shell and revised exact-membership oracle are not implicated
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r525 contains29 inventoried members plus manifest/readback; manifest SHA256fd8618d44d46a13ce201f150de18d0b9eb84c6846024de65e7ee1b679a607379; readback SHA2567536319797f0769ed846fbb4e8e7a5eeb78fa768d09ffaca1a50a8a0c1132d99; independent29/29 hash/membership validation passed; package before/after SHA256c0a2e7b5d3d406dbfa5be22a93ca4b90cf0cabaae550f73b87453875d7f3b0b0 identical
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r525-report.md SHA2564762cc6fadfd303c1c1799702d033dac403e7b93ade05405b4d0a76c726bd62c,122 lines,8843 bytes; frozen and never amended
+parent_readback: complete report, traceback/raw exit/status/result absence, manifest/readback29/29, package/tempfile/source/root/official boundaries read
+next_experiment:
+  status: GO_R526_PRIVATE_HARNESS_FIXTURE_ONLY_STATIC_PREPARATION_NO_BEHAVIOR
+  executor: /root/generator_build, gpt-5.6-sol high
+  allowed_change: copy immutable r525 harness to r526 and create its passed additional_39 root exactly once with mode0700 at function entry before child fixtures; fail on collision; no other case/oracle/count/candidate change
+  launcher: copy immutable r525 launcher to r526 ID/path/current HEAD/new harness path/hash while retaining248 assertions, shared HARNESS_ARGS/parser-only and12-heredoc gate
+  static_required: exact one-line semantic harness diff plus mechanical identities; AST/Ruff/bash/heredoc/parser/source-transform/six-mutant/count gates; r526 three roots and four official roots absent; no allocation or combined behavior
+  stop_after: parent reads frozen hashes/diffs/static results and checkpoints one fresh r526 invocation separately
+restrictions: no driver/shell/production source edit, project/MuJoCo/OpenGL import, GPU/renderer, official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r525 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-382 — r525 post-persist mutation oracle statically approved; one private GREEN authorized
 
 ```yaml
