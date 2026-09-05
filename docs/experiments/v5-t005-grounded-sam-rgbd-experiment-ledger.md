@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-205
+latest_checkpoint: CP-207
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: bde55e42294b5ed04fd04c039dbf2d91ede2de77
-active_experiment: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
+source_parent: f9144864a5b905644f31e6a964c7413d6ab36378
+active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
-open: categorical segmentation renderer fix, train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: ordinary-push renderer isolation fix and gate receipts, then actual GPU readback r372 before derived train/val truth reconstruction
+open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
+next_action: capture categorical truth on all original train/val accepted scene states; audit acceptance before deriving immutable r5 labels
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14641,4 +14641,81 @@ live_readback_contract: CP-204 fixed historical scene states, actual GPU rendere
 next_action: commit owned code/test/ledger, ordinary-push and read back exact Gitee SHA, then execute unique r372; no dataset rebuilding before its readback
 boundaries: sealed test/COCO100/PickPlace/Mac and Microduck unchanged; no model inference/training, threshold tuning or evidence deletion
 retention: r368-r371 retained; scratch deletion candidates only
+```
+
+## Checkpoint CP-206 — Actual fixed renderer passes frozen-state GPU readback
+
+```yaml
+checkpoint: CP-206
+status: VALID_GPU_RENDERER_READBACK_VISUAL_READBACK_NEXT
+source_commit: f9144864a5b905644f31e6a964c7413d6ab36378
+gitee_sha_readback: f9144864a5b905644f31e6a964c7413d6ab36378
+run_id: stage-e-categorical-render-readback-r372
+result: {exit_code: 0, elapsed_seconds: 1.64, val_scenes: 6, model_forwards: 0}
+actual_runtime: {GL_renderer: NVIDIA GeForce RTX 5080/PCIe/SSE2, RGB_offSamples: 4, categorical_offSamples: 0, model_setting_restored: 4}
+independent_gate: sample140 complete fixed geom-ID array equals r367 independent zero-sample A/B array exactly
+state_identity: legacy accepted attempts reproduce every retained r4 mask bitwise; fixed renderer receives those exact visible qpos/camera/material states
+RGB_readback: five scenes byte-identical between legacy and fixed production rendering; sample242 differs in one pixel by one channel unit, retained as bounded GPU raster variance
+mask_examples_half_open_boxes:
+  sample27: {old: [85, 0, 213, 287], fixed: [129, 189, 177, 272]}
+  sample140_cup_a: {old: [131, 175, 290, 280], fixed: [168, 175, 231, 255]}
+  sample140_cup_b: {old: [112, 173, 269, 280], fixed: [112, 173, 175, 252]}
+  sample152_cup_a: {old: [88, 0, 291, 290], fixed: [153, 203, 221, 290]}
+paired_reference: sample95 real visible/reference segmentation both use zero-sample route; measured visible fraction 0.358000858000858
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  package_prefix_and_source: verified r370 and owned checkout before rendering
+  scratch: durable scratch/stage-e-categorical-render-readback-r372/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-categorical-render-visual-readback-r373
+  scope: render exact saved legacy/fixed categorical masks and half-open boxes for all six r372 frames; no new MuJoCo or model inference
+  output: durable visualizations/categorical-renderer-fix-readback-r1
+subsequent: preregister full train/val frozen-state categorical capture, audit original scene acceptance under repaired truth, then derive a new immutable label version; do not silently change accepted attempts or drop samples
+boundaries: no new train/val dataset written yet; all old evidence and models preserved; sealed test/COCO100/PickPlace/Mac untouched; Microduck paused
+retention: r372 state/RGB/geom-ID arrays, report, manifest and logs retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-207 — Visual correction confirmed; full train/val capture preregistered
+
+```yaml
+checkpoint: CP-207
+status: VALID_VISUAL_READBACK_FULL_CAPTURE_PLANNED
+source_commit: f9144864a5b905644f31e6a964c7413d6ab36378
+run_id: stage-e-categorical-render-visual-readback-r373
+result: {exit_code: 0, elapsed_seconds: 0.69, saved_array_scenes: 6, model_forwards: 0, MuJoCo_renders: 0}
+manifest_sha256: d325d33d7155438ebbc31aaaa40ecd79a4a9b5051eee125a7334b2b69e9c23ff
+visual_observed: sample140 and sample152 individually opened; legacy boxes extend onto bottle or robot; zero-sample boxes enclose individual cup bodies without those distant extensions
+evidence: durable visualizations/categorical-renderer-fix-readback-r1 and run-evidence/stage-e-categorical-render-visual-readback-r373
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
+  status: PLANNED
+  prior_experiment: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
+  run_id: stage-e-categorical-train-val-capture-r374
+  lifecycle: FULL_RESTART offline renderer process; not a robot stability run
+  hypothesis: zero-sample categorical truth can be recovered on the original accepted train/val states without changing images, split identities or geometry
+  single_variable: categorical offscreen samples 4 to 0; RGB remains 4, original accepted scene state frozen
+  output: durable truth-remediation/categorical-train-val-capture-r1
+  members: train1200 seeds410000000..410001199 and val300 seeds420000000..420000299 only; each split retains six equal scenario quotas
+  primary_cohort: exclude only small_far_cup for separate offline reporting; retain all-scenario records
+  geometry: unchanged pinned r3 config and MJCF; no camera/object range, acceptance threshold or deterministic attempt changes
+  identity: reproduce legacy accepted state and require every legacy target mask to match retained r4 RLE bitwise; retain visible qpos/camera/material state and corrected visible/reference geom-ID arrays
+  guards: locked source and inventory hashes, GPU RTX5080 EGL, RGB actual4/categorical actual0, unique output and scratch, no model inference or sealed path traversal
+  RGB: retain original RGB binding; compare paired legacy/fixed RGB, fail on channel delta greater than1; do not replace historical RGB with rerendered RGB
+  acceptance_audit: record existing small/far pixel64 and bboxarea1024 criteria and partial visible fraction0.35..0.80 on corrected masks; report any changed membership without resampling, dropping samples or changing gates
+  retained_six: reuse verified r372 arrays for its six val states where all required raw fields exist; do not render them merely to repeat evidence
+  success: all1500 identities and original truth/image hashes verified; corrected arrays and acceptance outcomes saved with immutable manifest
+  invalid: provenance, legacy RLE, output collision, backend or RGB bound mismatch; preserve partial outputs and stop, never reuse failed root
+  subsequent: independent readback, then preregister immutable r5 lossless labels derived from retained categorical arrays; no training or tuning before corrected-truth reevaluation
+retention: r372/r373 retained; no archived or deleted runs; scratch deletion candidates only
+owned_processes: NONE at resumption
+boundaries: historical CP-113/CP-161/CP-164 and all model metrics unchanged; test/COCO100/PickPlace/Mac inaccessible; Microduck paused; prompt cup.; mask IoU0.80 unchanged
 ```
