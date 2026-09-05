@@ -868,6 +868,25 @@ class MuJoCoDatasetRenderer:
             height=config.image_height,
             width=config.image_width,
         )
+        # Color IDs are categorical: resolving multisamples can invent another
+        # valid geom ID at an edge. Keep RGB antialiasing in its original context.
+        self._segmentation_renderer = None
+        rgb_samples = self._model.vis.quality.offsamples
+        try:
+            try:
+                self._model.vis.quality.offsamples = 0
+                self._segmentation_renderer = mujoco.Renderer(
+                    self._model,
+                    height=config.image_height,
+                    width=config.image_width,
+                )
+                if self._segmentation_renderer._mjr_context.offSamples != 0:
+                    raise RuntimeError("CATEGORICAL_MULTISAMPLING_FORBIDDEN")
+            finally:
+                self._model.vis.quality.offsamples = rgb_samples
+        except Exception:
+            self.close()
+            raise
         self._base_camera_position = np.array(self._model.cam_pos[self._camera_id()], copy=True)
         camera_rotation = np.asarray(self._model.cam_mat0[self._camera_id()]).reshape(3, 3)
         self._camera_local_positive_z = np.array(camera_rotation[:, 2], copy=True)
@@ -963,10 +982,13 @@ class MuJoCoDatasetRenderer:
         return result
 
     def _segmentation(self) -> np.ndarray:
-        self._renderer.enable_segmentation_rendering()
-        self._renderer.update_scene(self._data, camera=self._config.camera_name)
-        segmentation = np.array(self._renderer.render(), copy=True)
-        self._renderer.disable_segmentation_rendering()
+        renderer = self._segmentation_renderer
+        renderer.enable_segmentation_rendering()
+        try:
+            renderer.update_scene(self._data, camera=self._config.camera_name)
+            segmentation = np.array(renderer.render(), copy=True)
+        finally:
+            renderer.disable_segmentation_rendering()
         return self._geom_ids(segmentation)
 
     def _render_attempt(self, random: np.random.Generator, scenario: DatasetScenario) -> RawRender:
@@ -1013,4 +1035,8 @@ class MuJoCoDatasetRenderer:
         )
 
     def close(self) -> None:
-        self._renderer.close()
+        try:
+            if self._segmentation_renderer is not None:
+                self._segmentation_renderer.close()
+        finally:
+            self._renderer.close()
