@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-200
+latest_checkpoint: CP-202
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: bde55e42294b5ed04fd04c039dbf2d91ede2de77
-active_experiment: EXP-079-STAGE-E-SELECTED-DECODER-RESIDUAL-AUDIT-R1
-confirmed: five-epoch corrected-val replay and independent readback select epoch 4, primary F1 0.8640350877192983; ordinary and required benchmark gates GREEN
-open: residual double-cup proposal/instance-match failures, production eligibility and final model qualification remain incomplete
-next_action: ordinary-push comparison/readback checkpoint with SHA readback, then retained-val-only residual audit and fresh diagnostic overlays
+active_experiment: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
+confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
+open: categorical segmentation renderer fix, train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
+next_action: TDD a separate zero-sample categorical segmentation renderer while preserving RGB multisampling, then fresh overlay and gates
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14452,4 +14452,107 @@ next_command: read existing orchestrator-failure-overlays-r3.py completely and a
 boundaries: synthetic sealed test, COCO100, PickPlace and Mac remain inaccessible; Microduck paused; IoU 0.80 and historical all-scenario metrics unchanged
 retention: r364 immutable full capture and r365 readback retained, no archived/deleted runs; scratch deletion candidates only
 owned_processes: NONE after r365 terminal readback
+```
+
+## Checkpoint CP-201 — Residual audit exposes inflated raw-mask boxes; renderer A/B planned
+
+```yaml
+checkpoint: CP-201
+status: VALID_RESIDUAL_AUDIT_RAW_RASTER_SEMANTICS_UNRESOLVED
+source_commit: 6aa293a136673e8eeda280d4f849d60754b10da5
+gitee_sha_readback: 6aa293a136673e8eeda280d4f849d60754b10da5
+run_id: stage-e-sam-selected-residual-audit-r366
+result: {exit_code: 0, elapsed_seconds: 13.34, val_images: 300, model_forwards: 0, preprocessing_frames_unchanged: 246}
+report_sha256: 62aa82e0e66b4dd295906f59f7d904d98120fa6e2b19fdeb9ef63fbff60c5f3e
+manifest_sha256: b7aeca9f15b815ec1a6e540ae4c1721924d7aca0913df161a7d5070b79ca2bfc
+observed:
+  - all 246 prompted readonly RGB inputs remain byte-identical after the actual processor; no model forward was run
+  - maximum one-to-one double-cup bbox coverage is 100/100 among retained low-floor records, 79/100 after fixed box/text gates, 58/100 after box duplicate filtering, 58/100 after SAM filtering
+  - 42 of 50 double-cup frames have one production candidate; this is unresolved unique-selection risk, not final qualification
+  - joint box-plus-mask assignment changes only one diagnostic TP, from frozen 236 to 237; CP-199/200 metric definitions and scores remain unchanged
+  - sample140 selected mask IoU is 0.9866896721715553 with truth1 but 0.0012113870381586917 with truth0; box-greedy matching picks truth0 because its bbox IoU is marginally higher
+visual_readback:
+  inspected_indices: [27, 95, 104, 140, 152, 242]
+  root: registered durable visualizations/sam-decoder-epoch4-residual-audit-r1
+  observations: visible masks follow cup surfaces, but their bounding boxes extend to bottle edges or robot pixels far from the cup; sample152 retains a bbox extending to the image top even though convex-hull fill is no longer used
+  implication: tiny distant raw object-ID pixels can still corrupt exact min/max boxes and therefore training prompts, DINO boxes, duplicate suppression and instance association
+correction_scope:
+  - CP-116 correctly proved lossless RLE equality with the raw renderer and explicitly retained tiny components
+  - equality with the renderer does not establish that each raster object ID is semantically correct at anti-aliased edges
+  - do not rewrite CP-113/116 or subsequent history; current r4 is lossless relative to raw IDs, but raw raster semantic validity now requires a discriminating test
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-SEGMENTATION-RASTER-ID-AB-R1
+  status: PLANNED
+  run_id: stage-e-segmentation-raster-id-ab-r367
+  sample: val seed420000140, two_cups only
+  single_variable: offscreen multisampling for categorical segmentation, default renderer context versus a separately created zero-sample context over identical model/data/camera
+  hypotheses: multisample color-ID blending creates stray target geom IDs; alternative is real geometry or geom/body mapping corruption
+  required_evidence: default segmentation matches retained visible RLE, exact model/camera state, default and zero-sample geom-ID arrays, connected components and bbox extents, per-pixel geometric raycast for differing target pixels, actual renderer offSamples values
+  constraints: no morphological cleaning or bbox heuristics; no production/source fix before a RED regression; no new dataset generation beyond this bounded diagnostic render
+  output: registered durable truth-remediation/segmentation-raster-id-ab-r1
+decision: hold further training, NMS tuning and model promotion while auditing raw truth semantics
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: r358 seven-package overlay
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+boundaries: val only, no sealed test/COCO100/PickPlace/Mac; Microduck paused; IoU 0.80 unchanged
+retention: r366 and all prior model/data evidence retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-202 — Categorical ID multisampling corruption confirmed in controlled A/B
+
+```yaml
+checkpoint: CP-202
+status: VALID_ROOT_CAUSE_AB_CODE_FIX_PLANNED
+source_commit: 6aa293a136673e8eeda280d4f849d60754b10da5
+experiment_id: EXP-079-STAGE-E-SEGMENTATION-RASTER-ID-AB-R1
+run_id: stage-e-segmentation-raster-id-ab-r367
+result: {exit_code: 0, elapsed_seconds: 1.11, val_seed: 420000140, model_inference: false}
+report_sha256: 5ce15c20a11423a37a4f763a0be279c5d1c9c551cff2a28c38e01df9277b3875
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: r358 seven-package overlay
+  mujoco_version: 3.12.0
+  GL_renderer: NVIDIA GeForce RTX 5080/PCIe/SSE2
+  GL_backend: EGL
+  config_sha256: c2af80e37a33e76c179c410cf428e7d7a56a46cd89024f75a5134a4e1e57e9c5
+  mjcf_sha256: d40494c9f88294840d8e8a90859c6a28dc361149b5878b785b787ea96c61e083
+  scratch: registered durable scratch/stage-e-segmentation-raster-id-ab-r367/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline_renderer
+  GZ_PARTITION: not_applicable_offline_renderer
+controlled_ab:
+  identical: model/data/qpos/camera and material state; no source MJCF, RGB file or dataset member edited
+  variable: actual offscreen context offSamples, default 4 versus separate context 0
+  default_binding: both cup masks match retained r4 visible RLE bitwise; repeat default segmentation also exact
+  cup_a:
+    default: {pixels: 4242, half_open_bbox: [131, 175, 290, 280], components: 15}
+    zero_samples: {pixels: 4224, half_open_bbox: [168, 175, 231, 255], components: 1}
+  cup_b:
+    default: {pixels: 4037, half_open_bbox: [112, 173, 269, 280], components: 3}
+    zero_samples: {pixels: 4046, half_open_bbox: [112, 173, 175, 252], components: 1}
+  geometric_check:
+    changed_target_pixels: 109
+    ray_body_matches_zero: 107
+    ray_body_matches_default: 90
+    distant_default_target_pixels_outside_corresponding_zero_bbox: 16
+    distant_pixels_rejected_by_geometric_ray: 16
+    distant_pixels_ray_agrees_with_zero_render: 16
+    caveat: two changed pixels on the overlapping cup boundary differ between center ray and zero-sample raster; this does not justify claiming pixel-perfect analytic ray equivalence everywhere
+root_cause:
+  confirmed_scope: default multisample categorical color-ID rendering creates semantically false distant target IDs in this exact retained scene
+  propagation: tiny false foreground pixels inflate min/max boxes, corrupt DINO training targets and SAM prompts, trigger box duplicate suppression and confuse bbox-only instance association
+  correction_to_prior_interpretation: raw RLE equality in CP-116 proved serialization fidelity, not categorical raster correctness; retain all history and model metrics but withhold qualification and further tuning against contaminated truth
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
+  status: PLANNED
+  scope: separate zero-sample categorical segmentation context; keep RGB context and its multisampling unchanged; use the same zero-sample context for visible and paired-reference segmentation
+  tdd: fail first on default categorical multisampling, RGB-setting mutation, construction-failure state leak and wrong renderer routing; then implement minimal renderer ownership/cleanup fix
+  run_ids: [stage-e-sam-categorical-render-red-r368, stage-e-sam-categorical-render-green-r369, linux-build-stage-e-categorical-render-r370, linux-test-stage-e-categorical-render-r371-ordinary, stage-e-categorical-render-readback-r372]
+  live_readback: same frozen val scene plus preregistered residual scenes; verify zero actual categorical offSamples, unchanged RGB context settings, disappearance of the proven distant false IDs and preserved raw artifact provenance
+  subsequent: freeze a new derived train/val truth version and rebuild labels before any model retraining or threshold tuning; no morphology, largest-component filtering or silent edits to r3/r4
+benchmark: preserve valid r363; no benchmark merely for this read-only diagnosis; reassess required gate when code/model comparison scope changes
+retention: r367 geom-ID NPZ, camera/qpos/raycast report and manifest retained; r366 overlays retained; no archived/deleted evidence
+boundaries: sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged; original r2/r2-repro/archives and all training checkpoints untouched
+owned_processes: NONE after controlled renderer close
 ```
