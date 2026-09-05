@@ -13733,3 +13733,100 @@ boundaries: no val/test/COCO100/PickPlace/Mac access; Microduck paused; no DINO 
 retention: immutable smoke checkpoint and run evidence retained; scratch deletion candidate only; no deletion
 next_action: commit and ordinary-push this checkpoint, remote SHA readback, then continue TDD for remaining training runner contracts
 ```
+
+## Checkpoint CP-180 — Deterministic training box prompt contract planned
+
+```yaml
+checkpoint: CP-180
+status: PLANNED
+source_commit: f5ded3d2e5e77b2c95c34051044d78ce38e3b417
+remote_sha_readback: f5ded3d2e5e77b2c95c34051044d78ce38e3b417
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+scope: CP-170 prompt construction only
+contract:
+  rng: numpy default_rng with SeedSequence entropy [430000079, epoch, sample_seed, instance_index]
+  perturbation: independent uniform [-0.05, 0.05] per box side, scaled by original box width/height
+  clipping: image pixel-coordinate limits [0,width-1] and [0,height-1]
+  validity: reject nonfinite, empty, inverted or out-of-image boxes and invalid nonnegative integer seed/epoch/instance identifiers
+  reproducibility: same identity yields same box independently of sample iteration order; distinct epochs yield different perturbations
+  data_scope: train only; no jitter or tuning on val/test/COCO100
+run_ids: [stage-e-sam-prompt-jitter-red-r339, stage-e-sam-prompt-jitter-green-r340]
+next_action: RED tests for deterministic bounded jitter and invalid geometry, then implementation and GREEN before full training runner
+provenance: locked Python, per-run source import, unique registered durable scratch with tempfile preflight; ROS_DOMAIN_ID/GZ_PARTITION not applicable
+boundaries: CP-170 recipe, IoU 0.80 and all sealed boundaries unchanged; Microduck paused
+retention: preserve every new run and scratch; no deletion
+```
+
+## Checkpoint CP-181 — Identity-bound training jitter GREEN
+
+```yaml
+checkpoint: CP-181
+status: FOCUSED_GREEN_FULL_GATE_PENDING
+source_commit: f5ded3d2e5e77b2c95c34051044d78ce38e3b417
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+red: {run_id: stage-e-sam-prompt-jitter-red-r339, failed: 6, exit_code: 1, elapsed_seconds: 0.32, cause: jitter helper missing}
+green: {run_id: stage-e-sam-prompt-jitter-green-r340, passed: 30, exit_code: 0, elapsed_seconds: 2.54}
+contract: CP-180 identity-seeded side jitter and pixel-grid clipping implemented; invalid geometry rejected
+static_checks: ruff check passed
+provenance: locked Python with per-run source symlink and NVMe scratch, exact tempfile preflight; ROS_DOMAIN_ID/GZ_PARTITION not applicable
+next_runs: [linux-build-stage-e-sam-jitter-r341, linux-test-stage-e-sam-jitter-r342-ordinary]
+next_action: fresh overlay and full ordinary gate, source sync, then complete five-epoch training orchestrator and preregister its exact immutable outputs before launch
+boundaries: generic cup, prompt cup., mask IoU 0.80, CP-170 recipe unchanged; no sealed sets or Microduck training
+retention: r339 RED and r340 GREEN retained; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-182 — Training jitter fresh overlay valid
+
+```yaml
+checkpoint: CP-182
+status: VALID_BUILD_ORDINARY_RUNNING
+source_commit: f5ded3d2e5e77b2c95c34051044d78ce38e3b417
+run_id: linux-build-stage-e-sam-jitter-r341
+result: {packages_finished: 7, exit_code: 0, elapsed_seconds: 56.12}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-jitter-r341/install
+provenance: all seven package prefixes and new jitter helper read back in r342 preflight; source resolves inside this isolated checkout
+lodepng: local r26 cache, exact frozen HEAD and strict fsck passed, no network fetch
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: unique registered durable scratch/linux-build-stage-e-sam-jitter-r341/tmp; exact Python tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_build
+GZ_PARTITION: not_applicable_offline_build
+ordinary: linux-test-stage-e-sam-jitter-r342-ordinary
+next_action: read back JUnit and test-result exit, commit owned jitter/test/ledger and ordinary-push/readback
+retention: r341 build and scratch retained; no deletion
+```
+
+## Checkpoint CP-183 — Training prompt construction passes complete ordinary gate
+
+```yaml
+checkpoint: CP-183
+status: TRAINING_PRIMITIVES_AND_DATA_READY_FULL_RUNNER_PENDING
+source_commit: f5ded3d2e5e77b2c95c34051044d78ce38e3b417
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+ordinary:
+  run_id: linux-test-stage-e-sam-jitter-r342-ordinary
+  result: {passed: 1251, failed: 0, errors: 0, skipped: 0, historical_warnings: 4, pytest_seconds: 15.28, elapsed_seconds: 16.67, colcon_exit: 0, test_result_exit: 0}
+  junit_sha256: 80f63a4a9b15404fbc59faad2c6497f8abccaa25fe39599316d15fd221080e78
+  collection: ordinary test directory only
+focused_junit:
+  r339_red_sha256: 796a6850572bfa49b1059f42fe0463725f00ed0675a548a3ab96dbc023b3e603
+  r340_green_sha256: 1336ba6b86ebc96ea76cbc3cbd38948925fca4bf23d1fd3df2239c25d7488782
+verification: ruff check and git diff --check passed
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-jitter-r341/install
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-sam-jitter-r342-ordinary/tmp
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/linux-test-stage-e-sam-jitter-r342-ordinary
+  tempfile_preflight: exact resolved match
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+remaining_training_work:
+  - compose the verified loader, decoder freeze, original-grid loss, identity-bound jitter and existing exclusive_json/checkpoint_file_entries/verify_complete_checkpoint contracts into the five-epoch orchestrator
+  - freeze exact order RNG, output path, source commit and script hash; reject collisions, CPU fallback, nonfinite gradients and frozen-state changes
+  - save and verify each epoch checkpoint plus optimizer/seed/order/loss evidence before reporting completion
+  - evaluate the five saved epochs on corrected val using retained DINO proposals, select by CP-170 primary F1 then recall then earliest epoch, and preserve all-scenario metrics
+formal_training_started: false; CP-179 smoke is not a candidate and must not be reused as initialization
+explicit_benchmark: retain r30/r222; next required full benchmark accompanies adapted-model comparison or relevant adapter changes
+boundaries: no sealed test/COCO100/PickPlace/Mac; Microduck paused; IoU 0.80 unchanged; continuing authorization applies
+retention: r334-r342 and immutable smoke checkpoint retained; no archived/deleted runs; scratch deletion candidates only
+next_action: commit owned jitter/test/ledger and ordinary-push/readback, then implement and execute the full runner under the frozen CP-170 recipe
+```

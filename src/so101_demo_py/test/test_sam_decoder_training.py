@@ -89,3 +89,32 @@ def test_mismatched_prompt_dimensions_rejected(torch):
         training_api().decoder_loss(
             torch.zeros(1, 2, 3, 2, 2), torch.zeros(1, 2, 3), torch.ones(1, 1, 2, 2)
         )
+
+
+def jitter_api():
+    helper = getattr(training_api(), "jitter_training_box", None)
+    assert callable(helper), "deterministic training box jitter is not implemented"
+    return helper
+
+
+def test_prompt_jitter_is_identity_bound_and_within_five_percent():
+    jitter = jitter_api()
+    arguments = dict(width=100, height=80, epoch=1, sample_seed=410000001, instance_index=0)
+    box = (10.0, 20.0, 50.0, 60.0)
+    first = jitter(box, **arguments)
+    jitter(box, **{**arguments, "sample_seed": 410000002})
+    assert jitter(box, **arguments) == first
+    assert jitter(box, **{**arguments, "epoch": 2}) != first
+    assert all(abs(actual - original) <= 2.0 for actual, original in zip(first, box))
+    edge = jitter((0.0, 0.0, 99.0, 79.0), **arguments)
+    assert 0 <= edge[0] < edge[2] <= 99
+    assert 0 <= edge[1] < edge[3] <= 79
+
+
+@pytest.mark.parametrize(
+    "box",
+    [(0, 0, 0, 1), (4, 0, 2, 1), (-1, 0, 2, 1), (0, 0, 100, 1), (0, 0, float("nan"), 1)],
+)
+def test_prompt_jitter_rejects_invalid_geometry(box):
+    with pytest.raises(ValueError, match="TRAINING_BOX_INVALID"):
+        jitter_api()(box, width=100, height=80, epoch=1, sample_seed=410000001, instance_index=0)
