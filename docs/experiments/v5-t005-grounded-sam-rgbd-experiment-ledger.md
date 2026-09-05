@@ -18768,3 +18768,27 @@ future_if_approved: checkpoint benchmark gate valid, then resume preregistered g
 retention: r499/r498 and all earlier evidence retained, archived none; existing scratch deletion candidates only and nothing deleted
 boundaries: no official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-340 — r499 recovery independently approved; generation-runner TDD preparation authorized
+
+```yaml
+checkpoint: CP-340
+status: VALID_BENCHMARK_GATE_GENERATION_RUNNER_TDD_PREP_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, evidence_quality: APPROVED, critical: 0, important: 0, minor: 0}
+accepted_gate: r498 semantic benchmark evidence plus r499 supplemental recovered receipt jointly form the valid explicit benchmark gate; r498 was not rerun and its original result.json/timing-comparison.json 47.0-second timing fields remain invalid, immutable, and retained
+result: {classification: VALID_BENCHMARK_GATE_RECOVERED_RECEIPT, invocations: 1, tests: 585, benchmark_cases: 585, ordinary_cases: 0, passed: 583, skipped: 2, failures: 0, errors: 0, pytest_seconds: 645.56, colcon_seconds: 646.90, total_seconds: 648.792879228, all_exits: 0}
+skips: exactly the two retained Linux-inapplicable macOS renameatx_np nodes; no drift
+performance: r498 versus immutable r30 HDD3210.78s is2565.22s shorter and4.973635x; versus retained r469 NVMe649.44s is3.88s shorter and1.006010x; observational only because source and suite revisions differ, with no causal optimization claim
+review_evidence: durable coordination/generator-r443-r1/nonpenetrating-train-val-benchmark-receipt-r499-review-report.md SHA256 9cb04e93b9417c5ed853bfbf20e418427912591f45c5315f1a9e7f19807f0f55
+review_readback: complete72-line report read; reviewer independently verified all36 pinned r498 inputs, output hashes, unique anchored full-line parser, JUnit counts/partition/exact skip IDs, every exit, JUnit645.549 versus stdout645.56 consistency, timing arithmetic and r498 immutability
+pycache_disposition: retained inventoried recovery.cpython-312.pyc does not invalidate the receipt because final recovery.py was invoked directly and review independently reconstructed the result; no evidence deleted
+next_experiment:
+  status: PLANNED_TDD_PREPARATION_ONLY
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: recover and bind the preregistered train/val-only official generation-runner contract from retained protocol and plan records, then prepare the private runner RED without allocating an official dataset output or rendering any frame; preserve exact nonpenetrating generator/config/converter identities and fail-closed provenance/collision/sealed-split constraints
+  review: GPT-6 Astra medium must independently review the recovered runner contract and RED evidence before any GREEN implementation or official generation
+  restrictions: no official output root, generation/render/MuJoCo/OpenGL runtime invocation, conversion, inference, training, sealed-test/COCO100/PickPlace/Mac/SAM access or change; no benchmark rerun
+retention: r499/r498 and all earlier evidence retained, archived none; all scratch trees remain deletion candidates only and nothing deleted
+boundaries: test remains sealed; COCO100 remains final frozen-candidate once-only; small_far_cup remains in all-scenario data while primary reporting excludes only that scenario; runtime eligibility thresholds require later geometry evidence and out-of-workspace targets publish no grasp pose; Microduck paused; mask0.80/mapping0.98 unchanged
+```
