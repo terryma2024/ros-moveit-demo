@@ -12775,3 +12775,84 @@ retention:
   deletion_candidates: [r311 partial output, r313-r314 scratch, and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-158, read back remote SHA, then execute r315 once with fresh source/runtime inventory readbacks, offline CUDA FP32, and the absent r2 output root
 ```
+
+## Checkpoint CP-159 — native SAM runtime A/B completed
+
+```yaml
+checkpoint: CP-159
+status: VALID_IMMUTABLE_PENDING_INDEPENDENT_READBACK
+recorded_at: 2026-09-05T09:06:56+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-158
+source_commit: af93dd832579dd84ada1506ef492ef2bcc2cc79a
+run:
+  run_id: stage-e-native-sam-ab-r315
+  status: VALID
+  exit_code: 0
+  elapsed_ms: 8618
+  sample_count: 10
+  prompt_executions: 20
+  dino_inference_rerun: false
+  training_or_tuning: false
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/native-sam2-runtime-ab-r2
+  manifest_sha256: 9b70b09c128a9944fddd210cfa46201d1ee1411531169d93e2702e8f2f88bbd9
+  tree_inventory_sha256: 94e42f77189fcce66a23debad0035a412f122c344e1e66070c0395553fafa345
+  files: 122
+  directories: 5
+  bytes: 16775007
+  modes: {files: '0444', directories: '0555'}
+aggregate:
+  native_dino_selected_pass_count: 2
+  native_dino_oracle_pass_count: 3
+  native_truth_selected_pass_count: 2
+  native_truth_oracle_pass_count: 3
+  transformers_dino_selected_pass_count: 4
+  transformers_dino_oracle_pass_count: 4
+  frozen_failure_samples_reaching_0_80_with_native_oracle: 0
+fixed_failure_observations:
+  sample_53: {transformers_selected: 0.000416, transformers_oracle: 0.148971, native_selected: 0.136817, native_oracle: 0.136817}
+  sample_135: {transformers_selected: 0.000265, transformers_oracle: 0.039373, native_selected: 0.003267, native_oracle: 0.186564}
+  sample_142: {transformers_selected: 0.477124, transformers_oracle: 0.477124, native_selected: 0.479121, native_oracle: 0.479121}
+  sample_152: {transformers_selected: 0.000445, transformers_oracle: 0.368016, native_selected: 0.090252, native_oracle: 0.303805}
+  sample_229: {transformers_selected: 0.000264, transformers_oracle: 0.223760, native_selected: 0.010057, native_oracle: 0.115104}
+  sample_289: {transformers_selected: 0.248726, transformers_oracle: 0.776377, native_selected: 0.764606, native_oracle: 0.764606}
+passing_control_observations:
+  - controls 68 and 127 remain above 0.80 under native selected masks
+  - control 57 falls from Transformers 0.980782 to native selected 0.436400 and native oracle 0.505976
+  - control 275 has native oracle 0.961926 but native quality selection chooses a 0.277832 mask
+preliminary_hypothesis_status:
+  transformers_conversion_or_runtime_as_primary_cause: NOT_SUPPORTED because official native selected/oracle pass counts are lower and no frozen failure crosses the unchanged gate
+  sam_quality_selection: CONFIRMED_IN_BOTH_IMPLEMENTATIONS as a secondary robustness defect, especially native control 275
+  frozen_hiera_tiny_capability_on_current_data: SUPPORTED_AS_PRIMARY_BOUNDARY at fixed-sample scope
+runtime:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  torch: 2.13.0+cu130
+  device: NVIDIA GeForce RTX 5080
+  dtype: float32
+  fallback: false
+  native_source_commit: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  native_checkpoint_sha256: 7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69
+  gpu_processes_before_and_after: none
+  attention_kernel: mathematical scaled-dot-product-attention fallback after FP32 Flash/memory-efficient kernels were unavailable
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-ab-r315
+  preflight_sha256: c066ffb3f6d2f0672d5e82859a87816062d5a3da9bf0ccf3db3eb98c6b5ef691
+  source_inventory_sha256: d087e47875dc56e9de8de3b7e1f334c00db5080bcc9ed79fe0e211795be7aada
+  runtime_inventory_sha256: c5e7f054a830cc626e57f54d9715962c30ee1a1cd9861cc7a3f84b34539eacab
+  input_scripts_sha256: 455f0d92e149921a5b78425c0cdab1396485186f093edd06e9a1048ced3b41a1
+  run_log_sha256: 5d0e67ae2b848417b63aebf08b38c14af21d8ed79db68d5f87b90fb826bc5683
+  stderr_sha256: 36156dafec7d2e5f3d829120beadcb9dc88c174a9916d2bc97715e99cc905da4
+  gpu_before_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  gpu_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit_sha256: 638c124b6302e8b6c26c2b2dce5af7bb80fd7a0e992d4f3bdddc81cba0177469
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r315 immutable output/evidence/scratch, r314 GREEN, r311 invalid partial output, all CP-158 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r311 partial output, r315 scratch, and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-159, then independently verify all 122 files, every native RLE/NPY binding, aggregate recomputation, and selected/oracle identities before finalizing the causal conclusion
+```
