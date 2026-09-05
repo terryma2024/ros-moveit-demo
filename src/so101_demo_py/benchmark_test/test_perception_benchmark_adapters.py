@@ -418,6 +418,7 @@ def _grounded_adapter(
     resource_sampler: Any | None = None,
     target_class_id: str = "plastic_cup",
     prompt: str = "plastic cup.",
+    proposal_observer: Any | None = None,
 ) -> tuple[
     GroundedSamRawAdapter,
     _GroundingProcessor,
@@ -444,8 +445,153 @@ def _grounded_adapter(
         resource_sampler=resource_sampler or _resource_sampler(torch_api),
         target_class_id=target_class_id,
         prompt=prompt,
+        **({"proposal_observer": proposal_observer} if proposal_observer is not None else {}),
     )
     return adapter, grounding_processor, grounding_model, sam_processor, sam_model
+
+
+def test_proposal_observer_keeps_high_score_proposal_rejected_by_sam(tmp_path: Path) -> None:
+    """Catch retaining only SAM survivors instead of the complete ordered DINO batch."""
+    class TwoProcessor(_GroundingProcessor):
+        def post_process_grounded_object_detection(self, outputs: object, **kwargs: object):
+            result = super().post_process_grounded_object_detection(outputs, **kwargs)[0]
+            result.update(
+                boxes=np.asarray([[1, 1, 2, 2], [3, 2, 13, 10]], dtype=np.float32),
+                scores=np.asarray([0.91, 0.61], dtype=np.float32),
+                text_labels=["plastic cup", "plastic cup"],
+                query_indices=np.asarray([0, 1], dtype=np.int64),
+            )
+            return [result]
+
+    class TwoGrounding(_GroundingModel):
+        def __call__(self, **inputs: object):
+            output = super().__call__(**inputs)
+            output.logits = np.repeat(output.logits, 2, axis=1)
+            return output
+
+    class TwoSam(_SamModel):
+        def __call__(self, **inputs: object):
+            self.call_count += 1
+            assert np.asarray(inputs["input_boxes"]).shape == (1, 2, 4)
+            masks = np.zeros((1, 2, 1, 16, 20), dtype=np.float32)
+            masks[0, 0, 0, 0, 0] = 1
+            masks[0, 1, 0, 2:10, 3:13] = 1
+            return SimpleNamespace(
+                pred_masks=masks, iou_scores=np.asarray([[[0.84], [0.84]]], dtype=np.float32)
+            )
+
+    seen = []
+    sam = TwoSam()
+
+    def observe(proposals):
+        assert sam.call_count == 0
+        with pytest.raises(TypeError):
+            proposals[0][0][0] = 99
+        seen.append(proposals)
+
+    adapter, _, grounding, _, _ = _grounded_adapter(
+        tmp_path, grounding_processor=TwoProcessor(), grounding_model=TwoGrounding(),
+        sam_model=sam, proposal_observer=observe,
+    )
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert grounding.call_count == sam.call_count == 1
+    assert len(seen) == 1 and len(seen[0]) == 2
+    assert seen[0][0][0] == (1.0, 1.0, 2.0, 2.0)
+    assert seen[0][0][1] == pytest.approx(0.91)
+    assert seen[0][0][2] == pytest.approx(0.79, abs=1e-6)
+    assert len(result.raw_candidates) == 1
+    assert result.raw_candidates[0].candidate_id == "grounded-sam-001"
+    assert result.raw_candidates[0].bbox_xyxy == seen[0][1][0]
+
+
+def test_proposal_observer_does_not_change_surviving_raw_candidate(tmp_path: Path) -> None:
+    seen = []
+    observed = _grounded_adapter(tmp_path, proposal_observer=seen.append)[0]
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    baseline = _grounded_adapter(baseline_root)[0]
+
+    actual = observed.collect(_frame(), CollectionMode.LOW_FLOOR)
+    expected = baseline.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert actual.raw_candidates == expected.raw_candidates
+    assert actual.irreversible_limits == expected.irreversible_limits
+    assert len(seen) == 1
+
+
+def test_proposal_observer_records_empty_frame_without_sam_forward(tmp_path: Path) -> None:
+    class EmptyProcessor(_GroundingProcessor):
+        def post_process_grounded_object_detection(self, outputs: object, **kwargs: object):
+            return [{"boxes": np.empty((0, 4), dtype=np.float32),
+                     "scores": np.empty(0, dtype=np.float32), "text_labels": [],
+                     "query_indices": np.empty(0, dtype=np.int64)}]
+
+    seen = []
+    adapter, _, grounding, _, sam = _grounded_adapter(
+        tmp_path, grounding_processor=EmptyProcessor(), proposal_observer=seen.append,
+    )
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert seen == [()]
+    assert result.raw_candidates == ()
+    assert grounding.call_count == 1 and sam.call_count == 0
+
+
+def test_proposal_observer_failure_stops_before_sam(tmp_path: Path) -> None:
+    failure = OSError("proposal evidence unavailable")
+
+    def observe(proposals):
+        raise failure
+
+    adapter, _, grounding, _, sam = _grounded_adapter(tmp_path, proposal_observer=observe)
+    with pytest.raises(OSError) as caught:
+        adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+    assert caught.value is failure
+    assert grounding.call_count == 1 and sam.call_count == 0
+
+
+@pytest.mark.parametrize("observer", [False, 0, "not callable"])
+def test_proposal_observer_rejects_invalid_callback(tmp_path: Path, observer: Any) -> None:
+    with pytest.raises(ValueError, match="proposal_observer"):
+        _grounded_adapter(tmp_path, proposal_observer=observer)
+
+
+def test_proposal_observer_from_bundle_reaches_real_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch the local bundle factory dropping the optional evidence observer."""
+    from so101_demo.perception_benchmark.adapters import grounded_sam as module
+
+    class LoadedGrounding(_GroundingModel):
+        def to(self, device):
+            assert device == "mps"
+            return self
+
+    class LoadedSam(_SamModel):
+        def to(self, device):
+            assert device == "mps"
+            return self
+
+    # Bundle byte verification is covered separately; exercise factory-to-collect wiring here.
+    verified = SimpleNamespace(
+        detector_dir=tmp_path / "detector", segmenter_dir=tmp_path / "segmenter",
+        manifest_sha256="b" * 64, target_class_id="plastic_cup", prompt="plastic cup.",
+    )
+    monkeypatch.setattr(module, "verify_model_bundle", lambda *_: verified)
+    seen = []
+    adapter = GroundedSamRawAdapter.from_bundle(
+        tmp_path, expected_manifest_sha256="b" * 64, requested_device="mps",
+        evidence_root=tmp_path, torch_api=_TorchApi(), proposal_observer=seen.append,
+        grounding_processor_loader=lambda *a, **k: _GroundingProcessor(),
+        grounding_model_loader=lambda *a, **k: LoadedGrounding(),
+        sam_processor_loader=lambda *a, **k: _SamProcessor(),
+        sam_model_loader=lambda *a, **k: LoadedSam(),
+    )
+    result = adapter.collect(_frame(), CollectionMode.LOW_FLOOR)
+
+    assert len(seen) == 1 and len(seen[0]) == 1
+    assert seen[0][0][0] == result.raw_candidates[0].bbox_xyxy
 
 
 @pytest.mark.parametrize("model", ("yolo", "grounded_sam"))

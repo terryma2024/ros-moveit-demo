@@ -34,6 +34,8 @@ from so101_demo.perception_benchmark.timing import (
     ResourceSampler,
 )
 
+GroundingProposals = tuple[tuple[tuple[float, float, float, float], float, float], ...]
+
 
 def _force_offline_environment() -> None:
     for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
@@ -179,8 +181,11 @@ class GroundedSamRawAdapter:
         resource_sampler: ResourceSampler,
         target_class_id: str = "plastic_cup",
         prompt: str = "plastic cup.",
+        proposal_observer: Callable[[GroundingProposals], None] | None = None,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> None:
+        if proposal_observer is not None and not callable(proposal_observer):
+            raise ValueError("proposal_observer must be callable or None")
         if model_id != GROUNDED_SAM_MODEL_ID:
             raise ValueError("model_id must equal the canonical Grounded-SAM benchmark ID")
         if runtime_device not in {"mps", "cuda"}:
@@ -199,6 +204,7 @@ class GroundedSamRawAdapter:
         self._manifest_sha256 = manifest_sha256
         self.target_class_id = target_class_id
         self._prompt = prompt
+        self._proposal_observer = proposal_observer
         self._torch = torch_api
         self._grounding_processor = grounding_processor
         self._grounding_model = grounding_model
@@ -225,11 +231,14 @@ class GroundedSamRawAdapter:
         sam_processor_loader: Callable[..., Any] | None = None,
         sam_model_loader: Callable[..., Any] | None = None,
         network_loader: Callable[..., Any] | None = None,
+        proposal_observer: Callable[[GroundingProposals], None] | None = None,
         monotonic_ns: Callable[[], int] = time.monotonic_ns,
     ) -> "GroundedSamRawAdapter":
         """Verify the pinned local bundle before invoking local-only loaders."""
 
         del network_loader
+        if proposal_observer is not None and not callable(proposal_observer):
+            raise ValueError("proposal_observer must be callable or None")
         root = Path(bundle_root)
         if not root.is_absolute() or root.is_symlink() or not root.is_dir():
             raise ModelSetupError(
@@ -308,6 +317,7 @@ class GroundedSamRawAdapter:
             resource_sampler=ResourceSampler(torch_api=torch_api, device=runtime_device),
             target_class_id=bundle.target_class_id,
             prompt=bundle.prompt,
+            proposal_observer=proposal_observer,
             monotonic_ns=monotonic_ns,
         )
 
@@ -494,6 +504,10 @@ class GroundedSamRawAdapter:
             )
             timer.mark("preprocess")
             proposals = self._grounding(frame, grounding_inputs)
+            # Observe the full ordered low-floor batch, including empty frames, before
+            # SAM can reject candidates. Retention failures abort this collection.
+            if self._proposal_observer is not None:
+                self._proposal_observer(proposals)
             timer.mark("dino_or_yolo")
             if proposals:
                 masks, qualities = self._sam(frame, proposals)

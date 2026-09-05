@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-238
+latest_checkpoint: CP-242
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
-active_experiment: EXP-079-STAGE-E-R5-MODEL-COMPARISON-BENCHMARK-R1
+active_experiment: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: r408 val-consumer audit passed; freeze complete DINO proposal-retention protocol before one new r5 val raw collection and frozen-SAM comparison
+next_action: observer RED/GREEN and ordinary gate passed; commit/push then r413 full explicit adapter benchmark, keep source fixed while it runs
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15791,4 +15791,101 @@ no_raw_started: new r5 model has only training validation and required checkpoin
 open_risks: corrected-DINO SAM/selection safety, production geometry eligibility, sealed-test truth protocol, COCO100 noninferiority and both platforms' PickPlace remain incomplete
 retention: all previous runs and model/data evidence retained; archived none; scratch deletion candidates only, no deletions
 boundaries: Microduck paused; sealed/test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; mask IoU0.80 unchanged; no new SAM training
+```
+
+## Checkpoint CP-239 — Bounded proposal-observer contract frozen before RED
+
+```yaml
+checkpoint: CP-239
+status: PLANNED
+experiment_id: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
+source_parent: ff51b29515700425a50895466e068a56518c6070
+prior_checkpoint: CP-238
+observed_boundary: raw adapter retains only candidates surviving SAM mask-size/quality floors; DINO proposals lost at that boundary cannot safely be recovered for another frozen SAM without new DINO inference
+single_variable: optional proposal_observer callback on GroundedSamRawAdapter constructor/from_bundle, invoked once per frame after complete low-floor DINO proposal extraction and before SAM; callback receives immutable nested tuple only
+default: None preserves existing behavior and raw result schema; no threshold/model/selection changes
+ownership: serial val collector receives callback and binds proposals to exact frame/image/model identity, writes exclusive durable sidecars and hashes; observer must fail closed before SAM if its retention fails
+regressions: complete proposals including a high-score candidate later rejected by SAM, zero-proposal frame receipt, one DINO forward only, unchanged surviving candidate and mask, observer exception stops SAM, invalid callback rejected, factory passes observer
+run_ids: {red: stage-e-r5-proposal-observer-red-r409, green: stage-e-r5-proposal-observer-green-r410, build: linux-build-stage-e-r5-proposal-observer-r411, ordinary: linux-test-stage-e-r5-proposal-observer-r412-ordinary, benchmark: linux-test-stage-e-r5-proposal-observer-r413-benchmark}
+verification_order: RED -> minimal implementation -> GREEN -> fresh7package symlink overlay using local r26 lodepng -> ordinary test only -> one explicit benchmark required by adapter change -> commit/push/readback -> preregister new raw collection
+scratch: each test uses its own nonexistent durable scratch/run-id/tmp; actual locked Python tempfile preflight; preserve logs/JUnit/source/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+initial_overlay: r394 seven-package symlink install
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+authorization: user standing approval to execute recommended in-scope next steps; bounded brainstorming design announced; no new data range or threshold decision
+retention: all prior evidence retained, no deletion/archival; r406 remains valid and will not be rerun for optimization
+boundaries: no new inference yet; Microduck paused; SAM frozen; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 and mapping0.98 unchanged
+```
+
+## Checkpoint CP-240 — Complete proposal observer RED/GREEN passed
+
+```yaml
+checkpoint: CP-240
+status: VALID_RED_GREEN_BUILD_NEXT
+experiment_id: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
+source_parent: ff51b29515700425a50895466e068a56518c6070
+red: {run_id: stage-e-r5-proposal-observer-red-r409, failed: 8, deselected: 69, pytest_seconds: 0.47, elapsed_seconds: 0.75, exit_code: 1}
+red_boundary: constructor/from_bundle lacked proposal_observer support, all8 intended regressions failed before implementation
+green: {run_id: stage-e-r5-proposal-observer-green-r410, passed: 8, deselected: 69, pytest_seconds: 0.28, elapsed_seconds: 0.56, exit_code: 0}
+behavior: observer receives complete immutable ordered DINO tuple once before SAM, including empty frames and later-rejected high-score proposals; default None, surviving raw candidates/masks/limits unchanged; callback failure prevents SAM forward; factory wiring verified
+implementation: optional typed callback on constructor/from_bundle; no new thresholds, model parameters, result schema or production selector changes
+timing_note: enabled observer runs within the raw DINO phase and its retention overhead is therefore included; default disabled timings unchanged; it is not an inference-only performance experiment
+static: ruff and git diff --check passed
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r394 symlink source for targeted tests
+scratch: each r409/r410 uses its own durable scratch/run-id/tmp; exact tempfile preflight passed; JUnit/source patch/logs/time retained
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next: fresh7package r411 build with offline local r26 lodepng, then r412 ordinary and r413 explicit benchmark; no expensive inference before gates
+retention: all prior evidence retained, no deletion/archival; scratch deletion candidates only
+boundaries: Microduck paused; SAM frozen; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 and mapping0.98 unchanged
+```
+
+## Checkpoint CP-241 — Fresh observer overlay r411 built
+
+```yaml
+checkpoint: CP-241
+status: VALID_BUILD_ORDINARY_NEXT
+run_id: linux-build-stage-e-r5-proposal-observer-r411
+source_parent: ff51b29515700425a50895466e068a56518c6070
+result: {packages: 7, exit_code: 0, elapsed_seconds: 56.78}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-observer-r411/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-r5-proposal-observer-r411/tmp; exact tempfile preflight passed
+lodepng: r26 complete source cache HEAD ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a and strict fsck passed; FETCHCONTENT_FULLY_DISCONNECTED=ON, no network fetch
+warnings: existing third-party compiler/package stderr and mujoco_vendor from /opt/ros/jazzy, no build failures
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_proposal_observer_r412.sh
+retention: source patch, build logs, local cache proof and all previous evidence retained; no deletion/archival
+boundaries: Microduck paused; no new inference or SAM changes; sealed/test/COCO100/PickPlace/Mac inaccessible
+```
+
+## Checkpoint CP-242 — Observer ordinary gate GREEN; explicit r413 next
+
+```yaml
+checkpoint: CP-242
+status: VALID_ORDINARY_GREEN_BENCHMARK_PLANNED
+run_id: linux-test-stage-e-r5-proposal-observer-r412-ordinary
+source_parent: ff51b29515700425a50895466e068a56518c6070
+result: {passed: 1283, skipped: 0, errors: 0, failures: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.64, elapsed_seconds: 18.24, colcon_exit: 0, test_result_exit: 0}
+collection: ordinary test only, benchmark not collected
+provenance: locked /data/work/venvs/so101-grounded-sam/bin/python, r411 symlink overlay, seven package prefixes/source import verified
+scratch: durable scratch/linux-test-stage-e-r5-proposal-observer-r412-ordinary/tmp; exact tempfile preflight passed
+static_review: ruff and git diff --check passed;14 production lines add optional observer only,8 regressions exercise real adapter flow with controlled inference backends; no numeric selection or model changes
+owned_files: grounded_sam.py adapter, test_perception_benchmark_adapters.py, ledger; original untracked build/install/log untouched
+next_run:
+  status: PLANNED
+  run_id: linux-test-stage-e-r5-proposal-observer-r413-benchmark
+  reason: required explicit benchmark after raw adapter interface/observation change; retain valid r406 and do not rerun it
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_proposal_observer_r413.sh NEXT_SYNCED_HEAD 3cc371a52e89bbf179fb99a157fdd0533495fb0ffa7230e00f0bd90ca3839ca6
+  guards: clean owned source and exact synced HEAD, actual installed observer signature and r411 prefixes, unique NVMe scratch with all tempfile envs and exact Python preflight
+  artifacts: JUnit, command/source/exit/test-result/time logs and r30 observational timing comparison retained; no fsync semantics changes
+  source_freeze: no repository edits or HEAD changes while benchmark runs
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_after_gate: freeze and verify serial proposal-receipt collector before new val raw inference; all300/primary250 and fixed thresholds/provenance retained
+retention: all prior evidence retained; no deletion/archival; scratch deletion candidates only
+boundaries: Microduck paused; no new SAM training/inference yet; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 and mapping0.98 unchanged
 ```
