@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-247
+latest_checkpoint: CP-248
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5
-active_experiment: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+source_parent: e430ccaa7672919151413fb934982ebd90656844
+active_experiment: EXP-079-STAGE-E-R5-VAL-RAW-WITH-PROPOSALS-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r419 ordinary1313passed; commit/push owned receipt implementation then r420 explicit gate on fixed source before new raw inference
+next_action: r419 ordinary1313passed and r420 explicit583passed2skipped; commit/push r421 frozen val-only raw protocol then launch once, retain all proposals for later frozen-SAM comparison
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16025,4 +16025,61 @@ ROS_DOMAIN_ID: not_applicable_offline
 GZ_PARTITION: not_applicable_offline
 retention: all earlier evidence retained; no deletion/archival; scratch deletion candidates only
 boundaries: no real new model inference; SAM frozen and stateless; Microduck paused; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-248 — Receipt benchmark passed; r5 val raw capture frozen
+
+```yaml
+checkpoint: CP-248
+status: VALID_RECEIPT_GATES_VAL_RAW_PLANNED
+completed_run: linux-test-stage-e-r5-proposal-receipts-r420-benchmark
+source_commit: e430ccaa7672919151413fb934982ebd90656844
+gitee_sha_readback: e430ccaa7672919151413fb934982ebd90656844
+result: {passed: 583, skipped: 2, total: 585, errors: 0, failures: 0, pytest_seconds: 647.48, elapsed_seconds: 648.83, runner_exit: 0, colcon_exit: 0, test_result_exit: 0}
+junit_sha256: 5fe2130c273620fbd93122f9b4ee87a7b5da58d5972fd732a67c7207c0f304ed
+timing_receipt_sha256: 34544101f29b7dc051dbb7997084054296769703ff69db3f65548798a92da06f
+baseline_comparison: r30 preserved3210.78pytest seconds; current647.48 ratio0.20165816405982345,2563.30 seconds less; observational source/suite-evolved comparison only; no fsync/journaling/integrity change
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/linux-test-stage-e-r5-proposal-receipts-r420-benchmark/tmp; actual tempfile exact match and installed module/7prefix preflight passed
+evidence: durable run-evidence/linux-test-stage-e-r5-proposal-receipts-r420-benchmark; command, runner, source, JUnit, preflight, exits, full logs and timing retained
+owned_processes: r420 exited; GPU compute process list empty; existing codex and so101-exp079-linux-r3 tmux sessions preserved
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-VAL-RAW-WITH-PROPOSALS-R1
+  status: PLANNED
+  prior_experiment: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+  run_id: stage-e-r5-val-raw-r421
+  lifecycle: offline serial CUDA, no ROS/Gazebo stack
+  single_variable: first raw evaluation of corrected-truth-trained r5 DINO epoch8 paired with unchanged original SAM; complete DINO observation retained
+  hypothesis: new DINO proposals can now be reevaluated against verified categorical r5 truth without repeating prior-model inference or losing proposals behind SAM filters
+  output_root: durable val-remediation/grounded-sam-cup-r5-epoch8-raw-r1; must not exist
+  evidence_root: durable run-evidence/stage-e-r5-val-raw-r421; must not exist
+  scratch: durable scratch/stage-e-r5-val-raw-r421/tmp; all3tempfile envs exact, locked Python preflight
+  model_bundle: durable models/grounded-sam-dino-cup-r5-epoch8-r1
+  model_manifest_sha256: eaa5ecec8b915dd743a691f7ee1607e3f3c7d12f018c406380d1be6c848729ca
+  evaluation_inventory: durable training-data/grounding-dino-cup-r5-train-val-categorical/val/inventory.json
+  evaluation_inventory_sha256: 5a6a349e47d01b889edc3248a9553b48b504f20fb8b19fb83f4c56ff226fbf2e
+  source_root: durable training-data/yolo-seg-small-occlusion-r5-train-val-categorical
+  source_manifest_sha256: 4cbb5d87449581dce4c25dcd5d0155e12c0f5ff4a3d7bf6f806f7da1fdd927f5
+  members: all300 val seeds420000000..420000299, six50frame scenarios; primary250 excludes only small_far_cup; no scenario-label runtime eligibility
+  raw_limits: {box_threshold: 0.01, text_threshold: 0.01, sam_quality_floor: 0.0, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  prompt: cup.
+  runtime: CUDA FP32 eval, original SAM stateless per frame, no training or fallback; all model parameters checked CUDA FP32; pinned dependency versions checked exactly
+  forward_accounting: independent model forward hooks count DINO300 and SAM once for each nonempty proposal frame; hooks observe only and do not alter outputs
+  timing: enabled observer fsync/readback is included in raw DINO phase; no inference-only latency claim
+  guards: r419/r420 exit+JUnit, unchanged source since e430ccaa except ledger, exact launch HEAD, r408 consumer report hash, complete bundle/data verification, empty GPU compute list, unique outputs, source/image/receipt identity and actual raw masks
+  success: raw manifest VALID with300 records, complete proposal receipts all300, exact surviving candidate cross-match, every retained artifact inventoried bypath/size/SHA and read back after readonly freeze; independent readback next, not yet production qualification
+  failure: any provenance/device/denominator/identity/receipt or output collision fails closed; preserve partial evidence; if inference completed but a later audit fails, inspect retained raw before considering any new inference
+  launcher: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh
+  launcher_sha256: f0db7e3e1e319751bf86634f2be069db819eb60539631306d5488a4bf423f871
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/collect_r5_val_raw_r421.py
+  script_sha256: 37df4fdd95f9a1198731095f781f70b6e0b25e1dd4a2ff343114c45a7bf46f7d
+  static: ruff and bash syntax checks passed; preparation performed during r420 without executing model code or changing repository source
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-val-raw-r421 collect_r5_val_raw_r421.py NEXT_SYNCED_HEAD
+  owner: new unique tmux so101-exp079-r5-raw-r421, direct local ai-station execution; no SSH or subagent
+next_after_raw: independent full readback using retained records, then preregister actual production-mask replay comparison of frozen original and retained epoch4 SAM; reuse complete DINO receipts, no DINO rerun
+retention: all historical data/raw/model/evidence retained; archived none; scratch deletion candidates only; no deletion
+boundaries: no sealed-test/COCO100/PickPlace/Mac access; Microduck paused; no new SAM training; mask IoU0.80 and mapping0.98 unchanged; raw capture is not final qualification
 ```
