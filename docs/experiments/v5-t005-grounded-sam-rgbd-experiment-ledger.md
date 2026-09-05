@@ -18172,3 +18172,33 @@ next_experiment:
 retention: r480/r481 and all earlier evidence retained, archived none; scratch deletion candidates only; nothing deleted
 boundaries: no MuJoCo/OpenGL/render/build/benchmark/generation/archive/conversion run/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-317 — r482 setup invalid before pytest; fresh GREEN authorized
+
+```yaml
+checkpoint: CP-317
+status: INVALID_SETUP_FRESH_GREEN_PLANNED
+run_id: stage-e-generator-train-val-only-green-r482
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_SETUP_STOPPED_BEFORE_PYTEST
+result: {setup_exit: 1, tool_exit: 1, pytest_invocations: 0, junit_present: false, measured_tests: 0}
+failure: sourcing /opt/ros/jazzy/setup.bash under shell nounset failed on unset AMENT_TRACE_SETUP_FILES before the exact Python, tempfile or pytest preflight; no behavioral GREEN was measured
+disposition: r482 run evidence and empty scratch tree are immutable and retained, never rerun/reused/backfilled; source/config preparation remains eligible for a fresh run because pytest invocation count is zero
+prepared_changes:
+  generator: src/so101_demo_py/src/adapters/perception/mujoco_dataset.py SHA256 56349d1328bf257933fa7ac0adc23683029824086642fba6dc685e600295a5bf
+  converter: src/so101_demo_py/src/training/grounding_dino_dataset.py SHA256 3cce77bbce5e14ea45e52211340b52d7dde8a4a00fdf90f2359868e874d2c67c
+  config: src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c
+  test: src/so101_demo_py/test/test_nonpenetrating_train_val_contract.py unchanged SHA256 a20b5af069a1ef6afe0e04737132e1273fd0349657eb642e3e4c71be7d83ad48
+static_gates: exact locked-Python AST, Ruff0.15.20, YAML exact-value parse and git diff-check passed before allocation; source-vs-4a0 patch SHA256 476e7d2eecbcae33b842d1dc7580da441ad5d59376c3902a122e15e0db109159
+evidence: durable run-evidence/stage-e-generator-train-val-only-green-r482 retained; preallocation log SHA256 aecf57d006b98b52f152471a208d308a7b7f98731dd30d742b4dbd95a179c052; report SHA256 cb3e92a59e301bb024c06a8d471c7f09ed88779df37649e34cb0a88026681149
+parent_readback: complete 98-line report, retained inventory and live four-input hashes read; no forbidden output or JUnit exists; prepared diff-check remains clean
+next_experiment:
+  status: GO_FRESH_GREEN_ONLY
+  run_id: stage-e-generator-train-val-only-green-r483
+  single_change: preserve exact prepared source/config/test bytes and r482 test selection; source ROS and retained r467 overlay with nounset disabled or AMENT_TRACE_SETUP_FILES safely initialized for setup, then restore strict shell options before preflight
+  preflight: allocate unique previously nonexistent durable r483 run/scratch roots; exact locked venv resolved /usr/bin/python3.12 must import pytest7.4.4 from /usr/lib/python3/dist-packages and resolve tempfile exactly inside fresh r483 NVMe tmp with explicit basetemp/cache
+  invocation: exactly one focused pytest process; all59 new cases plus the same relevant legacy regression files must pass with zero collection/environment errors; retain JUnit/command/exits/time/source/diff/provenance and stop for parent readback plus Astra review
+phase_id_correction_after_invalid: r483 fresh GREEN, r484 build, r485 ordinary, r486 benchmark, r487 runner RED, r488 runner GREEN/review, r489 generation, r490 source readback, r491 archive, r492 archive readback, r493 primary conversion, r494 repro conversion, r495 freeze; each separately checkpointed
+retention: r482 and all earlier evidence retained, archived none; r482 scratch is a deletion candidate only and nothing deleted
+boundaries: no source/test/config byte change in r483, no MuJoCo/OpenGL/render/build/benchmark/generation/archive/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
