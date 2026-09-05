@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-293
+latest_checkpoint: CP-297
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r466 GREEN121passed; freeze minimal observer-origin fix and Astra scoped re-review before new-source build and package gates
+next_action: r469 explicit benchmark583passed2skipped; prepare immutable fixed-plan r470 diagnostic runner and Astra review it before any GL/render/output allocation
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17468,6 +17468,125 @@ next_experiment:
   after: if approved allocate fresh build ID beyond superseded r461-r464, then ordinary+one explicit benchmark before actual diagnostic
 retention: all evidence retained, archived none; r465/r466 scratch deletion candidates only, nothing deleted
 boundaries: no build/render/data/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
+
+## Checkpoint CP-294 — Observer fix approved; final-source build authorized
+
+```yaml
+checkpoint: CP-294
+status: SCOPED_REVIEW_APPROVED_BUILD_PLANNED
+source_commit: 4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1
+remote: ordinary Gitee push and exact ls-remote readback completed
+reviewer: /root/generator_review, gpt-6-astra medium
+review_report: durable coordination/generator-r443-r1/runtime-observer-fix-review-report.md
+verdict: original Important ADDRESSED; spec APPROVED, quality APPROVED; no new blocking defect
+note: event construction validation is also wrapped before sink execution; still fail-closed/nonretryable, describe as event-delivery failure; no current distinction requirement
+next_experiment:
+  status: PLANNED
+  run_id: linux-build-stage-e-generator-observer-final-r467
+  executor: /root/generator_build, gpt-5.6-sol high
+  source: exact4a0ba99f, scoped source clean
+  packages: seven fixed packages, symlink install, exact clean r26 lodepng strictfsck and disconnected/no-fetch flags
+  runner: temporary build_generator_observer_final_r467.sh SHA256 f70113eb00ceb34cc5466be2a9e9dfd23ddc362c4415492aaef6da1e6f39caa7
+  roots: unique temporary build/install/log, durable run-evidence and durable scratch/run-ID/tmp all absent before launch
+  gate: actual lockedPython tempfile, all7prefixes, helper+dataset exact source, source hashes/commands/exit/time; stop before tests
+future: r468 ordinary then r469 one explicit benchmark, each separately checkpointed; actual diagnostic r470 only after gates
+retention: all evidence retained, archived none; old r461 runner unlaunched/superseded and preserved; scratch deletion candidates only
+boundaries: no render/data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
+
+## Checkpoint CP-297 — Final package gates valid; diagnostic runner review planned
+
+```yaml
+checkpoint: CP-297
+status: VALID_PACKAGE_GATES_DIAGNOSTIC_RUNNER_REVIEW_PLANNED
+run_id: linux-test-stage-e-generator-observer-r469-benchmark
+source_commit: 4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 585, passed: 583, failures: 0, errors: 0, skipped: 2, warnings: 0, pytest_seconds: 649.44, elapsed_seconds: 650.80}
+partition: benchmark_cases585, ordinary_cases0; exactly one invocation
+skips: expected Linux-inapplicable macOS renameatx_np cases
+overlay: r467; all7prefixes and helper+dataset exact source readback, source no-drift
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-test-stage-e-generator-observer-r469-benchmark/tmp, actual tempfile preflight passed
+performance_observation: r469 versus r30HDD3210.78 is-2561.34s ratio0.20227; versus r457NVMe646.35 is+3.09s ratio1.00478; noncausal suite/source caveat, semantics unchanged
+evidence: durable run-evidence/linux-test-stage-e-generator-observer-r469-benchmark; runtime-observability-package-gates-report.md SHA256 b0da9c60369281f4c41b0cf8225948c1b534b25e5e68452fd97c84a23968c2e3
+parent_readback: exact exit/JUnit/test-result/report and timing comparisons read back
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED_PREP_REVIEW_ONLY
+  run_id: stage-e-generator-runtime-acceptance-r470
+  executor: /root/generator_build, gpt-5.6-sol high
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: prepare fixed controlled two-case/three-attempt evidence runner and driver, no allocation/render; immutable Astra review before GO
+  frozen_source_overlay: 4a0ba99f with r467
+  plan: enabled one-cup explicit intersecting bottle then separated state, legacy separated same-state; development identifier seed410000127; two PNGs/three attempt records/two geometry receipts
+  gpu: EGL actual contexts, NVIDIA GL vendor/renderer, software strings forbidden; nvidia-smi supporting only
+  output: diagnostic artifacts only, no dataset.yaml/labels/splits/official manifest/test references; exclusive writes/fsync and full inventory
+  stop_before: no run/scratch/output roots before runner review approval
+retention: all evidence retained, archived none; r469 scratch deletion candidate only; no deletion
+boundaries: no official dataset/model/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup/SAM/IoU unchanged
+```
+
+## Checkpoint CP-296 — Final ordinary gate valid; explicit benchmark planned
+
+```yaml
+checkpoint: CP-296
+status: VALID_ORDINARY_EXPLICIT_BENCHMARK_PLANNED
+run_id: linux-test-stage-e-generator-observer-r468-ordinary
+source_commit: 4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 1373, passed: 1373, failures: 0, errors: 0, skipped: 0, warnings: 4, pytest_seconds: 20.71, elapsed_seconds: 22.30}
+partition: ordinary_cases1373, benchmark_cases0
+warnings: existing fork-from-multithreaded-process warnings only
+overlay: r467; all7prefixes and helper+dataset exact source readback passed; source no-drift before/after
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-test-stage-e-generator-observer-r468-ordinary/tmp; actual tempfile preflight passed
+evidence: durable run-evidence/linux-test-stage-e-generator-observer-r468-ordinary; runtime-observability-package-gates-report.md SHA256 33da6240007e4383b2016a89e37babdbb2507c2eae546b7746732cbf19036131
+parent_readback: exact exit/gate/JUnit/test-result and complete report read back
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-observer-r469-benchmark
+  executor: same Sol high
+  scope: exactly one explicit benchmark_test colcon gate, benchmark cases only
+  overlay: frozen r467 with exact source/provenance
+  scratch: durable scratch/linux-test-stage-e-generator-observer-r469-benchmark/tmp unique NVMe, actual lockedPython preflight
+  performance: observational comparisons to r30HDD3210.78 and r457NVMe646.35, no semantics changes
+  stop_after: parent checkpoint before actual diagnostic r470
+retention: all evidence retained, archived none; r468 scratch deletion candidate only; no deletion
+boundaries: no render/data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
+
+## Checkpoint CP-295 — Final observability build valid; ordinary gate planned
+
+```yaml
+checkpoint: CP-295
+status: VALID_BUILD_ORDINARY_PLANNED
+run_id: linux-build-stage-e-generator-observer-final-r467
+source_commit: 4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, packages_finished: 7, colcon_seconds: 56.3, elapsed_seconds: 56.46}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-observer-final-r467/install
+readback: all7prefixes inside r467; helper and dataset imports resolve exactly to checkout source; package source clean before/after
+lodepng: exact clean r26 cache ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, strictfsck/disconnected no-fetch
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-generator-observer-final-r467/tmp, actual tempfile preflight passed
+evidence: durable run-evidence/linux-build-stage-e-generator-observer-final-r467; runtime-observability-final-build-report.md
+ROS_DOMAIN_ID: not_applicable_offline_build
+GZ_PARTITION: not_applicable_offline_build
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-observer-r468-ordinary
+  executor: same Sol high
+  scope: colcon package test with pytest-args test only, benchmark cases0; frozen r467 overlay/provenance
+  scratch: durable scratch/linux-test-stage-e-generator-observer-r468-ordinary/tmp with all TMP vars/actual lockedPython preflight
+  evidence: full command/source/overlay/Python/JUnit/test-result/exit/time and collection partition
+  stop_after: parent checkpoint before one explicit benchmark r469
+retention: all evidence retained, archived none; r467 scratch deletion candidate only, no deletion
+boundaries: no render/data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
 ```
 
 ## Checkpoint CP-291 — Observability review finds sink exception-origin defect
