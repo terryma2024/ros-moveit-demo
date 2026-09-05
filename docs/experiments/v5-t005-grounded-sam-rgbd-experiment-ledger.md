@@ -18953,6 +18953,34 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-381 — Astra approves post-persist exact-membership test fix; r525 static preparation planned
+
+```yaml
+checkpoint: CP-381
+status: ASTRA_APPROVED_TESTS_ONLY_EXACT_MEMBERSHIP_FIX_R525_PREPARATION_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {tests_only_fix: APPROVED, production_candidate_bug_from_r524: NOT_SHOWN, official_generation: NOT_AUTHORIZED, final_launch_review: STILL_REQUIRED}
+read_scope: complete driver1954/combined571/r518486 lines and exact hashes; immutable r524 stderr/inventory29/29/survivor-root six files/two finalizer diagnostics; CP-379/380; no behavior or writes
+finding: r524 SURVIVED means complete returned false and the preexisting unexpected file was rejected by the pre-accounting membership check; no accounting/final inventory corroborates; candidate behavior is correct for that fixture and final exact-members operation remained target-unreached
+independent_operation: pre-accounting check validates pre-write state; after accounting persist, the final `_launch_inventory_members(... accounting_present=True)` supplies exact_members to sealing and independently detects membership added between those boundaries; removing only this final call permits default inventory to absorb the added file
+approved_fix:
+  scope: new private combined harness only; driver/shell unchanged; preserve the single executable mutation replacing only final exact_members with None
+  injection: for separate candidate and mutant modules/roots, temporarily wrap DurableRunEvidence.persist; call original first and verify accounting receipt persisted/read back, then exclusively write+fsync one unexpected regular file only for the target root/receipt; injection failure is HARNESS_ERROR and finally must restore/assert original method
+  candidate_oracle: injection occurred; accounting receipt remains; final membership rejects; launch final manifest/readback absent
+  mutant_oracle: same injection occurred; completion succeeds; independently validate final inventory/readback and exact unexpected SHA/member inclusion; return value alone is insufficient
+  controls: retain no-injection real-success control and convert the old preexisting-unexpected fixture into an explicit candidate rejection control; keep all roots independent
+  accounting: expected review group becomes42=36 controls+6 kills and total combined becomes248=167+42+39; freeze actual counts/hashes after static construction
+next_experiment:
+  status: GO_R525_PRIVATE_HARNESS_ONLY_STATIC_PREPARATION_NO_BEHAVIOR
+  executor: /root/generator_build, gpt-5.6-sol high
+  required: create a new r525 combined harness from frozen r522 bytes implementing only the approved adaptation; AST/Ruff/source-transform/six-mutant construction syntax and exact count anchors; prepare a new r525 launcher from r524 with new ID/path/current HEAD/harness hash/248 assertions while preserving pre-mkdir heredoc and shared-argument parser gates
+  preallocation: require r525 evidence/scratch/low and four official roots absent; do not allocate or invoke launcher/harness/driver
+  stop_after: parent reads exact diffs/hashes/static results and checkpoints one fresh r525 behavior gate separately
+restrictions: no production candidate/source changes, project/MuJoCo/OpenGL import, GPU/renderer, official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: all r524 and prior evidence/reports retained; no existing coordination report edits; new reports must be write-once unique paths
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-380 — r524 derived report provenance/narrative correction; raw RED evidence remains authoritative
 
 ```yaml
