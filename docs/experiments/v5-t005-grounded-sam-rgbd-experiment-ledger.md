@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-198
+latest_checkpoint: CP-200
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 74c8b897bec402d3cc3bda51817a69a75b338706
-active_experiment: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
-confirmed: five trained decoder checkpoints independently verified; all 300 retained proposal sets certified at fixed eligibility thresholds; replay contracts and ordinary gate GREEN
-open: five-epoch corrected-val inference/readback and subsequent qualification remain incomplete
-next_action: ordinary-push benchmark checkpoint with SHA readback, then launch registered r364 five-epoch retained-proposal replay
+source_parent: bde55e42294b5ed04fd04c039dbf2d91ede2de77
+active_experiment: EXP-079-STAGE-E-SELECTED-DECODER-RESIDUAL-AUDIT-R1
+confirmed: five-epoch corrected-val replay and independent readback select epoch 4, primary F1 0.8640350877192983; ordinary and required benchmark gates GREEN
+open: residual double-cup proposal/instance-match failures, production eligibility and final model qualification remain incomplete
+next_action: ordinary-push comparison/readback checkpoint with SHA readback, then retained-val-only residual audit and fresh diagnostic overlays
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14355,4 +14355,101 @@ independent_readback_next:
 next_action: commit ledger checkpoint, ordinary-push/readback, run r364 then r365 without crossing sealed boundaries
 retention: r363 logs/JUnit/scratch and all prior evidence retained; scratch deletion candidate only; no deletion
 boundaries: sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged
+```
+
+## Checkpoint CP-199 — Five-epoch SAM replay complete; epoch 4 selected pending readback
+
+```yaml
+checkpoint: CP-199
+status: VALID_COMPARISON_PENDING_INDEPENDENT_READBACK
+source_commit: bde55e42294b5ed04fd04c039dbf2d91ede2de77
+gitee_sha_readback: bde55e42294b5ed04fd04c039dbf2d91ede2de77
+run_id: stage-e-sam-decoder-comparison-r364
+result: {exit_code: 0, elapsed_seconds: 88.21, comparison_seconds: 86.85852124600206, epochs: 5, frame_records: 1500, new_sam_forwards: 1230, dino_forwards: 0, production_errors: 0}
+prompting: 246 prompted images and 254 DINO boxes per epoch; no-prompt images retain explicit empty records
+epoch_scores:
+  - {epoch: 1, primary_f1: 0.8333333333333334, all_f1: 0.8282097649186256}
+  - {epoch: 2, primary_f1: 0.8577680525164114, all_f1: 0.8483754512635379}
+  - {epoch: 3, primary_f1: 0.862144420131291, all_f1: 0.851985559566787}
+  - {epoch: 4, primary_f1: 0.8640350877192983, all_f1: 0.8535262206148282}
+  - {epoch: 5, primary_f1: 0.8552631578947368, all_f1: 0.8462929475587704}
+selected_epoch: 4
+selection_rule: highest primary F1, then primary recall, then earliest epoch; no threshold search
+selected_metrics:
+  primary: {images: 250, tp: 197, fp: 9, fn: 53, precision: 0.9563106796116505, recall: 0.788, f1: 0.8640350877192983, bbox_matches: 200, mask_pass: 197, mask_fail: 3}
+  all: {images: 300, tp: 236, fp: 17, fn: 64, precision: 0.932806324110672, recall: 0.7866666666666666, f1: 0.8535262206148282, bbox_matches: 239, mask_pass: 236, mask_fail: 3}
+  no_cup_unique: 0
+checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e
+comparison_report_sha256: 5a392756b29199b170283f96510c39457c25a588b2c15e1963db74258e411684
+runtime: {device: cuda, dtype: float32, cpu_fallback: false, peak_cuda_bytes: 568542208}
+warning:
+  observed: Transformers torch.from_numpy warns about readonly DetectionFrame RGB input
+  source_readback: preprocessing stacks/resizes image tensors before rescale/normalize; warning alone does not prove input mutation or invalidate outputs
+  followup: preserve warning, check preprocessing input preservation without rerunning model inference if needed
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+  scratch: unique durable scratch/stage-e-sam-decoder-comparison-r364/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/readback_sam_decoder_comparison_r365.sh
+next_scope: independent artifact/mask/quality/metric/selection readback and per-scenario diagnostic; no model inference
+qualification: not complete; val selection is not synthetic sealed-test, COCO100, live selection or PickPlace acceptance
+retention: full five-epoch lossless masks, quality arrays, accepted RLE and JSON records immutable; all logs retained, no deletion
+boundaries: test/COCO100/PickPlace/Mac still sealed; Microduck paused; mask IoU 0.80 unchanged
+```
+
+## Checkpoint CP-200 — Independent comparison readback valid; residual double-cup audit next
+
+```yaml
+checkpoint: CP-200
+status: VALID_COMPARISON_READBACK_RESIDUAL_AUDIT_PLANNED
+source_commit: bde55e42294b5ed04fd04c039dbf2d91ede2de77
+run_id: stage-e-sam-comparison-readback-r365
+result: {exit_code: 0, elapsed_seconds: 10.23, files_verified: 4275, frame_records: 1500, selected_epoch: 4, inference_rerun: false}
+independent_checks:
+  - immutable exact file inventory and every content hash
+  - full checkpoint, image, proposal ID and raw mask/quality identity
+  - independently reconstructed quality argmax, probability validity, minimum pixels, maximum area and inside-box filter
+  - accepted RLE masks roundtrip to selected NPZ masks
+  - independently recomputed greedy box matches, exact-mask IoU 0.80, all/primary TP/FP/FN and F1, complete denominators and epoch selection
+hashes:
+  artifact_inventory_sha256: 087d1e8120498bf0f37ae7f1ad8a58cccb9821b7e08d26eca1d0a3f82ce21d69
+  comparison_report_sha256: 5a392756b29199b170283f96510c39457c25a588b2c15e1963db74258e411684
+  independent_report_sha256: cba1a06525d55d51e8e135c95951e7dd0859069be3d54adf1bcdfcb86e0eea5b
+  verifier_sha256: d5ae44bae08489e5d6c553c1144a4eaf8b4dc494596c4a1794e43cf6c7628da2
+selected_epoch_4_scenarios:
+  cup_near_bottle: {images: 50, truth: 50, tp: 48, fp: 2, fn: 2}
+  no_cup: {images: 50, truth: 0, tp: 0, fp: 0, fn: 0}
+  one_cup_distractors: {images: 50, truth: 50, tp: 49, fp: 1, fn: 1}
+  partially_occluded_cup: {images: 50, truth: 50, tp: 45, fp: 3, fn: 5}
+  small_far_cup: {images: 50, truth: 50, tp: 39, fp: 8, fn: 11}
+  two_cups: {images: 50, truth: 100, tp: 55, fp: 3, fn: 45, retained_production_candidates: 58}
+remaining_mask_failures:
+  - {index: 104, scenario: two_cups, bbox_iou: 0.9041571875544016, mask_iou: 0.27586206896551724}
+  - {index: 140, scenario: two_cups, bbox_iou: 0.8627416208432118, mask_iou: 0.0012113870381586917}
+  - {index: 242, scenario: two_cups, bbox_iou: 0.931625853590286, mask_iou: 0.3702560377701108}
+interpretation:
+  - selected decoder substantially improves corrected-val mask performance over original SAM replay
+  - double-cup detection/instance association is still unresolved; high aggregate F1 is not proof of safe unique-target selection
+  - current evidence does not distinguish a missed second proposal, a merged prompt, or box-greedy assignment to the other visible instance in the three mask failures
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+  scratch: durable scratch/stage-e-sam-comparison-readback-r365/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-SELECTED-DECODER-RESIDUAL-AUDIT-R1
+  status: PLANNED
+  run_id: stage-e-sam-selected-residual-audit-r366
+  scope: corrected val only, selected epoch 4 saved outputs and retained DINO proposals; no inference or threshold tuning
+  checks: per-truth proposal coverage before/after fixed thresholds and duplicate filtering, pairwise box/mask IoUs for overlapping double-cup instances, deterministic residual visual overlays, preprocessing input preservation without a model forward
+  visualization_selection: all three mask-failure indices 104/140/242, historical sample 152, first two sorted non-two-cup primary bbox-miss indices; deduplicate indices and retain declared selection receipt before rendering
+  output: registered durable visualizations/sam-decoder-epoch4-residual-audit-r1
+  decision: preserve selected decoder; identify first remaining failure boundary before any additional training or qualification promotion
+next_command: read existing orchestrator-failure-overlays-r3.py completely and adapt its diagnostic rendering pattern for the preregistered retained-data audit
+boundaries: synthetic sealed test, COCO100, PickPlace and Mac remain inaccessible; Microduck paused; IoU 0.80 and historical all-scenario metrics unchanged
+retention: r364 immutable full capture and r365 readback retained, no archived/deleted runs; scratch deletion candidates only
+owned_processes: NONE after r365 terminal readback
 ```
