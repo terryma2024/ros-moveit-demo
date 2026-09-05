@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-214
+latest_checkpoint: CP-215
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 09f23a4eeb8b17ece9c997dc1339c216ccef1768
+source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
-confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
+confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: reevaluate retained historical epoch4 predictions against r5 truth with unchanged production matching and thresholds; no inference or checkpoint reselection
+next_action: independently recover original-SAM retained accepted records for r5 truth-correction control, then freeze corrected-label DINO remediation; no further SAM changes or sealed access
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14990,4 +14990,56 @@ next_experiment:
 benchmark: preserve r30 and valid r363; this frozen-record truth-correction audit does not execute or select models; next changed-model comparison still requires its explicit benchmark gate
 retention: r379 remains INVALID, r380 retained VALID; all r5 data read-only and unchanged; no deleted or archived runs; scratch deletion candidates only
 boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no pose publishing from any offline audit
+```
+
+## Checkpoint CP-215 — Corrected truth exposes severe retained DINO box failure
+
+```yaml
+checkpoint: CP-215
+status: VALID_R5_RETAINED_REEVALUATION_MODEL_NOT_QUALIFIED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
+source_commit: 9f30bc74df1315627a8b073d4de715df63e419ed
+gitee_sha_readback: 9f30bc74df1315627a8b073d4de715df63e419ed
+run_id: stage-e-categorical-r5-retained-reevaluation-r381
+result: {exit_code: 0, elapsed_seconds: 0.98, val_frames: 300, model_forwards: 0, MuJoCo_renders: 0, checkpoint_reselection: false}
+report_sha256: 31acd7d38d7181df00d77cef551895386dd76c1ce1740495dc9e930c9649ac4e
+manifest_sha256: e7e2f1528fecdde04d3480f76633ce993b7be9e4fc442debfbd76b06574b8c6b
+historical_r4_control:
+  all_scenario: {tp: 236, fp: 17, fn: 64, f1: 0.8535262206148282}
+  primary_near_workspace: {tp: 197, fp: 9, fn: 53, f1: 0.8640350877192983}
+  outcome: exact frozen CP-199/200 counts reproduced; historical scores not modified
+corrected_r5:
+  all_scenario: {images: 300, truths: 300, candidates: 253, bbox_matches: 24, tp: 24, fp: 229, fn: 276, f1: 0.0867992766726944, recall: 0.08, production_errors: 0, no_cup_unique: 0}
+  primary_near_workspace: {images: 250, truths: 250, candidates: 206, bbox_matches: 20, tp: 20, fp: 186, fn: 230, f1: 0.08771929824561403, recall: 0.08, production_errors: 0, no_cup_unique: 0}
+  two_cups: {images: 50, truths: 100, accepted: 58, bbox_matches: 3, tp: 3, fp: 55, fn: 97, unique_candidate_frames: 42}
+secondary_diagnostic:
+  best_retained_mask_iou_at_least0_80: {all_truths: 250, primary_truths: 203, one_cup_distractors: 50, cup_near_bottle: 50, partial: 47, two_cups: 56, small_far: 47}
+  qualification_warning: best-mask diagnostic ignores bbox association and is not one-to-one; it never replaces production matching or grants success
+observed: same accepted predictions and masks, same original RGB, changed truth only; corrected tight-box association rejects most inflated retained DINO boxes, while many retained masks still overlap the correct cups well
+inferred: corrected DINO box supervision is the next likely remediation boundary; further SAM decoder changes are not justified by this box-gated failure
+not_claimed: no current checkpoint is qualified; no evidence yet that corrected DINO training will satisfy unique-target safety or runtime reachability
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  inference_provenance: retained r364 CUDA FP32, no CPU fallback; no inference this run
+  scratch: durable scratch/stage-e-categorical-r5-retained-reevaluation-r381/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-ORIGINAL-SAM-RETAINED-AUDIT-R1
+  status: PLANNED
+  run_id: stage-e-categorical-r5-original-sam-retained-audit-r382
+  lifecycle: FULL_RESTART offline retained-record truth-correction audit
+  output: durable val-remediation/categorical-r5-original-sam-retained-audit-r1
+  single_variable: r4 versus r5 truth for the original-SAM retained accepted predictions; no new inference, training, checkpoint selection or threshold change
+  input_records: durable visualizations/grounded-sam-corrected-truth-residual-r1/records.jsonl
+  input_records_sha256: 79da929fbffa1bf1fadd1fb499772d07dc8f9877feb069e748fdd08e28fea953
+  control: reproduce CP-167 all TP47 FP171 FN253 and primary TP47 FP151 FN203 before corrected scoring; verify mask/raw-record/image provenance and retain the same bbox-greedy0.5/mask0.80 gate
+  constraint: CP-161/164 ten-sample diagnostics remain frozen and are not recomputed or reinterpreted as a new qualification set
+  subsequent: preregister corrected-label DINO training using immutable r5 train/val with exact recipe and frozen SAM choice; no further SAM modification from this checkpoint
+next_command: inspect retained residual records and their raw-mask references, then create the r382 audit script and unique NVMe runner; do not launch training yet
+owned_processes: NONE after r381; no ROS/Gazebo/MoveIt or training stack launched in this continuation
+working_tree: ledger-only owned changes before checkpoint commit; all original untracked build/install/log directories preserved
+retention: r372-r381 retained, including INVALID r374 and r379; r5 data immutable; archived_runs NONE; scratch trees deletion candidates only, no deletion authorized or performed
+boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; generic cup and prompt cup.; IoU0.80 unchanged; out-of-workspace or unverified targets must not publish a grasp pose
 ```
