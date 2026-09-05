@@ -12728,3 +12728,50 @@ retention:
   deletion_candidates: [r311 partial output, r313 scratch, and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-157, implement exact binary-float32 conversion and writable image-copy handling, then execute all four unchanged direct tests in fresh r314 scratch
 ```
+
+## Checkpoint CP-158 — official binary-float32 mask regression is GREEN
+
+```yaml
+checkpoint: CP-158
+status: GREEN_VALID_RETRY_PLANNED
+recorded_at: 2026-09-05T09:04:56+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-157
+source_commit: ab49183918d052a862039d3faf894ed5b67ba853
+run_id: stage-e-native-sam-binary-mask-green-r314
+result: {exit_code: 0, tests: 4, elapsed_ms: 133}
+implementation:
+  driver_sha256: 59e6294156b6a2df3e7a950ff0b967eafcada72ccaff1e534c23dd830276d074
+  unchanged_test_sha256: 82cf01c553d10f9bbb63bca562da80c70d5efaffc6195ff5bca3ae57c9a8dd59
+  behavior:
+    - bool masks remain lossless
+    - official thresholded float32 masks are accepted only if every value is exactly 0.0 or 1.0, then converted losslessly to bool
+    - non-binary float32 masks are rejected without threshold tuning
+    - PIL RGB pixels are copied into a writable uint8 array before native preprocessing
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-binary-mask-green-r314
+  preflight_sha256: 25e16bad974b68d0672292b6a8e3c398e71d83ce9d908d946b9f2d5bb4b4f03d
+  test_log_sha256: 27e28fb28924431b66f95b3cb0847adae75c51c6fe9f9ef5f2171cf278ae116f
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  scripts_pointer_sha256: 914207ba88d7d7dea054c1013b6f91f8fc31977250cae0da411face6be43f800
+  exit_sha256: eb344ec9994a7ee5614db26e41ed79818db2e101c31d072e339452b3cb19a989
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-binary-mask-green-r314/tmp
+  tempfile_preflight: exact resolved match
+retry:
+  run_id: stage-e-native-sam-ab-r315
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/native-sam2-runtime-ab-r2
+  source_commit: next ledger-sync commit
+  inputs: identical to r311; only the RED-to-GREEN normalization implementation and fresh output/run identities differ
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r314 GREEN evidence/scratch, r313 RED, r311 invalid partial output, all CP-157 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r311 partial output, r313-r314 scratch, and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-158, read back remote SHA, then execute r315 once with fresh source/runtime inventory readbacks, offline CUDA FP32, and the absent r2 output root
+```
