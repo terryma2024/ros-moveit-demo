@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-361 — r515 private runner GREEN valid; final launch-readiness review required
+
+```yaml
+checkpoint: CP-361
+status: VALID_GENERATION_RUNNER_SUCCESS_CHAIN_GREEN_FINAL_ASTRA_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r515
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_SUCCESS_CHAIN_GREEN, authoritative_offline: true, invocations: 1, total: 133, passed: 133, failed: 0, harness_errors: 0, retained_r508: 114/114, adapted_r509: 19/19, adapted_child_exit: 1, top_harness_exit: 0, launcher_tool_exit: 0, elapsed_seconds: 11.712718170, forbidden_before_after: [[],[]]}
+minimal_fix: all values required after execute_generation unwind use generic SO101_POSTALLOCATION_-prefixed shell-global state; nounset-safe owner claim disarms EXIT before work, validates complete state, preserves caught/finalizer exits and prevents recursion; normal paths disarm before clearing
+N2_green: exact r514 stage/fync failures now exit97/96, never call driver, and persist launch terminal with original exit/stage/stdout/stderr; TMP mismatch/late collision remain terminalized; compounded finalizer/storage control retains qualified exit9 without recursion
+N3_green: all exact success membership/status cases and controls pass with strict r509_frozen_private_driver.GenerationRunnerError provenance; driver bytes unchanged
+private_files: {driver_sha256: cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b, shell_sha256: f350b28f144955643a9b809065b0896be26470e7a4b89f919d853c39f276fd68, harness_sha256: d1cec51fb381b88d34816c610cad74439df6773e063e9073fffb0315622702f7, launcher_sha256: b04c5ac82c0890ec4d7ed6c15adaad9cb14ff5ee731d24cb91046e1d6ca2993e}
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r515; result SHA256c7f6c8d60072aa3a7bd28b752d4d7c78e4b0f4d49ef70bc04415e232c987523d; final18-file inventory SHA25678e7b4c3e777ec39b727fa3692d7b99b5898e389c0325b33d5591f8ef0a13cea; readback SHA25654268e1aa60fc01eeaf96af2d47e97e25a9f57cd6b2da91484926e0938128669
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r515-report.md SHA25690bc35d6f5dbff2fa1ab4eaaab0ea0b1257fcaed50c0c61893bb98eaccb2a7a8
+parent_readback: complete report/result all19 adapted cases/raw receipts/inventory/readback/tempfile/frozen hashes read; source/config clean and official four roots absent
+qualification_limit: private offline runner behavior only; real setup/overlay imports/NVIDIA contexts/official generation remain unexecuted
+next_experiment:
+  status: PLANNED_FINAL_READ_ONLY_LAUNCH_READINESS_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read complete final driver and shell, exact r514-to-r515 diff, r515 harness/result/inventory/readback and antecedent r508/r509/r514 contracts; verify lifecycle fix, all N1/N2/N3/I1/I2/I3/M1 closures, failure semantics, shell-driver hash/HEAD binding, source/config/closure/context contracts and whether one separately checkpointed official1500-member generation is safe
+  restrictions: read-only; no imports/tests/root allocation/edit/Git/index/ledger/sealed traversal or actual setup/GL/generation
+future_if_approved: parent must checkpoint exact production command/run ID/current authorized HEAD/reviewed hashes and one official generation only; source exhaustive readback and archive/conversion remain later separate stages
+retention: r515/r514 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-360 — r515 pre-root receipt contradiction corrected; same GREEN remains planned
 
 ```yaml
