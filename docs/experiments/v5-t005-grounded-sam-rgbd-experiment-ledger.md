@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-364 — r517 durable four-status design frozen; preimplementation Astra review required
+
+```yaml
+checkpoint: CP-364
+status: R517_DURABLE_ACCOUNTING_DESIGN_FROZEN_READ_ONLY_REVIEW_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+executor: /root/generator_build, gpt-5.6-sol high
+preflight: {r517_run_root: absent, r517_scratch_root: absent, r517_low_root: absent, invocations: 0, driver_start_sha256: cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b, shell_start_sha256: f350b28f144955643a9b809065b0896be26470e7a4b89f919d853c39f276fd68}
+reason: shell-local diagnostic/outer status would vanish at process exit and cannot satisfy distinct durable accounting; existing outer receipt alone cannot truthfully close original7/finalizer0/diagnostic96 or build the final inventory after the error receipt
+frozen_design:
+  driver: add exclusive launch-accounting-receipt.json; optional finalize-launch deferred-inventory mode persists/readbacks terminal but leaves inventory open; extend outer receipt with diagnostic_fsync_exit_code and conditional nonzero error_chain; add record-launch-accounting mode that validates terminal/outer consistency and persists schema-version1 stage/original/finalizer/diagnostic-fsync/outer-attempted/outer-exit/overall-exit/diagnostic identities, then alone creates launch-final inventory exactly once
+  shell: exclusively open finalizer diagnostics once; atomically claim/disarm EXIT before one normal finalizer; capture finalizer then diagnostic-fsync statuses; make exactly one outer attempt when finalizer or diagnostic status nonzero; capture outer status; call accounting completion once if storage permits; never reopen/refinalize/recurse; any otherwise-success plus storage/accounting failure returns nonzero
+  semantics: 7/0/96 persists distinct values and overall7; 7/9/96 persists distinct values and overall9; 0/0/0 no outer overall0; outer/accounting storage failure preserves existing bytes and nonzero without requiring impossible persistence
+  compatibility: direct finalize_launch_evidence/default CLI remains inventory-immediate for retained r515/N3 API tests; only production shell requests deferred mode; generation behavior/config/data protocol unchanged
+  verification: adapt exact r516 stubs to completion mode; require one finalizer/one accounting attempt, call1 sentinels, four-status receipt consistency, omission/mutation sensitivity; retain r515133 plus r516six=139 cases and static/provenance/evidence gates
+next_experiment:
+  status: PLANNED_READ_ONLY_DESIGN_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: validate design closes CP-362/r516 without split-brain inventories, false success, status relabeling, recursive writes or weakening N1/N3/I1-I3/M1; approve precise implementation or request bounded changes
+  restrictions: read-only; no candidate edit/import/test/root allocation/Git/index/ledger/production/sealed traversal
+future_if_approved: Sol completes exact design and runs one fresh r517 combined139 GREEN, then immutable Astra code/evidence review; no official generation authorization is implied
+retention: all prior evidence retained, archived none; no r517 roots allocated and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-363 — r516 exact-once diagnostic RED valid; bounded finalization GREEN authorized
 
 ```yaml
