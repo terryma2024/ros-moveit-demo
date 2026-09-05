@@ -18717,3 +18717,30 @@ next_experiment:
 retention: r497/r496 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; benchmark fixture semantics unchanged; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-338 — r498 benchmark process GREEN but timing receipt invalid; read-only recovery authorized
+
+```yaml
+checkpoint: CP-338
+status: GREEN_BENCHMARK_PROCESS_INVALID_TIMING_RECEIPT_RECOVERY_PLANNED
+run_id: linux-test-stage-e-generator-nonpenetrating-r498-benchmark
+executor: /root/generator_build, gpt-5.6-sol high
+semantic_result: {invocations: 1, tests: 585, benchmark_cases: 585, ordinary_cases: 0, partition_violations: 0, passed: 583, skipped: 2, failures: 0, errors: 0, colcon_test_exit: 0, test_result_exit: 0, receipt_exit: 0, tool_exit: 0, outer_exit: 0}
+skips: exact retained Linux-inapplicable macOS renameatx_np nodes; no skip drift
+timing_authority: stdout pytest summary 645.56s, /usr/bin/time colcon 646.90s, total runner 648.792879228s
+invalid_receipt: immutable result.json/timing-comparison.json record pytest47.0s because unanchored regex selected final `in 47s` substring from colcon `[10min 47s]` instead of pytest summary; zero receipt exit does not override inconsistency
+performance_observation: r498 authoritative645.56s vs immutable r30 HDD3210.78s is2565.22s shorter and approximately4.974x; vs r469 NVMe649.44s is3.88s faster; source/suite differ and no causal optimization claim
+source_environment: execution HEAD/Gitee d4e04632, package/build source07dcd29a, frozen r495 all7prefix overlay, exact locked Python/NVMe scratch/dependencies/imports/no-drift valid; no tmpfs/fsync/journaling/integrity change
+evidence: durable run-evidence/linux-test-stage-e-generator-nonpenetrating-r498-benchmark retained immutable; runner SHA256 b27c8383322719376d61fb5dffc7319e4c4cfceb0b619720127970d56abbc156; JUnit SHA256 0643278612841797af5305ea96bcb65aa7768191a0bd56e109928484799fbbab; stdout SHA256 af526195ed1138ddbcebb5c5e19b1a7774d6a02e080c84d322c7f93ce3becbb3; result SHA256 ab9b4bb700cda866b22133f9d1b33da762409c65e44f73cb69617bb5b82f81a2; invalid timing comparison SHA256 1553dd98e54259d1e7c97ea3f50298a1c3bf1d71eb435c339b14a0f4d53dfb35
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-benchmark-r498-report.md SHA256 7cf91b9841936fe4e01a8973c79dd0c23694de728e5bef613c5ac0499b766622
+parent_readback: complete149-line report, raw stdout/JUnit/result/time/runner regex and all hashes read; semantic test accepted but overall clean receipt withheld
+next_experiment:
+  status: PLANNED_READ_ONLY_RECOVERY
+  run_id: stage-e-generator-nonpenetrating-benchmark-receipt-r499
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: create fresh noncolliding durable run-evidence/r499 only; read retained immutable r498 stdout/JUnit/test-result/time/exits/source receipts; anchored full pytest-summary parser must uniquely yield645.56, cross-check JUnit585/583/2/0/0 and exact skips, colcon646.90/total648.792879228/all exits0; hash every input and emit fsynced supplemental result/inventory/report
+  restrictions: no benchmark/test/import/build/scratch allocation/repo edit/Git/index/ledger; never modify r498; fail closed on multiple/missing matches or hash drift
+  review_after: GPT-6 Astra medium read-only review of r499 recovery before accepting explicit benchmark gate
+retention: r498 and all earlier evidence retained unchanged, archived none; existing scratch deletion candidates only and nothing deleted
+boundaries: no rerun/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
