@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-195
+latest_checkpoint: CP-198
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 74c8b897bec402d3cc3bda51817a69a75b338706
 active_experiment: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
 confirmed: five trained decoder checkpoints independently verified; all 300 retained proposal sets certified at fixed eligibility thresholds; replay contracts and ordinary gate GREEN
-open: saved-checkpoint comparison launcher, explicit benchmark, five-epoch corrected-val comparison and subsequent qualification remain incomplete
-next_action: ordinary-push owned comparison contracts with SHA readback, then integrate the five-epoch retained-proposal replay launcher
+open: five-epoch corrected-val inference/readback and subsequent qualification remain incomplete
+next_action: ordinary-push benchmark checkpoint with SHA readback, then launch registered r364 five-epoch retained-proposal replay
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14236,4 +14236,123 @@ qualification: not yet run; no model candidate selected from training losses or 
 owned_processes: NONE after terminal ordinary gate
 retention: r351-r359 evidence retained including invalid r356; no archived or deleted runs; all newly created scratch trees are deletion candidates only
 boundaries: all sealed sets, PickPlace and Mac untouched; Microduck paused; no DINO or historical SAM inference rerun
+```
+
+## Checkpoint CP-196 — Five-checkpoint replay launcher and gates preregistered
+
+```yaml
+checkpoint: CP-196
+status: PLANNED
+source_commit: ddbca4e4db2ad06aa556f9ecd6079d495e819464
+gitee_sha_readback: ddbca4e4db2ad06aa556f9ecd6079d495e819464
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+launcher: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/compare_sam_decoder_checkpoints_r1.py
+scope: fixed experiment orchestration over already tested checkpoint/data/rebind/production-filter/scoring APIs; no generalized production adapter change
+inputs: exact CP-188 five manifests and identities; CP-191 retained DINO records; original r3 and corrected r4 val inventories and source manifests
+single_variable: saved trained SAM decoder epoch 1 through 5
+recipe: CP-189 fixed thresholds; CUDA FP32, stateless per image, all three multimask outputs preserved, quality argmax only
+selection: primary F1 then primary recall then earliest epoch, only when all five complete reports are free of production contract errors
+output_contract:
+  - retain lossless NPZ with all three masks and qualities per prompted frame, including rejected or invalid-quality outputs
+  - preserve exact proposal IDs and image identity for all 300 frames per epoch
+  - accepted masks receive real hash-bound RLE files; no misleading NPZ path used as an RLE MaskRef
+  - quality/production contract errors are reported, never clamped or silently removed from denominator; any such epoch prevents selection
+  - historical CP-167 metrics unchanged; original retained masks get a separately labeled production-filter replay baseline without inference
+runs:
+  launcher_red: stage-e-sam-comparison-launcher-red-r360
+  launcher_green: stage-e-sam-comparison-launcher-green-r361
+  preflight: stage-e-sam-comparison-preflight-r362
+  benchmark: linux-test-stage-e-sam-validation-r363-benchmark
+  comparison: stage-e-sam-decoder-comparison-r364
+outputs:
+  preflight: registered durable val-remediation/sam-decoder-corrected-val-preflight-r1
+  comparison: registered durable val-remediation/sam-decoder-corrected-val-comparison-r1
+guards: unique nonexistent output/evidence/scratch, exact source commit, package source clean, five expected manifests and immutable files, full val rebind and coverage, CUDA only, offline loading, no old inference rerun
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: each run uses its own registered durable scratch/run-id/tmp and exact tempfile readback
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+benchmark_contract: explicit colcon benchmark_test gate, only after launcher preflight, compare pytest duration with immutable r30 HDD baseline 3210.78 seconds
+boundaries: val only; no sealed test/COCO100/PickPlace/Mac; Microduck paused; no full live production equivalence claim from retained-proposal replay
+retention: retain all captures and failures; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-197 — Launcher preflight and retained baseline valid; explicit benchmark next
+
+```yaml
+checkpoint: CP-197
+status: VALID_PREFLIGHT_BENCHMARK_NEXT
+source_commit: ddbca4e4db2ad06aa556f9ecd6079d495e819464
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+launcher_tdd:
+  red: {run_id: stage-e-sam-comparison-launcher-red-r360, failed: 2, exit_code: 1, reason: real RLE persistence interface absent}
+  green: {run_id: stage-e-sam-comparison-launcher-green-r361, passed: 17, exit_code: 0, pytest_seconds: 0.18, elapsed_seconds: 0.46}
+  coverage: real mask RLE round-trip preserves hash/identity, output collision leaves existing evidence unchanged, existing replay contracts remain GREEN
+launcher_sha256: 3cd1e7d04a03f1d2bfc5d9492759c3f93fee7946940208ae257b46039ac78bd6
+preflight:
+  run_id: stage-e-sam-comparison-preflight-r362
+  result: {exit_code: 0, elapsed_seconds: 8.23, samples: 300, certified_frames: 300, sam_prompts: 254, dino_forwards: 0, sam_forwards: 0}
+  checkpoint_verification: all five exact CP-188 manifests, file inventories and immutable modes passed
+  truth_rebind_identity_sha256: 13c943df1aad31af8c3f3ab801a4d87433a59dd32550da943244b5731db499ea
+  baseline_report_sha256: f3138415fdecc6bc8fe86cae4b758a24d35c3f982e86b5531563639cda30b5e8
+baseline_production_mask_filter_replay:
+  all_scenario: {images: 300, tp: 47, fp: 171, fn: 253, f1: 0.18146718146718147}
+  primary_near_workspace: {images: 250, tp: 47, fp: 151, fn: 203, f1: 0.20982142857142858}
+  interpretation: independently matches CP-167 historical calibrated totals for these retained records; historical metric definitions remain unchanged
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+  scratch: unique durable scratch/stage-e-sam-comparison-preflight-r362/tmp; tempfile exact match
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_sam_validation_r363.sh
+benchmark: explicit benchmark_test only; fresh durable scratch/linux-test-stage-e-sam-validation-r363-benchmark/tmp; compare with r30 3210.78 seconds; do not rerun r30
+next_after_green: checkpoint and source sync, then run unique r364 with exact synced source argument and frozen launcher hash
+boundaries: no model inference yet; sealed sets/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged
+retention: r360-r362 and immutable preflight report retained; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-198 — Required explicit benchmark GREEN; five-epoch comparison armed
+
+```yaml
+checkpoint: CP-198
+status: VALID_BENCHMARK_COMPARISON_ARMED
+source_commit: ddbca4e4db2ad06aa556f9ecd6079d495e819464
+run_id: linux-test-stage-e-sam-validation-r363-benchmark
+result: {passed: 575, skipped: 2, tests: 577, failures: 0, errors: 0, pytest_seconds: 646.45, elapsed_seconds: 647.81, colcon_exit: 0, test_result_exit: 0}
+junit_sha256: 9cc406f5adbd1efbe5e6e2df1414b4802156d9a207ead111dd37570f2bcfcf23
+gate_command: colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+performance_comparison:
+  r30_preserved_hdd_pytest_seconds: 3210.78
+  r363_nvme_pytest_seconds: 646.45
+  saved_seconds: 2564.33
+  elapsed_reduction_percent: 79.86626302642972
+  speed_ratio: 4.966787841287029
+  interpretation: observed cross-run comparison, not a controlled storage-only speed experiment; suite evolved from r30 573 total to current 577 total
+  semantics: fsync, ext4 journaling and integrity checks retained; no tmpfs; r30 and r222 not rerun
+provenance:
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-sam-validation-r363-benchmark/tmp
+  tempfile_preflight: exact resolved match; all three actual pytest process TMP variables independently read back to the same path
+  filesystem: /data is /dev/nvme0n1p5 ext4
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+comparison_launch:
+  run_id: stage-e-sam-decoder-comparison-r364
+  launcher_sha256: 3cd1e7d04a03f1d2bfc5d9492759c3f93fee7946940208ae257b46039ac78bd6
+  command: run_sam_decoder_comparison_r1.sh compare EXACT_NEXT_SYNCED_SOURCE_COMMIT
+  prerequisite: preserve launcher hash, read back benchmark JUnit and exit, reject competing GPU compute process, verify exact source argument and immutable checkpoint/input hashes again
+  output: registered durable val-remediation/sam-decoder-corrected-val-comparison-r1
+  inference: new SAM only, 254 fixed prompts per epoch, all 300 frame records per epoch; no DINO recapture
+independent_readback_next:
+  run_id: stage-e-sam-comparison-readback-r365
+  status: PLANNED
+  verifier: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/verify_sam_decoder_comparison_r1.py
+  output: registered durable val-remediation/sam-decoder-corrected-val-readback-r1
+  checks: exact immutable artifact inventory, all 1500 NPZ/frame records, original proposal/image/checkpoint identities, independent quality/size/inside-box filtering, accepted RLE roundtrip, box/mask IoU and all/primary metrics, fixed epoch selection; no inference
+next_action: commit ledger checkpoint, ordinary-push/readback, run r364 then r365 without crossing sealed boundaries
+retention: r363 logs/JUnit/scratch and all prior evidence retained; scratch deletion candidate only; no deletion
+boundaries: sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged
 ```
