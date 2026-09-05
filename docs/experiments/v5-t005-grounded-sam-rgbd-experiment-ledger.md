@@ -18979,3 +18979,27 @@ future_if_approved: parent plans one unique official 1500-member train/val gener
 retention: r504/r503/r502/r501/r500 and all earlier evidence retained, archived none; scratch/low-rate synthetic trees deletion candidates only and nothing deleted
 boundaries: official roots absent; no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-348 — r504 re-review keeps I2 open; lifecycle-finalization RED authorized
+
+```yaml
+checkpoint: CP-348
+status: GENERATION_RUNNER_REREVIEW_CHANGES_REQUESTED_LIFECYCLE_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, launch_readiness: CHANGES_REQUESTED, critical: 0, important: 1, minor: 1, I1: ADDRESSED, I2: NOT_ADDRESSED, I3: ADDRESSED, M1: ADDRESSED}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r504-review-report.md SHA25611d975406731ae4ffdb4a9a34efb41d3c5c13e493340cc70bcf0e352ef2c1562
+finding_N1: driver-final inventory includes stdout/stderr while driver process still owns them; later GENERATION_COMPLETE stdout or uncaught traceback stderr deterministically invalidates its hashes; launch-finalizer treats nested manifest as opaque and can claim success without revalidation; r504 direct-function tests prefill static logs and hide the mutation
+finding_N2: shell capture/stage accounting begins after tempfile/setup sourcing; setup/log-fsync/finalizer failures can leave allocated partial roots without durable stage/original-vs-finalizer exit; finalizer diagnostic file contents are not fsynced before parent fsync; best-effort storage-failure boundary must be explicit
+confirmed_closure: I1 shared authorized/observed identity; I3 mandatory real operations and mutation sensitivity; M1 audit cleanup; source/config/closure/context/injection contracts remain intact
+next_experiment:
+  status: GO_TESTS_ONLY_OFFLINE_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-finalization-red-r505
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_inputs: r504 driver SHA256c0ab62a0 and shell SHA2562814ce20 remain byte-identical; no fix before RED
+  red_cases: emulate real success output appended after driver lifecycle and uncaught failure traceback appended to stderr, then fsync and launch-finalize; independently revalidate every driver/launch inventory entry and require current bytes; intentionally corrupt a nested driver manifest/member and require launch-finalizer rejection; simulate pre-driver setup failure and finalizer failure to require captured stage, original exit, finalizer exit, fsynced diagnostics and nonrecursive best-effort error chain
+  controls: unchanged static driver-owned stable receipts and ordinary launch-final inventory validate; all expected failures map only to N1/N2; forbidden project/MuJoCo/OpenGL imports empty; exact locked Python/fresh NVMe scratch/one harness invocation
+  restrictions: one new private regression harness/evidence only; no driver/shell edit, real overlay sourcing, project import, GPU/renderer, official root, render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed traversal
+future_if_valid: authorize minimal evidence-ownership correction: driver-final exact stable driver-owned set excludes launch-owned mutable logs, launch-final validates nested manifests after process/log close, and shell captures stage/dual exits/finalizer diagnostics from root allocation onward; then fresh combined offline GREEN and Astra re-review
+retention: r504/r503/r502/r501/r500 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
