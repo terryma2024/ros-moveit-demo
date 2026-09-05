@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-273
+latest_checkpoint: CP-278
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r443build passed; Astra requests visible-membership and receipt-field fixes; Sol high fix wave1 with r446RED/r447GREEN before package/benchmark gates
+next_action: r450 broadGREEN104passed; freeze owned fix and obtain scoped Astra medium re-review before fresh accepted-source build and deferred package gates
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16964,4 +16964,126 @@ fix_wave:
 package_gates: r444ordinary/r445explicit not launched; remain deferred until review issues resolved on freshly built accepted fix source; do not run benchmark on known-to-change source
 retention: all audits/tests/builds/review reports retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/training; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-274 — Subagent review findings reproduced RED
+
+```yaml
+checkpoint: CP-274
+status: VALID_REVIEW_FIX_RED_GREEN_AUTHORIZED
+run_id: stage-e-generator-review-fix-red-r446
+source_commit: 9e9c6394a74a4d6f0942742a37a4d5fb099e1986 plus owned regression-test diff
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 1, tests: 43, failures: 13, passed: 30, errors: 0, skipped: 0, pytest_seconds: 2.72, elapsed_seconds: 3.08}
+observed: renamed/unnamed/descendant intersecting bottle solids incorrectly accepted;4invalid primitive counts and5invalid geom-name shapes not rejected; malformed supplied receipt reaches writer
+controls: invisible conservative collision proxies remain excluded and all29previous tests pass
+RED_integrity: production source diff from reviewed7e91137f remains empty; only new tests and evidence runner before this run; parent read report plus exact exit/test log
+evidence: durable run-evidence/stage-e-generator-review-fix-red-r446 and coordination/generator-r443-r1/fix-1-report.md; full source/test copies/hashes/command/diff/preflight/JUnit/exit/time retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+scratch: durable scratch/stage-e-generator-review-fix-red-r446/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-review-fix-green-r447
+  single_variable: minimal fix for the13observed failures under fix-1-brief; complete supported visual membership or fail-closed schema, invisible proxies excluded, positive integer count and valid geom names
+  executor: same Sol high agent, no nested agents/Git/ledger changes
+  gate: new43tests plus existing generator/categorical tests; actual lockedPython uniqueNVMe scratch, evidence readback and static checks; never reuse r446 root
+  after: parent reviews report, commits only owned fix/tests, generates immutable fix review package for Astra medium; no package benchmark before review disposition
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/model training; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-275 — Preserve invalid GREEN bootstrap; new run allocated
+
+```yaml
+checkpoint: CP-275
+status: INVALID_GREEN_IMPORT_BOOTSTRAP_FRESH_RUN_PLANNED
+run_id: stage-e-generator-review-fix-green-r447
+source_commit: 9e9c6394a74a4d6f0942742a37a4d5fb099e1986 plus owned fix/test diff
+executor: /root/generator_build, gpt-5.6-sol high
+result: {runner_exit_code: 1, pytest_executed: false, JUnit: absent, measured_test_elapsed: unavailable}
+failure: IndentationError at mujoco_scene_geometry.py110, return inside accepted property lost indentation in the patch; import preflight stopped before pytest
+classification: INVALID bootstrap, not test failure or passing gate; r447 run/scratch preserved and never reused
+evidence: durable run-evidence/stage-e-generator-review-fix-green-r447 and fix-1-report.md; source copies/runner/preflight retained, no invented test/time receipt
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-review-fix-green-r448
+  single_variable: one-line syntax correction before rerunning unchanged broad test scope under fresh ID
+  executor_instruction: first AST/ruff syntax check actual owned source, then exact lockedPython/r443overlay/uniqueNVMe scratch and tempfile preflight, geometry43 plus existing generator controls
+  constraints: no code/Git/ledger changes outside owned fix; do not reuse r447 or launch package/benchmark
+retention: all evidence retained including INVALIDr447; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
+```
+
+## Checkpoint CP-276 — Static-tool bootstrap correction; fresh GREEN run
+
+```yaml
+checkpoint: CP-276
+status: INVALID_STATIC_TOOL_BOOTSTRAP_FRESH_GREEN_PLANNED
+run_id: stage-e-generator-review-fix-green-r448
+source_commit: 9e9c6394a74a4d6f0942742a37a4d5fb099e1986 plus owned fix/tests
+result: {AST: passed_both_sources, pytest_executed: false, JUnit: absent, measured_test_elapsed: unavailable}
+failure: locked Python -m ruff cannot import Ruff; host Ruff exists at /home/lenovo/.local/bin/ruff version0.15.20; source syntax correction succeeded
+classification: INVALID static-tool bootstrap, no pytest result or gate claim; evidence and scratch preserved, do not reuse
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-review-fix-green-r449
+  single_variable: invoke verified /home/lenovo/.local/bin/ruff for lint; keep exact lockedPython for AST/tempfile/import/pytest and unchanged broad test scope/source
+  executor: /root/generator_build, GPT-5.6-Sol high
+  gate: verify tool executable/version before allocating new roots, capture actual commands; freshNVMe scratch, source copies/hashes, preflight, JUnit/exit/time; report self-review before parent commit and Astra review
+retention: r447/r448 invalid bootstrap and all prior evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
+```
+
+## Checkpoint CP-277 — Lint-only stop preserved; pre-allocation static checks required
+
+```yaml
+checkpoint: CP-277
+status: STATIC_GATE_FAILED_NO_PYTEST_FRESH_GREEN_PLANNED
+run_id: stage-e-generator-review-fix-green-r449
+source_commit: 9e9c6394a74a4d6f0942742a37a4d5fb099e1986 plus owned fix/tests
+result: {AST: passed, Ruff: I001_failed, pytest_executed: false, JUnit: absent, measured_test_elapsed: unavailable}
+observed: Ruff0.15.20 reports one excess blank line between NumPy import and module constant; read-only Ruff diff identifies the one-line formatting correction
+classification: source static-gate failure, not pytest failure or environment/model result; all r449 artifacts retained without reuse
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-review-fix-green-r450
+  single_variable: remove excess blank line, no functional change fromr449
+  prerequisite: executor must pass actual read-only AST and Ruff checks on owned source/tests BEFORE creating r450 roots; ordinary lint preparation is not a pytest experiment and needs no new fixture directory per lint check
+  gate: unchanged broad104test scope, exact lockedPython/r443overlay/uniqueNVMe scratch/preflight/full source and command receipts/JUnit/exit/time
+retention: r447/r448/r449 and all evidence retained; archived none; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac, data/model/training change; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-278 — Review-fix GREEN frozen for scoped re-review
+
+```yaml
+checkpoint: CP-278
+status: VALID_DIRECTED_GREEN_SCOPED_REVIEW_PLANNED
+run_id: stage-e-generator-review-fix-green-r450
+source_commit: 9e9c6394a74a4d6f0942742a37a4d5fb099e1986 plus owned helper/test diff
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 104, passed: 104, failures: 0, errors: 0, skipped: 0, pytest_seconds: 4.26, elapsed_seconds: 4.58}
+coverage: geometry43 including13RED regressions plus61existing categorical and dataset controls
+static: actual lockedPython AST, host Ruff0.15.20 and git diff-check passed; source unchanged after test
+parent_readback: full fix report, exit JSON and JUnit read back; no package or qualification claim
+fix: complete supported task-geom schema rejects renamed/unnamed/descendant solids; invisible collision proxies remain excluded; positive nonbool integer count and exact two nonempty geom names validated at construction and writer scope boundary
+evidence: durable run-evidence/stage-e-generator-review-fix-green-r450; coordination/generator-r443-r1/fix-1-report.md
+report_sha256: 177f4652e6d48e22681996dcb98c8a7144186208ed13580d281276b5f9492ef9
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+scratch: durable scratch/stage-e-generator-review-fix-green-r450/tmp; exact actual-Python tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  kind: immutable_scoped_fix_review_round1
+  reviewer: /root/generator_review, gpt-6-astra medium
+  fix_base: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
+  scope: verdict both original findings and inspect new breakage in fix diff only; no repeated tests or source changes
+  after: fresh accepted-source seven-package build then ordinary and one required explicit benchmark gate; r444/r445 remain unlaunched
+retention: all evidence including invalidr447/r448/r449 preserved; archived none; scratch deletion candidates only, nothing deleted
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no inference/generation/training; mask0.80 and mapping0.98 unchanged
 ```

@@ -1,5 +1,6 @@
 """The generator must not accept intersecting task-object visual solids."""
 
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,32 @@ def position(scene, joint, xyz):
     identifier = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint)
     address = model.jnt_qposadr[identifier]
     data.qpos[address : address + 7] = [*xyz, 1, 0, 0, 0]
+
+
+def mutated_task_scene(tmp_path, old, new):
+    import mujoco
+
+    source = Path(__file__).parents[1] / "assets/mujoco"
+    copied = tmp_path / "mujoco"
+    shutil.copytree(source, copied)
+    scene_path = copied / "v5_multi_object_scene.xml"
+    xml = scene_path.read_text()
+    assert xml.count(old) == 1
+    scene_path.write_text(xml.replace(old, new, 1))
+    model = mujoco.MjModel.from_xml_path(str(scene_path))
+    return mujoco, model, mujoco.MjData(model)
+
+
+def assert_intersecting_bottle_variant_fails_closed(scene):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    position(scene, "bottle_free_joint", (0.07, -0.28, 0.19))
+    _, model, data = scene
+    try:
+        receipt = measure_task_scene_geometry(model, data, active_cup_count=1)
+    except ValueError:
+        return
+    assert not receipt.accepted
 
 
 @pytest.mark.parametrize(
@@ -83,6 +110,49 @@ def test_cup_bottle_intersection_is_rejected(scene):
         p.body_names == ("plastic_cup", "orange_bottle") and p.signed_distance_m < -0.001
         for p in receipt.pairs
     )
+
+
+def test_renamed_rendered_bottle_solid_is_measured_or_rejected(tmp_path):
+    changed = mutated_task_scene(
+        tmp_path,
+        'name="bottle_visual"',
+        'name="bottle_shell"',
+    )
+    assert_intersecting_bottle_variant_fails_closed(changed)
+
+
+def test_unnamed_rendered_bottle_solid_is_measured_or_rejected(tmp_path):
+    changed = mutated_task_scene(
+        tmp_path,
+        'name="bottle_visual" ',
+        "",
+    )
+    assert_intersecting_bottle_variant_fails_closed(changed)
+
+
+def test_descendant_rendered_bottle_solid_is_measured_or_rejected(tmp_path):
+    direct = """      <geom name="bottle_visual" type="cylinder" size="0.025 0.070"
+            group="0" contype="0" conaffinity="0" material="bottle_material"/>"""
+    descendant = """      <body name="bottle_shell_child">
+        <geom name="bottle_descendant_visual" type="cylinder" size="0.025 0.070"
+              group="0" contype="0" conaffinity="0" material="bottle_material"/>
+      </body>"""
+    changed = mutated_task_scene(tmp_path, direct, descendant)
+    assert_intersecting_bottle_variant_fails_closed(changed)
+
+
+def test_invisible_collision_proxies_are_excluded_from_visual_measurement(scene):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    _, model, data = scene
+    receipt = measure_task_scene_geometry(model, data, active_cup_count=1)
+    pair = next(
+        item
+        for item in receipt.pairs
+        if item.body_names == ("plastic_cup", "orange_bottle")
+    )
+    assert pair.primitive_pair_count == 26
+    assert all("collision" not in name for name in pair.geom_names)
 
 
 def test_parked_inactive_cups_are_not_physical_targets(scene):
@@ -229,6 +299,83 @@ def test_nonfinite_pair_cannot_be_serialized_as_valid_truth():
 
     with pytest.raises(ValueError, match="finite"):
         TaskGeometryPair(("cup", "bottle"), ("a", "b"), float("nan"), 1)
+
+
+@pytest.mark.parametrize("count", [0, -1, True, 1.0])
+def test_pair_requires_positive_non_boolean_integer_primitive_count(count):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import TaskGeometryPair
+
+    with pytest.raises(ValueError, match="primitive.*count"):
+        TaskGeometryPair(("cup", "bottle"), ("a", "b"), 0.1, count)
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("", "b"),
+        ("a", ""),
+        ("only",),
+        ("a", "b", "c"),
+        ("a", 1),
+    ],
+)
+def test_pair_requires_exactly_two_nonempty_geom_name_strings(names):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import TaskGeometryPair
+
+    with pytest.raises(ValueError, match="geom.*names"):
+        TaskGeometryPair(("cup", "bottle"), names, 0.1, 1)
+
+
+def test_writer_rejects_supplied_receipt_with_malformed_pair_fields(scene, tmp_path):
+    from so101_demo.adapters.perception.mujoco_dataset import (
+        DatasetConfig,
+        RawRender,
+        generate_dataset,
+    )
+    from so101_demo.adapters.perception.mujoco_scene_geometry import (
+        TaskGeometryPair,
+        TaskSceneGeometry,
+        measure_task_scene_geometry,
+    )
+
+    _, model, data = scene
+    valid = measure_task_scene_geometry(model, data, active_cup_count=0)
+    malformed_pairs = []
+    for pair in valid.pairs:
+        malformed = object.__new__(TaskGeometryPair)
+        object.__setattr__(malformed, "body_names", pair.body_names)
+        object.__setattr__(malformed, "geom_names", ("", ""))
+        object.__setattr__(malformed, "signed_distance_m", pair.signed_distance_m)
+        object.__setattr__(malformed, "primitive_pair_count", 0)
+        malformed_pairs.append(malformed)
+    malformed_receipt = object.__new__(TaskSceneGeometry)
+    object.__setattr__(malformed_receipt, "state_sha256", valid.state_sha256)
+    object.__setattr__(malformed_receipt, "pairs", tuple(malformed_pairs))
+
+    class SuppliedRenderer:
+        def render(self, seed, scenario):
+            return RawRender(
+                np.zeros((4, 4, 3), dtype=np.uint8),
+                np.full((4, 4), -1),
+                np.array([0]),
+                {},
+                geometry_receipt=malformed_receipt,
+            )
+
+    model_path = tmp_path / "toy.xml"
+    model_path.write_text("<mujoco/>")
+    splits = ("train", "val", "test")
+    config = DatasetConfig(
+        mjcf_path=model_path,
+        generator_commit="a" * 40,
+        split_counts={split: 1 for split in splits},
+        scenario_quotas={split: {"no_cup": 1} for split in splits},
+        require_nonpenetrating_scene=True,
+    )
+    output = tmp_path / "malformed-receipt-dataset"
+    with pytest.raises(ValueError, match="geometry receipt|primitive|geom"):
+        generate_dataset(config, output, renderer=SuppliedRenderer())
+    assert not list(output.rglob("*.png"))
 
 
 @pytest.mark.parametrize("enabled,with_receipt", [(True, True), (True, False), (False, False)])
