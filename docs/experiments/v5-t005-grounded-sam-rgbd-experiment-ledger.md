@@ -18895,3 +18895,31 @@ future_if_approved: parent may plan one fresh official generation only after rev
 retention: r502/r501/r500 and all earlier evidence retained, archived none; r502 scratch deletion candidate only and nothing deleted
 boundaries: no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-345 — r502 review requests corrections; focused offline regression RED authorized
+
+```yaml
+checkpoint: CP-345
+status: GENERATION_RUNNER_REVIEW_CHANGES_REQUESTED_FOCUSED_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, code_quality: CHANGES_REQUESTED, critical: 0, important: 3, minor: 1}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r502-review-report.md SHA256d0bee2895066f3e1b2233c8b5690676a86c65a1f0edc64da2bcf8f0c31ac7eba
+findings:
+  I1: driver hardcodes and self-compares old execution HEAD65d97cb6 while shell separately checks a parent-supplied actual HEAD; both can pass with contradictory identities, so observed/authorized execution provenance is not bound
+  I2: production execute leaves only two GPU JSON receipts; measured preconstruction/runtime/closure/private identities, command/logs/exits/terminal failure/success and final non-self-referential inventory are not durably captured
+  I3: trace-tuple tests do not prove sensitivity to removal/reordering of real operations; categorical readback failure, orchestration-level nonzero samples and a collision introduced after receipts but before generation are untested
+  M1: audit callbacks immediately before try and close can raise and bypass cleanup of an already-created renderer
+confirmed: r502 remains valid for its exact80 offline cases and substantive validators; it does not authorize actual GL or generation
+next_experiment:
+  status: GO_TESTS_ONLY_OFFLINE_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r503
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_inputs: r502 driver SHA25678c1ecb0 and shell SHA2563f469616 remain byte-identical; no fix before RED
+  owned_output: one new private regression harness plus fresh r503 evidence/scratch/low-rate roots only
+  red_cases: prove observed-vs-authorized HEAD disconnect including missing/malformed/mismatch and approved newer ledger-only control; absence of persistent preconstruction/command/terminal/failure/inventory records for factory and generation failure; categorical receipt readback corruption; orchestration-level categorical nonzero samples; late collision injected after both durable receipts; operation-level removal/reordering sensitivity for categorical readback and final collision gate; audit raises after construction and before close
+  required_classification: expected focused failures map only to I1-I3/M1, while retained valid controls pass; no harness/environment/source error; forbidden imports empty; exact locked Python and fresh NVMe scratch; one invocation then stop
+  restrictions: no driver/shell edit, project/MuJoCo/OpenGL import, real renderer, official root allocation, render/generation/conversion/inference/training/repo edit/build/test/benchmark/sealed traversal
+future_if_valid: parent checkpoint may authorize minimal private driver/shell/harness GREEN corrections and fresh offline run; Astra re-review remains required before actual GL
+retention: r502/r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged
+```
