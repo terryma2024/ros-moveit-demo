@@ -17751,3 +17751,30 @@ next_experiment:
 retention: r471/r472/r473 and all prior evidence retained, archived none; nothing deleted
 boundaries: r470 run/scratch roots absent including symlinks; no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-302 — r473 semantic re-review rejects launch; behavioral fix planned
+
+```yaml
+checkpoint: CP-302
+status: CHANGES_REQUESTED_BEHAVIORAL_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+reviewed_driver_sha256: 75a3f0bcaffd62d01126d20dd73d7537d735c6ffa70ef4b7bf73375b48a185c1
+reviewed_runner_sha256: 198e43ca8882a7f278d4b40e34763f87558b9ed8bfe1cee7a5e3633d6d666dc8
+review_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-fix-rereview-report.md SHA256 b3df4795caaadb20d587f98b1102ce88a16978e1b1939489eefdc84ad5af4abf
+verdict: spec CHANGES_REQUESTED, quality CHANGES_REQUESTED; r470 remains held
+correction_to_CP301: final reviewed driver has1336 lines, not1306; parent read used sed through line1380 and therefore did read the complete content hash, while the recorded line-count text was stale
+addressed: original parent-directory durability Important and immediate-context-receipt Minor
+R1: truthful preflight stores resolved /usr/bin/python3.12 but verifier compares unresolved venv literal, so valid r470 would deterministically fail only after render
+R2: manifest scalar values/types, equality booleans, exact preflight imports/prefix values, and nested truth dtype/full-shape/SHA semantics remain undervalidated; current categorical persistence is duplicate producer claims, not independent readback
+R3: PNG decoder accepts missing/nonfinal/nonzero IEND, trailing bytes, duplicate/misordered header and trailing compressed stream
+nonblocking: remove/consolidate unused driver shell-final constant; reject unexpected empty nested directories; fsync run directory after final checksum publication
+next_experiment:
+  status: PLANNED
+  executor: /root/generator_build, gpt-5.6-sol high
+  red_run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r474
+  method: no-GPU behavioral mutations using exact locked Python and unique durable NVMe scratch with actual tempfile preflight; import only private stdlib-level driver helpers, never call run/render or allocate r470 roots
+  corrections: one resolved-Python contract; exact typed manifest/preflight/truth validation; persist both categorical arrays in canonical lossless diagnostic-only bytes and independently recompute equality; strict frozen-writer PNG structure/zlib termination; exact directory allowlist; final parent fsync
+  stop_after: fresh GREEN ID/hashes/report and Astra re-review before any r470 GO
+retention: all old runner versions and r471-r473 evidence retained, archived none; nothing deleted
+boundaries: no production-source change, GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; prompt/gates unchanged
+```
