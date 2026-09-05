@@ -12856,3 +12856,60 @@ retention:
   deletion_candidates: [r311 partial output, r315 scratch, and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-159, then independently verify all 122 files, every native RLE/NPY binding, aggregate recomputation, and selected/oracle identities before finalizing the causal conclusion
 ```
+
+## Checkpoint CP-160 — native SAM runtime A/B independently verified and closed
+
+```yaml
+checkpoint: CP-160
+status: COMPLETE_VALID_NEXT_DIAGNOSTIC_REQUIRED
+recorded_at: 2026-09-05T09:11:11+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-159
+source_commit: f94860e5a506812799b6a695d7c85947abb609d7
+independent_readback:
+  run_id: stage-e-native-sam-ab-readback-r316
+  result: PASS
+  elapsed_ms: 689
+  files_verified: 122
+  rle_masks_verified: 60
+  tensor_files_verified: 40
+  manifest_sha256: 9b70b09c128a9944fddd210cfa46201d1ee1411531169d93e2702e8f2f88bbd9
+  tree_inventory_sha256: 94e42f77189fcce66a23debad0035a412f122c344e1e66070c0395553fafa345
+  aggregate_recomputed_exact: true
+  selected_quality_binding_exact: true
+  oracle_truth_iou_binding_exact: true
+  transformers_same_variant_comparisons_exact: true
+visual_readback:
+  inspected_overlays: [000057, 000275, 000135, 000289]
+  findings:
+    - control 57 native selected mask spans the cup and adjacent bottle; even its oracle remains substantially leaky
+    - control 275 native quality selection spans the foreground bottle and target cup, while a non-selected native oracle isolates the target cup at IoU 0.961926
+    - failure 135 remains dominated by the adjacent bottle; native oracle adds target pixels but remains only IoU 0.186564
+    - failure 289 native selected and oracle largely isolate the cup but retain enough leakage to remain below 0.80 at IoU 0.764606
+causal_conclusion:
+  - the bundled Transformers SAM model is fully loaded and bound correctly, and its failure class is not repaired by the byte-compatible official native SAM 2.1 implementation/checkpoint
+  - official native inference is not a production replacement candidate because it lowers selected/oracle fixed-sample pass counts and regresses two passing controls
+  - quality-based multimask selection is independently defective in both runtimes, but oracle multimask selection still cannot rescue any of the six frozen failures
+  - direct SAM fine-tuning or replacement remains a larger intervention than necessary until the documented box-prompt single-mask path is measured
+next_hypothesis:
+  H4_box_prompt_single_mask: both current adapters force multimask_output true even though the official native API documents multimask_output false as preferable for non-ambiguous prompts such as boxes; the single-mask token is not among the retained three multimask variants and remains unmeasured
+  smallest_scope: replay the same 10 train/val-only images and two frozen box sources through the current Transformers model with only multimask_output changed to false, retaining exact single masks/qualities and comparing against current selected/oracle evidence
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-ab-readback-r316
+  preflight_sha256: 5d496bb024ba71b157eb5921ea2d38bf400a4d67b2e0ad8912c64d4619bb109b
+  readback_sha256: 1d499e2d8df95e09c1436c3de81a6ce67c2d714da907d05bd2417de4d4849ecc
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  verifier_pointer_sha256: 9f3e0fb91fb74537e3da9097fbda55d2757181acc01466abb8db415e675a6f00
+  verifier_sha256: b6c27fcaef3e0229db739747bd6f11b495f8c07b8eeb989317861000fcf76148
+  exit_sha256: 0a61320ca6f7064358fd3db6e7dd7e01cb1de4fbe2c3cf7bdcf7ccc21f6f98c4
+tests:
+  ordinary_gate: not rerun; no repository implementation changed
+  explicit_benchmark_gate: not rerun; r30/r222 remain preserved
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r315 immutable native output, r316 independent readback, r311 invalid partial output, r303-r305 source/runtime, all CP-159 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r295 invalid source, r302 history source, r311 partial output, r304 runtime wheelhouse, r303 source, all r295-r316 scratch; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-160, then preregister the current-Transformers single-mask box-prompt diagnostic with the identical 10-sample/two-box denominator before any adapter change
+```
