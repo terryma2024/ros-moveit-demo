@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-236
+latest_checkpoint: CP-238
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
 active_experiment: EXP-079-STAGE-E-R5-MODEL-COMPARISON-BENCHMARK-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: r406 explicit benchmark GREEN; compose immutable epoch8 DINO plus original frozen SAM bundle r407, then preregister val-only pipeline comparison
+next_action: r408 val-consumer audit passed; freeze complete DINO proposal-retention protocol before one new r5 val raw collection and frozen-SAM comparison
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15717,4 +15717,78 @@ next_experiment:
 next_after_bundle: preregister full corrected-truth val-only pipeline collection/comparison, retaining complete DINO proposal provenance and actual SAM outputs; original and historical epoch4 SAM remain frozen; do not infer sealed or deployment eligibility from perfect val box score
 retention: all prior valid/invalid evidence retained; archived none; scratch deletion candidates only, no deletion
 boundaries: Microduck paused; no SAM training; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-237 — Immutable r5 DINO/original-SAM bundle verified; val-consumer audit planned
+
+```yaml
+checkpoint: CP-237
+status: VALID_BUNDLE_VAL_CONSUMER_AUDIT_PLANNED
+experiment_id: EXP-079-STAGE-E-R5-BUNDLE-COMPOSE-R1
+run_id: stage-e-r5-bundle-compose-r407
+source_commit: ea5b54a3d09fe53d9b7d4d65aedc4087f161e439
+gitee_sha_readback: ea5b54a3d09fe53d9b7d4d65aedc4087f161e439
+result: {exit_code: 0, elapsed_seconds: 6.87, original_SAM_files_verified: 9, new_model_forwards: 0}
+bundle_root: durable models/grounded-sam-dino-cup-r5-epoch8-r1
+bundle_manifest_sha256: eaa5ecec8b915dd743a691f7ee1607e3f3c7d12f018c406380d1be6c848729ca
+report_sha256: 0ff686ca8c7c298e1480a72337873f06c77077ac827a924d899cbac049540e22
+source_bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+detector_checkpoint_manifest_sha256: 6ca8c6b516e81b06fb862e75b9911555cf1bbedbaefe65e19a675fad535913a4
+gates: schema2 generic cup profile, independently audited epoch8 detector hash, unchanged runtime dependency pins, exact original SAM file set/size/SHA, verify_model_bundle passed
+qualification: NOT_YET_EVALUATED; box-only training val success does not establish mask or selector safety
+r406_evidence_readback: {junit_sha256: 819a867a2c5b00c61623f905b531e15fcd16232b4015092957195d63027f6f8b, timing_receipt_sha256: e1485215fb9dd22dd9b954c6a556ba10408e4049d68e893972738283e796647a}
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r394 seven-package symlink install
+scratch: durable scratch/stage-e-r5-bundle-compose-r407/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-VAL-CONSUMER-AUDIT-R1
+  status: PLANNED
+  run_id: stage-e-r5-val-consumer-audit-r408
+  single_variable: NONE; verify real evaluation loader consumes retained r5 categorical truth and agrees with training on image/absolute-box/RLE identity
+  source_root: durable training-data/yolo-seg-small-occlusion-r5-train-val-categorical
+  source_manifest_sha256: 4cbb5d87449581dce4c25dcd5d0155e12c0f5ff4a3d7bf6f806f7da1fdd927f5
+  evaluation_inventory: durable training-data/grounding-dino-cup-r5-train-val-categorical/val/inventory.json
+  evaluation_inventory_sha256: 5a6a349e47d01b889edc3248a9553b48b504f20fb8b19fb83f4c56ff226fbf2e
+  trainer_inventory: durable training-data/grounding-dino-cup-r5-train-val-trainer-r1/val/inventory.json
+  trainer_inventory_sha256: 35834baa2e284634cb7a18f4f7baa27f176909c7aeac7f317786b60877e597c1
+  normalization_boundary: evaluation loader explicitly checks polygon-compatible639/479 normalization; trainer requires640/480; choose each already immutable interface view, not the wrong consumer input; absolute boxes/images/RLE must be identical
+  checks: real load_locked_val_dataset on all300 val only; exact canonical categorical visible masks and pixel counts, no polygon truth fallback; semantic equality with trainer except documented normalization/converter identity; all300 and primary250 excluding only small_far_cup denominators
+  no_inference: true
+  no_code_change: expected; if actual consumer mismatch occurs, preserve evidence and follow RED/GREEN before changing code
+next_after_audit: preregister new-DINO raw/proposal retention plus frozen original/epoch4 SAM val comparison with explicit thresholds, provenance and full denominators; do not rerun old valid inference or silently lose high-score proposals behind SAM filters
+retention: all earlier data/model/raw evidence retained, no archival/deletion; scratch deletion candidates only
+boundaries: Microduck paused; no SAM training; sealed/test/COCO100/PickPlace/Mac inaccessible; cup. prompt and mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-238 — Real val consumer verified on all300 corrected-truth members
+
+```yaml
+checkpoint: CP-238
+status: VALID_VAL_CONSUMER_IDENTITY_RAW_PROTOCOL_NEXT
+experiment_id: EXP-079-STAGE-E-R5-VAL-CONSUMER-AUDIT-R1
+run_id: stage-e-r5-val-consumer-audit-r408
+source_commit: ea5b54a3d09fe53d9b7d4d65aedc4087f161e439
+result: {exit_code: 0, elapsed_seconds: 1.06, all_frames: 300, all_instances: 300, primary_frames: 250, primary_instances: 250, new_model_forwards: 0}
+members_sha256: 3cd4ae19e6ca57ae13ff033b7527860cd6882226a9769def492a6abd01e4efa4
+actual_consumer: load_locked_val_dataset consumed immutable categorical r5 evaluation inventory5a6a349e47d01b889edc3248a9553b48b504f20fb8b19fb83f4c56ff226fbf2e
+cross_view_proof: every member identical to trainer inventory35834baa2e284634cb7a18f4f7baa27f176909c7aeac7f317786b60877e597c1 except explicitly documented normalized box coordinates; images, seeds, scenarios, absolute boxes and RLE truth unchanged
+truth_proof: actual loader masks equal decoded categorical visible RLE pixel-for-pixel, mask SHA/count verified, canonical absolute extrema agree; no polygon mask fallback
+normalization: evaluation639/479 and trainer640/480 each explicitly verified, no source or immutable inventory rewrite
+cohorts: retain all300; primary250 excludes only existing small_far_cup; no runtime scenario-label eligibility introduced
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r394 seven-package symlink install
+scratch: durable scratch/stage-e-r5-val-consumer-audit-r408/tmp; exact tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+owned_processes: none running; r404 and r406 finished successfully; no competing GPU inference/training at readback
+working_tree: ledger-only owned update; original untracked build/install/log unchanged
+confirmed: r5 DINO epoch8 fully verified, new immutable original-SAM bundleeaa5ecec8b915dd743a691f7ee1607e3f3c7d12f018c406380d1be6c848729ca ready; ordinary1283passed and explicit575passed2skipped gates retained
+next_action: inspect and freeze minimal complete DINO proposal receipt capture before any new r5 inference; preserve all proposals above declared raw0.01 box/text floors even when later SAM mask-size/quality filters omit them, enabling frozen epoch4 comparison without repeating DINO
+next_protocol_constraints: all300 val frames with primary250 separate; original and historical epoch4 SAM frozen/stateless; retain production actual masks and DINO identity/score coverage; mask IoU0.80 and mapping0.98 unchanged; changed observation code must receive RED/GREEN and applicable gates before expensive collection
+no_raw_started: new r5 model has only training validation and required checkpoint reload forwards so far; no full r5 SAM/production raw run exists; old r3/r4 raw predictions remain immutable and are not rerun
+open_risks: corrected-DINO SAM/selection safety, production geometry eligibility, sealed-test truth protocol, COCO100 noninferiority and both platforms' PickPlace remain incomplete
+retention: all previous runs and model/data evidence retained; archived none; scratch deletion candidates only, no deletions
+boundaries: Microduck paused; sealed/test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; mask IoU0.80 unchanged; no new SAM training
 ```
