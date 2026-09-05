@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-375 — r522 launcher setup invalid before harness; fresh r523 launcher-only preparation planned
+
+```yaml
+checkpoint: CP-375
+status: INVALID_R522_LAUNCHER_SETUP_NO_CANDIDATE_BEHAVIOR_R523_PREPARATION_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r522
+executor: /root/generator_build, gpt-5.6-sol high
+classification: {authoritative_green: false, launcher_invocations: 1, launcher_tool_exit: 1, combined_harness_invocations: 0, candidate_behavior: unavailable}
+failure: embedded package_manifest Python heredoc omitted the closing parenthesis for subprocess.check_output; exact parser error at stdin line4 was `SyntaxError: '(' was never closed`; bash-n cannot validate embedded Python
+provenance: {head_authorized_observed_gitee: e20cc73e89f852e3d7d8357fc397335cf4c9c89f, scoped_source_clean: true, launcher_sha256: 24df8cd781b17a0f32ef61f2bfa4ee00ccaa71389c49c5906b11770f22e22a11, driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 093709f836dd5c66d36af5c0f5b0dde6bd8d8ee1094feeaa0497315a6d57d3c4}
+valid_preflight: three fresh roots allocated only after all collision/hash/HEAD gates; locked Python resolved /usr/bin/python3.12; tempfile.gettempdir exactly equaled the run-specific /data NVMe scratch tmp path
+partial_evidence: durable r522 root contains exactly17 regular files:15 frozen inputs plus source-before and tempfile preflight; scratch contains only tmp and low-rate root is empty; command/invocation/stdout/stderr/raw-exit/result/status/final inventory/readback are absent and were not backfilled
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r522 retained without modification; report coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r522-report.md SHA256b8afb7e61ba137c8cc8f10ec612a8a1f3f6c77dfa67ff9c0d6496b9ae96d8da5
+parent_readback: complete87-line report, all17 file names/hashes, tempfile receipt, missing-artifact set, root states, exact frozen inputs, repo/Gitee state and official-root absence read
+next_experiment:
+  status: GO_R523_LAUNCHER_ONLY_STATIC_PREPARATION_NO_ALLOCATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r523
+  executor: /root/generator_build, gpt-5.6-sol high
+  allowed_change: copy r522 explicit launcher to a new r523 path/run ID; add the single missing package_manifest parenthesis and a fail-closed preallocation static parser that extracts every quoted Python heredoc from the exact launcher, requires the frozen expected block count and ast.parse succeeds for every block
+  preservation: driver/shell/harness and all antecedent bytes/hashes unchanged; r522 launcher/root/evidence immutable; no harness or driver behavior invocation
+  static_required: bash-n; parse every embedded Python block with exact locked Python before allocation logic; verify candidate/antecedent hashes, new launcher self-hash plan, exact r523 roots plus official roots absent, source clean and local/Gitee HEAD; freeze new launcher SHA/line count/diff
+  stop_after: parent readback and separate checkpoint before any r523 root allocation or launcher invocation
+restrictions: no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r522 and all prior evidence retained; archived none; scratch/low roots are deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-374 — r522 GREEN candidate statically frozen; one private offline invocation authorized
 
 ```yaml
