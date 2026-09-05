@@ -18202,3 +18202,30 @@ phase_id_correction_after_invalid: r483 fresh GREEN, r484 build, r485 ordinary, 
 retention: r482 and all earlier evidence retained, archived none; r482 scratch is a deletion candidate only and nothing deleted
 boundaries: no source/test/config byte change in r483, no MuJoCo/OpenGL/render/build/benchmark/generation/archive/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-318 — r483 measured product regression; diagnostic-compatible GREEN fix authorized
+
+```yaml
+checkpoint: CP-318
+status: VALID_MEASURED_NON_GREEN_FIX_PLANNED
+run_id: stage-e-generator-train-val-only-green-r483
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GREEN_PRODUCT_REGRESSION, tests: 135, passed: 133, failed: 2, errors: 0, skips: 0, new_contract: 59/59_passed, legacy: 74_passed_2_failed, pytest_exit: 1, tool_exit: 1, elapsed_seconds: 4.424403356}
+failing_nodes:
+  - test_yolo_seg_dataset.py::test_split_seed_ranges_reject_invalid_or_overlapping_starts[seed_starts0]
+  - test_yolo_seg_dataset.py::test_split_seed_ranges_reject_invalid_or_overlapping_starts[seed_starts1]
+observed_boundary: missing-key and extra-key legacy seed_starts maps still reject with ValueError, but new generic message split maps must exactly match a supported dataset contract omits stable regex token seed; this is a narrow backward-compatible diagnostic regression and is the authoritative RED for the fix
+inputs: generator/converter/config/test remained exact at CP317 hashes before and after; source-vs-4a0 patch remained SHA256 476e7d2eecbcae33b842d1dc7580da441ad5d59376c3902a122e15e0db109159
+python_scratch: exact venv resolved /usr/bin/python3.12, pytest7.4.4 from /usr/lib/python3/dist-packages, tempfile/basetemp/cache exact inside fresh r483 NVMe scratch; setup and preflight PASS
+evidence: durable run-evidence/stage-e-generator-train-val-only-green-r483 and scratch retained; JUnit SHA256 c56fd4e9537faaa55b4758d0c20563402ab9f1475c2bb1a14f2729c834312a52; result SHA256 e267acd2260f85ca797b98eea64c574ff50800cee1120cc84a44642ca6e05ead; inventory SHA256 ac46f36f2fb08db01682d5527a4d57006c716ba1d66281f215e9c2ea323cf569
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-green-r483-report.md SHA256 da29b5412e0be1c46f32153e630392052d72e38026b29a650133756d16402b8b
+parent_readback: complete 135-line report, result and both failure tracebacks read; sole invocation and zero harness/collection errors confirmed; no forbidden boundary accessed
+next_experiment:
+  status: GO_FIX_GREEN_ONLY
+  run_id: stage-e-generator-train-val-only-green-r484
+  implementation: minimally restore parameter-specific seed diagnostic semantics for split_seed_plan invalid seed_starts key sets while preserving exact new two-way discriminator enforcement and every CP317 input behavior; do not alter tests/config/converter or unrelated generator semantics
+  verification: static gates then one focused pytest process containing the same exact135 cases under a new unique NVMe scratch with exact Python/tempfile preflight; require all135 pass, zero errors/skips, and preserve source diff/provenance receipts; stop for parent readback and Astra review
+phase_id_correction_after_non_green: r484 fix GREEN, r485 build, r486 ordinary, r487 benchmark, r488 runner RED, r489 runner GREEN/review, r490 generation, r491 source readback, r492 archive, r493 archive readback, r494 primary conversion, r495 repro conversion, r496 freeze; each separately checkpointed
+retention: r483/r482 and all prior evidence retained, archived none; scratch trees are deletion candidates only and nothing deleted
+boundaries: no build/benchmark/generation/render/MuJoCo/OpenGL/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
