@@ -310,7 +310,12 @@ def test_enabled_renderer_rejects_penetration_before_rgb(scene, monkeypatch):
     renderer._renderer = ForbiddenRenderer()
     monkeypatch.setattr(renderer, "_prepare", lambda random, scenario: None)
     with pytest.raises(ScenePenetrationError):
-        renderer._render_attempt(np.random.default_rng(1), DatasetScenario.ONE_CUP_DISTRACTORS)
+        renderer._render_attempt(
+            np.random.default_rng(1),
+            DatasetScenario.ONE_CUP_DISTRACTORS,
+            seed=123,
+            attempt_index=0,
+        )
 
 
 def test_enabled_all_scenarios_stop_at_deterministic_retry_limit():

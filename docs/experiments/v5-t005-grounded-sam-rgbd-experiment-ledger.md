@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-288
+latest_checkpoint: CP-290
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: Astra requests narrower diagnostic architecture; r459 RED for structured rejected receipt, immutable actual-boundary events and split-free renderer settings, official CLI/writer unchanged
+next_action: r460 GREEN118passed; freeze minimal observability source/tests and obtain immutable Astra review before fresh build/gates and actual diagnostic
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17355,6 +17355,63 @@ next_experiment:
 future_reserved: r460GREEN, r461freshbuild, r462ordinary, r463one explicit benchmark, then r464actual diagnostic if all reviewed and valid
 retention: all design/review and prior evidence retained; archived none; scratch deletion candidates only; no deletion
 boundaries: official dataset protocol still unfrozen; no render/generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-289 — Runtime observability RED valid; GREEN authorized
+
+```yaml
+checkpoint: CP-289
+status: VALID_RED_GREEN_PLANNED
+run_id: stage-e-generator-runtime-observability-red-r459
+source_commit: e697d2444281367c07abaa21b55bd21d40001aa6, production exact accepted95d3af5d plus test-only new module
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 1, tests: 92, failed: 6, passed: 86, errors: 0, skipped: 0, pytest_seconds: 4.378, elapsed_seconds: 4.71}
+RED: all6 new failures at absent reviewed seams: structured native receipt/context, legacy optional fields, immutable ordered actual-boundary events, all-rejected bound/no-image, sink abort, split-free settings
+controls: scene_geometry47, categorical4, ordinary_dataset26, augmented_dataset9 all pass
+production_integrity: helper/dataset/officialCLI exact95d3af5d before and after; production.diff empty; only new focused test
+parent_readback: full report and exit/test failure summary read back; RED coverage scoped as intended
+evidence: durable run-evidence/stage-e-generator-runtime-observability-red-r459; runtime-observability-report.md
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: accepted r455 symlink overlay
+scratch: durable scratch/stage-e-generator-runtime-observability-red-r459/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-observability-green-r460
+  executor: same Sol high
+  single_variable: implement CP-288 minimal message-compatible structured error, immutable synchronous actual-boundary events and split-free RendererSettings; no CLI/writer/state-provider changes
+  tests: new6 plus deferred malformed evidence cases where owned validator exists, all previous generator/categorical controls; actual AST/Ruff, unique NVMe scratch/preflight/JUnit/exit/time
+  stop_after: self-review/report; parent freezes only owned source/tests and immutable Astra medium review before r461 build
+retention: all evidence retained, archived none; r459 scratch deletion candidate only; no deletion
+boundaries: no diagnostic render/data generation/build/package/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-290 — Runtime observability GREEN frozen for review
+
+```yaml
+checkpoint: CP-290
+status: VALID_GREEN_SCOPED_REVIEW_PLANNED
+run_id: stage-e-generator-runtime-observability-green-r460
+source_commit: e697d2444281367c07abaa21b55bd21d40001aa6 plus owned source/tests
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 118, passed: 118, failures: 0, errors: 0, skipped: 0, pytest_seconds: 5.566, elapsed_seconds: 5.89}
+coverage: observability10, geometry47, categorical4, YOLOdataset35, GroundingDINOdataset22
+implementation: message-compatible structured penetration receipt/context; default-off frozen immutable synchronous render events at actual boundaries; split-free RendererSettings; selector callback/RNG unchanged
+unchanged: official generator CLI, DatasetConfig split validation, generate_dataset writer/manifest, attempt state/RNG provider, geometry thresholds/schema and all model/IoU contracts
+validation: malformed missing/accepted/wrong-scope/nonfinite observed evidence fails closed; sink exception aborts; all-rejected bound/no-image and actual backend spy ordering pass
+verification: actual AST/Ruff0.15.20/diff/CLI-diff/source-identity and r455 overlay/lockedPython/NVMe tempfile gates pass; no source change after test
+evidence: durable run-evidence/stage-e-generator-runtime-observability-green-r460; runtime-observability-report.md SHA256 a7958da3e13e2e01e9d4c452d6d8e736062ba0a3b5b4d6de58b48644c7375da1
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  base: 95d3af5de9317ed10f1a27c77c0849fa100be665
+  scope: CP-288 corrected architecture, event/exception/settings safety and compatibility, new breakage in immutable source diff
+  after: if approved, r461 fresh seven-package build, r462 ordinary, r463 one explicit benchmark; actual diagnostic only after these new-source gates
+retention: all evidence retained, archived none; r459/r460 scratch deletion candidates only, nothing deleted
+boundaries: no render/data generation/build/package/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
 ```
 
 ## Checkpoint CP-285 — Ordinary gate valid; explicit benchmark authorized once
