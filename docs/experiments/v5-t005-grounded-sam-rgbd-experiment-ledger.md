@@ -12591,3 +12591,48 @@ retention:
   deletion_candidates: [r307-r309 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-154, extend only the temporary driver to the preregistered immutable input/output/provenance contract, rerun the unchanged GREEN test, then execute the single 10-image native A/B on CUDA
 ```
+
+## Checkpoint CP-155 — complete native A/B driver retains GREEN contract
+
+```yaml
+checkpoint: CP-155
+status: GREEN_VALID_DIAGNOSTIC_RUN_PLANNED
+recorded_at: 2026-09-05T08:58:23+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-154
+source_commit: 225b5fe8cab324e300428504aced0ce59ec736a6
+run_id: stage-e-native-sam-ab-green-r310
+result: {exit_code: 0, tests: 3, elapsed_ms: 137}
+implementation:
+  driver: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/native_sam_runtime_ab_r1.py
+  driver_sha256: 65d3e111ded345002355809c31d0a1b0c05f5c8c9f1ee6fccffa87b10c265ab2
+  unchanged_test_sha256: 8a46b649ee41bb5127b54a3207946bee6e5a8d31e9d8f3552134d27b1b27f987
+driver_contract:
+  input_identity: exact r291 manifest/record/mask hashes plus r4 val inventory/source manifest and per-sample image/truth hashes
+  native_identity: exact official source commit/inventory, isolated runtime inventory, bundle manifest, byte-compatible config, and native checkpoint hashes
+  inference: 10 images, one stateless set_image per image, DINO_BOX and EXACT_TRUTH_BOX prompts, CUDA FP32 only, no DINO rerun
+  output: all native three-mask RLEs, quality vectors, low-resolution logits, per-variant truth IoU, analysis-only oracle, same-index Transformers IoU, selected-to-selected IoU, records, overlays, report, and immutable manifest
+  fail_closed: output collision, any identity/hash mismatch, source dirty state, CPU/non-FP32 parameters, tensor shape/dtype mismatch, incomplete denominator, or sealed-set access
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-ab-green-r310
+  preflight_sha256: e72c391ed37130e1ac80d37e92a0ed96d4ed5f95e35b0263080b40baa11615bc
+  test_log_sha256: 1fc2967041ab779f911b9a5a11ae383183e4ed5f94ae3dbb05fdfb331789659f
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  scripts_pointer_sha256: 6dc5cceb4e831931427c3d35c70c568bb939126ba64c21f1e33e1eec985c49d3
+  exit_sha256: 391bddc4c03813bc53a96060c8e413e692385f0ce673453a171fbfda80ab439c
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_physical_path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-ab-green-r310/tmp
+  tempfile_preflight: exact resolved match
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r310 extended-driver GREEN evidence/scratch, r309 minimal GREEN, r308 RED, all CP-154 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r307-r310 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-155, recompute source/runtime inventories and tempfile provenance in a fresh r311 root, then execute the only preregistered 10-image native A/B with offline CUDA and absent output root
+```
