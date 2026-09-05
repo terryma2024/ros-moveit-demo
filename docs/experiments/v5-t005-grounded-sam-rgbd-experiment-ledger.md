@@ -12913,3 +12913,65 @@ retention:
   deletion_candidates: [r295 invalid source, r302 history source, r311 partial output, r304 runtime wheelhouse, r303 source, all r295-r316 scratch; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-160, then preregister the current-Transformers single-mask box-prompt diagnostic with the identical 10-sample/two-box denominator before any adapter change
 ```
+
+## Checkpoint CP-161 — Transformers box-prompt single-mask diagnostic frozen
+
+```yaml
+checkpoint: CP-161
+status: PLANNED
+recorded_at: 2026-09-05T09:12:16+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-160
+source_commit: 4a0717d65461e8a9650761ae4ae6e0a4a3d790a3
+hypothesis: the current adapters force multimask_output true and select among the three ambiguity tokens, while a box is a non-ambiguous prompt and the unmeasured single-mask token from multimask_output false may produce materially safer cup masks
+single_variable: current Transformers Sam2Model call changes multimask_output from true to false; model, processor, image, box, device, dtype, postprocess, truth, and all thresholds remain unchanged
+scope:
+  split: val only
+  sample_contract: exactly the CP-140 six frozen failures and four passing controls
+  prompts_per_image: [DINO_BOX, EXACT_TRUTH_BOX]
+  detector_inference: none; reuse retained boxes
+  training: none
+  threshold_selection_or_tuning: none
+  production_change: none
+  sam_state: stateless per frame
+frozen_inputs:
+  model_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  sam_transformers_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  prior_multimask_manifest_sha256: 75a7f4ac5d9593eec5be8618ec2eadb173884e9d58abb5866d3b668ae8569e65
+  truth_val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  truth_source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+runtime_contract:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  device: cuda only
+  dtype: float32
+  fallback: forbidden
+  offline: true
+  scratch: unique absent /data NVMe root with exact-Python tempfile preflight
+capture_contract:
+  - retain the raw single-mask logits, single quality value, exact postprocessed RLE, truth IoU, and mask SHA for each of 20 prompts
+  - compare each single mask with the prior multimask quality-selected mask and prior analysis-only oracle, but never tune from the oracle
+  - persist overlays and an immutable manifest, then independently reconstruct all masks and aggregate counts
+success_criteria:
+  supported: single-mask mode raises fixed-sample pass count without losing any passing control and shows credible failure-class improvement
+  not_supported: it fails to improve the fixed failures, loses controls, or remains below the unchanged 0.80 gate
+invalid_criteria: provenance/hash/sample mismatch, output collision, CPU fallback, tensor denominator/shape/dtype mismatch, or sealed-set access
+tdd:
+  red_run: stage-e-transformers-single-mask-red-r317
+  green_run: stage-e-transformers-single-mask-green-r318
+  contract: normalize exactly one proposal and one mask/quality, preserve float32 raw tensors and exact postprocessed binary RLE, and reject accidental three-variant output
+planned_run:
+  run_id: stage-e-transformers-single-mask-r319
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/transformers-sam-single-mask-r1
+  independent_readback: stage-e-transformers-single-mask-readback-r320
+existing_helper_input:
+  path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/sam_mask_pipeline_diagnostic_r1.py
+  sha256: 41b043606d22aec9c41cc2b07d91387652702bd3fe6a4db7b514f8222b065249
+  mutation: forbidden; new driver may only import its already-audited input/provenance helpers
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [all CP-160 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r317-r320 scratch after readback and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-161, write and run the RED single-mask tensor/RLE contract against an absent new driver, then implement the minimum helper and reach GREEN before real inference
+```
