@@ -18923,3 +18923,32 @@ future_if_valid: parent checkpoint may authorize minimal private driver/shell/ha
 retention: r502/r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-346 — r503 focused review RED valid; minimal private-runner correction GREEN authorized
+
+```yaml
+checkpoint: CP-346
+status: VALID_GENERATION_RUNNER_REVIEW_RED_SCOPED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r503
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_REVIEW_RED, authoritative: true, cases: 17, expected_defects: 10, valid_controls: 7, harness_errors: 0, test_exit: 1, outer_readback_exit: 0, elapsed_seconds: 0.741750202, stderr_empty: true, forbidden_modules_before_import_after: [[],[],[]]}
+red_mapping: I1 missing/malformed/mismatched authorization and newer-ledger shell/driver identity disconnect; I2 factory failure leaves zero lifecycle files and generation failure leaves only two GPU receipts; I3 real categorical-readback and late-collision operation-removal mutations survive; M1 renderer_constructed and renderer_closed audit exceptions leak cleanup
+valid_controls: frozen shell rejects missing/malformed/mismatched authorization; real orchestrator rejects categorical corruption/nonzero samples/late collision with zero generation and one close; protected midflight audit exception closes once
+frozen_inputs: r502 driver SHA25678c1ecb037132e5588f4766a39d13f63e63d5071bd014b77d0e6aab369dcbcd0 and shell SHA2563f469616b00215d82f76dc65fc6f2d3b670dd04a8be38e29f34581abccd5688c unchanged; repo source/config clean; official roots absent
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-red-r503; harness SHA256c1bbdcbc1708474bae1c75c971cdcb47e1ff418b78c0cf6557f70f5cb53e27d2; result SHA2569eedb7e30404c94c22cc6aa4a953770629208e195f76f238fecf4d1151e11c46; result-readback SHA2560422a9147f9b3891949e63676fe2bba640f1245233d1b178afb4ca442a7201fa; final25-file inventory SHA2561c7bb8a9b13c5d25e70505919f3ab25dd64a31dfe76202bb8ea6456292c7b129; inventory-readback SHA256d8cf9a2e09afd04afffab3ae4128dc598c86f07e64a40a5a570621dbc5730a74
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-red-r503-report.md SHA256d1e458a2258ea2d8d397444ad2c0fbedfc34a6d9a38d1c68f3518bb16d0469fb
+parent_readback: complete70-line report, retained file list/hashes/status and official-root absence read; no source/official action
+next_experiment:
+  status: GO_SCOPED_PRIVATE_OFFLINE_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r504
+  executor: /root/generator_build, gpt-5.6-sol high
+  correction_I1: one shared driver contract receives typed parent-authorized HEAD and independently observes actual git HEAD; reject missing/malformed/disagreement, accept a newer ledger-only authorized/observed HEAD only with pinned package hashes; persist authorized and observed identities separately; never chase the latest hash by editing a constant
+  correction_I2: before renderer construction exclusively persist and read back exact preconstruction/private/runtime/environment/full closure/r470 plus command receipt; private launch wrapper captures stdout/stderr/elapsed/exit and writes terminal success/failure on handled errors, preserves partial artifacts and makes a final non-self-referential inventory with fsync/readback; factory and generation failures must prove durable partial evidence and official-root absence before generation
+  correction_I3: factor mandatory categorical readback comparison and final output collision recheck into actual orchestration operations; add categorical write/readback failures, orchestration nonzero samples, late post-receipt collision and operation-removal/reordering kill controls with zero generation/one close
+  correction_M1: every post-factory action including audit callbacks is cleanup-protected; close executes even when pre-close audit raises; tests cover both raising audit positions
+  verification: one fresh no-GL top-level GREEN harness combining all retained r502 expectations and r503 regressions against corrected frozen driver/shell; exact locked Python/fresh NVMe scratch/static checks; all cases/exits0 and forbidden imports empty; no post-measurement edits
+  restrictions: private T runner/harness only; no tracked repo edit, project/MuJoCo/OpenGL import, real renderer/GPU, official root allocation/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+review_after: Astra must read every corrected file/evidence and approve actual launch readiness before any GL or official generation checkpoint
+retention: r503/r502/r501/r500 and all prior evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
