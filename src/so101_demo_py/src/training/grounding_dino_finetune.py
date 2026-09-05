@@ -477,8 +477,13 @@ def verify_complete_checkpoint(
 def load_contract(path: Path) -> tuple[dict[str, Any], str]:
     contract_path = _regular_file(path, code="CONTRACT_INVALID")
     try:
-        document = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, yaml.YAMLError) as error:
+        payload = contract_path.read_text(encoding="utf-8")
+        document = (
+            json.loads(payload)
+            if contract_path.suffix.lower() == ".json"
+            else yaml.safe_load(payload)
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as error:
         raise _data_error("CONTRACT_INVALID", str(contract_path)) from error
     if not isinstance(document, dict) or document.get("schema_version") != 1:
         raise _data_error("CONTRACT_INVALID", "schema")

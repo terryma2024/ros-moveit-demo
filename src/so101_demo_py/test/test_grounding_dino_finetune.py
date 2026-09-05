@@ -12,6 +12,7 @@ from so101_demo.training.grounding_dino_finetune import (
     TrainingDataError,
     ValidationResult,
     build_coco_annotation,
+    load_contract,
     load_verified_split,
     require_cuda,
     select_best_checkpoint,
@@ -26,6 +27,32 @@ from so101_demo.training.grounding_dino_runtime import (
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_json_contract_roundtrip_preserves_optimizer_numeric_types(tmp_path: Path) -> None:
+    original, _ = load_contract(
+        Path(__file__).parents[1] / "config/perception/grounding_dino_training.yaml"
+    )
+    path = tmp_path / "contract.json"
+    path.write_text(json.dumps(original), encoding="utf-8")
+
+    loaded, digest = load_contract(path)
+
+    assert loaded["training"]["learning_rate"] == 0.00001
+    assert loaded["training"]["epsilon"] == 0.00000001
+    assert loaded == original
+    assert digest == _sha256(path)
+
+
+def test_json_contract_rejects_yaml_syntax_without_fallback(tmp_path: Path) -> None:
+    path = tmp_path / "contract.json"
+    path.write_text(
+        'schema_version: 1\nmodel: {}\ndata: {class_name: cup, prompt: "cup."}\n'
+        "training: {}\nsmoke: {}\nvalidation: {}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(TrainingDataError, match="CONTRACT_INVALID"):
+        load_contract(path)
 
 
 def _write_inventory(tmp_path: Path, *, split: str = "train") -> tuple[Path, Path]:
