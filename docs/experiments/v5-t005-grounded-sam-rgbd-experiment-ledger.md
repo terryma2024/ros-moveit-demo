@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-249
+latest_checkpoint: CP-250
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: e430ccaa7672919151413fb934982ebd90656844
-active_experiment: EXP-079-STAGE-E-R5-VAL-RAW-WITH-PROPOSALS-R1
+source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
+active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r421 raw complete and frozen; r422 independent full3220file readback without inference, then production-mask comparison protocol
+next_action: r422 full readback passed; freeze production prompt/filter protocol and run r423 no-forward preparation before original/epoch4 SAM actual production replay, no DINO rerun
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16122,4 +16122,48 @@ next_experiment:
 next_after_readback: freeze actual production-mask replay comparison of original and retained epoch4 SAM using complete proposals; do not repeat DINO or infer deployability from raw counts
 retention: every previous run retained; archived none; scratch deletion candidates only, no deletion
 boundaries: Microduck paused; no new SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-250 — Independent raw readback passed; frozen-SAM production protocol next
+
+```yaml
+checkpoint: CP-250
+status: VALID_INDEPENDENT_RAW_READBACK_PRODUCTION_REPLAY_PLANNED
+experiment_id: EXP-079-STAGE-E-R5-VAL-RAW-INDEPENDENT-READBACK-R1
+run_id: stage-e-r5-val-raw-readback-r422
+source_commit: 7c2fc970ac874ccae701fed522f83fe4a70d0241
+gitee_sha_readback: 7c2fc970ac874ccae701fed522f83fe4a70d0241
+result: {exit_code: 0, elapsed_seconds: 2.92, files: 3220, bytes: 4710148, frames: 300, primary_frames: 250, proposals: 2612, raw_masks: 2318, new_model_forwards: 0}
+report_sha256: b1faa68e6a2b03cb89ffdc225e7c2cfe54553c0302682111816f8313db27be8b
+coverage: 294 low-floor proposals omitted from raw masks remain in receipts;300 proposals above frozen DINO0.40/0.40, zero above-threshold omissions; exact full source/image/model binding and readonly tree verified independently
+raw_source_commit: 2e0ae8bd4730fb34d156a5cf8d26c18a6dca723a
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/stage-e-r5-val-raw-readback-r422/tmp; exact actual Python tempfile passed
+evidence: durable run-evidence/stage-e-r5-val-raw-readback-r422; complete script/runner/source/command/preflight/log/exit/report retained
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+owned_processes: none; r421 model job and r422 readback exited; no GPU training/inference left running
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
+  status: PLANNED
+  initial_run_id: stage-e-r5-production-prompt-preflight-r423
+  initial_action: no-forward prepare all300 production prompt lists from verified complete receipts through actual convert_grounding_results; prove unique proposal identity, complete count and immutable input receipt; do not use legacy0.25 prepare_replay_proposals helper on r5
+  single_variable: original frozen SAM versus retained historical decoder epoch4, using identical r5 DINO prompts and fixed production filters; no additional training
+  dino_thresholds: {box_threshold: 0.40, text_threshold: 0.40}
+  sam_production_filters: {duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.50, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  threshold_rationale: DINO from frozen r5 epoch8 selection; SAM0.50 and other filters retained from prior original/epoch4 comparison contract, no new threshold search; freeze before new production mask outcomes
+  raw_limits: unchanged CP-248 low-floor values
+  prompt: cup.
+  original_sam_identity: r5 bundleeaa5ecec8b915dd743a691f7ee1607e3f3c7d12f018c406380d1be6c848729ca, unchanged original SAM files
+  adapted_sam_identity: durable training/sam-decoder-cup-r4-r1/epoch-4, checkpointmanifest9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e; preserve historical training ancestry, do not relabel it as r5-trained
+  replay_evidence: retain complete SAM multimasks/qualities, actual production accepted masks and errors for every300frame member, SHA/inventory and readonly freeze; no new DINO forward
+  mapping_gate: actual original production masks must match retained original raw proposal identity and raw/production maskIoU>=0.98; adapted SAM requires its own corresponding low-floor masks, never claim original-SAM raw masks establish adapted mapping
+  scoring: actual convert_sam_results at fixed filters; corrected categorical visible RLE, one-to-one boxIoU0.5 plus maskIoU0.80, all300 and primary250; preserve per-scenario and two-cup unsafe-UNIQUE/no-cup-UNIQUE counts, not only F1
+  selection_scope: fixed-two-candidate val comparison only, not final qualification; do not lower IoU gates or silently tune thresholds from failures; runtime geometry eligibility still required
+  safety: no task-grounded disambiguation means multiple cups must not become a published grasp solely by confidence; no scenario-label runtime gate; geometry/depth/minimum-size thresholds need measured evidence
+next_after_preflight: register unique actual SAM replay IDs with complete provenance, execute serially and independently read back; code changes if needed require RED/GREEN and applicable gates first
+working_tree: ledger-only update since e430ccaa implementation; original untracked build/install/log preserved
+retention: all runs retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new SAM training; mask0.80/mapping0.98 unchanged; no deployment or task-completion claim
 ```
