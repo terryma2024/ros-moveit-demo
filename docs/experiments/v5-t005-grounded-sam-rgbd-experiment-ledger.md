@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-367 — r517 167-case accounting GREEN valid; immutable Astra review required
+
+```yaml
+checkpoint: CP-367
+status: VALID_GENERATION_RUNNER_DIAGNOSTIC_ACCOUNTING_GREEN_IMMUTABLE_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_DIAGNOSTIC_ACCOUNTING_GREEN, authoritative_offline: true, invocations: 1, total: 167, passed: 167, failed: 0, harness_errors: 0, groups: {retained_r515: 133/133, strengthened_r516: 6/6, real_driver_schema_inventory_mutation: 28/28}, test_parse_launcher_tool_exits: [0,0,0,0], elapsed_seconds: 25.816378126, forbidden_before_after: [[],[]]}
+accounting_matrix: 0/0/0=>overall0 no outer;7/0/0=>7 no outer;7/9/0=>9 one outer;7/0/96=>7 one outer;7/9/96=>9 one outer;0/0/96=>96 one outer; all exactly one finalizer and one completion with distinct typed receipts
+private_files: {driver_sha256: 7739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a, shell_sha256: 9bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a, harness_sha256: f70cbb1b015ac65b8115c53ee99a3939d51860710a659b7e027132da07e3552e, launcher_sha256: bb9b4d762391acc619a15bab363a4f68e52546e9850233faf98189353fd10be4}
+coverage: deferred-no-inventory/provisional completion, immediate compatibility, duplicate/mixed completion, typed/range/bool/null/precedence, terminal/outer consistency, unexpected/symlink/collision, exact membership and operation presence; package/source/config unchanged
+disclosed_limit: final four28-group entries are source-operation sentinels for deferred/diagnostic/completion/exact-membership operations, not separately executed mutated candidate variants; immutable reviewer must decide whether stronger mutation execution is required
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517; result SHA2563f4f380404833d44daa7aa8461f4d9dc02d5655a5b62f470c6447b9493b2f61b; final21-file inventory SHA2560b949b8d83d7a1e064c40096a7054c1e538aa607b1f5e449c0366d5cfbaa9a92; readback SHA2561ee45e31499fdae2eab1773a84d0b6ef687178920804eee100970d2ad55ba592
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-diagnostic-accounting-green-r517-report.md SHA25682e3a16cee7209225f0f088bb1b807b60cd91256b972867f28d1ed350bc3c0df
+parent_readback: complete report/result all167 group records/raw exits/inventory/readback/tempfile and frozen hashes read; official four roots absent; scoped status only original untracked dirs
+qualification_limit: private offline accounting only; no live setup/project/GL/GPU/official generation executed
+next_experiment:
+  status: PLANNED_IMMUTABLE_FINAL_LAUNCH_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read complete frozen driver/shell/harness/launcher, r516-to-r517 diffs, all r517 evidence and CP-365 conditions; validate exact-once both routes, provisional/final authority, four-status schema/precedence, sealing/log stability/storage failure and retained contracts; explicitly judge source sentinels versus executable mutation requirement
+  restrictions: read-only; no edit/import/test/root allocation/Git/index/ledger/production/sealed traversal
+future_if_approved: parent separately checkpoints exact one official1500-member run with reviewed hashes/current HEAD; if mutation evidence is insufficient, authorize tests-only fresh executable mutation gate before any production
+retention: r517 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-366 — r517 implementation statically frozen; one 167-case GREEN authorized
 
 ```yaml
