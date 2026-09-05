@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-385 — r526 authoritative 248-case offline GREEN; immutable Astra launch review planned
+
+```yaml
+checkpoint: CP-385
+status: VALID_R526_PRIVATE_OFFLINE_GREEN_ASTRA_FINAL_LAUNCH_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r526
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_R526_GREEN, authoritative: true, launcher_invocations: 1, harness_invocations: 1, exits_launcher_tool_test: [0,0,0], elapsed_seconds: 62.652237506, total: 248, passed: 248, failed: 0, harness_errors: 0, forbidden_before_after: [[],[]]}
+decomposition: {retained_r517: 167/167, review: {classification: VALID_R526_REVIEW_GREEN, total: 42, controls: 36/36, executable_mutation_kills: 6/6}, additional_operation_schema_partial: 39/39}
+mutation_proof: exact-membership candidate post-accounting control retained accounting/readback then rejected unexpected with no final pair; single-operation mutant completed and independently validated final inventory/readback containing unexpected SHA2562d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881; other five frozen mutants killed
+frozen_inputs: {head_authorized_observed_gitee: f1ccb4e10975df6215a40c34823ba0d32cde1f8e, driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 2de6cf06aabc4ce09bc740373dd98a632c510e9c1290b261ea06f04b7730b93d, launcher_sha256: f1bf901f70d019d6a4413849b021851a5c15ecc0328fe518952d22f49a547395, package_before_after_sha256: c0a2e7b5d3d406dbfa5be22a93ca4b90cf0cabaae550f73b87453875d7f3b0b0}
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r526; result SHA256456e253447df76b0b5c5c92abf1318a3a38d7875fea8ba6d70764e26ac9d92fd; final30-member manifest SHA256b3508014f243b6aac9b56295e3276d822cd8245f9686862bb33f664a3668f9fb; readback SHA256b43d4d1ec2438b68d19e8ababa3455de2966461a574a85963fac8801f3d5ea4f validated_files30; stderr empty; exact NVMe tempfile preflight valid
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r526-report.md SHA25628899cf7fe7258ef1927251da5208eaef2ab13a1060888bba79f60ceadb30733,109 lines,9728 bytes
+parent_readback: complete result including all39 additional names/all42 review records and mutant hashes, raw exit/status, exact30-member inventory/hash/readback, package/source/tempfile/root/official boundaries and complete report read; all recomputations passed
+next_experiment:
+  status: GO_READ_ONLY_IMMUTABLE_ASTRA_LAUNCH_READINESS_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read every final driver/shell/r526 harness/launcher line, exact diffs from r521/r517/r524/r525 where relevant, complete r526 result/cases/command/static/source/package/tempfile/inventory/readback and antecedent review reports; verify N1/N2/N3/I1/I2/I3/M1, failure/status precedence, terminal/outer/accounting/nested schemas, post-seal behavior, one-owner lifecycle, mutation sensitivity, provenance/hash/HEAD/output collision/context gates and exact production1500 wiring
+  report: write one new unique immutable review report path once, fsync/readback and never amend; classify APPROVED or CHANGES_REQUESTED with official-generation decision
+  restrictions: read-only; no candidate/harness/launcher/evidence/repo/Git edits, no behavior rerun, no root allocation or real setup/project/GL/GPU/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+future_if_approved: parent separately checkpoints one exact official1500-member train/val generation command with current HEAD and reviewed driver/shell hashes; approval does not itself launch production
+retention: r526/r525/r524 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: four official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-384 — r526 additional-root fixture fix statically valid; one private GREEN authorized
 
 ```yaml
