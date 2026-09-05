@@ -12136,3 +12136,49 @@ retention:
   deletion_candidates: [r295-r299 scratch and isolated dependency target after readback; do not delete without explicit user authorization]
 next_action: commit and ordinary-push this PLANNED checkpoint, acquire and hash the exact official source into the absent durable root, then audit its dependency and checkpoint-load feasibility before writing the RED test
 ```
+
+## Checkpoint CP-146 — first native SAM source audit failed closed
+
+```yaml
+checkpoint: CP-146
+status: INVALID_EVIDENCE_SCRIPT
+recorded_at: 2026-09-05T08:37:52+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-145
+source_commit: 6fddf871f6aaf7ebd9432ecb1ab6d84cce931a9d
+run_id: stage-e-native-sam-source-audit-r295
+valid_observations:
+  source_checkout_commit: 2b90b9f5ceec907a1c18123530e92e794ad901a4
+  source_checkout_tree: 64becbca23f880e0056449377496da248a74da43
+  tracked_files: 569
+  source_dirty_paths: 0
+  acquisition_elapsed_ms: 8100
+invalidity:
+  symptom: source-files.sha256 contains 4 records although the clean checkout has 569 tracked files
+  root_cause: the inventory pipeline emitted source-relative paths but invoked sha256sum from the task repository cwd, and the outer script did not enable error propagation for that pipeline
+  misleading_exit_record: {exit_code: 0, authoritative_validity: INVALID}
+  impact: source checkout may be complete, but r295 does not satisfy the all-file inventory/readback contract and cannot become the source for the A/B run
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-source-audit-r295
+  preflight_sha256: 52f6bf3f01ea15a5319c3e9ef4925e0bd64e37395505a68973193b3417c3ea39
+  acquire_log_sha256: afdb7bbcca340d73c250292da7c5a3fddd9c5b4e242922dbbf15bf88d9a81368
+  acquire_stderr_sha256: 2a4d514ae7cdfcbd5e94a239ed28d8e4b07761ef482448664462964227f060d5
+  source_audit_sha256: 1984aa732ab79870769a5ca1bbee453beb82402fc15d7c51571fe2b84c1c423e
+  incomplete_inventory_sha256: d7e5c04b577b2c4ad6696457b99bb1485c5d42ac4753dbffd171c2bd18b0d76e
+  exit_sha256: 8cd4c78c4300e3b0c68bee3ca85e1ad599ef3197e73f2bd354d68b1adb84e243
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-source-audit-r295/tmp
+  tempfile_preflight: exact resolved match
+  invalid_source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-2b90b9f-r1
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r295 invalid source/evidence/scratch unchanged, all CP-145 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r295 invalid source/evidence/scratch; do not delete without explicit user authorization]
+next_action: commit and ordinary-push this invalid checkpoint, then reacquire the same pinned commit into a new r300 source root and compute the inventory from inside that root with pipefail and an exact 569-file count assertion
+```
