@@ -18953,6 +18953,29 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-384 — r526 additional-root fixture fix statically valid; one private GREEN authorized
+
+```yaml
+checkpoint: CP-384
+status: R526_FIXTURE_STATIC_PREPARATION_VALID_ONE_PRIVATE_GREEN_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r526
+executor: /root/generator_build, gpt-5.6-sol high
+source_state: {head_local_gitee: fdfd3e844816a6010e48822c2c016e1cb1775870, scoped_source_clean: true, worktree_only_original_untracked_build_install_log: true}
+frozen_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 2de6cf06aabc4ce09bc740373dd98a632c510e9c1290b261ea06f04b7730b93d, harness_lines: 684, launcher_sha256: 4e00be63fad098a3273531061b608b29770da6acc837e0a43367b75c4519c441, launcher_lines: 415}
+delta: r525-to-r526 harness +13/-10 contains only mechanical labels plus fail-closed additional-root absence/symlink check and one mode0700 mkdir without parents/exist_ok; launcher +8/-8 mechanical ID/path/HEAD/harness/classification bindings; counts/oracles/candidate unchanged
+static_gates: harness AST/Ruff and launcher bash-n/heredoc12/parser15 passed; dynamic review42=36controls+6kills, retained167, additional39, total248 transforms and six mutant syntax/frozen hashes passed; forbidden imports empty
+preallocation: r526 evidence/scratch/low and four official roots absent by -e/-L; invocation/allocation0; r525 frozen report/evidence/candidate unchanged
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_OFFLINE_R526_GREEN
+  authorized_head: this CP-384 commit after ordinary Gitee push/readback; mechanically rebind only launcher HEAD and parent inverse-hash/static/root-absence readback before invocation
+  execution: one explicit launcher invocation/self-hash; all pre-mkdir gates, NVMe tempfile equality and one combined main must yield complete248/248 with review36+6 and additional39, zero errors/forbidden imports, exit0 VALID_R526_GREEN
+  evidence: full provenance/static/command/raw/result/status/source/package/nonself inventory/readback; new write-once report; fail closed without reuse/backfill/second invocation
+  stop_after: parent full readback/checkpoint then Astra immutable final launch-readiness review before official generation planning
+restrictions: private no-GL offline harness only; no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+retention: r525 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-383 — r525 review42 passes but additional fixture parent missing; r526 static preparation planned
 
 ```yaml
