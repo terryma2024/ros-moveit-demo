@@ -94,6 +94,10 @@ class RenderEvent:
 RenderEventSink = Callable[[RenderEvent], object]
 
 
+class RenderObserverError(RuntimeError):
+    """A synchronous render event observer failed."""
+
+
 def _emit_render_event(
     sink: RenderEventSink | None,
     kind: str,
@@ -103,7 +107,10 @@ def _emit_render_event(
     receipt: TaskSceneGeometry | None,
 ) -> None:
     if sink is not None:
-        sink(RenderEvent(kind, seed, scenario, attempt_index, receipt))
+        try:
+            sink(RenderEvent(kind, seed, scenario, attempt_index, receipt))
+        except Exception as error:
+            raise RenderObserverError("render event observer failed") from error
 
 
 @dataclass(frozen=True, slots=True)
