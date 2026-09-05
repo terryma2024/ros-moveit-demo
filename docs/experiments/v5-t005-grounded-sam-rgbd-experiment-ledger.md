@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-202
+latest_checkpoint: CP-205
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: bde55e42294b5ed04fd04c039dbf2d91ede2de77
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: categorical segmentation renderer fix, train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: TDD a separate zero-sample categorical segmentation renderer while preserving RGB multisampling, then fresh overlay and gates
+next_action: ordinary-push renderer isolation fix and gate receipts, then actual GPU readback r372 before derived train/val truth reconstruction
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14555,4 +14555,90 @@ benchmark: preserve valid r363; no benchmark merely for this read-only diagnosis
 retention: r367 geom-ID NPZ, camera/qpos/raycast report and manifest retained; r366 overlays retained; no archived/deleted evidence
 boundaries: sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged; original r2/r2-repro/archives and all training checkpoints untouched
 owned_processes: NONE after controlled renderer close
+```
+
+## Checkpoint CP-203 — Categorical renderer isolation RED to GREEN
+
+```yaml
+checkpoint: CP-203
+status: VALID_DIRECTED_GREEN_FRESH_OVERLAY_NEXT
+source_commit: 8a12e72ba1e7503aedcc5e3b4c0a860b4b624639
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-SEGMENTATION-FIX-R1
+red: {run_id: stage-e-sam-categorical-render-red-r368, failed: 4, exit_code: 1, elapsed_seconds: 0.36}
+green: {run_id: stage-e-sam-categorical-render-green-r369, passed: 55, exit_code: 0, pytest_seconds: 1.52, elapsed_seconds: 1.80}
+junit_sha256: 07808ecc27709de40032c1ee7ba0f5cc752c01fdc04f02e63fc39ee584f81b30
+implementation:
+  file: src/so101_demo_py/src/adapters/perception/mujoco_dataset.py
+  behavior: retain original RGB context, create a separate zero-sample segmentation context and restore model sample setting immediately, verify actual categorical offSamples is zero, route visible and paired-reference segmentation through it
+  failure_handling: categorical allocation/validation failure restores model setting and closes created contexts; render failure resets segmentation mode; normal close releases both contexts
+regression: src/so101_demo_py/test/test_mujoco_categorical_renderer.py exercises real renderer owner with a controlled graphics backend; actual GPU raster readback remains required
+static: ruff and git diff --check passed after targeted import spacing correction
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  focused_import: unique run scratch symlink to this checkout source
+  scratch: each r368/r369 uses its own registered durable scratch/run-id/tmp; exact tempfile preflight passed
+  overlay: r358 previous installed overlay; fresh r370 required before runtime readback
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/build_categorical_renderer_r370.sh
+next_gate: seven-package symlink overlay with verified local r26 lodepng and fetching disabled, then ordinary r371 and actual categorical renderer r372
+boundaries: no model training, threshold tuning, sealed test/COCO100/PickPlace/Mac; Microduck paused; IoU 0.80 unchanged
+retention: r368 RED and r369 GREEN evidence retained; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-204 — Fresh categorical renderer overlay built
+
+```yaml
+checkpoint: CP-204
+status: VALID_BUILD_ORDINARY_NEXT
+source_commit: 8a12e72ba1e7503aedcc5e3b4c0a860b4b624639
+run_id: linux-build-stage-e-categorical-render-r370
+result: {packages_finished: 7, exit_code: 0, elapsed_seconds: 56.26}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+lodepng: expected local r26 HEAD and strict fsck verified; fetching fully disconnected
+evidence: registered durable run-evidence/linux-build-stage-e-categorical-render-r370, including source patch and new regression test copy
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-categorical-render-r370/tmp; exact tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_categorical_renderer_r371.sh
+runtime_readback_preregistration:
+  run_id: stage-e-categorical-render-readback-r372
+  indices: [27, 95, 104, 140, 152, 242]
+  source: exact next synced code commit
+  input_state: reproduce historical accepted render attempt with legacy ID routing, require bitwise old RLE equality, then copy visible qpos/camera/material state into the actual fixed renderer
+  reason: calling the new acceptance loop could choose a different partial-occlusion attempt after truth repair; same seed alone is insufficient to prove unchanged scene
+  output: durable truth-remediation/categorical-renderer-readback-r1
+  guards: RGB context remains 4 samples, ID context is actually 0, model setting restored to 4, sample140 full geom-ID array equals independent r367 zero-sample result, RGB differences bounded and retained, paired-reference route checked on sample95
+next_after_ordinary: commit owned code/test/ledger and ordinary-push/readback before actual GPU readback
+boundaries: no new dataset, model inference/training, thresholds or sealed sets touched; Microduck paused
+retention: r370 build retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-205 — Categorical renderer ordinary gate GREEN; actual GPU readback armed
+
+```yaml
+checkpoint: CP-205
+status: VALID_CODE_ORDINARY_GREEN_GPU_READBACK_ARMED
+source_commit: 8a12e72ba1e7503aedcc5e3b4c0a860b4b624639
+run_id: linux-test-stage-e-categorical-render-r371-ordinary
+result: {passed: 1275, failures: 0, errors: 0, skipped: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.46, elapsed_seconds: 18.04, colcon_exit: 0, test_result_exit: 0}
+junit_sha256: 28f7f1e23dd1d0657f005e177962e2d0d6710d8d5ad37f5a9254dae5e14fb980
+collection: ordinary test directory only
+provenance:
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  package_prefixes: all seven verified in r370; mujoco_dataset resolves to this checkout source
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: durable scratch/linux-test-stage-e-categorical-render-r371-ordinary/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static: ruff check and git diff --check passed
+owned_changes: mujoco_dataset.py, test_mujoco_categorical_renderer.py and ledger checkpoints
+preserved_untracked: build-task14-runner-access-r11/, install-task14-runner-access-r11/, log-task14-runner-access-r11/
+benchmark_scope: this change isolates training-data categorical rendering, not the benchmark runner/adapter/report implementations; preserve valid r363 and require the next explicit gate when comparing changed data/model candidates
+next_command: run_categorical_renderer_readback_r372.sh EXACT_NEXT_SYNCED_COMMIT
+live_readback_contract: CP-204 fixed historical scene states, actual GPU renderer, categorical context0/RGB context4, zero-sample sample140 array bound to SHA 7996cf320f96c411bff0c9fd24c0c86bf3a63527eec8d749b91d7a23fb1a3e02, full state/mask evidence retained
+next_action: commit owned code/test/ledger, ordinary-push and read back exact Gitee SHA, then execute unique r372; no dataset rebuilding before its readback
+boundaries: sealed test/COCO100/PickPlace/Mac and Microduck unchanged; no model inference/training, threshold tuning or evidence deletion
+retention: r368-r371 retained; scratch deletion candidates only
 ```
