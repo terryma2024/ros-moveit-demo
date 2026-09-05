@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-219
+latest_checkpoint: CP-220
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: publish owned box-export fix, create immutable r5 trainer inventory and frozen training contract, then offline container smoke before formal training
+next_action: fresh offline training container from pinned local dependencies, then r5 six-scenario smoke and checkpoint reload
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15182,4 +15182,34 @@ launch_order: commit/push/readback -> r387 trainer view -> fresh container -> on
 benchmark: preserve r30/r363; require explicit benchmark for changed-model comparison, no rerun merely for this export-only ordinary gate
 retention: all runs retained; no deletion or archival; scratch candidates require separate deletion authorization
 boundaries: test/COCO100/PickPlace/Mac inaccessible; Microduck paused; generic cup and prompt cup.; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-220 — r5 trainer view consumed successfully by the real training loader
+
+```yaml
+checkpoint: CP-220
+status: VALID_IMMUTABLE_TRAINER_VIEW_CONTAINER_NEXT
+experiment_id: EXP-079-STAGE-D-R5-TRAINER-VIEW-R1
+source_commit: 8b29d4ca69ae55fe9dcf6632bf97457a2593fbb4
+gitee_sha_readback: 8b29d4ca69ae55fe9dcf6632bf97457a2593fbb4
+run_id: stage-d-r5-trainer-view-r387
+result: {exit_code: 0, elapsed_seconds: 1.91, train_samples: 1200, val_samples: 300, train_negative_targets: 200, val_negative_targets: 50, original_source_files_unchanged: 4500, model_forwards: 0, MuJoCo_renders: 0}
+output: durable training-data/grounding-dino-cup-r5-train-val-trainer-r1
+train_inventory_sha256: e6df16cf4101884320e65b801b8d5a2446fa3af2197b33fbb6d3ea13c0a2b93b
+val_inventory_sha256: 35834baa2e284634cb7a18f4f7baa27f176909c7aeac7f317786b60877e597c1
+contract_sha256: f9eeb79e9a3255b1bce8b7b6e13b8245f6838501ca60bcc8b2ae8f28c342ddc4
+manifest_sha256: e59cdfd3f5554c7ef8d9215b264a01e6e9482d6d6add43069c6eb8b0d113d7ab
+actual_consumer_gates: load_verified_split and build_coco_annotation consumed every train/val member; exact absolute mask extents unchanged; correct640/480 trainer normalization; no image/mask/scenario/seed changes
+smoke_seeds: {train: [410000000, 410000001, 410000002, 410000003, 410000004, 410000005], val: [420000000, 420000001, 420000002, 420000003, 420000004, 420000005]}
+recipe: model/training/smoke/validation sections byte-semantically unchanged from pinned original contract; only data identities updated, as frozen in CP-219
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-box-export-r385/install
+  scratch: durable scratch/stage-d-r5-trainer-view-r387/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_command: build_r5_training_container_r388.sh NEXT_SYNCED_SOURCE_SHA
+next_gate: locally pinned gcfix3 dependencies, no network, exact committed source layer, then unique r389 smoke with container Python NVMe tempfile preflight and no sealed/SAM mounts
+retention: trainer view and report immutable; all earlier r5/r4 data retained unchanged; no archival or deletion; scratch deletion candidate only
+boundaries: no model training yet; test/COCO100/PickPlace/Mac inaccessible; Microduck paused
 ```
