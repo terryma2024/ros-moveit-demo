@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-363 — r516 exact-once diagnostic RED valid; bounded finalization GREEN authorized
+
+```yaml
+checkpoint: CP-363
+status: VALID_GENERATION_RUNNER_DIAGNOSTIC_ACCOUNTING_RED_SCOPED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-red-r516
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_DIAGNOSTIC_ACCOUNTING_RED, authoritative: true, invocations: 1, total: 6, expected_defects: 2/2, valid_controls: 4/4, harness_errors: 0, test_exit: 1, launcher_tool_exit: 0, elapsed_seconds: 7.034037868, forbidden_before_after: [[],[]]}
+red: original7/finalizer0or9/diagnostic-fsync96 each invokes finalizer twice with exit arguments[7,96], truncates call1 diagnostic sentinels, returns96 and for finalizer9 records outer statuses[96,9] instead of[7,9]
+controls: no-storage-failure cases use one finalizer and correct outer behavior; compounded prior-stage storage/finalizer/outer failure does not recurse; original0+storage96 remains nonzero but confirms same duplicate/truncation gap
+frozen_inputs: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b and shell SHA256f350b28f144955643a9b809065b0896be26470e7a4b89f919d853c39f276fd68 byte-identical
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-red-r516; result SHA256a5f82ce2af7ddc3b745f6a83359c17d8d04690d745af171e0993b35fc388d4e9; harness SHA256634ff49cc7d291a650c88102ca39152f024c9eb21595e3ae97b5e6d0f543cda4; launcher SHA2569b4ceb7b7b38b047552a8f12fdfd3d49770f7bd90f8725691b0550fd75402773; final20-file inventory SHA256c743d1125d14c34f43572a48c79b081ca602285c83de69cb86607aaea87abb9d; readback SHA256be033304b4f8ef3c323441cba2635b94026bd06dc1a0b6f26912c4c7b98b0998
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-diagnostic-accounting-red-r516-report.md SHA2561547ca39661b0f6e8c57eb9588938aa18ac77ae634de5bdb9e5037ce42ed4c7a
+parent_readback: complete report/all6 result records/inventory/readback/tempfile/source receipts and frozen hashes read; official roots absent; no fix in RED
+next_experiment:
+  status: GO_MINIMAL_PRIVATE_FINALIZATION_ACCOUNTING_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+  executor: /root/generator_build, gpt-5.6-sol high
+  implementation: normal tail claims/disarms EXIT owner immediately before first/only finalize-launch; run finalizer once with nontruncating single diagnostic ownership, then capture finalizer diagnostic-fsync and outer-recorder statuses under bounded set-e handling; preserve original/finalizer/diagnostic-storage codes separately and return nonzero on any required accounting/storage failure
+  receipt_change: narrowly extend private outer/error receipt and CLI only as needed to persist diagnostic_fsync_exit_code separately from original_exit_code and finalizer_exit_code; error-chain labels must match nonzero components; outer-recorder invocation/result must be captured without recursion, refinalization or diagnostic rewrite; best-effort total storage failure need only retain already-written bytes and nonzero outcome
+  verification: one fresh combined harness runs exact retained r515133 plus unchanged r516 six=139 cases; both former defects one finalizer/call1 sentinels/original7 preserved and distinct finalizer0or9/storage96; normal controls unchanged; original0+storage failure cannot succeed; mutation/omission checks cover ownership transfer and separate status plumbing
+  required: exact locked Python/fresh NVMe scratch/static gates;139/139 pass, zero failure/harness error, all top exits0, forbidden imports empty; driver/shell hashes frozen after run; fsync/inventory/readback; stop for Astra review
+  restrictions: private T driver/shell/harness only; no tracked repo edit, real setup/project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r516/r515 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-362 — r515 review finds late ownership transfer; exact-once finalizer RED authorized
 
 ```yaml
