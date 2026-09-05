@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-354 — r509 success-chain and shell-accounting RED valid; scoped GREEN authorized
+
+```yaml
+checkpoint: CP-354
+status: VALID_GENERATION_RUNNER_SUCCESS_CHAIN_RED_SCOPED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-red-r509
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_SUCCESS_CHAIN_RED, authoritative: true, cases: 19, expected_defects: 14, valid_controls: 5, harness_errors: 0, test_exit: 1, launcher_exit: 0, tool_exit: 0, elapsed_seconds: 6.272872592, stderr_empty: true, forbidden_modules_before_import_after: [[],[],[]]}
+N3_red: nine success fail-open cases accepted no driver pair, terminal-only, each required success member missing, failure terminal plus launch0, and inconsistent terminal status/exit; controls prove one-sided/no-terminal reject, exact complete success accepts, explicit nonzero predriver failure without chain accepts
+N2_red: source-preserving shell fixture reproduces TMP mismatch, late collision, stage receipt failure, fsync failure and finalizer-plus-outer failure without driver execution; first four bypass terminal/outer accounting; dual storage/finalizer failure demonstrates unavoidable best-effort persistence boundary
+frozen_inputs: r508 driver SHA2569b0840c3 and shell SHA256f057282a byte-identical; package source clean and official roots absent
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-red-r509; harness SHA256aaf37891d17b1539c7b26a3b65a492469a0cee95d392b0a3aab11457372fdd9d; result SHA256f934f59d1a3145f62fda9f6e9e5e76e1757d390d525397d6380c0e4fa6af8b38; command SHA25611315d231040bfadc50a269a4ec9286f86a49520164c7eae9819a384a5c30af7; tempfile SHA25680089f2c7a8880db313376c6e4dfe3e1d2038fbf57600653918462a90eebb94f; final18-file manifest SHA256b0dae1c787e913e15115740ddc72df20fb98d6ad89cdf3504b78716ae1b79c7a; readback SHA256e2978a228b48e124127b9cec6c79338de12da0c2b387813994ff15a92f2609bc
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-red-r509-report.md SHA256de1e234844c2a0387b46f6dc620ff11379fe03c148d290bffb162f40484ccfe6
+parent_readback: complete86-line report, identities/cases/evidence/status and official-root absence read; RED accepted only
+next_experiment:
+  status: GO_PRIVATE_SUCCESS_CHAIN_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r510
+  executor: /root/generator_build, gpt-5.6-sol high
+  fix_N3: launch exit0 requires driver_process stage, both inventory files, exact success stable membership launch-command/preconstruction/terminal/both GPU receipts and no failure receipt, all nested hashes/readback, driver terminal status success/exit0/no failure; absent driver chain permitted only for explicit nonzero predriver stage
+  fix_N2: replace all post-allocation die/unguarded helper exits with one bounded status owner that records failing stage/original status and invokes finalizer exactly once; route tempfile/late-collision/stage/fsync failures without driver invocation; keep finalizer/outer recorder nonrecursive with distinct exits and explicitly label persistence best-effort when storage/finalization itself fails
+  verification: fresh one-shot offline GREEN runs exact r50919 plus retained r508114=133 cases; all valid cases pass and all unsafe variants reject before success; shell-level failures retain available accounting, never invoke generation; all exits0, forbidden imports empty, static/hash/NVMe/evidence gates valid
+  restrictions: private T driver/shell/harness only; no tracked repo edit, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+review_after: Astra full immutable launch-readiness review before any actual GL or official generation
+retention: r509 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-352 — r508 evidence-ownership GREEN valid; final launch-readiness review required
 
 ```yaml
