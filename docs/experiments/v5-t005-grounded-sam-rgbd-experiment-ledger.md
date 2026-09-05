@@ -12686,3 +12686,45 @@ retention:
   deletion_candidates: [r311 partial output/scratch, r312 scratch, and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-156, add the binary-float32 normalization regression test, observe RED, implement exact lossless conversion plus writable image copy, observe GREEN, then use a fresh output/run ID
 ```
+
+## Checkpoint CP-157 — official binary-float32 mask regression is RED
+
+```yaml
+checkpoint: CP-157
+status: RED_VALID
+recorded_at: 2026-09-05T09:03:17+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-156
+source_commit: db9ce611e9fb9e71ab22e330860e63917d839198
+run_id: stage-e-native-sam-binary-mask-red-r313
+result: {exit_code: 1, elapsed_ms: 192, expected: RED}
+failure: normalize_native_prediction rejects the official API's thresholded binary float32 mask tensor before lossless conversion
+test_contract:
+  test_script_sha256: 82cf01c553d10f9bbb63bca562da80c70d5efaffc6195ff5bca3ae57c9a8dd59
+  pre_fix_driver_sha256: 65d3e111ded345002355809c31d0a1b0c05f5c8c9f1ee6fccffa87b10c265ab2
+  required_green:
+    - accept float32 masks only when every value is exactly 0.0 or 1.0 and convert losslessly to bool
+    - reject a float32 mask containing 0.5 with a dedicated error
+    - preserve the prior axis, quality, selection, oracle, and RLE contracts unchanged
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-binary-mask-red-r313/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-binary-mask-red-r313
+  preflight_sha256: ba36d7d5eebc21b9ca05cbdb5ced9aba6b73ee6ac7d54452ab1de9a0f197eb31
+  stdout_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: 7a960f2f7d8dc8a702044423911efd687cfd6b0eb8d4429a7e13520342e72bb5
+  scripts_pointer_sha256: 88d433005e4b6d0c6494e84c198e9d6a8612d6b82c87fda86e5f6ce1b2bc377c
+  exit_sha256: 8c314f078df26b699b1481fc89ddb9609da82ede0810ce67d949143a89d9c53f
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r313 RED evidence/scratch, r311 invalid partial output, r312 probe, all CP-156 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r311 partial output, r313 scratch, and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-157, implement exact binary-float32 conversion and writable image-copy handling, then execute all four unchanged direct tests in fresh r314 scratch
+```
