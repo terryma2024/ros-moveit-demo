@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-235
+latest_checkpoint: CP-236
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
-active_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+source_parent: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
+active_experiment: EXP-079-STAGE-E-R5-MODEL-COMPARISON-BENCHMARK-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: r405 full readback valid; commit/push then explicit r406 benchmark before corrected-DINO frozen-SAM val comparison
+next_action: r406 explicit benchmark GREEN; compose immutable epoch8 DINO plus original frozen SAM bundle r407, then preregister val-only pipeline comparison
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15675,4 +15675,46 @@ next_experiment:
 next_after_benchmark: compose immutable epoch8 DINO plus frozen original SAM bundle and preregister corrected-truth val-only pipeline comparison; original and retained epoch4 SAM remain frozen; no test/COCO100/PickPlace/Mac permission implied
 retention: all training/audit/raw evidence retained; no archival/deletion; scratch deletion candidates only
 boundaries: Microduck paused; generic cup prompt cup.; mask IoU0.80 unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible
+```
+
+## Checkpoint CP-236 — Explicit r406 benchmark GREEN; immutable r5 bundle composition planned
+
+```yaml
+checkpoint: CP-236
+status: VALID_BENCHMARK_BUNDLE_PLANNED
+experiment_id: EXP-079-STAGE-E-R5-MODEL-COMPARISON-BENCHMARK-R1
+run_id: linux-test-stage-e-r5-model-comparison-r406-benchmark
+source_commit: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
+gitee_sha_readback: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
+lifecycle: PLANNED CP-235 -> RUNNING verified live pytest PID3691926 -> VALID exit0
+result: {passed: 575, skipped: 2, total: 577, errors: 0, failures: 0, pytest_seconds: 646.36, elapsed_seconds: 647.99, colcon_exit: 0, test_result_exit: 0, runner_exit: 0}
+collection: explicit benchmark_test only; source and HEAD unchanged throughout test
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+  prefixes: all7package prefixes/source import readback passed
+  scratch: durable scratch/linux-test-stage-e-r5-model-comparison-r406-benchmark/tmp; TMPDIR/TMP/TEMP exact and actual Python tempfile verified
+  evidence: durable run-evidence/linux-test-stage-e-r5-model-comparison-r406-benchmark; runner, command logs, JUnit, gate exits, test-result, timing comparison retained
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+timing_comparison: {r30_HDD_pytest_seconds: 3210.78, r406_NVMe_pytest_seconds: 646.36, ratio: 0.2013093391636923, seconds_difference: 2564.42, r363_NVMe_pytest_seconds: 646.45}
+timing_caveat: observational comparison only because suite/source evolved since r30; no isolated performance experiment claimed; r30/r363 not rerun, fsync/journaling/integrity semantics unchanged
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-BUNDLE-COMPOSE-R1
+  status: PLANNED
+  run_id: stage-e-r5-bundle-compose-r407
+  single_variable: replace DINO detector artifact with independently verified r5 epoch8; preserve original frozen SAM bytes, dependency manifest and generic cup profile
+  source_bundle: /data/work/so101-models/grounded-sam-v2-scipy-lock
+  source_bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  checkpoint_root: durable training/grounding-dino-cup-r5-r1/formal-r1/checkpoints/epoch-008
+  checkpoint_manifest_sha256: 6ca8c6b516e81b06fb862e75b9911555cf1bbedbaefe65e19a675fad535913a4
+  destination: durable models/grounded-sam-dino-cup-r5-epoch8-r1, must not exist
+  guards: exact r405 report hash, r406 gate exits/JUnit/timing receipt, frozen training manifest hash, complete source/checkpoint verification before composition
+  success: schema2 generic cup profile, DINO weights359164b33dcc1aeef3120e859ed8eee35eec31860383b0bc4196bdc164367229, original SAM file set/hash/size identical, new bundle verify_model_bundle passes
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_offline_truth_audit_r2.sh stage-e-r5-bundle-compose-r407 compose_r5_bundle_r407.py NEXT_SYNCED_HEAD
+  model_forwards: 0
+  python: locked host Python and r394 overlay; unique registered NVMe scratch preflight
+next_after_bundle: preregister full corrected-truth val-only pipeline collection/comparison, retaining complete DINO proposal provenance and actual SAM outputs; original and historical epoch4 SAM remain frozen; do not infer sealed or deployment eligibility from perfect val box score
+retention: all prior valid/invalid evidence retained; archived none; scratch deletion candidates only, no deletion
+boundaries: Microduck paused; no SAM training; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
 ```
