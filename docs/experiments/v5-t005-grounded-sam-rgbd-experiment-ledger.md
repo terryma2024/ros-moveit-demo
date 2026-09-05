@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-213
+latest_checkpoint: CP-214
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 4c6046213c8f94d72749e958a0deec39420cfc4c
-active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
+source_parent: 09f23a4eeb8b17ece9c997dc1339c216ccef1768
+active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: correct independent auditor polygon coordinate convention and run fresh r380; r5 datasets remain immutable and unchanged
+next_action: reevaluate retained historical epoch4 predictions against r5 truth with unchanged production matching and thresholds; no inference or checkpoint reselection
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14952,4 +14952,42 @@ next_experiment:
   command: run_offline_truth_audit_r1.sh stage-e-categorical-r5-label-readback-r380 readback_categorical_r5_labels_r1.py NEXT_SYNCED_SOURCE_SHA
 retention: r379 failed audit script/selection/logs/scratch retained; r5 source and converted files unchanged; no deletion or archival
 boundaries: historical metrics, mask IoU0.80, sealed test/COCO100/PickPlace/Mac and Microduck pause unchanged
+```
+
+## Checkpoint CP-214 — r5 label readback VALID; retained-prediction reevaluation armed
+
+```yaml
+checkpoint: CP-214
+status: VALID_INDEPENDENT_R5_LABEL_READBACK_REEVALUATION_PLANNED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-LABEL-READBACK-R2
+source_commit: 09f23a4eeb8b17ece9c997dc1339c216ccef1768
+gitee_sha_readback: 09f23a4eeb8b17ece9c997dc1339c216ccef1768
+run_id: stage-e-categorical-r5-label-readback-r380
+result: {exit_code: 0, elapsed_seconds: 5.24, source_files: 4502, converted_files: 3, visible_masks_verified: 1500, paired_reference_and_union_masks_verified: 250, original_images_identical: 1500, original_input_receipts_unchanged: 4500, model_forwards: 0, MuJoCo_renders: 0}
+report_sha256: bfb2e8f817fdb371d7c44e8b422d784784a450b5b5a1fbd5d6e54dcb4e57aefa
+manifest_sha256: b9bfdbb9c31f0a4c50af3451f8875ee35b6318592e588aa61b247f957d8111df
+independent_gates: all source/converted tree hashes and counts match CP-212, train/val seeds disjoint and original quotas unchanged, every new RLE equals categorical ID mask, every converted absolute box equals exact pixel-center extent, polygon normalization639/479 confirmed, class cup and prompt cup. unchanged
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  scratch: durable scratch/stage-e-categorical-r5-label-readback-r380/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
+  status: PLANNED
+  run_id: stage-e-categorical-r5-retained-reevaluation-r381
+  lifecycle: FULL_RESTART offline retained-record scoring
+  output: durable val-remediation/categorical-r5-retained-epoch4-reevaluation-r1
+  single_variable: r4 versus r5 truth masks and tight truth boxes, same300 original val images and exactly the same retained r364 epoch4 accepted prediction records
+  checkpoint_policy: historical epoch4 remains frozen for this diagnosis; no new epoch selection, model inference or training
+  source_binding: r364 artifact inventory087d1e8120498bf0f37ae7f1ad8a58cccb9821b7e08d26eca1d0a3f82ce21d69, report5a392756b29199b170283f96510c39457c25a588b2c15e1963db74258e411684, exact r4/r5 val inventories and original image hashes
+  scoring: unchanged candidate ranking, bbox-greedy one-to-one association at bboxIoU0.5 followed by maskIoU0.80; preserve all postprocessing decisions, thresholds and errors
+  control: recomputed r4 all-scenario TP236 FP17 FN64 and primary TP197 FP9 FN53 must match frozen CP-199/200 metrics before trusting corrected-truth scores
+  cohorts: all300 val frames and primary250 excluding only existing small_far_cup; per-scenario and per-frame scores retained
+  secondary_diagnostic: per-truth best retained mask IoU without bbox association may locate box-versus-mask failures, but never replaces production matching or qualifies a candidate
+  next: use corrected-truth results to identify the next minimal train/val-only remediation; sealed sets stay closed
+benchmark: preserve r30 and valid r363; this frozen-record truth-correction audit does not execute or select models; next changed-model comparison still requires its explicit benchmark gate
+retention: r379 remains INVALID, r380 retained VALID; all r5 data read-only and unchanged; no deleted or archived runs; scratch deletion candidates only
+boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no pose publishing from any offline audit
 ```
