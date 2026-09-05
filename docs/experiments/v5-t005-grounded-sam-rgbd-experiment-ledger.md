@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-271
+latest_checkpoint: CP-273
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: e609d8e8256db0cec0e779445669bea0999da717
+source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r442 broad directed90passed; freeze owned generator source/tests, r443 fresh7package symlink build with verified offline lodepng, then r444ordinary and r445explicit benchmark
+next_action: r443build passed; Astra requests visible-membership and receipt-field fixes; Sol high fix wave1 with r446RED/r447GREEN before package/benchmark gates
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16896,4 +16896,72 @@ subsequent_gates: r444 ordinary test/ only then one required r445 explicit bench
 remaining: package/build gates and real GPU generator nonpenetration acceptance readback not yet done; new dataset namespace/quotas/ranges/truth protocol must freeze before any dataset generation
 retention: all evidence retained; archived none; scratch deletion candidates only; original untracked build/install/log untouched
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new experiment data or model training, mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-272 — User-selected subagent roles activated
+
+```yaml
+checkpoint: CP-272
+status: BUILD_AND_READONLY_REVIEW_DISPATCHED
+source_commit: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
+gitee_sha_readback: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
+user_instruction: switch to subagents; execution/debug GPT-5.6-Sol high, review GPT-6 Astra medium
+supersedes: earlier no-subagents/inline-only restriction; serial build/test/inference experiments and all data safety boundaries remain
+agents:
+  execution: {id: /root/generator_build, model: gpt-5.6-sol, reasoning: high, scope: r443build and installed provenance readback only}
+  review: {id: /root/generator_review, model: gpt-6-astra, reasoning: medium, scope: immutable e609d8e8..7e91137f generator source diff, spec and quality review only}
+coordination_root: durable coordination/generator-r443-r1
+brief: coordination_root/brief.md
+review_package: coordination_root/review.diff
+reports: coordination_root/build-report.md and review-report.md
+ownership: parent sole ledger writer and Git committer/pusher; agents cannot spawn nested agents; reviewer no code/index/HEAD writes or experiments
+Ruling: use existing registered durable coordination root and experiment ledger rather than skill default .superpowers scratch or deleting skill workspace; user evidence-root and no-deletion constraints take precedence, all review history retained
+plan_interface_check:
+  - r443 consumes frozen7e91137f and r26cache, produces newoverlay for r444/r445; no parallel source edit allowed during build
+  - review consumes immutable7e91137f independent of build; findings must be resolved before proceeding to data generation, no review rerun of completed tests
+  - r444ordinary and r445explicit consume same acceptedsource/freshoverlay, each uniqueNVMe scratch; sequential only
+remaining: build and review reports pending; do not claim passing gates from dispatch
+retention: coordination briefs/diff/reports and all evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/model training; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-273 — Fresh build passed; review fix wave registered
+
+```yaml
+checkpoint: CP-273
+status: VALID_BUILD_REVIEW_CHANGES_REQUESTED
+run_id: linux-build-stage-e-generator-nonpenetration-r443
+source_commit: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
+gitee_sha_readback: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
+result: {exit_code: 0, elapsed_seconds: 56.66, packages: 7, runner_executions: 1}
+readback: parent read build-report and exit receipt; executor verified all7package prefixes under fresh overlay and exact installed helper source path
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-generator-nonpenetration-r443/tmp; actual tempfile passed
+lodepng: exacted6fe5825c6a4fbb7f58ab35a4231c7543cd452a strictfsck and clean tracked cache; explicit local source and disconnected build, no fetch
+warnings: unselected mujoco_vendor resolved from /opt/ros/jazzy; recorded existing compiler deprecation/nodiscard warnings in6packages; no compiler errors
+diagnostic_correction: initial wrong-namespace helper import probe failed and is retained; corrected so101_demo.adapters.perception.mujoco_scene_geometry import matches exactsource
+ROS_DOMAIN_ID: not_applicable_offline_build
+GZ_PARTITION: not_applicable_offline_build
+review:
+  agent: /root/generator_review, gpt-6-astra medium
+  source: immutable e609d8e8..7e91137f
+  report: durable coordination/generator-r443-r1/review-report.md
+  verdict: changes_requested; no Critical, one Important, one Minor
+  Important: checker silently skips renamed/unnamed visible geoms and descendant task solids because membership uses direct body plus _visual suffix; a renamed intersecting bottle cylinder can leave only neck measured and yield accepted complete body-pair scope
+  Minor: TaskGeometryPair permits zero/negative primitive counts and empty geom names, allowing internally malformed supplied receipts to reach writer
+parent_verification: reviewed source selection and DatasetConfig arbitrary regular MJCF support; findings are valid accepted-input gaps in fail-closed certification, not evidence that unchanged pinned v5 assets failed r443
+Ruling: fix both findings together before downstream data generation/package benchmark; prefer complete explicit supported visual schema or fully verified rendered-solid membership, preserve invisible conservative collision exclusions, reject unsupported descendants instead of silently omitting
+fix_wave:
+  round: 1
+  executor: /root/generator_build, gpt-5.6-sol high
+  brief: durable coordination/generator-r443-r1/fix-1-brief.md
+  report: durable coordination/generator-r443-r1/fix-1-report.md
+  RED: {status: PLANNED, run_id: stage-e-generator-review-fix-red-r446}
+  GREEN: {status: PLANNED, run_id: stage-e-generator-review-fix-green-r447}
+  scope: visible membership including renamed/unnamed and descendant geoms, malformed positive primitive-count/name receipt validation; real primitive regressions before implementation, existing29+dataset controls retained
+  control: executor reports RED then waits for parent checkpoint before implementation; no source commit/push or ledger edits by agent; after GREEN parent freezes fix and Astra performs scoped re-review
+package_gates: r444ordinary/r445explicit not launched; remain deferred until review issues resolved on freshly built accepted fix source; do not run benchmark on known-to-change source
+retention: all audits/tests/builds/review reports retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/training; mask0.80/mapping0.98 unchanged
 ```
