@@ -12636,3 +12636,53 @@ retention:
   deletion_candidates: [r307-r310 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-155, recompute source/runtime inventories and tempfile provenance in a fresh r311 root, then execute the only preregistered 10-image native A/B with offline CUDA and absent output root
 ```
+
+## Checkpoint CP-156 — first native A/B run failed closed on actual API mask dtype
+
+```yaml
+checkpoint: CP-156
+status: INVALID_TENSOR_CONTRACT_RED_REQUIRED
+recorded_at: 2026-09-05T09:01:30+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-155
+source_commit: b4f9efb2386b56ca8fd4f72585857648e7e9cec2
+failed_run:
+  run_id: stage-e-native-sam-ab-r311
+  status: INVALID
+  exit_code: 1
+  elapsed_ms: 4833
+  completed_prompts: 0
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/native-sam2-runtime-ab-r1
+  output_contents: [manifest.running.json]
+  cause: temporary normalization core required bool masks, while official SAM2ImagePredictor.predict converts returned masks to float32 after applying the boolean threshold
+  provenance_readback: source and isolated runtime inventories matched exactly before execution
+  reuse: forbidden; partial output remains immutable audit evidence and the retry receives a new output root
+tensor_probe:
+  run_id: stage-e-native-sam-tensor-probe-r312
+  status: VALID
+  sample: {formal_sample_index: 53, prompt: DINO_BOX}
+  image: {shape: [480, 640, 3], dtype: uint8, writable: false}
+  masks: {shape: [3, 480, 640], dtype: float32, values_semantics: thresholded binary returned as float32}
+  qualities: {shape: [3], dtype: float32, finite: true, values: [0.7397983074188232, 0.8288931846618652, 0.8942976593971252]}
+  low_res_logits: {shape: [3, 256, 256], dtype: float32}
+  source_explanation: SAM2ImagePredictor._predict thresholds masks when return_logits is false, then predict calls float() before conversion to NumPy
+runtime_observations:
+  - FP32 Flash and memory-efficient attention kernels are unavailable, and PyTorch validly falls back to the mathematical scaled-dot-product-attention kernel
+  - the PIL-derived NumPy image is read-only and triggers a non-mutating torchvision warning; retry will make an explicit writable copy without changing pixels
+decision:
+  tdd_change: add a synthetic binary-float32 mask contract that must normalize losslessly to bool, while rejecting any non-binary float32 mask
+  unchanged_requirements: qualities remain finite float32, mask axes remain CxHxW, and no threshold other than exact 0/1 conversion is introduced
+evidence:
+  r311: {preflight_sha256: bf5029ff5178119404a532cec10a604d3177b51c9d1514341dc61044d634f97a, source_inventory_sha256: d087e47875dc56e9de8de3b7e1f334c00db5080bcc9ed79fe0e211795be7aada, runtime_inventory_sha256: c5e7f054a830cc626e57f54d9715962c30ee1a1cd9861cc7a3f84b34539eacab, input_scripts_sha256: 07730a988f31111500d485d256db74ea25085554267fe8704d46406adf7126b3, stderr_sha256: 2b45dae61eb4c11803bd0ecc0faf54385439af4749b47e82c428bbd8e4a30f35, exit_sha256: cab29817ddd45a3e3f96ccf0e4745adb5acb20a03cefef4ffac0c3d35417cda6}
+  r312: {preflight_sha256: d356973866b44597e54809ed9fcd4f2cccdad0d47c11b288162599641770f9c9, probe_sha256: 8430eed0227789b8c5e5166572b78dc45b42e026e8a6f7dea13da261e2258541, stderr_sha256: 1283752150b1137efc7bb2de38e8747c8edf80ff3fca16f13ac39d8f58130102, exit_sha256: 104b8e7f00a1cc7cce8f5d927b19dae7c2f801507d7df03707210f17a72c1994}
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r311 partial output/evidence/scratch, r312 probe evidence/scratch, all CP-155 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r311 partial output/scratch, r312 scratch, and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-156, add the binary-float32 normalization regression test, observe RED, implement exact lossless conversion plus writable image copy, observe GREEN, then use a fresh output/run ID
+```
