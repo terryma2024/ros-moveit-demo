@@ -18289,3 +18289,29 @@ phase_id_correction_after_review: r485 tests-only RED, r486 fix GREEN, Astra re-
 retention: all r484 and earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no production/config edit in r485, no build/benchmark/generation/render/MuJoCo/OpenGL/conversion run outside synthetic fixtures/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-321 — r485 semantic harness boundary invalid; fresh complete RED authorized
+
+```yaml
+checkpoint: CP-321
+status: INVALID_RED_HARNESS_FRESH_RED_PLANNED
+run_id: stage-e-generator-train-val-review-red-r485
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_RED_HARNESS_BOUNDARY
+result: {tests: 174, passed: 141, failed: 33, errors: 0, skips: 0, valid_expected_product_failures: 32, semantic_harness_errors: 1, pytest_exit: 1, outer_exit: 1, receipt_exit: 1, elapsed_seconds: 5.705723012}
+valid_red_groups: {I1: 4, I2: 10, I3: 5, I4: 8, M1: 5}
+invalid_case: I5 legacy measured-none fixture used DatasetConfig640x480 with fake-renderer8x10 artifacts and rejected at VISIBLE_TRUTH_INVALID mask/image shape mismatch before the intended unconditional strict-subset regression
+disposition: r485 evidence/scratch immutable and retained, never rerun/reused/backfilled; no production fix authorized from an incomplete RED
+inputs: revised test SHA256 10f8b36ca43fdeba1b3c3604cf46a9256c66b7ed6fcd0942d3678f640fc9c945; generator/converter/config remain exact CP320 hashes; tests-only patch versus r484 SHA256 f2569d3a1cbe36709d922b6bd0ae73bfbaf8efaeb7077cf577e758075c28cbec
+evidence: durable run-evidence/stage-e-generator-train-val-review-red-r485 and scratch retained; JUnit SHA256 a8d5e7fb0b7e86f11732eafdb6363de2044f6a01402a09652335038132db1f62; result SHA256 f6a66ce9e706745311d3f1cba4cdb3a25b9746b460edf0dec1a8ae4e65ce8cf1; inventory SHA256 8ddd2c255354ba035cc2c45bcd7550d86b95f3460ba64b4318c1dda8463b3c9b
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-review-red-r485-report.md SHA256 6939dfeacb9ab917af55e28936e375a68039bfab81c9405b3db31bfeb973768a
+parent_readback: complete97-line report/result/group table/input hashes read; zero environment/collection errors and no forbidden access confirmed; run rejected only for wrong I5 semantic boundary
+next_experiment:
+  status: GO_FRESH_TESTS_ONLY_RED
+  run_id: stage-e-generator-train-val-review-red-r486
+  single_change: in the I5 legacy measured-none fixture set DatasetConfig image_width10 and image_height8 to match fake artifacts; preserve every other r485 test expectation/fixture and all production/config bytes
+  invocation: repeat the exact same174-case selection once after AST/Ruff/hash gates under a unique fresh r486 NVMe scratch and exact Python/tempfile preflight; require the I5 case to fail specifically at the unconditional strict-subset/new-contract leakage while the same32 product failures and141 controls retain their classifications, with zero harness/collection errors
+phase_id_correction_after_invalid: r486 fresh complete RED, r487 fix GREEN, Astra re-review, r488 build, r489 ordinary, r490 benchmark, r491 runner RED, r492 runner GREEN/review, r493 generation, r494 source readback, r495 archive, r496 archive readback, r497 primary conversion, r498 repro conversion, r499 freeze; each separately checkpointed
+retention: r485 and all prior evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no production/config edit in r486, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
