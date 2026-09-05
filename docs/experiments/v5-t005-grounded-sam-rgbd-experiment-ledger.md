@@ -3,7 +3,7 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-232
+latest_checkpoint: CP-233
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
@@ -15573,4 +15573,33 @@ prepared_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediatio
 latest_live_readback_this_checkpoint: same PID3666719 running, epoch2 batch150/1200 loss19.528493881225586; checkpoint audit and benchmark remain serially deferred until formal terminal success
 retention: all prior evidence retained; no deletion/archival; scratch deletion candidate only
 boundaries: Microduck paused; no SAM training; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged; primary reporting excludes only small_far_cup
+```
+
+## Checkpoint CP-233 — r404 verified wait; downstream gates remain closed
+
+```yaml
+checkpoint: CP-233
+status: RUNNING_VERIFIED_WAIT
+source_commit: 1cf31f8c16064fdc360baa23a85ec5059b0dc4f6
+gitee_sha_readback: 1cf31f8c16064fdc360baa23a85ec5059b0dc4f6
+active_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+authoritative_handle: docker so101-exp079-r5-formal-r404 running PID3666719, unchanged from launch; owned tmux session remains the training owner
+latest_progress: epoch3 batch700/1200, finite loss1.9626892805099487; no restart or concurrent experiment
+intermediate_all_scenario_box_only_metrics:
+  epoch1: {mean_loss: 13102.54501399994, tp: 5, fp: 0, fn: 295, f1: 0.03278688524590164}
+  epoch2: {mean_loss: 19.7856713197877, tp: 14, fp: 0, fn: 286, f1: 0.089171974522293}
+interpretation: intermediate training diagnostics only; no early checkpoint selection, threshold/recipe changes, qualification or new primary-cohort claims
+scope_recheck: full original design/runbook reread; later user corrections govern lossless categorical truth, primary cohort and historical frozen SAM candidates; no sealed access permitted by training progress
+prepared_benchmark_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_model_comparison_r406.sh
+script_status: bash syntax passed only; not launched and no r406 evidence/scratch allocated; full experiment registration deferred until r405 valid readback
+benchmark_guards: requires current synced HEAD, clean owned code, authoritative r404 exited0 and exact SHA of VALID r405 report before colcon; unique NVMe TMPDIR/TMP/TEMP and locked Python readback; explicit benchmark_test only; preserve JUnit/logs and calculate pytest elapsed comparison against r30 HDD3210.78s
+next_command: docker inspect --format '{{.State.Status}} {{.State.Pid}} {{.State.ExitCode}}' so101-exp079-r5-formal-r404
+next_after_terminal_success: execute previously registered r405 audit once with unique directory and current synced HEAD; never rerun existing formal training command
+python: /opt/venv/bin/python in r396 pinned image; host audit Python/data overlay remain CP-232
+scratch: active durable scratch/stage-d-r5-training-formal-r404/tmp, IPC-only alias backed by same scratch/ipc
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+working_tree: ledger-only update; original untracked build/install/log preserved
+retention: all previous evidence retained; archived none; scratch deletion candidates only, no deletions
+boundaries: Microduck paused; SAM unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible; cup. prompt and mask IoU0.80 unchanged
 ```
