@@ -18365,6 +18365,30 @@ retention: r488 and all prior evidence retained, archived none; scratch trees de
 boundaries: no production/config edit in r489, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-326 — r489 unexpected-directory traversal RED valid; minimal GREEN authorized
+
+```yaml
+checkpoint: CP-326
+status: VALID_EXPECTED_RED_N1_GREEN_PLANNED
+run_id: stage-e-generator-train-val-directory-boundary-red-r489
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_EXPECTED_RED, tests: 175, prior_controls_passed: 174, expected_N1_failures: 1, errors: 0, skips: 0, harness_failures: 0, pytest_exit: 1, outer_exit: 1, receipt_exit: 1, tool_exit: 1, elapsed_seconds: 5.195567726, stderr_bytes: 0}
+failure_boundary: guarded os.scandir raises UNEXPECTED_DIRECTORY_TRAVERSAL_SENTINEL only when current production recurses into synthetic images/test; valid canonical compact lower-level tree passes first and no unexpected payload bytes are read
+inputs: test SHA256 8ecb4ced7fe652877c99433b8f255221b597a116f83042696c142af9833f2772; one-test patch SHA256 c2c0b3a17d89a68e65c0576b96f0e7f3e53bc271c3b33bdcedea1cc98b1fec1e; production/config exact CP325 hashes
+evidence: durable run-evidence/stage-e-generator-train-val-directory-boundary-red-r489 and scratch retained; JUnit SHA256 f4a865ca76508e8aff8c71ca48a84e8e884d649f5a61b18854dc449cd0637865; result SHA256 fbc7d27cb464c2540976f8eea86f346efee451788902edf6ecc56c8b892c77fc; inventory SHA256 b86d21a8c4a2ba84cf97117b2524c8eb5ea41a4788709bf4e2042a3faae75fd2
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-directory-boundary-red-r489-report.md SHA256 9e08e139dbc69bba72a0738cb6b481433f3e7497908dbc001d57695431097cc1
+parent_readback: complete79-line report/result/traceback/input hashes read; sole N1 boundary is authoritative and no forbidden access occurred
+next_experiment:
+  status: GO_N1_GREEN_ONLY
+  run_id: stage-e-generator-train-val-directory-boundary-green-r490
+  implementation: only in the new-contract exact-tree walker, compare a discovered nonsymlink directory relative path to expected_directories and raise the existing normalized fail-closed dataset error before recursing when unexpected; preserve no-follow symlink/special checks and final equality for missing members
+  restrictions: do not change tests/config/generator or address deferred N2; no broader filesystem redesign or race claim
+  verification: AST/Ruff/hash/diff gates then same175 cases exactly once under fresh unique r490 NVMe scratch and exact Python/tempfile preflight; require175/175 pass and all exits0; retain evidence and stop for parent readback plus Astra scoped re-review before commit/build
+phase_id_correction: r490 N1 GREEN, Astra scoped re-review, r491 build, r492 ordinary, r493 benchmark, r494 runner RED, r495 runner GREEN/review, r496 generation, r497 source readback, r498 archive, r499 archive readback, r500 primary conversion, r501 repro conversion, r502 freeze; each separately checkpointed
+retention: r489 and all prior evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-323 — r487 semantic GREEN valid but launcher exit non-clean; fresh receipt run required
 
 ```yaml
