@@ -18587,3 +18587,29 @@ future: if reviewed, commit/push/readback then fresh seven-package build; full o
 retention: r493 review/root-cause plus r492/r491 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no production/config/build/full ordinary/benchmark/official generation/render/MuJoCo/OpenGL runtime invocation/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; child only imports non-rendering entrypoints and must prove forbidden roots absent; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-333 — r494 test-oracle focused GREEN valid; implementation review required
+
+```yaml
+checkpoint: CP-333
+status: VALID_FOCUSED_GREEN_IMPLEMENTATION_REVIEW_PLANNED
+run_id: stage-e-generator-ordinary-order-oracle-green-r494
+executor: /root/generator_build, gpt-5.6-sol high
+red: retained r492 VALID_ORDINARY_GATE_FAILURE, sole parent-global order oracle failure among1472 ordinary cases
+change: only test_nonpenetrating_train_val_contract.py adds subprocess and replaces disputed parent-worker assertions; test SHA256 8ecb4c... to c8047f6ff399ae5455644b02795637de594e204370b1214114bb0a4e81c68717; exact patch SHA256 bc42abe3e61cff17a561fee5c972b2cdf28a82c02f9f772dd080395757e83aae
+production_config: generator 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59, converter 6a2176ef046592a63265986f2961c2f93f3bc34b41503f6482942766d40fd00e, config 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c unchanged; production/config diff against aebf4cab empty
+result: {classification: VALID_FOCUSED_GREEN, tests: 1, passed: 1, failures: 0, errors: 0, skipped: 0, pytest_exit: 0, receipt_exit: 0, tool_exit: 0, invocations: 1, pytest_seconds: 0.47, total_elapsed_seconds: 2.239403765, stderr_empty: true}
+child_readback: exact venv interpreter; passed checkout source root; all three module actual paths equal fixed checkout expectations; forbidden_before and forbidden_after empty; no environment/path/cache manipulation
+environment: r491 overlay all7 prefixes, exact locked Python, fresh unique r494 durable NVMe scratch/tempfile preflight, explicit basetemp/cache, AST/Ruff/diff gates all pass
+evidence: durable run-evidence/stage-e-generator-ordinary-order-oracle-green-r494 and scratch retained; runner SHA256 f6a46191a695feb02674c002160f6394375c278c76d628122ce8883a6b3dfc3a; result SHA256 2ad8e388235edfaa5272a085920692fd8c0e7d6db49d74aedfff6532cec8edec; JUnit SHA256 a76467410747b9a3fcd043c0b4937749e5d6ecddd69fe820ca712da4be8fbbdd; inventory SHA256 eccbf409ffa899c4ebda89f3d8176cfde02dc96970c3144aa1431630cf7e2a6a
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-oracle-green-r494-report.md SHA256 3ff38c67f3874cde5797e28c42c9d53391a8dd94ac14bed773644b1b3138a6eb
+parent_readback: complete95-line report, exact diff, stdout child diagnostics, JUnit/result/timing/hash receipts and live hashes read; focused result accepted only
+next_experiment:
+  status: PLANNED_READ_ONLY_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: inspect exact test-only patch/live test and immutable r492 RED/r493 proposal/r494 GREEN evidence; verdict correctness, provenance, regression sensitivity and any Critical/Important/Minor issue
+  restrictions: read-only; no import/test/root allocation/edit/Git/index/ledger/sealed traversal; do not treat focused result as full ordinary
+future_if_approved: commit only test plus next ledger checkpoint, ordinary-push/readback, then fresh seven-package offline build before full ordinary rerun; benchmark remains blocked
+retention: r494/r493/r492/r491 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no production/config/build/full ordinary/benchmark/official generation/render/runtime MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
