@@ -13287,3 +13287,42 @@ next_experiment_authorization:
   restriction: no model training or replacement, no threshold selection without geometry evidence, no sealed boundary access
 next_action: ordinary-push and remote SHA readback, then preregister the bounded geometry audit after inspecting available train/val metadata and runtime reachability contracts
 ```
+
+## Checkpoint CP-168 — Bounded train/val eligibility geometry audit planned
+
+```yaml
+checkpoint: CP-168
+status: PLANNED
+recorded_at: 2026-09-05
+experiment_id: EXP-079-STAGE-E-NEAR-WORKSPACE-ELIGIBILITY-GEOMETRY-AUDIT-R1
+run_id: stage-e-eligibility-geometry-audit-r326
+source_commit: 640b6b0ba494ae83ca85ba1528f6620badd80f19
+previous_remote_sha_readback: 640b6b0ba494ae83ca85ba1528f6620badd80f19
+hypothesis: retained train/val evidence and source contracts identify whether depth, projected size and reachability thresholds can be justified
+lifecycle: OFFLINE_READ_ONLY_NO_STACK
+inputs:
+  dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  permitted_splits: [train, val]
+  source_contracts: [mujoco_dataset.py, application/object_pose.py, application/task_reachability.py, ros/rgbd_object_pose_node.py, config/mujoco/rgbd_task_points.yaml]
+frozen_method:
+  - verify manifest and require exactly 1200 train and 300 val samples with disjoint seeds and train/val-only artifact paths
+  - inspect retained truth field availability and derive projected visible mask and exact bounding box sizes from validated RLE
+  - report train and val separately with all-scenario and primary cohorts; do not select thresholds from these distributions
+  - record whether measured depth, camera intrinsics/extrinsics, and per-sample world geometry were retained
+  - inspect source publication and seven-segment reachability contracts without running ROS or robot motions
+preliminary_observations:
+  - small_far_cup retreats the camera by 2.4 to 3.0 m while cup world-position distribution stays near the same nominal point; scenario is not robot-unreachability truth
+  - detect_once currently publishes after localization and evidence staging without a reachability check
+success: evidence availability and gaps are explicit; no scenario-to-reachability inference or invented production threshold
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: not_used_standalone_read_only_audit
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-eligibility-geometry-audit-r326
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-eligibility-geometry-audit-r326/tmp
+boundaries: no inference, model changes, tests, COCO100, PickPlace or Mac; Microduck paused; mask IoU 0.80
+retention: preserve every input and output; new scratch is deletion candidate only after readback and explicit authorization
+next_action: execute this read-only audit, append result checkpoint and ordinary-push with remote SHA readback
+```
