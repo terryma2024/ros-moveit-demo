@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-388 — r527 authoritative tail-fsync RED; scoped private GREEN static preparation authorized
+
+```yaml
+checkpoint: CP-388
+status: VALID_R527_TAIL_FSYNC_RED_SCOPED_GREEN_STATIC_PREPARATION_PLANNED
+run_id: stage-e-generator-tail-fsync-accounting-red-r527
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_R527_TAIL_FSYNC_RED, authoritative: true, invocations: 1, total: 12, expected_defects: 5, controls: 7, harness_errors: 0, harness_exit: 1, launcher_exit: 0, tool_exit: 0, elapsed_seconds: 18.045111495, stderr_empty: true, forbidden_before_after: [[],[]]}
+defect_observation: both normal-tail fsync call sites lose the injected main_log_fsync96 after a successful owner retry, pass caught96 instead of saved driver original0or7 to finalizer/accounting, omit outer for storage failure, and exit96; the mixed finalizer9 path exits9 but likewise records original96 and no storage failure
+controls: all-zero0or7, already-owned helper ordinal3/original0or7 storage forwarding, predriver owner non-recursion, postseal accounting diagnostic failure and real-driver storage receipt/final inventory all pass
+provenance: {head_local_gitee: a7f86b85932faf4e0ec059f501a2a6bd46a347f8, driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 8b560c4529e25f64185aeb95ff1fc4f2ebde965dd98fcd57c267ff18792c2348, launcher_sha256: 5c544017639507f583e78057a08d00390d4e14971413b47d62ae8d7ddcab621f, package_before_after_sha256: c0a2e7b5d3d406dbfa5be22a93ca4b90cf0cabaae550f73b87453875d7f3b0b0}
+evidence: durable run-evidence/stage-e-generator-tail-fsync-accounting-red-r527; result SHA2560419921c288690668feaecf3e484b7b03bf00cabebf0753bde04f3156f3d5c78; final20-member manifest SHA2564e64dc330630532b4bcb1301c87f88de821d9114e112621bfc6ca0e9c56a9a86; readback SHA256abef3a4bda1df4de62fba6845cdcf070616b0e5b711c2dca6ab6b220bf24354a; evidence root exactly22 regular files; exact NVMe tempfile preflight valid
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-red-r527-behavior-report.md SHA25661837f8478e08575565e5d26dca42e40c4c6a07eb566f8e6d9e3bcc3bc1b04c7,137 lines
+parent_readback: complete report/result and all12 case traces read; all20 manifest members independently sha256-checked; package before/after byte-identical; source/private identities, exits, tempfile and official-root boundaries verified
+next_experiment:
+  status: GO_PRIVATE_TAIL_FSYNC_GREEN_STATIC_PREPARATION_NO_BEHAVIOR
+  planned_run_id: stage-e-generator-tail-fsync-accounting-green-r528
+  executor: /root/generator_build, gpt-5.6-sol high
+  minimal_fix: preserve saved driver original_exit before either fallible tail audit; execute both tail fsyncs under explicit status capture rather than errexit ownership; seed the single completion owner's ordered storage-failure state and first-nonzero diagnostic status from every failed tail fsync so a later successful helper retry cannot erase it; keep stage ordering and only one finalizer/completion; outer must run for captured storage failure; finalizer9 then original7 then storage96 precedence remains
+  combined_gate_preparation: adapt the focused five defects to GREEN without requiring EXIT-trap entry, retain all seven focused controls, and combine with the complete authoritative r526248-case suite for expected260 total; include double-tail-failure ordering and mutation/oracle checks if required to prove both call sites feed one ordered state
+  static_required: exact candidate diff and hashes, AST/Ruff/bash/transformed syntax, launcher heredoc/parser/private post-run hash/HEAD/package gates, no forbidden imports, fresh r528 root absence and unchanged official boundaries; write-once prep report; stop for Astra static review before any r528 behavior
+restrictions: private T shell/harness/launcher only; no repo source/config/Git/ledger edit by executor, no behavior invocation/root allocation, real setup/project/MuJoCo/OpenGL/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r527 complete evidence/scratch/low roots and all reports retained; all earlier evidence retained; archived/deleted none
+boundaries: four official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-387 — r527 focused tail-fsync RED harness statically approved; one invocation authorized
 
 ```yaml
