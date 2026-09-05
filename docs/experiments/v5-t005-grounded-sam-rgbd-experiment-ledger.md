@@ -17675,3 +17675,29 @@ next_experiment:
 retention: all evidence retained, archived none; no new deletion candidate and nothing deleted
 boundaries: no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
 ```
+
+## Checkpoint CP-299 — r470 runner review requests bounded evidence fixes
+
+```yaml
+checkpoint: CP-299
+status: CHANGES_REQUESTED_RUNNER_FIX_PLANNED
+run_id: stage-e-generator-runtime-acceptance-r470
+reviewer: /root/generator_review, gpt-6-astra medium
+reviewed_driver_sha256: e508af606576e7059679703af46c1b75785eb8eea53def90a2d6c0b12d9ed777
+reviewed_runner_sha256: d678bac81d3dfe9cdf7f0b772dba0676f42fb37d1e7e8456c20a919c4fe29665
+review_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-review-report.md SHA256 1c39848dae2b9c4e69574becce6bf0b5eee9f2e0ae68e9e97a1f85b9899b35df
+verdict: spec CHANGES_REQUESTED, quality CHANGES_REQUESTED; current runner must not launch
+important1: verify mode lacks exact required memberships and semantic cross-binding for GPU, MJCF closure, attempts, truth, events, RGB/categorical claims, runner/source/environment provenance and complete inventories
+important2: parent directories publishing new run/scratch/tmp/output/attempt/case directories are not all fsynced before dependent work, so terminal evidence is not proven crash-durable before retry
+minor: successful GPU identity observations stay in memory until late aggregate write and can be lost on a later failure
+supported: fixed experiment and production renderer path are sound; actual four GL contexts targeted; package/overlay/Python/EGL gates, fixed subclass and receipt schema are otherwise in scope
+next_experiment:
+  status: PLANNED_PREP_ONLY
+  executor: /root/generator_build, gpt-5.6-sol high
+  method: preserve old hashes; first retain no-import/no-GL static RED reproductions, then minimal runner/driver fix and same-check GREEN
+  corrections: exact phase allowlists and cross-record validation, independent PNG decode/hash, recomputed closure, provenance bindings, parent-to-child directory fsync, immediate per-context GPU receipts, pre-model closure gate, explicit symlink absence and reviewed-driver launch hash
+  stop_after: freeze new hashes/report and Astra scoped re-review; no r470 execution without later GO
+roots: r470 run/scratch/output remain absent including symlinks; no GPU/render/runtime success claimed
+retention: all evidence retained, archived none; nothing deleted; static fix evidence will use unique IDs
+boundaries: no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
+```
