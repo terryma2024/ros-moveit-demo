@@ -18792,3 +18792,30 @@ next_experiment:
 retention: r499/r498 and all earlier evidence retained, archived none; all scratch trees remain deletion candidates only and nothing deleted
 boundaries: test remains sealed; COCO100 remains final frozen-candidate once-only; small_far_cup remains in all-scenario data while primary reporting excludes only that scenario; runtime eligibility thresholds require later geometry evidence and out-of-workspace targets publish no grasp pose; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-341 — r500 stopped at invalid preflight; fresh environment-only RED required
+
+```yaml
+checkpoint: CP-341
+status: INVALID_PREFLIGHT_HARNESS_NO_RED_MEASUREMENT_FRESH_RED_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-red-r500
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_PREFLIGHT_HARNESS_NO_RED_MEASUREMENT
+result: {launcher_invocations: 1, contract_test_invocations: 0, outer_exit: 2, authoritative_red: false}
+cause: launcher line152 correctly observed tempfile.gettempdir() exactly equal to the fresh r500 NVMe scratch/tmp but then incorrectly required that exact directory to also contain itself in actual.parents; this impossible extra predicate stopped before the contract harness
+valid_controls: execution HEAD/Gitee802cd934; accepted package/code07dcd29a; scoped package diff empty; exact generator8b0844aa, converter6a2176ef, config677a48fa, contract-testc8047f6f; r495 all7 prefixes present; retained r470 manifest/readback/final receipt exact; locked Python resolved/usr/bin/python3.12; no project/MuJoCo/OpenGL import
+tempfile_receipt: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-red-r500/tempfile-preflight.log SHA256 9bc27c3fe83869ce808abbc41731290102db7c0d5a0117cdeea9584fc5f23a2e; resolved temp path is exact registered r500 scratch/tmp
+prepared_files: {harness_sha256: 87910ca84d541166e0795052ad0eaec56cd458c50691605ca53941928676e34d, launcher_sha256: 3a6b77fc1c0ff93a2d301af626467e61be2018f4bd3646c0711acb59b4aa11bc}
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-red-r500-report.md SHA256 14aed20065e73e7a4ff0375fbd9d72f38ff110693b0c1f76496e4529ce33a547
+parent_readback: complete report and retained tempfile receipt/inventory paths/hashes read; official source path rechecked absent under -e and -L; repo has only original three untracked directories
+root_disposition: r500 evidence/scratch/low-rate roots are retained, invalid, and must never be reused; scratch is deletion candidate only; nothing deleted
+next_experiment:
+  status: PLANNED_FRESH_ENVIRONMENT_ONLY_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-red-r501
+  executor: /root/generator_build, gpt-5.6-sol high
+  sole_launcher_change: remove the impossible expected-in-actual.parents clause and require actual==expected; preserve the r500 contract harness bytes and every other expectation
+  required_result: exactly one harness invocation; test exit1 and outer/receipt/tool exits0; all12 precondition controls pass; exactly one GENERATION_RUNNER_MISSING defect; zero harness errors; forbidden module sets empty
+  restrictions: new unique run/scratch/low-rate roots; no official output allocation, driver/shell implementation, project/MuJoCo/OpenGL import, render, conversion, inference, training or sealed access; stop for parent readback and Astra review before GREEN
+retention: r500/r499/r498 and all earlier evidence retained, archived none; all scratch trees deletion candidates only and nothing deleted
+boundaries: official four final roots remain absent; sealed-test/COCO100/PickPlace/Mac/SAM unchanged and inaccessible; no benchmark rerun; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged
+```
