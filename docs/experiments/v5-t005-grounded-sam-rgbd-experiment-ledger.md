@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-290
+latest_checkpoint: CP-293
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r460 GREEN118passed; freeze minimal observability source/tests and obtain immutable Astra review before fresh build/gates and actual diagnostic
+next_action: r466 GREEN121passed; freeze minimal observer-origin fix and Astra scoped re-review before new-source build and package gates
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17411,6 +17411,90 @@ next_experiment:
   scope: CP-288 corrected architecture, event/exception/settings safety and compatibility, new breakage in immutable source diff
   after: if approved, r461 fresh seven-package build, r462 ordinary, r463 one explicit benchmark; actual diagnostic only after these new-source gates
 retention: all evidence retained, archived none; r459/r460 scratch deletion candidates only, nothing deleted
+boundaries: no render/data generation/build/package/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-292 — Sink-origin RED reproduced; dedicated wrapper GREEN planned
+
+```yaml
+checkpoint: CP-292
+status: VALID_RED_GREEN_PLANNED
+run_id: stage-e-generator-runtime-observer-origin-red-r465
+source_commit: 5576903e2ddf1d7f966f80616c42ff0ea9bbc91d plus owned tests only
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 1, tests: 99, failed: 3, passed: 96, errors: 0, skipped: 0, pytest_seconds: 5.027, elapsed_seconds: 5.35}
+observed: structured same-class sink exceptions at geometry_measured and penetration_rejected cause second preparation/retry; RGB-start case aborts as ValueError without dedicated observer wrapper/cause
+controls: existing OSError sink abort, genuine native retry and prior observability/geometry/dataset controls pass
+production_integrity: exact5576903e before/after; only focused test diff
+parent_readback: actual exit and three failure summary read back; full report retained
+evidence: durable run-evidence/stage-e-generator-runtime-observer-origin-red-r465; runtime-observer-fix-report.md SHA256 abfa2d4e61dd3760c5fbdc3787e0f5cfcb3292c465c617be4f2a370e9c0e62ea
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r455 accepted source symlink overlay
+scratch: durable scratch/stage-e-generator-runtime-observer-origin-red-r465/tmp; actual tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-observer-origin-green-r466
+  executor: same Sol high
+  single_variable: _emit_render_event translates sink-origin Exception to non-retryable RenderObserverError preserving __cause__; native penetration outside sink unchanged
+  tests: new3 plus all prior observability/geometry/dataset controls, AST/Ruff/source identity and fresh NVMe receipts
+  stop_after: report, parent freeze/commit/push and Astra scoped re-review before any build
+retention: all evidence retained, archived none; r465 scratch deletion candidate only, no deletion
+boundaries: r461 held/superseded; no build/render/data/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
+
+## Checkpoint CP-293 — Observer-origin fix GREEN frozen for scoped re-review
+
+```yaml
+checkpoint: CP-293
+status: VALID_GREEN_SCOPED_REREVIEW_PLANNED
+run_id: stage-e-generator-runtime-observer-origin-green-r466
+source_commit: 5576903e2ddf1d7f966f80616c42ff0ea9bbc91d plus owned fix/test diff
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 121, passed: 121, failures: 0, errors: 0, skipped: 0, pytest_seconds: 5.629, elapsed_seconds: 5.95}
+fix: dedicated RenderObserverError wraps sink-origin Exception with original __cause__; BaseException and native renderer ScenePenetrationError remain outside wrapper/retry confusion
+scope: production delta from reviewed5576903e is mujoco_dataset +8/-1; tests cover structured same-class failures at measured/rejected/RGB-start plus OSError/native retry and all previous controls
+verification: post-run AST/Ruff/diff/helper/officialCLI/source identity pass, exact lockedPython/r455overlay/NVMe preflight; source unchanged after test
+parent_readback: exact exit/test summary and minimal source diff read back; full report retained
+evidence: durable run-evidence/stage-e-generator-runtime-observer-origin-green-r466; runtime-observer-fix-report.md SHA256 5f556797831cde1cfb4b82be91e5472f98dc328a0bec906d3e86a03d0a740c27
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  fix_base: 5576903e2ddf1d7f966f80616c42ff0ea9bbc91d
+  scope: original Important exception-origin finding and new breakage in fix diff only
+  after: if approved allocate fresh build ID beyond superseded r461-r464, then ordinary+one explicit benchmark before actual diagnostic
+retention: all evidence retained, archived none; r465/r466 scratch deletion candidates only, nothing deleted
+boundaries: no build/render/data/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
+
+## Checkpoint CP-291 — Observability review finds sink exception-origin defect
+
+```yaml
+checkpoint: CP-291
+status: FIX_ROUND1_IMPORTANT_RED_PLANNED
+source_commit: 5576903e2ddf1d7f966f80616c42ff0ea9bbc91d
+remote: ordinary Gitee push and exact ls-remote readback completed
+reviewer: /root/generator_review, gpt-6-astra medium
+review_report: durable coordination/generator-r443-r1/runtime-observability-code-review-report.md
+review_verdict: spec CHANGES_REQUESTED, quality CHANGES_REQUESTED; corrected minimal architecture otherwise in scope
+important: sink may throw structured ScenePenetrationError with matching rejected event receipt/context; selector catches and retries it as native penetration, violating immediate sink-failure abort
+correction: translate every sink-origin BaseException-compatible normal exception at _emit boundary into distinct non-retryable observer failure preserving original cause; selector catches only native penetration; message-only unobserved legacy semantics unchanged
+required_RED: structured ScenePenetrationError sink failures at geometry_measured and penetration_rejected, plus RGB-start; assert one preparation/no later events, zero relevant backend calls and documented wrapper/cause; retain OSError and genuine native retry controls
+clarification: CP-290 sink-abort claim proven only for OSError before fix; structured same-class exception remains open
+build_hold: prepared r461 runner SHA7ae8a8bf... not launched, all roots absent; source-pinned runner superseded after fix, retained unchanged
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-observer-origin-red-r465
+  executor: /root/generator_build, gpt-5.6-sol high
+  source: exact5576903e production unchanged, tests-only
+  scope: three same-class sink-origin reproductions and existing controls; no broad event changes
+  scratch: durable scratch/stage-e-generator-runtime-observer-origin-red-r465/tmp with exact lockedPython preflight
+  stop_after: RED evidence/report and parent checkpoint before fix
+future: r466GREEN then scoped Astra re-review; allocate fresh build/package/benchmark IDs only after accepted source
+retention: all evidence retained, archived none; scratch deletion candidates only; nothing deleted
 boundaries: no render/data generation/build/package/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
 ```
 
