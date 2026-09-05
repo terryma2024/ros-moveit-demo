@@ -18613,3 +18613,26 @@ future_if_approved: commit only test plus next ledger checkpoint, ordinary-push/
 retention: r494/r493/r492/r491 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no production/config/build/full ordinary/benchmark/official generation/render/runtime MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-334 — r494 implementation approved; owned test commit and fresh build authorized
+
+```yaml
+checkpoint: CP-334
+status: IMPLEMENTATION_REVIEW_APPROVED_OWNED_COMMIT_BUILD_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, implementation_quality: APPROVED, critical: 0, important: 0, minor: 0, scope: focused_only}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-oracle-r494-review-report.md SHA256 da3d2f72a0446de940be95b3884f12370e30d2c7ea6fb54e7e4cc674adb37f8b
+accepted_change: exact test-only patch SHA256 bc42abe3e61cff17a561fee5c972b2cdf28a82c02f9f772dd080395757e83aae; corrected test SHA256 c8047f6ff399ae5455644b02795637de594e204370b1214114bb0a4e81c68717; one stdlib import plus one function body only; no rename/reorder/skip/production/config change
+accepted_evidence: retained r492 authoritative ordinary RED plus r494 one-test GREEN; child exact venv, three fixed checkout paths, forbidden_before/after empty; all r494 exits0
+commit_gate: commit only this ledger and exact corrected test; preserve original untracked directories; ordinary-push Gitee and exact remote SHA readback before build
+next_experiment:
+  status: PLANNED_AFTER_PUSH_READBACK
+  run_id: linux-build-stage-e-generator-order-oracle-r495
+  executor: /root/generator_build, gpt-5.6-sol high
+  build: fresh unique seven-package symlink overlay from accepted commit; exact same package list and offline r26 lodepng ed6fe582 strict-fsck/clean/FETCHCONTENT source override/FULLY_DISCONNECTED gates as r491; no fetch
+  scratch: fresh unique durable scratch/linux-build-stage-e-generator-order-oracle-r495/tmp with all TMP vars and exact locked-Python tempfile preflight
+  evidence: command/logs/exits/elapsed, source/test/config hashes, all7 prefixes, exact checkout imports, lodepng receipts and no-drift; stop before full ordinary
+future_gate: r496 one full ordinary run must collect exactly1472 ordinary/0 benchmark and pass1472/1472 with all exits0; only then authorize the one explicit benchmark
+retention: r494 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no full ordinary/benchmark/official generation/render/MuJoCo/OpenGL runtime/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
