@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-259
+latest_checkpoint: CP-260
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 2e817ca01206427615e6ed81164ef6806d2ab1c0
+source_parent: ae1019709d49727fe36bf793dfbf1f81a0add904
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r430 confirms actual visual-wall intersection in all three residual frames; r431 measure all retained250 train/val two-cup scenes without changing metrics, data, models or gates
+next_action: r431 finds19/200train and10/50val two-cup frames with intersecting walls; r432 audit active task-object geometry across all retained train/val before freezing a generator repair, no new data or inference
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16512,4 +16512,45 @@ next_run:
 next_after_census: checkpoint physical-data issue and freeze root-boundary RED regression/reconstruction proposal; do not train SAM to accommodate physically intersecting samples
 retention: all historical data/models/evidence retained, including INVALIDr429; archived none; scratch deletion candidates only
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no training, no label/metric/cohort/gate changes
+```
+
+## Checkpoint CP-260 — Two-cup physical-intersection census complete
+
+```yaml
+checkpoint: CP-260
+status: VALID_TWO_CUP_CENSUS_ALL_TASK_OBJECT_AUDIT_PLANNED
+run_id: stage-e-r5-train-val-cup-geometry-r431
+source_commit: ae1019709d49727fe36bf793dfbf1f81a0add904
+gitee_sha_readback: ae1019709d49727fe36bf793dfbf1f81a0add904
+result: {exit_code: 0, elapsed_seconds: 8.89, frames: 250, model_forwards: 0, renders: 0, physics_steps: 0}
+report_sha256: 5bbd0c6067b9665bdcf3ec9ab539e2794e6fc0bc266e2df705ce87b12e5ea2da
+train: {two_cup_frames: 200, intersecting_visible_wall_frames: 19}
+val: {two_cup_frames: 50, intersecting_visible_wall_frames: 10}
+val_intersecting_indices: [2, 80, 104, 122, 134, 140, 158, 206, 236, 242]
+readback: all250 original RGB/truth/capture states bound by immutable inventories and exact RLE; all prior three geometry records independently reproduced bitwise; manifest hashes and census independently recomputed
+interpretation: actual dataset geometry issue is broader than the three model failures; not evidence that every intersecting sample fails or that nonintersecting samples universally pass
+metric_contract: all existing all-scenario/primary metrics and denominators unchanged; small_far_cup remains the ONLY primary exclusion; no geometry-based post-hoc qualification exclusions
+root_boundary_observed: MuJoCoDatasetRenderer._prepare randomizes free-joint poses without nonpenetration validation; select_bounded_render bounds only far/partial image rules, not physical validity
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-train-val-cup-geometry-r431/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  experiment_id: EXP-079-STAGE-E-R5-ACTIVE-TASK-GEOMETRY-R1
+  status: PLANNED
+  run_id: stage-e-r5-active-task-geometry-r432
+  prior_experiment: stage-e-r5-train-val-cup-geometry-r431
+  lifecycle: REUSE_STACK offline state only
+  single_variable: extend physical measurement to all1500 retained train/val frames and active cup/bottle versus each other and table/neutral-block/base-pedestal visual solids
+  selection: all1200train/300val members in already verified corrected-r5 inventories, six original scenario quotas unchanged; never open test
+  method: restore exact captured qpos/camera/material and verify exact categorical RLE/RGB; measure all declared active visual box/cylinder pairs using signed geometry distances; retain full per-frame pair minima and negative witnesses; independently reproduce r431 cup-pair minima
+  exclusions_from_geometry_pairs_only: same-body internal geometry and deliberately parked inactive cup bodies; never use this to exclude an evaluation sample or publish a pose
+  numerical_guard: 1e-9m separates floating point contact ambiguity from negative penetration; record actual minimum signed distances, not an eligibility threshold
+  scope_limit: robot meshes and arbitrary unseen assets are not certified by this primitive task-object audit; no physics settling or renderer calls
+  success_criteria: complete1500 provenance-bound frames, pair records and split/scenario counts; fail closed on missing state/hash or unsupported task primitive
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-active-task-geometry-r432 audit_r5_active_task_geometry_r432.py NEXT_SYNCED_HEAD
+next_after_audit: freeze minimal generator nonpenetration RED test and bounded new-version protocol based on measured affected pairs; do not start generation/training from this checkpoint
+retention: all runs retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no SAM training, no threshold/metric/cohort changes
 ```
