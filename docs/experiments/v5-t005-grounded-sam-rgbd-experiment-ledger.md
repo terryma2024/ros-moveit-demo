@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-268
+latest_checkpoint: CP-271
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03
+source_parent: e609d8e8256db0cec0e779445669bea0999da717
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r439 persistence GREEN21; r440 add receipt-scope binding and successful-retry regressions, then broader directed gate and fresh build/ordinary/explicit tests; owned source changes not yet committed
+next_action: r442 broad directed90passed; freeze owned generator source/tests, r443 fresh7package symlink build with verified offline lodepng, then r444ordinary and r445explicit benchmark
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16812,4 +16812,88 @@ next_run:
 remaining: serialized per-sample truth/manifest policy tests, accepted retry path and invalid receipt checks, build/ordinary/explicit gate, immutable dataset protocol before generation
 retention: all evidence retained; archived none; scratch deletion candidates only
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
+```
+
+## Checkpoint CP-269 — Receipt identity and scope RED
+
+```yaml
+checkpoint: CP-269
+status: VALID_RECEIPT_SCOPE_RED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetration-red-r440
+source_commit: e609d8e8256db0cec0e779445669bea0999da717 plus owned source/test diff
+result: {exit_code: 1, failed: 7, passed: 22, pytest_seconds: 2.32, elapsed_seconds: 2.66}
+observed: malformed SHA and missing/duplicate/foreign/wrong-cup-count pair scopes accepted; successful bounded retry and invalid-measurement propagation controls passed
+ledger_order_note: CP-266/267/268 were inserted earlier in physical file order by nonunique patch context; their IDs/history are unchanged, latest state follows checkpoint ID and header, not tail alone; new checkpoints append after this unique terminal context
+evidence: durable run-evidence/stage-e-generator-nonpenetration-red-r440; exact source/test copies, hashes, command/preflight/JUnit/log/exit/time retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 symlink install
+scratch: durable scratch/stage-e-generator-nonpenetration-red-r440/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-green-r441
+  single_variable: validate SHA and exact required body-pair scope at selector and writer receipt boundaries
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-green-r441
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac, no new data/training; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-270 — Receipt scope GREEN; broad generator compatibility next
+
+```yaml
+checkpoint: CP-270
+status: VALID_SCOPE_GREEN_BROAD_DIRECTED_GATE_PLANNED
+run_id: stage-e-generator-nonpenetration-green-r441
+source_commit: e609d8e8256db0cec0e779445669bea0999da717 plus owned working diff
+result: {exit_code: 0, passed: 29, pytest_seconds: 2.19, elapsed_seconds: 2.50}
+observed: all seven identity/scope regressions now pass; exact scenario pair scope checked by bounded selector and writer; successful retry stops after first valid receipt and invalid geometry errors propagate
+static: targeted import/format fixes to new helper/tests only; ruff across three changed files and git diff --check passed
+evidence: durable run-evidence/stage-e-generator-nonpenetration-green-r441, exact code/test/hash/command/source/preflight/JUnit/log/exit/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 symlink install
+scratch: durable scratch/stage-e-generator-nonpenetration-green-r441/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-green-r442
+  single_variable: broaden directed test collection to all existing YOLO/Grounding-DINO dataset and categorical renderer tests plus new geometry tests, no code/model/data change
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_broad_r442.sh stage-e-generator-nonpenetration-green-r442
+remaining: freeze completed source/tests only after directed readback, fresh7package build with offline lodepng, ordinary and required explicit benchmark gate; actual generator nonpenetration runtime readback before new dataset protocol
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac or new experiment data/training; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-271 — Generator compatibility gate passed; source freeze and build planned
+
+```yaml
+checkpoint: CP-271
+status: VALID_BROAD_DIRECTED_GENERATOR_GATE_BUILD_PLANNED
+run_id: stage-e-generator-nonpenetration-green-r442
+source_commit: e609d8e8256db0cec0e779445669bea0999da717 plus owned completed source/test diff
+result: {exit_code: 0, passed: 90, pytest_seconds: 3.90, elapsed_seconds: 4.22}
+scope: new29 geometry tests plus existing YOLO/Grounding-DINO dataset and categorical-renderer tests; no skipped tests or errors
+RED_GREEN: r43412missing->r43512pass; r4364missing+12pass->r43716pass; r4384missing+17pass->r43921pass; r4407missing+22pass->r44129pass; r442all90directedpass
+change: explicit opt-in generator nonpenetration policy; actual visual primitive receipt before RGB, bounded deterministic rejection, scope/identity/finite validation, accepted truth and policy persistence; disabled original route and historical artifacts unchanged
+source_review: ruff and diff-check passed; no SAM/detector/selector/IoU threshold change; actual renderer and writer consume new gate, not a helper-only implementation
+evidence: durable run-evidence/stage-e-generator-nonpenetration-green-r442 with command/source/copies/hashes/preflight/JUnit/log/exit/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 symlink install for directed gate
+scratch: durable scratch/stage-e-generator-nonpenetration-green-r442/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: linux-build-stage-e-generator-nonpenetration-r443
+  source_commit: NEXT_SYNCED_HEAD containing only owned generator implementation/tests and ledger
+  single_variable: fresh seven-package symlink overlay for verified generator source
+  build_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetration-r443
+  lodepng: r26 local cache HEADed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, strict fsck and tracked clean check, FETCHCONTENT_SOURCE_DIR_LODEPNG plus FETCHCONTENT_FULLY_DISCONNECTED; no network fetch
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/build_scene_geometry_r443.sh
+  evidence: unique durable run-evidence/scratch, exact Python tempfile, full source/command/build/exit/time, explicit installed source import readback
+subsequent_gates: r444 ordinary test/ only then one required r445 explicit benchmark_test via colcon test; independent unique NVMe scratch each, no r30 rerun; compare required benchmark elapsed to3210.78s baseline without semantic change
+remaining: package/build gates and real GPU generator nonpenetration acceptance readback not yet done; new dataset namespace/quotas/ranges/truth protocol must freeze before any dataset generation
+retention: all evidence retained; archived none; scratch deletion candidates only; original untracked build/install/log untouched
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new experiment data or model training, mask0.80/mapping0.98 unchanged
 ```
