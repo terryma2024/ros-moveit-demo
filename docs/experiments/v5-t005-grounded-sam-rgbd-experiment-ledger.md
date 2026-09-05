@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-230
+latest_checkpoint: CP-231
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
-active_experiment: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
+source_parent: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+active_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: commit/push r403 smoke readback, launch r404 formal8epoch from original base in owned tmux; no new model qualification yet
+next_action: monitor already-running r404 without relaunch; after exit0 independently verify all8checkpoints and frozen selection before new pipeline qualification
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15499,4 +15499,40 @@ next_experiment:
 next_after_formal: append independent full checkpoint readback protocol; then explicit benchmark and corrected-DINO train/val pipeline comparison with frozen SAM candidates, all/primary cohorts; no sealed access automatically authorized
 retention: all previous valid/invalid runs retained; no archival/deletion; scratch deletion candidate only
 boundaries: Microduck paused; generic cup and prompt cup.; mask IoU0.80 unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible
+```
+
+## Checkpoint CP-231 — Formal r404 launched locally and first backward observed
+
+```yaml
+checkpoint: CP-231
+status: RUNNING
+experiment_id: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+run_id: stage-d-r5-training-formal-r404
+launch_source_commit: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+gitee_sha_readback: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+training_implementation_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+container: so101-exp079-r5-formal-r404
+container_host_pid_at_readback: 3666719
+tmux: {session: so101-exp079-r5-formal-r404, pane_shell_pid: 3666574, command: bash}
+image: so101-grounding-dino-tiny-train:r5-categorical-r396
+image_id: sha256:75bf5c3d116d8b734e14c2f189f1cb4392912b5837387af010a36cb16fba554f
+python: /opt/venv/bin/python
+host_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+output: durable training/grounding-dino-cup-r5-r1/formal-r1
+logs: durable run-evidence/stage-d-r5-training-formal-r404/training.log
+scratch: durable scratch/stage-d-r5-training-formal-r404/tmp; actual Python exact tempfile, numeric contract, source hashes, CUDA no fallback and two-worker IPC preflights passed
+mounts: exact allowlist verified before docker start; read-only train/val/base, dedicated r5 output, unique scratch/evidence, IPC alias; network none
+observed: epoch1 batch1/1200 completed forward/backward with finite loss67596.7734375; container running; formal accumulation4 means no optimizer update is claimed from batch1 alone
+free_space_before_launch: /dev/nvme0n1p5 available233G; RTX5080 free15324MiB; no competing GPU process
+working_tree: only ledger updated after launch; three original untracked build/install/log directories untouched
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+last_valid_experiments: r402 smoke and r403 independent readback; ordinary r3951283passed; explicit benchmark r363 retained
+confirmed: corrected r5 data identity and training recipe frozen; JSON and IPC startup failures separately resolved with RED/GREEN evidence
+open_risks: formal training, corrected-DINO pipeline quality, runtime geometry eligibility and all final qualification gates remain incomplete
+next_command: tail -n 3 /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-d-r5-training-formal-r404/training.log
+resume_rule: inspect this existing container/session and exit.log; never rerun formal command or reuse run directory; only owned container may be stopped if invalid
+next_after_exit: preregister independent full8checkpoint/frozen/reload readback; no extra old inference; new model comparison needs explicit benchmark gate and all/primary corrected-truth cohorts
+retention: all existing runs and containers retained; archived none; scratch deletion candidates only, no permission to delete
+boundaries: Microduck paused; SAM not loaded/trained; sealed/test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; mask IoU0.80 unchanged
 ```
