@@ -12393,3 +12393,63 @@ retention:
   deletion_candidates: [r304 runtime/evidence/scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-150, then load the exact native checkpoint with the byte-compatible config on CUDA, fail on any state-dict mismatch, and record the official postprocessing mode before writing RED
 ```
+
+## Checkpoint CP-151 — native SAM checkpoint loads exactly on CUDA
+
+```yaml
+checkpoint: CP-151
+status: VALID_RED_PLANNED
+recorded_at: 2026-09-05T08:46:54+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-150
+source_commit: 85dad28ea2a8fd963bba3cf45e16227d79aefc94
+run_id: stage-e-native-sam-checkpoint-load-r305
+result: {exit_code: 0, elapsed_ms: 1986}
+model:
+  class: SAM2Base
+  training: false
+  parameter_count: 38962498
+  state_keys: 471
+  checkpoint_keys: 471
+  missing_keys: []
+  unexpected_keys: []
+  mismatched_shapes: []
+  parameter_devices: [cuda:0]
+  checkpoint_sha256: 7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69
+official_postprocessing:
+  apply_postprocessing: true
+  dynamic_multimask_via_stability: true
+  dynamic_multimask_stability_delta: 0.05
+  dynamic_multimask_stability_thresh: 0.98
+  connected_components_cuda_extension: not built and not used by this static-image box-prompt path
+runtime:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  torch: 2.13.0+cu130
+  device: NVIDIA GeForce RTX 5080
+  fallback: false
+  sam2_origin: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-aa9b872-r3/sam2/__init__.py
+  hydra_origin: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime/native-sam2-aa9b872-r1/site-packages/hydra/__init__.py
+  source_commit: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  gpu_processes_before_and_after: none
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-checkpoint-load-r305
+  preflight_sha256: 503c93f025b9335e5485da2f53dade98faa1a3b22673174554a8ac66b6e5af73
+  load_audit_sha256: 04a73c5dcd5ee388e8c3f95458f76fb9f5fed09d437cd15c54df69eaecb837c0
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  gpu_before_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  gpu_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  exit_sha256: 40cdc712ac918373a32398c13335ba14bbc2505281e0cef2818ba223ef39bf27
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+tdd_next:
+  red_run: stage-e-native-sam-ab-red-r306
+  failure_contract: the absent diagnostic core must fail a synthetic three-mask/three-quality test that enforces axis normalization, quality binding, selected mask, oracle mask, and exact RLE roundtrip
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r305 checkpoint-load evidence/scratch, r304 runtime, all CP-150 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r305 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-151, inspect only the official native predictor API and the already retained r291 manifest schema, then write and run the RED contract before the minimal native diagnostic driver
+```
