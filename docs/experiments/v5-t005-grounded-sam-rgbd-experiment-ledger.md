@@ -18953,6 +18953,23 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-380 — r524 derived report provenance/narrative correction; raw RED evidence remains authoritative
+
+```yaml
+checkpoint: CP-380
+status: R524_REPORT_CORRECTION_RAW_EVIDENCE_FROZEN_ASTRA_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r524
+correction: after CP-379 committed report SHA25649f38f84..., executor overwrote the same coordination-report path with a132-line expanded file SHA25602de5922a240ecf273d4c797a9590caecd82afcfd95bceada26bfeb85426b01f; immutable r524 run-evidence bytes/manifest/readback did not change, but the report path lost immutability and CP-379 history must remain untouched
+narrative_error: expanded report says the mutation case status is SURVIVED and also says `complete(...)` returned true; frozen Cases._record defines a mutation as KILLED when its boolean is true, and the exact case lambda returns `complete(...)`, so SURVIVED proves complete returned false; absence of launch-accounting receipt corroborates rejection before persistence
+authoritative_interpretation: the current candidate's pre-accounting `_launch_inventory_members(accounting_present=False)` already rejected the preexisting unexpected file; therefore the final exact-members operation was never independently reached and removing it produced no behavior change; r524 remains a valid mutation-sensitivity RED with5/6 kills, not a production-code failure conclusion
+evidence_precedence: immutable r524 stderr SHA256e175dc89c4b15f138e59b93545a211f7a3da75220b2b25eb741da66c2d2dc8f1, exact frozen source/harness and case-root files take precedence over the derived report narrative; current expanded report is frozen as a retained non-authoritative derived artifact and must not be edited again
+review_input: GPT-6-Astra medium must use raw r524 evidence plus frozen source, not rely on either coordination report version for the boolean interpretation; adjudicate the proposed post-precheck injection seam and exact mutation reachability
+process_rule: future coordination reports are write-once per path; additional analysis uses a new correction-report filename and new ledger checkpoint, never in-place expansion
+restrictions: read-only review only; no candidate/harness/launcher/evidence/Git changes or behavior invocation until review result and next checkpoint
+retention: both historical report hashes remain recorded in CP-379/CP-380; current file retained; no deletion/archive
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-379 — r524 valid mutation-sensitivity RED; exact-membership boundary review planned
 
 ```yaml
