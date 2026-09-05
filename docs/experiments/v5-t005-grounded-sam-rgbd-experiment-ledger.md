@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-257
+latest_checkpoint: CP-258
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 38b2486f98221148016318eb9c4a4c21a01d0137
+source_parent: 682bf2c134b8af8e1d6f807357dbf6608a032ed8
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r428 residual plots read back; r429 fixed-three-frame retained-qpos geometry audit before attributing residuals to SAM; no inference or gate changes
+next_action: r429 INVALID before model load due to overly narrow mesh path guard; r430 permits verified assets/common symlink targets within this checkout, otherwise unchanged fixed-three-frame geometry audit
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16440,4 +16440,33 @@ working_tree: ledger-only owned change; original untracked build/install/log pre
 owned_processes: none; original codex and so101-exp079-linux-r3 tmux sessions preserved
 retention: all evidence retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged; no training
+```
+
+## Checkpoint CP-258 — Geometry audit asset-path bootstrap correction
+
+```yaml
+checkpoint: CP-258
+status: INVALID_AUDIT_BOOTSTRAP_FRESH_RUN_PLANNED
+run_id: stage-e-r5-retained-cup-geometry-r429
+source_commit: 682bf2c134b8af8e1d6f807357dbf6608a032ed8
+gitee_sha_readback: 682bf2c134b8af8e1d6f807357dbf6608a032ed8
+result: {exit_code: 1, elapsed_seconds: 0.30, model_loads: 0, model_forwards: 0, renders: 0, geometry_measurements: 0}
+failure: asset traversal required resolved paths below assets/mujoco, but tracked mesh links legitimately resolve below this checkout's assets/common/visual
+readback_example: assets/mujoco/assets/base_motor_holder_so101_v1.stl resolves to src/so101_demo_py/assets/common/visual/base_motor_holder_so101_v1.stl within the isolated checkout
+conclusion: runner provenance bootstrap error only; no physical intersection conclusion or model/data metric change
+evidence: durable run-evidence/stage-e-r5-retained-cup-geometry-r429; full script/runner/command/source/preflight/audit/exit logs retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-retained-cup-geometry-r429/tmp; exact tempfile passed; never reuse
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-r5-retained-cup-geometry-r430
+  prior_experiment: stage-e-r5-retained-cup-geometry-r429
+  single_variable: allow resolved transitive assets under this checkout's src/so101_demo_py/assets only; retain exact hashes before/after model load
+  scope_and_criteria: unchanged CP-257; exactly104/236/242, same retained qpos/truth, no stepping/rendering/inference
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-retained-cup-geometry-r430 audit_r5_cup_geometry_r430.py NEXT_SYNCED_HEAD
+retention: r429 and all history retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no training, no cohort/gate changes
 ```
