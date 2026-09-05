@@ -12340,3 +12340,56 @@ retention:
   deletion_candidates: [r303 source/evidence/scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-149, acquire the five exact dependency distributions into a new retained wheelhouse, install them offline into the absent isolated target, and verify import origins plus exact checkpoint loading before RED
 ```
+
+## Checkpoint CP-150 — isolated native SAM dependency runtime built
+
+```yaml
+checkpoint: CP-150
+status: VALID_CHECKPOINT_LOAD_AUDIT_PLANNED
+recorded_at: 2026-09-05T08:45:10+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-149
+source_commit: dedecd1d8fdb7324258a28693f5dd960063a941b
+run_id: stage-e-native-sam-runtime-build-r304
+result: {exit_code: 0, elapsed_ms: 8973}
+runtime:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime/native-sam2-aa9b872-r1
+  isolated_site: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime/native-sam2-aa9b872-r1/site-packages
+  locked_base_python_mutated: false
+  imports_inside_isolated_site: {hydra: true, omegaconf: true, antlr4: true, iopath: true, portalocker: true}
+  versions: {hydra-core: 1.3.2, omegaconf: 2.3.0, antlr4-python3-runtime: 4.9.3, iopath: 0.1.10, portalocker: 3.2.0}
+  installed_inventory_sha256: c5e7f054a830cc626e57f54d9715962c30ee1a1cd9861cc7a3f84b34539eacab
+wheelhouse:
+  antlr4-python3-runtime-4.9.3.tar.gz: f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b
+  hydra_core-1.3.2-py3-none-any.whl: fa0238a9e31df3373b35b0bfb672c34cc92718d21f81311d8996a16de1141d8b
+  iopath-0.1.10.tar.gz: 3311c16a4d9137223e20f141655759933e1eda24f8bff166af834af3c645ef01
+  omegaconf-2.3.0-py3-none-any.whl: 7b4df175cdb08ba400f45cae3bdcae7ba8365db4d165fc65fd04b050ab63b46b
+  portalocker-3.2.0-py3-none-any.whl: 3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968
+acquisition_semantics:
+  - network used only to acquire the five explicitly pinned distributions into the retained wheelhouse
+  - installation used no-index and the retained wheelhouse only
+  - native source remains an immutable PYTHONPATH input; no editable install or CUDA extension build
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-runtime-build-r304
+  preflight_sha256: c7117e7028b2ff7a6494bb2a822f75868193db82cd840450461d6e96c3550886
+  build_log_sha256: ef15343fe06426116a2048b1a52c265c0fa439954c319c2819f34088f1a946bf
+  build_stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  wheelhouse_inventory_sha256: 568433633e43f64c0b2915a88195283775384a2abaf0ca1c8c88a25e2122d830
+  installed_inventory_pointer_sha256: 2051bc9f9b282de87a2823e54131c5c46a854cfca37ff7acc14de53fff5bc888
+  import_audit_sha256: c7bcaf38082fdfaf50c8aa0a489b1522d2bec33f7b9ce3d330cfa674dd1733ae
+  exit_sha256: 079e67a4c03eb93bcf5bb09ae0d31872bab35c6fe1505876bd2d0ff13a27e339
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-runtime-build-r304/tmp
+  tempfile_preflight: exact resolved match
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r304 isolated runtime/wheelhouse/evidence/scratch, all CP-149 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r304 runtime/evidence/scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-150, then load the exact native checkpoint with the byte-compatible config on CUDA, fail on any state-dict mismatch, and record the official postprocessing mode before writing RED
+```
