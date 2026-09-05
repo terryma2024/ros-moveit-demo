@@ -17648,3 +17648,30 @@ next_experiment:
 retention: all evidence retained, archived none; r455/r456 scratch deletion candidates only, no deletion
 boundaries: no inference/generation/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
 ```
+
+## Checkpoint CP-298 — r470 fixed diagnostic runner prepared; immutable review active
+
+```yaml
+checkpoint: CP-298
+status: PREPARED_NOT_EXECUTED_IMMUTABLE_REVIEW_ACTIVE
+run_id: stage-e-generator-runtime-acceptance-r470
+package_source_commit: 4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1
+preparation_execution_head: 364874aa93039253205ee3f91cb69793b1d5535b
+executor: /root/generator_build, gpt-5.6-sol high
+reviewer: /root/generator_review, gpt-6-astra medium
+prepared_driver: temporary runtime_generator_acceptance_r470.py SHA256 e508af606576e7059679703af46c1b75785eb8eea53def90a2d6c0b12d9ed777
+prepared_runner: temporary run_generator_acceptance_r470.sh SHA256 d678bac81d3dfe9cdf7f0b772dba0676f42fb37d1e7e8456c20a919c4fe29665
+fixed_plan_sha256: 42248b6d88b8b6e06c45f8d91b721ad8564f296bc04c1eb59a24452373296669
+preparation_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-report.md SHA256 7f80fad96dace1457006d47cbe2b684d7e333f9c9ed768677a4e98493994ccb2
+static_readback: bash syntax, driver and embeddedPython AST, fixed-plan invariants, subclass-only-_prepare, package-diff/status-clean, exact hashes and reserved-root absence passed
+provenance: complete src/so101_demo_py gated against package source4a0; later ledger-only execution HEAD recorded separately; r467 overlay and locked Python pinned
+diagnostic_contract: fixed one_cup_distractors two-case/three-attempt plan; production measurement/selector/RGB/categorical/event path; exactly2 geometry receipts and2 accepted PNGs; same-state equality; no physics step
+durability_gpu: exclusive/fsynced attempt/event/PNG evidence; transitive logical/resolved/symlink/content MJCF closure; four actual mujoco.egl.GLContext NVIDIA receipts; software fallback rejected; nvidia-smi supporting only
+roots: durable run-evidence and scratch for r470 both absent; no GL import/context/render/test/build/allocation occurred
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  scope: Astra immutable read-only review of exact prepared hashes and CP-297 contract
+  stop_after: review report and parent checkpoint; no launch without explicit ledger GO
+retention: all evidence retained, archived none; no new deletion candidate and nothing deleted
+boundaries: no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
+```
