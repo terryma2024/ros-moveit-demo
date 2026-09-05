@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-368 — r517 review finds three accounting gaps; executable RED preparation authorized
+
+```yaml
+checkpoint: CP-368
+status: GENERATION_RUNNER_R517_REVIEW_CHANGES_REQUESTED_EXECUTABLE_RED_PREPARATION_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, official_generation: CHANGES_REQUESTED, critical: 0, important: 3, minor: 0, retained_r517_result: VALID_FOR_167_COVERED_CASES_ONLY}
+finding_I1: complete_postallocation captures main-log fsync failure then overwrites it with later successful finalizer-diagnostic fsync; low-root parent fsync also uncaptured, so original0 may seal/exit0 and original7 loses distinct storage provenance
+finding_I2: completion validates only selected terminal/outer fields and allowed-name membership; contradictory closed-schema status/exit/elapsed/log hashes, outer chain/diagnostics, or missing/mutated nested driver members can be resealed without nested revalidation
+finding_I3: four operation checks are token-presence sentinels, not executable mutants; outer/completion/inventory storage failures, exceptional-owner paths, diagnostic collisions and a real final deferred-chain readback remain insufficiently exercised
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r517-review-report.md SHA256bc2a656a32abf1b11349b5102196c467ed5ab692e5772eb8070cf68d5a5acbeb
+confirmed_scope: r517167/167/raw exits/inventory remain valid; six normal-route exact-once combinations, provisional terminal, default immediate path, typed inputs and current hash/HEAD bindings pass; no existing evidence is relabeled or rerun
+frozen_inputs: driver SHA2567739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a; shell SHA2569bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a; no fix before RED
+next_experiment:
+  status: GO_TESTS_ONLY_RED_HARNESS_PREPARATION_NO_INVOCATION
+  run_id: stage-e-generator-nonpenetrating-generation-runner-completion-integrity-red-r518
+  executor: /root/generator_build, gpt-5.6-sol high
+  I1_cases: original0and7/finalizer0 with main-log fsync96 followed by successful diagnostic fsync; all-zero control; representative exceptional-owner and low-root-parent fsync failures; require first nonzero storage status/operation retained, conditional outer, no false success/overwrite
+  I2_cases: valid deferred success/predriver/finalizer-failure controls; mutate terminal status/exit/bool/elapsed/main-log identities; missing/mutated nested member and half manifest; mutate successful outer extra key/type/conditional chain/diagnostic identity; require rejection before authoritative final pair
+  I3_cases: execute isolated single-operation mutants for deferred inventory, diagnostic propagation, conditional outer, accounting completion, exact membership validation and owner disarm while keeping token presence nondecisive; cover outer failure, accounting write, final inventory/readback fsync with original0/nonzero, exceptional staging, exclusive diagnostic collision/create failure, function-unwind/nounset, and real deferred success final readback
+  preparation_only: create one source-preserving offline harness/fixtures and static receipts, freeze exact case total/harness hash/mutation hashes and expected defects/controls; do not allocate r518 run/scratch/low roots or invoke until parent checkpoints
+  restrictions: candidate bytes frozen; no tracked repo/Git/index/ledger, real setup/project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+future_if_preflight_clean: parent checkpoints one unique NVMe/locked-Python r518 invocation; valid RED then authorizes minimal I1/I2 fixes plus executable full GREEN and immutable review
+retention: r517 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-367 — r517 167-case accounting GREEN valid; immutable Astra review required
 
 ```yaml
