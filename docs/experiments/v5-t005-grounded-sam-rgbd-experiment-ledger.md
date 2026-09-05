@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-374 — r522 GREEN candidate statically frozen; one private offline invocation authorized
+
+```yaml
+checkpoint: CP-374
+status: R522_STATIC_PREPARATION_VALID_ONE_PRIVATE_OFFLINE_GREEN_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r522
+executor: /root/generator_build, gpt-5.6-sol high
+source_state: {head: 09a476d0b0b4e6343b680fd7addc87c872ec1ec5, remote_before_checkpoint: 09a476d0b0b4e6343b680fd7addc87c872ec1ec5, scoped_package_clean: true, worktree_only_original_untracked_build_install_log: true, root_AGENTS_nvme_rule_present: true}
+frozen_candidate: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, driver_lines: 1954, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, shell_lines: 484, embedded_driver_hash_matches: true, harness_sha256: 093709f836dd5c66d36af5c0f5b0dde6bd8d8ee1094feeaa0497315a6d57d3c4, harness_lines: 571}
+planned_gate: {total: 246, retained_r517: 167, adapted_r521: 40, additional: 39, additional_accept: 13, additional_reject: 26, executable_mutants: 6, expected_exit: 0, expected_classification: VALID_R522_GREEN, forbidden_imports: []}
+I1_I2_closure: ordered typed operation-level storage failures preserve first nonzero and finalizer_then_original_then_storage_then_outer precedence; terminal/outer/accounting schemas require plain scalar types and actual diagnostic hashes/sizes; complete nested pairs always revalidate inventory/membership/hash/readback, failed-finalizer absent/half pairs remain explicit partial failure evidence, successful chains require the exact pair and membership
+review_corrections: Astra early static review found and Sol corrected the failed-finalizer partial-chain overconstraint, complete-pair validation bypass and bool/float scalar gaps; added real finalizer_exit9 absent/half/complete controls, corrupted complete-pair rejects and equal-value bool/float rejects; early review is not final launch approval
+static_readback: exact locked Python py_compile passed; ruff0.15.20 passed for both Python files; bash-n passed; git-diff-check passed; six generated mutant syntax checks passed; construction imports before/after empty; r521-to-final driver diff +463/-54 and shell diff +35/-9
+preallocation: r522 durable evidence root, NVMe scratch root and low-rate root all absent by -e/-L; all four official training/archive/conversion/repro roots absent by -e/-L; harness_invocations0; driver_behavior_invocations0
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_OFFLINE_R522_GREEN
+  launcher: create one explicit immutable launcher under registered T, bind its own reviewed SHA256, this checkpoint commit as exact authorized/observed HEAD, the three frozen input hashes and immutable antecedent hashes; resolve/read back before allocation
+  storage: allocate the unique previously absent durable run-evidence and scratch roots plus low-rate root; export TMPDIR/TMP/TEMP to the exact fresh NVMe scratch tmp directory; exact locked Python tempfile.gettempdir preflight must equal that resolved directory before harness start
+  execution: invoke the combined harness exactly once; require 246/246 including all six executable mutation kills, zero harness errors, empty forbidden imports, source/package before-after identity, exit0 and VALID_R522_GREEN
+  evidence: persist command, launcher/input/source/package hashes, preflight, stdout/stderr, raw exits, elapsed, parsed result, exact final nonselfreferential inventory/readback and root-absence readback; never reuse or backfill a failed root
+  stop_after: no candidate edit and no second invocation; parent reads every result/inventory/status, checkpoints outcome, then Astra performs a separate complete immutable code/evidence launch-readiness review before any official generation plan
+restrictions: private no-GL offline harness only; no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official root allocation/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+retention: r521/r520/r519/r518 and all prior evidence retained; archived none; all scratch trees deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-373 — r521 review RED valid; minimal I1/I2 GREEN preparation authorized
 
 ```yaml
