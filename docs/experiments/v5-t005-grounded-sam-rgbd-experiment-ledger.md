@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-355 — r510 harness adaptation invalid; fresh anchor-only GREEN retry required
+
+```yaml
+checkpoint: CP-355
+status: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_ADAPTATION_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r510
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_ADAPTATION
+result: {authoritative_green: false, invocations: 1, raw_harness_exit: 1, launcher_tool_exit: 1, elapsed_seconds: 0.039665525, case_counts: unavailable}
+cause: combined harness failed before case execution because its exact source adaptation anchor for obsolete retained logs-only ordinary-control registration did not match r507 multiline formatting; stdout empty and parser correctly could not construct result
+unaccepted_candidate: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b; shell SHA25653ddc70ab21b5cf4a901cd718cc2972d643bc35a7bdb9df42625317ef47c9760; static AST/Ruff/Bash passed but behavior unmeasured
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r510 retained with fresh scratch/low-rate roots; harness SHA256a4451b4008b5710e0b70908f4a2103f9858da91a6a2fbdc6b8721b47f72a0590; launcher SHA2564c2f0c25148aa3ae14cb1f380058170bdc2541e03283073e2f79afa24f38497a
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r510-report.md SHA256c53acbe666666ecaf12ba23bc57fe948a245f64c60064516302d5e0fc270b0a8
+parent_readback: complete26-line report, candidate hashes/status and official boundaries read; r510 invalid, never rerun/backfilled
+next_experiment:
+  status: PLANNED_FRESH_ANCHOR_ONLY_GREEN_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r511
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_candidate: keep r510 driver SHA256cbb737df and shell SHA25653ddc70a byte-identical
+  harness_change: use exact actual multiline registration anchor or syntax-aware equivalent to replace only obsolete logs-only positive control with N3 rejection; mechanically update r511 IDs/paths/current identity; retain raw-exit-before-parse launcher and all133 test semantics
+  required: one fresh invocation,133/133 pass, zero failures/harness errors, all exits0, forbidden imports empty, exact Python/NVMe/static/fsync/inventory/readback; stop for Astra review
+  restrictions: no runner code change, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r510 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-354 — r509 success-chain and shell-accounting RED valid; scoped GREEN authorized
 
 ```yaml
