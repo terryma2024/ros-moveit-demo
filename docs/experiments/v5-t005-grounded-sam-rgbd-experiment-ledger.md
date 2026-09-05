@@ -18564,3 +18564,26 @@ future_gate: after reviewed r494 focused GREEN, commit/push/readback then fresh 
 retention: r493 report plus r492/r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no edit/rerun/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-332 — r493 proposal review approved; test-only focused GREEN authorized
+
+```yaml
+checkpoint: CP-332
+status: PROPOSAL_REVIEW_APPROVED_TEST_ONLY_GREEN_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, proposal_quality: APPROVED, critical: 0, important: 0, minor: 0}
+review_findings: root cause independently proven as shared-worker order-dependent oracle; no inspected production eager-import regression; retained r492 sufficient RED; fresh-child correction preserves true invariant and catches stale package/eager runtime imports when provenance-bound
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-proposal-r493-review-report.md SHA256 dfd2d862f40f7636eca934a60a7f1db6deea969ea2737a0e4f0dcd07d9a7591c
+implementation_constraints: child invoked by exact venv sys.executable and inherits cwd/environment; no -I/PYTHONPATH/sys.path/cache manipulation/fakes; check forbidden root set empty before and after exactly three project imports; parent computes checkout package source root and passes it because python-c has no test-file __file__; child compares all three resolved module files to fixed expected suffixes and emits interpreter/paths/forbidden diagnostics
+red: retained r492 one valid ordinary process,1472 ordinary/0 benchmark, sole order-oracle failure; no duplicate RED
+next_experiment:
+  status: GO_TEST_ONLY_FOCUSED_GREEN
+  run_id: stage-e-generator-ordinary-order-oracle-green-r494
+  executor: /root/generator_build, gpt-5.6-sol high
+  change: only add required subprocess import and replace test_contract_tests_load_no_rendering_modules parent-global assertions with the approved child-process oracle; production/config bytes unchanged; no reordering/skip/cache deletion
+  verification: AST/Ruff/diff/hash gates then exactly one direct focused pytest invocation of the corrected test under exact locked Python and r491 overlay/PYTHONPATH, fresh unique durable NVMe scratch with TMPDIR/TMP/TEMP preflight and explicit basetemp/cache; require1/1 pass, zero failure/error/skip, child checkout-source and interpreter diagnostics, all exits0
+  stop_after: preserve evidence and source diff; parent readback plus Astra implementation review before commit/build/full ordinary
+future: if reviewed, commit/push/readback then fresh seven-package build; full ordinary must be1472/1472 with benchmark0 before one explicit benchmark
+retention: r493 review/root-cause plus r492/r491 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no production/config/build/full ordinary/benchmark/official generation/render/MuJoCo/OpenGL runtime invocation/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; child only imports non-rendering entrypoints and must prove forbidden roots absent; Microduck paused; mask0.80/mapping0.98 unchanged
+```
