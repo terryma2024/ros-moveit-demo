@@ -17902,3 +17902,29 @@ next_experiment:
 retention: all prior evidence and review retained, archived none; no evidence deleted; future r478 scratch deletion candidate only
 boundaries: r470 held; no driver correction yet and no GL/render/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-308 — r478 authoritative producer-contract RED valid; minimal GREEN planned
+
+```yaml
+checkpoint: CP-308
+status: VALID_PRODUCER_CONTRACT_RED_GREEN_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-producer-contract-red-r478
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_PRODUCER_CONTRACT_RED, total: 11, defects_reproduced: 6, valid_controls: 5, harness_errors: 0, test_exit: 1, receipt_exit: 1, tool_exit: 1, readback_exit: 0, stderr_bytes: 0, elapsed_seconds: 0.10}
+defects: two categorical producer filenames noncanonical; actual four producer files rejected by real GPU reader and real inventory consumer; enabled false and legacy-disabled true geometry_receipt_present mutations accepted by real truth validator
+controls: all four JSON case/purpose semantics; both RGB canonical filenames; canonical GPU reader; canonical inventory; unchanged valid truth all PASS
+inputs: frozen driver e266450e88a74db2d9d6f27c0ebff66eb32f20d9ef451c7f8355ca6714948259 and shell 7f7c4e6089087dfddabf26e4e93a0b2a314fbab344478ecf225b3326c3b58849 unchanged; harness SHA256 723ad679e51b8c109bd43099b47d997dd61e465e4a0ea4c7050879aa5a456fa6; launcher SHA256 b260e7cde5b0a57b294361afaf5f2d248dafef9978d7cee6debfa3f2faefd69f
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-producer-contract-red-r478 plus unique retained NVMe scratch; result SHA256 8dc0f785a5d959f4a4244f1fd606acbb5da5666966498437c821d9c60436ce8a; final nonselfreferential hash receipt SHA256 1b6f001a4e1a0070931b8ff4f3e642f62dc34d46d546036025d93da5beb5dec3
+report: durable coordination/generator-r443-r1/runtime-acceptance-runner-producer-contract-red-report.md SHA256 26418993295a5300e7bdf8868a153c152cd2a99809e7226a0b3c072b32c4992b
+parent_readback: complete report/result/check classifications and command/exit/time/empty-stderr/source/input/package/r470-absence/tempfile/readback receipts confirmed; run executed exactly once
+python_scratch: exact locked venv resolved /usr/bin/python3.12 and tempfile.gettempdir exact unique registered durable NVMe scratch/tmp; PASS
+next_experiment:
+  status: PLANNED_GREEN_ONLY
+  run_id: stage-e-generator-runtime-acceptance-runner-producer-contract-green-r479
+  executor: same Sol high
+  implementation: define one canonical mapping from case/purpose to receipt filename and use it for persistence and inventory while preserving JSON semantic purpose categorical_segmentation; bind geometry_receipt_present enabled is true and legacy-disabled is false
+  tests: all11 r478 expectations GREEN plus all33 retained r477 behavioral checks GREEN in one offline no-GL test invocation; AST/Ruff/bash/new hash bindings/package/no-r470-root gates; unique NVMe scratch and exact locked-Python tempfile preflight
+  stop_after: freeze corrected driver/shell hashes and full r479 evidence/report for parent checkpoint and Astra scoped re-review; do not execute r470
+retention: r478 and all prior evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no GL/render/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; r470 held; Microduck paused; gates unchanged
+```
