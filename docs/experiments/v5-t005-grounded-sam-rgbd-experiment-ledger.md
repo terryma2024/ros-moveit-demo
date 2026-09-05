@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-226
+latest_checkpoint: CP-228
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
 active_experiment: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: commit/push verified JSON loader fix, build fresh offline r396 image, then isolated r397 smoke-r2
+next_action: bounded IPC-only short bind alias RED/GREEN preflight; preserve exact long NVMe tempfile and two-worker recipe, then new r402 smoke
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15374,5 +15374,63 @@ next_run:
   smoke_gate: six train/six val, one epoch from original base, backward/optimizer/checkpoint/fresh reload required; no formal launch until independent r398 readback
   command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_dino_training_r2.sh smoke NEXT_SYNCED_HEAD
 retention: r389/r388 and all other historical evidence retained; new image/context retained; no deletion or archival
+boundaries: Microduck paused; SAM absent; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-227 — r397 DataLoader IPC path limit; isolated compatibility probe planned
+
+```yaml
+checkpoint: CP-227
+status: INVALID_SMOKE_IPC_COMPATIBILITY_PLANNED
+run_id: stage-d-r5-training-smoke-r397
+source_commit: e740dae3fb975b31a9e0bd6e361828cd6b2933b8
+gitee_sha_readback: e740dae3fb975b31a9e0bd6e361828cd6b2933b8
+implementation_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+observed: fixed JSON contract roundtrip/numeric lr and epsilon passed; optimizer and processor probes passed; first DataLoader worker tensor handoff fails in resource_sharer Listener with AF_UNIX path too long
+root_cause: Python3.12 multiprocessing.connection.arbitrary_address uses util.get_temp_dir under mandatory long TMPDIR; resulting pathname exceeds Linux Unix-socket address limit
+owned_process_action: explicit docker stop --time10 so101-exp079-r5-smoke-r397 only, after logging and exact container ownership readback; no unrelated processes touched
+result: INVALID before first completed training batch; not a model-quality result
+output: durable training/grounding-dino-cup-r5-r1/smoke-r2 retained immutable INVALID
+evidence: durable run-evidence/stage-d-r5-training-smoke-r397; training.log, preflight, container inspections and exit retained
+python: /opt/venv/bin/python
+overlay: r396 image sha256:75bf5c3d116d8b734e14c2f189f1cb4392912b5837387af010a36cb16fba554f
+scratch: durable scratch/stage-d-r5-training-smoke-r397/tmp
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-NVME-IPC-ALIAS-R1
+  status: PLANNED
+  single_variable: short container bind alias /so101-ipc for multiprocessing socket paths only; backed by the same run-specific durable NVMe scratch/ipc
+  invariants: TMPDIR/TMP/TEMP and Python tempfile stay at exact registered long /data path; no tmpfs substitute, no fsync change, no worker/optimizer/seed/recipe change
+  mechanism: pinned Python3.12 current_process config tempdir set to short IPC alias before fork workers; invoke unchanged installed console script via runpy so config survives bootstrap; verify actual two-worker tensor transfer before model launch
+  red: stage-d-r5-ipc-red-r400; real multiprocessing Listener at long NVMe path must fail with observed AF_UNIX path limit
+  green: stage-d-r5-ipc-green-r401; short alias Listener plus actual two-worker DataLoader tensor handoff must pass while tempfile stays unchanged
+  new_smoke: stage-d-r5-training-smoke-r402, output smoke-r3; new readback r403 then formal r404 only after independent smoke readback
+  superseded_unlaunched: r398/r399 remain unused
+retention: all existing evidence and stopped containers retained; no deletion/archival; scratch remains deletion candidate only
+boundaries: Microduck paused; SAM absent; no sealed/test/COCO100/PickPlace/Mac access; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-228 — IPC-only NVMe alias RED/GREEN passed; r402 smoke armed
+
+```yaml
+checkpoint: CP-228
+status: VALID_IPC_RED_GREEN_SMOKE_PLANNED
+experiment_id: EXP-079-STAGE-D-NVME-IPC-ALIAS-R1
+source_commit: e740dae3fb975b31a9e0bd6e361828cd6b2933b8
+red: {run_id: stage-d-r5-ipc-red-r400, exit_code: 1, elapsed_seconds: 1.22, failure: AF_UNIX path too long at real Listener.bind}
+green: {run_id: stage-d-r5-ipc-green-r401, exit_code: 0, elapsed_seconds: 1.27, workers: 2, received_tensor_values: [0,1,2,3,4,5,6,7]}
+root_cause: CONFIRMED Python3.12 multiprocessing socket pathname limit, separate from model and JSON contract fix
+provenance: same pinned r396 image and /opt/venv/bin/python; network none, no model/data mounts for IPC probes; actual tempfile resolves to exact respective NVMe scratch/run-id/tmp before and after transfer
+implementation: bootstrap sets multiprocessing current_process config tempdir to /so101-ipc bind backed by unique durable scratch/run-id/ipc; unchanged console script invoked via runpy so fork inherits config; bootstrap verifies listener and two-worker tensor handoff before model launch
+model_recipe: unchanged, including two workers; bootstrap probe precedes trainer seed initialization; no fsync/tmpfs/tempfile semantics changes
+r397_final: {container_exit: 137, elapsed_seconds: 61.50, reason: owned-container stop after failed worker handoff, optimizer_updates: 0}
+next_run: stage-d-r5-training-smoke-r402
+next_output: durable training/grounding-dino-cup-r5-r1/smoke-r3
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_dino_training_r3.sh smoke NEXT_SYNCED_HEAD
+next_after_smoke: independent r403 readback before r404 formal; no obsolete r398/r399 execution
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+retention: invalid r389/r397, valid/invalid IPC probes, stopped containers, scratch, scripts and all earlier evidence retained; no deletion or archival
 boundaries: Microduck paused; SAM absent; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
 ```
