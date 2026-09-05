@@ -18257,3 +18257,35 @@ next_experiment:
 retention: r484/r483/r482 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no build/benchmark/generation/render/MuJoCo/OpenGL/conversion run/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-320 — r484 review changes requested; bounded tests-only RED authorized
+
+```yaml
+checkpoint: CP-320
+status: REVIEW_CHANGES_REQUESTED_TESTS_ONLY_RED_PLANNED
+experiment_id: EXP-079-STAGE-E-NONPENETRATING-TRAIN-VAL-VERSION-R1
+reviewer: /root/generator_review, gpt-6-astra medium
+review_verdict: {spec: CHANGES_REQUESTED, quality: CHANGES_REQUESTED, critical: 0, important: 5, minor: 1}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-r484-review-report.md SHA256 bdf6331cb4f5a29c7662926232b58c6f0f06474aa931c258c1eb6363831c6110
+review_readback: complete144-line report read; all referenced patch/test/evidence hashes were independently recomputed by reviewer; no tests/imports/Git/sealed access occurred
+findings:
+  I1: new discriminator permits require_nonpenetrating_scene false/missing and can render/write without geometry truth
+  I2: generator/converter accept arbitrary compact two-way counts/seeds/quotas despite exact official1200/300,450m/460m,six-equal-quota version certificate; prior compact positive fixture conflicts with the binding protocol
+  I3: scenario/configured-count/visible-count/unique active body consistency absent, allowing empty partial truth and no_cup targets to bypass validation
+  I4: declared manifest membership is not compared to exact no-follow source-tree membership/canonical seed-derived filenames, allowing unlisted test files/symlinks and renamed members
+  I5: new strict-subset/type checks are not scoped to new contract and reject legacy schema2 measured-none data, violating legacy compatibility
+  M1: new schema typing/config validation and malformed huge-distance normalization are incomplete
+Ruling: I2 is correct and load-bearing; the exact discriminator names the complete official dataset version, not a generic compact format, so public DatasetConfig/generation/conversion must require the frozen counts, seed starts/ranges and six equal quotas. The earlier r481 test SHA and RED remain immutable historical evidence, but its compact public-positive fixture is now an explicitly identified test/spec defect and may be revised only in the new tests-only RED. Cost if wrong: unit fixtures become heavier or require a clean lower-level validation seam, but accepting a falsely certified persistent dataset would contaminate training provenance.
+minor_disposition: M1 is included in the bounded RED/fix because it is at the same new-contract fail-closed boundary; it is not deferred
+next_experiment:
+  status: GO_TESTS_ONLY_RED
+  run_id: stage-e-generator-train-val-review-red-r485
+  executor: /root/generator_build, gpt-5.6-sol high
+  owned_changes: tests and synthetic fixtures only; preserve r484 production/config bytes exactly
+  coverage: I1 missing/false gate with zero renderer/output; I2 wrong counts/starts/ranges/quotas plus valid exact official control without sealed data; I3 all-six scenario count/body invariants including zero-instance partial, no_cup target, inactive/duplicate body; I4 no-follow exact tree with unexpected regular/test/symlink/special member and canonical seed filenames without reading unexpected content; I5 synthetic discriminator-absent schema2 measured-none legacy acceptance/output compatibility; M1 plain-int schema/config and raw-TypeError/OverflowError normalization mutations
+  fixture_rule: do not add a test-only production bypass or relabel compact data as the official contract; compact fixtures may exercise a factored lower-level helper only if the public official boundary is separately exercised and the seam is production-legitimate, not pytest/environment conditioned
+  invocation: static test AST/Ruff and exact production/config hash gates, then one focused pytest process under a unique fresh r485 NVMe scratch; expected product defects must fail while legacy/valid controls pass, with zero harness/collection errors; retain JUnit/command/exits/time/test diff/provenance and stop before source fix
+phase_id_correction_after_review: r485 tests-only RED, r486 fix GREEN, Astra re-review, r487 build, r488 ordinary, r489 benchmark, r490 runner RED, r491 runner GREEN/review, r492 generation, r493 source readback, r494 archive, r495 archive readback, r496 primary conversion, r497 repro conversion, r498 freeze; each separately checkpointed
+retention: all r484 and earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no production/config edit in r485, no build/benchmark/generation/render/MuJoCo/OpenGL/conversion run outside synthetic fixtures/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
