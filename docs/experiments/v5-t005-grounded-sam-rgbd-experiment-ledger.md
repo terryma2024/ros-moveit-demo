@@ -18953,6 +18953,35 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-373 — r521 review RED valid; minimal I1/I2 GREEN preparation authorized
+
+```yaml
+checkpoint: CP-373
+status: VALID_R517_REVIEW_FINDINGS_RED_SCOPED_GREEN_PREPARATION_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r521
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_R521_RED, authoritative: true, launcher_invocations: 1, harness_invocations: 1, total: 40, expected_defects: 16/16, controls: 18/18, executable_mutation_kills: 6/6, harness_errors_unexpected: [0,0], harness_exit: 1, parse_launcher_tool_exits: [0,0,0], elapsed_seconds: 29.955438766, forbidden_before_after: [[],[]]}
+I1_red: main-log storage failure with original0or7, exceptional owner storage and low-root parent fsync all reach target finalization/completion yet lose or relabel storage status/outer attempt; matched zero-storage controls pass
+I2_red: five terminal, three nested-chain and four outer-receipt contradictions are accepted by current completion; valid deferred/outer/predriver/finalizer-partial controls pass
+I3_gate: six token-retaining executable single-operation mutants behaviorally killed including owner-disarm post-completion reentry diagnostic; twelve lifecycle/storage controls pass
+frozen_red_inputs: driver SHA2567739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a; shell SHA2569bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a; r520 wrapper SHA256e43b351f95938e65b8eecf94b355dfa491dccdeb5b16af59f3a4da3dc00904bb; explicit launcher SHA25614f28d762ff5096bee09b89408b191bfb762c1c21a56da0ad7db21996d5087df
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-red-r521; result SHA256f74655a74c000dcadd7e63bb6be86151ba6596c6c53f9f25dc328a5d32362c5f; final22-file inventory SHA2565f9362cba8954f0aa309e2956ca48c7520d4d863800f378600e1cdb93033b44b; readback SHA256422fe83cd01c80c6084dbc64efe2b3717a01bf2f819f172bb7fed48a2566ebb9
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-red-r521-report.md SHA2567c934ff96943b4dd37009c19130229a72cb2d18d0174103f7ff45231916a7d38
+parent_readback: complete report/result target traces/mutant hashes/raw receipts/inventory/readback/tempfile/frozen hashes read; official roots absent and scoped status preserved
+next_experiment:
+  status: GO_PRIVATE_I1_I2_FIX_AND_GREEN_HARNESS_PREPARATION_NO_INVOCATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r522
+  executor: /root/generator_build, gpt-5.6-sol high
+  I1_fix: never overwrite first nonzero storage result; capture low-root-parent/main-log/finalizer/outer/accounting diagnostic create/fsync outcomes with explicit operation identity and deterministic aggregation; preserve finalizer>original>storage>outer precedence; any otherwise-success storage/completion failure stays nonzero and conditionally invokes outer exactly once
+  I2_fix: before accounting persist/final seal, validate complete closed terminal and outer schemas with plain types/status/codes/elapsed/current log and diagnostic identities/conditional chains; require/revalidate exact nested driver pair/members/hashes for driver-process chains; enforce scenario-appropriate mandatory membership and reject contradictions without repair
+  invariants: one owner/finalizer/outer/completion, provisional deferred authority, default immediate compatibility, exclusive nontruncating diagnostics, exact final inventory, no post-seal mutation; N1/N3/I1-I3/M1 science/provenance contracts unchanged
+  preparation_only: modify private T driver/shell, update embedded hash, create combined GREEN retaining exact r517167 and adapted r52140 plus any new status-schema controls; execute static AST/Ruff/Bash/mutant-construction checks only; freeze exact case total/candidate/harness/mutant hashes and complete r521-to-final diffs; do not allocate r522 roots or invoke behavioral harness until parent checkpoint
+  restrictions: no tracked repo/Git/index/ledger, real setup/project/GL/GPU/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+future_if_static_clean: parent authorizes one fresh r522 NVMe GREEN; all cases/mutants must pass before immutable Astra review and any production plan
+retention: r521/r520/r519/r518 and all prior evidence retained, archived none; nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-372 — r520 stdin launcher provenance invalid; explicit-file r521 retry required
 
 ```yaml
