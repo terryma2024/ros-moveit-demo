@@ -13060,3 +13060,52 @@ retention:
   deletion_candidates: [r317-r318 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-163, extend only this temporary driver to the frozen 10-image/two-box immutable evidence contract, rerun unchanged GREEN, then execute r319 once
 ```
+
+## Checkpoint CP-164 — Extended Transformers single-mask diagnostic driver is GREEN
+
+```yaml
+checkpoint: CP-164
+status: GREEN_VALID_READY_FOR_FROZEN_DIAGNOSTIC
+recorded_at: 2026-09-05T09:20:18+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-163
+source_commit: b1c374cf2af4c633a1a0aee975a211cf01b96fd3
+run_id: stage-e-transformers-single-mask-driver-green-r319
+result: {exit_code: 0, tests: 2, elapsed_ms: 144}
+implementation:
+  driver: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transformers_sam_single_mask_r1.py
+  driver_sha256: 093df60d912b51f31132bc67322dc30d2712956829c4701c1e28f6c1d7e8c6b6
+  unchanged_test_sha256: 77053d1f6909a960ea2df7f9feefa1570bccfce957f3dad17f8a868ad825477c
+  immutable_base_helper_sha256: 41b043606d22aec9c41cc2b07d91387652702bd3fe6a4db7b514f8222b065249
+verified_contract:
+  - the extended driver still normalizes exactly one float32 raw mask and one finite float32 quality and rejects three variants
+  - all real-run input identities are fail-closed before loading the current Transformers SAM bundle
+  - the planned run reuses exactly the prior immutable 10 records and two retained box prompts without detector inference
+  - per-prompt raw tensors, exact binary RLE, comparison metrics, records, overlays, report, and final immutable manifest are retained
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_origin: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-transformers-single-mask-driver-green-r319/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-transformers-single-mask-driver-green-r319
+  preflight_sha256: adbb05305f24f62c206fefadc4d322d62fd6f7bc4b95126668061796f8e54eb9
+  test_log_sha256: baee8c38d469f09e873d32e586b3da37d0ce12abf76aa9e2e24cd55ffa79c1e6
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  scripts_pointer_sha256: aac0157a04746fd25ed7831b4b918e6e5aeb102789a65725608296f563608001
+  exit_sha256: 3f2511137bb210ac7f556e9da6d413f77c765c8c6152ac7c09b0c326547bf54e
+run_id_revision:
+  reason: the driver grew after the minimal r318 GREEN, so a fresh unique GREEN consumed r319 before model execution
+  actual_diagnostic_run: stage-e-transformers-single-mask-r321
+  independent_readback: stage-e-transformers-single-mask-readback-r322
+tests:
+  ordinary_gate: not run; temporary train/val-only diagnostic changed no repository implementation
+  explicit_benchmark_gate: not run; r30 and r222 remain preserved
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r319 GREEN evidence/scratch, r318 minimal GREEN, r317 RED, all CP-163 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r317-r319 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-164 with remote SHA readback, then execute the preregistered current-Transformers single-mask diagnostic exactly once as r321
+```
