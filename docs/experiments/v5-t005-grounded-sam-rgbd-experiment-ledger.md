@@ -18118,3 +18118,31 @@ next_experiment:
 retention: all prior evidence retained, archived none; future r480 scratch deletion candidate only; nothing deleted
 boundaries: no import of MuJoCo/OpenGL, render, official config/deployment, build/benchmark/generation/archive/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-315 — r480 harness invalid; fresh pytest-capable RED authorized
+
+```yaml
+checkpoint: CP-315
+status: INVALID_HARNESS_FRESH_RED_PLANNED
+run_id: stage-e-generator-train-val-only-red-r480
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_HARNESS_NO_JUNIT
+result: {invocation_count: 1, pytest_exit: 1, outer_exit: 1, tool_exit: 1, receipt_exit: 1, measured_tests: 0, measured_failures: 0, harness_errors: 1, junit_present: false, elapsed_seconds: 0.026219252, stdout_bytes: 0, stderr_bytes: 71}
+failure: exact locked venv Python was invoked without the already established /usr/lib/python3/dist-packages test dependency path and exited No module named pytest before collection; no protocol behavior or control was measured
+disposition: r480 run/scratch immutable and retired, never rerun/reused/backfilled; not a behavioral RED
+tests: sole new tracked test src/so101_demo_py/test/test_nonpenetrating_train_val_contract.py, 811 lines, SHA256 a20b5af069a1ef6afe0e04737132e1273fd0349657eb642e3e4c71be7d83ad48, 59 design cases=52 expected missing-behavior plus7 controls; parent read complete source
+source_state: five production/config paths and complete package source remain exact against frozen4a0ba99f; no production/config/CLI/renderer implementation change; only intended untracked test file plus original three untracked roots
+evidence: durable run-evidence/stage-e-generator-train-val-only-red-r480 and unique scratch retained; result SHA256 578b6577adbd65a42c0002ca148b827eb41c9427fffdce76e41761eb41ae675d; inventory SHA256 dfca982afbb31d46ab2434965b9b9c8f6a46570f57a85752272c60b3798f69a0
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-red-report.md SHA256 f0f59314188dc135ab5caf6c889104f645ce317ee135c124d9d77de4bedfc9f8
+parent_readback: complete report and all811 test lines read; /usr/bin/pytest shebang /usr/bin/python3 and /usr/bin/python3 -m pytest7.4.4 confirmed; venv failure reproduced read-only; prior successful generator test runner establishes explicit /usr/lib/python3/dist-packages injection pattern
+next_experiment:
+  status: GO_FRESH_RED_ONLY
+  run_id: stage-e-generator-train-val-only-red-r481
+  single_change: preserve exact test bytes and frozen production; source /opt/ros Jazzy and r467 overlay, then explicitly add /usr/lib/python3/dist-packages to PYTHONPATH before using the same locked venv Python
+  preflight: exact venv Python must import pytest7.4.4, print pytest module path and tempfile.gettempdir, resolve executable /usr/bin/python3.12, and require tempfile exact fresh durable scratch/stage-e-generator-train-val-only-red-r481/tmp; set explicit pytest basetemp inside it
+  invocation: one focused pytest call for exact test SHA with JUnit; classify all59 measured cases and require zero collection/environment/harness errors for authoritative RED; never rerun same ID
+  stop_after: report/readback and parent checkpoint; no implementation
+phase_id_correction_after_invalid: r481 fresh RED, r482 GREEN, r483 build, r484 ordinary, r485 benchmark, r486 runner RED, r487 runner GREEN/review, r488 generation, r489 source readback, r490 archive, r491 archive readback, r492 primary conversion, r493 repro conversion, r494 freeze; each remains separately gated
+retention: r480 and all prior evidence retained, archived none; scratch deletion candidates only; nothing deleted
+boundaries: no production/official config change, MuJoCo/OpenGL/render/build/generation/sealed-test/COCO100/inference/training/PickPlace/Mac/SAM change; Microduck paused; protocol/gates unchanged
+```
