@@ -13570,3 +13570,114 @@ boundaries: all sealed sets untouched; Microduck paused; no deletion; mask IoU 0
 retention: r327 invalid, r329 RED, r330 GREEN, r331 overlay and r332/r333 ordinary evidence retained; no archived runs; scratch remains deletion candidate only
 next_action: commit only owned training module, regression tests and ledger; ordinary-push and remote SHA readback, then continue runner implementation under CP-170 recipe
 ```
+
+## Checkpoint CP-175 — Exact-RLE training loader extension planned
+
+```yaml
+checkpoint: CP-175
+status: PLANNED
+source_commit: 02eee1bd1245699d3190d1d1976883e2ba410055
+remote_sha_readback: 02eee1bd1245699d3190d1d1976883e2ba410055
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+stage: VERIFIED_TRAIN_DATA_LOADER
+design:
+  reuse: existing locked validation loader integrity checks through a private split-bound implementation
+  public_contracts: keep load_locked_val_dataset val-only; add load_locked_train_dataset train-only
+  train_only_strengthening: require exact visible RLE for every instance; polygon fallback forbidden for optimizer truth
+  paths: image, label and truth members must match their bound split and seed; no cross-split access
+  invariants: inventory hash, source-manifest hash, immutable files, member hashes, cup class, cup. prompt, exact RLE count/hash and bbox identity
+red_cases: valid exact-RLE train fixture, wrong inventory split, cross-split member, missing visible RLE, tampered member hash; existing val behavior must remain valid
+run_ids: [stage-e-sam-train-loader-red-r334, stage-e-sam-train-loader-green-r335]
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: r331 source symlink for focused tests; fresh overlay required before runtime after changes
+  ROS_DOMAIN_ID: not_applicable_offline_tests
+  GZ_PARTITION: not_applicable_offline_tests
+  evidence_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence
+  scratch_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch
+boundaries: persistent authorization; no sealed sets, no old inference rerun, Microduck paused, mask IoU 0.80
+next_action: extend the loader fixture into train and invalid-input regression cases, establish RED, implement the split-bound helper and rerun GREEN
+```
+
+## Checkpoint CP-176 — Train-only lossless loader GREEN
+
+```yaml
+checkpoint: CP-176
+status: FOCUSED_GREEN_FULL_GATE_PENDING
+source_commit: 02eee1bd1245699d3190d1d1976883e2ba410055
+red: {run_id: stage-e-sam-train-loader-red-r334, failed: 5, passed: 1, exit_code: 1, elapsed_seconds: 0.51, junit_sha256: d38b4760361eba631aaa3f609a8f5727ef4036b9dbd1acf8401914d499bababd}
+green: {run_id: stage-e-sam-train-loader-green-r335, passed: 24, exit_code: 0, elapsed_seconds: 2.58, junit_sha256: 2beef13db954b71d9b143dca76f1ad5db932108f8197844fc9cfbb83fde4b9b4}
+implementation: shared private split-bound loader, separate train/val public entry points, train requires exact visible RLE
+checks: existing val behavior, exact-RLE train success, inventory-split rejection, test-member rejection before read, hash rejection, polygon-only train rejection, prior decoder primitives
+static: ruff check passed after removing an obsolete test import; git diff check required before commit
+python: /data/work/venvs/so101-grounded-sam/bin/python
+source_import: per-run scratch symlink to isolated checkout
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+scratch: unique durable root scratch/run-id/tmp for each run; exact Python tempfile preflight passed
+next_runs: [linux-build-stage-e-sam-loader-r336, linux-test-stage-e-sam-loader-r337-ordinary]
+next_action: fresh seven-package overlay, ordinary gate, commit and ordinary-push; then preregister real-model train-only CUDA gradient smoke
+boundaries: persistent authorization; test/COCO100/PickPlace/Mac untouched; Microduck paused; retained raw inference not rerun
+retention: r334 RED and r335 GREEN retained; no deletion; scratch deletion candidates only
+```
+
+## Checkpoint CP-177 — Loader overlay built; real-model gradient smoke preregistered
+
+```yaml
+checkpoint: CP-177
+status: BUILD_VALID_ORDINARY_RUNNING_SMOKE_PLANNED
+source_commit: 02eee1bd1245699d3190d1d1976883e2ba410055
+build: {run_id: linux-build-stage-e-sam-loader-r336, packages_finished: 7, exit_code: 0, elapsed_seconds: 55.62}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-loader-r336/install
+lodepng: r26 cache, frozen HEAD and strict fsck passed, FETCHCONTENT_FULLY_DISCONNECTED ON
+ordinary: linux-test-stage-e-sam-loader-r337-ordinary
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-SAM-DECODER-GRADIENT-SMOKE-R1
+  run_id: stage-e-sam-decoder-gradient-smoke-r338
+  status: PLANNED_PENDING_ORDINARY_GREEN_AND_SOURCE_SYNC
+  question: does one real-model optimizer step update only decoder tensors, including both high-resolution projection layers, and survive a complete checkpoint save/reload
+  sample: {split: train, formal_index: 1, seed: 410000001, scenario: one_cup_distractors, truths: 1, bbox_xyxy: [158, 170, 257, 261], visible_pixels: 4489}
+  inputs: immutable CP-174 train inventory, source manifest and base bundle hashes
+  optimizer: one AdamW step at lr 0.00001, weight_decay 0.01, gradient_clip_norm 1.0
+  seed: 430000079
+  prompt: exact bbox for gradient plumbing smoke only; full training still uses CP-170 preregistered jitter
+  mode: CUDA FP32, stateless, multimask true, frozen encoders in eval, only decoder in train
+  gates: finite loss and gradients; nonzero conv_s0/conv_s1 gradients; changed state entries restricted to mask_decoder.; all frozen state hashes identical; all reloaded state hashes equal saved model
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/sam-decoder-gradient-smoke-r1
+  output_role: smoke evidence only, never a production candidate or checkpoint-selection result
+  cpu_use: serialization-only reload hash readback allowed; no CPU training or inference
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/sam_decoder_gradient_smoke_r1.py
+  inference_reuse: no DINO invocation; no old validation inference rerun
+provenance: {python: /data/work/venvs/so101-grounded-sam/bin/python, ROS_DOMAIN_ID: not_applicable_offline, GZ_PARTITION: not_applicable_offline}
+scratch: each named run has a unique directory under registered durable root; exact Python tempfile preflight required
+retention: all r336 build and r337 test evidence retained; scratch deletion candidates only
+boundaries: no val access during smoke, sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; persistent authorization applies
+next_action: read back ordinary results, commit owned loader/test/ledger and ordinary-push with remote SHA readback; then execute r338 exactly once
+```
+
+## Checkpoint CP-178 — Train loader complete ordinary gate GREEN
+
+```yaml
+checkpoint: CP-178
+status: CODE_GREEN_SYNC_AND_CUDA_SMOKE_PENDING
+source_commit: 02eee1bd1245699d3190d1d1976883e2ba410055
+ordinary:
+  run_id: linux-test-stage-e-sam-loader-r337-ordinary
+  result: {passed: 1245, failed: 0, errors: 0, skipped: 0, existing_warnings: 4, pytest_seconds: 15.24, elapsed_seconds: 16.63, colcon_exit: 0, test_result_exit: 0}
+  junit_sha256: f39b808e31cd7d544173275ea98ed55828aea4203dff1c641b5fa1a5788da9ce
+  scope: src/so101_demo_py/test only; benchmark suite not collected
+provenance:
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-loader-r336/install
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-sam-loader-r337-ordinary/tmp
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/linux-test-stage-e-sam-loader-r337-ordinary
+  tempfile_preflight: exact resolved match
+  package_prefixes: all seven inside r336 install
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static_checks: ruff check and git diff --check passed
+smoke_script_sha256: bb7c2953e4299e981f5a364496daf239b4e03e11b66775b7b4a0382b5c61b3df
+next_action: commit only loader/tests/ledger, ordinary-push/readback remote SHA, execute preregistered r338 with CUDA and source provenance preflight
+boundaries: all sealed sets untouched; Microduck paused; no benchmark rerun or data/model selection
+retention: r334-r337 retained; no archived/deleted runs; scratch deletion candidates only
+```
