@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-351 — r507 GREEN harness output invalid; fresh serialization-only retry required
+
+```yaml
+checkpoint: CP-351
+status: INVALID_EVIDENCE_OWNERSHIP_GREEN_HARNESS_OUTPUT_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-evidence-ownership-green-r507
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_EVIDENCE_OWNERSHIP_GREEN_HARNESS_OUTPUT
+result: {authoritative_green: false, invocations: 1, tool_exit: 1, stdout_empty: true, measured_case_counts: unavailable, expected_cases: 114, reruns: 0}
+cause: all case construction completed but final json.dumps encountered an unnormalized PosixPath in lifecycle-control detail; launcher then tried to parse empty stdout, so no valid harness exit receipt or complete result exists
+unaccepted_candidate: driver1097plus changes SHA2569b0840c39b8ba06742948e1df433e59eb7e412918788c17034fb64a520e3b069; shell SHA256f057282a2418d1fe0c76a20626acee27ef2a26dcda74959401887918e60620aa; static AST/Ruff/Bash pass and embedded driver hash matches, but behavior remains unaccepted
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-evidence-ownership-green-r507; invalid-result SHA2564c0753a4b113058c491b1e23e6719d513d5b4e94983f7b45bba843e8eba385a3; stderr SHA256a9bdbee7b046bb90f85dd4631a5cc743d3a16aadf4d4c56214de139ad86de689; empty stdout SHA256e3b0c442; final19-file manifest SHA256d811aaa7be8305987bf6972bc12d05315eeeab2d99cdd2820715495c7e037d0d; readback SHA2565679d2b314eb2d34792acea38a6d450723a32ef687493141c91d4df93adbcedb
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-evidence-ownership-green-r507-report.md SHA256f2005500bd8b2d2ff83cee1d62b5a83d49b3a974a4d1631a30fe9cc66e951fcb
+parent_readback: complete60-line report, private hashes/file inventory/status/official-root absence read; r507 retained invalid, never rerun/backfilled
+next_experiment:
+  status: PLANNED_FRESH_SERIALIZATION_ONLY_GREEN_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-evidence-ownership-green-r508
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_candidate: keep r507 driver SHA2569b0840c3 and shell SHA256f057282a byte-identical
+  harness_changes: recursively normalize Path details to deterministic strings; mechanically update unique r508 IDs/paths/current execution identity; private launcher writes/fsyncs raw harness exit and elapsed receipts before parsing stdout; no test semantic change
+  required: same retained105 plus exact9 lifecycle cases=114;114 pass, zero failure/harness error, all exits0, forbidden imports empty; static gates, exact Python/fresh NVMe scratch, full fsync/inventory/readback; stop for Astra review
+  restrictions: no runner code change, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r507 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-350 — r506 lifecycle-finalization RED valid; evidence-ownership GREEN authorized
 
 ```yaml
