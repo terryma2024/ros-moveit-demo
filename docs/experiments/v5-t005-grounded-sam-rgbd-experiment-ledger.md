@@ -18843,3 +18843,29 @@ future_if_approved: authorize Sol high to implement exactly two private T-root r
 retention: r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: official roots absent; no project/MuJoCo/OpenGL runtime/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM action; no benchmark rerun; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-343 — r501 RED approved; bounded private-runner offline GREEN authorized
+
+```yaml
+checkpoint: CP-343
+status: GENERATION_RUNNER_RED_APPROVED_PRIVATE_OFFLINE_GREEN_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, red_evidence: APPROVED, proposed_green: APPROVED, critical: 0, important: 0, minor: 0}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r501-review-report.md SHA2563d00880a6747b0b1a26300955fac3ce5a0c5caaa439fdcdfc7820cb309ed0a10
+accepted_red: r501 is authoritative only for the missing reviewed private driver/shell; its12 controls are preconditions, not behavioral or live-GPU proofs
+review_closure: r500-to-r501 exact three-change retry verified; all12 evidence and9 input checksums verified; frozen YAML/count/seed/quota/policy and accepted source/config/r495/r470 identities exact; four official roots and proposed runner pair remain absent
+next_experiment:
+  status: GO_PRIVATE_RUNNER_OFFLINE_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-green-r502
+  executor: /root/generator_build, gpt-5.6-sol high
+  owned_outputs: exactly private T/generate_nonpenetrating_train_val_v1.py, T/run_nonpenetrating_train_val_v1.sh, one offline dependency-injected behavioral harness, and fresh r502 evidence/scratch/low-rate artifacts; no tracked repository edit
+  preconstruction_gates: exact source/config/code-vs-execution provenance, active r495 prefix/import/interpreter, complete pinned canonical transitive MJCF closure and digest, r470 identities, exact live environment values, typed ordered train/val contract, every official collision including dangling symlink, no test/extra/missing/reordered/duplicate/bool-confused values and no sample_limit
+  orchestration: exactly one truthy renderer; inspect actual persistent RGB and categorical context adapters separately with r470-equivalent class/current/non-null/NVIDIA/software-rejection logic plus categorical zero samples; durably fsync and read back both receipts before generation; pass exact inspected renderer to injected generate_dataset call; no fallback; same renderer closes in finally for success and every post-construction failure
+  test_matrix: valid ordered sequence plus real validation-path mutations; receipt-sink failure/readback mismatch, nonzero categorical samples, inspection failure, factory/generation failure, exchanged renderer, missing inspection/receipt, gate removal/reordering and collision/sealed/test cases must fail closed with zero premature construction/generation/output where applicable
+  shell: evaluated exact gates, reviewed driver hash, non-self-referential launch binding, unique evidence/scratch allocation and exact tempfile preflight; generation-phase umask must preserve source0700/dirs0755/files0644 instead of RED evidence umask077
+  required_result: one bounded no-GL/no-project-renderer offline GREEN process with all cases pass, forbidden runtime imports absent, all exits0, full hashes/inventory/readback; stop for Astra implementation review
+  restrictions: no real renderer construction, MuJoCo/OpenGL/GL import, actual GPU claim, official root allocation, render/generation/conversion/inference/training, repo edit/build/test/benchmark or sealed traversal
+future_gate: offline GREEN and complete implementation must receive Astra read-only review before any actual GL or official generation planning
+retention: r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged; no runtime scenario-label gate or invented eligibility thresholds
+```
