@@ -11984,3 +11984,75 @@ retention:
   deletion_candidates: [r289-r291 scratch; do not delete without explicit user authorization]
 next_action: commit and push this execution checkpoint, independently verify all 122 files and tensor/RLE bindings, inspect overlays, then characterize the local sam2_video-to-Sam2Model warning without network access
 ```
+
+## Checkpoint CP-144 — SAM mask-pipeline evidence independently verified and warning bounded
+
+```yaml
+checkpoint: CP-144
+status: COMPLETE_VALID_NEXT_DIAGNOSTIC_REQUIRED
+recorded_at: 2026-09-05T09:04:00+08:00
+stage: E_SAM_MASK_PIPELINE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-PIPELINE-DIAGNOSTIC-R1
+prior_checkpoint: CP-143
+source_commit: 50f8dfe97726438409f5cd5ba855439f9e7b1621
+independent_readback:
+  run_id: stage-e-sam-mask-pipeline-readback-r292
+  result: PASS
+  elapsed_ms: 3139
+  files_verified: 122
+  postprocessed_variants_verified: 60
+  assertions:
+    - immutable tree inventory exactly matches the recorded inventory
+    - every retained raw mask tensor and quality row re-postprocesses to the retained RLE exactly
+    - all 10 DINO-box selected masks equal the old stored RLE pixel-for-pixel
+model_class_warning_audit:
+  run_id: stage-e-sam-model-class-load-audit-r293
+  local_config: {architectures: [Sam2VideoModel], model_type: sam2_video}
+  loaded_runtime: {model_class: Sam2Model, config_class: Sam2Config, loaded_model_type: sam2_video}
+  loading_info: {missing_keys: [], unexpected_keys: [], mismatched_keys: [], error_msgs: []}
+  bundled_readme_contract: Basic Image Segmentation explicitly uses Sam2Processor plus Sam2Model
+  conclusion: the warning is a local checkpoint/config compatibility warning with complete weight loading, not evidence of omitted weights and not the observed failure's root cause
+  config_sha256: 860aff9751b139d83a4ad7df1e5535416fded533e0ead02625edbefcb9953cce
+  readme_sha256: dfa401b1b9358b9650ae487dd2f2bb336fd745c3609e3244adf2e97a22343857
+per_sample_readback:
+  run_id: stage-e-sam-mask-pipeline-summary-r294
+  frozen_failure_samples: 6
+  frozen_passing_controls: 4
+  failure_samples_reaching_mask_iou_0_80_with_dino_oracle_variant: 0
+  failure_samples_reaching_mask_iou_0_80_with_truth_oracle_variant: 0
+  quality_selection_observations:
+    - samples 53, 135, 152, 229, and 289 have a better non-selected DINO-box variant
+    - sample 275 passes at 0.948873 with its DINO box but a small truth-box change makes the quality head select a 0.295966 variant while another variant remains 0.938144
+    - quality selection is therefore an observed robustness defect, but oracle selection does not rescue any of the six preregistered failures at the unchanged 0.80 gate
+  representative_values:
+    sample_142_small_far: {dino_selected_iou: 0.477124, dino_oracle_iou: 0.477124, truth_oracle_iou: 0.480263}
+    sample_289_one_cup: {dino_selected_iou: 0.248726, dino_oracle_iou: 0.776377, truth_oracle_iou: 0.782669}
+visual_readback:
+  inspected_overlays: [000057, 000135, 000142, 000289]
+  findings:
+    - passing control 57 remains aligned under both prompt-box sources
+    - sample 135 targets the adjacent bottle under both the accurate DINO box and exact truth box
+    - sample 142 remains expanded around the small/far cup under both prompt-box sources
+    - sample 289 remains mixed/leaky under both prompt-box sources
+hypothesis_resolution:
+  H1_adapter_or_processor_binding: DISPROVEN at the frozen-sample scope
+  H2_sam_quality_selection: CONFIRMED_AS_SECONDARY_ROBUSTNESS_DEFECT but insufficient to satisfy the gate
+  H3_sam_prompt_or_capability: REMAINS_PRIMARY because exact truth boxes and analysis-only oracle variants do not rescue the frozen failures
+decision:
+  result: CURRENT_TRANSFORMERS_SAM_PATH_BOUND_VALIDLY
+  next_boundary: distinguish Transformers conversion/runtime behavior from the official native SAM 2.1 image predictor using the same bundled native checkpoint and the same frozen train/val-only images and boxes
+  prohibited_inference: no claim that SAM fine-tuning or replacement is yet required
+tests:
+  ordinary_gate: not rerun; no repository implementation changed
+  explicit_benchmark_gate: not rerun; no benchmark-owned member changed and r30/r222 remain preserved
+evidence:
+  r292: {preflight_sha256: 4fc3dc6a0c5a3f206c4dedab8f03b6547f0bf5f0a6c958ff5d09a0d953f7fd25, run_sha256: 9c87da811d205524960d36092b04774bb8ac918303d4279ee5eb2353a7157a42, stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, exit_sha256: 4b8b9e2a8bb4cbb01df07c5ca8d3e8602b8b12f92b1a4b7627d725afba101e82}
+  r293: {preflight_sha256: 241b8b443ed2f8aacaefb9bb4308f75d538a561be5e7e9c48ee554b5db00b34a, run_sha256: dcb9fb3713c176845e3d2847bbf541aafb94801534152495448ed126af7385a9, stderr_sha256: f6cfe73559c8f078161ed03ac34b96c7488023b07abccc9ce8b2730ec836dea9, exit_sha256: 1d19c672a7d957cf999f1d8f99cce50ac389bdfb2467fa17f30cc03fa68fb8d7}
+  r294: {preflight_sha256: 89b368b95e33b6390df8aae44a3058136e05d15ec39afaa15a2886dde64530e2, summary_sha256: cde2db1424f7d5d907ed3ab2c4020b9c57789d29d921b116d2b7d92ba1669103, exit_sha256: d24219f6de94b955cf36d25bd2aca88e2d35eef45b9317b7083f55ec8fe9653c}
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r291 immutable diagnostic, r292 independent readback, r293 model-class audit, r294 per-sample summary, all CP-143 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r289-r294 scratch; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-144 with remote SHA readback, then preregister a same-checkpoint native-SAM A/B diagnostic before any implementation or model decision
+```
