@@ -18513,3 +18513,29 @@ next_experiment:
 retention: r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no benchmark/official generation/render/MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-330 — r492 ordinary gate has one valid order-dependent test failure; root-cause audit required
+
+```yaml
+checkpoint: CP-330
+status: VALID_ORDINARY_GATE_FAILURE_ROOT_CAUSE_AUDIT_PLANNED
+run_id: linux-test-stage-e-generator-nonpenetrating-r492-ordinary
+executor: /root/generator_build, gpt-5.6-sol high
+source: execution HEAD/Gitee a3a1c2ca8ed31b1173b8136e691afcaa288d87f1; package code exact aebf4cab032f64f9fa66fcf965b01803d9bd80d7; scoped source clean/no drift
+result: {classification: VALID_ORDINARY_GATE_FAILURE, tests: 1472, passed: 1471, failures: 1, errors: 0, skipped: 0, ordinary_cases: 1472, benchmark_cases: 0, colcon_test_exit: 0, test_result_exit: 1, receipt_exit: 1, tool_exit: 1, colcon_elapsed_seconds: 25.49, total_elapsed_seconds: 28.259095101, invocations: 1}
+sole_failure: test_nonpenetrating_train_val_contract.py::test_contract_tests_load_no_rendering_modules at line808; process-global assertion found mujoco already in sys.modules
+initial_evidence: ordinary files test_mujoco_scene_geometry.py and test_mujoco_runtime_observability.py legally import mujoco and collect before the new contract test; the same assertion passed in the focused175 selection lacking that prior process state; therefore failure currently indicates an order-dependent test oracle, not renderer execution or production import regression
+environment: exact locked Python, fresh durable NVMe scratch/tempfile preflight, explicit basetemp/cache, all seven r491 prefixes and both checkout imports verified; no benchmark collected
+evidence: durable run-evidence/linux-test-stage-e-generator-nonpenetrating-r492-ordinary retained; JUnit SHA256 a78a25c7cc7320d4644118fcaef5a7defe1b2bb22a496d0421ae2d7fe55d141f; result SHA256 fd8b62223f4358547d764b845fac7e57796a61a05737e2b520b905aa2cc4961c; inventory SHA256 dfd1102e7032b2ff7ef24eddb6442bb1d1a0047c0325e8f004dd6d8248a7e8a8; runner SHA256 c30e55048daf26dac3ec8e2422a99e4f9f500faed7e2a9d05b15e3be506cc3bc
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-ordinary-r492-report.md SHA256 8d3c81b7a8a402afa61f95a82f49c3930482d7e701743ea02aec15cd20f47ffa
+parent_readback: complete92-line report, sole traceback, exact counts/partition/exits/timing, preflight, JUnit/result/inventory/log hashes and relevant import sites read; no rerun or edit
+next_experiment:
+  status: PLANNED_READ_ONLY
+  run_id: stage-e-generator-ordinary-order-dependency-root-cause-r493
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: systematic-debugging phases1-3 from retained r492 plus complete static source/order/reference inspection; identify intended invariant, recent-change origin, comparable working isolation test, exact hypothesis, and smallest TDD correction; no execution/import/root allocation/edit/Git/index
+  decision_gate: parent checkpoint must approve any test change; explicit benchmark remains prohibited until a fresh ordinary GREEN on accepted source
+phase_plan_correction: r493 root-cause audit, r494 test-oracle GREEN plus Astra review, r495 fresh build if accepted, r496 ordinary, r497 one explicit benchmark, then private generation-runner RED/GREEN/review and official train/val-only generation/conversion/freeze with new unique run IDs; each separately checkpointed
+retention: r492/r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no edit/rerun/benchmark/official generation/render/GL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change in r493; MuJoCo module import during r492 ordinary suite disclosed; Microduck paused; mask0.80/mapping0.98 unchanged
+```
