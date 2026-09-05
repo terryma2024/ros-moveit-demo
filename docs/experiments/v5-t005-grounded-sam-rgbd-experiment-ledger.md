@@ -18049,3 +18049,47 @@ next_experiment:
 retention: preparation report and all earlier evidence retained, archived none; no new scratch deletion candidate and nothing deleted
 boundaries: no test namespace is allocated by this version; sealed test/COCO100/PickPlace/Mac inaccessible; no generation/inference/training/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-313 — protocol review corrections frozen; scoped re-review required
+
+```yaml
+checkpoint: CP-313
+status: CHANGES_REQUESTED_CORRECTED_PROTOCOL_REREVIEW_PLANNED
+experiment_id: EXP-079-STAGE-E-NONPENETRATING-TRAIN-VAL-VERSION-R1
+reviewer: /root/generator_review, gpt-6-astra medium
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-protocol-review-report.md SHA256 cc827cd779b108f14c8d1f22f873ba8ce9deb87fbc9c44d6559a95c56a102687
+verdict: spec CHANGES_REQUESTED, implementability CHANGES_REQUESTED; science population/nonpenetration objective coherent; no generation authorized
+unchanged_science: CP312 counts/scenarios/primary reporting/seed intervals/CP075-076 camera-object-acceptance geometry/nonpenetration/RLE truth/class cup/prompt cup. and no-test boundary remain exact
+correction_actual_context:
+  allocation_order: static/source/config/output-preabsence gates, then unique evidence and scratch roots plus exact locked-Python tempfile gate; official dataset root remains absent
+  mechanism: separately TDD-reviewed private generation driver loads exact config, constructs one production MuJoCoDatasetRenderer, inspects and durably persists its actual persistent RGB and zero-sample categorical EGL contexts, then passes that exact renderer instance to public generate_dataset(config,output_root,renderer=renderer)
+  failure: context inspection or NVIDIA/software/backend mismatch closes renderer in finally and leaves dataset root absent; no fallback renderer construction; driver always closes same renderer; public generator CLI remains unchanged and is not the official invocation
+  timing: both actual context receipts must exist before public generate_dataset is called; event evidence then binds accepted geometry/retry lifecycle during generation
+correction_format_dispatch:
+  discriminator: top-level dataset_contract is exact string so101-nonpenetrating-train-val-v1 in new config and manifest
+  member_splits: manifest exact JSON array [train, val] in that order
+  new_contract: discriminator present only with schema_version exactly2, member_splits exact, exact train/val split_counts/seed_starts/seed_ranges/scenario_quotas/maps and scene_geometry_policy task-visual-nonpenetration-v1; unknown/changed/missing required field, extra/reordered/duplicate split or any test member/path/map fails closed
+  legacy_contract: discriminator absent is accepted only through the existing exact three-way train/val/test path with prior schema1/2 behavior and bytes; any unknown discriminator rejects and two-way data cannot downgrade to legacy
+  dataset_yaml_new_exact: {path: ., train: images/train, val: images/val, names: {0: plastic_cup}} with no test key; manifest/artifacts/profile similarly have no test entry
+correction_truth_no_downgrade:
+  visible_targets: every target in the new contract requires the complete visible mask_shape_hw, visible_mask_rle_counts, visible_mask_sha256 and visible_pixel_count contract; polygon-only or partial field sets reject; no_cup has zero targets
+  partial_targets: complete paired-reference and amodal RLE/hash/count/fraction/occluder/reference fields required in addition to visible; exact visibleORreference, strict subset and CP076 gates
+  receipt: each truth scene_geometry exact keys [policy,accepted,pairs,state_sha256], exact policy, accepted plain bool true, lowercase SHA; every pair exact keys [body_names,geom_names,primitive_pair_count,signed_distance_m], scenario-derived ordered scope, supported selected geom structure, positive plain-int count, finite non-bool distance and minimum >=-1e-9; converter normalizes violations into existing fail-closed error contract
+correction_tests: r480 RED additionally removes whole ordinary visible-RLE set, deletes/changes discriminator/policy, downgrades schema, reorders/duplicates splits, injects test paths/members/maps, mutates receipt keys/types/scope/distance; legacy three-way fixtures are newly synthetic and never read sealed data
+correction_gates: r483 ordinary command uses package-relative `colcon test --packages-select so101_demo_py --pytest-args test`, separately reads JUnit and colcon test-result plus new build/install/log identities; r484 remains one explicit benchmark_test gate
+correction_modes_profiles:
+  generated_source: wrapper sets umask022; source root exact0700, descendant dirs0755, regular files0644 before freeze; r488 verifies every type/mode/hash and no symlink/special
+  archive: exact4502 regular-file entries only and zero directory/link/special entries, deterministic sorted NUL file list with no recursion; header mode0444, uid/gid0, names numeric0, mtime0, gzip-n; independently compare every payload SHA to source
+  final_filesystem: after source/archive/conversions/readbacks, source/primary/repro regular files0444 and all dirs including roots0555, then fsync and complete reread
+  primary_profile: all-scenario dataset-profile remains one of exactly three conversion JSON files; primary1000/250 derivation is a separate immutable r493 run-evidence audit receipt, never converter/runtime filtering
+runtime_reuse: r470 proves one fixed one_cup_distractors sequence only; post-GREEN review must show exact renderer/geometry/RNG/mask/acceptance hunks unchanged despite whole-file hash change; it does not prove six-scenario quotas or exhaustion-free new seeds
+corrected_phases: r480 tracked tests-only RED; r481 minimal source/config GREEN and review/commit; r482 fresh seven-package build; r483 ordinary; r484 explicit benchmark; r485 private generation-runner offline RED; r486 runner GREEN and Astra review; r487 official generation; r488 source readback; r489 archive; r490 archive readback; r491 primary conversion; r492 reproducibility conversion; r493 byte-identical/profile/mode/hash freeze
+reservations: prior four final roots and r480-r491 remain absent; r492/r493 run/scratch independently checked absent under -e and -L; no allocation performed
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: verify these exact corrections close CP312 findings and authorize only r480 tests-only RED
+  restrictions: no edit/import/test/render/root allocation/sealed traversal
+retention: all reports and evidence retained, archived none; no new scratch deletion candidate; nothing deleted
+boundaries: no source implementation or official config yet; no generation/test namespace/sealed-test/COCO100/inference/training/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
