@@ -17878,3 +17878,27 @@ next_experiment:
 retention: r474-r477 and all earlier evidence retained, archived none; scratch trees are deletion candidates only and nothing was deleted
 boundaries: no actual r470/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
 ```
+
+## Checkpoint CP-307 — r477 scoped re-review rejects launch; producer-contract RED planned
+
+```yaml
+checkpoint: CP-307
+status: CHANGES_REQUESTED_PRODUCER_CONTRACT_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+reviewed_driver_sha256: e266450e88a74db2d9d6f27c0ebff66eb32f20d9ef451c7f8355ca6714948259
+reviewed_shell_sha256: 7f7c4e6089087dfddabf26e4e93a0b2a314fbab344478ecf225b3326c3b58849
+review_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-behavioral-green-rereview-report.md SHA256 45a3100ad5701c9577d85fb6c31f94a62012912a578e9e0450657c97abf01281
+verdict: spec CHANGES_REQUESTED, code_quality CHANGES_REQUESTED; no r470 launch command approved
+important: driver receipt producer derives categorical filename from semantic purpose categorical_segmentation, yielding underscore filenames, while GPU_RECEIPT_PATHS, artifact hashing and shell allowlist require categorical-segmentation; successful rendering would deterministically fail after output production
+minor: truth geometry_receipt_present is type-checked but not value-bound; flipped enabled=false or legacy=true flags can pass after ordinary hash bookkeeping refresh
+confirmed_addressed: prior resolved-Python R1; previously listed manifest/preflight/nested-array R2 mutations; independent canonical categorical bytes and frozen np.int32 HxW production compatibility; strict PNG R3; structural inventory/durability/hash-binding fixes subject to the filename defect
+next_experiment:
+  status: PLANNED_RED_ONLY
+  run_id: stage-e-generator-runtime-acceptance-runner-producer-contract-red-r478
+  executor: /root/generator_build, gpt-5.6-sol high
+  method: exact locked Python with unique durable NVMe scratch and tempfile preflight; no-GL harness stubs only context inspection and calls real receipt persistence for all four GPU_CONTEXT_KEYS, proving emitted paths differ from canonical GPU_RECEIPT_PATHS while JSON case/purpose remains semantic; add enabled/legacy truth-presence flag-flip mutations plus valid controls
+  required: preserve exact r477 driver/shell before RED; complete command/exit/time/stdout/stderr/input/source/package/no-r470-root receipts; classify expected defects separately from harness errors
+  stop_after: freeze authoritative RED evidence/report and parent checkpoint before any driver correction
+retention: all prior evidence and review retained, archived none; no evidence deleted; future r478 scratch deletion candidate only
+boundaries: r470 held; no driver correction yet and no GL/render/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
+```
