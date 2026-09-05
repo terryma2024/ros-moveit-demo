@@ -18819,3 +18819,27 @@ next_experiment:
 retention: r500/r499/r498 and all earlier evidence retained, archived none; all scratch trees deletion candidates only and nothing deleted
 boundaries: official four final roots remain absent; sealed-test/COCO100/PickPlace/Mac/SAM unchanged and inaccessible; no benchmark rerun; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-342 — r501 authoritative generation-runner RED valid; scoped Astra review required
+
+```yaml
+checkpoint: CP-342
+status: VALID_GENERATION_RUNNER_CONTRACT_RED_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-red-r501
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_CONTRACT_RED, authoritative: true, launcher_invocations: 1, harness_invocations: 1, harness_test_exit: 1, launcher_outer_tool_exit: 0, receipt_exit: 0, controls: 12/12, expected_defects: 1, defect_code: GENERATION_RUNNER_MISSING, harness_errors: 0, forbidden_modules_before: [], forbidden_modules_after: [], stderr_empty: true, harness_elapsed_seconds: 0.026484223}
+single_variable_retry: r500 harness byte-identical SHA25687910ca84d541166e0795052ad0eaec56cd458c50691605ca53941928676e34d; r501 launcher SHA256d50d6f03a52286e14a7ff3481c4f194d889d7d918806ae86b613175b9b978913 differs only in new run ID, execution HEAD and removal of impossible tempfile parent predicate
+provenance: execution HEAD/Gitee7012c9d9; accepted package/code07dcd29a; generator8b0844aa; converter6a2176ef; config677a48fa; accepted testc8047f6f; r495 all7 overlay prefixes; exact locked Python resolved/usr/bin/python3.12; retained r470 acceptance identities exact; scoped source clean
+scratch: fresh durable scratch/stage-e-generator-nonpenetrating-generation-runner-red-r501/tmp with exact locked-Python tempfile equality; receipt SHA2561568fbb76daf0e62e90dbfa26df32a2a3fc564b5080743f25e118afefc49db5d
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-red-r501; result SHA2560d886790585c1b2ca46e59d386d1568c06a2e399c3c3ea1f7fa74f510eb87b8d; inventory SHA256b0e5c38222cab7c3ee3c3563ab074fccac2846f92a9648795a47a787ce3afc69; inventory-readback SHA256621d171e3372fc15e9462476de4aa7f98935aef3e59db069b744c410b721ad90; command SHA256b89a4e9ac05727a8aa83628bbd383d0ad86a29c0ea1e7d71c8849a20289785f6; sha256sum-c all12 OK
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-red-r501-report.md SHA25657a7a0374b812b7241267e15911eac4df68a8abee32a34f538e861bf79c04715
+parent_readback: complete97-line report and result/inventory/readback/tempfile/command receipts read; inventory verified from evidence cwd; official roots and proposed runner pair remain absent; repo has only original three untracked directories
+next_experiment:
+  status: PLANNED_READ_ONLY_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: independently validate CP313 binding, r500-to-r501 single-variable retry, authoritative RED classification, exact frozen contract/provenance/collision/sealed boundaries, and sufficiency of the proposed private driver/shell GREEN plus offline ordering/identity/failure tests; report Critical/Important/Minor and approve/change-request
+  restrictions: read-only; no imports/tests/root allocation/edit/Git/index/ledger/sealed traversal; no GREEN or official generation before review
+future_if_approved: authorize Sol high to implement exactly two private T-root runner files and an offline no-GL dependency-injected GREEN harness in a fresh run ID; Astra implementation review remains required before any actual GL or official dataset allocation
+retention: r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: official roots absent; no project/MuJoCo/OpenGL runtime/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM action; no benchmark rerun; Microduck paused; mask0.80/mapping0.98 unchanged
+```
