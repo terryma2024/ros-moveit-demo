@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-258
+latest_checkpoint: CP-259
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 682bf2c134b8af8e1d6f807357dbf6608a032ed8
+source_parent: 2e817ca01206427615e6ed81164ef6806d2ab1c0
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r429 INVALID before model load due to overly narrow mesh path guard; r430 permits verified assets/common symlink targets within this checkout, otherwise unchanged fixed-three-frame geometry audit
+next_action: r430 confirms actual visual-wall intersection in all three residual frames; r431 measure all retained250 train/val two-cup scenes without changing metrics, data, models or gates
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16469,4 +16469,47 @@ next_run:
   command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-retained-cup-geometry-r430 audit_r5_cup_geometry_r430.py NEXT_SYNCED_HEAD
 retention: r429 and all history retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no training, no cohort/gate changes
+```
+
+## Checkpoint CP-259 — All three residual scenes contain intersecting visible cup solids
+
+```yaml
+checkpoint: CP-259
+status: VALID_RETAINED_GEOMETRY_INTERSECTION_CONFIRMED_SCOPE_AUDIT_PLANNED
+run_id: stage-e-r5-retained-cup-geometry-r430
+source_commit: 2e817ca01206427615e6ed81164ef6806d2ab1c0
+gitee_sha_readback: 2e817ca01206427615e6ed81164ef6806d2ab1c0
+result: {exit_code: 0, elapsed_seconds: 0.54, frames: 3, visual_pairs_per_frame: 169, model_forwards: 0, renders: 0, physics_steps: 0}
+report_sha256: 8d2b1c1a4236fad1d775057ea9dae12d3c8bea45ed96e05e0f1a463a49f5ae20
+observed:
+  - {index: 104, cup_center_distance_m: 0.06160757782564553, intersecting_wall_pairs: 2, maximum_wall_penetration_m: 0.005933234371196479, bottom_radial_overlap_m: 0.018392422174354474}
+  - {index: 236, cup_center_distance_m: 0.06063157030972227, intersecting_wall_pairs: 4, maximum_wall_penetration_m: 0.001834586059081822, bottom_radial_overlap_m: 0.01936842969027773}
+  - {index: 242, cup_center_distance_m: 0.04312156668872883, intersecting_wall_pairs: 2, maximum_wall_penetration_m: 0.002934504615874867, bottom_radial_overlap_m: 0.03687843331127117}
+independent_evidence: actual visual-wall box signed distances from mj_geomDistance agree with independent oriented-box separating-axis intersections; both radius0.040 bottom cylinders share z and overlap radially and by0.002m axially
+provenance: exact CP-210 immutable array receipts, r5 val inventory and original RGB hashes; exact visible RLE reproduced from categorical IDs; original qpos/camera/material state; pinned MJCF/config and all transitive local assets hashed before/after load
+readback: readonly report and selection hashes verified; independent math.hypot positions agree within6.94e-18m; initial exact-float equality readback assertion was too strict, replaced with1e-15m comparison, not a geometry or gate change
+confirmed: these three rendered scenes contain mutually intersecting cup wall solids; not merely conservative collision-proxy overlap or legitimate disjoint projected occlusion
+not_confirmed: how much of each SAM error is caused by intersection versus remaining segmentation limitations; no counterfactual images or model forwards generated
+correction: CP-211/CP-213 acceptance verified the originally declared image/size/occlusion rules, not physical nonpenetration; preserve their history and metrics, do not interpret that acceptance as geometric validity
+metrics: allF1 0.99 and primaryF1 0.988 unchanged; all three sub0.80 failures remain failures; no extra primary exclusions
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/stage-e-r5-retained-cup-geometry-r430/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  experiment_id: EXP-079-STAGE-E-R5-TRAIN-VAL-CUP-GEOMETRY-R1
+  run_id: stage-e-r5-train-val-cup-geometry-r431
+  prior_experiment: stage-e-r5-retained-cup-geometry-r430
+  lifecycle: REUSE_STACK offline model state only
+  single_variable: expand measurement from three fixed residuals to every existing two_cups train/val frame,200train/50val; unchanged geometry algorithms
+  selection: immutable corrected-r5 train/val inventories, scenario two_cups only; membership frozen before measurements; train410000000..410001199 and val420000000..420000299 only
+  method: same exact capture/RGB/RLE/state and asset verification; all visual primitive distances, independent wall SAT and bottom overlap, proxy contacts separately
+  success_criteria: complete250-member provenance-bound geometry census and split counts; independent reproduction of prior three witnesses; no dropped frames, no sealed reads
+  invalid_criteria: wrong membership/hash/state/model, missing frame, ambiguous geometry; preserve failed run without resuming directory
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-train-val-cup-geometry-r431 audit_r5_train_val_cup_geometry_r431.py NEXT_SYNCED_HEAD
+next_after_census: checkpoint physical-data issue and freeze root-boundary RED regression/reconstruction proposal; do not train SAM to accommodate physically intersecting samples
+retention: all historical data/models/evidence retained, including INVALIDr429; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no training, no label/metric/cohort/gate changes
 ```
