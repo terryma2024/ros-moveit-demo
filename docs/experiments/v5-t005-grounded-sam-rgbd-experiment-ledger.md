@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-254
+latest_checkpoint: CP-255
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r426 epoch4 launcher frozen; commit/push/readback then one own-raw/production SAM replay with fixed CP-250 filters, no DINO or training
+next_action: r426 epoch4 primaryF1 0.988,3mask failures all ambiguous two-cup frames; r427 independent own-raw/production readback and residual details, no new inference
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16316,4 +16316,43 @@ GZ_PARTITION: not_applicable_offline
 next: execute once, retain/freeze/readback; if error occurs, do not rerun valid retained inference just to audit it
 retention: all prior evidence retained; no archival/deletion; scratch deletion candidates only
 boundaries: no sealed-test/COCO100/PickPlace/Mac; Microduck paused; no SAM training; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-255 — Frozen epoch4 replay improves masks; three ambiguous-frame failures remain
+
+```yaml
+checkpoint: CP-255
+status: VALID_EPOCH4_PRODUCTION_REPLAY_INDEPENDENT_READBACK_PLANNED
+run_id: stage-e-r5-epoch4-sam-production-r426
+source_commit: 0c9af00b8a163b5261cabea66c57bca304ac98f8
+gitee_sha_readback: 0c9af00b8a163b5261cabea66c57bca304ac98f8
+result: {exit_code: 0, elapsed_seconds: 93.05, model_loop_seconds: 85.26917050802149, frames: 300, raw_sam_forwards: 300, production_sam_forwards: 250, dino_forwards: 0, raw_masks: 2312, production_masks: 300, errors: 0}
+all_scenario: {tp: 297, fp: 3, fn: 3, precision: 0.99, recall: 0.99, f1: 0.99}
+primary_near_workspace: {tp: 247, fp: 3, fn: 3, precision: 0.988, recall: 0.988, f1: 0.988}
+actual_selector: {TARGET_AMBIGUOUS: 50, TARGET_NOT_FOUND: 50, UNIQUE: 200, no_cup_unique: 0, two_cup_unique: 0}
+scenario_mask_results: one_cup_distractors50/50, cup_near_bottle50/50, partially_occluded_cup50/50, small_far_cup50/50, two_cups97/100; no_cup50/50NOT_FOUND
+mapping: {errors: 0, minimum_own_raw_production_iou: 0.9997407983411094, required_iou: 0.98}
+comparison_observed: original primaryF1 0.964 versus epoch4 0.988 at identical DINO0.40/0.40 and SAM0.50; original9primary failures versus epoch4 3, all epoch4 failures in AMBIGUOUS two-cup frames
+qualification: NOT_FINAL; do not erase three sub0.80 masks or claim all masks passed because frames are ambiguous; independently verify residuals and original safety contract before any gate release
+output_root: durable val-remediation/grounded-sam-cup-r5-epoch4-production-r1
+report_sha256: e3d1291abb80a5e082bfdca8be37b129f01e70a9215dbad08f2374738a523b52
+output_inventory_sha256: 856f5d3e501fe7b73605218a8d48c02261a1680bfeb0e8f75d68b7912e8d1ce1
+provenance: original r5 DINO bundle identity and historical epoch4 SAM checkpoint identity separate; full checkpoint bytes verified, CUDA FP32 local-only; own raw and production masks retained, no DINO model forward or training
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-epoch4-sam-production-r426/tmp; actual tempfile exact preflight passed
+owned_processes: tmux so101-exp079-r5-epoch4-r426 and Python3755139 finished naturally
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-r5-epoch4-sam-readback-r427
+  single_variable: NONE; independent retained-artifact reconstruction only
+  checks: full immutable file inventory; all300 low-floor NPZ/qualities and2312raw masks reproduce argmax/size/quality rules; all300 production NPZ/qualities/masks, actual filtering and TargetSelector, own mapping0.98, all/primary/scenario metrics
+  residual_audit: record each sub0.80 candidate ID, matched truth, pixels/boxes, real decision, all three retained multimask IoUs and predicted qualities; diagnostic only, never choose runtime masks by truth
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-epoch4-sam-readback-r427 audit_r5_epoch4_sam_r427.py NEXT_SYNCED_HEAD
+  new_model_forwards: 0
+next_after_readback: audit residual cause and original safety-gate scope, preserve all-scenario metrics and all three failures; no automatic SAM retraining or threshold change
+retention: all historical data/models/raw/evidence retained; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged; no deployment claim
 ```
