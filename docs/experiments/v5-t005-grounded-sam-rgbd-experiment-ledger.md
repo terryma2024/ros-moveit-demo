@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-216
+latest_checkpoint: CP-219
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: RED to GREEN on explicit mask-box export normalization for the DINO trainer; preserve r5 source and derive a new trainer inventory before smoke
+next_action: publish owned box-export fix, create immutable r5 trainer inventory and frozen training contract, then offline container smoke before formal training
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15084,4 +15084,102 @@ provenance:
   GZ_PARTITION: not_applicable_offline
 retention: all historical raw/model/data/diagnostic evidence retained; no archived or deleted runs; scratch deletion candidates only
 boundaries: CP-161/164 diagnostics unchanged; test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-217 — Trainer-compatible mask-box export RED to GREEN
+
+```yaml
+checkpoint: CP-217
+status: VALID_DIRECTED_GREEN_BUILD_PLANNED
+experiment_id: EXP-079-STAGE-D-R5-TRAINER-BOX-NORMALIZATION-R1
+source_parent: 4f0a428ab0b37892d55a4ce2a7d5bdc604f38acd
+red: {run_id: stage-d-r5-box-normalization-red-r383, failed: 5, passed: 25, exit_code: 1, elapsed_seconds: 1.25}
+green: {run_id: stage-d-r5-box-normalization-green-r384, passed: 30, exit_code: 0, pytest_seconds: 0.93, elapsed_seconds: 1.20}
+regressions: real trainer rejects legacy polygon-normalized mask box; explicit dimension-aware export loads through real trainer and COCO annotation conversion; official schema2 converter uses exact visible-mask box; invalid image dimensions rejected
+implementation: grounding_dino_dataset._box_document requires explicit image dimensions and normalizes absolute coordinates by width/height; official converter exports verified truth box instead of reconstructing its absolute extent from compatibility polygon
+unchanged: binary mask extent, polygon compatibility representation, canonical visible/reference/amodal RLE, image bytes, training labels/classes, IoU thresholds and old evidence
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  directed_import: r370 symlink overlay resolving to this owned checkout
+  scratch: separate registered durable scratch/r383 and scratch/r384 run-specific tmp directories; exact Python tempfile preflights passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  status: PLANNED
+  build_run_id: linux-build-stage-d-r5-box-export-r385
+  ordinary_run_id: linux-test-stage-d-r5-box-export-r386-ordinary
+  lifecycle: FULL_RESTART build and test processes
+  packages: same seven-package symlink overlay set as r370; exact verified r26 lodepng source, fetching disconnected
+  gates: targeted source/code receipts, seven package-prefix/source readback, ordinary test-only nonzero collection and zero failures/errors, NVMe tempfile preflight and complete JUnit/log/time evidence
+  next: commit owned code/test/ledger and ordinary-push/readback, then preregister a new trainer-only inventory view; no old r5 files overwritten
+benchmark: this training dataset export change does not alter benchmark code; preserve r363 until changed-model comparison gate
+retention: r383 RED and r384 GREEN logs/JUnit/source patches retained; no archival or deletion; scratch deletion candidates only
+boundaries: no model training started, SAM unchanged, sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused
+```
+
+## Checkpoint CP-218 — Fresh r5 box-export overlay built
+
+```yaml
+checkpoint: CP-218
+status: VALID_BUILD_ORDINARY_NEXT
+run_id: linux-build-stage-d-r5-box-export-r385
+source_parent: 4f0a428ab0b37892d55a4ce2a7d5bdc604f38acd
+owned_patch: grounding_dino_dataset.py and test_grounding_dino_dataset_augmented.py; source patch and exact file copies retained with build evidence
+result: {packages_finished: 7, exit_code: 0, elapsed_seconds: 56.85}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-box-export-r385/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-d-r5-box-export-r385/tmp; exact tempfile readback passed
+lodepng: r26 HEAD ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a and strict fsck verified; source cache unchanged; fetch fully disconnected
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+static: ruff check and git diff --check passed
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_box_export_r386.sh
+retention: build/source/cache receipts retained; no evidence deletion or archival; scratch deletion candidate only
+boundaries: no training or sealed access; Microduck paused; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-219 — Ordinary gate GREEN; r5 trainer-view and DINO recipe frozen
+
+```yaml
+checkpoint: CP-219
+status: VALID_ORDINARY_GREEN_TRAINER_VIEW_PLANNED
+run_id: linux-test-stage-d-r5-box-export-r386-ordinary
+source_parent: 4f0a428ab0b37892d55a4ce2a7d5bdc604f38acd
+result: {passed: 1281, errors: 0, failures: 0, skipped: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.22, elapsed_seconds: 17.77, colcon_exit: 0, test_result_exit: 0}
+collection: ordinary test directory only
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-box-export-r385/install
+  prefixes: all seven package prefixes and source import read back before test
+  scratch: durable scratch/linux-test-stage-d-r5-box-export-r386-ordinary/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static: ruff and git diff --check passed
+owned_changes: grounding_dino_dataset.py, test_grounding_dino_dataset_augmented.py and ledger; original untracked build/install/log directories preserved
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-R5-TRAINER-VIEW-R1
+  status: PLANNED
+  run_id: stage-d-r5-trainer-view-r387
+  output: durable training-data/grounding-dino-cup-r5-train-val-trainer-r1
+  report_output: durable truth-remediation/r5-trainer-view-r1
+  single_variable: normalized box coordinates exported from unchanged r5 absolute mask boxes using640/480 for the trainer; no image/mask/absolute-box/seed/scenario changes
+  guards: pinned r5 source and prior converted hashes; all original file identities preserved; real load_verified_split consumes all train1200/val300 with exact box/normalized agreement; negative targets and six-scenario smoke subset preserved
+  contract: immutable contract.json copied from original Grounding DINO training recipe with only data identities updated to r5 and new converter commit; source archive SHA remains explicitly historical ancestry
+training_contract:
+  base: original IDEA-Research/grounding-dino-tiny revision a2bb814dd30d776dcf7e30523b00659f4f141c71, frozen11-file inventory from CP-080
+  start: from original base weights, not contaminated r3 epoch7; smoke and formal each start independently from base
+  recipe: unchanged CP-080/CP-093 seed20260904, all DINO parameters trainable, AdamW lr1e-5 betas0.9/0.999 eps1e-8 weight_decay1e-4, linear decay warmup0.10,8epochs,batch1,accumulation4,clip0.1,BF16 train/FP32 val and weights,gradient checkpointing,2workers,no extra augmentations
+  determinism: existing explicit deterministic_warn_only=true CUDA exception retained, cuDNN deterministic/benchmark false and flash/memory-efficient SDP disabled; no new reproducibility claim
+  validation_selection: preserve original preregistered all-scenario synthetic-val box threshold and epoch ranking for a controlled label-correction experiment; primary near-workspace qualification still separately excludes only small_far_cup and cannot be bypassed by all-scenario performance
+  thresholds: original fixed0.05..0.50 box/text grid, bboxIoU0.50; no COCO100 or test access
+  SAM: absent from training container, no parameters changed; later evaluate frozen original SAM and retained epoch4 only with corrected DINO prompts before selecting final pipeline
+  output_parent: durable training/grounding-dino-cup-r5-r1; only r5 smoke/formal artifacts in the mounted parent, not the broad training directory containing SAM
+  container: fresh source layer atop locally verified gcfix3 image ID d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550; no network or dependency fetch, record new image ID and exact source hashes
+  mounts: train images ro, val images ro, two inventories ro, contract ro, DINO base ro, dedicated r5 output parent rw, unique NVMe scratch rw; no sealed/test/COCO100/SAM mounts
+  tempfile: TMPDIR/TMP/TEMP use the exact run-specific host /data scratch path also mounted at that path inside container; actual /opt/venv/bin/python verifies tempfile before training; do not repurpose HOME
+planned_run_ids: {container_build: stage-d-r5-training-container-r388, smoke: stage-d-r5-training-smoke-r389, smoke_readback: stage-d-r5-training-smoke-readback-r390, formal: stage-d-r5-training-formal-r391}
+launch_order: commit/push/readback -> r387 trainer view -> fresh container -> one six-scenario smoke epoch and fresh reload -> independent smoke checkpoint readback -> formal8epoch training in owned tmux window
+benchmark: preserve r30/r363; require explicit benchmark for changed-model comparison, no rerun merely for this export-only ordinary gate
+retention: all runs retained; no deletion or archival; scratch candidates require separate deletion authorization
+boundaries: test/COCO100/PickPlace/Mac inaccessible; Microduck paused; generic cup and prompt cup.; mask IoU0.80 unchanged
 ```
