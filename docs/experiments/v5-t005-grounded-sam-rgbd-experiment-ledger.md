@@ -18455,3 +18455,30 @@ next_experiment:
 retention: r488/r487 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-328 — r490 scoped review approved; owned commit and fresh build authorized
+
+```yaml
+checkpoint: CP-328
+status: REVIEW_APPROVED_OWNED_COMMIT_BUILD_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+review_verdict: {N1: ADDRESSED, new_critical: 0, new_important: 0, new_minor: 0, spec: APPROVED, quality: APPROVED}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-r490-rereview-report.md SHA256 0dec699ae2009767003aa79fc73d8aa0e19391d76efedb230fd4766f0bee5bb5
+review_scope_readback: exact r489 one-test patch, r490 five-line converter patch, RED/GREEN reports, result, complete175-case JUnit, and live source inspected; unexpected nonsymlink directory now rejects before insertion or recursion while canonical/missing/symlink/special/final-equality protections remain intact
+findings: original I1-I5/M1 and N1 addressed; N2 positive official converter population-validator control remains deferred Minor for final whole-branch triage and is nonblocking under the recorded review-loop policy
+accepted_inputs: generator SHA256 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59; converter SHA256 6a2176ef046592a63265986f2961c2f93f3bc34b41503f6482942766d40fd00e; config SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c; test SHA256 8ecb4ced7fe652877c99433b8f255221b597a116f83042696c142af9833f2772; full source patch against4a0 SHA256 c63a9532bf2f8e16795a607c3d45b193eaf0c434029bdde4ee297acac1522b67
+green_evidence: r490 VALID_CLEAN_GREEN 175/175, zero failures/errors/skips, pytest/outer/receipt/tool exits all0, elapsed5.23275333s; JUnit SHA256 03051eec1e18ffc78e04577f6957ca20ce1308969eec5dd7091ee4a31c3bb463; result SHA256 5f692a1e36b634277c6ef037e1ec4ac3a905aba2e19390e652851749afa210d1; inventory SHA256 c66f2ec61f3ea58de855c63f4c78181a6b9cbe6e9972a42bb9b9782076b5e869
+owned_commit_gate: commit only this ledger plus mujoco_dataset.py, grounding_dino_dataset.py, plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml, and test_nonpenetrating_train_val_contract.py; then fetch Gitee branch, rebase onto its exact tip without cleaning/stashing/switching, verify root AGENTS NVMe scratch rule, ordinary-push, and exact ls-remote readback; preserve original untracked build/install/log directories
+next_experiment:
+  status: PLANNED_AFTER_PUSH_READBACK
+  run_id: linux-build-stage-e-generator-nonpenetrating-r491
+  executor: /root/generator_build, gpt-5.6-sol high
+  source: exact owned commit after Gitee readback
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  build: fresh unique low-rate build/install/log tree under registered temporary root; symlink install; exact clean retained r26 lodepng cache at commit ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a with strict fsck/status and FETCHCONTENT_SOURCE_DIR_LODEPNG plus FULLY_DISCONNECTED; no network fetch
+  scratch: fresh unique durable scratch/linux-build-stage-e-generator-nonpenetrating-r491/tmp with TMPDIR/TMP/TEMP and exact locked-Python tempfile preflight
+  evidence: durable run-evidence/linux-build-stage-e-generator-nonpenetrating-r491 with command, exits, elapsed, source commit/status/diff, source hashes, lodepng receipts, all7 prefix readbacks, and checkout-source import readbacks; stop before tests
+phase_plan: r491 build, r492 ordinary, r493 one explicit benchmark, r494 private generation-runner RED, r495 runner GREEN/review, r496 generation, r497 source readback, r498 archive, r499 archive readback, r500 primary conversion, r501 repro conversion, r502 freeze; each separately checkpointed
+retention: all r490/r489 and earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no package test/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change in this checkpoint; Microduck paused; mask0.80/mapping0.98 unchanged
+```

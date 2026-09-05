@@ -352,27 +352,43 @@ class DatasetConfig:
     scenario_quotas: Mapping[str, Mapping[str, int]] | None = None
     geometry: SceneGeometry = SceneGeometry()
     require_nonpenetrating_scene: bool = False
+    dataset_contract: str | None = None
+    schema_version: int = 2
 
     def __post_init__(self) -> None:
         if type(self.require_nonpenetrating_scene) is not bool:
             raise ValueError("require_nonpenetrating_scene must be boolean")
+        if self.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+            if self.require_nonpenetrating_scene is not True:
+                raise ValueError("nonpenetrating dataset contract requires its geometry gate")
+            if type(self.schema_version) is not int or self.schema_version != 2:
+                raise ValueError("nonpenetrating dataset contract requires schema version 2")
         path = Path(self.mjcf_path)
         if not path.is_absolute():
             path = path.resolve()
         if path.is_symlink() or not path.is_file():
             raise ValueError("mjcf_path must be a regular file")
-        counts = dict(self.split_counts)
-        if set(counts) != {"train", "val", "test"}:
-            raise ValueError("split_counts must contain train, val, and test")
-        if any(not isinstance(value, int) or value <= 0 for value in counts.values()):
+        splits = _dataset_splits(self.dataset_contract)
+        raw_counts = dict(self.split_counts)
+        if set(raw_counts) != set(splits):
+            raise ValueError("split_counts must exactly match the dataset contract")
+        counts = {split: raw_counts[split] for split in splits}
+        if any(type(value) is not int or value <= 0 for value in counts.values()):
             raise ValueError("split counts must be positive integers")
         if not self.generator_commit:
             raise ValueError("generator_commit must be non-empty")
         if self.image_width <= 0 or self.image_height <= 0:
             raise ValueError("image dimensions must be positive")
-        starts = dict(_SEED_STARTS if self.seed_starts is None else self.seed_starts)
+        if self.seed_starts is None and splits != _LEGACY_SPLITS:
+            raise ValueError("seed_starts are required for the dataset contract")
+        raw_starts = dict(_SEED_STARTS if self.seed_starts is None else self.seed_starts)
+        if set(raw_starts) != set(splits):
+            raise ValueError("seed_starts must exactly match the dataset contract")
+        starts = {split: raw_starts[split] for split in splits}
         split_seed_plan(counts, starts)
         quotas = _validated_scenario_quotas(counts, self.scenario_quotas)
+        if self.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+            _validate_official_train_val_population(counts, starts, quotas)
         object.__setattr__(self, "mjcf_path", path)
         object.__setattr__(self, "split_counts", MappingProxyType(counts))
         object.__setattr__(self, "seed_starts", MappingProxyType(starts))
@@ -399,6 +415,31 @@ class DatasetConfig:
 
 _SEED_STARTS = {"train": 100000, "val": 200000, "test": 300000}
 _MAX_SEED = 999_999_999
+_LEGACY_SPLITS = ("train", "val", "test")
+_TRAIN_VAL_SPLITS = ("train", "val")
+_TRAIN_VAL_DATASET_CONTRACT = "so101-nonpenetrating-train-val-v1"
+_TRAIN_VAL_SPLIT_COUNTS = {"train": 1200, "val": 300}
+_TRAIN_VAL_SEED_STARTS = {"train": 450_000_000, "val": 460_000_000}
+_TRAIN_VAL_SCENARIO_QUOTAS = {
+    "train": {scenario.value: 200 for scenario in DatasetScenario},
+    "val": {scenario.value: 50 for scenario in DatasetScenario},
+}
+
+
+def _dataset_splits(dataset_contract: str | None) -> tuple[str, ...]:
+    if dataset_contract is None:
+        return _LEGACY_SPLITS
+    if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+        return _TRAIN_VAL_SPLITS
+    raise ValueError("unknown dataset contract")
+
+
+def _splits_for_maps(*maps: Mapping[str, object]) -> tuple[str, ...]:
+    key_sets = [set(item) for item in maps]
+    for splits in (_LEGACY_SPLITS, _TRAIN_VAL_SPLITS):
+        if all(keys == set(splits) for keys in key_sets):
+            return splits
+    raise ValueError("split maps must exactly match a supported dataset contract")
 
 
 def _validated_scenario_quotas(
@@ -407,11 +448,10 @@ def _validated_scenario_quotas(
 ) -> dict[str, dict[str, int]] | None:
     if scenario_quotas is None:
         return None
-    if set(scenario_quotas) != {"train", "val", "test"}:
-        raise ValueError("scenario quotas must contain train, val, and test")
+    splits = _splits_for_maps(split_counts, scenario_quotas)
     known = {scenario.value for scenario in DatasetScenario}
     result: dict[str, dict[str, int]] = {}
-    for split in ("train", "val", "test"):
+    for split in splits:
         raw = scenario_quotas[split]
         if not isinstance(raw, Mapping) or not raw or not set(raw) <= known:
             raise ValueError("scenario quotas contain an unknown or empty scenario mapping")
@@ -424,11 +464,27 @@ def _validated_scenario_quotas(
     return result
 
 
+def _validate_official_train_val_population(
+    split_counts: Mapping[str, int],
+    seed_starts: Mapping[str, int],
+    scenario_quotas: Mapping[str, Mapping[str, int]] | None,
+) -> None:
+    if dict(split_counts) != _TRAIN_VAL_SPLIT_COUNTS:
+        raise ValueError("official dataset contract population has invalid split counts")
+    if dict(seed_starts) != _TRAIN_VAL_SEED_STARTS:
+        raise ValueError("official dataset contract population has invalid seed starts")
+    if scenario_quotas is None or any(
+        dict(scenario_quotas[split]) != _TRAIN_VAL_SCENARIO_QUOTAS[split]
+        for split in _TRAIN_VAL_SPLITS
+    ):
+        raise ValueError("official dataset contract population has invalid scenario quotas")
+
+
 def scenario_plan(config: DatasetConfig) -> dict[str, tuple[DatasetScenario, ...]]:
     """Return the deterministic quota-derived scenario schedule for every split."""
 
     result: dict[str, tuple[DatasetScenario, ...]] = {}
-    for split in ("train", "val", "test"):
+    for split in config.split_counts:
         if config.scenario_quotas is None:
             scenarios = tuple(DatasetScenario)
             result[split] = tuple(
@@ -456,15 +512,15 @@ def split_seed_plan(
     seed_starts: Mapping[str, int] | None = None,
 ) -> dict[str, tuple[int, ...]]:
     counts = dict(split_counts)
-    if set(counts) != set(_SEED_STARTS):
-        raise ValueError("split counts must contain train, val, and test")
     starts = dict(_SEED_STARTS if seed_starts is None else seed_starts)
-    if set(starts) != set(_SEED_STARTS):
-        raise ValueError("seed_starts must contain train, val, and test")
+    try:
+        splits = _splits_for_maps(counts, starts)
+    except ValueError as error:
+        raise ValueError("seed_starts must exactly match split_counts") from error
     result: dict[str, tuple[int, ...]] = {}
-    for split in ("train", "val", "test"):
+    for split in splits:
         count = counts[split]
-        if not isinstance(count, int) or count <= 0:
+        if type(count) is not int or count <= 0:
             raise ValueError("split counts must be positive integers")
         start = starts[split]
         if type(start) is not int or start < 0:
@@ -484,17 +540,19 @@ def limited_split_counts(
     split_counts: Mapping[str, int], sample_limit: int | None
 ) -> dict[str, int]:
     counts = dict(split_counts)
-    split_seed_plan(counts)
+    splits = _splits_for_maps(counts)
+    if any(type(value) is not int or value <= 0 for value in counts.values()):
+        raise ValueError("split counts must be positive integers")
     if sample_limit is None:
-        return counts
-    if not isinstance(sample_limit, int) or sample_limit < 3:
-        raise ValueError("sample_limit must be at least three")
+        return {split: counts[split] for split in splits}
+    if type(sample_limit) is not int or sample_limit < len(splits):
+        raise ValueError(f"sample_limit must be at least {len(splits)}")
     if sample_limit > sum(counts.values()):
         raise ValueError("sample_limit cannot exceed configured sample count")
-    base, remainder = divmod(sample_limit, 3)
+    base, remainder = divmod(sample_limit, len(splits))
     result = {
         split: base + (1 if index < remainder else 0)
-        for index, split in enumerate(("train", "val", "test"))
+        for index, split in enumerate(splits)
     }
     if any(result[split] > counts[split] for split in result):
         raise ValueError("sample_limit allocation exceeds a configured split")
@@ -539,13 +597,25 @@ def load_dataset_config(
     raw_seed_starts = document.get("seed_starts")
     if raw_seed_starts is not None and not isinstance(raw_seed_starts, dict):
         raise ValueError("seed_starts must be a mapping")
-    split_seed_plan(raw_counts, raw_seed_starts)
+    dataset_contract = document.get("dataset_contract")
+    splits = _dataset_splits(dataset_contract)
+    if set(raw_counts) != set(splits):
+        raise ValueError("split_counts must exactly match the dataset contract")
+    if raw_seed_starts is None and splits != _LEGACY_SPLITS:
+        raise ValueError("seed_starts are required for the dataset contract")
+    effective_seed_starts = _SEED_STARTS if raw_seed_starts is None else raw_seed_starts
+    split_seed_plan(raw_counts, effective_seed_starts)
     raw_scenario_quotas = document.get("scenario_quotas")
     if raw_scenario_quotas is not None and not isinstance(raw_scenario_quotas, dict):
         raise ValueError("scenario_quotas must be a mapping")
     if sample_limit is not None and raw_scenario_quotas is not None:
         raise ValueError("sample_limit cannot alter preregistered scenario quotas")
     counts = limited_split_counts(raw_counts, sample_limit)
+    schema_version = document.get("schema_version")
+    if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT and (
+        type(schema_version) is not int or schema_version != 2
+    ):
+        raise ValueError("nonpenetrating dataset contract requires schema version 2")
     return DatasetConfig(
         mjcf_path=mjcf,
         split_counts=counts,
@@ -557,6 +627,8 @@ def load_dataset_config(
         scenario_quotas=raw_scenario_quotas,
         geometry=SceneGeometry.from_mapping(document.get("scene_geometry")),
         require_nonpenetrating_scene=document.get("require_nonpenetrating_scene", False),
+        dataset_contract=dataset_contract,
+        schema_version=2 if dataset_contract is None else schema_version,
     )
 
 
@@ -927,7 +999,7 @@ def generate_dataset(
     artifacts: list[str] = []
     class_instance_total = 0
     try:
-        for split in ("train", "val", "test"):
+        for split in config.split_counts:
             for seed, scenario in zip(seeds[split], schedules[split], strict=True):
                 render = active_renderer.render(seed, scenario)
                 extra_truth: dict[str, Any] = {}
@@ -981,18 +1053,14 @@ def generate_dataset(
                         "truth": truth_relative.as_posix(),
                     }
                 )
-        dataset_yaml = (
-            "path: .\n"
-            "train: images/train\n"
-            "val: images/val\n"
-            "test: images/test\n"
-            "names:\n"
-            "  0: plastic_cup\n"
-        )
+        dataset_yaml = "path: .\ntrain: images/train\nval: images/val\n"
+        if config.dataset_contract is None:
+            dataset_yaml += "test: images/test\n"
+        dataset_yaml += "names:\n  0: plastic_cup\n"
         _exclusive_text(root / "dataset.yaml", dataset_yaml)
         artifacts.append("dataset.yaml")
         manifest: dict[str, Any] = {
-            "schema_version": 2,
+            "schema_version": config.schema_version,
             "generator_commit": config.generator_commit,
             "mjcf_sha256": hashlib.sha256(config.mjcf_path.read_bytes()).hexdigest(),
             "camera_name": config.camera_name,
@@ -1021,6 +1089,9 @@ def generate_dataset(
         }
         if config.require_nonpenetrating_scene:
             manifest["scene_geometry_policy"] = "task-visual-nonpenetration-v1"
+        if config.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+            manifest["dataset_contract"] = config.dataset_contract
+            manifest["member_splits"] = list(_TRAIN_VAL_SPLITS)
         atomic_json(root / "dataset-manifest.json", manifest)
         return manifest
     finally:
