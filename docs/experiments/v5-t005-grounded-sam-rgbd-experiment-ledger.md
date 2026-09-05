@@ -12453,3 +12453,46 @@ retention:
   deletion_candidates: [r305 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-151, inspect only the official native predictor API and the already retained r291 manifest schema, then write and run the RED contract before the minimal native diagnostic driver
 ```
+
+## Checkpoint CP-152 — first native A/B RED attempt invalid at test runner
+
+```yaml
+checkpoint: CP-152
+status: INVALID_TEST_RUNNER
+recorded_at: 2026-09-05T08:49:45+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-151
+source_commit: 71de62e48adfdca8efce219d353c74dce1d19166
+run_id: stage-e-native-sam-ab-red-r306
+result:
+  exit_code: 1
+  elapsed_ms: 18
+  expected_red_observed: false
+  cause: exact locked inference Python has no pytest module, so collection never reached the absent diagnostic implementation
+decision:
+  - do not install pytest into or otherwise mutate the locked Grounded-SAM venv
+  - retain the same three synthetic contracts and add a direct self-contained main entry to the temporary test script
+  - rerun with the exact locked Python in a new r307 scratch/evidence root; only a missing-driver failure counts as RED
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_native_sam_runtime_ab_r1.py
+  test_script_sha256_before_direct_entry: b826772815e5476f63c3ce957a25c2c2fa681751ee617c42531fc9781c11455f
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-ab-red-r306/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-ab-red-r306
+  preflight_sha256: d1c1bb83906e424d7d1e0f7ec615afc0a57372016aaafe6a7f99537f11dcefc5
+  stdout_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: 1e531e04430a99bd1100ba8427cfb0bcf16d9eceb3405d8d0ce0fb44b8cbbe1c
+  exit_sha256: 9c4cbdf692c3900f9d1b0ce659785b5c4ca3676b2902ca77818b92bec58af556
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r306 invalid evidence/scratch, all CP-151 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r306 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-152, add only the direct test main to the temporary test, and execute the unchanged contract with the exact locked Python as r307
+```
