@@ -584,11 +584,17 @@ def _truth_instances(
     return normalized
 
 
-def _box_document(box: BoundingBox) -> dict[str, Any]:
+def _box_document(
+    box: BoundingBox, *, image_width: int, image_height: int
+) -> dict[str, Any]:
+    """Export trainer coordinates, not the polygon's pixel-center normalization."""
+    width = _positive_dimension(image_width, "image_width")
+    height = _positive_dimension(image_height, "image_height")
+    left, top, right, bottom = box.absolute_xyxy
     return {
         "absolute_xyxy": list(box.absolute_xyxy),
         "class_name": "cup",
-        "normalized_xyxy": list(box.normalized_xyxy),
+        "normalized_xyxy": [left / width, top / height, right / width, bottom / height],
         "text": "cup.",
     }
 
@@ -778,7 +784,9 @@ def convert_dataset(
             label_box = polygon_to_box(polygon, width, height)
             if not _boxes_match(label_box, truth_instance["box"]):
                 raise _fail("TRUTH_MISMATCH", f"{paths['label']}: label/truth box differs")
-            box_document = _box_document(label_box)
+            box_document = _box_document(
+                truth_instance["box"], image_width=width, image_height=height
+            )
             box_document["visible_pixel_count"] = truth_instance["visible_pixel_count"]
             if manifest["schema_version"] == 2:
                 box_document["occlusion"] = truth_instance["occlusion"]

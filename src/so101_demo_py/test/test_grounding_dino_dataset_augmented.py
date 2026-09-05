@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -15,7 +16,14 @@ from so101_demo.adapters.perception.mujoco_dataset import (
 )
 from so101_demo.training.grounding_dino_dataset import (
     GroundingDinoDatasetError,
+    _box_document,
+    binary_mask_to_box,
     convert_dataset,
+)
+from so101_demo.training.grounding_dino_finetune import (
+    TrainingDataError,
+    _box_truth,
+    build_coco_annotation,
 )
 
 
@@ -197,3 +205,56 @@ def test_schema_v2_conversion_rejects_seed_overlap_across_splits(
             source_archive_sha256="a" * 64,
             converter_commit="b" * 40,
         )
+
+
+def test_mask_box_export_preserves_exact_extent_and_loads_in_dino_trainer() -> None:
+    mask = np.zeros((80, 100), dtype=bool)
+    mask[10:31, 20:51] = True
+    box = binary_mask_to_box(mask, 100, 80)
+
+    document = _box_document(box, image_width=100, image_height=80)
+    document.update(visible_pixel_count=651, occlusion=None)
+    loaded = _box_truth(document, width=100, height=80)
+    annotation = build_coco_annotation(SimpleNamespace(boxes=(loaded,)), image_id=7)
+
+    assert loaded.absolute_xyxy == (20.0, 10.0, 50.0, 30.0)
+    assert loaded.normalized_xyxy == (0.2, 0.125, 0.5, 0.375)
+    assert annotation == {
+        "image_id": 7,
+        "annotations": [{"bbox": [20.0, 10.0, 30.0, 20.0], "area": 600.0,
+                         "category_id": 0, "iscrowd": 0}],
+    }
+
+
+def test_polygon_normalization_is_not_accepted_as_trainer_box_normalization() -> None:
+    mask = np.zeros((80, 100), dtype=bool)
+    mask[10:31, 20:51] = True
+    box = binary_mask_to_box(mask, 100, 80)
+    legacy = {"absolute_xyxy": list(box.absolute_xyxy),
+              "normalized_xyxy": list(box.normalized_xyxy),
+              "class_name": "cup", "text": "cup.", "visible_pixel_count": 651}
+
+    with pytest.raises(TrainingDataError, match="absolute and normalized coordinates disagree"):
+        _box_truth(legacy, width=100, height=80)
+
+
+def test_official_schema_v2_export_uses_exact_visible_mask_box(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    output = tmp_path / "converted"
+    convert_dataset(source, output, source_archive_sha256="a" * 64, converter_commit="b" * 40)
+    inventory = json.loads((output / "train/inventory.json").read_text())
+    document = inventory["samples"][0]["boxes"][0]
+
+    assert document["absolute_xyxy"] == [200.0, 100.0, 207.0, 107.0]
+    loaded = _box_truth(document, width=640, height=480)
+    assert loaded.normalized_xyxy == (0.3125, 100 / 480, 207 / 640, 107 / 480)
+
+
+@pytest.mark.parametrize("width,height", [(0, 80), (100, 0), (True, 80)])
+def test_mask_box_export_rejects_invalid_image_dimensions(width, height) -> None:
+    mask = np.zeros((80, 100), dtype=bool)
+    mask[10:31, 20:51] = True
+    box = binary_mask_to_box(mask, 100, 80)
+
+    with pytest.raises(GroundingDinoDatasetError):
+        _box_document(box, image_width=width, image_height=height)
