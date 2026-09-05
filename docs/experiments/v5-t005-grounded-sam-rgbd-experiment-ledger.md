@@ -11875,3 +11875,43 @@ retention:
   deletion_candidates: [r289 scratch; do not delete without explicit user authorization]
 next_action: implement the minimal selection/diagnosis core and diagnostic evidence driver, then run unchanged contract in fresh r290 scratch
 ```
+
+## Checkpoint CP-142 — SAM mask-pipeline diagnostic contract is GREEN
+
+```yaml
+checkpoint: CP-142
+status: GREEN_VALID_DIAGNOSTIC_RUN_PLANNED
+recorded_at: 2026-09-05T08:25:15+08:00
+stage: E_SAM_MASK_PIPELINE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-PIPELINE-DIAGNOSTIC-R1
+prior_checkpoint: CP-141
+source_commit: 986bacb7e3eb29a1048625e9c54501ae4a1b4e15
+run_id: stage-e-sam-mask-pipeline-green-r290
+result:
+  exit_code: 0
+  proposals: 2
+  variants_per_proposal: 3
+  assertions: [same-proposal quality argmax, proposal-axis isolation, selected mask identity, oracle variant identity, stored-mask exact match and mismatch]
+implementation:
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/sam_mask_pipeline_diagnostic_r1.py
+  script_sha256: 41b043606d22aec9c41cc2b07d91387652702bd3fe6a4db7b514f8222b065249
+  test_script_sha256: 002afbc4782ddb667f5765e202ed5d63832fa622d8a2692e733e583cb03de287
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  package_physical_path: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-mask-pipeline-green-r290/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-mask-pipeline-green-r290
+  preflight_sha256: e3b91922dbfffb3d9e2385ad55bb0a4a65616d955ada8a0efa6a38c2316a9359
+  provenance_sha256: baeab14efd8bb6bdfbc54f91423f6b7b982b1baba0fe8e453f2f86392c389e19
+  run_sha256: 7d1980ebe1a7d6b553c387b5a9f2c3d31f69c4c69d5fe099c37567818859fc30
+  exit_sha256: 68fddfa05015768593bc50481382b8570b51954b63a173024e6dd1443c634a50
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r290 GREEN evidence and scratch, r289 RED evidence and scratch, all CP-141 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r289-r290 scratch; do not delete without explicit user authorization]
+next_action: run the single preregistered 10-frame diagnostic in fresh r291 scratch/output with CUDA-only, offline-model, and complete provenance gates
+```
