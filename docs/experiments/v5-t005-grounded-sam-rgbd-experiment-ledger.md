@@ -18978,6 +18978,31 @@ retention: r508/r507/r506/r505 and all prior evidence retained, archived none; s
 boundaries: official roots absent; no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-353 — r508 review finds missing-success-chain fail-open; shell-accounting RED authorized
+
+```yaml
+checkpoint: CP-353
+status: GENERATION_RUNNER_FINAL_REVIEW_CHANGES_REQUESTED_N3_N2_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, launch_readiness: CHANGES_REQUESTED, critical: 0, important: 1, minor: 1, N1: ADDRESSED, N2: PARTIAL, N3: OPEN, I1: ADDRESSED, I3: ADDRESSED, M1: ADDRESSED}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r508-review-report.md SHA2568c6d84fb3da5e744f78468b9d2c49ac7e815d67c2eedcbc695cd58ef0d8a51f6
+finding_N3: launch finalizer conditionally validates nested driver evidence only when either manifest/readback exists; exit0 with neither produces launch success; current logs-only ordinary control explicitly accepts this; dynamic stable-member allowlist requires only terminal and lacks exact success membership/status consistency
+finding_N2: post-allocation check_tempfile_exact and later require_absent call die/exit, bypassing surrounding set+e/original_exit/finalization; stage/fsync helper failures can also escape; retained tests call Python helpers rather than actual shell failure paths
+confirmed: stable log ownership/nested corruption validation otherwise closes N1; shared HEAD I1, mandatory operations I3 and cleanup M1 intact; r508114-case result remains valid only for covered cases
+next_experiment:
+  status: GO_TESTS_ONLY_OFFLINE_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-red-r509
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_inputs: r508 driver SHA2569b0840c3 and shell SHA256f057282a remain byte-identical; no fix before RED
+  N3_cases: exit0 with no pair, one-sided pair, terminal-only/each missing required success member, driver-terminal failure plus launch exit0 and wrong terminal status/exit must reject before launch terminal/inventory; current expected fail-open defects distinguished from harness errors; complete success chain and legitimate nonzero pre-driver failure without driver chain are valid controls
+  N2_cases: execute a source-preserving offline shell-level fixture/stub path that reaches actual accounting owner but never real setup/project/driver generation; force TMP mismatch and late collision/die-equivalent plus stage/fsync/finalizer failures; require no driver invocation and demonstrate missing durable stage/original/finalizer/error chain on frozen shell
+  required: fresh exact Python/NVMe scratch, static gates, one top-level harness, complete expected defects/controls, zero harness errors/forbidden imports; durable fsync/inventory/readback; stop before fix
+  restrictions: no driver/shell edit, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+future_if_valid: minimal GREEN requires exact success-chain membership/status plus bounded nonrecursive post-allocation shell error owner; actual shell-level failure cases and retained114 suite pass before Astra re-review
+retention: r508 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-351 — r507 GREEN harness output invalid; fresh serialization-only retry required
 
 ```yaml
