@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-356 — r511 nested adaptation invalid; fresh identity-injection GREEN retry required
+
+```yaml
+checkpoint: CP-356
+status: INVALID_SUCCESS_CHAIN_GREEN_NESTED_ADAPTATION_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r511
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_ADAPTATION
+result: {authoritative_green: false, invocations: 1, raw_harness_exit: 1, launcher_tool_exit: 1, elapsed_seconds: 0.050836391, case_counts: unavailable}
+cause: corrected multiline control anchor matched, but wrapper globally replaced r507 DRIVER_SHA256 literal and unintentionally changed identical old-hash text used as nested r505 adaptation-map key; retained suite then searched unchanged r505 source for new hash and failed before cases
+frozen_candidate: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b and shell SHA25653ddc70ab21b5cf4a901cd718cc2972d643bc35a7bdb9df42625317ef47c9760 byte-identical and unmeasured
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r511 retained; harness SHA256a12ee6d0cad29ed00ea79f61eb4e28fe474df5cf8d4db7076dba8df6f9646b77; launcher SHA2567c841dbb6910d763d75c8ccd7adaf160b537773db95c74a9a2dadc59df948fea
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r511-report.md SHA2568512ce72daf8a33d585f961bf5f123a504e0a398e0d46776dd8deaa861567ace
+parent_readback: complete report/candidate hashes/status read; r511 retained invalid, never rerun/backfilled
+next_experiment:
+  status: PLANNED_FRESH_IDENTITY_INJECTION_GREEN_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r512
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_candidate: keep r510/r511 driver SHA256cbb737df and shell SHA25653ddc70a byte-identical
+  harness_change: load retained module/source unchanged then set runtime identity constants after exec, or replace only first assignment with an exact one-count assertion; never alter nested adaptation anchors; mechanical r512 IDs/paths/current identity only
+  required: same133 tests,133 pass, zero failure/harness error, all exits0, forbidden imports empty, fresh exact Python/NVMe/static/fsync/inventory/readback; raw exit persisted before parse; stop for Astra review
+  restrictions: no runner code change, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r511/r510 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-355 — r510 harness adaptation invalid; fresh anchor-only GREEN retry required
 
 ```yaml
