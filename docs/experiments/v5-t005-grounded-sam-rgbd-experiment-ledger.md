@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-357 — r512 omitted retained encoder; fresh composed-harness GREEN retry required
+
+```yaml
+checkpoint: CP-357
+status: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_SERIALIZATION_COMPOSED_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r512
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_SERIALIZATION
+result: {authoritative_green: false, invocations: 1, raw_harness_exit: 1, launcher_tool_exit: 1, elapsed_seconds: 5.261753659, case_counts: unavailable}
+cause: post-load identity injection succeeded and retained suite reached result construction, but wrapper loaded r507 source without applying exact r508 recursive Path encoder; json.dumps rejected PosixPath
+frozen_candidate: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b and shell SHA25653ddc70ab21b5cf4a901cd718cc2972d643bc35a7bdb9df42625317ef47c9760 unchanged/unaccepted
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r512 retained; harness SHA2561f092d35dfde00869c2ca55a7df2b3bf6ec23c5afb426537c51a419385c2014a; launcher SHA25649387ca333706833d250c57bf74b9b42d07a9d1ff171b220289f628999474376
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r512-report.md SHA2567d600033b8f1593bb64ee6ddea8e1b4c71f565c4b30ca38661a9682c9f8e897c
+parent_readback: complete report/candidate hashes/status read; r512 invalid, never rerun/backfilled
+next_experiment:
+  status: PLANNED_FRESH_COMPOSED_HARNESS_GREEN_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r513
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_candidate: keep drivercbb737df and shell53ddc70a byte-identical
+  harness_change: preserve verified r512 post-load identity injection and apply byte-exact r508 recursive final JSON encoder adaptation before retained module execution; assert both nested adaptation anchors unchanged and both transformations one-count/independently hashed; mechanical r513 identity/path only
+  required: same133 cases,133 pass, zero failure/harness error, all exits0, forbidden imports empty, raw exit before parse, fresh exact Python/NVMe/static/fsync/inventory/readback; stop for Astra review
+  restrictions: no runner code change, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r512/r511/r510 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-356 — r511 nested adaptation invalid; fresh identity-injection GREEN retry required
 
 ```yaml
