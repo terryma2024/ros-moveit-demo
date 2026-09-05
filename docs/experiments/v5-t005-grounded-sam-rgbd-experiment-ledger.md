@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-212
+latest_checkpoint: CP-213
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 4c6046213c8f94d72749e958a0deec39420cfc4c
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: independently verify immutable r5 labels/inventories against captured IDs, then reevaluate retained predictions
+next_action: correct independent auditor polygon coordinate convention and run fresh r380; r5 datasets remain immutable and unchanged
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14918,4 +14918,38 @@ next_experiment:
   subsequent: preregister retained-record corrected-truth reevaluation, preserving historical epoch4 choice and all old metrics; no training or threshold tuning before results
 retention: all new r5 files read-only, all r2/r2-repro/r3/r4/archives/captures retained untouched; no archived/deleted runs; scratch deletion candidates only
 boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-213 — Independent auditor coordinate-convention error isolated
+
+```yaml
+checkpoint: CP-213
+status: INVALID_AUDITOR_CONVENTION_CORRECTED_READBACK_PLANNED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-LABEL-READBACK-R1
+source_commit: e74ac5bc3922b222f5988e6061a2cb133f7d9912
+gitee_sha_readback: e74ac5bc3922b222f5988e6061a2cb133f7d9912
+run_id: stage-e-categorical-r5-label-readback-r379
+result: {exit_code: 1, elapsed_seconds: 0.62, first_failed_check: auditor compatibility polygon extent reconstruction}
+root_cause: auditor incorrectly multiplied normalized polygon coordinates by640/480; existing generator _polygon_from_mask explicitly divides integer pixel centers by639/479
+discriminating_evidence:
+  seed410000001_corrected_mask_and_converted_box: [158, 170, 222, 252]
+  polygon_times639_479: [158, 170, 222, 252]
+  incorrect_polygon_times640_480: [158.24726134585288, 170.35490605427975, 222.3474178403756, 252.52609603340292]
+scope: independent auditor defect only; exact RLE, converted absolute mask box and normalized box check passed before assertion; no new source/dataset defect demonstrated
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  scratch: durable scratch/stage-e-categorical-r5-label-readback-r379/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-LABEL-READBACK-R2
+  status: PLANNED
+  run_id: stage-e-categorical-r5-label-readback-r380
+  output: durable truth-remediation/categorical-r5-label-readback-r2
+  single_variable: auditor uses existing639/479 normalization instead of invented640/480; all mask, box, hash, identity and precision gates otherwise unchanged
+  lifecycle: FULL_RESTART offline readback; no model inference or rendering
+  command: run_offline_truth_audit_r1.sh stage-e-categorical-r5-label-readback-r380 readback_categorical_r5_labels_r1.py NEXT_SYNCED_SOURCE_SHA
+retention: r379 failed audit script/selection/logs/scratch retained; r5 source and converted files unchanged; no deletion or archival
+boundaries: historical metrics, mask IoU0.80, sealed test/COCO100/PickPlace/Mac and Microduck pause unchanged
 ```
