@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-233
+latest_checkpoint: CP-235
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
 active_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: monitor already-running r404 without relaunch; after exit0 run prepared r405 independent8checkpoint audit before new pipeline qualification
+next_action: r405 full readback valid; commit/push then explicit r406 benchmark before corrected-DINO frozen-SAM val comparison
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15602,4 +15602,77 @@ GZ_PARTITION: not_applicable_offline
 working_tree: ledger-only update; original untracked build/install/log preserved
 retention: all previous evidence retained; archived none; scratch deletion candidates only, no deletions
 boundaries: Microduck paused; SAM unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible; cup. prompt and mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-234 — Formal r404 completed; epoch8 selected by frozen synthetic-val ranking
+
+```yaml
+checkpoint: CP-234
+status: VALID_FORMAL_TERMINAL_INDEPENDENT_READBACK_NEXT
+experiment_id: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+run_id: stage-d-r5-training-formal-r404
+launch_source_commit: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+implementation_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+ledger_source_commit: a49e6d2b682d56e83d0bc1544891ae17f44ed919
+gitee_sha_readback: a49e6d2b682d56e83d0bc1544891ae17f44ed919
+result: {container_status: exited, container_exit: 0, runner_exit: 0, elapsed_seconds: 2464.76, completed_epochs: 8, selected_epoch: 8}
+selected_box_only_metrics: {tp: 300, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0, small_target_recall: 1.0, multi_cup_recall: 1.0, box_threshold: 0.4, text_threshold: 0.4}
+checkpoint_root: durable training/grounding-dino-cup-r5-r1/formal-r1/checkpoints/epoch-008
+checkpoint_manifest_sha256: 6ca8c6b516e81b06fb862e75b9911555cf1bbedbaefe65e19a675fad535913a4
+fresh_reload_sha256: 9a8f8036b409d580bdc6cc490c0ce306ea6e4a0f2856280214528c8f3e9744b8
+fresh_reload: VALID, new Python process, cuda0,900queries,4inputtokens,finite active logits and boxes,no CPU fallback
+interpretation: trainer-level synthetic-val box result only; not SAM mask, selection safety, primary-cohort pipeline, sealed-test, COCO100 or PickPlace qualification
+python: /opt/venv/bin/python in pinned r396 image
+overlay_host: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+scratch: durable scratch/stage-d-r5-training-formal-r404/tmp; exact tempfile preflight and IPC-only NVMe alias retained
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+owned_processes: r404 container stopped naturally; owned tmux command completed; no restart
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_offline_truth_audit_r2.sh stage-d-r5-training-formal-readback-r405 audit_r5_formal_r405.py a49e6d2b682d56e83d0bc1544891ae17f44ed919
+audit_status: PLANNED CP-232, execute once now that authoritative terminal success exists
+retention: all8 checkpoints and raw training/validation/reload evidence retained; invalid smoke runs also retained; no archival/deletion
+boundaries: Microduck paused; SAM not loaded/trained; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-235 — Independent formal checkpoint readback VALID; explicit benchmark planned
+
+```yaml
+checkpoint: CP-235
+status: VALID_FORMAL_READBACK_BENCHMARK_PLANNED
+experiment_id: EXP-079-STAGE-D-R5-FORMAL-READBACK-R1
+run_id: stage-d-r5-training-formal-readback-r405
+source_commit: a49e6d2b682d56e83d0bc1544891ae17f44ed919
+result: {exit_code: 0, elapsed_seconds: 41.21, complete_checkpoints: 8, output_files: 73, floating_weights_finite: true, tensors_per_checkpoint: 990, new_model_forwards: 0}
+report_sha256: 3cc371a52e89bbf179fb99a157fdd0533495fb0ffa7230e00f0bd90ca3839ca6
+output_inventory_sha256: be491f6cdf768c354d2ad214fa8dbbafec35ae85715569adad49c4a250247343
+frozen_model_manifest_sha256: 29f7d80d0e4fa406729d66c28dd0d3fbc51b1788b813f5736d82a1e444f5ea2e
+selected_epoch: 8
+selected_checkpoint_manifest_sha256: 6ca8c6b516e81b06fb862e75b9911555cf1bbedbaefe65e19a675fad535913a4
+selected_model_safetensors_sha256: 359164b33dcc1aeef3120e859ed8eee35eec31860383b0bc4196bdc164367229
+fresh_reload_sha256: 9a8f8036b409d580bdc6cc490c0ce306ea6e4a0f2856280214528c8f3e9744b8
+optimizer_readback: epoch1 states300steps; epoch8 all968 optimizer states2400steps and scheduler last_epoch2400
+selection_readback: all8 complete100-point grids, independent count-derived precision/recall/F1 and frozen rank keys reproduced every epoch winner and finalepoch8; all manifests agree
+recipe_readback: actual formal config equals frozen numeric contract, train1200/val300, original base, no resume, exact implementation47e9682168937e4ff2a0a773c428f4044b6623fb and launch bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+scratch: durable scratch/stage-d-r5-training-formal-readback-r405/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-MODEL-COMPARISON-BENCHMARK-R1
+  status: PLANNED
+  run_id: linux-test-stage-e-r5-model-comparison-r406-benchmark
+  reason: required explicit package benchmark gate for newly trained and selected DINO model comparison, not optimization-only rerun
+  collection: benchmark_test only through colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+  preconditions: ordinary r3951283passed, source code unchanged since JSON fix, formal container exited0 and r405 exact report SHA valid; no competing training/inference
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: same verified fresh r394 seven-package symlink overlay
+  scratch: unique durable scratch/linux-test-stage-e-r5-model-comparison-r406-benchmark/tmp; export TMPDIR/TMP/TEMP exact before test; actual Python tempfile must match, seven prefixes/source import verified
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_model_comparison_r406.sh NEXT_SYNCED_HEAD 3cc371a52e89bbf179fb99a157fdd0533495fb0ffa7230e00f0bd90ca3839ca6
+  success: nonzero collection, pytest/colcon/test-result exits0, no errors/failures, JUnit/logs/commands/source/scratch/time readback
+  comparison: preserve r30 valid HDD3210.78pytestseconds and r363 valid NVMe646.45pytestseconds; report r406 observational timing ratio, with suite/source evolution caveat; do not rerun either baseline
+  semantics: no fsync/journaling/integrity disabling and no tmpfs substitute
+next_after_benchmark: compose immutable epoch8 DINO plus frozen original SAM bundle and preregister corrected-truth val-only pipeline comparison; original and retained epoch4 SAM remain frozen; no test/COCO100/PickPlace/Mac permission implied
+retention: all training/audit/raw evidence retained; no archival/deletion; scratch deletion candidates only
+boundaries: Microduck paused; generic cup prompt cup.; mask IoU0.80 unchanged; sealed/test/COCO100/PickPlace/Mac inaccessible
 ```
