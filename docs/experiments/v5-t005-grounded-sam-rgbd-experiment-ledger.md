@@ -12056,3 +12056,83 @@ retention:
   deletion_candidates: [r289-r294 scratch; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-144 with remote SHA readback, then preregister a same-checkpoint native-SAM A/B diagnostic before any implementation or model decision
 ```
+
+## Checkpoint CP-145 — CP-144 timestamp correction and native SAM 2.1 A/B preregistration
+
+```yaml
+checkpoint: CP-145
+status: PLANNED
+recorded_at: 2026-09-05T08:35:57+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-144
+source_commit: fbd81a85f52f35464164ca40d95dfc8b0223e50d
+correction:
+  field: CP-144 recorded_at
+  recorded_value: 2026-09-05T09:04:00+08:00
+  corrected_value: 2026-09-05T08:34:12+08:00
+  basis: Git committer timestamp of immutable commit fbd81a85f52f35464164ca40d95dfc8b0223e50d
+  scope: timestamp transcription only; CP-144 evidence, hashes, result, and history are unchanged
+question: does the official native SAM 2.1 image predictor produce materially different masks from the fully loaded Transformers path when both use the bundled Hiera Tiny native checkpoint, identical images, and identical box prompts
+single_variable: SAM image-predictor implementation and its native checkpoint serialization; sample identities, source pixels, DINO boxes, exact truth boxes, truth RLE, and the 0.80 IoU gate remain frozen
+scope:
+  split: val only
+  sample_contract: exactly the CP-140 six frozen failures and four passing controls
+  detector_inference: none
+  training: none
+  threshold_selection_or_tuning: none
+  production_change: none
+  sam_state: stateless per image
+frozen_inputs:
+  transformers_diagnostic_manifest_sha256: 75a7f4ac5d9593eec5be8618ec2eadb173884e9d58abb5866d3b668ae8569e65
+  native_checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1/sam2.1-hiera-tiny/sam2.1_hiera_tiny.pt
+  native_config: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1/sam2.1-hiera-tiny/sam2.1_hiera_t.yaml
+  model_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+source_acquisition_contract:
+  repository: https://github.com/facebookresearch/sam2.git
+  observed_main_commit: 2b90b9f5ceec907a1c18123530e92e794ad901a4
+  policy:
+    - clone only into a new run-specific durable source root and record every source/dependency SHA
+    - do not edit, overwrite, or reinterpret the read-only model bundle
+    - use an isolated dependency target; do not mutate the locked Grounded-SAM environment
+    - fail closed if the official source cannot load the exact bundled config/checkpoint without missing or unexpected checkpoint keys
+    - any network-acquired source or wheel is evidence input, never an implicit floating dependency
+runtime_contract:
+  host: ai-station direct execution; no SSH
+  base_python: /data/work/venvs/so101-grounded-sam/bin/python
+  device: cuda only
+  fallback: forbidden
+  offline_inference: true after source/dependency acquisition
+  scratch: unique non-existing /data NVMe root with TMPDIR/TMP/TEMP preflight using the actual runtime Python
+capture_contract:
+  - run native predictor once per image, then issue DINO_BOX and EXACT_TRUTH_BOX prompts without carrying state between images
+  - retain native masks, native quality scores, selected and analysis-only oracle variants, truth IoU, overlay, and source/checkpoint/config/runtime provenance
+  - compare native masks against the corresponding Transformers variants without changing selection thresholds
+  - independently reconstruct and read back every retained RLE before any conclusion
+success_criteria:
+  implementation_difference_supported: native path materially improves the fixed failures or disagrees geometrically with Transformers under identical prompts
+  implementation_difference_disproven: native path reproduces the same failure class and does not materially improve the fixed failures
+  gate: no diagnostic result changes the frozen mask IoU requirement of 0.80
+invalid_criteria:
+  - source/dependency/checkpoint/config provenance mismatch
+  - checkpoint missing, unexpected, or mismatched keys
+  - CPU fallback, output collision, incomplete 20-prompt denominator, sample mismatch, or sealed-set access
+tdd:
+  red_run: stage-e-native-sam-ab-red-r296
+  green_run: stage-e-native-sam-ab-green-r297
+  contract: synthetic native predictor output normalization must preserve three-mask axis, quality-to-mask binding, selected mask, oracle mask, and exact RLE roundtrip
+planned_runs:
+  source_audit: stage-e-native-sam-source-audit-r295
+  diagnostic: stage-e-native-sam-ab-r298
+  independent_readback: stage-e-native-sam-ab-readback-r299
+planned_output:
+  source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-2b90b9f-r1
+  dependency_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime/native-sam2-r1
+  diagnostic_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/native-sam2-runtime-ab-r1
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [all CP-144 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r295-r299 scratch and isolated dependency target after readback; do not delete without explicit user authorization]
+next_action: commit and ordinary-push this PLANNED checkpoint, acquire and hash the exact official source into the absent durable root, then audit its dependency and checkpoint-load feasibility before writing the RED test
+```
