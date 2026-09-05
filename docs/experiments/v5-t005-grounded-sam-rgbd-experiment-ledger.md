@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-253
+latest_checkpoint: CP-254
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r425 independent original-SAM readback passed; prepare r426 retained epoch4 SAM raw/production replay on same r5 prompts and filters, no DINO or training; no final qualification yet
+next_action: r426 epoch4 launcher frozen; commit/push/readback then one own-raw/production SAM replay with fixed CP-250 filters, no DINO or training
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16288,4 +16288,32 @@ next_after_epoch4: independent retained-artifact reconstruction and fixed-two-mo
 working_tree: ledger-only since e430ccaa code; original untracked build/install/log untouched
 retention: all earlier evidence retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-254 — Epoch4 replay launcher frozen before execution
+
+```yaml
+checkpoint: CP-254
+status: PLANNED_EPOCH4_REPLAY_READY
+run_id: stage-e-r5-epoch4-sam-production-r426
+source_parent: 594397e963aa01e76e7141b39e201e5e12d12ea8
+prior_checkpoint: CP-253
+script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/replay_r5_epoch4_sam_r426.py
+script_sha256: aa24f5ea44023264354b844e5c88177ffa34155975a189b3d560820020d24609
+script_review: derived from retained r424 assembly; substitute explicit verified epoch4 model/processor only and add own low-floor multimask/quality/RLE reference; unchanged real production postprocess, TargetSelector, scoring and mapping gate
+model_identity: r5 DINO bundle SHA and historical epoch4 SAM checkpoint SHA stored separately; diagnostic DetectionBatch weights reference epoch4 checkpoint, no fake original-SAM combined bundle identity
+reference_capture: each frame's complete r421 proposals receives one epoch4 raw SAM batch; argmax multimask selection and raw quality0/min64/maxratio0.50 match retained adapter contract; store all raw multimasks/qualities and accepted raw RLE before production batch
+production_capture:250nonempty production frames,300member denominator; CP-250 thresholds unchanged; raw mapping compares epoch4-to-epoch4 only; zero DINO and zero training forwards
+preconditions: r423 prompt/script hashes and r425 report8517009b9ea0788cd3cf90e68cc915c85ad6c69f32593ec9ecdcc97f965c6013, full checkpoint manifest/file/identity verification, exact dependency versions, CUDA FP32 local-only, empty GPU compute list, unique outputs
+command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-epoch4-sam-production-r426 replay_r5_epoch4_sam_r426.py NEXT_SYNCED_HEAD
+owner: unique tmux so101-exp079-r5-epoch4-r426, direct local ai-station, no SSH or subagent
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-epoch4-sam-production-r426/tmp; actual Python tempfile required before execution
+static: ruff passed; no repository production code changed; independent output reconstruction required after model execution
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next: execute once, retain/freeze/readback; if error occurs, do not rerun valid retained inference just to audit it
+retention: all prior evidence retained; no archival/deletion; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac; Microduck paused; no SAM training; mask0.80/mapping0.98 unchanged
 ```
