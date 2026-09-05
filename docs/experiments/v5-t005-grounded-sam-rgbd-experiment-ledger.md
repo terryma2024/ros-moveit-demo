@@ -13401,3 +13401,172 @@ retention:
   deletion_candidates: [r324-r326 scratch and prior candidates; none deleted]
 next_action: ordinary-push and read back remote SHA; obtain the explicit training-target decision before any SAM optimizer updates
 ```
+
+## Checkpoint CP-170 — Continuing authorization received; decoder-only training contract planned
+
+```yaml
+checkpoint: CP-170
+status: PLANNED
+recorded_at: 2026-09-05
+source_commit: e57c12fa144c528e1812fb84fd8933ad2d068916
+gitee_sha_readback: e57c12fa144c528e1812fb84fd8933ad2d068916
+authorization: user explicitly authorizes the proposed action and subsequent recommended authorization boundaries until the objective is complete
+prior_checkpoint_correction: CP-169 proposed decoder adaptation is now authorized; historical record remains intact
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+stage: TRAINING_PRIMITIVES_RED_GREEN
+design:
+  scope: extend existing training package with decoder-only optimization and exact-visible-mask loss
+  trainable_parameters: only names beginning mask_decoder.; reject absent or aliased decoder parameter ownership
+  frozen_parameters: every other model parameter, including image encoder, prompt encoder and memory embedding
+  forward: pixel_values path with gradients enabled for decoder projections; no no_grad image-embedding cache
+  masks: retain multimask_output true; supervise all three variants with the same box-associated visible target
+  loss: mean binary cross entropy with logits plus soft Dice loss plus mean squared predicted-quality error against detached binary-mask IoU
+  truth_resolution: bilinearly upsample logits to the exact original visible-mask grid; do not replace truth with hull or downsample away thin visible pixels
+  invalid_inputs: reject incompatible shapes, nonbinary truth and nonfinite tensors before optimizer updates
+recipe_for_subsequent_runner:
+  optimizer: AdamW
+  learning_rate: 0.00001
+  weight_decay: 0.01
+  epochs: 5
+  batch_size_images: 1
+  gradient_clip_norm: 1.0
+  dtype: float32
+  runtime: CUDA only, offline, no CPU fallback
+  seed: 430000079
+  train_scope: all corrected r4 train scenarios; no scope change to optimizer data based on reporting cohort
+  prompt: exact visible-mask bbox with deterministic bounded 5 percent side jitter, clipped to image bounds and preserving nonempty box
+  validation: corrected val only; fixed DINO proposals and existing production thresholds; maximize primary-cohort production F1, then primary recall, then earliest epoch; report all-scenario metrics too
+  freeze_before_full_run: complete hashes, prompt RNG convention, loss implementation, artifact collision policy and smoke receipt
+red_contracts:
+  - real tensor optimizer step changes decoder parameters while all nondecoder parameter bytes remain unchanged
+  - confidently correct logits have lower loss than reversed logits and gradients move incorrect foreground/background in the corrective direction
+  - quality regression gradients follow measured IoU and never backpropagate through the discrete IoU target
+  - invalid or empty decoder ownership and malformed targets fail closed
+run_ids: [stage-e-sam-decoder-primitives-red-r327, stage-e-sam-decoder-primitives-green-r328]
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  install_overlay: not_used_for_initial_source_unit_tests; fresh overlay required before runtime experiment
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+  scratch_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch
+  evidence_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence
+boundaries: no sealed test, COCO100, PickPlace or Mac; Microduck paused; generic cup and prompt cup.; mask IoU 0.80; preserve all historical inference and metrics
+next_action: add regression tests, record RED before implementation, then implement and record GREEN under separate unique scratch paths
+```
+
+## Checkpoint CP-171 — First decoder RED launch invalid before pytest startup
+
+```yaml
+checkpoint: CP-171
+status: INVALID_RUNNER_ENVIRONMENT
+run_id: stage-e-sam-decoder-primitives-red-r327
+source_commit: e57c12fa144c528e1812fb84fd8933ad2d068916
+failure: locked ML Python has no pytest installed; omitted existing system pytest distribution from PYTHONPATH
+result: {exit_code: 1, elapsed_seconds: 0.02, collected_tests: 0, red_established: false}
+implementation_written: false
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-decoder-primitives-red-r327
+scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-decoder-primitives-red-r327/tmp
+tempfile_preflight: exact resolved match
+retry: add existing /usr/lib/python3/dist-packages to import path and verify pytest import before launch; no package install or locked-venv mutation
+next_runs: [stage-e-sam-decoder-primitives-red-r329, stage-e-sam-decoder-primitives-green-r330]
+retention: preserve r327; scratch remains deletion candidate only; r328 not launched
+boundaries: unchanged; no inference or training launched
+```
+
+## Checkpoint CP-172 — Decoder-only primitives RED to GREEN
+
+```yaml
+checkpoint: CP-172
+status: FOCUSED_GREEN_FRESH_OVERLAY_AND_ORDINARY_PENDING
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+source_commit: e57c12fa144c528e1812fb84fd8933ad2d068916
+red: {run_id: stage-e-sam-decoder-primitives-red-r329, failed: 10, reason: missing training API assertion, exit_code: 1, elapsed_seconds: 1.29, junit_sha256: 9b2e160e5bc06d98adda1b789af4a4d711ae77b7e312a5a53addfe9a8cbaad82}
+green: {run_id: stage-e-sam-decoder-primitives-green-r330, passed: 10, exit_code: 0, elapsed_seconds: 2.38, junit_sha256: c88b1efb30aa6c574519f705d44956f9cd72846bdd24b7fb262080eb24daa12e}
+changes:
+  - training/sam_decoder_training.py provides unique decoder ownership validation and freezes all other parameters
+  - original-grid BCE plus soft Dice supervises all output variants; detached measured IoU supervises quality
+  - tests exercise actual torch autograd and optimizer behavior, alias rejection and malformed truth rejection
+static_checks: ruff check and git diff --check passed
+runtime_provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  source_import: per-run scratch imports/so101_demo symlink points only to this checkout src/so101_demo_py/src
+  pytest: existing /usr/lib/python3/dist-packages; locked ML environment unchanged
+  ROS_DOMAIN_ID: not_applicable_unit_tests
+  GZ_PARTITION: not_applicable_unit_tests
+  scratch: each named run uses its own registered durable root scratch/run-id/tmp; exact locked-Python preflight passed
+next_runs: [linux-build-stage-e-sam-decoder-r331, linux-test-stage-e-sam-decoder-r332-ordinary]
+benchmark_gate: deferred until model comparison or benchmark-affecting implementation; training primitives alone do not change benchmark scope
+boundaries: sealed sets untouched; Microduck paused; production adapter unchanged; no model training yet
+retention: preserve r327 invalid, r329 RED, r330 GREEN and their evidence; scratch deletion candidates only
+next_action: build fresh seven-package overlay using validated local r26 lodepng cache, source/read back provenance, then ordinary gate before committing owned implementation and checkpoint
+```
+
+## Checkpoint CP-173 — Fresh decoder-training overlay built
+
+```yaml
+checkpoint: CP-173
+status: VALID_BUILD_ORDINARY_RUNNING
+source_commit: e57c12fa144c528e1812fb84fd8933ad2d068916
+run_id: linux-build-stage-e-sam-decoder-r331
+result: {exit_code: 0, packages_finished: 7, elapsed_seconds: 55.56}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-decoder-r331/install
+build_evidence: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-decoder-r331
+scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-build-stage-e-sam-decoder-r331/tmp
+python: /data/work/venvs/so101-grounded-sam/bin/python
+tempfile_preflight: exact resolved match
+lodepng: {cache: linux-build-r26/build/mujoco_ros2_control/_deps/lodepng-src, head: ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, fsck: passed, network: disabled_with_FETCHCONTENT_FULLY_DISCONNECTED}
+package_prefix_readback: all seven selected packages resolve inside r331/install
+training_module_resolved: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/src/so101_demo_py/src/training/sam_decoder_training.py
+implementation_sha256: b8f2bdd6af7566a3b830c9495e93eeac7fec9e992fb7434da9f8cbe25f99ef0d
+test_sha256: 2a1257586dca79cbdc86cc74b4a08fdf5e0d1a2e3af3352102d7a5032de26ff3
+ordinary_gate: linux-test-stage-e-sam-decoder-r332-ordinary; source and package prefixes verified before launch
+ROS_DOMAIN_ID: not_applicable_offline_build_and_tests
+GZ_PARTITION: not_applicable_offline_build_and_tests
+retention: r331 retained; scratch deletion candidate only; no evidence deleted
+next_action: read back ordinary JUnit and test-result exit, then commit owned implementation/tests/ledger and ordinary-push with remote SHA verification
+```
+
+## Checkpoint CP-174 — Decoder primitives pass the complete ordinary gate
+
+```yaml
+checkpoint: CP-174
+status: CODE_GREEN_SYNC_PENDING
+source_commit: e57c12fa144c528e1812fb84fd8933ad2d068916
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+ordinary_initial:
+  run_id: linux-test-stage-e-sam-decoder-r332-ordinary
+  result: {passed: 1240, failed: 0, errors: 0, skipped: 0, warnings: 4, pytest_seconds: 16.45, elapsed_seconds: 17.85, colcon_exit: 0, test_result_exit: 0}
+  junit_sha256: ef1ca0b9c045659659fb0fdfc8d083619a6a8d8832d80d3bf5ff9aca94ea1672
+ordinary_final:
+  run_id: linux-test-stage-e-sam-decoder-r333-ordinary
+  result: {passed: 1240, failed: 0, errors: 0, skipped: 0, warnings: 4, pytest_seconds: 15.04, elapsed_seconds: 16.44, colcon_exit: 0, test_result_exit: 0}
+  junit_sha256: 58e0a5129543632e6505e53bdfb1675faaefcb4fe326f41d2300f33551c00d08
+  change_since_r332: test-only torch import deferred from collection to execution
+warning_correction:
+  initial_hypothesis: new eager torch import caused process-fork warnings
+  verdict: not_supported; warnings persisted after deferred import
+  historical_readback: r280 colcon-test.log already contains the same four warnings in test_concurrent_model_provenance_writers_preserve_the_first_document
+  regression: no new warnings or failures compared with historical ordinary gate
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-decoder-r331/install
+  ROS_DOMAIN_ID: not_applicable_offline_tests
+  GZ_PARTITION: not_applicable_offline_tests
+  source_binding: r331 built package points to this isolated checkout; all seven package prefixes read back before r332
+  scratch: r332/r333 each use their own registered durable scratch/run-id/tmp; exact Python preflight passed
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence
+static_checks: ruff check and git diff --check passed
+explicit_benchmark: not run for isolated training primitives; required when comparing adapted model; retain r30 and r222
+next_stage:
+  status: AUTHORIZED_RUNNER_IMPLEMENTATION_PENDING
+  work: verified train-only exact-RLE loader, deterministic prompt jitter, immutable checkpoint writing and real-model CUDA gradient smoke before full training
+  train_inventory_sha256: 56ae5c06cb2929be8ff8869bf8e662b2241518ba5dd1114709e2789b2825ac0a
+  val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  base_bundle: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1
+  base_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  model_training_started: false
+boundaries: all sealed sets untouched; Microduck paused; no deletion; mask IoU 0.80 unchanged; SAM adaptation authorization persists
+retention: r327 invalid, r329 RED, r330 GREEN, r331 overlay and r332/r333 ordinary evidence retained; no archived runs; scratch remains deletion candidate only
+next_action: commit only owned training module, regression tests and ledger; ordinary-push and remote SHA readback, then continue runner implementation under CP-170 recipe
+```
