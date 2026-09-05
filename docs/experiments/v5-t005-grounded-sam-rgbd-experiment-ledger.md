@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-208
+latest_checkpoint: CP-209
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: f9144864a5b905644f31e6a964c7413d6ab36378
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: diagnose r374 RGB-bound failure on train seed410001070; preserve completed captures and do not relax the bound
+next_action: verify retained categorical captures and complete categorical-only recovery bound to exact original RGB hashes
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14753,4 +14753,49 @@ next_experiment:
 owned_processes: NONE after renderer finally-close
 boundaries: no r5 dataset created; old datasets/models and sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU0.80 unchanged
 retention: all r374 partial evidence retained in place; scratch deletion candidate only; no deletion or archival
+```
+
+## Checkpoint CP-209 — RGB repeatability separated from categorical truth recovery
+
+```yaml
+checkpoint: CP-209
+status: VALID_RGB_DIAGNOSTIC_CATEGORICAL_ONLY_CAPTURE_PLANNED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-RGB-BOUND-AUDIT-R1
+source_commit: f36da5ce0511e0cef24912e8fbe35a405f4eab12
+gitee_sha_readback: f36da5ce0511e0cef24912e8fbe35a405f4eab12
+run_id: stage-e-categorical-rgb-bound-audit-r375
+result: {exit_code: 0, elapsed_seconds: 1.60, seed: 410001070, paired_repeats: 5, model_forwards: 0}
+report_sha256: 71e0bc6c27cd80121e0ebaee1053134e425ddb9e45ba12b78a3b020270cdf789
+manifest_sha256: 31793aafa3354aa4103e7aa31849e142d04d228ef3df814a6d4e4934d09134d1
+observed:
+  - qpos/qvel/xpos/xquat/geom_xpos/geom_xmat/cam_xpos/cam_xmat/light_xpos/light_xdir match between contexts on all five pairs
+  - every legacy cup mask matches original RLE; all five zero-sample categorical arrays match each other bitwise
+  - paired RGB differences are 0,0,7,6,6 pixels with maximum channel deltas0,0,2,2,2; fixed-context repeat itself changes seven pixels by up to2 on repeat2
+  - all seven repeat2 paired RGB difference coordinates belong to table geom63/body9, not cups; original RGB versus legacy differs only1..2 pixels by at most1
+inferred: strict maximum1 RGB rerender repeatability is not established even for unchanged geometry; no evidence of copied geometric-state drift in this seed
+unresolved: low-level driver/raster mechanism for the RGB variation is not proven; do not call it a segmentation correctness failure or silently raise its tolerance
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  GL_renderer: NVIDIA GeForce RTX5080, EGL, RGB4 categorical0
+  scratch: durable scratch/stage-e-categorical-rgb-bound-audit-r375/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+decision: retain r374 as INVALID; recover truth without substituting any rerendered RGB for the original image
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
+  status: PLANNED
+  run_id: stage-e-categorical-train-val-capture-r376
+  lifecycle: FULL_RESTART offline categorical process
+  output: durable truth-remediation/categorical-train-val-capture-r2
+  single_variable: truth-only recovery uses exact original image SHA identity and actual zero-sample segmentation on the accepted visible state; no corrected RGB render is required or adopted
+  preliminary_gate: restore each of seven retained r372/r375 scene states in the renderer owning that state, invoke the real zero-sample segmentation method, require complete visible/reference categorical arrays to match retained arrays exactly
+  recovery: independently hash and validate all1070 completed r374 pairs, six r372 val pairs and the first r375 train pair; reference receipts from the new root, never modify the failed root or choose a repeat by model score
+  new_capture: only remaining423 original train/val members; legacy route reproduces accepted scene and old RLE, then original visible qpos is restored and the same owner's real zero-sample visible/reference route captures truth
+  RGB_identity: original files remain immutable and byte-identical by pinned inventory SHA; rerendered legacy RGB is diagnostic only, never replaces original dataset RGB
+  frozen_contract: same1500 identities, quotas, camera/object geometry and original acceptance thresholds as CP-207; all corrected acceptance violations reported without resampling or dropping
+  invalid: hash/identity/legacy RLE/control-array/state/backend/collision mismatch; preserve incomplete outputs and stop
+  subsequent: independent full readback and new immutable r5 truth preregistration; no inference/training/tuning before repaired-label reevaluation
+retention: r372-r375 retained in place; no archived/deleted runs; all scratch deletion candidates only
+boundaries: mask IoU0.80 and historical all-scenario/primary scores unchanged; sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused
 ```
