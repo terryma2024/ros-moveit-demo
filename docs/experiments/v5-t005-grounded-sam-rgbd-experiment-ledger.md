@@ -17853,3 +17853,28 @@ next_experiment:
 retention: r474-r476 and all earlier evidence retained, archived none; scratch deletion candidates only, no deletion
 boundaries: r470 held; no GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-306 — r477 behavioral GREEN frozen for final runner re-review
+
+```yaml
+checkpoint: CP-306
+status: VALID_BEHAVIORAL_GREEN_SCOPED_REREVIEW_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-behavioral-green-r477
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_BEHAVIORAL_GREEN, total: 33, passed: 33, original_r476_expectations_passed: 17, regressions: 0, harness_errors: 0, test_exit: 0, tool_exit: 0, receipt_exit: 0, stderr_bytes: 0, elapsed_seconds: 0.22}
+red_predecessor: authoritative r476 exit1 reproduced16 defects with one valid control and zero harness errors; r474/r475 remain invalid immutable evidence
+inputs: corrected driver SHA256 e266450e88a74db2d9d6f27c0ebff66eb32f20d9ef451c7f8355ca6714948259, corrected shell SHA256 7f7c4e6089087dfddabf26e4e93a0b2a314fbab344478ecf225b3326c3b58849, GREEN harness SHA256 0ebfa8ee71e467adcd629ad98925c448b746162efea2fce8ec8de11f4cd033ca, offline launcher SHA256 ca203394b7254160ced34292e6bf0ff99700d36958bede2977b8517914b724c6
+implementation: consistent resolved locked-Python contract; exact typed manifest/preflight/nested-truth validation; exclusive fsynced canonical little-endian int32 row-major categorical artifacts with independent readback/equality; exact frozen-writer PNG chunk and zlib termination checks; exact nested directory allowlist; removed duplicate constant; final run-root fsync
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-behavioral-green-r477 plus unique retained NVMe scratch; result SHA256 23ffa251a0ff4ace1fa0a7319344ef62e9de4081102c4a1a35f24d383079df8d
+report: durable coordination/generator-r443-r1/runtime-acceptance-runner-behavioral-green-report.md SHA256 4b3a045357f7397fc9cca728c15a9b8682f6671ceb1e4bf18922a26509116501
+parent_readback: all1482 corrected driver lines and all219 corrected shell lines read completely; report/result/exits/empty-stderr/tempfile/static/package-diff receipts and input hashes confirmed; src/so101_demo_py remains exact against frozen source4a0ba99f; r470 run/scratch/output roots remain absent
+python_scratch: exact locked venv launch resolved /usr/bin/python3.12; TMPDIR/TMP/TEMP and tempfile.gettempdir exact within unique registered durable NVMe scratch; PASS
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: full final driver/shell and r476-to-r477 evidence; confirm R1-R3, independent categorical readback, strict PNG, exact typed manifests/preflight/truth and exact trees, failure durability, launch hashes, and actual MuJoCo geom_ids compatibility
+  restrictions: read-only; no execution/import/GL/render/root allocation or repository/evidence mutation
+  stop_after: reviewer report and parent checkpoint decision; r470 remains held unless a later ledger GO records exact reviewed hashes and command
+retention: r474-r477 and all earlier evidence retained, archived none; scratch trees are deletion candidates only and nothing was deleted
+boundaries: no actual r470/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
+```
