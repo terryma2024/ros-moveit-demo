@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-207
+latest_checkpoint: CP-208
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: f9144864a5b905644f31e6a964c7413d6ab36378
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: capture categorical truth on all original train/val accepted scene states; audit acceptance before deriving immutable r5 labels
+next_action: diagnose r374 RGB-bound failure on train seed410001070; preserve completed captures and do not relax the bound
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14718,4 +14718,39 @@ next_experiment:
 retention: r372/r373 retained; no archived or deleted runs; scratch deletion candidates only
 owned_processes: NONE at resumption
 boundaries: historical CP-113/CP-161/CP-164 and all model metrics unchanged; test/COCO100/PickPlace/Mac inaccessible; Microduck paused; prompt cup.; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-208 — Full capture fails closed at paired RGB bound
+
+```yaml
+checkpoint: CP-208
+status: INVALID_FULL_CAPTURE_DIAGNOSTIC_PLANNED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
+source_commit: d306b319ad8ed867517f1b08c22f2cb955e4a11c
+gitee_sha_readback: d306b319ad8ed867517f1b08c22f2cb955e4a11c
+run_id: stage-e-categorical-train-val-capture-r374
+result: {exit_code: 1, elapsed_seconds: 61.64, failed_seed: 410001070, failed_split: train, failed_scenario: two_cups}
+first_bad_boundary: paired RGB maximum channel difference exceeds preregistered1; assertion before saving this failed frame's arrays
+limitations: failed-frame magnitude and coordinates were not logged by r374; do not invent them or infer a root cause from this assertion
+retained: prior1070 completed train pair NPZ/JSON records, initial selection and geometry documents, runner/helper/source/preflight/command/exit logs; no final manifest or full capture success claimed
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  scratch: durable scratch/stage-e-categorical-train-val-capture-r374/tmp; locked Python tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-RGB-BOUND-AUDIT-R1
+  status: PLANNED
+  run_id: stage-e-categorical-rgb-bound-audit-r375
+  lifecycle: FULL_RESTART offline renderer process
+  scope: only original train seed410001070; five fixed-state paired repeats, save all arrays before any acceptance evaluation, compare both contexts with retained original RGB
+  competing_hypotheses: stochastic raster edge variance versus missing copied render state or RGB-context mutation
+  single_variable: renderer context identity on exact accepted scene state; repeated RGB observations diagnose repeatability
+  output: durable truth-remediation/categorical-rgb-bound-audit-r1
+  guards: locked source/MJCF/inventory, bitwise legacy RLE, RTX5080 EGL, RGB4 categorical0, original image hash; no threshold change or model inference
+  subsequent: inspect difference locations and state identity; completed r374 pairs may be reused only after independent receipt/hash readback; never reuse the failed run directory
+owned_processes: NONE after renderer finally-close
+boundaries: no r5 dataset created; old datasets/models and sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU0.80 unchanged
+retention: all r374 partial evidence retained in place; scratch deletion candidate only; no deletion or archival
 ```
