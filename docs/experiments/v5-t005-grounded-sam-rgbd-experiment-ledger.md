@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-386 — Astra final review NO-GO on uncovered tail fsync path; focused RED preparation planned
+
+```yaml
+checkpoint: CP-386
+status: R526_GREEN_RETAINED_ASTRA_CHANGES_REQUESTED_TAIL_FSYNC_RED_PREPARATION_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, task_quality: CHANGES_REQUESTED, official_generation: NO_GO, critical: 0, important: 1, minor: 1}
+review_scope: complete frozen driver1954/shell484/r526 harness684/launcher415, full2033-line result and all30 evidence members/hashes/readback, source/package/tempfile/raw/status, antecedents and production wiring; no behavior or protected access
+Important_R526_I1: normal tail fsync calls at shell lines465and467 run under errexit after original_exit is saved; ordinal1or2 failure enters EXIT owner with96 as caught original, helper retry may succeed and records storage0, skips outer and loses real original0or7; r526 injected only helper ordinal3 and did not cover these paths
+required_RED: four target cases=tail fsync ordinal1or2 crossed with driver original0or7; require finalizer/accounting original stays0or7, first storage96 survives retries, outer exactly1, one owner/finalizer/completion, overall96 for original0 and7 for original7; add mixed tail-storage96+finalizer9 requiring first storage96 and overall9; retain all-zero0/7, helper-ordinal3 0/7, predriver exception/no-recursion/postseal controls and at least one real-driver persisted receipt/inventory control
+minimal_fix_boundary: preserve original result before any fallible tail audit and route each tail fsync outcome into the same first-nonzero ordered storage state owned by completion; successful retry cannot erase it; merely passing saved original to EXIT is insufficient; consolidation allowed only if durability/stage ordering retained
+Minor_R526_M1: offline launcher records source-after HEAD/branch/scoped/private hashes but final acceptance gates only package equality/result identities; retained r526 actual before/after are equal so GREEN evidence remains valid, but future reuse needs an automated metadata-drift reject/unchanged accept test without real Git mutation
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r526-final-launch-review-report.md SHA2562506b2f265a95d92cd779cfe56cb56e2412f2a783d4866272487ff1846b04c90,93 lines,16818 bytes
+parent_readback: complete report and exact cited shell/harness lines read; report hash/local-Gitee/source boundaries verified
+next_experiment:
+  status: GO_PRIVATE_TAIL_FSYNC_FOCUSED_RED_STATIC_PREPARATION_NO_BEHAVIOR
+  planned_run_id: stage-e-generator-tail-fsync-accounting-red-r527
+  executor: /root/generator_build, gpt-5.6-sol high
+  preparation: create a new private focused harness and launcher using existing no-GL shell instrumentation; freeze exact case matrix/oracles/target-reachability and immutable candidate hashes; candidate shell/driver remain unchanged
+  static_required: AST/Ruff/bash/source-transform syntax, grammar-valid unique case IDs, exact locked Python/shared arguments/NVMe launcher preflights, r527/official roots absent; no harness/driver behavior invocation or root allocation
+  stop_after: parent reads frozen plan/hashes and checkpoints exactly one fresh RED invocation; shell fix forbidden until authoritative RED evidence
+restrictions: no tracked source edit, project/MuJoCo/OpenGL/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r526 remains authoritative for248 covered cases; all prior evidence/reports retained; archived/deleted none
+boundaries: four official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-385 — r526 authoritative 248-case offline GREEN; immutable Astra launch review planned
 
 ```yaml
