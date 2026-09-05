@@ -11747,3 +11747,96 @@ retention:
   deletion_candidates: [r282-r288 scratch; do not delete without explicit user authorization]
 next_action: commit and push CP-139, then stop at this decision boundary with SAM unchanged and all downstream gates sealed
 ```
+
+## Checkpoint CP-140 — fixed-sample SAM mask-pipeline diagnostic authorized and frozen
+
+```yaml
+checkpoint: CP-140
+status: PLANNED
+recorded_at: 2026-09-05T08:16:46+08:00
+stage: E_SAM_MASK_PIPELINE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-PIPELINE-DIAGNOSTIC-R1
+prior_checkpoint: CP-139
+authorization: user authorized the recommendation and authorized future recommended boundaries until the complete task goal is met
+source_commit: 2aae7fbb6910335a28a2a119fc45f42bb8bfd7c6
+symptom: 162 of 163 corrected-truth mask failures are leakage despite failing matched boxes having median box IoU 0.94327
+competing_hypotheses:
+  H1_adapter_or_processor_binding: real SAM output tensor, processor postprocess, proposal index, and stored RLE are not bound as assumed
+  H2_sam_quality_selection: stored argmax predicted-IoU variant is not the best available mask for the same DINO box
+  H3_sam_prompt_or_capability: binding is exact but the frozen SAM variants leak even with an accurate DINO box; exact-truth-box A/B distinguishes box sensitivity from segmenter capability
+single_variable: same frozen image/model with prompt box source DINO_BOX versus EXACT_TRUTH_BOX; no other inference or configuration change
+lifecycle: ISOLATED_STACK
+scope:
+  split: val only
+  detector_inference: none; use retained immutable DINO boxes
+  sam_inference: fixed 10-frame diagnostic only
+  training: none
+  threshold_selection_or_tuning: none
+  model_or_code_change: none
+sample_contract:
+  failure_representatives:
+    - {formal_sample_index: 53, truth_index: 0, candidate_id: grounded-sam-000, scenario: partially_occluded_cup}
+    - {formal_sample_index: 135, truth_index: 0, candidate_id: grounded-sam-000, scenario: cup_near_bottle}
+    - {formal_sample_index: 142, truth_index: 0, candidate_id: grounded-sam-000, scenario: small_far_cup}
+    - {formal_sample_index: 152, truth_index: 0, candidate_id: grounded-sam-000, scenario: two_cups}
+    - {formal_sample_index: 229, truth_index: 0, candidate_id: grounded-sam-000, scenario: one_cup_distractors}
+    - {formal_sample_index: 289, truth_index: 0, candidate_id: grounded-sam-000, scenario: one_cup_distractors}
+  passing_controls:
+    - {formal_sample_index: 57, truth_index: 0, candidate_id: grounded-sam-000, scenario: cup_near_bottle, prior_mask_iou: 0.980782198246797}
+    - {formal_sample_index: 68, truth_index: 0, candidate_id: grounded-sam-000, scenario: two_cups, prior_mask_iou: 0.9764957264957265}
+    - {formal_sample_index: 127, truth_index: 0, candidate_id: grounded-sam-000, scenario: one_cup_distractors, prior_mask_iou: 0.9859180687637161}
+    - {formal_sample_index: 275, truth_index: 0, candidate_id: grounded-sam-000, scenario: partially_occluded_cup, prior_mask_iou: 0.9488730071467839}
+frozen_inputs:
+  model_bundle_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-cup-r3-epoch7-r1
+  model_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  sam_model_id: facebook/sam2.1-hiera-tiny
+  sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
+  sam_transformers_model_sha256: 48c14467e5cf9e51870511feb72c89688e82dd74523142c0538b663e193ac2a7
+  threshold_lock: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/calibration/frozen-cup-r3-epoch7-r1/threshold-lock.json
+  threshold_lock_file_sha256: 49cb6e11152447fa32c1f91442fe973206be2d526104f7cdcd1f911c889b5a17
+  threshold_lock_internal_sha256: c59a7fb341e239c643e4ca3d8aff95fcad8f7bf5d8521b1b388f40aa4647e91e
+  raw_run_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-r3-epoch7-raw-r2
+  raw_manifest_sha256: f5b5bc81e707dd189fca24fc90b77b710d21707a269408eecf2cf8c28121481a
+  corrected_truth_source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  corrected_val_inventory_sha256: 9cd4f266b7728f02d6b066ac359efa05e1a080ed2fc7ad1aff4447624e34d466
+  residual_manifest_sha256: 03c9cd02c4c344ce975fe8ac31a46423f5a642cba4db2d9e4faeaba24e357970
+capture_contract:
+  - for DINO_BOX, replay each retained candidate box as a single stateless prompt and capture raw pred_masks, raw iou_scores, postprocessed masks, selected variant, and stored-RLE comparison
+  - for EXACT_TRUTH_BOX, capture the same fields with only the prompt box changed
+  - persist lossless target raw tensor slices as NPY, every postprocessed variant as exact COCO RLE, shape/dtype/SHA/area, and model-reported quality
+  - report selected-by-quality truth IoU and analysis-only best-variant truth IoU for each prompt source; never deploy or tune from oracle values
+  - bind every record to source image, corrected truth, raw record, stored RLE, model manifest, threshold lock, Python, CUDA device, dtype, and source commit
+validity:
+  - exact Python /data/work/venvs/so101-grounded-sam/bin/python and CUDA with no CPU fallback
+  - local-files-only and HF_HUB_OFFLINE=TRANSFORMERS_OFFLINE=1
+  - all 10 identities/hashes match CP-139, raw evidence, and corrected inventory
+  - output root absent/no symlink; complete 20 prompt executions or terminal INVALID evidence
+  - DINO_BOX reproduction mismatch is a valid diagnostic observation, not permission to overwrite old raw evidence
+success_criteria:
+  - complete immutable artifacts distinguish H1/H2/H3 on all 10 samples and pass independent readback
+failure_criteria:
+  - valid complete evidence shows one or more hypotheses remain unresolved; continue with the smallest recommended TDD experiment
+invalid_criteria:
+  - provenance/hash/identity mismatch, CPU fallback, output collision, incomplete records, or any sealed-set access
+provenance:
+  install_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: UNSET_OFFLINE_INFERENCE
+  gz_partition: UNSET_OFFLINE_INFERENCE
+planned_output:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/grounded-sam-mask-pipeline-r1
+  run_id: stage-e-sam-mask-pipeline-r291
+  members: [manifest.json, report.json, records/, tensors/, masks/, overlays/]
+  freeze_and_readback: required
+tdd:
+  red_run: stage-e-sam-mask-pipeline-red-r289
+  green_run: stage-e-sam-mask-pipeline-green-r290
+  test_break: catches swapped proposal/variant axes, selection by the wrong quality row, and non-exact stored-mask binding
+  expected_values: hand-derived two-proposal/three-variant tensors and masks
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [all CP-139 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r289-r291 scratch after readback; do not delete without explicit user authorization]
+next_action: commit and push this PLANNED checkpoint, then create and execute the RED contract before any diagnostic implementation
+```
