@@ -18008,3 +18008,44 @@ next_experiment:
 retention: r470 and all earlier evidence retained, archived none; all scratch trees deletion candidates only; nothing deleted
 boundaries: sealed synthetic test remains inaccessible and no new test version may be generated or previewed; COCO100/PickPlace/Mac inaccessible; no model inference/training or SAM change; Microduck paused; primary excludes only small_far_cup for reporting, never runtime labels; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-312 — nonpenetrating train/val-only protocol candidate frozen for review
+
+```yaml
+checkpoint: CP-312
+status: PREPARED_PROTOCOL_SCOPED_REVIEW_PLANNED
+experiment_id: EXP-079-STAGE-E-NONPENETRATING-TRAIN-VAL-VERSION-R1
+preparation_head: ce84e782e4f8b612bfe2e3b68630ccc99082c9b2
+executor: /root/generator_build, gpt-5.6-sol high
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-protocol-prep-report.md SHA256 4842cecf8f6abebe21f06b8a982d6608801ff7a88e652bb5b7215cac9eaa79d2
+disposition: PREPARED_WITH_REQUIRED_CODE_CHANGE; inspection only, no test/import/render/root allocation/data/model action
+support_finding: current generator and converter require exact train/val/test positive splits; test omitted or zero is rejected; sample-limit cannot isolate train/val; official generation remains blocked until bounded TDD generalization
+member_contract:
+  splits: [train, val]
+  counts: {train: 1200, val: 300}
+  per_scenario_quotas: {train: 200, val: 50}
+  scenario_order: [no_cup, one_cup_distractors, two_cups, cup_near_bottle, small_far_cup, partially_occluded_cup]
+  primary_reporting_only: {train: 1000, val: 250, exclusion: small_far_cup}
+  forbidden: any test key/path/namespace/member/profile/seal, runtime scenario-label eligibility, sample dropping/resampling/renumbering
+seed_contract: train450000000..450001199, val460000000..460000299; zero exact endpoint declarations in bounded repository plus full ledger scan; disjoint from all discovered prior/reserved ranges and each other; attempt seed SeedSequence([sample_seed,scenario_ordinal,attempt_index]) for attempts0..63
+geometry_contract: exact CP075/CP076 MJCF, 640x480 task_camera, base/jitter/object centers/ranges, small_far retreat2.40..3.00m and area0..1024exclusive/pixels>=64, partial bottle offsets and visible fraction0.35..0.80inclusive/pixels>=64/occluded>=1; all six scenarios opt in task-visual-nonpenetration-v1 before any render
+receipt_contract: each accepted truth has accepted true, exact policy/state SHA and scenario-derived complete ordered finite task-visual primitive pair scope with signed distance guard >=-1e-9m; invalid/missing/foreign/duplicate pair or exhaustion fails closed and partial root is never reused
+truth_contract: zero-sample-count categorical body-ID visible RLE is mask truth; partial paired reference hides only orange_bottle with identical accepted cup/camera/material state; amodal=visibleORreference; hashes/counts/shape/strict subset/fraction/occluder recompute exactly; convex-hull polygon compatibility only, never mask truth
+class_prompt: generic cup and cup. exactly; SAM remains frozen/stateless and absent from generation/training
+output_contract:
+  source: durable training-data/yolo-seg-nonpenetrating-train-val-v1
+  archive: durable training-data/archives/so101-v5-t005-cup-nonpenetrating-train-val-v1.tar.gz
+  converted: durable training-data/grounding-dino-cup-nonpenetrating-train-val-v1
+  repro: durable training-data/grounding-dino-cup-nonpenetrating-train-val-v1-repro
+  collision_readback: all four and run/scratch r480-r491 absent under both -e and -L; reserved only, not allocated
+phases: r480 RED tests only; r481 GREEN; review/commit; r482 fresh seven-package offline build; r483 ordinary; r484 one explicit benchmark; r485 generation1500; r486 exhaustive4502-file readback; r487 deterministic archive; r488 archive readback; r489 primary conversion; r490 reproducibility conversion; r491 byte-identical/mode/hash/profile freeze
+source_change_scope: canonical supported split tuple only exact train-val-test or train-val while preserving old byte semantics; new immutable config; converter same tuple plus mandatory schema2 nonpenetration receipt validation; no CLI flag or renderer/camera/RNG/mask/threshold/model semantic change
+runtime_provenance: new reviewed overlay required after source change; exact source/config/MJCF closure/Python/NVIDIA EGL contexts/offline/no-fallback/output-preabsence; unique registered NVMe scratch and exact tempfile gate each phase
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: full report and cited source; validate no hidden test access/output, exact seed/geometry/truth/receipt science, backward compatibility, TDD/gate sufficiency, file counts/roots/run ordering and single next r480 RED boundary
+  restrictions: read-only; no source/report/ledger/evidence edit, import/test/render/root allocation or sealed-member traversal
+retention: preparation report and all earlier evidence retained, archived none; no new scratch deletion candidate and nothing deleted
+boundaries: no test namespace is allocated by this version; sealed test/COCO100/PickPlace/Mac inaccessible; no generation/inference/training/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
