@@ -13941,3 +13941,95 @@ next_action: commit owned runtime/test/ledger, ordinary-push and read back exact
 boundaries: no sealed test, COCO100, PickPlace, Mac or Microduck training; no DINO rerun; IoU 0.80 unchanged
 retention: r343-r348 retained; scratch deletion candidates only; no evidence deleted
 ```
+
+## Checkpoint CP-188 — Five-epoch decoder training completed
+
+```yaml
+checkpoint: CP-188
+status: VALID_TRAINING_COMPLETE_PENDING_INDEPENDENT_READBACK_AND_VAL_SELECTION
+source_commit: 2eed1d9a199d62d2357e492d5d11c091281653ed
+gitee_sha_readback: 2eed1d9a199d62d2357e492d5d11c091281653ed
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+run_id: stage-e-sam-decoder-train-r349
+result: {exit_code: 0, wall_seconds: 230.70, training_seconds: 224.62092729500728, epochs: 5, optimizer_steps: 5000, candidate: false}
+epochs:
+  - {epoch: 1, steps: 1000, loss_mean: 0.10409333217097447, checkpoint_manifest_sha256: d77ff339d135a4a278dbceeafd43d63ea89c6c019253798e0d0362c6ceec01ed}
+  - {epoch: 2, steps: 1000, loss_mean: 0.04172070256154984, checkpoint_manifest_sha256: 8c6c223056892cbe41a4c8251d64dc0e99c5cd1f622169ccd1a8a4724c421aa2}
+  - {epoch: 3, steps: 1000, loss_mean: 0.033183360693044964, checkpoint_manifest_sha256: 7e69370a1d76400a27bdcf7cb26c622fabfdf35fdc9f8d61151987e0259d77c6}
+  - {epoch: 4, steps: 1000, loss_mean: 0.031275631037307905, checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e}
+  - {epoch: 5, steps: 1000, loss_mean: 0.030510024214163423, checkpoint_manifest_sha256: 04fbd10f228e54c35a86831a0a6af73103a8f2d70bb6635ea5e51d681aba1906}
+epoch_gates: all frozen-state hashes unchanged; complete model reload equality and checkpoint inventory verification passed for every saved epoch
+runtime:
+  device: cuda
+  dtype: float32
+  cpu_fallback: false
+  peak_cuda_bytes: 685124096
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-runtime-r347/install
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/sam-decoder-cup-r4-r1
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-decoder-train-r349
+scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-decoder-train-r349/tmp
+tempfile_preflight: exact resolved match
+interpretation: training completed, but no validation or qualification claim is made from training losses
+next_readback:
+  run_id: stage-e-sam-training-readback-r350
+  status: PLANNED
+  checks: all five expected manifest hashes and exact file sets, immutable modes, 1000 unique prompted train seeds per epoch, logged order and finite loss/gradient counts, 5000 total updates, all frozen model tensors equal original base, optimizer state step counts, report identity
+  allowed_access: train inventory, original base and five new checkpoints only; no val/test/COCO100
+next_action: independent r350 readback, checkpoint and source sync, then preregister corrected-val evaluation of the five epochs with retained DINO proposals and fixed CP-170 selection rule
+boundaries: sealed test/COCO100/PickPlace/Mac untouched; Microduck paused; IoU 0.80 unchanged; no DINO rerun
+retention: all five immutable checkpoints, per-step logs and r349 evidence retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-189 — Full training independent readback passed; corrected-val comparison authorized
+
+```yaml
+checkpoint: CP-189
+status: VALID_TRAINING_READBACK_COMPLETE_CORRECTED_VAL_COMPARISON_NEXT
+source_commit: 2eed1d9a199d62d2357e492d5d11c091281653ed
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+run_id: stage-e-sam-training-readback-r350
+result: {exit_code: 0, elapsed_seconds: 5.45, files_verified: 42, total_bytes: 794258333, epochs_verified: 5, optimizer_steps_verified: 5000}
+tree_inventory_sha256: 6d3ff523db4bdeab3e7086728fe98cb909a1f2f1fd69b12a7d29c7c663f5c7cf
+independent_checks:
+  - exact expected five checkpoint manifests and seven-file member set per checkpoint
+  - immutable file/directory modes and full content hashes
+  - exactly 1000 unique prompted train seeds and 1200 box prompts per epoch, matching logged order and CP-180 jitter bounds
+  - finite loss/gradient records and independently recomputed epoch means
+  - all 178 frozen state tensors equal original base for each epoch
+  - all 125 optimizer state counters equal 1000 times completed epoch
+  - training report identity, CUDA declaration, candidate false and zero val/sealed access
+evidence_hashes:
+  training_report_sha256: 3c383daccde7076d0c3e4a7b04a12ac00eb5afdaefe434eb66693bd1abdeb915
+  training_exit_sha256: 4919cb2d2562cb5c94d61c2a929c8ffa419b2993f86487d511568d34487c761b
+  independent_report_sha256: feddb65b9e47dbe70c30278161e9cc5db1ae972d6f96f887b65f7e2241f9832a
+  verifier_sha256: 87a421003ee00d42c243dd9ed3c5429e8f030a5d8167fdfe895f267c35efa56b
+  readback_exit_sha256: 2843e2668e753cf6a0044b5e80f5faa5b4ea11c66895c1238def39b609a4968a
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-runtime-r347/install
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-training-readback-r350
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-training-readback-r350/tmp
+  tempfile_preflight: exact resolved match
+  runtime: CPU serialization/hash verification only; no model forward or fallback
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+  status: AUTHORIZED_PENDING_DETAILED_PREREGISTRATION_AND_DRIVER_TDD
+  inputs: five immutable CP-188 checkpoints, r4 corrected val, retained r224 DINO proposal records bound to original r3 val and CP-128 truth rebind identity
+  variable: trained SAM decoder epoch only; same DINO boxes/scores and same prompt/preprocessing/production selection thresholds
+  thresholds: box 0.25, text 0.25, SAM quality 0.50, duplicate IoU 0.85, minimum mask pixels 64, maximum area ratio 0.50, truth box IoU 0.50, truth mask IoU 0.80
+  outputs: every epoch's selected SAM masks, quality scores, stable candidate identities, complete 300-val-image denominators and all/primary cohort metrics
+  primary_cohort: offline reporting excludes only small_far_cup; production must not use scenario labels
+  checkpoint_selection: highest primary production F1, then primary recall, then earliest epoch; do not adjust thresholds
+  baseline: preserve CP-167 all-scenario F1 0.18146718146718147 and primary F1 0.20982142857142858
+  inference: new SAM inference required for changed decoder weights; do not rerun DINO or valid historical raw inference
+  explicit_benchmark: required for this adapted-model comparison, on fresh NVMe scratch, using colcon test --packages-select so101_demo_py --pytest-args benchmark_test; compare pytest elapsed with r30 HDD baseline 3210.78 seconds; preserve r30 and r222
+  forbidden: synthetic sealed test, COCO100, PickPlace and Mac remain inaccessible; this checkpoint authorizes val comparison only
+retention: all r349 checkpoints and r350 readback retained, no archived/deleted runs; scratch deletion candidates only
+microduck: paused
+next_action: commit and ordinary-push CP-188/189 with remote SHA readback; then implement and verify the bounded val comparison driver before its required benchmark and five-epoch SAM evaluation
+```
