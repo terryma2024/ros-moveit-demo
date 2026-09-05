@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-370 — r518 shell cases fail reachability; fresh run-ID-corrected RED required
+
+```yaml
+checkpoint: CP-370
+status: INVALID_R518_RED_HARNESS_RUN_ID_REACHABILITY_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r518
+executor: /root/generator_build, gpt-5.6-sol high
+reported_result: {classification: VALID_R517_REVIEW_FINDINGS_RED, total: 40, expected_defects: 16, controls: 18, mutation_kills: 6, harness_errors: 0, harness_exit: 1, launcher_tool_exit: 0, elapsed_seconds: 20.112267157}
+parent_correction: authoritative overall RED=false; all four I1 defect details and five shell-mutant details have calls=[], finalizer/completion0 and stderr `authorized generation run ID is required`; root.name underscores were concatenated into SO101_GENERATION_RUN_ID, violating shell lowercase-alnum-hyphen grammar before target behavior
+impact: wide defect/mutation oracles accepted generic early failure as expected defect/kill; I1 storage behavior and five shell mutation kills are unmeasured; real-driver I2 fixtures and valid controls remain retained observations but cannot validate the preregistered combined gate
+evidence_retained: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-red-r518; result SHA256ce30c959d5b7eaf344ee60c2116a9df5410438e0d6ddc21f4d6b2a52c28d88f4; final21-file inventory SHA256f1d9fadfee44f8724d963c5a871b40b225f3c72b3d3e2896fac6a8417de61b16; readback SHA256fd2a569be624b624ceadae37954a6fc4575043ac0dbc16794635ad44f15a0f9c
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-red-r518-report.md SHA256187ce5641920ece67346c238ffd5ce3063e00651bd77c1263027653f533c1ee4 retained unchanged; its authoritative conclusion is superseded by this parent readback correction
+frozen_candidate: driver SHA2567739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a and shell SHA2569bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a unchanged
+next_experiment:
+  status: GO_FRESH_RUN_ID_AND_REACHABILITY_ONLY_RED_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r519
+  executor: /root/generator_build, gpt-5.6-sol high
+  sole_harness_fix: construct grammar-valid unique hyphen-only per-case generation IDs independent of root names, assert regex before subprocess, and require per-case target reachability/call-stage markers; generic provenance/argument/preflight exit cannot count as defect or mutation kill
+  preserved: exact40-case semantics/split and six mutation source hashes/operations, all I2/control assertions, frozen candidate bytes; mechanical r519 paths/current HEAD only
+  required: static AST/Ruff/Bash and generated-mutant syntax; fresh exact Python/NVMe roots; one invocation;16 target defects/18 controls/6 behavior kills, zero harness error/unexpected, all shell cases reach registered target seam, forbidden imports empty; raw exit/elapsed/fsync/inventory/readback/report; stop before fix
+  restrictions: no candidate edit, tracked repo/Git/index/ledger, real setup/project/GL/GPU/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r518 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-369 — r518 40-case executable RED statically frozen; one invocation authorized
 
 ```yaml
