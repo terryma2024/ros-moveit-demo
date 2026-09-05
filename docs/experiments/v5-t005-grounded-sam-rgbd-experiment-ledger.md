@@ -12288,3 +12288,55 @@ retention:
   deletion_candidates: [r302 history source/evidence/scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-148, acquire and inventory the exact aa9b872 source in a new immutable root, then construct an isolated dependency target without mutating the locked Grounded-SAM environment
 ```
+
+## Checkpoint CP-149 — byte-compatible official SAM 2.1 source frozen
+
+```yaml
+checkpoint: CP-149
+status: VALID_DEPENDENCY_ACQUISITION_PLANNED
+recorded_at: 2026-09-05T08:43:17+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-148
+source_commit: 634393c948d62c6eb6dc97333b20932b831ccb51
+run_id: stage-e-native-sam-compatible-source-r303
+source:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-aa9b872-r3
+  official_commit: aa9b8722d0585b661ded4b3dff1bd103540554ae
+  official_tree: 4518e721044e71e1f8a7d3b2318db556ae7caad7
+  tracked_files: 565
+  inventory_records: 565
+  source_files_inventory_sha256: d087e47875dc56e9de8de3b7e1f334c00db5080bcc9ed79fe0e211795be7aada
+  dirty_paths: 0
+  config_byte_equal_to_bundle: true
+  config_sha256: 43e114f609a1af7efede061f5c186119d498acd31f118f300c07acf57d4a5eca
+dependency_plan:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/runtime/native-sam2-aa9b872-r1
+  acquisition: download exact wheels/source distributions to a retained wheelhouse, hash them, then install offline into an absent isolated target
+  pinned_direct_requirements: {hydra-core: 1.3.2, omegaconf: 2.3.0, antlr4-python3-runtime: 4.9.3, iopath: 0.1.10, portalocker: 3.2.0}
+  inherited_locked_environment: {torch: 2.13.0, torchvision: 0.28.0, numpy: 2.5.2, tqdm: 4.70.0, pillow: 12.3.0}
+  source_usage: PYTHONPATH points to the immutable official source plus isolated dependency target; no editable install and no mutation of the locked venv
+  cuda_extension: not built; official image predictor box-prompt path does not require connected-component postprocessing, and the A/B must record this runtime fact
+  network_policy: network is permitted only during the explicit retained dependency-acquisition run; diagnostic inference is offline
+validity:
+  - all acquired distributions and installed files receive deterministic inventories and SHA readback
+  - import origins must resolve only to the immutable official source, isolated dependency target, or the exact locked base environment
+  - checkpoint load must report no missing or unexpected keys before RED/GREEN diagnostic implementation
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-compatible-source-r303
+  preflight_sha256: 5c870f472031938df04b2b33c86cb2b2f75c8847902f1f7063116424ebc648eb
+  acquire_log_sha256: 97aeb7d92852c5d69f2c330180ab402e35daa3646da2e53c83c52abe1213677d
+  acquire_stderr_sha256: af0dd76e101870dfa66a1db8792c3a9784ee3d4b098f983bcc832ea8aa1afc26
+  source_audit_sha256: c27c6ee2d0717ad9591ea58f1d065fb7c987e59e5b9a8f5196a49ea1f658506f
+  source_inventory_pointer_sha256: 2dbeef346fcfd306c0f2c3a0f4c97f7f4899096ed20ecc33e8081c03593216b2
+  exit_sha256: 5e5d47d4480ae06a37dc9f7c5cd50e7b5c620c37a6c7a2fee767ce375c55af8d
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r303 immutable compatible source/evidence/scratch, all CP-148 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r303 source/evidence/scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-149, acquire the five exact dependency distributions into a new retained wheelhouse, install them offline into the absent isolated target, and verify import origins plus exact checkpoint loading before RED
+```
