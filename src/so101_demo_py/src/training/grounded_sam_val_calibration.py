@@ -235,15 +235,15 @@ def _require_immutable_regular_file(path: Path, code: str) -> bytes:
     return payload
 
 
-def _safe_val_member(root: Path, value: object, kind: str, seed: int) -> Path:
+def _safe_split_member(root: Path, value: object, kind: str, seed: int, split: str) -> Path:
     if not isinstance(value, str) or "\\" in value:
         raise ValCalibrationError("VAL_MEMBER_PATH_INVALID", str(value))
     relative = PurePosixPath(value)
-    expected = PurePosixPath(kind, "val", f"{seed}.{ {'images': 'png', 'labels': 'txt', 'truth': 'json'}[kind] }")
+    expected = PurePosixPath(kind, split, f"{seed}.{ {'images': 'png', 'labels': 'txt', 'truth': 'json'}[kind] }")
     if relative != expected:
         raise ValCalibrationError("VAL_MEMBER_PATH_INVALID", value)
     target = root.joinpath(*relative.parts)
-    if target.resolve(strict=False).parent != (root / kind / "val").resolve(strict=False):
+    if target.resolve(strict=False).parent != (root / kind / split).resolve(strict=False):
         raise ValCalibrationError("VAL_MEMBER_PATH_INVALID", value)
     return target
 
@@ -299,6 +299,44 @@ def load_locked_val_dataset(
 ) -> ValDataset:
     """Verify and load only the externally hash-bound r3 validation members."""
 
+    return _load_locked_split_dataset(
+        inventory_path=inventory_path,
+        expected_inventory_sha256=expected_inventory_sha256,
+        source_root=source_root,
+        expected_source_manifest_sha256=expected_source_manifest_sha256,
+        split="val",
+    )
+
+
+def load_locked_train_dataset(
+    *,
+    inventory_path: Path,
+    expected_inventory_sha256: str,
+    source_root: Path,
+    expected_source_manifest_sha256: str,
+) -> ValDataset:
+    """Load train members only, requiring exact visible RLE for optimizer truth."""
+
+    return _load_locked_split_dataset(
+        inventory_path=inventory_path,
+        expected_inventory_sha256=expected_inventory_sha256,
+        source_root=source_root,
+        expected_source_manifest_sha256=expected_source_manifest_sha256,
+        split="train",
+    )
+
+
+def _load_locked_split_dataset(
+    *,
+    inventory_path: Path,
+    expected_inventory_sha256: str,
+    source_root: Path,
+    expected_source_manifest_sha256: str,
+    split: str,
+) -> ValDataset:
+    if split not in {"train", "val"}:
+        raise ValCalibrationError("SPLIT_INVALID")
+
     inventory_file = Path(inventory_path)
     root = Path(source_root)
     if (
@@ -340,7 +378,7 @@ def load_locked_val_dataset(
         or canonical_json_bytes(inventory) != inventory_payload
         or set(inventory) != expected_fields
         or inventory.get("schema_version") != 1
-        or inventory.get("split") != "val"
+        or inventory.get("split") != split
         or inventory.get("class_name") != "cup"
         or inventory.get("prompt") != "cup."
         or inventory.get("source_manifest_sha256") != expected_source_manifest_sha256
@@ -383,7 +421,7 @@ def load_locked_val_dataset(
         seed = int(item["seed"])
         payloads: dict[str, bytes] = {}
         for kind, field in (("images", "image"), ("labels", "label"), ("truth", "truth")):
-            path = _safe_val_member(root, item[f"{field}_relpath"], kind, seed)
+            path = _safe_split_member(root, item[f"{field}_relpath"], kind, seed, split)
             payload = _require_immutable_regular_file(path, "VAL_MEMBER_INVALID")
             expected_sha = item.get(f"{field}_sha256")
             if (
@@ -402,7 +440,7 @@ def load_locked_val_dataset(
             raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index)) from error
         if (
             not isinstance(truth_document, Mapping)
-            or truth_document.get("split") != "val"
+            or truth_document.get("split") != split
             or truth_document.get("seed") != seed
             or truth_document.get("scenario") != item["scenario"]
             or len(polygons) != len(item["boxes"])
@@ -442,6 +480,8 @@ def load_locked_val_dataset(
             )
             canonical_box = converted
             if visible is None:
+                if split == "train":
+                    raise ValCalibrationError("TRAIN_VISIBLE_MASK_REQUIRED", str(index))
                 mask = rasterize_polygon(tuple(polygon), width, height)
                 mask.setflags(write=False)
             else:
@@ -462,7 +502,7 @@ def load_locked_val_dataset(
                 seed=seed,
                 scenario=str(item["scenario"]),
                 configured_cup_count=int(item["configured_cup_count"]),
-                image_path=_safe_val_member(root, item["image_relpath"], "images", seed),
+                image_path=_safe_split_member(root, item["image_relpath"], "images", seed, split),
                 image_sha256=str(item["image_sha256"]),
                 truths=tuple(truths),
             )

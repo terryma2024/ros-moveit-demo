@@ -18,7 +18,6 @@ from so101_demo.training.grounded_sam_val_calibration import (
     candidate_from_document,
     candidate_to_document,
     collect_val_raw,
-    load_locked_val_dataset,
     load_verified_raw_records,
     select_mask_aware_sam_quality_threshold,
     select_sam_quality_threshold,
@@ -279,12 +278,25 @@ def test_low_grid_selection_requires_truth_mask_iou_and_counts_mask_failure(
     assert [point["sam_quality"] for point in points] == ["0.00", "0.10", "0.20"]
 
 
-def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "split,corruption,error",
+    [
+        ("val", None, None),
+        ("train", None, None),
+        ("train", "inventory_split", "VAL_INVENTORY_INVALID"),
+        ("train", "member_split", "VAL_MEMBER_PATH_INVALID"),
+        ("train", "missing_rle", "TRAIN_VISIBLE_MASK_REQUIRED"),
+        ("train", "member_hash", "VAL_MEMBER_SHA256_MISMATCH"),
+    ],
+)
+def test_val_loader_binds_inventory_and_only_val_members(
+    tmp_path: Path, split: str, corruption: str | None, error: str | None
+) -> None:
     source = tmp_path / "source"
-    inventory_root = tmp_path / "converted/val"
-    image = source / "images/val/420000000.png"
-    label = source / "labels/val/420000000.txt"
-    truth = source / "truth/val/420000000.json"
+    inventory_root = tmp_path / f"converted/{split}"
+    image = source / f"images/{split}/420000000.png"
+    label = source / f"labels/{split}/420000000.txt"
+    truth = source / f"truth/{split}/420000000.json"
     image.parent.mkdir(parents=True)
     label.parent.mkdir(parents=True)
     truth.parent.mkdir(parents=True)
@@ -321,7 +333,7 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
                 ],
                 "scenario": "small_far_cup",
                 "seed": 420000000,
-                "split": "val",
+                "split": split,
                 "visible_instance_count": 1,
             }
         )
@@ -349,13 +361,13 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
                     }
                 ],
                 "configured_cup_count": 1,
-                "image_relpath": "images/val/420000000.png",
+                "image_relpath": f"images/{split}/420000000.png",
                 "image_sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
-                "label_relpath": "labels/val/420000000.txt",
+                "label_relpath": f"labels/{split}/420000000.txt",
                 "label_sha256": hashlib.sha256(label.read_bytes()).hexdigest(),
                 "scenario": "small_far_cup",
                 "seed": 420000000,
-                "truth_relpath": "truth/val/420000000.json",
+                "truth_relpath": f"truth/{split}/420000000.json",
                 "truth_sha256": hashlib.sha256(truth.read_bytes()).hexdigest(),
                 "visible_instance_count": 1,
             }
@@ -365,8 +377,20 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
         "source_generator_commit": "d" * 40,
         "source_manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
         "source_mjcf_sha256": "b" * 64,
-        "split": "val",
+        "split": split,
     }
+    if corruption == "inventory_split":
+        inventory["split"] = "val"
+    elif corruption == "member_split":
+        inventory["samples"][0]["image_relpath"] = "images/test/420000000.png"
+    elif corruption == "missing_rle":
+        document = json.loads(truth.read_bytes())
+        for field in ("mask_shape_hw", "visible_mask_rle_counts", "visible_mask_sha256"):
+            del document["instances"][0][field]
+        truth.write_bytes(canonical_json_bytes(document))
+        inventory["samples"][0]["truth_sha256"] = hashlib.sha256(truth.read_bytes()).hexdigest()
+    elif corruption == "member_hash":
+        inventory["samples"][0]["image_sha256"] = "f" * 64
     inventory_path = inventory_root / "inventory.json"
     inventory_path.write_bytes(canonical_json_bytes(inventory))
     expected_inventory_sha = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
@@ -378,12 +402,21 @@ def test_val_loader_binds_inventory_and_only_val_members(tmp_path: Path) -> None
     source.chmod(0o555)
     inventory_root.chmod(0o555)
 
-    loaded = load_locked_val_dataset(
+    from so101_demo.training import grounded_sam_val_calibration as calibration
+
+    loader = getattr(calibration, f"load_locked_{split}_dataset", None)
+    assert callable(loader), "train-only exact-RLE loader is not implemented"
+    arguments = dict(
         inventory_path=inventory_path,
         expected_inventory_sha256=expected_inventory_sha,
         source_root=source,
         expected_source_manifest_sha256=inventory["source_manifest_sha256"],
     )
+    if error:
+        with pytest.raises(ValCalibrationError, match=error):
+            loader(**arguments)
+        return
+    loaded = loader(**arguments)
 
     assert len(loaded.samples) == 1
     assert loaded.samples[0].scenario == "small_far_cup"
