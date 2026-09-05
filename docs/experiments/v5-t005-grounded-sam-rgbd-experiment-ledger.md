@@ -18869,3 +18869,29 @@ future_gate: offline GREEN and complete implementation must receive Astra read-o
 retention: r501/r500 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; generic cup/prompt cup.; mask0.80/mapping0.98 unchanged; no runtime scenario-label gate or invented eligibility thresholds
 ```
+
+## Checkpoint CP-344 — r502 private generation runner offline GREEN valid; implementation review required
+
+```yaml
+checkpoint: CP-344
+status: VALID_GENERATION_RUNNER_OFFLINE_GREEN_IMPLEMENTATION_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-green-r502
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_OFFLINE_GREEN, invocations: 1, cases: 80, passed: 80, failed: 0, harness_errors: 0, harness_exit: 0, receipt_exit: 0, outer_exit: 0, tool_exit: 0, elapsed_seconds: 0.732213645, forbidden_modules_before_import_after: [[],[],[]], stderr_empty: true}
+private_files: {driver: T/generate_nonpenetrating_train_val_v1.py, driver_lines: 727, driver_sha256: 78c1ecb037132e5588f4766a39d13f63e63d5071bd014b77d0e6aab369dcbcd0, shell: T/run_nonpenetrating_train_val_v1.sh, shell_lines: 183, shell_sha256: 3f469616b00215d82f76dc65fc6f2d3b670dd04a8be38e29f34581abccd5688c, harness: T/test_nonpenetrating_generation_runner_green_r502.py, harness_lines: 699, harness_sha256: 3295f1230bf4eafcdc7d493dbe0e0da3a412ffebfef6de25638ffd7c137b2315}
+closure: canonical transitive MJCF inventory45 files, SHA2566709602b4036955776287388f8f66409ea071cd8d9da3a031f89ad6714adba47
+measured_contract: actual validators cover exact source/config/code-vs-execution/r495 active prefix-import-interpreter/closure/r470/environment/typed train-val/output collision gates; valid plus mutation controls; distinct RGB/categorical r470-equivalent adapters with categorical plain-int offSamples0; durable exclusive/fsync/readback receipts before generation; exact truthy renderer identity; no fallback; same close exactly once on success and every created-renderer failure; factory failure no fallback; shell evaluated hash/tempfile/umask gates
+provenance: execution HEAD/Gitee65d97cb6; accepted package/code07dcd29a; generator8b0844aa; geometryf6519ad4; converter6a2176ef; config677a48fa; scoped source clean; all four official roots absent
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-green-r502; result SHA25627ccc50af18a1a5aeb367a3e111d7326ddc699b15ecf024e6705f8afa966a194; initial inventory SHA256c25acc0d3ef36511268322420a0addb6e84352858ec3b9fa6ecb05de8706f5a9; initial readback SHA25615c8fd726cd7fc48c6721c2c8186c92763c66859c9799bd688039c83df85aaae; complete36-record tree inventory SHA2561ed4eb56fd30b0eea64f9ab27d5f09f4ecd3e694584f1947b2b61bc704cc29c3; complete readback SHA256972dd34c5e841a8a73d1ffafe0a761b60089cfe99f260981bfe19be650d0a3e3; tempfile SHA2569a2ef2734be52f113f4f574b01ba54d2ea7f054065c21fb65ad6eb6aee152ce8; command SHA256c9d2004fec4264530559238c9b98e37f7f89c29905e4d8358a52c4dfa4db64d5
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-green-r502-report.md SHA25680bb5321351e5bc719c91883cde4645b294faa2aea0b3934eccf4039712d349f
+parent_readback: complete82-line report, result and all14 initial inventory items read/verified; complete-tree readback PASS36; source hashes/private file hashes/official-source absence and repo status rechecked
+qualification_limit: offline control-flow only; real project renderer/context/GPU/sample/science/output remains unexecuted and unqualified
+next_experiment:
+  status: PLANNED_READ_ONLY_IMPLEMENTATION_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read every frozen driver/shell/harness line plus complete r502 evidence and relevant production/r470 seams; independently assess all CP343 validation, ordering, durability, identity, no-fallback, close, lazy-import, shell and mutation guarantees; report Critical/Important/Minor and exact change/launch decision
+  restrictions: read-only; no import/test/root allocation/edit/Git/index/ledger/sealed traversal; no actual GL or official generation
+future_if_approved: parent may plan one fresh official generation only after review explicitly accepts real production adapter wiring and shell; output allocation and actual GPU remain separately checkpointed
+retention: r502/r501/r500 and all earlier evidence retained, archived none; r502 scratch deletion candidate only and nothing deleted
+boundaries: no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
