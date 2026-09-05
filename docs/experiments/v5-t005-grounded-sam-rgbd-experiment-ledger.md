@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-377 — r523 CLI contract invalid before cases; fresh r524 launcher-only preparation planned
+
+```yaml
+checkpoint: CP-377
+status: INVALID_R523_LAUNCHER_ARGUMENT_CONTRACT_ZERO_CASES_R524_PREPARATION_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r523
+executor: /root/generator_build, gpt-5.6-sol high
+classification: {authoritative_green: false, launcher_invocations: 1, combined_harness_invocations: 1, harness_exit: 2, launcher_tool_exit: 1, cases_executed: 0, elapsed_seconds: 0.038223205}
+failure: launcher supplied `--work-root` while the frozen harness requires `--work_root`; argparse rejected before harness main/cases/candidate behavior; stdout empty and result absent; frozen generic launcher-status truthfully says INVALID_R522_GREEN and the run-level classification is INVALID_R523_LAUNCHER_ARGUMENT_CONTRACT
+valid_setup: launcher self-hash/local-Gitee HEAD/source/candidate/antecedent/collision/12-heredoc AST/NVMe tempfile/package/static/command gates passed; package before/after SHA256c0a2e7b5d3d406dbfa5be22a93ca4b90cf0cabaae550f73b87453875d7f3b0b0 identical
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r523 has29 inventoried members plus manifest/readback; manifest SHA256f17b0c0f91907428b172da5b0fc91b9bf6605049a043ca1e6672a0c563e2197e; readback SHA2566bf36865f74a17331983985423c28a2439d5056d9f9dd3950ffcee43e238fe5b; independent exact membership/regular/non-symlink/hash validation29/29 passed
+report: coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r523-report.md SHA25696324d9d3e566ba3f73fd576ffd65d9ec81cb317bbdb055d782fa96ccb92b76a
+parent_readback: complete76-line report, stderr/raw status/empty stdout/result absence, all29 inventory members, manifest/readback, package identity, tempfile/root/repo/Gitee/official boundaries read
+next_experiment:
+  status: GO_R524_LAUNCHER_ONLY_STATIC_AND_CLI_PREPARATION_NO_ALLOCATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r524
+  executor: /root/generator_build, gpt-5.6-sol high
+  allowed_change: copy immutable r523 launcher to new r524 ID/path/current HEAD; change only `--work-root` to the harness-defined `--work_root`; factor one shared HARNESS_ARGS array used by both preflight and eventual command
+  TDD_guard: before any mkdir, exact locked Python loads the frozen harness under a non-main run name, invokes only its arguments parser with the shared HARNESS_ARGS, verifies the exact parsed namespace/values and confirms forbidden project/MuJoCo/OpenGL imports remain absent; this parser-only invocation is explicitly not a combined-harness main/case invocation
+  static_required: existing12-heredoc AST and bash-n plus the new parser-only CLI gate must pass with all r524/official roots absent; freeze launcher hash/line count/exact r523-to-r524 diff and preserve every candidate/antecedent/r523 byte
+  stop_after: no root allocation or combined harness/driver behavior; parent readback/checkpoint before any r524 launcher invocation
+restrictions: no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r523/r522 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-376 — r523 launcher-only correction statically verified; one fresh private GREEN authorized
 
 ```yaml
