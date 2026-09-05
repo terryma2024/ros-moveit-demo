@@ -13326,3 +13326,78 @@ boundaries: no inference, model changes, tests, COCO100, PickPlace or Mac; Micro
 retention: preserve every input and output; new scratch is deletion candidate only after readback and explicit authorization
 next_action: execute this read-only audit, append result checkpoint and ordinary-push with remote SHA readback
 ```
+
+## Checkpoint CP-169 — Geometry availability audited; production eligibility design and training-target boundary
+
+```yaml
+checkpoint: CP-169
+status: VALID_GEOMETRY_AVAILABILITY_AUDIT
+recorded_at: 2026-09-05
+experiment_id: EXP-079-STAGE-E-NEAR-WORKSPACE-ELIGIBILITY-GEOMETRY-AUDIT-R1
+run_id: stage-e-eligibility-geometry-audit-r326
+source_commit: d8ace2f43b34be08d43587de3871e3c8ec0d1392
+previous_gitee_sha_readback: d8ace2f43b34be08d43587de3871e3c8ec0d1392
+result: {exit_code: 0, elapsed_seconds: 1.85, train_truth_files: 1200, val_truth_files: 300, inference_rerun: false}
+verified:
+  manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  truth_inventory_sha256: d9f14c4d3a56a3067950431308b13b16747ebc3a11d85765a76bbc3d9c5b7685
+  checks: exact split counts, disjoint seeds, train/val-only artifact paths, sample/truth identity, RLE shape/count/hash agreement
+observed_geometry:
+  train_primary: {instances: 1000, visible_pixels_min: 1596, visible_pixels_median: 3933, bbox_area_min_px: 3434}
+  train_small_far: {instances: 200, visible_pixels_min: 154, visible_pixels_median: 240.5, bbox_area_min_px: 189}
+  val_primary: {instances: 250, visible_pixels_min: 1498, visible_pixels_median: 3855, bbox_area_min_px: 3744}
+  val_small_far: {instances: 50, visible_pixels_min: 105, visible_pixels_median: 243.5, bbox_area_min_px: 247}
+  interpretation: descriptive distributions only; none of these extrema are production thresholds
+evidence_gaps:
+  - retained dataset has RGB, labels and truth but no measured depth artifacts
+  - per-sample intrinsics, camera-to-world transforms and world object positions are absent from retained truth
+  - small_far_cup retreats the camera, so it cannot establish an unreachable robot target
+  - existing perception publication does not call the existing sequential reachability checker
+production_eligibility_design:
+  status: REVIEWABLE_PLAN_NOT_IMPLEMENTED
+  placement: after unique candidate localization, before any grasp-pose publication
+  depth_evidence: aligned frame timestamps, validated intrinsics, finite positive measured mask depth, source-time camera-to-world transform, and uncertainty/support statistics
+  projected_size_evidence: mask/box dimensions at actual camera resolution with calibration and physical cup dimensions; establish minimum support from geometry evidence before freezing numerical limits
+  reachability_evidence: fresh robot joint state and collision scene, all seven dynamic motion targets planned sequentially with valid terminal states
+  binding: eligibility receipt must bind source frame, candidate/mask identity, localized pose, configuration and scene revision
+  allow: publish only after all evidence is current and all eligibility checks explicitly pass
+  deny: absent policy, missing depth or calibration, insufficient projected support, stale receipt, UNKNOWN or UNREACHABLE; never publish a grasp pose
+  scenario_labels: forbidden at runtime
+  thresholds: unset pending calibrated geometry evidence; no dataset-derived arbitrary cutoff
+  red_tests_before_implementation: missing policy, invalid depth, unknown or unreachable planner, stale or mismatched receipt and undersized support each prevent publisher invocation; valid bound receipt permits exactly one publication
+  verification_after_implementation: focused RED-to-GREEN, fresh overlay and ordinary package gate; explicit benchmark only if its implementation or model comparison scope changes
+proposed_next_model_experiment:
+  status: PROPOSED_NOT_AUTHORIZED_OR_STARTED
+  hypothesis: a bounded mask-decoder adaptation may reduce the remaining near-workspace leakage after corrected-truth reevaluation and the closed single-mask diagnostic
+  change: train SAM mask decoder only; this changes the original frozen-SAM training target contract
+  fixed_components: DINO epoch7 checkpoint, SAM image/prompt encoders, generic cup, prompt cup., stateless per-frame operation, mask IoU 0.80
+  data: corrected r4 train only for optimizer updates; val only for selection; preserve all-scenario reporting and separately report the primary cohort excluding only small_far_cup
+  preregistration_required_before_training: one recipe, seed, optimizer, loss, epoch budget, train prompt construction, primary selection metric and tie rule, complete input hashes and candidate output roots
+  assessment: compare against retained corrected-truth baseline; no claim that adaptation is proven necessary or will pass
+  forbidden: sealed test, COCO100, PickPlace, Mac, threshold relaxation or retroactive diagnostic changes
+decision_boundary:
+  source: docs/superpowers/plans/2026-09-04-grounding-dino-tiny-cup-finetune-linux-first.md, final rule on changing training targets
+  reason: original plan explicitly freezes SAM; data expansion and reporting-cohort authorization do not explicitly authorize training SAM
+  requested_decision: authorize bounded SAM mask-decoder adaptation, or retain the frozen-SAM contract and select another scoped investigation
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: not_used_standalone_read_only_audit
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-eligibility-geometry-audit-r326
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-eligibility-geometry-audit-r326/tmp
+  tempfile_preflight: exact resolved match with locked Python
+  command: /usr/bin/time -f '{"exit_code":%x,"elapsed_seconds":%e}' -o exit.json /data/work/venvs/so101-grounded-sam/bin/python /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/audit_eligibility_geometry_r1.py
+evidence_hashes:
+  report: ce33274c62fa246ba594a8cd7bb8b46bc1205d08157dc4ab24f472c3119321f7
+  inputs: b7b6b52c6afc9b56546b6b655ac9062b05af2938cc2b03a9a849f93f754a70b4
+  preflight: 1f8c36bb56987fbc3029173e012f35701cb8a821b6b912399bc6611d14b3db92
+  exit: a009939f960df0c62285ca8f34f79b090800d8a1ec9936c093300d0dd2037105
+tests: not run for read-only audit and ledger changes; preserve valid r30 and r222
+boundaries: {test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou: 0.80}
+retention:
+  retained_runs: [r324, r325, r326, all historical evidence]
+  archived_runs: []
+  deletion_candidates: [r324-r326 scratch and prior candidates; none deleted]
+next_action: ordinary-push and read back remote SHA; obtain the explicit training-target decision before any SAM optimizer updates
+```
