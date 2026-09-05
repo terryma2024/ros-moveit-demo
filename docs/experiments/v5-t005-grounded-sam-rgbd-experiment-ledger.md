@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-358 — r513 exception oracle invalid; fresh type-provenance GREEN retry required
+
+```yaml
+checkpoint: CP-358
+status: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_EXCEPTION_CLASS_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r513
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_SUCCESS_CHAIN_GREEN_HARNESS_EXCEPTION_CLASS
+result: {authoritative_green: false, invocations: 1, raw_harness_exit: 1, launcher_tool_exit: 1, elapsed_seconds: 5.560774962, complete_case_count: unavailable, retained114_control_flow_completed: true}
+cause: candidate correctly rejected the first N3 case with r509_frozen_private_driver.GenerationRunnerError, but adapted GREEN oracle caught m.GenerationRunnerError from the r509 harness module, which owns no such attribute; AttributeError invalidated output before the19-case receipt
+verified_harness_work: r512 post-load identity injection and r508 recursive Path encoder each applied exactly once; nested anchors unchanged; retained114 completed; no candidate-byte change
+frozen_candidate: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b and shell SHA25653ddc70ab21b5cf4a901cd718cc2972d643bc35a7bdb9df42625317ef47c9760 unchanged/unaccepted
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r513; invalid-result SHA2567abd48d63a25666b4a2594d670bfce881bb12a01c1215ec2ba24727d1dd45cb6; harness SHA2561fb318c241cf91c6d9902e0318bbb86623641bd42881c437a3d91a86466ea2d2; launcher SHA2562adb3018de36fb6a1e0b9dc590fddb0f9b2991c1d298d86776fdf638e1464a8a; final17-file inventory SHA256c0216f093b114b9d54673a03595eb10aa8fd4b3fff77502845a33648d5df5d55; readback SHA25608b1d8a8bdb6448c365e0c10c243679f0f1ec5c0e8852ef08476fbdee9171867
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r513-report.md SHA256620070dc92348f6d91b554888f549fc4c0b5ec20498a955c8e8b0b2317b6736c
+parent_readback: complete report/invalid result/inventory/raw receipts/stderr and frozen hashes read; official generation root absent; r513 retained invalid and never rerun/backfilled
+next_experiment:
+  status: PLANNED_FRESH_EXCEPTION_TYPE_PROVENANCE_GREEN_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r514
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_candidate: keep drivercbb737df and shell53ddc70a byte-identical
+  sole_harness_change: catch the exact loaded private driver module GenerationRunnerError with strict module/type provenance; preserve byte-exact r513 post-load identity injection and recursive Path encoder, all assertions and case semantics; mechanical r514 identity/path/current HEAD only
+  required: same133 cases,133 pass, zero failure/harness error, all exits0, forbidden imports empty; raw exit/elapsed before parse; exact locked Python/fresh unique NVMe scratch/static/fsync/inventory/readback; stop for Astra review
+  restrictions: no runner code change, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r513 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-357 — r512 omitted retained encoder; fresh composed-harness GREEN retry required
 
 ```yaml
