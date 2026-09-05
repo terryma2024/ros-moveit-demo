@@ -54,6 +54,58 @@ class DatasetScenario(str, Enum):
             raise ValueError("cup_count must be 0, 1, or 2") from error
 
 
+_RENDER_EVENT_KINDS = frozenset(
+    {
+        "geometry_measured",
+        "penetration_rejected",
+        "rgb_render_started",
+        "rgb_render_finished",
+        "segmentation_render_started",
+        "segmentation_render_finished",
+        "scenario_rejected",
+        "accepted",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RenderEvent:
+    kind: str
+    seed: int
+    scenario: DatasetScenario
+    attempt_index: int
+    receipt: TaskSceneGeometry | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in _RENDER_EVENT_KINDS:
+            raise ValueError("unknown render event kind")
+        if type(self.seed) is not int or self.seed < 0:
+            raise ValueError("render event seed must be a nonnegative integer")
+        if not isinstance(self.scenario, DatasetScenario):
+            raise ValueError("render event scenario must be a dataset scenario")
+        if type(self.attempt_index) is not int or self.attempt_index < 0:
+            raise ValueError("render event attempt index must be a nonnegative integer")
+        if self.receipt is not None:
+            if not isinstance(self.receipt, TaskSceneGeometry):
+                raise ValueError("render event receipt must be task scene geometry")
+            self.receipt.validate_scope(self.scenario.cup_count)
+
+
+RenderEventSink = Callable[[RenderEvent], object]
+
+
+def _emit_render_event(
+    sink: RenderEventSink | None,
+    kind: str,
+    seed: int,
+    scenario: DatasetScenario,
+    attempt_index: int,
+    receipt: TaskSceneGeometry | None,
+) -> None:
+    if sink is not None:
+        sink(RenderEvent(kind, seed, scenario, attempt_index, receipt))
+
+
 @dataclass(frozen=True, slots=True)
 class RawRender:
     rgb8: np.ndarray
@@ -258,6 +310,30 @@ class SceneGeometry:
 
 
 @dataclass(frozen=True, slots=True)
+class RendererSettings:
+    mjcf_path: Path
+    camera_name: str = "task_camera"
+    image_width: int = 640
+    image_height: int = 480
+    geometry: SceneGeometry = SceneGeometry()
+    require_nonpenetrating_scene: bool = False
+
+    def __post_init__(self) -> None:
+        path = Path(self.mjcf_path)
+        if not path.is_absolute() or path.is_symlink() or not path.is_file():
+            raise ValueError("mjcf_path must be an absolute regular file")
+        if not isinstance(self.camera_name, str) or not self.camera_name:
+            raise ValueError("camera_name must be non-empty")
+        if self.image_width <= 0 or self.image_height <= 0:
+            raise ValueError("image dimensions must be positive")
+        if not isinstance(self.geometry, SceneGeometry):
+            raise ValueError("geometry must be scene geometry")
+        if type(self.require_nonpenetrating_scene) is not bool:
+            raise ValueError("require_nonpenetrating_scene must be boolean")
+        object.__setattr__(self, "mjcf_path", path)
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetConfig:
     mjcf_path: Path
     split_counts: Mapping[str, int]
@@ -301,6 +377,16 @@ class DatasetConfig:
             else MappingProxyType(
                 {split: MappingProxyType(values) for split, values in quotas.items()}
             ),
+        )
+
+    def renderer_settings(self) -> RendererSettings:
+        return RendererSettings(
+            mjcf_path=self.mjcf_path,
+            camera_name=self.camera_name,
+            image_width=self.image_width,
+            image_height=self.image_height,
+            geometry=self.geometry,
+            require_nonpenetrating_scene=self.require_nonpenetrating_scene,
         )
 
 
@@ -648,6 +734,28 @@ def _sample_meets_acceptance(sample: LabeledSample, geometry: SceneGeometry) -> 
     return True
 
 
+def _validate_observed_penetration_error(
+    error: ScenePenetrationError,
+    *,
+    seed: int,
+    scenario: DatasetScenario,
+    attempt_index: int,
+) -> TaskSceneGeometry:
+    receipt = getattr(error, "receipt", None)
+    if not isinstance(receipt, TaskSceneGeometry):
+        raise ValueError("observed penetration receipt is missing or invalid")
+    if (
+        getattr(error, "seed", None) != seed
+        or getattr(error, "scenario", None) != scenario
+        or getattr(error, "attempt_index", None) != attempt_index
+    ):
+        raise ValueError("observed penetration context does not match the active attempt")
+    receipt.validate_scope(scenario.cup_count)
+    if receipt.accepted:
+        raise ValueError("observed penetration receipt must reject the scene")
+    return receipt
+
+
 def select_bounded_render(
     seed: int,
     scenario: DatasetScenario,
@@ -655,6 +763,7 @@ def select_bounded_render(
     geometry: SceneGeometry,
     *,
     require_nonpenetrating_scene: bool = False,
+    event_sink: RenderEventSink | None = None,
 ) -> RawRender:
     """Select the first deterministic render satisfying an augmented scenario gate."""
 
@@ -670,8 +779,15 @@ def select_bounded_render(
         )
         try:
             render = render_attempt(random)
-        except ScenePenetrationError:
+        except ScenePenetrationError as error:
             if require_nonpenetrating_scene:
+                if event_sink is not None:
+                    _validate_observed_penetration_error(
+                        error,
+                        seed=seed,
+                        scenario=scenario,
+                        attempt_index=attempt_index,
+                    )
                 continue
             raise
         if require_nonpenetrating_scene:
@@ -682,7 +798,23 @@ def select_bounded_render(
                 continue
         sample = build_labeled_sample(render, seed=seed, scenario=scenario)
         if _sample_meets_acceptance(sample, geometry):
+            _emit_render_event(
+                event_sink,
+                "accepted",
+                seed,
+                scenario,
+                attempt_index,
+                render.geometry_receipt,
+            )
             return render
+        _emit_render_event(
+            event_sink,
+            "scenario_rejected",
+            seed,
+            scenario,
+            attempt_index,
+            render.geometry_receipt,
+        )
     raise RuntimeError(f"{scenario.value} failed {attempts} deterministic attempts for seed {seed}")
 
 
@@ -892,19 +1024,19 @@ def generate_dataset(
 class MuJoCoDatasetRenderer:
     """Lazy MuJoCo renderer; segmentation is derived only from geom/body IDs."""
 
-    def __init__(self, config: DatasetConfig) -> None:
+    def __init__(self, config: DatasetConfig | RendererSettings) -> None:
         try:
             import mujoco
         except ImportError as error:
             raise RuntimeError("MuJoCo Python binding is required for dataset rendering") from error
         self._mujoco = mujoco
-        self._config = config
-        self._model = mujoco.MjModel.from_xml_path(str(config.mjcf_path))
+        self._config = config.renderer_settings() if isinstance(config, DatasetConfig) else config
+        self._model = mujoco.MjModel.from_xml_path(str(self._config.mjcf_path))
         self._data = mujoco.MjData(self._model)
         self._renderer = mujoco.Renderer(
             self._model,
-            height=config.image_height,
-            width=config.image_width,
+            height=self._config.image_height,
+            width=self._config.image_width,
         )
         # Color IDs are categorical: resolving multisamples can invent another
         # valid geom ID at an edge. Keep RGB antialiasing in its original context.
@@ -915,8 +1047,8 @@ class MuJoCoDatasetRenderer:
                 self._model.vis.quality.offsamples = 0
                 self._segmentation_renderer = mujoco.Renderer(
                     self._model,
-                    height=config.image_height,
-                    width=config.image_width,
+                    height=self._config.image_height,
+                    width=self._config.image_width,
                 )
                 if self._segmentation_renderer._mjr_context.offSamples != 0:
                     raise RuntimeError("CATEGORICAL_MULTISAMPLING_FORBIDDEN")
@@ -1029,26 +1161,104 @@ class MuJoCoDatasetRenderer:
             renderer.disable_segmentation_rendering()
         return self._geom_ids(segmentation)
 
-    def _render_attempt(self, random: np.random.Generator, scenario: DatasetScenario) -> RawRender:
+    def _render_attempt(
+        self,
+        random: np.random.Generator,
+        scenario: DatasetScenario,
+        *,
+        seed: int,
+        attempt_index: int,
+        event_sink: RenderEventSink | None = None,
+    ) -> RawRender:
         self._prepare(random, scenario)
         geometry_receipt = None
         if self._config.require_nonpenetrating_scene:
             geometry_receipt = measure_task_scene_geometry(
                 self._model, self._data, active_cup_count=scenario.cup_count
             )
+            _emit_render_event(
+                event_sink,
+                "geometry_measured",
+                seed,
+                scenario,
+                attempt_index,
+                geometry_receipt,
+            )
             if not geometry_receipt.accepted:
-                raise ScenePenetrationError("intersecting task visual solids")
+                _emit_render_event(
+                    event_sink,
+                    "penetration_rejected",
+                    seed,
+                    scenario,
+                    attempt_index,
+                    geometry_receipt,
+                )
+                raise ScenePenetrationError(
+                    "intersecting task visual solids",
+                    receipt=geometry_receipt,
+                    seed=seed,
+                    scenario=scenario,
+                    attempt_index=attempt_index,
+                )
+        _emit_render_event(
+            event_sink,
+            "rgb_render_started",
+            seed,
+            scenario,
+            attempt_index,
+            geometry_receipt,
+        )
         self._renderer.disable_segmentation_rendering()
         self._renderer.update_scene(self._data, camera=self._config.camera_name)
         rgb = np.array(self._renderer.render(), dtype=np.uint8, copy=True)
+        _emit_render_event(
+            event_sink,
+            "rgb_render_finished",
+            seed,
+            scenario,
+            attempt_index,
+            geometry_receipt,
+        )
+        _emit_render_event(
+            event_sink,
+            "segmentation_render_started",
+            seed,
+            scenario,
+            attempt_index,
+            geometry_receipt,
+        )
         visible_geom_ids = self._segmentation()
+        _emit_render_event(
+            event_sink,
+            "segmentation_render_finished",
+            seed,
+            scenario,
+            attempt_index,
+            geometry_receipt,
+        )
         amodal_geom_ids = None
         occluder_body_name = None
         occlusion_reference = None
         if scenario == DatasetScenario.PARTIALLY_OCCLUDED_CUP:
             self._set_free_joint_position("bottle_free_joint", np.array((2.0, 2.0, 2.0)))
             self._mujoco.mj_forward(self._model, self._data)
+            _emit_render_event(
+                event_sink,
+                "segmentation_render_started",
+                seed,
+                scenario,
+                attempt_index,
+                geometry_receipt,
+            )
             amodal_geom_ids = self._segmentation()
+            _emit_render_event(
+                event_sink,
+                "segmentation_render_finished",
+                seed,
+                scenario,
+                attempt_index,
+                geometry_receipt,
+            )
             occluder_body_name = "orange_bottle"
             occlusion_reference = "visible_union_paired_segmentation_with_declared_occluder_hidden"
         body_names = {
@@ -1072,13 +1282,33 @@ class MuJoCoDatasetRenderer:
             geometry_receipt=geometry_receipt,
         )
 
-    def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
+    def render(
+        self,
+        seed: int,
+        scenario: DatasetScenario,
+        *,
+        event_sink: RenderEventSink | None = None,
+    ) -> RawRender:
+        attempt_index = -1
+
+        def render_attempt(random: np.random.Generator) -> RawRender:
+            nonlocal attempt_index
+            attempt_index += 1
+            return self._render_attempt(
+                random,
+                scenario,
+                seed=seed,
+                attempt_index=attempt_index,
+                event_sink=event_sink,
+            )
+
         return select_bounded_render(
             seed,
             scenario,
-            lambda random: self._render_attempt(random, scenario),
+            render_attempt,
             self._config.geometry,
             require_nonpenetrating_scene=self._config.require_nonpenetrating_scene,
+            event_sink=event_sink,
         )
 
     def close(self) -> None:
