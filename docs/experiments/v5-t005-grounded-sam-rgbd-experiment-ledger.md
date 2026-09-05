@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-362 — r515 review finds late ownership transfer; exact-once finalizer RED authorized
+
+```yaml
+checkpoint: CP-362
+status: GENERATION_RUNNER_FINAL_REVIEW_CHANGES_REQUESTED_EXACT_ONCE_FINALIZER_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: CHANGES_REQUESTED, official_generation: CHANGES_REQUESTED, critical: 0, important: 1, minor: 0, N1: ADDRESSED, N2: PARTIAL, N3: ADDRESSED, I1: ADDRESSED, I2: PARTIAL, I3: ADDRESSED, M1: ADDRESSED}
+finding_N2: normal path calls finalize-launch and then fsyncs finalizer diagnostics while EXIT owner remains armed; diagnostic fsync failure unwinds into owner, calls finalizer a second time with truncating redirects, replaces original setup/driver exit by storage exit, and may collide with existing terminal/inventory
+impact: no generation retry or false science success, but violates exact-once finalization and distinct original/finalizer/storage accounting; blocks official generation
+confirmed: r515133/133 remains valid for covered contracts; global trap lifetime, N1/N3/I1/I3/M1 and ordinary preconstruction/normal/factory/generation evidence closures pass
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r515-review-report.md SHA2562470019b2abd0c50c294c7a89c7dfa1d278aeb00c3f088a2766afb653e7947e5
+parent_readback: complete review and cited finalizer/owner source regions read; candidate hashes unchanged; source status only original untracked dirs; no production GO
+next_experiment:
+  status: GO_TESTS_ONLY_OFFLINE_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-finalizer-order-red-r516
+  executor: /root/generator_build, gpt-5.6-sol high
+  frozen_inputs: r515 driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b and shell SHA256f350b28f144955643a9b809065b0896be26470e7a4b89f919d853c39f276fd68 byte-identical; no fix before RED
+  red_cases: original setup/driver exit7 plus first finalizer0 then diagnostic-fsync96; same with finalizer9; require one finalizer call, no diagnostic truncation, and distinct original7/finalizer0or9/storage96; current duplicate/relabel defects must be measured without harness error
+  controls: original7/finalizer0/storage0 exactly one finalizer/no outer; original7/finalizer9/storage0 exactly one finalizer/one outer/no recursion; diagnostic-fsync plus outer-storage failure stays nonzero, never retries/truncates and preserves already-written bytes; include original0 variant proving prior success receipt cannot yield overall success after storage failure
+  required: source-preserving shell fixture only, no real setup/driver/official output; exact locked Python/fresh NVMe scratch; one top harness; complete expected defect/control counts, zero harness errors/forbidden imports; static/fsync/inventory/readback; stop before fix
+  restrictions: no candidate edit, tracked repo/Git/ledger, project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+future_if_valid: minimal GREEN transfers/disarms EXIT owner immediately before first normal finalizer, captures original/finalizer/diagnostic-fsync/outer statuses explicitly, never refinalizes or truncates, and writes one exclusive best-effort storage error receipt with separate fields; then full retained133 plus new matrix and Astra review
+retention: r515 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-361 — r515 private runner GREEN valid; final launch-readiness review required
 
 ```yaml
