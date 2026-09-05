@@ -18341,6 +18341,28 @@ retention: r486/r485 and all earlier evidence retained, archived none; scratch t
 boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-327 — r490 N1 clean GREEN valid; scoped re-review required
+
+```yaml
+checkpoint: CP-327
+status: VALID_CLEAN_GREEN_N1_SCOPED_REREVIEW_PLANNED
+run_id: stage-e-generator-train-val-directory-boundary-green-r490
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_CLEAN_GREEN, tests: 175, passed: 175, failed: 0, errors: 0, skips: 0, pytest_exit: 0, outer_exit: 0, receipt_exit: 0, tool_exit: 0, elapsed_seconds: 5.23275333, stderr_bytes: 0}
+fix: converter-only five-line expected_directories membership check occurs before recursion; r489-to-r490 patch SHA256 496757f6f68895de1cbec79e665cc4991fd24a2131d904b1dc469456480eba97; symlink/special and final exact-set checks unchanged
+inputs: generator SHA256 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59; converter SHA256 6a2176ef046592a63265986f2961c2f93f3bc34b41503f6482942766d40fd00e; test SHA256 8ecb4ced7fe652877c99433b8f255221b597a116f83042696c142af9833f2772; config SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c; full patch SHA256 c63a9532bf2f8e16795a607c3d45b193eaf0c434029bdde4ee297acac1522b67
+evidence: durable run-evidence/stage-e-generator-train-val-directory-boundary-green-r490 and scratch retained; JUnit SHA256 03051eec1e18ffc78e04577f6957ca20ce1308969eec5dd7091ee4a31c3bb463; result SHA256 5f692a1e36b634277c6ef037e1ec4ac3a905aba2e19390e652851749afa210d1; inventory SHA256 c66f2ec61f3ea58de855c63f4c78181a6b9cbe6e9972a42bb9b9782076b5e869
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-directory-boundary-green-r490-report.md SHA256 278879cbe08cf78634e77eb352795afb7baf0f057c3c23300381390c9e65499c
+parent_readback: complete75-line report/result/input hashes read; RED-to-GREEN sentinel boundary and all clean exits confirmed
+next_experiment:
+  status: PLANNED_SCOPED_REREVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: verdict N1 ADDRESSED/NOT_ADDRESSED from exact one-test and five-line source diffs; inspect only new breakage in those diffs; confirm no unexpected-directory traversal and no regression to canonical/missing/symlink/special checks
+  restrictions: read-only; no test/import/edit/Git/index/root allocation/sealed traversal; N2 remains deferred Minor; no build until approval and owned changes committed/pushed/read back
+retention: r490/r489 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-325 — original review findings closed; new directory-traversal RED required
 
 ```yaml
