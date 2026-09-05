@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-369 — r518 40-case executable RED statically frozen; one invocation authorized
+
+```yaml
+checkpoint: CP-369
+status: R518_EXECUTABLE_REVIEW_RED_STATIC_GREEN_ONE_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r518
+executor: /root/generator_build, gpt-5.6-sol high
+frozen_inputs: {driver_sha256: 7739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a, shell_sha256: 9bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a, harness_sha256: 8e220a972d35051c18f6b2ecc5bb0d1a9c80c51c09edb364f62ec10f82e31dec, harness_lines: 486}
+planned_total: {total: 40, expected_defects: 16, controls: 18, executable_mutation_kills: 6}
+case_groups: I1 four storage-loss defects plus two all-zero controls; I2 twelve terminal/nested/outer mutations plus four valid deferred/outer/predriver/partial controls; I3 six single-operation executable mutants plus twelve outer/completion/accounting/inventory/exception/collision/nounset/real-final-readback controls
+mutants_sha256: {deferred_inventory: bc8b12bd9c64ed48028deb955e11a1c5cfa6a97ecdbaa7dfced0f83bd3b293a2, diagnostic_propagation: dc5fc34c7f970d3a7983e0edbd35ed652eaa8074d474952108c6aa7b128adc67, conditional_outer: 31b4e509e3a62b0f5273c98175abe345ecda12c5742c1b4e8b0ea8cdf7d0b5cf, accounting_completion: 21c3580fc334e24ce316ea60fa4ee0aea832a3cf473604001527d8fa87c6c5c3, owner_disarm: bd61b58fcf07436725d4c956afff42b0d40d93c59fdcfbea4ff9336561358899, exact_membership: 2d18cd25cab3669275e702f0500ed5927d93f155bf77c1d3ba10381ebbb29430}
+mutation_quality: every anchor unique; removed operation text retained in comment/dead text; five shell mutants Bash-parse and driver membership mutant AST-parses, so behavioral oracle must kill them
+static_gates: harness AST/Ruff pass; frozen shell and five shell mutants Bash syntax pass; driver mutant AST pass; parent independently read exact hashes/totals/anchors; candidate bytes unchanged
+preallocation: all r518 run/scratch/low roots absent under -e/-L; top invocation0; no durable prep report/launcher exists
+next_experiment:
+  status: GO_ONE_FRESH_TESTS_ONLY_RED
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r518
+  executor: /root/generator_build, gpt-5.6-sol high
+  allowed_pre_run: create mechanical launcher only with current HEAD/frozen hashes/r518 paths; no harness/candidate semantic or byte change
+  required: exact locked Python/fresh unique NVMe TMPDIR/TMP/TEMP preflight; one top invocation; exact16 expected defects/18 controls/6 kills, zero harness error/unexpected; expected RED harness exit with launcher/tool0; forbidden imports empty; raw exit/elapsed before parse; durable fsync/inventory/readback/report; stop before fix
+  restrictions: no candidate edit, tracked repo/Git/index/ledger, real setup/project/GL/GPU/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: all prior evidence retained, archived none; nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-368 — r517 review finds three accounting gaps; executable RED preparation authorized
 
 ```yaml
