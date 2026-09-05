@@ -1,5 +1,22 @@
 # V5-T005 Grounding DINO Tiny + SAM 2.1 RGB-D experiment ledger
 
+## Current Linux-first continuation snapshot
+
+```yaml
+latest_checkpoint: CP-195
+worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+branch: codex/v5-t004-yolo-seg-rgbd
+source_parent: 74c8b897bec402d3cc3bda51817a69a75b338706
+active_experiment: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+confirmed: five trained decoder checkpoints independently verified; all 300 retained proposal sets certified at fixed eligibility thresholds; replay contracts and ordinary gate GREEN
+open: saved-checkpoint comparison launcher, explicit benchmark, five-epoch corrected-val comparison and subsequent qualification remain incomplete
+next_action: ordinary-push owned comparison contracts with SHA readback, then integrate the five-epoch retained-proposal replay launcher
+boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
+evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
+```
+
+The original baseline snapshot below is retained as historical context; the current continuation is above.
+
 ```yaml
 task_id: so101-v5-t005-grounded-sam-rgbd
 goal: 在 macOS MPS 与 ai-station CUDA 上使用 Grounding DINO Tiny 和 SAM 2.1 Hiera Tiny，从多物体 MuJoCo RGB-D 中选择唯一 plastic_cup，发布新鲜 /cup_pose，并完成仿真 pick&place
@@ -14032,4 +14049,191 @@ next_experiment:
 retention: all r349 checkpoints and r350 readback retained, no archived/deleted runs; scratch deletion candidates only
 microduck: paused
 next_action: commit and ordinary-push CP-188/189 with remote SHA readback; then implement and verify the bounded val comparison driver before its required benchmark and five-epoch SAM evaluation
+```
+
+## Checkpoint CP-190 — Correction: retained raw candidates are SAM-filtered, not a complete DINO cache
+
+```yaml
+checkpoint: CP-190
+status: VALID_RETENTION_AUDIT_COMPLETENESS_PROOF_REQUIRED
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+run_id: stage-e-dino-retention-audit-r351
+result: {exit_code: 0, elapsed_seconds: 6.12, samples_verified: 300, retained_candidates: 9213, images_with_internal_missing_ids: 50, missing_proposals_lower_bound: 131, missing_before_last_retained_box_qualified_id: 0}
+report_sha256: a6cd3adde2a40b0c4752ec467283273d5378bbaca1afe95874f29e2a1848cfc2
+correction:
+  - CP-189 assumed raw records were complete DINO proposal records; history is preserved, but this assumption is withdrawn
+  - GroundedSamRawAdapter._candidates omits proposals when old SAM quality is negative, mask pixels below 64, or area ratio above 0.50
+  - missing IDs prove discarded proposals; their coordinates/text scores and possible trailing discarded proposals are not retained
+  - no corresponding logits/pred_boxes/proposal cache was found in registered val-remediation or training artifacts
+  - no evidence yet proves any missing proposal passes the fixed box/text threshold of 0.25
+next_bounded_audit:
+  status: PLANNED
+  method: use descending DINO box-score order to upper-bound each missing interval and discarded tail
+  reuse_rule: certify a frame only when every missing interval has a retained preceding score below 0.25 and the last retained score is below 0.25; empty records are not certifiable
+  recovery: capture DINO only for uncertifiable frames if necessary; no old SAM rerun, no repeated inference on certified frames
+  capture_retention: retain original DINO logits, boxes, token inputs and proposal metadata for any necessary recovery
+production_semantics:
+  - exact production conversion also requires mask_inside_box_ratio >= 0.80; preserve this existing gate in new evaluation
+  - retain historical calibrated metrics without relabeling them as newly executed production results; report replay-compatible and exact production branches separately if their contracts differ
+provenance: locked Python, r347 source overlay, read-only audit with no tempfile fixtures or inference; ROS_DOMAIN_ID/GZ_PARTITION not applicable
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-dino-retention-audit-r351
+boundaries: all sealed sets untouched, no new inference yet; Microduck paused; all thresholds unchanged
+next_action: establish the fixed-threshold completeness proof per frame, checkpoint its result and preregister only the necessary capture before five-epoch SAM comparison
+retention: r351 audit retained; no deletion
+```
+
+## Checkpoint CP-191 — All 300 retained DINO sets certified at fixed threshold
+
+```yaml
+checkpoint: CP-191
+status: VALID_FIXED_THRESHOLD_COVERAGE_NO_DINO_RECAPTURE_REQUIRED
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+run_id: stage-e-dino-retention-bound-audit-r352
+result: {exit_code: 0, elapsed_seconds: 6.12, frames_verified: 300, certified_at_box_threshold_0_25: 300, uncertifiable_frames: 0}
+report_sha256: 36045079cc582c350670459ee728dd5de364599c083f0074b06052599f38aeca
+proof:
+  - raw proposal IDs preserve original descending DINO box-score order
+  - every internal missing interval has a preceding retained score strictly below 0.25
+  - every frame has a retained final proposal with score strictly below 0.25, bounding every possible discarded tail
+  - therefore every proposal capable of passing fixed box threshold 0.25 is retained, independently of missing text scores
+scope: completeness is certified only at the fixed 0.25 box threshold; raw records are still not a complete low-floor cache
+decision: reuse retained proposals for all 300 frames; no DINO inference or recovery capture needed
+next_implementation:
+  status: PLANNED
+  module: training/sam_decoder_validation.py
+  contracts: enforce coverage certificate, score already production-filtered masks against exact visible truth, report all and primary cohorts, select exactly one of five complete epoch reports by CP-170 rule
+  red_cases: unsafe missing prefix/interior/tail rejected, low-score gaps certified, 0.75 mask IoU fails unchanged 0.80 gate, primary excludes only small_far_cup, missing denominator rejected, earliest-epoch tie rule and complete five-epoch requirement
+  run_ids: [stage-e-sam-validation-red-r353, stage-e-sam-validation-green-r354]
+production_filter_plan: use existing convert_grounding_results and convert_sam_results, including mask-inside-box 0.80; keep historical calibrated metrics distinct from production-filter replay metrics
+next_action: TDD the bounded comparison contracts and integrate the five-checkpoint comparison driver, then required ordinary/benchmark gates before SAM evaluation
+provenance: locked Python, r347 source overlay, no inference or fsync-heavy fixtures; ROS_DOMAIN_ID/GZ_PARTITION not applicable
+boundaries: no sealed test/COCO100/PickPlace/Mac; Microduck paused; all fixed thresholds unchanged
+retention: r351/r352 audit scripts and reports retained; no deletion
+```
+
+## Checkpoint CP-192 — Validation contracts GREEN; production bridge planned
+
+```yaml
+checkpoint: CP-192
+status: VALID_DIRECTED_GREEN_INTEGRATION_PENDING
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+red: {run_id: stage-e-sam-validation-red-r353, failed: 10, exit_code: 1, reason: comparison module absent}
+green: {run_id: stage-e-sam-validation-green-r354, passed: 24, exit_code: 0, pytest_seconds: 0.20, elapsed_seconds: 0.48}
+junit_sha256: 89b48b9cec746da0da6e79fa6ea3a583160213d4d5c83ebc50275c052da30f1f
+static_readback: ruff check and git diff --check passed
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  focused_import: run-specific scratch/imports/so101_demo symlink to this checkout src/so101_demo_py/src
+  installed_overlay: r347 remains previous installed runtime; new validation module not yet rebuilt
+  scratch: registered durable scratch/stage-e-sam-validation-green-r354/tmp
+  tempfile_preflight: exact resolved match
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+production_contract_readback:
+  - convert_grounding_results rejects object_count above 16 BEFORE deduplication; it does not truncate candidates
+  - convert_sam_results uses quality argmax and existing mask-inside-box 0.80 without truth-based selection
+  - retained raw collection also discards text score below 0.01 before assigning IDs; CP-191 certifies proposals eligible for fixed box/text gates, not every raw query or production pre-label candidate-limit count
+  - comparison must be labeled retained-proposal replay with production mask filters, not proof of full live DINO postprocessing equivalence; preserve this limitation for subsequent qualification
+next_stage:
+  status: PLANNED
+  scope: bridge certified retained generic-cup proposals to existing conversion functions, preserving stable identities and failing closed on limit/shape/quality violations
+  runs: [stage-e-sam-validation-bridge-red-r355, stage-e-sam-validation-bridge-green-r356]
+  next: TDD bridge, integrate five-epoch driver, fresh overlay and ordinary/explicit benchmark gates before new SAM evaluation
+boundaries: all sealed sets, PickPlace and Mac untouched; Microduck paused; no inference rerun; IoU 0.80 unchanged
+retention: r353/r354 retained; scratch deletion candidates only; no evidence deleted
+```
+
+## Checkpoint CP-193 — Replay bridge GREEN; fresh package gate planned
+
+```yaml
+checkpoint: CP-193
+status: VALID_BRIDGE_DIRECTED_GREEN
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-CORRECTED-VAL-COMPARISON-R1
+red: {run_id: stage-e-sam-validation-bridge-red-r355, failed: 5, passed: 10, exit_code: 1, reason: bridge functions absent}
+invalid_green_attempt:
+  run_id: stage-e-sam-validation-bridge-green-r356
+  result: 5 failed, 55 passed; pytest exit 1
+  cause: new test fixture constructed a 64-pixel MaskRef on a 4x4 intermediate candidate before replacing its dimensions
+  correction: construct the valid four-pixel intermediate fixture, then replace mask and bbox together; no production threshold or assertion changed
+green: {run_id: stage-e-sam-validation-bridge-green-r357, passed: 60, exit_code: 0, pytest_seconds: 0.21, elapsed_seconds: 0.49}
+static: ruff and git diff --check pass after targeted import spacing correction
+observed_contracts:
+  - original proposal IDs survive deduplication and production SAM conversion
+  - previous SAM quality cannot suppress a new decoder prompt
+  - uncertified retained tails and more than 16 retained box-qualified inputs fail closed
+  - highest predicted SAM quality chooses the mask; a lower-quality inside-box mask cannot substitute for a failing highest-quality mask
+  - non-probability SAM quality is rejected, not clamped
+  - strict greater-than DINO box/text comparison matches installed Transformers postprocessor; CP-191 coverage proof at greater-than-or-equal remains conservative
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  focused_import: run-specific scratch/imports/so101_demo symlink to owned source checkout
+  overlay: r347 previous installed overlay, pending fresh rebuild
+  scratch: registered durable scratch/stage-e-sam-validation-bridge-green-r357/tmp; exact tempfile preflight passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_stage:
+  status: PLANNED
+  build: linux-build-stage-e-sam-validation-r358
+  ordinary: linux-test-stage-e-sam-validation-r359-ordinary
+  scope: fresh seven-package symlink overlay with verified local r26 lodepng and network fetching disabled; ordinary test only
+  subsequent: commit owned comparison contracts and ledger, ordinary-push/readback; integrate saved-checkpoint comparison launcher, then explicit benchmark before new SAM evaluation
+boundaries: no DINO rerun or new SAM inference yet; all sealed boundaries unchanged; Microduck paused
+retention: r355/r356/r357 retained, including invalid fixture attempt; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-194 — Comparison contracts fresh overlay built
+
+```yaml
+checkpoint: CP-194
+status: VALID_BUILD_ORDINARY_NEXT
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+run_id: linux-build-stage-e-sam-validation-r358
+result: {packages_finished: 7, exit_code: 0, elapsed_seconds: 56.04}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/linux-build-stage-e-sam-validation-r358
+source_retention: tracked diff plus exact new module and test copies preserved with runner, source commit, build and exit logs
+lodepng: r26 local cache expected HEAD and strict fsck verified; FETCHCONTENT_FULLY_DISCONNECTED enabled
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: registered durable scratch/linux-build-stage-e-sam-validation-r358/tmp; exact tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_sam_validation_r359.sh
+next_gate: source r358 overlay, verify seven package prefixes and validation module source path, ordinary test directory only
+boundaries: all sealed boundaries unchanged; Microduck remains paused and no GPU compute process present at readback
+retention: r358 build and evidence retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-195 — Comparison contracts ordinary gate GREEN; source sync
+
+```yaml
+checkpoint: CP-195
+status: VALID_CONTRACTS_ORDINARY_GREEN_COMPARISON_RUNTIME_PENDING
+source_commit: 74c8b897bec402d3cc3bda51817a69a75b338706
+run_id: linux-test-stage-e-sam-validation-r359-ordinary
+result: {passed: 1271, failed: 0, errors: 0, skipped: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.29, elapsed_seconds: 17.83, colcon_exit: 0, test_result_exit: 0}
+junit_sha256: d2c1fbbee9fded262aae49e627f958ad31687971ea3042720a94af67a65c6cff
+directed_junit_r357_sha256: d6878d25eb8b78fa01dff1c27b10099291d4dbfab513af6aa391167ddd66b85b
+collection: ordinary test directory only, no benchmark suite
+provenance:
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-validation-r358/install
+  package_prefixes: all seven verified in r358
+  validation_module: r358 build symlink resolves to this checkout source
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: registered durable scratch/linux-test-stage-e-sam-validation-r359-ordinary/tmp
+  tempfile_preflight: exact resolved match
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static: ruff check and git diff --check passed
+owned_changes: training/sam_decoder_validation.py, test/test_sam_decoder_validation.py, appended ledger CP-190 through CP-195 and current continuation snapshot
+preserved_untracked: build-task14-runner-access-r11/, install-task14-runner-access-r11/, log-task14-runner-access-r11/
+remote: actual Gitee remote is gitee; origin is local source bundle; ordinary push only, exact remote SHA readback required
+repository_rule: b91a4b56d30bc971e7c2d64465516b9d7a49b299 is already an ancestor and root NVMe rule is present
+next_experiment: same authorized five-epoch corrected-val comparison; implement bounded launcher, preregister exact output and inputs, then required explicit benchmark before new SAM inference
+qualification: not yet run; no model candidate selected from training losses or unit tests
+owned_processes: NONE after terminal ordinary gate
+retention: r351-r359 evidence retained including invalid r356; no archived or deleted runs; all newly created scratch trees are deletion candidates only
+boundaries: all sealed sets, PickPlace and Mac untouched; Microduck paused; no DINO or historical SAM inference rerun
 ```
