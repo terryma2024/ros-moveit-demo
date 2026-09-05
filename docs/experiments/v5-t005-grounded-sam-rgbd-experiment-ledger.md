@@ -12975,3 +12975,46 @@ retention:
   deletion_candidates: [r317-r320 scratch after readback and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-161, write and run the RED single-mask tensor/RLE contract against an absent new driver, then implement the minimum helper and reach GREEN before real inference
 ```
+
+## Checkpoint CP-162 — Transformers single-mask contract is RED
+
+```yaml
+checkpoint: CP-162
+status: RED_VALID
+recorded_at: 2026-09-05T09:14:03+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-161
+source_commit: e4eab543ae1ea23f348ce2fba61a27e72a143efe
+run_id: stage-e-transformers-single-mask-red-r317
+result: {exit_code: 1, elapsed_ms: 131, expected: RED, cause: transformers_sam_single_mask_r1.py absent}
+test_contract:
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_transformers_sam_single_mask_r1.py
+  test_script_sha256: 77053d1f6909a960ea2df7f9feefa1570bccfce957f3dad17f8a868ad825477c
+  assertions:
+    - raw logits are exactly [1, 1, 1, 256, 256] float32
+    - qualities are exactly [1, 1, 1] finite float32
+    - postprocessed mask is exactly [1, 1, H, W] and binds to the one quality
+    - exact RLE roundtrip and truth IoU are preserved
+    - accidental three-variant multimask output is rejected
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-transformers-single-mask-red-r317/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-transformers-single-mask-red-r317
+  preflight_sha256: 3d7ee1bf026346f0d9e7b68a1e23fb10e153a88de79a1bcdf8b7ab9891981a61
+  stdout_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: 09700f03f053fcee585935acd2479c6bea9cf56dd5a220de4b697887b786511a
+  test_pointer_sha256: 5f6752942d6da822680b3a150de5c499376f9e00b27655809ec6974ff1ba2690
+  exit_sha256: 5ad86f0bb0d9d845efbe296edde26a6443b5f8fd878c9ed0e6a60322c6962513
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r317 RED evidence/scratch, all CP-161 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r317 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-162, implement only normalization and single-mask diagnosis/RLE helpers in the new temporary driver, then run the unchanged test in fresh r318 scratch
+```
