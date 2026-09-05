@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-209
+latest_checkpoint: CP-210
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: f9144864a5b905644f31e6a964c7413d6ab36378
-active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R1
+source_parent: 4c6046213c8f94d72749e958a0deec39420cfc4c
+active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: verify retained categorical captures and complete categorical-only recovery bound to exact original RGB hashes
+next_action: independently read back all1500 corrected categorical records, then derive immutable r5 train/val labels
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14798,4 +14798,43 @@ next_experiment:
   subsequent: independent full readback and new immutable r5 truth preregistration; no inference/training/tuning before repaired-label reevaluation
 retention: r372-r375 retained in place; no archived/deleted runs; all scratch deletion candidates only
 boundaries: mask IoU0.80 and historical all-scenario/primary scores unchanged; sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused
+```
+
+## Checkpoint CP-210 — Complete categorical train/val capture with unchanged acceptance
+
+```yaml
+checkpoint: CP-210
+status: VALID_FULL_CATEGORICAL_CAPTURE_INDEPENDENT_READBACK_NEXT
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
+source_commit: 4c6046213c8f94d72749e958a0deec39420cfc4c
+gitee_sha_readback: 4c6046213c8f94d72749e958a0deec39420cfc4c
+run_id: stage-e-categorical-train-val-capture-r376
+result: {exit_code: 0, elapsed_seconds: 33.69, total: 1500, reused_frames: 1077, new_frames: 423, model_forwards: 0}
+report_sha256: 7e979b14dfd5492db023a1691181a42458b8d3852b752674bc290dbbd8fb5cde
+manifest_sha256: 5efa83edf970b102d6ef09b320cd5cbef3c3a41ecad99054c4348f175e7f9500
+observed:
+  - seven retained scene states reproduce complete visible categorical arrays bitwise, including the partial paired-reference array
+  - all1500 original train/val image, truth and label hashes verified; all legacy target RLE matches bitwise
+  - all1070 recovered partial-run records independently match their retained arrays, masks, counts, boxes and acceptance flags before inclusion
+  - zero corrected acceptance violations across original small/far and partial geometry criteria; no resampling, dropped members or threshold changes needed
+  - original RGB files unchanged; new capture output contains truth/state arrays only, no replacement RGB
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  GPU: NVIDIA GeForce RTX5080, EGL, RGB context4/categorical0
+  scratch: durable scratch/stage-e-categorical-train-val-capture-r376/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-READBACK-R1
+  status: PLANNED
+  run_id: stage-e-categorical-train-val-readback-r377
+  lifecycle: FULL_RESTART offline saved-array audit
+  single_variable: independent implementation reads frozen arrays and reconstructs masks/counts/tight boxes/acceptance, no GPU rendering or model inference
+  output: durable truth-remediation/categorical-train-val-readback-r1
+  gates: exact manifest paths/counts/hashes/modes, all recovery receipts unchanged, train/val identities and quotas, correct active cup bodies and no hidden cup pixels, original RGB hashes, full legacy RLE equality and corrected pixel/box/reference/acceptance agreement
+  subsequent: freeze r5 train/val label reconstruction using original RGB, corrected row-major visible/reference/amodal RLE and tight boxes; polygons compatibility only, never SAM truth
+owned_processes: NONE after renderer finally-close
+boundaries: r374 remains INVALID; all history and original archives untouched; sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; prompt cup.; mask IoU0.80 unchanged
+retention: r376 immutable capture and r372-r375 evidence retained; no archived/deleted runs; scratch deletion candidates only
 ```
