@@ -3,7 +3,7 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-220
+latest_checkpoint: CP-221
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
@@ -15212,4 +15212,38 @@ next_command: build_r5_training_container_r388.sh NEXT_SYNCED_SOURCE_SHA
 next_gate: locally pinned gcfix3 dependencies, no network, exact committed source layer, then unique r389 smoke with container Python NVMe tempfile preflight and no sealed/SAM mounts
 retention: trainer view and report immutable; all earlier r5/r4 data retained unchanged; no archival or deletion; scratch deletion candidate only
 boundaries: no model training yet; test/COCO100/PickPlace/Mac inaccessible; Microduck paused
+```
+
+## Checkpoint CP-221 — Offline r5 training image built from pinned local dependencies
+
+```yaml
+checkpoint: CP-221
+status: VALID_CONTAINER_BUILD_SMOKE_ARMED
+run_id: stage-d-r5-training-container-r388
+source_commit: 14b47a8a140001e5a36607f6db5a431bc0122a08
+gitee_sha_readback: 14b47a8a140001e5a36607f6db5a431bc0122a08
+result: {exit_code: 0, elapsed_seconds: 5.08}
+image: so101-grounding-dino-tiny-train:r5-categorical-r388
+image_id: sha256:6cfa37acb139d84f1910cc60fedbddeba0b87a10ef8b691395872b1ba637d69d
+base_image_id: sha256:d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550
+source_layer: git archive of exact committed src/so101_demo_py only, offline pip no-index/no-deps/no-build-isolation; no dependency or model fetch
+provenance: source label readback equals exact source commit; base image identity unchanged before/after build; Dockerfile/context/build log/image inspections retained
+python_host: /data/work/venvs/so101-grounded-sam/bin/python
+python_container: /opt/venv/bin/python
+overlay_host: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-box-export-r385/install
+scratch: durable scratch/stage-d-r5-training-container-r388/tmp; host exact tempfile readback passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-d-r5-training-smoke-r389
+  output: durable training/grounding-dino-cup-r5-r1/smoke-r1
+  contract_sha256: f9eeb79e9a3255b1bce8b7b6e13b8245f6838501ca60bcc8b2ae8f28c342ddc4
+  training_implementation_commit: 14b47a8a140001e5a36607f6db5a431bc0122a08
+  bootstrap: verify actual container Python tempfile on exact NVMe path, installed training module hashes, Torch/Transformers versions and RTX5080 CUDA before invoking trainer
+  container_checks: create unique named container, inspect exact allowlisted read-only data/model/contract mounts, dedicated output/scratch/evidence mounts, network none and no test/COCO100/SAM; preserve stopped container and all logs
+  smoke: one epoch, six train/six val members, accumulation1, all DINO trainable from official base; fresh-process checkpoint reload and one val-image inference required
+  next_after_smoke: independent r390 checkpoint/file/identity/metrics readback before formal r391 launch
+retention: image/build context and all prior evidence retained; no cleanup or archival; scratch deletion candidate only
+boundaries: Microduck paused; no test/COCO100/PickPlace/Mac access; SAM not mounted or trained; mask IoU0.80 unchanged
 ```
