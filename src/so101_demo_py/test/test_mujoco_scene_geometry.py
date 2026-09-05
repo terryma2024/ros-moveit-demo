@@ -50,6 +50,30 @@ def assert_intersecting_bottle_variant_fails_closed(scene):
     assert not receipt.accepted
 
 
+def visualizer_geom_rgba(scene, geom_name):
+    mujoco, model, data = scene
+    identifier = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+    mujoco.mj_forward(model, data)
+    visual_scene = mujoco.MjvScene(model, maxgeom=10_000)
+    mujoco.mjv_updateScene(
+        model,
+        data,
+        mujoco.MjvOption(),
+        None,
+        mujoco.MjvCamera(),
+        mujoco.mjtCatBit.mjCAT_ALL,
+        visual_scene,
+    )
+    matches = [
+        visual_scene.geoms[index]
+        for index in range(visual_scene.ngeom)
+        if visual_scene.geoms[index].objtype == int(mujoco.mjtObj.mjOBJ_GEOM)
+        and visual_scene.geoms[index].objid == identifier
+    ]
+    assert len(matches) <= 1
+    return None if not matches else np.asarray(matches[0].rgba).copy()
+
+
 @pytest.mark.parametrize(
     "a,b",
     [
@@ -153,6 +177,69 @@ def test_invisible_collision_proxies_are_excluded_from_visual_measurement(scene)
     )
     assert pair.primitive_pair_count == 26
     assert all("collision" not in name for name in pair.geom_names)
+
+
+def test_opaque_geom_rgba_overrides_transparent_material_and_proxy_is_rejected(scene):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    mujoco, model, data = scene
+    proxy = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "bottle_collision")
+    material = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MATERIAL, "cup_b_material")
+    model.mat_rgba[material] = [1, 1, 1, 0]
+    model.geom_matid[proxy] = material
+    model.geom_rgba[proxy] = [1, 0, 0, 1]
+    model.geom_pos[proxy] = [-0.05, -0.06, -0.025]
+
+    np.testing.assert_allclose(visualizer_geom_rgba(scene, "bottle_collision"), [1, 0, 0, 1])
+    with pytest.raises(ValueError, match="collision proxy|visible"):
+        measure_task_scene_geometry(model, data, active_cup_count=1)
+
+
+def test_transparent_geom_rgba_overrides_opaque_material_and_proxy_stays_excluded(scene):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    mujoco, model, data = scene
+    proxy = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "bottle_collision")
+    material = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MATERIAL, "cup_b_material")
+    model.geom_matid[proxy] = material
+    model.geom_rgba[proxy] = [0, 0, 0, 0]
+
+    assert visualizer_geom_rgba(scene, "bottle_collision") is None
+    receipt = measure_task_scene_geometry(model, data, active_cup_count=1)
+    assert receipt.accepted
+    assert all("collision" not in name for pair in receipt.pairs for name in pair.geom_names)
+
+
+def test_default_geom_rgba_uses_material_color_and_opaque_proxy_is_rejected(scene):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    mujoco, model, data = scene
+    proxy = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "bottle_collision")
+    material = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MATERIAL, "cup_b_material")
+    model.geom_matid[proxy] = material
+    model.geom_rgba[proxy] = [0.5, 0.5, 0.5, 1]
+
+    np.testing.assert_allclose(
+        visualizer_geom_rgba(scene, "bottle_collision"), model.mat_rgba[material]
+    )
+    with pytest.raises(ValueError, match="collision proxy|visible"):
+        measure_task_scene_geometry(model, data, active_cup_count=1)
+
+
+def test_extra_descendant_geom_is_rejected_with_complete_direct_schema(tmp_path):
+    from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
+
+    direct = """      <geom name="bottle_visual" type="cylinder" size="0.025 0.070"
+            group="0" contype="0" conaffinity="0" material="bottle_material"/>"""
+    with_descendant = direct + """
+      <body name="bottle_extra_child">
+        <geom name="bottle_extra_child_visual" type="cylinder" size="0.01 0.01"
+              group="0" contype="0" conaffinity="0" material="bottle_material"/>
+      </body>"""
+    changed = mutated_task_scene(tmp_path, direct, with_descendant)
+    _, model, data = changed
+    with pytest.raises(ValueError, match="descendant"):
+        measure_task_scene_geometry(model, data, active_cup_count=1)
 
 
 def test_parked_inactive_cups_are_not_physical_targets(scene):
