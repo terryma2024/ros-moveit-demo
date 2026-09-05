@@ -226,7 +226,10 @@ def test_all_penetrating_attempts_emit_exact_bound_and_make_no_image_calls(scene
 
 
 def test_event_sink_failure_aborts_before_image_or_next_attempt(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset import (
+        DatasetScenario,
+        RenderObserverError,
+    )
 
     renderer, calls = _instrumented_renderer(scene)
     preparations = 0
@@ -241,14 +244,108 @@ def test_event_sink_failure_aborts_before_image_or_next_attempt(scene):
     def fail_sink(event):
         raise OSError("evidence write failed")
 
-    with pytest.raises(OSError, match="evidence write failed"):
+    with pytest.raises(RenderObserverError, match="render event observer failed") as caught:
         renderer.render(
             410000127,
             DatasetScenario.ONE_CUP_DISTRACTORS,
             event_sink=fail_sink,
         )
+    assert isinstance(caught.value.__cause__, OSError)
+    assert str(caught.value.__cause__) == "evidence write failed"
     assert preparations == 1
     assert calls == []
+
+
+@pytest.mark.parametrize("failure_kind", ["geometry_measured", "penetration_rejected"])
+def test_structured_penetration_error_from_rejected_sink_is_not_retried(
+    scene, failure_kind
+):
+    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
+
+    renderer, calls = _instrumented_renderer(scene)
+    preparations = 0
+
+    def prepare(random, scenario):
+        nonlocal preparations
+        preparations += 1
+        _prepare_one_cup_state(scene, penetrating=True)
+
+    renderer._prepare = prepare
+    event_kinds = []
+    sink_errors = []
+
+    def fail_sink(event):
+        event_kinds.append(event.kind)
+        if event.kind == failure_kind:
+            error = ScenePenetrationError(
+                "structured evidence sink failure",
+                receipt=event.receipt,
+                seed=event.seed,
+                scenario=event.scenario,
+                attempt_index=event.attempt_index,
+            )
+            sink_errors.append(error)
+            raise error
+
+    with pytest.raises(Exception) as caught:
+        renderer.render(
+            410000127,
+            DatasetScenario.ONE_CUP_DISTRACTORS,
+            event_sink=fail_sink,
+        )
+
+    expected_events = ["geometry_measured"]
+    if failure_kind == "penetration_rejected":
+        expected_events.append("penetration_rejected")
+    assert preparations == 1
+    assert event_kinds == expected_events
+    assert calls == []
+    assert type(caught.value).__name__ == "RenderObserverError"
+    assert caught.value.__cause__ is sink_errors[0]
+
+
+def test_structured_penetration_error_from_rgb_start_sink_aborts_before_backend(scene):
+    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
+
+    renderer, calls = _instrumented_renderer(scene)
+    preparations = 0
+
+    def prepare(random, scenario):
+        nonlocal preparations
+        preparations += 1
+        _prepare_one_cup_state(scene, penetrating=False)
+
+    renderer._prepare = prepare
+    event_kinds = []
+    sink_errors = []
+
+    def fail_sink(event):
+        event_kinds.append(event.kind)
+        if event.kind == "rgb_render_started":
+            error = ScenePenetrationError(
+                "structured evidence sink failure",
+                receipt=event.receipt,
+                seed=event.seed,
+                scenario=event.scenario,
+                attempt_index=event.attempt_index,
+            )
+            sink_errors.append(error)
+            raise error
+
+    with pytest.raises(Exception) as caught:
+        renderer.render(
+            410000127,
+            DatasetScenario.ONE_CUP_DISTRACTORS,
+            event_sink=fail_sink,
+        )
+
+    assert preparations == 1
+    assert event_kinds == ["geometry_measured", "rgb_render_started"]
+    assert calls == []
+    assert type(caught.value).__name__ == "RenderObserverError"
+    assert caught.value.__cause__ is sink_errors[0]
 
 
 @pytest.mark.parametrize("malformation", ["missing", "accepted", "wrong_scope", "nonfinite"])
