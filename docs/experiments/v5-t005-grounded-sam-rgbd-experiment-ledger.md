@@ -18340,3 +18340,27 @@ phase_id_correction: r487 fix GREEN, Astra re-review, r488 build, r489 ordinary,
 retention: r486/r485 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-323 — r487 semantic GREEN valid but launcher exit non-clean; fresh receipt run required
+
+```yaml
+checkpoint: CP-323
+status: VALID_GREEN_TEST_POSTPROCESS_FAILURE_FRESH_CLEAN_RUN_PLANNED
+run_id: stage-e-generator-train-val-review-green-r487
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GREEN_TEST_WITH_POSTPROCESS_LAUNCHER_FAILURE, pytest_tests: 174, passed: 174, failed: 0, errors: 0, skips: 0, pytest_exit: 0, measured_outer_exit: 0, measured_receipt_exit: 0, launcher_tool_exit: 1, elapsed_seconds: 5.15434963, stderr_bytes: 0}
+product_status: all r486 I1-I5/M1 RED cases and141 controls are semantically GREEN; measured inputs unchanged; this result is valid product evidence but not the required clean end-to-end launcher receipt
+launcher_failure: after durable JUnit/stdout/stderr/time/exits and input-after hashes, private evidence parser read tests from the testsuites root instead of its child testsuite and raised KeyError; no test rerun or source edit occurred
+inputs: generator SHA256 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59; converter SHA256 78db8b071efdd007c8fb0beef37db5be0efe44926de2e0be7bc877bfcf3dee9d; test/config exact CP322 hashes; full source patch SHA256 fa60dc2bda76a11aec42828dcd245ff91e3da6e960fe42eb4c591e97f63bfe2d
+evidence: durable run-evidence/stage-e-generator-train-val-review-green-r487 and scratch retained; JUnit SHA256 9d6affe0e410ca209a4a1b85f83b371bf2630fdf7d955d5930a91437a09e3e1e; supplemental result SHA256 6f204d71855b1a9b9ab44e80e1615a72cf939006941c82aaf21dc1d47dfbf111; readback SHA256 e0bb66d99d251cfc7d5400d99761c92850692987b0fd78bace2689e0c2da3da8; inventory SHA256 75a32559b658b98f922efb321b66b943c4e5af0e697f967fbb4facb7b99b9cac
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-review-green-r487-report.md SHA256 e3977d6250002b673a424aa8a35a4935f0baee1ca39166161c3edf82c517a3ad
+parent_readback: complete84-line report/result/inventory/input hashes read; fail-closed choice is not to promote r487 as clean GREEN despite independent semantic result
+next_experiment:
+  status: GO_FRESH_CLEAN_GREEN_RECEIPT
+  run_id: stage-e-generator-train-val-review-green-r488
+  single_change: preserve exact generator/converter/test/config bytes and exact174-case command selection; correct only the private evidence launcher JUnit parser to aggregate child testsuite attributes safely
+  invocation: after static/hash gates and unique fresh r488 NVMe scratch exact Python/tempfile preflight, run the same174 cases exactly once; require pytest/outer/receipt/tool exits all0, 174/174 pass, zero error/skip and pristine evidence; stop for parent readback plus Astra review
+phase_id_correction_after_launcher: r488 clean GREEN, Astra re-review, r489 build, r490 ordinary, r491 benchmark, r492 runner RED, r493 runner GREEN/review, r494 generation, r495 source readback, r496 archive, r497 archive readback, r498 primary conversion, r499 repro conversion, r500 freeze; each separately checkpointed
+retention: r487/r486 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no source/test/config byte change in r488, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
