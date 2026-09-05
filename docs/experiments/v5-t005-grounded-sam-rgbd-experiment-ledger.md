@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-242
+latest_checkpoint: CP-243
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 67469c87dc1488f3f9b73ef82f62cf2c10dd1dfb
-active_experiment: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
-confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
-open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: observer RED/GREEN and ordinary gate passed; commit/push then r413 full explicit adapter benchmark, keep source fixed while it runs
+source_parent: 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5
+active_experiment: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
+open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
+next_action: implement and test serial per-frame complete-proposal receipt retention before any new r5 raw inference; keep original and historical epoch4 SAM frozen
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15888,4 +15888,48 @@ GZ_PARTITION: not_applicable_offline
 next_after_gate: freeze and verify serial proposal-receipt collector before new val raw inference; all300/primary250 and fixed thresholds/provenance retained
 retention: all prior evidence retained; no deletion/archival; scratch deletion candidates only
 boundaries: Microduck paused; no new SAM training/inference yet; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 and mapping0.98 unchanged
+```
+
+## Checkpoint CP-243 — Complete observer benchmark passed; proposal receipts planned
+
+```yaml
+checkpoint: CP-243
+status: VALID_OBSERVER_GATES_RECEIPT_COLLECTOR_PLANNED
+experiment_id: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
+run_id: linux-test-stage-e-r5-proposal-observer-r413-benchmark
+source_commit: 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5
+gitee_sha_readback: 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5
+result: {passed: 583, skipped: 2, total: 585, errors: 0, failures: 0, pytest_seconds: 645.20, elapsed_seconds: 646.56, runner_exit: 0, colcon_exit: 0, test_result_exit: 0}
+command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_proposal_observer_r413.sh 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5 3cc371a52e89bbf179fb99a157fdd0533495fb0ffa7230e00f0bd90ca3839ca6
+evidence: durable run-evidence/linux-test-stage-e-r5-proposal-observer-r413-benchmark; runner.sh, source-commit.log, preflight.log, colcon-log command, test.log, test-result.log, exit.log, gate-exit.log, junit.xml and timing receipt retained
+junit_sha256: 8be61f541b6995e9f3ec8323b7f261b99278ac2c65ea2418f88781307568643f
+timing_receipt_sha256: c41a49c50934ae2ad12db87ca325fca2270bbe7c7d70e6b6bede048214259c30
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-observer-r411/install
+scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/linux-test-stage-e-r5-proposal-observer-r413-benchmark/tmp
+preflight: TMPDIR/TMP/TEMP exact unique scratch, actual Python tempfile resolved equality, installed observer signature and all7 package prefixes verified; no source or HEAD changes during test
+baseline_comparison: r30 preserved without rerun;645.20 versus3210.78 pytest seconds, ratio0.20094805623555648,2565.58 seconds less; suite/source evolved so observational only; no fsync/journaling/integrity changes or tmpfs
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+owned_processes: r413 exited; no new model inference/training process, Microduck not resumed
+working_tree: observer code/tests already committed and Gitee read back; only this ledger update owned; original untracked build/install/log untouched
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+  status: PLANNED
+  prior_experiment: EXP-079-STAGE-E-DINO-PROPOSAL-OBSERVER-R1
+  single_variable: serial evidence-retention wrapper around existing val raw collector; no inference thresholds or model changes
+  design: bind each observer call to exact active val seed/index/frame identity, dimensions, PNG/RGB SHA, source/data/model identity and ordered complete proposals above0.01 floors; exclusive durable receipt must succeed before SAM; validate surviving candidate IDs/boxes/scores against receipt afterward
+  empty_frames: require an explicit empty receipt; missing callback is not an empty proposal set
+  fail_closed: out-of-order or wrong frame identity, duplicate/missing callback, nonfinite or out-of-range scores/boxes, unsorted proposals, output collision, receipt write/readback failure, candidate not matching receipt, CPU fallback or model/data manifest mismatch
+  tests_first: r414 RED then r415 GREEN using fake inference backend and real retention path; cover omitted high-score proposal, empty frame, all identity/error boundaries, persisted receipt hash and completeness; no new expensive inference before applicable gates
+  lifecycle: offline serial, no ROS/Gazebo stack
+  scope: bounded extension of existing collect_val_raw flow; preserve old raw schema and every historical file; retained proposal sidecars enable original/epoch4 frozen-SAM comparison without repeating DINO
+  model_bundle: durable models/grounded-sam-dino-cup-r5-epoch8-r1
+  model_manifest_sha256: eaa5ecec8b915dd743a691f7ee1607e3f3c7d12f018c406380d1be6c848729ca
+  evaluation_inventory_sha256: 5a6a349e47d01b889edc3248a9553b48b504f20fb8b19fb83f4c56ff226fbf2e
+  denominators: all300 frames and primary250 excluding only small_far_cup; scenario labels never runtime eligibility
+  selection_boundary: DINO checkpoint selected at0.40/0.40; freeze SAM/production comparison protocol before inference outcomes; mask IoU0.80 and raw/production mapping0.98 unchanged
+  authorization: standing user approval; bounded design announced; no repeated request for already authorized scope
+retention: all runs retained; archived none; r413 scratch is a deletion candidate after readback, not deleted; no evidence cleanup
+boundaries: no new r5 full SAM raw run yet; no additional SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; Microduck paused
 ```
