@@ -53,6 +53,21 @@ _DEFAULT_GEOM_RGBA = np.array((0.5, 0.5, 0.5, 1.0))
 class ScenePenetrationError(RuntimeError):
     """A measured penetrating scene may be retried with a new deterministic draw."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        receipt: TaskSceneGeometry | None = None,
+        seed: int | None = None,
+        scenario: Any | None = None,
+        attempt_index: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.receipt = receipt
+        self.seed = seed
+        self.scenario = scenario
+        self.attempt_index = attempt_index
+
 
 @dataclass(frozen=True, slots=True)
 class TaskGeometryPair:
