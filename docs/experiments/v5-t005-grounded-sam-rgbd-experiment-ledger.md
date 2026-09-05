@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-260
+latest_checkpoint: CP-261
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: ae1019709d49727fe36bf793dfbf1f81a0add904
+source_parent: 2847084cc156a89d8b1b07c651ef796ea84c7b47
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r431 finds19/200train and10/50val two-cup frames with intersecting walls; r432 audit active task-object geometry across all retained train/val before freezing a generator repair, no new data or inference
+next_action: r432 INVALID bootstrap enum-membership check; r433 explicit integer type check, unchanged all1500 active-task geometry census before generator repair
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16553,4 +16553,31 @@ next_run:
 next_after_audit: freeze minimal generator nonpenetration RED test and bounded new-version protocol based on measured affected pairs; do not start generation/training from this checkpoint
 retention: all runs retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no SAM training, no threshold/metric/cohort changes
+```
+
+## Checkpoint CP-261 — Preserve enum-check bootstrap failure; fresh census runner
+
+```yaml
+checkpoint: CP-261
+status: INVALID_ENUM_BOOTSTRAP_FRESH_AUDIT_PLANNED
+run_id: stage-e-r5-active-task-geometry-r432
+source_commit: 2847084cc156a89d8b1b07c651ef796ea84c7b47
+gitee_sha_readback: 2847084cc156a89d8b1b07c651ef796ea84c7b47
+result: {exit_code: 1, elapsed_seconds: 0.59, model_forwards: 0, renders: 0, frames_measured: 0}
+failure: NumPy scalar membership in a list of MuJoCo pybind enum values rejected actual primitive types5/6; explicit enum reconstruction confirms CYLINDER/BOX for every scoped visual geom
+root_boundary: audit bootstrap type guard, not model/data provenance or geometric evidence; r430/r431 direct scalar comparisons and numeric witnesses unaffected
+evidence: durable run-evidence/stage-e-r5-active-task-geometry-r432; selection and full logs retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-active-task-geometry-r432/tmp; actual tempfile passed; do not reuse
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-r5-active-task-geometry-r433
+  prior_experiment: stage-e-r5-active-task-geometry-r432
+  single_variable: normalize model geom_type and enum whitelist with int before membership check; unchanged scope/provenance/algorithms/criteria from CP-260
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-active-task-geometry-r433 audit_r5_active_task_geometry_r433.py NEXT_SYNCED_HEAD
+retention: all evidence including invalid runs retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
 ```
