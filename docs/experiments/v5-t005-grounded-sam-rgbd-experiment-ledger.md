@@ -17827,3 +17827,29 @@ next_experiment:
 retention: r474/r475 and all earlier evidence retained, archived none; r474/r475 scratch deletion candidates only, no deletion
 boundaries: no current runner/source/ledger-by-agent change, no r470/GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
 ```
+
+## Checkpoint CP-305 — r476 authoritative behavioral RED valid; runner GREEN planned
+
+```yaml
+checkpoint: CP-305
+status: VALID_BEHAVIORAL_RED_GREEN_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r476
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_BEHAVIORAL_RED, total: 17, defects_reproduced: 16, valid_controls: 1, harness_errors: 0, test_exit: 1, tool_exit: 1, receipt_exit: 1, elapsed_seconds: 0.07}
+inputs: harness SHA8935c1966cd10cae8c90ce572f85c58ada49e19c97415f6d2f28cf8b667ba271, frozen driver75a3f0bc, shell198e43ca, outer launcher49b00b0c
+coverage: truthful resolved Python, exact preflight/manifest/truth semantics, independently persisted categorical bytes, eight strict PNG structure/stream cases, unexpected nested empty directory; valid frozen-writer PNG control PASS
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-behavioral-red-r476 plus unique scratch; complete command/stdout/stderr/exit/time/preflight/source/input/post-run/readback/hash receipts
+report: durable coordination/generator-r443-r1/runtime-acceptance-runner-behavioral-red-report.md SHA256 132958daafa12064ac4f462e4108307ac01b19345763f5f33e1d8876eaaa5cdf
+parent_readback: exact result17, exit1, empty stderr, tempfile and lockedPython gates, report and r470 root absence confirmed
+superseded_invalid: r474 harness error and r475 missing exit receipt retained unchanged; neither rerun/reused
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-acceptance-runner-behavioral-green-r477
+  executor: same Sol high
+  scope: minimal private runner/driver correction only; no repository production source
+  implementation: resolved executable single contract; exact typed scalar/preflight/nested truth checks; two canonical little-endian int32 categorical byte artifacts and independent equality readback; strict exact writer PNG parser; exact directory allowlist; remove unused duplicate constant; final run-root fsync
+  tests: same r476 behavioral expectations must all pass on fixed reader plus AST/Ruff/bash/hash/package/no-r470-root checks, unique NVMe scratch and actual lockedPython tempfile preflight
+  stop_after: freeze new runner hashes/report and parent checkpoint before Astra re-review
+retention: r474-r476 and all earlier evidence retained, archived none; scratch deletion candidates only, no deletion
+boundaries: r470 held; no GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
+```
