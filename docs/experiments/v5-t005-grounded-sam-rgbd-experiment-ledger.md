@@ -18341,6 +18341,30 @@ retention: r486/r485 and all earlier evidence retained, archived none; scratch t
 boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-325 — original review findings closed; new directory-traversal RED required
+
+```yaml
+checkpoint: CP-325
+status: FIX_ROUND1_NEW_IMPORTANT_TESTS_ONLY_RED_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+rereview_verdict: {original_findings_addressed: 6, original_not_addressed: 0, new_critical: 0, new_important: 1, new_minor: 1, spec: CHANGES_REQUESTED, quality: CHANGES_REQUESTED}
+rereview_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-r488-rereview-report.md SHA256 51ebe7e33b543f5a2c2dd1051163eed66cfbbbc4e442bdfde723d24f5dcf57f9
+closed_original: I1 exact physical gate, I2 exact official version certificate, I3 scenario/count/body truth, I4 exact inventory/type/name, I5 legacy measured-none scoping, and M1 malformed schema/distance normalization are each ADDRESSED
+new_important_N1: new-contract tree walker calls os.scandir recursively on an unexpected nonsymlink directory before comparing it to expected_directories; it eventually rejects but violates the no-traversal access boundary and can leak raw RecursionError on deep unexpected trees
+new_minor_N2: replacement population tests lack a valid converter validator success call; deferred per review-loop policy for final whole-branch triage and does not enter the blocking fix loop
+Ruling: N1 is a real load-bearing fail-closed access defect; exact inventory must reject an unexpected directory entry before opening or enumerating any descendants, while still no-follow checking symlinks/special files and completing final equality for missing canonical members. Cost if wrong: early rejection may report the first extra directory rather than a complete inventory, which is the intended safety tradeoff.
+next_experiment:
+  status: GO_TESTS_ONLY_RED
+  run_id: stage-e-generator-train-val-directory-boundary-red-r489
+  executor: /root/generator_build, gpt-5.6-sol high
+  owned_changes: one focused synthetic regression test/fixture only; preserve generator/converter/config bytes exact at CP324 and preserve all existing174 test behaviors
+  coverage: valid canonical compact lower-level tree control plus unexpected images/test directory containing a synthetic descendant; guard os.scandir so opening the unexpected directory or below fails the test before payload access; expected current failure proves traversal-before-rejection, not missing helper/import/harness; no real sealed path/string traversal
+  invocation: static AST/Ruff/hash gates, then one focused pytest process containing prior174 plus new N1 case under fresh unique r489 NVMe scratch and exact Python/tempfile preflight; require174 controls pass and exactly1 expected N1 failure, zero errors/skips/harness failures; stop before source fix
+phase_id_correction: r489 N1 RED, r490 N1 GREEN, Astra scoped re-review, r491 build, r492 ordinary, r493 benchmark, r494 runner RED, r495 runner GREEN/review, r496 generation, r497 source readback, r498 archive, r499 archive readback, r500 primary conversion, r501 repro conversion, r502 freeze; each separately checkpointed
+retention: r488 and all prior evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no production/config edit in r489, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-323 — r487 semantic GREEN valid but launcher exit non-clean; fresh receipt run required
 
 ```yaml
