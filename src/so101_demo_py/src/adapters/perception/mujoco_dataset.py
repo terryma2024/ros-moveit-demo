@@ -14,6 +14,11 @@ from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 import numpy as np
+from so101_demo.adapters.perception.mujoco_scene_geometry import (
+    ScenePenetrationError,
+    TaskSceneGeometry,
+    measure_task_scene_geometry,
+)
 from so101_demo.runtime.point_cloud_preview import write_png_rgb8
 from so101_demo.runtime.task_artifacts import atomic_json
 
@@ -58,6 +63,7 @@ class RawRender:
     amodal_geom_ids: np.ndarray | None = None
     occluder_body_name: str | None = None
     occlusion_reference: str | None = None
+    geometry_receipt: TaskSceneGeometry | None = None
 
     def __post_init__(self) -> None:
         rgb = np.array(self.rgb8, dtype=np.uint8, copy=True)
@@ -262,8 +268,11 @@ class DatasetConfig:
     seed_starts: Mapping[str, int] | None = None
     scenario_quotas: Mapping[str, Mapping[str, int]] | None = None
     geometry: SceneGeometry = SceneGeometry()
+    require_nonpenetrating_scene: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.require_nonpenetrating_scene) is not bool:
+            raise ValueError("require_nonpenetrating_scene must be boolean")
         path = Path(self.mjcf_path)
         if not path.is_absolute():
             path = path.resolve()
@@ -454,6 +463,7 @@ def load_dataset_config(
         seed_starts=raw_seed_starts,
         scenario_quotas=raw_scenario_quotas,
         geometry=SceneGeometry.from_mapping(document.get("scene_geometry")),
+        require_nonpenetrating_scene=document.get("require_nonpenetrating_scene", False),
     )
 
 
@@ -643,6 +653,8 @@ def select_bounded_render(
     scenario: DatasetScenario,
     render_attempt: Callable[[np.random.Generator], RawRender],
     geometry: SceneGeometry,
+    *,
+    require_nonpenetrating_scene: bool = False,
 ) -> RawRender:
     """Select the first deterministic render satisfying an augmented scenario gate."""
 
@@ -650,13 +662,24 @@ def select_bounded_render(
         DatasetScenario.SMALL_FAR_CUP,
         DatasetScenario.PARTIALLY_OCCLUDED_CUP,
     }
-    attempts = geometry.maximum_deterministic_attempts if bounded else 1
+    attempts = geometry.maximum_deterministic_attempts if bounded or require_nonpenetrating_scene else 1
     scenario_ordinal = tuple(DatasetScenario).index(scenario)
     for attempt_index in range(attempts):
         random = np.random.default_rng(
             np.random.SeedSequence([seed, scenario_ordinal, attempt_index])
         )
-        render = render_attempt(random)
+        try:
+            render = render_attempt(random)
+        except ScenePenetrationError:
+            if require_nonpenetrating_scene:
+                continue
+            raise
+        if require_nonpenetrating_scene:
+            if not isinstance(render.geometry_receipt, TaskSceneGeometry):
+                raise ValueError("required geometry receipt is missing or invalid")
+            render.geometry_receipt.validate_scope(scenario.cup_count)
+            if not render.geometry_receipt.accepted:
+                continue
         sample = build_labeled_sample(render, seed=seed, scenario=scenario)
         if _sample_meets_acceptance(sample, geometry):
             return render
@@ -767,8 +790,20 @@ def generate_dataset(
     try:
         for split in ("train", "val", "test"):
             for seed, scenario in zip(seeds[split], schedules[split], strict=True):
+                render = active_renderer.render(seed, scenario)
+                extra_truth: dict[str, Any] = {}
+                if config.require_nonpenetrating_scene:
+                    receipt = render.geometry_receipt
+                    if not isinstance(receipt, TaskSceneGeometry) or not receipt.accepted:
+                        raise ValueError("required accepted geometry receipt is missing or invalid")
+                    receipt.validate_scope(scenario.cup_count)
+                    extra_truth["scene_geometry"] = {
+                        "policy": "task-visual-nonpenetration-v1",
+                        "accepted": True,
+                        **asdict(receipt),
+                    }
                 sample = build_labeled_sample(
-                    active_renderer.render(seed, scenario),
+                    render,
                     seed=seed,
                     scenario=scenario,
                 )
@@ -789,6 +824,7 @@ def generate_dataset(
                         "configured_cup_count": scenario.cup_count,
                         "visible_instance_count": len(sample.instances),
                         "instances": [_truth_instance_document(item) for item in sample.instances],
+                        **extra_truth,
                     },
                 )
                 relative_paths = (image_relative, label_relative, truth_relative)
@@ -844,6 +880,8 @@ def generate_dataset(
             "samples": samples,
             "artifacts": sorted(artifacts),
         }
+        if config.require_nonpenetrating_scene:
+            manifest["scene_geometry_policy"] = "task-visual-nonpenetration-v1"
         atomic_json(root / "dataset-manifest.json", manifest)
         return manifest
     finally:
@@ -993,6 +1031,13 @@ class MuJoCoDatasetRenderer:
 
     def _render_attempt(self, random: np.random.Generator, scenario: DatasetScenario) -> RawRender:
         self._prepare(random, scenario)
+        geometry_receipt = None
+        if self._config.require_nonpenetrating_scene:
+            geometry_receipt = measure_task_scene_geometry(
+                self._model, self._data, active_cup_count=scenario.cup_count
+            )
+            if not geometry_receipt.accepted:
+                raise ScenePenetrationError("intersecting task visual solids")
         self._renderer.disable_segmentation_rendering()
         self._renderer.update_scene(self._data, camera=self._config.camera_name)
         rgb = np.array(self._renderer.render(), dtype=np.uint8, copy=True)
@@ -1024,6 +1069,7 @@ class MuJoCoDatasetRenderer:
             amodal_geom_ids=amodal_geom_ids,
             occluder_body_name=occluder_body_name,
             occlusion_reference=occlusion_reference,
+            geometry_receipt=geometry_receipt,
         )
 
     def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
@@ -1032,6 +1078,7 @@ class MuJoCoDatasetRenderer:
             scenario,
             lambda random: self._render_attempt(random, scenario),
             self._config.geometry,
+            require_nonpenetrating_scene=self._config.require_nonpenetrating_scene,
         )
 
     def close(self) -> None:
