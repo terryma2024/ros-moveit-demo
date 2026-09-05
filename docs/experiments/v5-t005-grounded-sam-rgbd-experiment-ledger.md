@@ -18229,3 +18229,31 @@ phase_id_correction_after_non_green: r484 fix GREEN, r485 build, r486 ordinary, 
 retention: r483/r482 and all prior evidence retained, archived none; scratch trees are deletion candidates only and nothing deleted
 boundaries: no build/benchmark/generation/render/MuJoCo/OpenGL/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-319 — r484 train/val contract GREEN valid; Astra source review required
+
+```yaml
+checkpoint: CP-319
+status: VALID_GREEN_SCOPED_REVIEW_PLANNED
+run_id: stage-e-generator-train-val-only-green-r484
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GREEN, tests: 135, passed: 135, failed: 0, errors: 0, skips: 0, new_contract: 59/59_passed, legacy: 76/76_passed, pytest_exit: 0, outer_exit: 0, tool_exit: 0, elapsed_seconds: 4.390205782, stderr_bytes: 0}
+fix: only a four-line split_seed_plan exception translation restored the legacy seed_starts diagnostic while retaining invalid-input rejection and the canonical two-way/three-way split semantics; r483-to-r484 patch SHA256 0bbd04346e00b3eeb62b1c405033cee80f1c4f0b0e31375bc467a2c52017f774
+inputs:
+  generator: SHA256 6138d823e0a595ba087674e4338c1c59d9f1099e4684e40f4382ceb7dfb645ba
+  converter: SHA256 3cce77bbce5e14ea45e52211340b52d7dde8a4a00fdf90f2359868e874d2c67c
+  config: SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c
+  frozen_test: SHA256 a20b5af069a1ef6afe0e04737132e1273fd0349657eb642e3e4c71be7d83ad48
+  full_patch: source-vs-frozen-4a0 SHA256 7ac773ca481b20ecb80b7d3ecdb0009236674f7d9346bb455383cd56acffa087
+python_scratch: exact venv resolved /usr/bin/python3.12, pytest7.4.4 from /usr/lib/python3/dist-packages, tempfile/basetemp/cache exact fresh r484 NVMe scratch; all preflight gates PASS
+evidence: durable run-evidence/stage-e-generator-train-val-only-green-r484 and scratch retained; JUnit SHA256 0e9e2903a0a700b0f48fdd2b218b2d06061bf49c5c1ed559182b6908f083fcfe; result SHA256 6949281588dc3a55207ee92cc896af6dabaec69c21745b2c86b4e0b6c82491ac; inventory SHA256 989ce1c7f9b444767d8db9d18113696283641576aa0070c8ee45aea8c30ea21d
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-green-r484-report.md SHA256 73ae2e78aed9243511bf4438cbed99a2ed169e80f0482c2075d48cb36515a938
+parent_readback: complete report/result/JUnit hashes and complete generator/converter diffs plus exact new config read; frozen811-line test was already read completely at CP315 and remains byte-identical; no forbidden boundary accessed
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: exact CP313/CP316 requirements, r481 RED, r483 regression RED, r484 GREEN, full source/config/test diff and legacy byte-compatibility risk; return independent spec-compliance and task-quality verdicts with concrete findings
+  restrictions: read-only; no edit/index/Git/ledger/evidence mutation, no test/import/render/root allocation/sealed traversal; no build authorization until review is approved and owned changes are committed/pushed/read back
+retention: r484/r483/r482 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no build/benchmark/generation/render/MuJoCo/OpenGL/conversion run/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
