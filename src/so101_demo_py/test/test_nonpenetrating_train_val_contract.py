@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -805,8 +806,55 @@ def test_legacy_sample_limit_control_is_unchanged() -> None:
 
 
 def test_contract_tests_load_no_rendering_modules() -> None:
-    assert "mujoco" not in sys.modules
-    assert "OpenGL" not in sys.modules
+    source_root = (Path(__file__).resolve().parents[1] / "src").resolve()
+    program = """
+import importlib
+import sys
+from pathlib import Path
+
+forbidden_roots = {"mujoco", "OpenGL"}
+module_suffixes = {
+    "so101_demo.adapters.perception.mujoco_dataset": (
+        "adapters/perception/mujoco_dataset.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_scene_geometry": (
+        "adapters/perception/mujoco_scene_geometry.py"
+    ),
+    "so101_demo.training.grounding_dino_dataset": (
+        "training/grounding_dino_dataset.py"
+    ),
+}
+
+def loaded_forbidden_roots():
+    return {name.split(".", 1)[0] for name in sys.modules} & forbidden_roots
+
+source_root = Path(sys.argv[1]).resolve()
+before = loaded_forbidden_roots()
+print(f"interpreter={sys.executable}")
+print(f"source_root={source_root}")
+print(f"forbidden_before={sorted(before)}")
+assert not before, before
+modules = {name: importlib.import_module(name) for name in module_suffixes}
+actual_paths = {name: Path(module.__file__).resolve() for name, module in modules.items()}
+expected_paths = {name: source_root / suffix for name, suffix in module_suffixes.items()}
+for name in module_suffixes:
+    print(f"module={name} actual={actual_paths[name]} expected={expected_paths[name]}")
+assert actual_paths == expected_paths, (actual_paths, expected_paths)
+after = loaded_forbidden_roots()
+print(f"forbidden_after={sorted(after)}")
+assert not after, after
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program, str(source_root)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    print(completed.stdout, end="")
+    print(completed.stderr, end="", file=sys.stderr)
+    assert completed.returncode == 0, (
+        f"child stdout:\n{completed.stdout}\nchild stderr:\n{completed.stderr}"
+    )
 
 
 def _official_config_document(tmp_path: Path) -> tuple[Path, dict[str, object]]:
