@@ -18953,6 +18953,27 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-360 — r515 pre-root receipt contradiction corrected; same GREEN remains planned
+
+```yaml
+checkpoint: CP-360
+status: VALID_STATIC_PREFLIGHT_CHILD_EXIT_ORACLE_CORRECTION_R515_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r515
+executor: /root/generator_build, gpt-5.6-sol high
+preflight_result: {run_root_allocated: false, scratch_root_allocated: false, harness_invocations: 0, candidate_driver_unchanged: true, candidate_shell_implemented_not_measured: true}
+finding: adapted r509 sets EXPECTED_DEFECTS=0 and EXPECTED_CONTROLS=19; when all19 pass its unchanged authoritative expression is true and original main returns1, while r514 wrapper expected code2, making a133/133 GREEN receipt impossible despite unchanged case semantics
+parent_readback: r509 lines438-459 and r514 lines64-92 read; code1 is the exact authoritative adapted-child receipt, code2 denotes nonauthoritative; changing only wrapper expectation2-to-1 does not change any case assertion, expected count, exception provenance or candidate behavior
+private_candidate: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b byte-identical; lifecycle-fixed shell SHA256f350b28f144955643a9b809065b0896be26470e7a4b89f919d853c39f276fd68 unmeasured
+shell_scope_readback: exact r514-to-candidate diff moves all postallocation trap root/path/time/stage/owner values to SO101_POSTALLOCATION_-prefixed globals; owner uses nounset-safe claim, disarms before work, preserves caught/finalizer exits, clears state after ordinary finalization; no driver/N3/collision/schema change
+authorization:
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r515
+  sole_added_harness_correction: assert adapted authoritative r509 child exit1 instead of2; preserve exact19 case states/counts and every r514 oracle plus mechanical r515 identity/path/current HEAD and new reviewed shell hash
+  required: retain CP-359 implementation scope and all133 semantic requirements; one fresh invocation only;133/133, zero failure/harness error, outer launcher/tool exit0, adapted child authoritative exit1 explicitly receipted; static/NVMe/fsync/inventory/readback; stop for Astra
+  restrictions: no further candidate change unless a new RED; no real setup/project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: all prior evidence retained, archived none; no r515 evidence/scratch/low root exists yet and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-359 — r514 exposes EXIT-trap scope RED; minimal shell lifecycle GREEN authorized
 
 ```yaml
