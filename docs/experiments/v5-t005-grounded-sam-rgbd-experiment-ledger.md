@@ -3,7 +3,7 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-225
+latest_checkpoint: CP-226
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
@@ -15345,4 +15345,34 @@ new_smoke: r397 uses smoke-r2 output and unique container/scratch/evidence; r389
 benchmark: no benchmark code/model comparison performed yet; preserve r30/r363 and run required explicit gate with new model comparison
 retention: all logs/JUnit/source receipts/builds retained; no archival/deletion; scratch deletion candidates require explicit permission
 boundaries: Microduck paused; no SAM change or sealed/test/COCO100/PickPlace/Mac access
+```
+
+## Checkpoint CP-226 — r396 offline image verified; fresh smoke-r2 armed
+
+```yaml
+checkpoint: CP-226
+status: VALID_CONTAINER_BUILD_SMOKE_PLANNED
+run_id: stage-d-r5-training-container-r396
+source_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+gitee_sha_readback: 47e9682168937e4ff2a0a773c428f4044b6623fb
+result: {exit_code: 0, elapsed_seconds: 4.33}
+image: so101-grounding-dino-tiny-train:r5-categorical-r396
+image_id: sha256:75bf5c3d116d8b734e14c2f189f1cb4392912b5837387af010a36cb16fba554f
+base_image_id: sha256:d7f0a8962193ca695ad4c8cdf8786ec8deb8163aac329d7f27f393d14abd0550
+source: exact committed package archive installed offline no-index/no-deps/no-build-isolation; base image unchanged, source label readback passed
+python: /opt/venv/bin/python
+host_overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+scratch: durable scratch/stage-d-r5-training-container-r396/tmp; host locked Python exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-d-r5-training-smoke-r397
+  output: durable training/grounding-dino-cup-r5-r1/smoke-r2
+  single_variable: fixed JSON contract loader; data, contract hash, model base and training recipe unchanged from r389
+  guards: exact installed module hashes and contract JSON roundtrip including numeric lr/eps, CUDA no fallback, allowlisted mounts/network none, exact container Python NVMe tempfile
+  smoke_gate: six train/six val, one epoch from original base, backward/optimizer/checkpoint/fresh reload required; no formal launch until independent r398 readback
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_dino_training_r2.sh smoke NEXT_SYNCED_HEAD
+retention: r389/r388 and all other historical evidence retained; new image/context retained; no deletion or archival
+boundaries: Microduck paused; SAM absent; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged
 ```
