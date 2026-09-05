@@ -13222,3 +13222,68 @@ retention:
   deletion_candidates: [r317-r323 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-166, independently verify all 82 artifacts and aggregates under unique r324, then inspect the frozen overlays before selecting the smallest next train/val-only SAM intervention
 ```
+
+## Checkpoint CP-167 — Independent readback and primary near-workspace cohort reporting
+
+```yaml
+checkpoint: CP-167
+status: VALID_READBACK_COMPLETE_COHORT_POLICY_ADOPTED
+recorded_at: 2026-09-05
+prior_checkpoint: CP-166
+source_commit: 373682c3ea57fa2fd0177204b7088a57dcfc78b6
+experiment_id: EXP-079-STAGE-E-NEAR-WORKSPACE-COHORT-READBACK-R1
+policy:
+  authority: user strategy update
+  all_scenario: preserve every historical metric and CP-161/CP-164 frozen ten-sample diagnostic
+  primary_cohort: exclude only existing small_far_cup scenario for offline reporting
+  mask_iou_gate: 0.80 unchanged
+  inference_rerun: false
+independent_readback:
+  run_id: stage-e-transformers-single-mask-readback-r324
+  result: {exit_code: 0, elapsed_ms: 724, files_verified: 82, rle_verified: 20, tensors_verified: 40, aggregate: exact}
+  report_sha256: efcc5b198166356abdd2b3dda71dce1eb69db6a40b37eaf282ecb414042d930c
+  exit_sha256: 4cdd4588e834b83412c3d4f2a25a799c25d05dc50ac4f4d9be98f2f2eefd77e3
+  preflight_sha256: 256c89fe55b46aa4f1598067856d6ed87f5c6c239f91dcbea9790fd4893935ba
+visual_readback:
+  sample_275: single mask leaks onto adjacent bottle and loses the passing control
+  sample_289: residual leakage leaves IoU below 0.80
+  samples_53_135: catastrophic non-target leakage persists
+  conclusion: H4 closed; production single-mask switch unsupported
+cohort_readback:
+  run_id: stage-e-near-workspace-cohort-readback-r325
+  result: {exit_code: 0, elapsed_ms: 103}
+  report_sha256: 3bafa9f175145881a1c1acf5fda2e29bb68e6877b28c60ab158f9ad2da411b59
+  inputs_sha256: fe6571837fa79cf4cc308dbc82fb5a53ae474b98ce97855bd0ec007aa2967621
+  exit_sha256: 5b4b7c3707ec90c4d73a9d25e3dd107145cca160c2a9572b3723da5b78ebcd0e
+  preflight_sha256: f4bc1d1dd1f15daf314757cb351e6b309737971c85de11716078d63287e6f905
+corrected_truth_selected_val:
+  all_scenario: {images: 300, truths: 300, candidates: 218, bbox_matches: 210, mask_pass: 47, mask_fail: 163, tp: 47, fp: 171, fn: 253, precision: 0.21559633027522937, recall: 0.15666666666666668, f1: 0.18146718146718147}
+  primary_near_workspace: {images: 250, truths: 250, candidates: 198, bbox_matches: 192, mask_pass: 47, mask_fail: 145, tp: 47, fp: 151, fn: 203, precision: 0.23737373737373738, recall: 0.188, f1: 0.20982142857142858}
+fixed_diagnostic_reporting:
+  all_scenario: {samples: 10, single_dino_pass: 3, single_truth_pass: 2, prior_multimask_selected_pass: 4, prior_multimask_oracle_pass: 4}
+  primary_near_workspace: {samples: 9, single_dino_pass: 3, single_truth_pass: 2, prior_multimask_selected_pass: 4, prior_multimask_oracle_pass: 4}
+runtime_eligibility_plan:
+  status: PLANNED_GEOMETRY_EVIDENCE_REQUIRED
+  required_inputs: [measured_depth, robot_reachability, minimum_projected_box_or_mask_size]
+  scenario_labels_at_runtime: forbidden
+  thresholds: null; require geometry evidence before selection
+  failure_behavior: out-of-workspace or unverified eligibility must not publish a grasp pose
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/install
+  ROS_DOMAIN_ID: not_applicable_offline_readback
+  GZ_PARTITION: not_applicable_offline_readback
+  evidence_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence
+  scratch_parent: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch
+  scratch: each named run has its own tmp directory; exact Python tempfile preflight passed
+tests: no implementation changes; no pytest or benchmark rerun; retain r30 and r222
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused}
+retention:
+  retained_runs: [r324, r325, all prior evidence]
+  archived_runs: []
+  deletion_candidates: [r324 and r325 scratch, prior candidates; deletion requires explicit authorization]
+next_experiment_authorization:
+  scope: read-only train/val and source-geometry audit to make runtime eligibility design reviewable
+  restriction: no model training or replacement, no threshold selection without geometry evidence, no sealed boundary access
+next_action: ordinary-push and remote SHA readback, then preregister the bounded geometry audit after inspecting available train/val metadata and runtime reachability contracts
+```
