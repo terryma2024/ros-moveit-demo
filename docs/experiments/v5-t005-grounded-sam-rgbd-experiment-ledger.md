@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-231
+latest_checkpoint: CP-232
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
 active_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: monitor already-running r404 without relaunch; after exit0 independently verify all8checkpoints and frozen selection before new pipeline qualification
+next_action: monitor already-running r404 without relaunch; after exit0 run prepared r405 independent8checkpoint audit before new pipeline qualification
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15535,4 +15535,42 @@ resume_rule: inspect this existing container/session and exit.log; never rerun f
 next_after_exit: preregister independent full8checkpoint/frozen/reload readback; no extra old inference; new model comparison needs explicit benchmark gate and all/primary corrected-truth cohorts
 retention: all existing runs and containers retained; archived none; scratch deletion candidates only, no permission to delete
 boundaries: Microduck paused; SAM not loaded/trained; sealed/test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-232 — Formal process verified live; post-training readback preregistered
+
+```yaml
+checkpoint: CP-232
+status: RUNNING_FORMAL_READBACK_PLANNED
+source_commit: 90daa1a716f3dd8bc807d08bd2a1b1dca4b992dd
+prior_turn: progress; JSON/IPC RED_GREEN, smoke and independent readback completed, formal started
+live_revalidation: same r404 container running PID3666719 and tmux shell3666574; epoch1 batch450/1200 finite loss3751.52587890625; no restart
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-R5-FORMAL-READBACK-R1
+  status: PLANNED
+  run_id: stage-d-r5-training-formal-readback-r405
+  prior_experiment: EXP-079-STAGE-D-R5-DINO-FORMAL-R1
+  single_variable: NONE; independent read-only audit after authoritative terminal success, no model forwards
+  output: durable run-evidence/stage-d-r5-training-formal-readback-r405
+  preconditions: container state exited/exit0, runner exit.log0 and after-inspection present; formal-r1 complete; never run on partially written outputs
+  identities: unchanged r5 trainer contract f9eeb79e9a3255b1bce8b7b6e13b8245f6838501ca60bcc8b2ae8f28c342ddc4; image implementation47e9682168937e4ff2a0a773c428f4044b6623fb; launch bf5f10a6af2478d2f429b116ecb803d9e7f2beaa
+  checks:
+    - eight distinct complete checkpoint directories epoch001..008, every manifest member/hash/size and exact identity
+    - eight finite epoch metrics, each full100-point original fixed grid; independently recompute precision/recall/F1 and threshold ranking using original contract keys
+    - independently rank the eight epoch winners and match frozen/result/checkpoint/reload identities exactly; no use of new primary-cohort ranking for historical controlled-training selection
+    - resolved formal recipe byte-semantically equals frozen contract, counts1200/300 and no resume; original base provenance, CUDA RTX5080, BF16 and explicit warn-only exception retained
+    - selected safetensors differ from original base; all persisted floating checkpoint weights finite; first/last optimizer state steps consistent with300 updates per epoch and2400 total
+    - complete output-file SHA inventory, no stale staging directories, selected fresh-process CUDA reload evidence and no forbidden access
+  failures: any missing/extra/mismatched artifact or rank/recipe/device mismatch fails closed and preserves output; no automatic retraining
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+  scratch: unique durable scratch/stage-d-r5-training-formal-readback-r405/tmp with exact Python tempfile preflight
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_after_readback: append result plus one explicit new-model benchmark gate and val-only new-DINO frozen-SAM comparison protocol; do not launch gated experiments before readback
+prepared_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/audit_r5_formal_r405.py; AST parse passed; not executed on in-progress training
+prepared_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_offline_truth_audit_r2.sh stage-d-r5-training-formal-readback-r405 audit_r5_formal_r405.py CURRENT_SYNCED_HEAD
+latest_live_readback_this_checkpoint: same PID3666719 running, epoch2 batch150/1200 loss19.528493881225586; checkpoint audit and benchmark remain serially deferred until formal terminal success
+retention: all prior evidence retained; no deletion/archival; scratch deletion candidate only
+boundaries: Microduck paused; no SAM training; sealed/test/COCO100/PickPlace/Mac inaccessible; mask IoU0.80 unchanged; primary reporting excludes only small_far_cup
 ```
