@@ -17979,3 +17979,32 @@ approval_scope: r470 private runtime diagnostic only, not official generation/be
 retention: all prior evidence retained, archived none; nothing deleted; r470 scratch will remain retained deletion candidate after readback
 boundaries: Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
 ```
+
+## Checkpoint CP-311 — r470 real GPU runtime acceptance valid; new train/val protocol preparation next
+
+```yaml
+checkpoint: CP-311
+status: VALID_RUNTIME_ACCEPTANCE_DATASET_PROTOCOL_PREP_PLANNED
+run_id: stage-e-generator-runtime-acceptance-r470
+execution_head: 934856f175cb42707306cf043126899d48712807
+executor: /root/generator_build, gpt-5.6-sol high
+execution: {approved_command_count: 1, shell_exit: 0, tool_exit: 0, driver_exit: 0, readback_exit: 0, elapsed_receipt_seconds: 1.50, tool_wall_seconds: 2.3866, stdout_bytes: 0, stderr_bytes: 0, readback_stderr_bytes: 0}
+result: {classification: PASS, attempts: 3, geometry_receipts: 2, gpu_contexts: 4, pngs: 2, ordinary_dataset_artifacts: 0}
+plan: fixed one_cup_distractors seed410000127; enabled attempt0 rejected before render at minimum signed distance -0.014999763534646014m, enabled attempt1 accepted at state af7725d3 with one RGB and one categorical call, legacy-disabled accepted same planned state with one RGB and one categorical call
+geometry: enabled rejected receipt accepted=false and render calls0; enabled accepted receipt accepted=true with required seven pair records and minimum0m table contact; legacy has explicit null receipt and policy absent
+gpu: four canonical immediate receipts all mujoco.egl.GLContext, nonnull EGL display/context, NVIDIA Corporation, NVIDIA GeForce RTX5080 PCIe SSE2, GL4.6 NVIDIA595.84, PyOpenGL3.1.10; MUJOCO_GL=egl, PYOPENGL_PLATFORM=egl, MUJOCO_EGL_DEVICE_ID=0; supporting nvidia-smi GPU UUID recorded without claiming EGL-CUDA UUID mapping
+same_state: RGB decoded pixel SHA256 69c6c882f3475b917b9e222652ad1463ea332381fb60f9df106fe2bccb6676a8 and PNG file SHA256 4aa776d20a3bcc68c9a28fdec09c88ce7a6a4aba2a82ef82dadf3088d900d8cc identical; canonical categorical bytes SHA256 6e3153e392a0266403c9af643c5f84306e4c03a7f69eef3f350ad8d431354b07 identical
+visual_readback: both 480x640 accepted PNGs opened at original detail; matching scene shows the target cup, bottle, block, table and arm without an obvious cross-object mask-label artifact; byte identity independently proves exact equality
+provenance: package source4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1; exact r467 seven-package overlay; locked venv Python resolved /usr/bin/python3.12; copied and current driver a8a02ac8 and shell e1309cd7 unchanged; post-run source diff/status empty
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-r470; scratch/stage-e-generator-runtime-acceptance-r470 retained with tmp only
+hashes: {exit_json: 96a6378d92cc2619c21ebc1437857e89c38edd96566edc392ee4e68cadf2468d, manifest: 39608d3d6f16eead47ba51c9be8f28b0c5791d65cf2cfdaafe5e1f2b92fd867a, inventory: ccbaa92c49568910a55e04c725720765c48b8dac21146a416e3d4130ec79ed60, readback: f54fe7798b159f1e6af5820a78a0f38e22a4133a769efde032cc179752d3f361, final_top_level_receipt: 09ff2d78296c032d6ab79c7759bf8f0d8a8c7f8d89abc38a0cf7c3a4300c5d3c}
+parent_readback: complete manifest/inventory/readback/plan/attempt/truth/GPU/event/provenance records read; exact tree and17 diagnostic inventory items verified; final checksum receipt sha256sum-c all OK; two PNGs viewed; current private and package hashes rechecked
+next_experiment:
+  status: PLANNED_PREP_REVIEW_ONLY
+  experiment_id: EXP-079-STAGE-E-NONPENETRATING-TRAIN-VAL-VERSION-R1
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: inspect current generator/config/CLI and all prior seed namespaces, then prepare a complete immutable train/val-only new-version protocol and no-launch runner plan covering exact quotas/ranges, camera/object geometry, enabled nonpenetration receipt policy, explicit partial truth, independent seeds, split/member exclusion, provenance, output collision and readback; do not allocate official roots or generate samples
+  reviewer: /root/generator_review, gpt-6-astra medium before any generation GO
+retention: r470 and all earlier evidence retained, archived none; all scratch trees deletion candidates only; nothing deleted
+boundaries: sealed synthetic test remains inaccessible and no new test version may be generated or previewed; COCO100/PickPlace/Mac inaccessible; no model inference/training or SAM change; Microduck paused; primary excludes only small_far_cup for reporting, never runtime labels; mask0.80/mapping0.98 unchanged
+```
