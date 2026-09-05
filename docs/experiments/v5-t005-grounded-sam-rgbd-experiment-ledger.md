@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-262
+latest_checkpoint: CP-268
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 9368e549a24b398269cd7ffc76ac16dd352f7cd5
+source_parent: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r433 complete1500-frame audit confirms117 intersecting task-object scenes; r434 RED regression at generator nonpenetration boundary, no new generation/training or gate release
+next_action: r439 persistence GREEN21; r440 add receipt-scope binding and successful-retry regressions, then broader directed gate and fresh build/ordinary/explicit tests; owned source changes not yet committed
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16582,6 +16582,98 @@ retention: all evidence including invalid runs retained; archived none; scratch 
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
 ```
 
+## Checkpoint CP-266 — Pre-render integration GREEN; persistence boundary RED next
+
+```yaml
+checkpoint: CP-266
+status: VALID_PRE_RENDER_GREEN_PERSISTENCE_RED_PLANNED
+run_id: stage-e-generator-nonpenetration-green-r437
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03 plus owned working diff
+result: {exit_code: 0, passed: 16, pytest_seconds: 1.28, elapsed_seconds: 1.58}
+observed: enabled actual renderer rejects penetrating state before RGB boundary; deterministic three-attempt exhaustion reproduced; missing receipt and invalid policy rejected; disabled config remains default
+evidence: durable run-evidence/stage-e-generator-nonpenetration-green-r437 includes exact implementation copies/hashes, test copy/hash, source/diff, runner/command/preflight/JUnit/log/exit
+correction: r435/r436 runner saved tests but did not copy then-untracked helper into tracked diff; do not claim those earlier diffs alone fully freeze helper source; r437 now explicitly copies both implementation modules
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 symlink install, source imports verified
+scratch: durable scratch/stage-e-generator-nonpenetration-green-r437/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-red-r438
+  single_variable: add failing receipt validation and actual generate_dataset persistence tests, including alternate renderer missing receipt
+  scope: tiny freshly authored unit fixtures only; fixture train/val/test labels are not the sealed experiment test set and never access retained evaluation data
+  contract: enabled truth and manifest declare task-visual-nonpenetration-v1 and contain accepted immutable state/pair receipt; enabled writer rejects missing/invalid receipt even with caller-supplied renderer; empty/nonfinite receipts fail closed; disabled legacy documents omit new policy fields
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-red-r438
+remaining: persistence GREEN, broader directed tests, fresh build/ordinary/explicit gates; no dataset generation before new-version frozen protocol
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no model training or qualification threshold changes
+```
+
+## Checkpoint CP-267 — Persistence and alternate-renderer bypass RED
+
+```yaml
+checkpoint: CP-267
+status: VALID_PERSISTENCE_RED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetration-red-r438
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03 plus owned working diff
+result: {exit_code: 1, failed: 4, passed: 17, pytest_seconds: 1.69, elapsed_seconds: 2.01}
+observed_missing: empty receipt and NaN pair rejected neither; enabled writer omitted policy/receipt and allowed supplied renderer without receipt; disabled legacy persistence control passed
+evidence: durable run-evidence/stage-e-generator-nonpenetration-red-r438; exact implementation/test copies and hashes, command/source/preflight/JUnit/log/exit retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 symlink install
+scratch: durable scratch/stage-e-generator-nonpenetration-red-r438/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-green-r439
+  single_variable: enforce nonempty finite receipt and writer gate before image output; serialize explicit policy plus actual state/pair receipt only when enabled
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-green-r439
+remaining: broader current generator tests, review receipt binding/retry success, source freeze/build/package gates, then separately frozen new dataset protocol
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new experiment dataset or model inference/training
+```
+
+## Checkpoint CP-268 — Versioned geometry truth GREEN; boundary review remains
+
+```yaml
+checkpoint: CP-268
+status: VALID_PERSISTENCE_GREEN_BOUNDARY_REVIEW_NEXT
+run_id: stage-e-generator-nonpenetration-green-r439
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03 plus owned working diff
+result: {exit_code: 0, passed: 21, pytest_seconds: 1.63, elapsed_seconds: 1.94}
+observed: empty receipt and nonfinite pair rejected; enabled generate_dataset rejects supplied renderer without receipt before PNG output; enabled truth records accepted state/pairs and task-visual-nonpenetration-v1 manifest policy; disabled legacy documents omit new fields
+scope: toy fixtures only, no real experiment dataset generation or sealed test reads
+evidence: durable run-evidence/stage-e-generator-nonpenetration-green-r439 contains exact implementation/test copies and SHA, source/tracked diff, runner/command/preflight/JUnit/log/exit/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/stage-e-generator-nonpenetration-green-r439/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+owned_source_snapshot:
+  src/so101_demo_py/src/adapters/perception/mujoco_scene_geometry.py: f489c16a812a3724356a42e379a06daf0cd7d959236bca102fac05f775afed2f
+  src/so101_demo_py/src/adapters/perception/mujoco_dataset.py: fba50204145f7ffba65126b00d49b957fe196eb0edad5d0f881a089b5381617f
+  src/so101_demo_py/test/test_mujoco_scene_geometry.py: 0292319b6b9aae7b0f18b938fdd53c560f1fe6d33fe5491863a9fea3f4bedae5
+static_review: git diff --check passed; ruff reported5 import-order formatting issues, not yet fixed; no linter/package/build success claim
+remaining_risks:
+  - current immutable receipt validates nonempty finite pairs but needs explicit required body-pair scope for scenario cup count, valid state SHA and duplicate/missing pair rejection; a no-cup receipt must not certify a two-cup scene
+  - test successful deterministic retry path and invalid-measurement propagation, not only exhaustion
+  - full existing generator/adapter tests must verify config loading and compatibility; fresh overlay/package/explicit gates not yet run
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-red-r440
+  single_variable: add regression tests for wrong-scope receipt rejection and malformed identity/pair records; add successful retry control without changing geometry/model thresholds
+  contract: required receipt pairs must exactly cover expected active dynamic pairs and dynamic/static task pairs for the configured cup count; no missing/duplicate/foreign pair; state SHA must be valid; nonfinite/unsupported errors propagate rather than retry
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-red-r440
+next_after_review: minimal GREEN, targeted formatting, broader directed tests, commit completed owned source/tests, fresh7package overlay using validated local lodepng cache, ordinary and required explicit gate with unique NVMe scratch
+working_tree: ledger plus modified mujoco_dataset.py and new mujoco_scene_geometry.py/test_mujoco_scene_geometry.py are owned; source remains uncommitted during RED-to-GREEN verification chain; only ledger checkpoint committed/pushed now
+preserved: original untracked build-task14-runner-access-r11/install-task14-runner-access-r11/log-task14-runner-access-r11; all historical source archives/data/models/raw/evidence untouched
+owned_processes: none; r434-r439 tests terminal, no model or training job launched
+retention: all six RED/GREEN runs retained; archived none; NVMe scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new experiment data/model training; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-262 — Complete physical-data audit; generator RED regression next
 
 ```yaml
@@ -16640,4 +16732,84 @@ working_tree: only this ledger checkpoint owned; original untracked build/instal
 owned_processes: none after r433; no model/training jobs started; original tmux sessions and unrelated Python750283 preserved
 retention: r428/r430/r431/r433 retained valid audits, r429/r432 retained INVALID bootstrap evidence, all earlier data/models/raw preserved; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no SAM training; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-263 — Geometry checker RED observed before implementation
+
+```yaml
+checkpoint: CP-263
+status: VALID_RED_GEOMETRY_CHECKER_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetration-red-r434
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03
+result: {exit_code: 1, pytest_seconds: 1.22, elapsed_seconds: 1.55, failed: 12, errors: 0}
+failure: all12 fail at absent mujoco_scene_geometry production module, expected missing generator boundary; real local MuJoCo fixture construction succeeded, no GL rendering or model inference
+tests: retained three intersecting poses, disjoint cups with table contact, cup-bottle penetration, intentionally parked inactive cups, invalid active counts, nonfinite state, missing body and unsupported primitive
+owned_changes: src/so101_demo_py/test/test_mujoco_scene_geometry.py and ledger; no production implementation before RED
+evidence: durable run-evidence/stage-e-generator-nonpenetration-red-r434 contains source SHA, exact test copy/hash, tracked diff, runner/command/preflight, JUnit/log/exit/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install, actual source import verified
+scratch: durable scratch/stage-e-generator-nonpenetration-red-r434/tmp; TMPDIR/TMP/TEMP and actual tempfile verified
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-green-r435
+  single_variable: implement missing measured visual-primitive geometry checker; active task body pairs only, immutable receipt and actual state hash, no image or model changes
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-green-r435
+remaining: helper GREEN alone does not fix generator; pre-render gate, deterministic retry/exhaustion and versioned truth receipt still require RED/GREEN integration and fresh build/ordinary/explicit gates
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac, no new data or training; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-264 — Primitive checker GREEN; generator integration still absent
+
+```yaml
+checkpoint: CP-264
+status: VALID_CHECKER_GREEN_GENERATOR_INTEGRATION_RED_PLANNED
+run_id: stage-e-generator-nonpenetration-green-r435
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03 plus owned working diff
+result: {exit_code: 0, passed: 12, pytest_seconds: 1.24, elapsed_seconds: 1.55}
+implementation: new mujoco_scene_geometry measures active visual box/cylinder pairs with exact model qpos, no stepping/rendering; immutable pair receipts, state SHA, nonfinite/missing/unsupported rejection; actual source import through r418 symlink verified
+not_complete: helper is not yet called by generator; no physical-data fix or package gate claim
+evidence: durable run-evidence/stage-e-generator-nonpenetration-green-r435 contains runner, command, source, tests/hash, logs, JUnit and exit/time
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-generator-nonpenetration-green-r435/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-red-r436
+  single_variable: add failing generator integration tests; DatasetConfig opt-in flag defaults false so original geometry config and frozen artifacts are unchanged
+  contract: enabled renderer measures immediately after prepare and rejects before RGB; all enabled scenarios use existing maximum deterministic attempts; only explicit penetration is retryable, missing/invalid geometry receipt fails closed; accepted RawRender carries immutable geometry receipt
+  tests: pre-render rejection with real geometry and no GPU renderer; deterministic exhausted retry count; missing receipt rejection; opt-in config and disabled legacy compatibility
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-red-r436
+owned_changes: new helper/tests and ledger, uncommitted RED-to-GREEN chain; existing untracked build/install/log untouched
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: no sealed-test/COCO100/PickPlace/Mac, no new data/training; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-265 — Generator integration RED, helper controls remain GREEN
+
+```yaml
+checkpoint: CP-265
+status: VALID_INTEGRATION_RED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetration-red-r436
+source_commit: 040b17ab5c46f8b78e827066a3a4dde4c33a9f03 plus owned uncommitted helper/tests
+result: {exit_code: 1, failed: 4, passed: 12, pytest_seconds: 1.29, elapsed_seconds: 1.60}
+expected_missing: penetration exception, required receipt/retry keyword and DatasetConfig explicit policy; no changes to production renderer before these failures
+evidence: durable run-evidence/stage-e-generator-nonpenetration-red-r436, complete command/test/JUnit/log/exit/preflight retained
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-generator-nonpenetration-red-r436/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-green-r437
+  single_variable: implement CP-264 opt-in pre-render rejection, bounded retry for explicit penetration only, required accepted receipt; preserve disabled original route
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_scene_geometry_r434.sh stage-e-generator-nonpenetration-green-r437
+remaining: serialized per-sample truth/manifest policy tests, accepted retry path and invalid receipt checks, build/ordinary/explicit gate, immutable dataset protocol before generation
+retention: all evidence retained; archived none; scratch deletion candidates only
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
 ```
