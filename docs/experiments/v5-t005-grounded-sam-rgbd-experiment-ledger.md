@@ -18953,6 +18953,34 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-365 — r517 durable accounting design approved with mandatory acceptance conditions
+
+```yaml
+checkpoint: CP-365
+status: R517_DURABLE_ACCOUNTING_DESIGN_APPROVED_IMPLEMENTATION_GREEN_PLANNED
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {design: APPROVED, implementability: APPROVED, candidate_bytes: NOT_REVIEWED, official_generation: NOT_AUTHORIZED, new_critical: 0, new_important: 0, known_r516_important: OPEN_UNTIL_GREEN_REVIEW}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-r517-design-review-report.md SHA2564534f312c45328a9e3e9e39dc29eb0a4f602e36432cc13935cd532bfa704c61b
+mandatory_conditions:
+  - both normal and exceptional routes claim/disarm one owner before sole finalizer; exclusive diagnostics never reopen/truncate and creation failure cannot masquerade as finalizer success
+  - deferred terminal is explicitly provisional/non-authoritative; accounting completion is sole final-inventory writer; default immediate mode stays compatible; repeated/mixed completion and inconsistent/missing evidence reject
+  - exact typed closed schema distinguishes unattempted outer from exit0, validates terminal/outer consistency and uses shared precedence first-nonzero(finalizer,original,diagnostic-fsync,outer), then completion failure only when computed result was0
+  - all stable logs/stages/terminal/optional outer/accounting bytes close/fsync/readback before one exact inventory; completion diagnostics cannot append inventoried logs; no collision repair/replacement
+  - total storage failure makes at most one outer and one completion attempt, preserves existing bytes and returns nonzero without claiming a receipt/inventory; partial inventory/readback never qualifies
+  - real driver functions cover immediate/deferred/completion contracts, strong types/bool-as-int/extra/symlink/collision/duplicate/missing/inconsistent cases and omission mutations; adapt disclosed r516 oracle where diagnostic-only failure now requires one outer; retain r515133
+status_precedence: finalizer then original then diagnostic-fsync then outer-recorder, else0; accounting-completion failure replaces only a precompletion0 result
+parent_readback: complete design review and r516 baseline-to-current partial driver/shell diffs read; reviewer observed an in-flight partial shell and explicitly did not approve bytes
+unaccepted_partial_candidate: {driver_sha256: 421852f264aaf9b66d4a3c373763d5b32b718f74ccb40208e1b8f8751b2ff448, shell_sha256: c21ba586c54a88cc05c0a8d354e2d9a4fe89317b2d5c9a28802f220fbe7bf9ed, r517_roots: absent, invocations: 0}; partial bytes must be completed against every mandatory condition, statically checked and then frozen before measurement
+next_experiment:
+  status: GO_COMPLETE_R517_IMPLEMENTATION_AND_ONE_COMBINED_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+  executor: /root/generator_build, gpt-5.6-sol high
+  required: finish exact CP-364 design under mandatory conditions; fresh unique roots and one invocation; retained133 plus strengthened six and real-function/mutation controls with explicit total; all pass, zero harness error, top exits0/forbidden imports empty; exact locked Python/NVMe/static/fsync/inventory/readback; freeze complete driver/shell/diffs; stop for Astra
+  restrictions: private T driver/shell/harness only; no tracked repo edit, real setup/project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: all antecedent evidence retained, archived none; no r517 roots allocated and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-364 — r517 durable four-status design frozen; preimplementation Astra review required
 
 ```yaml
