@@ -18953,6 +18953,34 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-350 — r506 lifecycle-finalization RED valid; evidence-ownership GREEN authorized
+
+```yaml
+checkpoint: CP-350
+status: VALID_GENERATION_RUNNER_FINALIZATION_RED_SCOPED_GREEN_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-finalization-red-r506
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_FINALIZATION_RED, authoritative: true, cases: 9, expected_defects: 7, valid_controls: 2, harness_errors: 0, test_exit: 1, outer_exit: 0, elapsed_seconds: 2.305760889, stderr_empty: true, forbidden_modules_before_import_after: [[],[],[]]}
+single_change_retry: r506 51-line wrapper SHA25615809509305cc68bc5e54d941ae5daf98b855c40d29800222e614199700bd5b5 loads exact frozen r505 harness and converts only returned root to string; all nine assertions unchanged; r504 driver/shell bytes frozen
+N1_red: success stdout append and factory/generation traceback append each stale exactly its driver-final log digest while launch finalizer accepts; appended preconstruction member corruption and driver-manifest digest corruption likewise pass opaque nested finalization
+N2_red: synthetic setup failure after root allocation leaves no stage/terminal/log evidence; forced finalizer failure retains original7/finalizer9/outer2 only in memory and fsyncs low directory but not finalizer diagnostic files
+controls: closed stable driver-owned files validate; ordinary closed/fsynced launch-only root validates
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-finalization-red-r506; result SHA2563d4889627e3ea9225ed9ac43ffaf34f63c8a9cd97989c94981a256755e2cd3a8; result-readback SHA256c8ba248d6d7754f762166e6623c38041f3b8976753cf8dc19320de1c779a8d66; final22-file inventory SHA256adcec6388fbd0f47e0babb74c92e962aa2e1d8b9b039e79e2a77abbb7c97891c; readback SHA256cfab37396a62496c52cfb530c68fa559389b666d3315fb4808d4f9abbe194fbc
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-finalization-red-r506-report.md SHA256c3c5a6a0eff22371e716f3878ed7e0252b2a1333ac26f9068d118667f2e4eed5
+parent_readback: complete71-line report, file inventory/hash/status and official-root absence read; r506 accepted only as RED
+next_experiment:
+  status: GO_EVIDENCE_OWNERSHIP_OFFLINE_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-finalization-green-r507
+  executor: /root/generator_build, gpt-5.6-sol high
+  fix_N1: driver-final exact allowlist contains only stable driver-owned receipts and GPU members, excluding stdout/stderr and all later launch-owned artifacts; after child exit and log close/fsync launch finalizer must first validate driver manifest/readback binding and every nested member before writing launch terminal/inventory or success
+  fix_N2: start bounded stdout/stderr capture and durable stage accounting immediately after run-root allocation before tempfile/setup; persist current stage and original setup/driver exit separately from finalizer exit; fsync finalizer diagnostic files then parent; implement one nonrecursive best-effort outer failure chain retaining original and finalizer/storage errors without overwrite or generation retry
+  verification: one fresh no-GL top-level GREEN runs exact r506 N1/N2 matrix plus retained r504105 cases; success/factory/generation post-process log appends must leave both inventories fully revalidatable; corrupt nested manifest/member rejects; setup/finalizer failures preserve durable dual-exit/stage/diagnostics; all cases/exits0 and forbidden imports empty
+  restrictions: private T driver/shell/harness only; no tracked repo edit, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+review_after: Astra complete read-only launch-readiness re-review before any actual GL or official generation
+retention: r506/r505 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-349 — r505 harness serialization invalid; fresh single-change RED retry required
 
 ```yaml
