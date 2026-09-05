@@ -18093,3 +18093,28 @@ next_experiment:
 retention: all reports and evidence retained, archived none; no new scratch deletion candidate; nothing deleted
 boundaries: no source implementation or official config yet; no generation/test namespace/sealed-test/COCO100/inference/training/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-314 — corrected train/val protocol approved; r480 tests-only RED authorized
+
+```yaml
+checkpoint: CP-314
+status: APPROVED_TESTS_ONLY_RED_PLANNED
+experiment_id: EXP-079-STAGE-E-NONPENETRATING-TRAIN-VAL-VERSION-R1
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, implementability: APPROVED, blocking_findings: 0}
+review_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-protocol-rereview-report.md SHA256 7c01862cf661c2e5e82fa10147ec07b941c03232f0f9550e6f43133a913af279
+approved_protocol: CP313 exact actual-renderer binding, discriminator/no-downgrade truth, mode/archive/profile and r480-r493 corrections supersede conflicting CP312 preparation-report details; science and no-test contract unchanged
+source_state: production source frozen exact4a0ba99f2a4e0f644fe34a4ee068ac5a6d8f78f1; recorded five source/config hashes exact and scoped package diff empty
+next_experiment:
+  status: GO_RED_ONLY
+  run_id: stage-e-generator-train-val-only-red-r480
+  executor: /root/generator_build, gpt-5.6-sol high
+  owned_changes: tracked tests and synthetic config fixtures only; no production module, official config, CLI or renderer change before RED
+  coverage: exact new discriminator/member_splits/train-val maps/YAML/tree and six-scenario schedule; absent/zero/mismatch/extra/bool/overlap/test injections; whole ordinary visible-RLE removal and partial RLE/union/subset mutations; exact policy/receipt keys/types/SHA/ordered scope/geom/count/distance guard; synthetic legacy exact three-way compatibility; fake renderer only
+  invocation: one focused pytest process after static test AST/Ruff and unique-root/hash/source gates; expected missing behavior must fail while legacy/valid controls pass; separate expected defects from harness errors
+  python_scratch: exact locked venv; allocate unique nonexistent durable scratch/stage-e-generator-train-val-only-red-r480/tmp, export TMPDIR/TMP/TEMP and fail unless tempfile.gettempdir resolves inside exact NVMe path
+  evidence: unique durable run-evidence/stage-e-generator-train-val-only-red-r480 with test copies/diff/hashes, exact command/JUnit/stdout/stderr/exits/time/source/overlay/Python/tempfile and sealed-boundary receipts
+  stop_after: freeze authoritative RED and report for parent checkpoint; no r481 implementation
+retention: all prior evidence retained, archived none; future r480 scratch deletion candidate only; nothing deleted
+boundaries: no import of MuJoCo/OpenGL, render, official config/deployment, build/benchmark/generation/archive/conversion/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; gates unchanged
+```
