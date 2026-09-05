@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-215
+latest_checkpoint: CP-216
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: independently recover original-SAM retained accepted records for r5 truth-correction control, then freeze corrected-label DINO remediation; no further SAM changes or sealed access
+next_action: RED to GREEN on explicit mask-box export normalization for the DINO trainer; preserve r5 source and derive a new trainer inventory before smoke
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15042,4 +15042,46 @@ owned_processes: NONE after r381; no ROS/Gazebo/MoveIt or training stack launche
 working_tree: ledger-only owned changes before checkpoint commit; all original untracked build/install/log directories preserved
 retention: r372-r381 retained, including INVALID r374 and r379; r5 data immutable; archived_runs NONE; scratch trees deletion candidates only, no deletion authorized or performed
 boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; generic cup and prompt cup.; IoU0.80 unchanged; out-of-workspace or unverified targets must not publish a grasp pose
+```
+
+## Checkpoint CP-216 — Original-SAM control complete; trainer normalization mismatch found
+
+```yaml
+checkpoint: CP-216
+status: VALID_ORIGINAL_SAM_AUDIT_TRAINER_HANDOFF_FIX_PLANNED
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-ORIGINAL-SAM-RETAINED-AUDIT-R1
+source_commit: 487c6417096a0c07296fc69b0fa08a2de84fdf34
+run_id: stage-e-categorical-r5-original-sam-retained-audit-r382
+result: {exit_code: 0, elapsed_seconds: 0.72, val_frames: 300, model_forwards: 0, MuJoCo_renders: 0}
+report_sha256: 9bdad297cf1beb32d10bee3c2e0ccc47a177e9a006e9d5c4381eeec538443639
+manifest_sha256: 9741841dfcc76f149e964ee60593e7460660d50bfbf5b8ce0c10ac530f2b5fea
+CP167_control: all TP47 FP171 FN253 and primary TP47 FP151 FN203 reproduced exactly; original records/mask hashes/boxes/scores/image identities and CUDA no-fallback receipt verified
+r5_original_sam:
+  all_scenario: {tp: 13, fp: 205, fn: 287, bbox_matches: 20, f1: 0.05019305019305019, recall: 0.043333333333333335}
+  primary: {tp: 13, fp: 185, fn: 237, bbox_matches: 20, f1: 0.05803571428571429, recall: 0.052}
+  diagnostic_best_mask_pass_count: {all: 48, primary: 48}
+  two_cup_unique_frames: 43
+conclusion: original SAM also remains unqualified under retained inflated DINO prompts; this does not justify replacing SAM before correcting DINO supervision and evaluating corrected prompts
+training_handoff_observed:
+  source: grounding_dino_finetune._box_truth requires normalized box coordinates equal absolute coordinates divided by image width/height
+  existing_r5_export: helper _box_document retains binary_mask_to_box polygon-compatible normalization by width-minus1/height-minus1
+  distinction: CP-213 correctly repaired polygon reconstruction, but did not establish trainer box-normalization compatibility; CP-214/215 mask and absolute-box readbacks remain valid, while r5 trainer compatibility is not established
+  intended_fix: explicit image dimensions at inventory export; retain exact absolute mask extents, normalize them for trainer consumption, and keep polygon compatibility coordinates separate
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-R5-TRAINER-BOX-NORMALIZATION-R1
+  status: PLANNED
+  tdd: prove legacy mask-box document is rejected by real trainer, then RED test explicit dimension-aware export through real trainer and COCO annotation conversion; implement only export boundary and its official converter caller
+  code_scope: grounding_dino_dataset.py and focused regression tests; no SAM, renderer, thresholds, cohort membership or training objective changes
+  run_ids: [stage-d-r5-box-normalization-red-r383, stage-d-r5-box-normalization-green-r384]
+  subsequent: fresh overlay and ordinary gate, new immutable trainer inventory derived from r5 source, preflight and smoke before formal DINO training; explicit benchmark when changed-model comparison requires it
+  data_policy: existing r5 source masks/images and prior r5 converted inventory remain read-only; new trainer-view path registered before generation
+training_intent: restart DINO from pinned official base, not contaminated epoch7; retain CP-080 optimizer/8epoch recipe for a controlled corrected-label experiment, all train1200 remain present, no SAM model mounted or optimized
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  scratch: durable scratch/stage-e-categorical-r5-original-sam-retained-audit-r382/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+retention: all historical raw/model/data/diagnostic evidence retained; no archived or deleted runs; scratch deletion candidates only
+boundaries: CP-161/164 diagnostics unchanged; test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask IoU0.80 unchanged
 ```
