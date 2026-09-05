@@ -11915,3 +11915,72 @@ retention:
   deletion_candidates: [r289-r290 scratch; do not delete without explicit user authorization]
 next_action: run the single preregistered 10-frame diagnostic in fresh r291 scratch/output with CUDA-only, offline-model, and complete provenance gates
 ```
+
+## Checkpoint CP-143 — fixed-sample SAM mask-pipeline diagnostic completed
+
+```yaml
+checkpoint: CP-143
+status: VALID_IMMUTABLE_PENDING_INDEPENDENT_READBACK
+recorded_at: 2026-09-05T08:27:48+08:00
+stage: E_SAM_MASK_PIPELINE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-PIPELINE-DIAGNOSTIC-R1
+prior_checkpoint: CP-142
+source_commit: 3bea5c4925bfb0afd1e73686f6e4fcf55f054767
+run:
+  run_id: stage-e-sam-mask-pipeline-r291
+  status: VALID
+  exit_code: 0
+  elapsed_ms: 17014
+  sample_count: 10
+  prompt_executions: 20
+  dino_inference_rerun: false
+  sam_model_change: false
+  threshold_tuning: false
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/grounded-sam-mask-pipeline-r1
+  manifest_sha256: 75a7f4ac5d9593eec5be8618ec2eadb173884e9d58abb5866d3b668ae8569e65
+  tree_inventory_sha256: a5bcf797fbc10b452e25f4ae9363dd25fd1050617b7dcb6ee5d1f3d5e609d77d
+  files: 122
+  directories: 5
+  bytes: 16632309
+  modes: {files: '0444', directories: '0555'}
+aggregate:
+  dino_replay_stored_exact_count: 10
+  dino_box_selected_pass_count: 4
+  dino_box_oracle_pass_count: 4
+  truth_box_selected_pass_count: 3
+  truth_box_oracle_pass_count: 4
+hypothesis_status:
+  H1_adapter_or_processor_binding: DISPROVEN for the 10 frozen samples because replay selected masks equal stored RLE pixel-for-pixel
+  H2_sam_quality_selection: NOT_SUPPORTED because analysis-only best variant does not increase DINO-box pass count
+  H3_sam_prompt_or_capability: SUPPORTED_AT_DIAGNOSTIC_SCOPE because exact-truth boxes do not increase oracle pass count and reduce selected pass count by one
+runtime_warning:
+  observed: Transformers reports that a model of type sam2_video is being used to instantiate Sam2Model of type sam2 and warns this is unsupported for some configurations
+  status: UNRESOLVED_FIRST_ORDER_BOUNDARY
+  action: preserve warning and inspect exact local config/class mapping before attributing failure to weights or changing SAM
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  torch: 2.13.0+cu130
+  transformers: 4.56.2
+  runtime_device: cuda
+  fallback: false
+  gpu_processes_before_and_after: none
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-mask-pipeline-run-r291/tmp
+  tempfile_preflight: exact resolved match
+  script_sha256: 41b043606d22aec9c41cc2b07d91387652702bd3fe6a4db7b514f8222b065249
+run_evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-mask-pipeline-run-r291
+  preflight_sha256: 7dedade4ca0198cf1cfc6f0b49803854a759b336dcfedb78d774c97dc1499936
+  provenance_sha256: c7997b5a0f3bfedb1117d30441b25848111f33c7f931199865ff2b44951c3b8e
+  gpu_before_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  gpu_after_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  run_sha256: 28751abf157aef5483e7367f50c9d8034586f9fdaad90570c58ca2c936c627d0
+  stderr_sha256: c9db25ee6efc6d08c3d81c316a92fde6d96b7272c2f79ce813dc84181d48e8a0
+  exit_sha256: 63d4b1eefb0fe7c5d4840d64ea967ca0293e0a6e02589eda6f1b84e0a24ccfd9
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r291 immutable output/evidence/scratch, r290 GREEN, r289 RED, all CP-142 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r289-r291 scratch; do not delete without explicit user authorization]
+next_action: commit and push this execution checkpoint, independently verify all 122 files and tensor/RLE bindings, inspect overlays, then characterize the local sam2_video-to-Sam2Model warning without network access
+```
