@@ -18482,3 +18482,34 @@ phase_plan: r491 build, r492 ordinary, r493 one explicit benchmark, r494 private
 retention: all r490/r489 and earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no package test/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change in this checkpoint; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-329 — r491 fresh offline seven-package build valid; ordinary gate authorized
+
+```yaml
+checkpoint: CP-329
+status: VALID_BUILD_ORDINARY_GATE_PLANNED
+run_id: linux-build-stage-e-generator-nonpenetrating-r491
+executor: /root/generator_build, gpt-5.6-sol high
+source_commit: aebf4cab032f64f9fa66fcf965b01803d9bd80d7
+remote_readback: exact Gitee branch SHA matched source before build
+result: {classification: VALID_BUILD, packages_finished: 7, colcon_exit: 0, tool_exit: 0, colcon_seconds: 56.32, total_elapsed_seconds: 59.646040299, scoped_source_clean_before: true, scoped_source_clean_after: true, source_files_unchanged: true}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-nonpenetrating-r491/install
+readback: all seven package prefixes bind the r491 overlay; mujoco_dataset and grounding_dino_dataset imports resolve to exact checkout sources; original top-level untracked build/install/log inode/mtime receipt unchanged
+lodepng: retained r26 cache exact commit ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, strict fsck exit0/empty output, clean status, explicit source override and fully-disconnected mode; no fetch
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-generator-nonpenetrating-r491/tmp; actual tempfile preflight exact; retained deletion candidate only
+evidence: durable run-evidence/linux-build-stage-e-generator-nonpenetrating-r491 retained; runner SHA256 a5218214d58382ef9849e1402a0e18955139ca1f4052df18db9d43997c222f01; result SHA256 7ec40ba4a6e6d1d86c3d9d7c17d970455e0a374a306bf67670df0dfd09aadc17; inventory SHA256 b8bdddae6d039ba79d55aaef4a6dd1b67574d584556f4bb4781cfd69b9eb1822; package-prefix receipt SHA256 2bdf4349c9d47ed632c129421c90fea44c8766eba68944c94ad57c41da8b2ae1; import receipt SHA256 6cdcb6109c4fa21b826eb13c470c87ce24d98043f83e84046c0715e6150c0a72
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-build-r491-report.md SHA256 bf22fd55cb9e6cb2e04c34f485301548fbe8fa8551a2081b2a09ffd15f6a4d55
+warnings: six packages emitted only retained known workspace/system-CMake/deprecation/plugin-copy warning families; no compile/build failure
+parent_readback: complete98-line report, result, tempfile, stdout summary, timing, hashes, source/import/prefix and retention evidence read; build accepted
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-nonpenetrating-r492-ordinary
+  executor: /root/generator_build, gpt-5.6-sol high
+  source_overlay: exact aebf4cab and frozen r491 build/install bases
+  scope: one colcon package-test process for so101_demo_py with pytest-args test only; require all collected cases pass, no errors/skips, benchmark cases0, and ordinary cases equal total; do not collect benchmark_test
+  scratch: fresh unique durable scratch/linux-test-stage-e-generator-nonpenetrating-r492-ordinary/tmp with TMPDIR/TMP/TEMP, explicit pytest basetemp/cache, and exact locked-Python tempfile preflight inside it
+  evidence: complete command/logs/exits/elapsed/JUnit/test-result, collection partition, source/overlay/Python/prefix/import provenance and no-drift; stop before benchmark
+retention: r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no benchmark/official generation/render/MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
