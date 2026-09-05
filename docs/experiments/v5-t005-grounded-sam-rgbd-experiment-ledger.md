@@ -18539,3 +18539,28 @@ phase_plan_correction: r493 root-cause audit, r494 test-oracle GREEN plus Astra 
 retention: r492/r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no edit/rerun/benchmark/official generation/render/GL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change in r493; MuJoCo module import during r492 ordinary suite disclosed; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-331 — r493 root cause confirmed; test-oracle proposal review planned
+
+```yaml
+checkpoint: CP-331
+status: ROOT_CAUSE_CONFIRMED_PROPOSAL_REVIEW_PLANNED
+run_id: stage-e-generator-ordinary-order-dependency-root-cause-r493
+executor: /root/generator_build, gpt-5.6-sol high
+verdict: test_contract_tests_load_no_rendering_modules reads shared pytest-process sys.modules and is order dependent; retained r492 is authoritative RED for the oracle defect; no static production eager-import regression exists in the intended generator/geometry/converter modules
+causal_path: ordinary collection executes runtime-observability real-MuJoCo fixture at case469 and scene-geometry real-MuJoCo fixture at case482; imported native module remains cached; contract assertion at case593 observes unrelated prior state; r490 focused selection ran the disputed assertion before any real-MuJoCo fixture and therefore passed
+intended_invariant: importing mujoco_dataset, mujoco_scene_geometry, and grounding_dino_dataset must not eagerly load root modules mujoco or OpenGL
+reference_pattern: repository test_core_import_boundaries.py uses sys.executable child process to isolate module-cache history
+single_hypothesis: replacing only the two parent-global assertions with a locked-interpreter child that first proves forbidden roots absent, imports exactly the intended three modules, asserts their resolved __file__ paths equal current checkout sources, then proves forbidden roots remain absent will pass in focused and ordinary order; any actual eager import in that graph will still fail
+red_authority: r492 exact locked environment, r491 overlay provenance, fresh NVMe scratch, 1472 ordinary/0 benchmark, 1471 pass plus sole expected oracle failure; no second RED is needed or authorized
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-root-cause-r493-report.md SHA256 221f799f4f0364bee20c6a44d20ed166ad267135ed0dbfb1fa04fee85b79ff83
+parent_readback: complete report including identities, JUnit order, complete-file/static import analysis, hypothesis, rejected alternatives, provenance risks and gate sequence read
+next_experiment:
+  status: PLANNED_READ_ONLY_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: independently assess r493 root cause and whether the single subprocess/source-binding correction tests the true invariant without masking production regression; identify Critical/Important/Minor issues and approve/change-request exact proposal
+  restrictions: read-only, no import/test/root allocation/edit/Git/index/ledger/sealed traversal; if approved parent may authorize one test-only r494 edit and focused GREEN using retained r492 RED
+future_gate: after reviewed r494 focused GREEN, commit/push/readback then fresh seven-package build and full ordinary GREEN; explicit benchmark only after that checkpoint
+retention: r493 report plus r492/r491 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no edit/rerun/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
