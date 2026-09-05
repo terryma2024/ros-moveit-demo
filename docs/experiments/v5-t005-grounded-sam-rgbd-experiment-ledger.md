@@ -17928,3 +17928,29 @@ next_experiment:
 retention: r478 and all prior evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no GL/render/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; r470 held; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-309 — r479 producer-contract GREEN frozen for launch re-review
+
+```yaml
+checkpoint: CP-309
+status: VALID_PRODUCER_CONTRACT_GREEN_SCOPED_REREVIEW_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-producer-contract-green-r479
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_PRODUCER_CONTRACT_GREEN, total: 44, passed: 44, r478_expectations: 11, r477_expectations: 33, failures: 0, harness_errors: 0, run_calls: 0, forbidden_imports: 0, test_exit: 0, receipt_exit: 0, tool_exit: 0, readback_exit: 0, stderr_bytes: 0, elapsed_seconds: 0.25}
+red_predecessor: authoritative r478 reproduced6 defects with5 controls and0 harness errors before correction
+implementation: one GPU_RECEIPT_PATH_BY_KEY mapping derives producer and consumer/inventory keys; unknown pair fails before persistence; categorical JSON purpose remains categorical_segmentation while filename is canonical categorical-segmentation; accepted truth requires geometry_receipt_present exactly true for enabled and false for legacy-disabled
+inputs_outputs: input driver e266450e and shell7f7c4e; corrected driver SHA256 a8a02ac8a13981600761f6b6eb4259aa54c8719241da4270b42da7c319af48ee; corrected shell SHA256 e1309cd7bfe8b503cb42fe0b92d8b9065f6ad37c362e7fed92131b5b7abe7287; shell embedded driver binding exact
+tests: all11 producer/consumer/truth expectations and all33 prior semantic/PNG/tree checks PASS in one offline call; private module imported no mujoco/OpenGL and _run sentinel recorded zero calls
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-producer-contract-green-r479 plus unique retained NVMe scratch; result SHA256 ac87720fddffa146f3796d6fae9b11a5744c8196e1cf6c71dccda4493214bf9f; final nonselfreferential receipt SHA256 3a5be0de1bdb9611638af3a8aeaca9ca8f83f3fda505d980bd4e15b8d7e68919
+report: durable coordination/generator-r443-r1/runtime-acceptance-runner-producer-contract-green-report.md SHA256 c1d8fcc142a518e799a2a57deaad14ea7da957a53c2260dc8aa979c48ef82912
+parent_readback: complete report, all44 result records, exact minimal driver/shell diffs, four zero exits, empty stderr, tempfile/static/private/source/package/r470-absence and hash receipts confirmed; private files unchanged after measured run
+python_scratch: exact locked venv resolved /usr/bin/python3.12 and tempfile.gettempdir exact unique registered durable NVMe scratch/tmp; PASS
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: full corrected driver/shell plus r478 RED/r479 GREEN; verify prior Important and Minor are fixed without regression and decide exact one-shot r470 launch eligibility
+  restrictions: read-only; no execution/import/GL/render/root allocation or mutation
+  stop_after: full review report and parent ledger decision; r470 remains held unless later GO records exact reviewed shell hash and invocation
+retention: r478/r479 and all prior evidence retained, archived none; scratch deletion candidates only, nothing deleted
+boundaries: no actual r470/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
+```
