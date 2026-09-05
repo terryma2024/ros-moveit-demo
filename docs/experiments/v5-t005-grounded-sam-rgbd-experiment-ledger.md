@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-221
+latest_checkpoint: CP-225
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 9f30bc74df1315627a8b073d4de715df63e419ed
-active_experiment: EXP-079-STAGE-E-CATEGORICAL-R5-RETAINED-REEVALUATION-R1
+source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
+active_experiment: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
 confirmed: r5 categorical truth is independently verified on all1500 train/val frames; unchanged epoch4 predictions score primaryF1 0.0877193 under corrected boxes versus historicalr4 0.8640351; DINO box contamination remains a qualification failure
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: fresh offline training container from pinned local dependencies, then r5 six-scenario smoke and checkpoint reload
+next_action: commit/push verified JSON loader fix, build fresh offline r396 image, then isolated r397 smoke-r2
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15246,4 +15246,103 @@ next_run:
   next_after_smoke: independent r390 checkpoint/file/identity/metrics readback before formal r391 launch
 retention: image/build context and all prior evidence retained; no cleanup or archival; scratch deletion candidate only
 boundaries: Microduck paused; no test/COCO100/PickPlace/Mac access; SAM not mounted or trained; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-222 — r389 invalid before optimizer creation; JSON numeric parsing audit
+
+```yaml
+checkpoint: CP-222
+status: INVALID_SMOKE_VALID_FAILURE_DIAGNOSIS
+run_id: stage-d-r5-training-smoke-r389
+source_commit: 888b067788415f365c66f557c1ee0ac3a1c9ee04
+implementation_commit: 14b47a8a140001e5a36607f6db5a431bc0122a08
+result: {exit_code: 1, elapsed_seconds: 8.75, optimizer_updates: 0}
+first_failure: AdamW initialization receives learning_rate as str; TypeError comparing float and str
+observed: container CUDA RTX5080, exact module hashes, model11-file hashes, contract/inventory hashes and exact NVMe tempfile preflight passed; no CPU fallback
+root_cause_hypothesis: load_contract applies YAML safe_load to generated JSON; JSON scientific notation1e-05 and1e-08 becomes YAML strings, unlike the original YAML numeric literals
+correction: CP-220 producer-side semantic equality and inventory-loader success did not establish serialized contract roundtrip equality; immutable r5 contract bytes and recipe remain unchanged
+evidence: durable run-evidence/stage-d-r5-training-smoke-r389 including container-before/after, bootstrap, preflights, training.log, exit.log and preserved stopped container so101-exp079-r5-smoke-r389
+output: durable training/grounding-dino-cup-r5-r1/smoke-r1 retained INVALID; never reuse
+python: /opt/venv/bin/python
+overlay: image sha256:6cfa37acb139d84f1910cc60fedbddeba0b87a10ef8b691395872b1ba637d69d
+scratch: durable scratch/stage-d-r5-training-smoke-r389/tmp
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
+  status: PLANNED
+  single_variable: format-aware JSON parsing in load_contract, preserving original YAML behavior and all frozen bytes/hyperparameters
+  regression: real frozen YAML recipe serialized as JSON must reload identically with numeric lr/eps; a .json contract must reject YAML-only syntax rather than silently fallback
+  run_ids: {red: stage-d-r5-contract-json-red-r392, green: stage-d-r5-contract-json-green-r393, build: linux-build-stage-d-r5-contract-json-r394, ordinary: linux-test-stage-d-r5-contract-json-r395-ordinary, container: stage-d-r5-training-container-r396, smoke: stage-d-r5-training-smoke-r397, readback: stage-d-r5-training-smoke-readback-r398, formal: stage-d-r5-training-formal-r399}
+  superseded_unlaunched_ids: r390/r391 remain unused; do not launch obsolete runner
+retention: all evidence and stopped container retained; no archival/deletion; scratch deletion candidate only
+boundaries: all sealed/test/COCO100/PickPlace/Mac boundaries unchanged; Microduck paused; no SAM changes; mask IoU0.80 unchanged
+```
+
+## Checkpoint CP-223 — JSON contract regression RED to GREEN
+
+```yaml
+checkpoint: CP-223
+status: VALID_RED_GREEN_BUILD_RUNNING
+experiment_id: EXP-079-STAGE-D-CONTRACT-JSON-ROUNDTRIP-R1
+source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
+root_cause: CONFIRMED at load_contract; real YAML-recipe to JSON roundtrip converted numeric lr to str with old unconditional YAML parser
+red: {run_id: stage-d-r5-contract-json-red-r392, failed: 2, passed: 8, pytest_seconds: 0.10, elapsed_seconds: 0.36, exit_code: 1}
+green: {run_id: stage-d-r5-contract-json-green-r393, passed: 10, pytest_seconds: 0.08, elapsed_seconds: 0.35, exit_code: 0}
+fix: .json uses json.loads and JSON parse failures retain CONTRACT_INVALID; other suffixes preserve original yaml.safe_load behavior
+regression: unchanged real recipe roundtrips identically including lr0.00001/epsilon0.00000001; JSON filename rejects YAML-only syntax
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-box-export-r385/install
+  scratch: each run uses its own durable scratch/run-id/tmp with exact tempfile readback; JUnit, source patch, command, elapsed time and exit retained
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static: git diff --check and /home/lenovo/.local/bin/ruff passed; nonexistent venv ruff path diagnostic exit127 retained in turn, no test failure
+next: fresh seven-package r394 overlay using retained r26 lodepng cache and disconnected fetch, then ordinary r395; no expensive old inference or optimization benchmark rerun
+retention: all prior evidence including invalid r389 retained; no archival/deletion
+boundaries: unchanged; Microduck paused; SAM unchanged; no test/COCO100/PickPlace/Mac access
+```
+
+## Checkpoint CP-224 — Fresh r394 overlay built for JSON contract fix
+
+```yaml
+checkpoint: CP-224
+status: VALID_BUILD_ORDINARY_NEXT
+run_id: linux-build-stage-d-r5-contract-json-r394
+source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
+result: {packages: 7, exit_code: 0, elapsed_seconds: 56.07}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-d-r5-contract-json-r394/tmp; exact tempfile preflight passed
+lodepng: retained r26 cache HEAD ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a and strict fsck passed; FETCHCONTENT_FULLY_DISCONNECTED=ON
+warnings: six packages emitted build stderr; mujoco_vendor resolved from /opt/ros/jazzy as before; no build failures
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_contract_json_r395.sh
+retention: build logs/source patch and all earlier evidence preserved; no deletion/archival
+boundaries: Microduck paused; no sealed/test/COCO100/PickPlace/Mac access
+```
+
+## Checkpoint CP-225 — Ordinary gate GREEN; corrected loader ready for fresh image
+
+```yaml
+checkpoint: CP-225
+status: VALID_ORDINARY_GREEN_CONTAINER_NEXT
+run_id: linux-test-stage-d-r5-contract-json-r395-ordinary
+source_parent: 888b067788415f365c66f557c1ee0ac3a1c9ee04
+result: {passed: 1283, failures: 0, errors: 0, skipped: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.63, elapsed_seconds: 18.17, colcon_exit: 0, test_result_exit: 0}
+collection: ordinary test only; benchmark not collected
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-r5-contract-json-r394/install
+  source: current checkout resolved by import; seven package prefixes independently verified
+  scratch: durable scratch/linux-test-stage-d-r5-contract-json-r395-ordinary/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+static_review: ruff and git diff --check passed; patch limited to contract format dispatch, two real loader regressions and ledger
+next: commit only these three owned files, ordinary Gitee push/readback; build_r5_training_container_r396.sh with synced commit
+new_smoke: r397 uses smoke-r2 output and unique container/scratch/evidence; r389 smoke-r1 remains immutable INVALID; identical original base/data/contract/recipe, only parser fix
+benchmark: no benchmark code/model comparison performed yet; preserve r30/r363 and run required explicit gate with new model comparison
+retention: all logs/JUnit/source receipts/builds retained; no archival/deletion; scratch deletion candidates require explicit permission
+boundaries: Microduck paused; no SAM change or sealed/test/COCO100/PickPlace/Mac access
 ```
