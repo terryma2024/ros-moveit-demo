@@ -12496,3 +12496,53 @@ retention:
   deletion_candidates: [r306 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-152, add only the direct test main to the temporary test, and execute the unchanged contract with the exact locked Python as r307
 ```
+
+## Checkpoint CP-153 — native SAM A/B contract is RED
+
+```yaml
+checkpoint: CP-153
+status: RED_VALID
+recorded_at: 2026-09-05T08:51:51+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-152
+source_commit: a962ad91df8d094b56bd3051bd2790f1c712bdad
+invalid_retry:
+  run_id: stage-e-native-sam-ab-red-r307
+  status: INVALID_IMPORT_PATH
+  cause: symlink-install egg-link directory alone did not expose the build-time so101_demo package
+  exit_code: 1
+  impact: test did not reach the absent driver
+valid_red:
+  run_id: stage-e-native-sam-ab-red-r308
+  exit_code: 1
+  elapsed_ms: 127
+  cause: native_sam_runtime_ab_r1.py is absent
+  contract_reached: true
+  output_root_created: false
+test_contract:
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_native_sam_runtime_ab_r1.py
+  test_script_sha256: 8a46b649ee41bb5127b54a3207946bee6e5a8d31e9d8f3552134d27b1b27f987
+  assertions:
+    - preserve native CxHxW three-mask axis and reject HxWxC axis swaps
+    - bind argmax quality to the selected mask and truth-IoU oracle to the correct alternate mask
+    - preserve float32 finite qualities and reject float64 or nonfinite values
+    - selected and oracle COCO RLE decode pixel-for-pixel to the expected masks
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_physical_path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo
+  r308_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-ab-red-r308/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  r307: {preflight_sha256: 7744bee0ad956f16082a07573f6a2c762731ed4ee34b57d7416da8776ef57fa4, stderr_sha256: c72f22752f1064c0f69949a6dfc824e0d99361d24bdc5213fbc7cefd0b16bb73, exit_sha256: a872364cd21959a88fa537e5ee007be68cf7be008e23ed1d468dc7cc8b1e6ff1}
+  r308: {preflight_sha256: 68a913bef5ce54d1c74fe00d587c017b291471b25ff7d168308b7cdb18c90ccb, stdout_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, stderr_sha256: 793e2487665c60bcd75f2703942221ed11587ac2e52ac662700a562876e5e73d, exit_sha256: 02cfbc66684e1f1418e3b21164fd5684782c994c447269c3db5788b7add1c541}
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r307 invalid evidence/scratch, r308 RED evidence/scratch, all CP-152 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r307-r308 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-153, implement only the temporary native output normalization and diagnostic selection/RLE core, then run the unchanged direct contract in fresh r309 scratch
+```
