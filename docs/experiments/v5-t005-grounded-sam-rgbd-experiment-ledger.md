@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-379 — r524 valid mutation-sensitivity RED; exact-membership boundary review planned
+
+```yaml
+checkpoint: CP-379
+status: VALID_R524_RED_EXACT_MEMBERSHIP_MUTANT_SURVIVED_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r524
+executor: /root/generator_build, gpt-5.6-sol high
+result: {authoritative_green: false, launcher_invocations: 1, combined_harness_invocations: 1, harness_exit: 1, launcher_tool_exit: 1, elapsed_seconds: 60.84537644, retained_r517: 167_executed, review_r521: {total: 40, controls_passed: 34, mutation_kills: 5/6, harness_errors: 0}, additional39: not_reached, aggregate246: unavailable}
+red_boundary: i3_mutant_exact_membership SURVIVED while deferred-inventory/diagnostic-propagation/conditional-outer/accounting-completion/owner-disarm mutants were killed; adapted subgroup rejected before additional39 and stdout/result remained absent
+diagnostic_observation: fixture placed `unexpected` before persist_launch_accounting; corrected candidate now rejects it in the pre-accounting `_launch_inventory_members(... accounting_present=False)` call, so completion returns false before reaching the mutated final exact_members argument; the mutant no longer changes the observed path and the oracle reports SURVIVED
+frozen_inputs: {head_local_gitee: b136d633b03a9e71de48b038392dacc256e61625, driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 093709f836dd5c66d36af5c0f5b0dde6bd8d8ee1094feeaa0497315a6d57d3c4, launcher_sha256: 1ae429aaa1c5ccf751ca3ce387ff64ec98f0dc16875b80cfa23685dfbfd9c852, package_before_after_sha256: c0a2e7b5d3d406dbfa5be22a93ca4b90cf0cabaae550f73b87453875d7f3b0b0}
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r524 contains29 inventoried members plus manifest/readback; manifest SHA2561bc40f463948229313a160a8a112bee9f373e83897ae45b0e9766a47e8ba3179; readback SHA256c17e3d070d6e7edef1f24db3ca5cc4f6584d530a04d679ce54ff4b6a79cb91d9; independent29/29 validation passed
+report: coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r524-report.md SHA25649f38f84ef032b25c4d7e28bbfeace84eee6bdbba328cd3e830790f96aba40ff
+parent_readback: complete99-line report, traceback/embedded40-case result, survivor fixture members, raw exits/status, full inventory/package/tempfile/source/root/official boundaries read
+next_experiment:
+  status: GO_READ_ONLY_ASTRA_EXACT_MEMBERSHIP_ADJUDICATION
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read immutable final driver, combined harness adaptation, r518 antecedent and complete r524 survivor evidence; determine whether production code is wrong or mutation fixture became target-unreachable, and specify the smallest TDD-preserving change
+  proposed_hypothesis: retain the executable removal of the final exact-membership call, but inject the unexpected regular file only after the pre-accounting membership check via an instrumented accounting-receipt persist seam; candidate final membership recheck must reject while the single-operation mutant must accept, proving the final check independently matters
+  restrictions: reviewer read-only; no candidate/harness/launcher/evidence/Git edits and no behavior invocation; Sol waits for reviewed bounded plan
+future_if_approved: parent checkpoints r525 private harness-only preparation, preserving driver/shell and all r524 evidence; then one fresh combined GREEN after separate static freeze
+retention: r524/r523/r522 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-378 — r524 shared-argument CLI preflight valid; one fresh private GREEN authorized
 
 ```yaml
