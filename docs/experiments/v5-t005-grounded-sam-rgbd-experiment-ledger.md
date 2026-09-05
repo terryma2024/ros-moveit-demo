@@ -18744,3 +18744,27 @@ next_experiment:
 retention: r498 and all earlier evidence retained unchanged, archived none; existing scratch deletion candidates only and nothing deleted
 boundaries: no rerun/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-339 — r499 recovered benchmark receipt internally valid; Astra review required
+
+```yaml
+checkpoint: CP-339
+status: VALID_RECOVERED_RECEIPT_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-benchmark-receipt-r499
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_BENCHMARK_GATE_RECOVERED_RECEIPT, recovery_exit: 0, benchmark_reruns: 0, original_invocations: 1, tests: 585, benchmark_cases: 585, ordinary_cases: 0, partition_violations: 0, passed: 583, skipped: 2, failures: 0, errors: 0, pytest_seconds: 645.56, colcon_seconds: 646.90, total_seconds: 648.792879228, all_original_exits: 0}
+method: fresh noncolliding durable r499 root only; recovery pinned36 immutable r498 input hashes, required exactly one full-line pytest summary match, independently parsed JUnit/classname partition/exact skips and test-result, cross-checked outer time/exits and explicitly preserved original47.0 timing files as invalid/immutable
+performance: versus r30 HDD3210.78s difference2565.22s speedup4.973635x; versus r469 NVMe649.44s difference3.88s ratio1.006010x; observational only because source/suite revisions differ
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-benchmark-receipt-r499; script SHA256 e7ef02b076f18b1533dca2674b25052e6d0a6c78e6ae83279f557b5dc38157e3; input-hashes SHA256 486bc439fdc558037992755612f94392f94a73e59c254809a09f2b2247dd9cdb; result SHA256 005e4c0e588a0f042b61e8b3480916a9229e782fcf22094174c80326d7c94d65; inventory SHA256 c5bc8579157bd4521d1515437582b53b5ffff58bdecfd7e9ce044d584ccacc82; readback SHA256 7ef2e6fcaa897ab48ad0fad3b969ba82e3e1673b39c2d6d946379060aba7cb24
+disclosure: static compilation created retained __pycache__/recovery.cpython-312.pyc before final recovery source; pyc was not used for the recovery invocation, remains inventoried and was not deleted; reviewer must judge whether this affects evidentiary validity
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-benchmark-receipt-r499-report.md SHA256 40613c0a51ba41f59c76ff1491e7f8708bc2a3c9706a722fb6feb2d4b3111bc1
+parent_readback: complete88-line report, result/readback/script/input/output/inventory hashes and r498 immutable sources read; receipt provisionally valid pending independent review
+next_experiment:
+  status: PLANNED_READ_ONLY_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: validate all pinned r498 identities, anchored parser uniqueness, JUnit/skip/exit/time cross-checks, recovered comparison arithmetic, original evidence immutability and pycache disclosure; report findings and approve/change-request explicit benchmark gate
+  restrictions: no import/test/benchmark/build/root allocation/edit/Git/index/ledger/sealed traversal; no next-stage authorization until review
+future_if_approved: checkpoint benchmark gate valid, then resume preregistered generation-runner TDD preparation; never rerun r498/r30
+retention: r499/r498 and all earlier evidence retained, archived none; existing scratch deletion candidates only and nothing deleted
+boundaries: no official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
