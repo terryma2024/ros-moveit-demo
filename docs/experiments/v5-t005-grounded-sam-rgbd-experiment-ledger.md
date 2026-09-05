@@ -13681,3 +13681,55 @@ next_action: commit only loader/tests/ledger, ordinary-push/readback remote SHA,
 boundaries: all sealed sets untouched; Microduck paused; no benchmark rerun or data/model selection
 retention: r334-r337 retained; no archived/deleted runs; scratch deletion candidates only
 ```
+
+## Checkpoint CP-179 — Real SAM decoder CUDA gradient and checkpoint smoke passed
+
+```yaml
+checkpoint: CP-179
+status: VALID_GRADIENT_AND_RELOAD_SMOKE_ONLY
+source_commit: 90e47aa6723958060247c986558d80088751e829
+gitee_sha_readback: 90e47aa6723958060247c986558d80088751e829
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-GRADIENT-SMOKE-R1
+run_id: stage-e-sam-decoder-gradient-smoke-r338
+result: {exit_code: 0, wall_seconds: 7.30, optimizer_and_reload_seconds: 1.0152429349836893, train_samples_verified: 1200, optimizer_steps: 1}
+sample: {seed: 410000001, split: train, scenario: one_cup_distractors}
+training_evidence:
+  loss_before: 0.4829586148262024
+  loss_after: 0.28475695848464966
+  gradient_norm_before_clip: 31.303058624267578
+  conv_s0_weight_gradient_norm: 0.8735958337783813
+  conv_s1_weight_gradient_norm: 0.12354773283004761
+  changed_state_members: 125; all mask_decoder.
+  frozen_state_members: 178; every hash unchanged
+  serialization_reload: every state tensor hash equals the post-step model
+  missing_unexpected_mismatched_loading_keys: none
+  interpretation: validates training plumbing and serialization only; not a generalization or qualification result
+runtime:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-loader-r336/install
+  gpu: NVIDIA GeForce RTX 5080, GPU-0b7689c1-877a-b915-12aa-c9b9f86aa190
+  dtype: float32
+  device: cuda:0
+  peak_cuda_bytes: 649413632
+  cpu_fallback: false; CPU reload only performed serialization hash verification, no CPU forward
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+  warning: known sam2_video versus sam2 configuration warning; loading key checks passed
+output:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/diagnostics/sam-decoder-gradient-smoke-r1
+  candidate: false
+  report_sha256: 17d6fea7ae4efc17e1b8d35faaa7b69107ca0af775ed31250075250ed66830ab
+  checkpoint_weights_sha256: 52883ce9742542ecc628cd1ff865616e03d54c248f9f6b9033a5642f5050dd81
+  checkpoint_file_readback: all four files independently matched report hashes
+  permissions: files 0444, directories 0555
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-decoder-gradient-smoke-r338
+  driver_sha256: bb7c2953e4299e981f5a364496daf239b4e03e11b66775b7b4a0382b5c61b3df
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-decoder-gradient-smoke-r338/tmp
+  tempfile_preflight: exact resolved match
+next_stage: deterministic prompt jitter and exclusive epoch checkpoint contract, followed by the five-epoch runner under CP-170 recipe
+restart_contract: formal training initializes from original base bundle; never resume or warm-start from this one-step smoke
+boundaries: no val/test/COCO100/PickPlace/Mac access; Microduck paused; no DINO rerun; mask IoU 0.80 unchanged
+retention: immutable smoke checkpoint and run evidence retained; scratch deletion candidate only; no deletion
+next_action: commit and ordinary-push this checkpoint, remote SHA readback, then continue TDD for remaining training runner contracts
+```
