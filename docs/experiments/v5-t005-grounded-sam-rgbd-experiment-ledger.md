@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-349 — r505 harness serialization invalid; fresh single-change RED retry required
+
+```yaml
+checkpoint: CP-349
+status: INVALID_HARNESS_SERIALIZATION_NO_RED_MEASUREMENT_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-finalization-red-r505
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_HARNESS_SERIALIZATION
+result: {authoritative_red: false, invocations: 1, test_exit: 1, stdout_bytes: 0, stderr_bytes: 1573, elapsed_seconds: 2.424109550}
+cause: all cases reached final result serialization but one detail returned root as PosixPath; json.dumps raised TypeError and no complete machine-readable result exists, so case counts cannot be authoritatively recovered and exit1 is harness error
+frozen_inputs: r504 driver SHA256c0ab62a0 and shell SHA2562814ce20 remained byte-identical; r505 harness584 lines SHA2560668ae2e324c94b2ecfa9488bc49b67220954a34c7a3de7e175162ea40b7179d; package source/config clean and official roots absent
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-finalization-red-r505; final21-file inventory SHA256b42b61ce88412654acdb4d4a091f8a0d345439797ae7a7047c8eaab197c38bf9; readback SHA2568f8b1fbae4919c2283b525b12cf11e442dac1f0b6e7535c1b4a97399bce98364; stdout empty SHA256e3b0c442; stderr SHA256e266ecaa
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-finalization-red-r505-report.md SHA256c5ab6497b5c3ea0d570fb1c0bb1996e03d04871ee29bc957825009e6a0fcdcb2
+parent_readback: complete49-line report, hashes/status and official-root absence read; r505 retained invalid and never reused or backfilled
+next_experiment:
+  status: PLANNED_FRESH_SINGLE_CHANGE_RED_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-finalization-red-r506
+  executor: /root/generator_build, gpt-5.6-sol high
+  sole_harness_change: serialize synthetic root as str(root), plus mechanical fresh r506 IDs/paths and current execution identity only; preserve every N1/N2 assertion and frozen driver/shell bytes
+  required: AST/Ruff/Bash static gates; fresh unique roots/exact locked-Python NVMe tempfile; one invocation; complete JSON with expected N1/N2 defects, valid controls, zero harness errors and forbidden imports empty; all evidence fsynced/inventoried/read back; stop before fixes
+  restrictions: no driver/shell fix, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/repo edit/build/package test/benchmark/sealed access
+retention: r505 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-347 — r504 corrected private-runner GREEN valid; launch-readiness re-review required
 
 ```yaml
