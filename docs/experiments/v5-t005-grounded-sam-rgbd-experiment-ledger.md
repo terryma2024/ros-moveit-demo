@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-211
+latest_checkpoint: CP-212
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 4c6046213c8f94d72749e958a0deec39420cfc4c
 active_experiment: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-CAPTURE-R2
 confirmed: r366/r367 reveal multisample categorical-ID contamination and inflated raw-mask boxes; r4 lossless truth is not yet semantically qualified; historical epoch4 selection retained
 open: train/val truth reconstruction and reevaluation, production eligibility and final model qualification remain incomplete
-next_action: derive immutable r5 train/val labels from fully verified categorical arrays and original RGB bytes
+next_action: independently verify immutable r5 labels/inventories against captured IDs, then reevaluate retained predictions
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -14879,4 +14879,43 @@ next_experiment:
   next_after_reconstruction: retained-record all-scenario and primary near-workspace reevaluation with unchanged IoU0.80 and thresholds, no old model inference repeat
 retention: all prior evidence retained; no archived/deleted runs; scratch deletion candidates only
 boundaries: no model training or tuning authorized by this label-conversion checkpoint; sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused
+```
+
+## Checkpoint CP-212 — Immutable r5 categorical train/val labels reconstructed
+
+```yaml
+checkpoint: CP-212
+status: VALID_R5_RECONSTRUCTION_INDEPENDENT_LABEL_READBACK_NEXT
+experiment_id: EXP-079-STAGE-E-CATEGORICAL-TRAIN-VAL-R5-RECONSTRUCTION-R1
+source_commit: 37e0efa725ad8a52e4b48e963187394fa5be2bf2
+gitee_sha_readback: 37e0efa725ad8a52e4b48e963187394fa5be2bf2
+run_id: stage-e-categorical-train-val-r5-reconstruction-r378
+result: {exit_code: 0, elapsed_seconds: 38.67, samples: 1500, instances: 1500, measured_partial_instances: 250, MuJoCo_renders: 0, model_forwards: 0}
+source_output: durable training-data/yolo-seg-small-occlusion-r5-train-val-categorical
+source_manifest_sha256: 4cbb5d87449581dce4c25dcd5d0155e12c0f5ff4a3d7bf6f806f7da1fdd927f5
+source_tree: {files: 4502, bytes: 64061517, inventory_sha256: 599ffa279991df7d748d759285aafdf861003257f0fe3a12831b014a9e1d7510}
+converted_output: durable training-data/grounding-dino-cup-r5-train-val-categorical
+converted_manifest_sha256: 4adf169cafdea0357d966532fe498830e18d11b2effae3ead1f7e1de9eb07c25
+train_inventory_sha256: 1dcd4b3959498d7fddb19ad042144b79b6aadd758beb2825e08417dc9a2e3e28
+val_inventory_sha256: 5a6a349e47d01b889edc3248a9553b48b504f20fb8b19fb83f4c56ff226fbf2e
+converted_tree: {files: 3, bytes: 1097643, inventory_sha256: f9b6c82b23cf219ea99bbed5cf82e6cce4b15fe55eb2a2dfcb3fc125264bc0df}
+gates: all1500 images byte-identical to original, all4500 original input files unchanged after conversion, visible/reference/amodal RLE roundtrip exact, existing schema2 truth/occlusion/small-target checks and polygon-tight-box agreement passed without changing geometry or thresholds
+annotation_contract: new compatibility polygons are not SAM truth; exact zero-sample row-major RLE is canonical; converted class cup and prompt cup.; old archive SHA denotes ancestry, new source manifest binds corrected labels
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-categorical-render-r370/install
+  scratch: durable scratch/stage-e-categorical-train-val-r5-reconstruction-r378/tmp; exact tempfile readback passed
+  ROS_DOMAIN_ID: not_applicable_offline
+  GZ_PARTITION: not_applicable_offline
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-CATEGORICAL-R5-LABEL-READBACK-R1
+  status: PLANNED
+  run_id: stage-e-categorical-r5-label-readback-r379
+  lifecycle: FULL_RESTART offline independent saved-file audit
+  output: durable truth-remediation/categorical-r5-label-readback-r1
+  single_variable: independent RLE decoding and raw-ID comparison of every new truth, plus converted box extents and image/path/hash/cohort identities
+  gates: source and converted complete path/count/hash/mode inventories, original image identity and input receipts, all visible/reference/union masks and hashes/counts, tight converted boxes and class/prompt, quotas/split disjointness; no rendering or inference
+  subsequent: preregister retained-record corrected-truth reevaluation, preserving historical epoch4 choice and all old metrics; no training or threshold tuning before results
+retention: all new r5 files read-only, all r2/r2-repro/r3/r4/archives/captures retained untouched; no archived/deleted runs; scratch deletion candidates only
+boundaries: sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask IoU0.80 unchanged
 ```
