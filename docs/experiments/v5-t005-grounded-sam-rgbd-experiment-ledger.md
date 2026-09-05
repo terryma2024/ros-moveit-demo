@@ -13109,3 +13109,49 @@ retention:
   deletion_candidates: [r317-r319 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-164 with remote SHA readback, then execute the preregistered current-Transformers single-mask diagnostic exactly once as r321
 ```
+
+## Checkpoint CP-165 — First single-mask execution failed closed on source-root provenance
+
+```yaml
+checkpoint: CP-165
+status: INVALID_RETRY_REQUIRED
+recorded_at: 2026-09-05T09:22:01+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-164
+source_commit: 99d8505a2bf5fa836ccb184507d1619a2fb68ae1
+run_id: stage-e-transformers-single-mask-r321
+result: {exit_code: 1, elapsed_ms: 214, output_created: false, model_loaded: false, inference_started: false}
+failure:
+  code: SOURCE_MANIFEST_INVALID
+  cause: command passed the derived grounding-dino-cup-r4 inventory container as truth-source-root; the locked loader correctly required dataset-manifest.json from the separately frozen yolo-seg source root
+  invalid_argument: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-r4-train-val-lossless
+  corrected_argument: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-small-occlusion-r4-train-val-lossless
+  corrected_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+retry_contract:
+  run_id: stage-e-transformers-single-mask-r323
+  variable_change: none; correct only the mismatched source-root path and retain every frozen hash, sample, prompt, runtime, and threshold
+  output: same still-absent registered diagnostic root
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_origin: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo/__init__.py
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-transformers-single-mask-r321/tmp
+  tempfile_preflight: exact resolved match
+  gpu: NVIDIA GeForce RTX 5080 UUID GPU-0b7689c1-877a-b915-12aa-c9b9f86aa190; 483 MiB before and after
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-transformers-single-mask-r321
+  preflight_sha256: a50a1b06910920c19cec2d9d616b1caf66df1facc6bb1f269dd137a5e676ab58
+  inputs_sha256: 0608e7175b1a8e0b5fd37f4143583f6e19d9f4e68dc8ec0139848d8ad952f228
+  stdout_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  stderr_sha256: 0bd95585ad513750614a4b261452c45b2c8f1b7fa40c1b1ac881652d48513e91
+  exit_sha256: 115aac7b09193fa8c7b952c8ce3013ae4e822be3b348c9aa0fb871da9886ff93
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run; r30 and r222 remain preserved
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r321 invalid evidence/scratch, all CP-164 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r321 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-165 with remote SHA readback, then retry under unique r323 with only the preregistered corrected truth source root
+```
