@@ -18953,6 +18953,38 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-387 — r527 focused tail-fsync RED harness statically approved; one invocation authorized
+
+```yaml
+checkpoint: CP-387
+status: R527_FOCUSED_TAIL_FSYNC_RED_STATIC_APPROVED_ONE_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-tail-fsync-accounting-red-r527
+executor: /root/generator_build, gpt-5.6-sol high
+reviewer: /root/generator_review, gpt-6-astra medium
+candidate_frozen: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781}
+final_private_inputs: {harness_sha256: 8b560c4529e25f64185aeb95ff1fc4f2ebde965dd98fcd57c267ff18792c2348, harness_lines: 731, launcher_sha256: 6207f94de3c9349a319f12778db17f9d6573aa4c0362317ec0dd86bb15045aae, launcher_lines: 363}
+static_review_history:
+  - first review rejected a combined reachability/semantic predicate and informational-only post-run private hashes; no behavior ran
+  - second review rejected an oracle that truncated the fsync trace at the injected ordinal; no behavior ran
+  - final correction requires a complete contiguous ordinal trace, one exact target injection, execute/driver_process/log_fsync reachability, singular finalizer/completion, a successful fsync after completion, and HARNESS_ERROR for setup/oracle misses; semantic RED remains compatible with a future consolidated completion owner
+static_self_tests: valid and consolidated-owner accepted; missing execute/injection/log_fsync, wrong ordinal, truncated post-injection trace, non-contiguous trace and generic failure all HARNESS_ERROR; unchanged private hashes accepted and drift rejected
+matrix: five defects=tail ordinal1or2 crossed with original0or7 plus tail1/original7/finalizer9; seven controls=all-zero0or7, helper3/original0or7, predriver no-recursion, postseal diagnostic failure and real-driver receipt/inventory
+static_gates: exact Python AST and parser, Ruff, candidate/launcher/transformed bash-n,13of13 launcher heredoc AST, source anchors, four-private-hash post-run hard gate, forbidden imports empty, local/Gitee65879716 and scoped source clean
+reports:
+  - original write-once prep SHA256aef0c6570e2772214030cde32eaa44db4079d9ba2de137c0bdf3e3fcfeec06d8,108 lines, retained unchanged
+  - first write-once correction SHA256341a8769a945f3d4e36a874b6974efe830a5e2ba0b7592e22806672a96316f15,139 lines, retained unchanged
+  - final write-once correction-2 SHA25614070c9694b3f144ce6cd8c4007a6a59474a501c1f76f6a8aab01c275aaf83f9,138 lines
+astra_verdict: APPROVED for one r527 focused RED only; critical0 important0 minor0; not GREEN or official-generation approval
+next_experiment:
+  status: GO_ONE_PRIVATE_FOCUSED_RED
+  command_boundary: after this ledger-only commit is ordinary-pushed/read back, mechanically rebind only launcher HEAD_EXPECTED to the new local/Gitee SHA, independently rehash/bash/root-check it, then invoke once with SO101_REVIEWED_LAUNCHER_SHA256 equal to the reviewed-and-rebound bytes
+  required: fresh unique EVIDENCE/SCRATCH/LOW roots; exact locked Python with TMPDIR/TMP/TEMP under the run-specific D NVMe scratch and tempfile.gettempdir exact preflight; launcher/harness invocations1; harness exit1 and launcher/tool exit0; classification VALID_R527_TAIL_FSYNC_RED;12 total/5 expected defects/7 controls/0 harness errors; full fsync/inventory/readback and before/after source/private/package identity
+  stop_after: parent reads every result/case/evidence member and checkpoints RED before any candidate fix
+restrictions: candidate driver/shell byte-identical; no production fix, repo source edit, real setup/project/MuJoCo/OpenGL/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r526 and all r527 static reports retained; archived/deleted none; scratch/low-rate trees remain deletion candidates only
+boundaries: four official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-386 — Astra final review NO-GO on uncovered tail fsync path; focused RED preparation planned
 
 ```yaml
