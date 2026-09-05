@@ -13830,3 +13830,114 @@ boundaries: no sealed test/COCO100/PickPlace/Mac; Microduck paused; IoU 0.80 unc
 retention: r334-r342 and immutable smoke checkpoint retained; no archived/deleted runs; scratch deletion candidates only
 next_action: commit owned jitter/test/ledger and ordinary-push/readback, then implement and execute the full runner under the frozen CP-170 recipe
 ```
+
+## Checkpoint CP-184 — Five-epoch training orchestrator planned
+
+```yaml
+checkpoint: CP-184
+status: PLANNED
+source_commit: c627f50c20a329966d7181bcee84a0cbf8ee31ce
+remote_sha_readback: c627f50c20a329966d7181bcee84a0cbf8ee31ce
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+implementation: training/sam_decoder_runtime.py composes verified CP-170/175/180 primitives and existing exclusive checkpoint inventory verifier
+recipe_completion:
+  epoch_order_rng: numpy default_rng SeedSequence([430000079, epoch, 0]) over train samples with nonempty truth, retaining the permutation and per-step seed
+  data_denominators: 1200 train images, 1000 with visible cup truth, 1200 visible cup instances per epoch; empty images retained in input audit but have no SAM box prompt
+  epoch_budget: exactly 5; no early stopping or adaptive learning-rate changes
+  checkpoint: full model/processor export plus optimizer and RNG state, loss/order receipt, complete file inventory and identity manifest
+  checkpoint_gate: exclusive new directory; no complete manifest after interrupted export; independent inventory verification and full saved-model state reload equality
+  frozen_gate: every nondecoder state tensor hash must remain equal to original base at each epoch
+  selection: no val access during optimization; compare all five saved epochs later using CP-170 fixed primary metric rule and retained DINO proposals
+  initialization: original base bundle only, never the one-step smoke checkpoint
+red_contracts: exclusive checkpoint writes, complete inventory/identity readback, collision preserves old bytes, failed export leaves no complete manifest, invalid source identity rejected before output creation
+planned_tests: [stage-e-sam-runtime-red-r343, stage-e-sam-runtime-green-r344]
+planned_training_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/sam-decoder-cup-r4-r1
+launch_prerequisites: TDD and ordinary gate GREEN, fresh overlay, source sync and SHA readback, exact source/input hashes frozen, unique run/scratch, CUDA and tempfile preflight
+boundaries: no sealed sets, COCO100, PickPlace or Mac; Microduck paused; mask IoU 0.80 unchanged
+next_action: establish runtime checkpoint-contract RED, implement the fixed five-epoch orchestrator, verify GREEN and full ordinary gate, then launch under a new registered training run ID
+```
+
+## Checkpoint CP-185 — Five-epoch orchestrator and real processor contracts GREEN
+
+```yaml
+checkpoint: CP-185
+status: FOCUSED_GREEN_FRESH_OVERLAY_AND_ORDINARY_PENDING
+source_commit: c627f50c20a329966d7181bcee84a0cbf8ee31ce
+experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+tdd:
+  runtime_red: {run_id: stage-e-sam-runtime-red-r343, failed: 4, exit_code: 1, elapsed_seconds: 2.50, junit_sha256: f230ec464e43768b4383c492cc310298518122cdf77d019663a1607b37775ab3}
+  runtime_green: {run_id: stage-e-sam-runtime-green-r344, passed: 34, exit_code: 0, elapsed_seconds: 2.65}
+  processor_red: {run_id: stage-e-sam-runtime-processor-red-r345, failed: 1, exit_code: 1, elapsed_seconds: 3.34}
+  final_green: {run_id: stage-e-sam-runtime-processor-green-r346, passed: 35, exit_code: 0, elapsed_seconds: 3.83, junit_sha256: 17ef59576ad539bd853362653c72f578e12b9de663270b1aa39c6a4a47d9ee41}
+processor_contract: actual Sam2Processor exercised with two jittered boxes; helper converts tuple geometry to required nested lists before preprocessing
+checkpoint_contract: real optimizer state and exported model weights survive inventory and identity readback; collision preserves old bytes; interrupted export retains partial evidence without a complete manifest
+runner_contract: fixed CP-170 recipe, verified train denominator, original base loading, CUDA/offline/source guards, epoch frozen-state checks, per-step evidence, full checkpoint reload check
+static_checks: ruff check and git diff --check passed
+provenance: locked Python and source imports; each run has unique durable NVMe scratch and exact tempfile preflight; ROS_DOMAIN_ID/GZ_PARTITION not applicable
+next_runs: [linux-build-stage-e-sam-runtime-r347, linux-test-stage-e-sam-runtime-r348-ordinary, stage-e-sam-decoder-train-r349]
+next_action: fresh seven-package overlay and ordinary gate; commit owned runtime/test/ledger and ordinary-push with SHA readback; preregister exact r349 launch inputs and run
+boundaries: no sealed sets or Microduck training; IoU 0.80 unchanged; no old DINO inference rerun
+retention: r343-r346 retained; scratch deletion candidates only; no deletion
+```
+
+## Checkpoint CP-186 — Full SAM trainer fresh overlay valid
+
+```yaml
+checkpoint: CP-186
+status: VALID_BUILD_ORDINARY_RUNNING
+source_commit: c627f50c20a329966d7181bcee84a0cbf8ee31ce
+run_id: linux-build-stage-e-sam-runtime-r347
+result: {packages_finished: 7, exit_code: 0, elapsed_seconds: 55.83}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-runtime-r347/install
+package_readback: all seven prefixes inside r347 install; new runtime callable imported from this checkout
+lodepng: local r26 cache HEAD verified, strict fsck passed, FetchContent fully disconnected
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: unique registered durable scratch/linux-build-stage-e-sam-runtime-r347/tmp; exact tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+ordinary: linux-test-stage-e-sam-runtime-r348-ordinary
+frozen_training_launcher:
+  path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/launch_sam_decoder_training_r1.py
+  sha256: c36d6300721c631b794c1dc2cdac3a5a9dcbd7a4eae5425d4d7ca5de9f37e1a0
+  inputs: exact CP-174/178 train inventory, source manifest and original base bundle; no val path supplied
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/sam-decoder-cup-r4-r1
+  source_binding: pass the exact next synced code commit as mandatory launcher argument; runtime requires HEAD equality and no tracked package source changes
+storage_readback: /data NVMe has 237 GiB available before training
+next_action: read back ordinary gate, commit owned runtime/test/ledger, ordinary-push/readback, then launch unique r349 with exact source argument and immutable input hashes
+boundaries: CP-170 recipe and all sealed boundaries unchanged; Microduck paused
+retention: r347 evidence retained; scratch deletion candidate only; no deletion
+```
+
+## Checkpoint CP-187 — Full trainer ordinary gate GREEN; formal training armed
+
+```yaml
+checkpoint: CP-187
+status: CODE_GREEN_FORMAL_TRAINING_ARMED
+source_commit: c627f50c20a329966d7181bcee84a0cbf8ee31ce
+ordinary:
+  run_id: linux-test-stage-e-sam-runtime-r348-ordinary
+  result: {passed: 1256, failed: 0, errors: 0, skipped: 0, historical_warnings: 4, pytest_seconds: 16.34, elapsed_seconds: 17.87, colcon_exit: 0, test_result_exit: 0}
+  junit_sha256: 6a58780df2cd7220a1a7ffeaf825c57c27e48742b9dac59ba96d557f52f44c59
+  collection: ordinary test directory only
+static: ruff check and git diff --check passed
+training_launch:
+  run_id: stage-e-sam-decoder-train-r349
+  experiment_id: EXP-079-STAGE-E-SAM-DECODER-ADAPTATION-R1
+  recipe: exactly CP-170, CP-180 and CP-184; five epochs, 5000 image optimizer steps, no val access
+  launcher_sha256: c36d6300721c631b794c1dc2cdac3a5a9dcbd7a4eae5425d4d7ca5de9f37e1a0
+  train_inventory_sha256: 56ae5c06cb2929be8ff8869bf8e662b2241518ba5dd1114709e2789b2825ac0a
+  source_manifest_sha256: f1eb466795627443d53aea01d088a32079430acc1e7dd152bcfbee9c00ae6f5c
+  base_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/sam-decoder-cup-r4-r1
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-decoder-train-r349
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-decoder-train-r349/tmp
+  guards: all three output paths absent, exact Python tempfile match, CUDA RTX5080, offline mode, HEAD equals explicitly supplied synced commit, package source clean
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-sam-runtime-r347/install
+  ROS_DOMAIN_ID: not_applicable_offline_training
+  GZ_PARTITION: not_applicable_offline_training
+next_action: commit owned runtime/test/ledger, ordinary-push and read back exact remote SHA, then run r349 from that commit and monitor the same process handle through terminal completion
+boundaries: no sealed test, COCO100, PickPlace, Mac or Microduck training; no DINO rerun; IoU 0.80 unchanged
+retention: r343-r348 retained; scratch deletion candidates only; no evidence deleted
+```
