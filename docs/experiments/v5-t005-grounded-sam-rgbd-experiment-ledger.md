@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-243
+latest_checkpoint: CP-247
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 4f68a90a7f129d56baa2dff51b35aa0cc5cd40a5
 active_experiment: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: implement and test serial per-frame complete-proposal receipt retention before any new r5 raw inference; keep original and historical epoch4 SAM frozen
+next_action: r419 ordinary1313passed; commit/push owned receipt implementation then r420 explicit gate on fixed source before new raw inference
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -15932,4 +15932,97 @@ next_experiment:
   authorization: standing user approval; bounded design announced; no repeated request for already authorized scope
 retention: all runs retained; archived none; r413 scratch is a deletion candidate after readback, not deleted; no evidence cleanup
 boundaries: no new r5 full SAM raw run yet; no additional SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; generic cup prompt cup.; Microduck paused
+```
+
+## Checkpoint CP-244 — Receipt retention first RED/GREEN; terminal integrity regressions next
+
+```yaml
+checkpoint: CP-244
+status: VALID_FIRST_RED_GREEN_ADDITIONAL_REGRESSIONS_PLANNED
+experiment_id: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+source_parent: 305bfc399e097b3ed51ce3ab28e30aa2fd2f78a8
+red: {run_id: stage-e-r5-proposal-receipts-red-r414, failed: 27, pytest_seconds: 0.34, elapsed_seconds: 0.62, exit_code: 1}
+red_boundary: missing proposal-receipt module at test invocation, not collection failure; full test source separately retained because new files are untracked before commit
+green: {run_id: stage-e-r5-proposal-receipts-green-r415, passed: 27, pytest_seconds: 0.20, elapsed_seconds: 0.48, exit_code: 0}
+implemented: complete ordered immutable proposal receipts, per-frame PNG/RGB/source/model identity, exclusive fsync write/readback before SAM, exact surviving-candidate coverage and independent receipt loader
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r411 seven-package symlink install
+scratch: unique durable scratch/run-id/tmp for r414 and r415; TMPDIR/TMP/TEMP and actual Python tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_regressions: swallowed duplicate observer exception must poison run; image changed before finalize must not publish VALID receipt inventory; real collect_val_raw integration, no mock persistence, must preserve accepted mask/record schema and complete proposal sidecars
+next_runs: {red: stage-e-r5-proposal-receipts-red-r416, green: stage-e-r5-proposal-receipts-green-r417, build: linux-build-stage-e-r5-proposal-receipts-r418, ordinary: linux-test-stage-e-r5-proposal-receipts-r419-ordinary, benchmark: linux-test-stage-e-r5-proposal-receipts-r420-benchmark}
+retention: all previous evidence retained, no deletion/archival; scratch deletion candidates only; source snapshots retained with each test
+boundaries: no new real inference; original and epoch4 SAM frozen; no SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged; Microduck paused
+```
+
+## Checkpoint CP-245 — Receipt terminal integrity RED/GREEN and real collector integration
+
+```yaml
+checkpoint: CP-245
+status: VALID_RECEIPT_RED_GREEN_BUILD_NEXT
+experiment_id: EXP-079-STAGE-E-PROPOSAL-RECEIPT-COLLECTOR-R1
+source_parent: 305bfc399e097b3ed51ce3ab28e30aa2fd2f78a8
+red: {run_id: stage-e-r5-proposal-receipts-red-r416, failed: 2, passed: 28, pytest_seconds: 0.24, elapsed_seconds: 0.52, exit_code: 1}
+confirmed_failures: swallowed duplicate observer error was not poisoning run; finalization wrote VALID inventory before rechecking source image
+fix: callback marks permanent failure even if backend catches exception; finalize verifies every receipt, image, identity and survivor before writing terminal inventory
+green: {run_id: stage-e-r5-proposal-receipts-green-r417, passed: 30, pytest_seconds: 0.21, elapsed_seconds: 0.50, exit_code: 0}
+integration: actual collect_val_raw and load_verified_raw_records preserve one accepted64pixel mask and unchanged raw record contract while retaining both DINO proposals; no real model forwards
+source_snapshots: r414 test-source.py plus r416 implementation-source.py reproduce r415 first GREEN; r416 and r417 each retain full test/implementation files; new files intentionally not included in tracked-only git diff until commit
+static: ruff formatting followed by targeted unused-import removal; ruff check and git diff --check passed; package gate will verify formatted version
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r411 seven-package symlink install for targeted tests
+scratch: r416/r417 each unique registered durable scratch/run-id/tmp, actual Python tempfile preflight passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/build_r5_proposal_receipts_r418.sh
+next_gates: fresh r418 seven-package symlink build with offline r26 lodepng, r419 ordinary test only, then r420 explicit model-comparison evidence gate on committed fixed source; r413 remains valid and is not rerun
+retention: all earlier evidence retained; no deletion/archival; scratch deletion candidates only
+boundaries: no new real inference; original and epoch4 SAM frozen; no SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged; Microduck paused
+```
+
+## Checkpoint CP-246 — Fresh receipt overlay r418 built
+
+```yaml
+checkpoint: CP-246
+status: VALID_BUILD_ORDINARY_NEXT
+run_id: linux-build-stage-e-r5-proposal-receipts-r418
+source_parent: 305bfc399e097b3ed51ce3ab28e30aa2fd2f78a8
+result: {packages: 7, exit_code: 0, elapsed_seconds: 56.08}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-build-stage-e-r5-proposal-receipts-r418/tmp; exact tempfile preflight passed
+lodepng: r26 complete cache ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a strict fsck passed; fully disconnected FetchContent, no network fetch
+warnings: preexisting third-party compiler/package stderr and mujoco_vendor from /opt/ros/jazzy; no build failure
+evidence: durable run-evidence/linux-build-stage-e-r5-proposal-receipts-r418; runner, full build log, source patch, both new source files, cache check and exit/time retained
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_proposal_receipts_r419.sh
+retention: all previous evidence retained, no deletion/archival
+boundaries: Microduck paused; no new real model inference; sealed-test/COCO100/PickPlace/Mac inaccessible; SAM frozen; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-247 — Receipt ordinary gate GREEN; full benchmark next
+
+```yaml
+checkpoint: CP-247
+status: VALID_ORDINARY_GREEN_BENCHMARK_PLANNED
+run_id: linux-test-stage-e-r5-proposal-receipts-r419-ordinary
+source_parent: 305bfc399e097b3ed51ce3ab28e30aa2fd2f78a8
+result: {passed: 1313, skipped: 0, errors: 0, failures: 0, preexisting_fork_warnings: 4, pytest_seconds: 16.66, elapsed_seconds: 18.21, colcon_exit: 0, test_result_exit: 0}
+collection: ordinary test directory only, includes30 new receipt regressions, no benchmark collection
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/linux-test-stage-e-r5-proposal-receipts-r419-ordinary/tmp; exact tempfile and7prefix/module provenance preflight passed
+evidence: durable run-evidence/linux-test-stage-e-r5-proposal-receipts-r419-ordinary; complete logs, JUnit, exits and command retained
+owned_changes: new training/grounded_sam_proposal_receipts.py, test/test_grounded_sam_proposal_receipts.py and ledger only; no prior source file behavior changed; original untracked build/install/log preserved
+review: frame/image/proposal identity checked before SAM; callback exceptions poison even if caught downstream; terminal inventory follows full member readback; actual raw collector integration passed; original schema and thresholds unchanged
+next_run: linux-test-stage-e-r5-proposal-receipts-r420-benchmark
+next_command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_r5_proposal_receipts_r420.sh NEXT_SYNCED_HEAD 3cc371a52e89bbf179fb99a157fdd0533495fb0ffa7230e00f0bd90ca3839ca6
+reason: full explicit gate for model-comparison receipt adapter implementation; not rerunning valid r413 or measuring scratch optimization
+source_freeze: commit/push/readback before r420, no source or HEAD edits while running
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+retention: all earlier evidence retained; no deletion/archival; scratch deletion candidates only
+boundaries: no real new model inference; SAM frozen and stateless; Microduck paused; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged
 ```
