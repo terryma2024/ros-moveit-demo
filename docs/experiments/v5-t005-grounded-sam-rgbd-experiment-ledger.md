@@ -12182,3 +12182,56 @@ retention:
   deletion_candidates: [r295 invalid source/evidence/scratch; do not delete without explicit user authorization]
 next_action: commit and ordinary-push this invalid checkpoint, then reacquire the same pinned commit into a new r300 source root and compute the inventory from inside that root with pipefail and an exact 569-file count assertion
 ```
+
+## Checkpoint CP-147 — native source reacquired; bundled config requires historical-source trace
+
+```yaml
+checkpoint: CP-147
+status: SOURCE_VALID_CONFIG_COMPATIBILITY_BLOCKED
+recorded_at: 2026-09-05T08:39:51+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-146
+source_commit: 42ccb84bc47018b888530479e1c0862a7fb8826c
+source_audit:
+  run_id: stage-e-native-sam-source-audit-r300
+  result: VALID
+  source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/sources/sam2-official-2b90b9f-r2
+  official_commit: 2b90b9f5ceec907a1c18123530e92e794ad901a4
+  official_tree: 64becbca23f880e0056449377496da248a74da43
+  tracked_files: 569
+  inventory_records: 569
+  dirty_paths: 0
+  source_files_inventory_sha256: 39cfad77cc8c66d15da392c7628d3ee7fdf755cbc888a4a02963d253ed3f3fce
+  elapsed_ms: 5689
+compatibility_audit:
+  run_id: stage-e-native-sam-dependency-audit-r301
+  result: EXPECTED_FAIL_CLOSED
+  exit_code: 76
+  checkpoint_sha256: 7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69
+  current_official_config_sha256: f932eac1c6241e910031b2f000a81cd9f8a8d4896e2277ab5ffb721f378b188d
+  bundled_config_sha256: 43e114f609a1af7efede061f5c186119d498acd31f118f300c07acf57d4a5eca
+  configs_byte_equal: false
+  semantic_difference:
+    - memory self-attention RoPE feat_sizes is [64, 64] in current official source and [32, 32] in the bundled model config
+    - memory cross-attention RoPE feat_sizes is [64, 64] in current official source and [32, 32] in the bundled model config
+  missing_required_packages: [hydra-core, iopath]
+  conclusion: do not install dependencies or attempt checkpoint loading against current official main; first find and freeze the official historical source whose committed Hiera Tiny config matches the bundled model config
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  source_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-source-audit-r300/tmp
+  dependency_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-dependency-audit-r301/tmp
+  tempfile_preflight: exact resolved match for both runs
+evidence:
+  r300: {preflight_sha256: 0b6b41a43a1aa14b952f2774c9947f65f35a0ce56f1ffde63d194ccb228ba763, acquire_log_sha256: c1261074d4c93aff98ebccd4e1e69c75c7fa8ac988faa9bf7816639e5285cf96, source_audit_sha256: 85085e9177e1bd0df9869aebe8dc24c83fc39ae9251f7fead0909696e9164cfa, source_inventory_pointer_sha256: fbe6cf9c95eb39c6e2fe9b84779e6f4eea3c2c3b3b083c673a306c25126299b3, exit_sha256: d1dfa2554e1302b53f11ab4064644332c2a548a76ce0c172413c88feab068ba1}
+  r301: {preflight_sha256: 3cbc3fa19c83039a94fb7f6929dafb1d4f744f141bf11a545924f400b4150574, audit_sha256: 5fccdd3124aa61476791c4ff537eae34854b60cad27f4c2611693492fca31842, stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, exit_sha256: 0738d811f643dbd34f14aa0380cf34f3c0c7ec6f36ba19a5b801de026e136179}
+tests:
+  ordinary_gate: not run; no repository implementation changed
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r300 valid source/evidence/scratch, r301 compatibility evidence/scratch, r295 invalid evidence, all CP-146 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r295, r300, and r301 scratch/source candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-147, then use a new read-only full-history audit root to identify the exact official commit where the two feat_sizes fields changed and freeze the immediately compatible predecessor before dependency installation
+```
