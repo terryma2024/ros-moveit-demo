@@ -18364,3 +18364,24 @@ phase_id_correction_after_launcher: r488 clean GREEN, Astra re-review, r489 buil
 retention: r487/r486 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
 boundaries: no source/test/config byte change in r488, no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-324 — r488 clean review-finding GREEN valid; scoped Astra re-review required
+
+```yaml
+checkpoint: CP-324
+status: VALID_CLEAN_GREEN_SCOPED_REREVIEW_PLANNED
+run_id: stage-e-generator-train-val-review-green-r488
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_CLEAN_GREEN, tests: 174, passed: 174, failed: 0, errors: 0, skips: 0, pytest_exit: 0, measured_outer_exit: 0, durable_receipt_exit: 0, launcher_tool_exit: 0, elapsed_seconds: 5.138459747, stderr_bytes: 0}
+inputs: generator SHA256 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59; converter SHA256 78db8b071efdd007c8fb0beef37db5be0efe44926de2e0be7bc877bfcf3dee9d; test SHA256 7e971871a0bd06f2d38539f3a384123b88c0552a1d98722365e6291d82ccb029; config SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c; full source patch SHA256 fa60dc2bda76a11aec42828dcd245ff91e3da6e960fe42eb4c591e97f63bfe2d
+evidence: durable run-evidence/stage-e-generator-train-val-review-green-r488 and scratch retained; JUnit SHA256 3ef79136d923e9b253748f8b89a3fc38e3cf96cedbd7e5a78cb4a917f181cddf; result SHA256 75ed0f78fbb617c1a2c4a1366b79539929e0b6b88869942cd02290e7dab8a262; independent readback SHA256 27d58df61ee807d02fdea9b40d59b8c341d675cc22b58a8634b8d7032999c5b5; inventory SHA256 a723e456a5a2a87bdfa836aae0d113ef379d9700df3574c6d6bf54c71a55f9c9
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-review-green-r488-report.md SHA256 4eadcbfebac124bff7dbb9e46f2422c1e13e0939788311aeef847d38c54d35a9
+parent_readback: complete85-line report/result/input hashes read; parser self-check and all four clean exits confirmed; r487 nonclean evidence retained unchanged
+next_experiment:
+  status: PLANNED_SCOPED_REREVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: verdict each original I1-I5/M1 as ADDRESSED or NOT_ADDRESSED against the exact tests-only and production fix diffs; inspect new breakage only in fix surface; verify CP320 I2 ruling, legacy behavior, exact inventory no-follow-before-read and all174 clean evidence
+  restrictions: read-only; no edit/test/import/Git/index/root allocation/sealed traversal; no build authorization until all Important findings addressed and owned source/config/test changes are committed/pushed/read back
+retention: r488/r487 and all earlier evidence retained, archived none; scratch trees deletion candidates only and nothing deleted
+boundaries: no build/benchmark/official generation/render/MuJoCo/OpenGL/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; mask0.80/mapping0.98 unchanged
+```
