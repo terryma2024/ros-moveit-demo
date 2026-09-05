@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-352 — r508 evidence-ownership GREEN valid; final launch-readiness review required
+
+```yaml
+checkpoint: CP-352
+status: VALID_GENERATION_RUNNER_EVIDENCE_OWNERSHIP_GREEN_FINAL_REVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-evidence-ownership-green-r508
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_EVIDENCE_OWNERSHIP_GREEN, authoritative_offline: true, invocations: 1, tests: 114, passed: 114, failed: 0, harness_errors: 0, retained_r504: 105/105, lifecycle_r506: 9/9, harness_exit: 0, launcher_exit: 0, tool_exit: 0, elapsed_seconds: 5.421287783, stderr_empty: true, forbidden_modules_before_import_after: [[],[],[]]}
+single_change_retry: r507 candidate driver SHA2569b0840c39b8ba06742948e1df433e59eb7e412918788c17034fb64a520e3b069 and shell SHA256f057282a2418d1fe0c76a20626acee27ef2a26dcda74959401887918e60620aa byte-identical; wrapper recursively normalizes Path details and launcher persists raw exit/elapsed before JSON parsing, with no test semantic change
+N1_green: stable driver-only inventory survives real post-lifecycle success/factory/generation stdout/stderr appends; both driver and launch inventories revalidate after logs close/fsync; nested member and manifest corruption reject before launch terminal/inventory
+N2_green: simulated pre-driver setup failure persists ordered stage, original exit7, finalizer exit0, terminal and valid inventory; forced finalizer failure persists original7/finalizer9, fsynced diagnostic identities, exclusive nonrecursive outer error chain that cannot overwrite
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-evidence-ownership-green-r508; result SHA256aa5b1a12836195e0893468d6437333c3801c20f3ad6053f1496ecbcbf951ddf8; command SHA25682337a70539afd63154e4a0ab74942d08b81aaeadbb8e05872fe095eaddf39a0; tempfile SHA256d6ee42838133b8414ff52213b804b5640efbbbceff6bc8e74ccb0123c0f026de; final23-file inventory SHA2560cf6fd1451e19619cefcbf4805af8bbc51acd8853f866fa7a681e6c2ccb388a9; readback SHA256c516b5e05ed78e6ea49c4a94ff38b7af6f786bc0f1c0c3c277af3e65492a4652
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-evidence-ownership-green-r508-report.md SHA2565bfbcb8983f5184143b7ac24c298131b91f31723939f6f1f8dcdb974badd9358
+parent_readback: complete73-line report, all23 inventory entries/checksum readback, result case records and official-source absence read; repo status only original untracked dirs
+qualification_limit: private offline launch/evidence behavior only; real setup/active overlay import/NVIDIA contexts/official generation remain unexecuted
+next_experiment:
+  status: PLANNED_FINAL_READ_ONLY_LAUNCH_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read every final driver/shell/harness line and r508 lifecycle evidence; verify N1/N2 without weakening I1/I3/M1, nested validation, stable ownership, stage/dual-exit/finalizer durability, no recursive failure and exact production launch wiring; approve/change-request one official-generation plan only
+  restrictions: read-only; no imports/tests/root allocation/edit/Git/index/ledger/sealed traversal or actual GL/generation
+future_if_approved: parent checkpoints a single unique official1500-member generation run under reviewed hashes and current authorized/observed HEAD; actual run must stop on any provenance/context/attempt/output failure and preserve partial evidence; exhaustive source readback remains separate
+retention: r508/r507/r506/r505 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-351 — r507 GREEN harness output invalid; fresh serialization-only retry required
 
 ```yaml
