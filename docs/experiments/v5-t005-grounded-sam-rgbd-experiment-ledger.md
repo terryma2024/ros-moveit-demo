@@ -11840,3 +11840,38 @@ retention:
   deletion_candidates: [r289-r291 scratch after readback; do not delete without explicit user authorization]
 next_action: commit and push this PLANNED checkpoint, then create and execute the RED contract before any diagnostic implementation
 ```
+
+## Checkpoint CP-141 — SAM mask-pipeline diagnostic contract is RED
+
+```yaml
+checkpoint: CP-141
+status: RED_VALID
+recorded_at: 2026-09-05T08:18:39+08:00
+stage: E_SAM_MASK_PIPELINE_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-SAM-MASK-PIPELINE-DIAGNOSTIC-R1
+prior_checkpoint: CP-140
+source_commit: 0eaec1f82c4068ee2f9d923e27a461e12de243c6
+run_id: stage-e-sam-mask-pipeline-red-r289
+result: {exit_code: 1, expected: RED, cause: sam_mask_pipeline_diagnostic_r1.py absent, output_root_created: false}
+test_break:
+  - proposal and variant axes are swapped
+  - selected mask does not use argmax of the same proposal's quality row
+  - replay selected mask is incorrectly declared equal to stored RLE
+fixture: hand-derived two-proposal by three-variant boolean masks and float32 quality rows
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-sam-mask-pipeline-red-r289/tmp
+  tempfile_preflight: exact resolved match
+  test_script_sha256: 002afbc4782ddb667f5765e202ed5d63832fa622d8a2692e733e583cb03de287
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-sam-mask-pipeline-red-r289
+  preflight_sha256: d99942e9549146203f129414219fe3c63c098ae6e415a2c37dd972d267087ae2
+  run_sha256: eb1c97c75bcc3090de989e3f099d7de70bdd61e0e1655fd12fd98361f498fcb5
+  exit_sha256: 4b721d21a55867b799e2f85f95b6de13ccf2d24c113c7a0c1ee0087250d3dadd
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused}
+retention:
+  retained_runs: [r289 RED evidence and scratch, all CP-140 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r289 scratch; do not delete without explicit user authorization]
+next_action: implement the minimal selection/diagnosis core and diagnostic evidence driver, then run unchanged contract in fresh r290 scratch
+```
