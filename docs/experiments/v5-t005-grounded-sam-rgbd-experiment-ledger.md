@@ -12546,3 +12546,48 @@ retention:
   deletion_candidates: [r307-r308 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-153, implement only the temporary native output normalization and diagnostic selection/RLE core, then run the unchanged direct contract in fresh r309 scratch
 ```
+
+## Checkpoint CP-154 — native SAM output contract is GREEN
+
+```yaml
+checkpoint: CP-154
+status: GREEN_VALID_DIAGNOSTIC_DRIVER_PLANNED
+recorded_at: 2026-09-05T08:53:34+08:00
+stage: E_NATIVE_SAM_RUNTIME_AB
+experiment_id: EXP-079-STAGE-E-NATIVE-SAM-RUNTIME-AB-R1
+prior_checkpoint: CP-153
+source_commit: 6ce8ba1d00c54a68345a47dc511e7c7ab69d137d
+run_id: stage-e-native-sam-ab-green-r309
+result: {exit_code: 0, tests: 3, elapsed_ms: 128}
+implementation:
+  driver: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/native_sam_runtime_ab_r1.py
+  driver_sha256: d3f47df769e91188624519f06f300b0faff5678fea4511da70a1b36429274d9f
+  test_script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/test_native_sam_runtime_ab_r1.py
+  test_script_sha256: 8a46b649ee41bb5127b54a3207946bee6e5a8d31e9d8f3552134d27b1b27f987
+verified_contract:
+  - exact native three-mask CxHxW axis and float32 quality vector
+  - same-index quality argmax selection and independent truth-IoU oracle
+  - exact selected/oracle COCO RLE roundtrip
+  - fail-closed HxWxC axis, nonfinite quality, and wrong quality dtype handling
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  package_physical_path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-val-truth-rebind-r279/build/so101_demo_py/so101_demo
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-native-sam-ab-green-r309/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-native-sam-ab-green-r309
+  preflight_sha256: e4691ca792432704785d28bfae459de6c190960d459e2650d0f54c6a56808d23
+  test_log_sha256: 1fc2967041ab779f911b9a5a11ae383183e4ed5f94ae3dbb05fdfb331789659f
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  scripts_pointer_sha256: 382f94912f56068221086e7407523ff3b6df7167ae511265df9603c6e50f81c5
+  exit_sha256: f8d926a6fd23ec454441a0d311279e049080725ce2c1a1f3cd1350f53277da85
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r309 GREEN evidence/scratch, r308 RED, all CP-153 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r307-r309 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-154, extend only the temporary driver to the preregistered immutable input/output/provenance contract, rerun the unchanged GREEN test, then execute the single 10-image native A/B on CUDA
+```
