@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-255
+latest_checkpoint: CP-256
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r426 epoch4 primaryF1 0.988,3mask failures all ambiguous two-cup frames; r427 independent own-raw/production readback and residual details, no new inference
+next_action: r427 independently reproduced all epoch4 results; r428 fixed-three-frame retained-mask visualization, no inference or gate changes
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16355,4 +16355,41 @@ next_run:
 next_after_readback: audit residual cause and original safety-gate scope, preserve all-scenario metrics and all three failures; no automatic SAM retraining or threshold change
 retention: all historical data/models/raw/evidence retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged; no deployment claim
+```
+
+## Checkpoint CP-256 — Epoch4 fully reproduced; all residuals selected for visual audit
+
+```yaml
+checkpoint: CP-256
+status: VALID_EPOCH4_READBACK_RETAINED_VISUAL_AUDIT_PLANNED
+run_id: stage-e-r5-epoch4-sam-readback-r427
+source_commit: fd0b64ffe3816ac1fd173911193f0561d8f54d62
+gitee_sha_readback: fd0b64ffe3816ac1fd173911193f0561d8f54d62
+result: {exit_code: 0, elapsed_seconds: 7.93, files: 3814, frames: 300, raw_masks: 2312, production_masks: 300, new_model_forwards: 0}
+report_sha256: 09e0bcf9c3c40bb36955eef3e89c25ada730ccaffd4a96baa431ae52d442ac1f
+proof: own raw argmax/quality/size decisions and all2312RLEs, production multimasks/qualities/filtering/selector and300RLEs, own mapping0.98 and every reported metric reproduced from readonly artifacts
+primary_metrics: {tp: 247, fp: 3, fn: 3, f1: 0.988}
+all_metrics: {tp: 297, fp: 3, fn: 3, f1: 0.99}
+residuals:
+  - {index: 104, seed: 420000104, candidate_id: grounded-sam-000, truth_index: 1, mask_iou: 0.6498993963782697, pixels: 1300, truth_pixels: 1980, all_multimask_ious: [0.6498993963782697, 0.6476190476190476, 0.6481203007518797]}
+  - {index: 236, seed: 420000236, candidate_id: grounded-sam-000, truth_index: 1, mask_iou: 0.7698800533096402, pixels: 1744, truth_pixels: 2240, all_multimask_ious: [0.7698800533096402, 0.8103907637655418, 0.7846358792184724]}
+  - {index: 242, seed: 420000242, candidate_id: grounded-sam-001, truth_index: 1, mask_iou: 0.7721698113207547, pixels: 1695, truth_pixels: 2062, all_multimask_ious: [0.7721698113207547, 0.7802923149457803, 0.7784090909090909]}
+decisions: all three TARGET_AMBIGUOUS, no pose published by this offline replay; no runtime mask selection by truth allowed
+inferred: solely replacing argmax multimask choice cannot fix104/242 because all alternatives remain sub0.80; inspect actual RGB and masks before another model intervention
+contract_readback: original design section12 requires cup mask IoU>=0.80 and0/2cup no-pose separately; ambiguity is not grounds to rewrite mask failures as passes
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-epoch4-sam-readback-r427/tmp; actual tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  status: PLANNED
+  run_id: stage-e-r5-epoch4-residual-visual-r428
+  selection: all three r427 failures104/236/242, fixed before plotting; no passing sample cherry-pick
+  action: reuse retained scientific panel renderer to plot original RGB, exact r5 categorical visible RLE, actual production masks aligned by truth association and FN/FP/overlap pixels; no model or simulator rendering
+  output_root: durable visualizations/r5-epoch4-residuals-r1; must not exist
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-epoch4-residual-visual-r428 visualize_r5_epoch4_residuals_r428.py NEXT_SYNCED_HEAD
+  readback: verify manifest and inspect all three generated panels; record observed versus inferred boundaries before recommending correction
+retention: all previous evidence retained; no archival/deletion; scratch deletion candidates only
+boundaries: no more SAM training or threshold changes during this audit; sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
