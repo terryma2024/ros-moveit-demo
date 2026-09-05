@@ -18663,3 +18663,30 @@ next_experiment:
 retention: r495 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no explicit benchmark/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; ordinary tests may legally import MuJoCo without rendering; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-336 — r496 tests GREEN but private receipt invalid; fresh clean receipt required
+
+```yaml
+checkpoint: CP-336
+status: GREEN_TEST_PROCESS_INVALID_RECEIPT_FRESH_RUN_PLANNED
+run_id: linux-test-stage-e-generator-order-oracle-r496-ordinary
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_RECEIPT_AFTER_GREEN_TEST_PROCESS
+semantic_result: {tests: 1472, passed: 1472, failures: 0, errors: 0, skipped: 0, actual_benchmark_classname_cases: 0, colcon_test_exit: 0, test_result_exit: 0, pytest_seconds: 24.02, colcon_elapsed_seconds: 25.64}
+nonclean_receipt: {reported_benchmark_cases: 1, receipt_exit: 1, tool_exit: 1, outer_exit: 1, total_elapsed_seconds: 27.77950498}
+first_invalid_boundary: private post-test parser searched testcase name as well as classname and falsely classified ordinary node so101_demo_py.test.test_test_suite_partition::test_low_frequency_benchmark_tests_are_outside_default_package_suite; immutable copied JUnit independently has zero .benchmark_test. classnames
+source_environment: package code exact 07dcd29a, frozen r495 overlay/all7prefixes, checkout imports, exact locked Python, fresh r496 NVMe tempfile/basetemp/cache and no-drift all valid
+evidence: durable run-evidence/linux-test-stage-e-generator-order-oracle-r496-ordinary retained; runner SHA256 e1557da2f57d9a1b455ba300c26c6caf0a8865ea6a302e87afe8bd25b8c03554; JUnit SHA256 2795e1da53950bac1ef65c6c8542098087e84687a21bae8cc80c6df10961c29c; result SHA256 3a2af0cd86aaa016e49f53bce3e41438ae6fa06a9ac4ae664b10daeb4204f4b9; inventory SHA256 f43fecd20028ef5e2953dd45eea50db44f95dd9a92dd19daea10cbe28fdfbef0
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-oracle-ordinary-r496-report.md SHA256 3273dac74c9fec02bf81091f386f35c1d311b0a7c4d65e838774e211d566fdbc
+parent_readback: complete105-line report, full count/exits/timing/provenance, exact false-positive JUnit node and independent classname scan read; no source defect or source change
+next_experiment:
+  status: PLANNED_FRESH_CLEAN_RECEIPT
+  run_id: linux-test-stage-e-generator-order-oracle-r497-ordinary-clean
+  executor: /root/generator_build, gpt-5.6-sol high
+  source_command: exact r496 source, r495 overlay and single ordinary colcon command; fresh unique NVMe scratch/basetemp/cache and evidence root
+  sole_runner_change: private immutable-runner parser classifies benchmark only from testcase classname containing .benchmark_test. and ordinary only from classname containing .test.; never inspect test name; require exactly1472 ordinary/0 benchmark,1472 pass, zero failure/error/skip and colcon/test-result/receipt/tool exits all0
+  stop_after: durable JUnit/result/log/source/provenance readback and parent checkpoint; no benchmark yet
+phase_plan_correction: r497 clean ordinary receipt, r498 one explicit benchmark, then generation-runner RED/GREEN/review and official train/val-only generation/conversion/freeze with unique IDs
+retention: r496 and all earlier evidence retained unchanged, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no repo source edit/build/benchmark/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; ordinary may legally import MuJoCo; Microduck paused; mask0.80/mapping0.98 unchanged
+```
