@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-261
+latest_checkpoint: CP-262
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 2847084cc156a89d8b1b07c651ef796ea84c7b47
+source_parent: 9368e549a24b398269cd7ffc76ac16dd352f7cd5
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r432 INVALID bootstrap enum-membership check; r433 explicit integer type check, unchanged all1500 active-task geometry census before generator repair
+next_action: r433 complete1500-frame audit confirms117 intersecting task-object scenes; r434 RED regression at generator nonpenetration boundary, no new generation/training or gate release
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16580,4 +16580,64 @@ next_run:
   command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-active-task-geometry-r433 audit_r5_active_task_geometry_r433.py NEXT_SYNCED_HEAD
 retention: all evidence including invalid runs retained; archived none; scratch deletion candidates only
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/gate changes
+```
+
+## Checkpoint CP-262 — Complete physical-data audit; generator RED regression next
+
+```yaml
+checkpoint: CP-262
+status: VALID_FULL_TASK_GEOMETRY_CENSUS_GENERATOR_RED_PLANNED
+run_id: stage-e-r5-active-task-geometry-r433
+source_commit: 9368e549a24b398269cd7ffc76ac16dd352f7cd5
+gitee_sha_readback: 9368e549a24b398269cd7ffc76ac16dd352f7cd5
+result: {exit_code: 0, elapsed_seconds: 4.11, frames: 1500, prior_cup_pairs_reproduced: 250, model_forwards: 0, renders: 0, physics_steps: 0}
+report_sha256: db3ea65032ec312d9656665befec4211702cbd33d1b8bf9da1742eaa80d79d7c
+train:
+  total: 1200
+  penetrating_frames: 85
+  primary_penetrating_frames: 71
+  by_scenario: {partially_occluded_cup: 29, two_cups: 29, small_far_cup: 14, one_cup_distractors: 13}
+  by_body_pair: {plastic_cup_orange_bottle: 66, plastic_cup_plastic_cup_b: 19}
+val:
+  total: 300
+  penetrating_frames: 32
+  primary_penetrating_frames: 30
+  by_scenario: {two_cups: 11, partially_occluded_cup: 13, one_cup_distractors: 6, small_far_cup: 2}
+  by_body_pair: {plastic_cup_plastic_cup_b: 10, plastic_cup_orange_bottle: 22}
+readback: all1500 exact original RGB, categorical capture and r5 RLE hashes verified; original state restored without stepping/rendering; all250 prior cup-pair minima reproduced exactly; immutable report/selection hashes and counts independently recomputed
+physical_scope: active task-object visual box/cylinder solids against each other and table/neutral-block/base-pedestal; no robot mesh certification claimed
+observed: all recorded penetration is cup-cup or cup-bottle; no penetration found against scoped static task solids at1e-9m numerical guard
+qualification: physical dataset correctness now requires remediation before further model intervention; corrected categorical RLE faithfully represents the rendered intersecting scenes, so relabeling alone cannot repair the RGB geometry
+metrics: all historical model scores and CP-161/CP-164 diagnostics unchanged; primary excludes only small_far_cup; no post-hoc removal of these117 frames or conversion of mask failures into passes
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-r5-proposal-receipts-r418/install
+scratch: durable scratch/stage-e-r5-active-task-geometry-r433/tmp; exact tempfile passed
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+bounded_design_under_standing_authorization:
+  owner: dataset renderer/generator, not SAM, evaluation scoring or runtime target selector
+  approach: opt-in versioned nonpenetration policy; before RGB/segmentation rendering validate measured active task visual primitives at actual model state; deterministic bounded retries reject intersecting states; preserve immutable geometry receipt alongside categorical visible truth
+  legacy: old config and existing frozen datasets remain reproducible and unmodified; new policy must be explicit in a new version's config/manifest, never silently retrofit old r3/r5 evidence
+  fail_closed: invalid body/geom/state, unsupported primitive, nonfinite distance, missing required receipt or exhausted attempts cannot become an accepted sample
+  contact_semantics: preserve actual signed distances and numeric ambiguity separately; 1e-9m numerical guard is not a grasp eligibility or qualification threshold
+  alternatives_not_selected: moving objects after rendering would break RGB/truth identity; dropping current failed samples would alter frozen metrics; training SAM on intersection artifacts would not repair physical data validity
+  tests: real primitive geometry fixtures plus retained three-failure positions; disjoint/contact/overlap and invalid state; renderer gate before render, deterministic retry/exhaustion, receipt binding; RED before production change
+next_run:
+  experiment_id: EXP-079-STAGE-E-GENERATOR-NONPENETRATION-RED-R1
+  status: PLANNED
+  run_id: stage-e-generator-nonpenetration-red-r434
+  prior_experiment: stage-e-r5-active-task-geometry-r433
+  lifecycle: FULL_RESTART isolated offline test process
+  single_variable: new failing regression tests for absent generator nonpenetration boundary; do not implement production fix before observed RED
+  source_parent: NEXT_SYNCED_HEAD from CP-262 commit; record exact test diff SHA before pytest
+  test_scope: directional regression only first; ordinary and explicit benchmark gates follow GREEN/rebuild in later unique runs
+  scratch: durable scratch/stage-e-generator-nonpenetration-red-r434/tmp; must not exist, export TMPDIR/TMP/TEMP and exact locked Python preflight
+  evidence: source/overlay/Python/command/full stdout/stderr/JUnit/exit/elapsed and assertion boundary; no costly benchmark solely for scratch optimization
+  next_command: inspect current renderer test seams and create the minimal RED test in src/so101_demo_py/test/ with a recorded unique NVMe test runner; no subagent
+next_after_green: freeze full new-version train/val generation protocol, quotas/ranges/independent namespace/geometry truth/explicit partial truth and split exclusions before any generation; immutable old roots remain untouched
+remaining_runtime_work: measured-depth/reachability/minimum-projection eligibility gate still unimplemented; no dataset scenario labels at runtime, unknown/out-of-workspace targets must not publish pose
+working_tree: only this ledger checkpoint owned; original untracked build/install/log directories preserved
+owned_processes: none after r433; no model/training jobs started; original tmux sessions and unrelated Python750283 preserved
+retention: r428/r430/r431/r433 retained valid audits, r429/r432 retained INVALID bootstrap evidence, all earlier data/models/raw preserved; archived none; scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no SAM training; mask0.80/mapping0.98 unchanged
 ```
