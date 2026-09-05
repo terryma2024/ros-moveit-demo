@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-248
+latest_checkpoint: CP-249
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: e430ccaa7672919151413fb934982ebd90656844
 active_experiment: EXP-079-STAGE-E-R5-VAL-RAW-WITH-PROPOSALS-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r419 ordinary1313passed and r420 explicit583passed2skipped; commit/push r421 frozen val-only raw protocol then launch once, retain all proposals for later frozen-SAM comparison
+next_action: r421 raw complete and frozen; r422 independent full3220file readback without inference, then production-mask comparison protocol
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16082,4 +16082,44 @@ next_experiment:
 next_after_raw: independent full readback using retained records, then preregister actual production-mask replay comparison of frozen original and retained epoch4 SAM; reuse complete DINO receipts, no DINO rerun
 retention: all historical data/raw/model/evidence retained; archived none; scratch deletion candidates only; no deletion
 boundaries: no sealed-test/COCO100/PickPlace/Mac access; Microduck paused; no new SAM training; mask IoU0.80 and mapping0.98 unchanged; raw capture is not final qualification
+```
+
+## Checkpoint CP-249 — First r5 raw capture complete with every DINO proposal retained
+
+```yaml
+checkpoint: CP-249
+status: VALID_FROZEN_RAW_INDEPENDENT_READBACK_PLANNED
+experiment_id: EXP-079-STAGE-E-R5-VAL-RAW-WITH-PROPOSALS-R1
+run_id: stage-e-r5-val-raw-r421
+source_commit: 2e0ae8bd4730fb34d156a5cf8d26c18a6dca723a
+gitee_sha_readback: 2e0ae8bd4730fb34d156a5cf8d26c18a6dca723a
+result: {exit_code: 0, elapsed_seconds: 118.57, frames: 300, primary_frames: 250, dino_forwards: 300, sam_forwards: 300, proposals: 2612, accepted_raw_masks: 2318, files: 3220}
+output_root: durable val-remediation/grounded-sam-cup-r5-epoch8-raw-r1
+report_sha256: fa3e4d538c9f48d53bd7155d6f7ba405a1f0750466c7257188ce398c118a18f1
+raw_manifest_sha256: c6fed8be78034371c20b5bc78c16722edb9165acb1e020336e696bd560d45055
+receipt_manifest_sha256: d55e3bd24366283629a81764033ff3afa06c26a2e2a9604636485584dacc9ff0
+output_inventory_sha256: b559445b396b89b266c350661619f0ee9b65f092864ea1123deead023d93f9cf
+members_sha256: 084130ad2626bda034ccdfb262a55a3d0a6c836d6f62951b46c121416f711e68
+retention_proof: complete proposal receipts before each SAM forward, exact raw survivors cross-matched, all3220files path/size/SHA verified after readonly freeze;294 proposals omitted by raw SAM filters still retained as proposals
+runtime: NVIDIA GeForce RTX5080, locked FP32 CUDA, exact dependency versions, no CPU fallback or inference errors; peak observed process memory2934MiB; original SAM unchanged/stateless
+warnings: retained original sam2_video-to-sam2 configuration warning and readonly NumPy-to-torch warning; no runtime failure; no configuration change made mid-run
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-val-raw-r421/tmp; exact tempfile preflight passed
+evidence: durable run-evidence/stage-e-r5-val-raw-r421 plus stage-e-r5-val-raw-r421-launch.log; launch/script copies, source/command/preflight, selection, logs/exit, inventory/members/report retained
+owned_processes: tmux so101-exp079-r5-raw-r421 and Python3741641 finished naturally; GPU compute list empty; existing tmux sessions preserved
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+qualification: NOT_YET_PRODUCTION_EVALUATED; raw completeness does not prove mask0.80, production mapping0.98 or selector safety
+next_experiment:
+  experiment_id: EXP-079-STAGE-E-R5-VAL-RAW-INDEPENDENT-READBACK-R1
+  status: PLANNED
+  run_id: stage-e-r5-val-raw-readback-r422
+  single_variable: NONE, independent process reads retained data only
+  checks: all3220readonlyregularfiles match inventory, both manifest hashes, real raw and complete-proposal loaders on all300, exact source/image/model binding, all300/primary250 denominators; count raw-omitted proposals including above already-frozen DINO0.40/0.40 without changing thresholds
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-val-raw-readback-r422 audit_r5_val_raw_r422.py NEXT_SYNCED_HEAD
+  model_forwards: 0
+next_after_readback: freeze actual production-mask replay comparison of original and retained epoch4 SAM using complete proposals; do not repeat DINO or infer deployability from raw counts
+retention: every previous run retained; archived none; scratch deletion candidates only, no deletion
+boundaries: Microduck paused; no new SAM training; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged
 ```
