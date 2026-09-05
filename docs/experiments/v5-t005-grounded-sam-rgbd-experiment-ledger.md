@@ -18952,3 +18952,30 @@ review_after: Astra must read every corrected file/evidence and approve actual l
 retention: r503/r502/r501/r500 and all prior evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-347 — r504 corrected private-runner GREEN valid; launch-readiness re-review required
+
+```yaml
+checkpoint: CP-347
+status: VALID_GENERATION_RUNNER_REVIEW_GREEN_REREVIEW_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r504
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_GENERATION_RUNNER_REVIEW_GREEN, authoritative_offline: true, invocations: 1, tests: 105, passed: 105, failed: 0, harness_errors: 0, retained_r502_cases: 80, new_review_cases: 25, test_exit: 0, outer_exit: 0, elapsed_seconds: 2.569123542, stderr_empty: true, forbidden_modules_before_import_after: [[],[],[]]}
+private_files: {driver_lines: 1097, driver_sha256: c0ab62a050ac2891f3cc7cc39af7899fbd674544006db10975b7025d2b493427, shell_lines: 250, shell_sha256: 2814ce20c033679870d448ad92a88530cb2ebd9a005672f16001e4355889ef78, harness_lines: 732, harness_sha256: 2c1cb6dff09f4cf9c19fa5a1ebeb6d0d42678e90488c0c78c74a58610a5a3edf}
+I1_green: no hardcoded execution HEAD; typed authorized and independently git-observed heads must be identical valid SHA and are persisted separately; current authorized/observed f4bf1aee control passes with pinned code07dcd29a, mismatch/missing/malformed controls reject
+I2_green: exclusive fsynced/readback launch-command and complete preconstruction/private/runtime/environment/45-file-closure/r470/contract receipt before factory; handled terminal/failure/stdout/stderr/elapsed/exit plus driver-final and launch-final non-self-referential inventories; synthetic factory failure6/9 files, generation failure8/11 with both GPU receipts, success7/10, all inventories verified and partials preserved
+I3_green: mandatory categorical readback and final collision helpers; categorical corruption/persist/readback/nonzero samples and late post-two-receipt collision reject with zero generation/one close; four real source-copy removal/reordering mutations are killed
+M1_green: every post-factory action cleanup-protected; audit failures at constructed/RGB/closed all close exactly once and propagate appropriately
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-green-r504; result SHA256795b33fe1afb0b2f31ea1a568b8c8d6054d7c70ec318c6f2938e26a1bc8bbfd1; result-readback SHA256c7411d3cc59126e01ce0d69653214bfd7b6f984f05ad001d2c7c06467ff89213; final25-file inventory SHA25627cb3bd7e9c68307c6856f8e404cbbcdc7eaedc8d6960f96786da4397d7dba02; inventory-readback SHA25608a6af3f79b236aff0db2c371384b271e319811639b56afdb7370c1ca0f626c3
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-green-r504-report.md SHA256629aaa16fa3b15db6c0c97ab914ae9c841c3a0671681adfbd49d9fe0ff639265
+parent_readback: complete72-line report, result new-case records and all25 inventory entries read/verified; private hashes/status/official-source absence rechecked; no source/official action
+qualification_limit: offline proof only; production shell --execute, active overlay import, real NVIDIA contexts and official generation remain unexecuted
+next_experiment:
+  status: PLANNED_READ_ONLY_LAUNCH_READINESS_REREVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: read every corrected driver/shell/harness line and complete r504 evidence; verify exact I1-I3/M1 closure, persistence schema/ordering/failure behavior, mutation sensitivity, shell-to-driver identity binding and whether one separately checkpointed official GPU generation can safely be authorized
+  restrictions: read-only; no import/test/root allocation/edit/Git/index/ledger/sealed traversal and no actual GL/generation
+future_if_approved: parent plans one unique official 1500-member train/val generation run with current authorized execution HEAD, reviewed shell/driver hashes, exact NVMe scratch and retained partial-failure semantics; no conversion/readback phase is conflated
+retention: r504/r503/r502/r501/r500 and all earlier evidence retained, archived none; scratch/low-rate synthetic trees deletion candidates only and nothing deleted
+boundaries: official roots absent; no repo edit/build/package test/benchmark rerun/real GL/render/generation/conversion/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
+```
