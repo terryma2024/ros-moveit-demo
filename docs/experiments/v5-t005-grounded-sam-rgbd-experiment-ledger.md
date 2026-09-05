@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-372 — r520 stdin launcher provenance invalid; explicit-file r521 retry required
+
+```yaml
+checkpoint: CP-372
+status: INVALID_R520_LAUNCHER_SETUP_EXPLICIT_FILE_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r520
+executor: /root/generator_build, gpt-5.6-sol high
+classification: INVALID_LAUNCHER_SETUP
+result: {authoritative_red: false, launcher_invocations: 1, harness_invocations: 0, launcher_tool_exit: 1, case_result: unavailable}
+cause: outer launcher executed expanded inner script through `bash -s`; inner `$0` resolved to literal `bash`, so audited input-copy `cp ... "$0"` failed before command/raw-exit/result stages
+frozen_inputs: driver SHA2567739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a; shell SHA2569bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a; r520 one-oracle wrapper SHA256e43b351f95938e65b8eecf94b355dfa491dccdeb5b16af59f3a4da3dc00904bb; no candidate behavior ran
+partial_evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-red-r520 contains exactly five input/tempfile files; tempfile preflight valid; no command/raw exit/elapsed/result/inventory/readback exists and none backfilled; partial root retained
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-red-r520-report.md SHA256b3042fbb87644b421444601658f3a58d22260b0312e8ca524d9eaa9ad49d060d
+parent_readback: complete report/five files/tempfile/frozen hashes/root absence/status read; official roots absent; r520 never reused
+next_experiment:
+  status: GO_FRESH_EXPLICIT_LAUNCHER_FILE_ONLY_RED_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r521
+  executor: /root/generator_build, gpt-5.6-sol high
+  sole_launcher_fix: materialize one real immutable r521 launcher file, execute it by absolute path, resolve/readback/hash that exact path before allocation and pass/copy the explicit audited path; never use stdin-shell $0 as provenance
+  preserved: exact r520 one-oracle wrapper and40-case semantics/split, candidate and six mutant hashes; mechanical r521 paths/current HEAD only
+  required: fresh roots/locked Python/NVMe preflight; one launcher and one harness invocation;16 defects/18 controls/6 kills, zero harness error/unexpected, target reachability/forbidden empty; expected harness exit1 with parse/launcher/tool0; raw exit/elapsed/fsync/inventory/readback/report; stop before candidate fix
+  restrictions: no candidate/harness semantic edit, tracked repo/Git/index/ledger, real setup/project/GL/GPU/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r520/r519 and all prior evidence retained, archived none; nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-371 — r519 reaches targets but misses reentry diagnostic; one-oracle RED retry required
 
 ```yaml
