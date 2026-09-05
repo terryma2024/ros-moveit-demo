@@ -13018,3 +13018,45 @@ retention:
   deletion_candidates: [r317 scratch and prior candidates; do not delete without explicit user authorization]
 next_action: commit and ordinary-push CP-162, implement only normalization and single-mask diagnosis/RLE helpers in the new temporary driver, then run the unchanged test in fresh r318 scratch
 ```
+
+## Checkpoint CP-163 — Transformers single-mask contract is GREEN
+
+```yaml
+checkpoint: CP-163
+status: GREEN_VALID_DIAGNOSTIC_DRIVER_PLANNED
+recorded_at: 2026-09-05T09:15:43+08:00
+stage: E_TRANSFORMERS_SAM_SINGLE_MASK_DIAGNOSTIC
+experiment_id: EXP-079-STAGE-E-TRANSFORMERS-SAM-SINGLE-MASK-R1
+prior_checkpoint: CP-162
+source_commit: 66d541d8e048cda2b030d00521ae544893adff71
+run_id: stage-e-transformers-single-mask-green-r318
+result: {exit_code: 0, tests: 2, elapsed_ms: 134}
+implementation:
+  driver: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/transformers_sam_single_mask_r1.py
+  driver_sha256: a9dcfbfb6ff718842ec1559a605fcd927e20a2ecaaa2c0c670c0eb59b8dcbcd0
+  unchanged_test_sha256: 77053d1f6909a960ea2df7f9feefa1570bccfce957f3dad17f8a868ad825477c
+verified_contract:
+  - exactly one raw single-mask logit plane, one finite float32 quality, and one HxW postprocessed mask
+  - exact mask/quality binding, truth IoU, mask SHA, and COCO RLE roundtrip
+  - fail-closed accidental three-variant multimask output
+provenance:
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-transformers-single-mask-green-r318/tmp
+  tempfile_preflight: exact resolved match
+evidence:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-transformers-single-mask-green-r318
+  preflight_sha256: 4916161464519c815f97850d03feeff0831053234640c19f004baaeb64989cd9
+  test_log_sha256: baee8c38d469f09e873d32e586b3da37d0ce12abf76aa9e2e24cd55ffa79c1e6
+  stderr_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  scripts_pointer_sha256: 967335301f6787c3b48560ebb7fee38658ffc2ee0ee35fc56513ec33584ccb47
+  exit_sha256: d947ce919d00cf0217a4f27d0a85961e93e8135e909bad24537e56318158c5e9
+tests:
+  ordinary_gate: not run; temporary diagnostic only
+  explicit_benchmark_gate: not run
+sealed_boundaries: {synthetic_test: untouched, coco100: untouched, pickplace: untouched, mac: untouched, microduck: paused, mask_iou_gate: '0.80 unchanged'}
+retention:
+  retained_runs: [r318 GREEN evidence/scratch, r317 RED, all CP-162 retained evidence]
+  archived_runs: []
+  deletion_candidates: [r317-r318 scratch and prior candidates; do not delete without explicit user authorization]
+next_action: commit and ordinary-push CP-163, extend only this temporary driver to the frozen 10-image/two-box immutable evidence contract, rerun unchanged GREEN, then execute r319 once
+```
