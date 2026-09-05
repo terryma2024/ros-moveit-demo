@@ -17778,3 +17778,28 @@ next_experiment:
 retention: all old runner versions and r471-r473 evidence retained, archived none; nothing deleted
 boundaries: no production-source change, GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; prompt/gates unchanged
 ```
+
+## Checkpoint CP-303 — r474 behavioral RED invalid; fresh harness rerun planned
+
+```yaml
+checkpoint: CP-303
+status: INVALID_HARNESS_ERROR_FRESH_RED_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r474
+executor: /root/generator_build, gpt-5.6-sol high
+command_exit: 1
+result: {total: 17, defects_reproduced: 15, valid_controls: 1, harness_errors: 1, classification: HARNESS_ERROR}
+valid_observations: truthful resolved-Python mismatch, wrong preflight imports/prefixes, four truth/categorical gaps, eight malformed-PNG acceptances, unexpected nested empty directory; valid frozen-writer PNG control accepted
+invalid_reason: manifest-scalar fixture omitted event-trace.jsonl, causing FileNotFoundError after the intended check; outer zsh used readonly variable name status and failed to create exit.log
+disposition: no scientific RED claim; r474 is immutable invalid evidence and must never be reused or rerun
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-behavioral-red-r474 and scratch sibling; result/stdout/stderr/elapsed/command/preflight/input hashes retained despite missing exit.log
+python_scratch: exact locked venv launch, resolved /usr/bin/python3.12, all TMP vars at unique registered NVMe scratch/tmp, tempfile preflight PASS
+source_state: current r470 driver75a3f0bc and shell198e43ca unchanged; package scope clean; r470 run root absent
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r475
+  executor: same Sol high
+  single_change: repair fixture completeness and outer exit variable only, retain same behavioral expectations; fresh evidence and scratch paths with exact tempfile preflight
+  stop_after: valid RED report and parent checkpoint before runner fix
+retention: r474 and all earlier evidence retained, archived none; r474 scratch deletion candidate only, no deletion
+boundaries: no runner/source change yet, no r470/GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
