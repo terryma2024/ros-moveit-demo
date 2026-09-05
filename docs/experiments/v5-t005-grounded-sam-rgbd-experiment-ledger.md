@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-282
+latest_checkpoint: CP-286
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r454 GREEN108passed; freeze RGBA correction and scoped Astra fix-round2 review, then fresh accepted-source build; r451 held
+next_action: r457 explicit benchmark583passed2skipped; freeze package gate checkpoint, then design actual generator nonpenetration acceptance before new immutable train/val dataset protocol
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17204,4 +17204,133 @@ next_experiment:
   after: accepted-source fresh seven-package build then ordinary and explicit benchmark, before actual generator acceptance/new dataset protocol
 retention: all evidence retained; archived none; r452/r453/r454 scratch deletion candidates only, nothing deleted
 boundaries: r451 held; sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new data/model/inference
+```
+
+## Checkpoint CP-283 — Scoped fix approved; fresh build authorized
+
+```yaml
+checkpoint: CP-283
+status: SCOPED_REVIEW_APPROVED_FRESH_BUILD_PLANNED
+source_commit: 95d3af5de9317ed10f1a27c77c0849fa100be665
+remote: ordinary Gitee push and ls-remote exact SHA readback completed
+reviewer: /root/generator_review, gpt-6-astra medium
+report: durable coordination/generator-r443-r1/fix-2-review-report.md
+fix_round2: RGBA precedence Important addressed, descendant coverage observation addressed; no new defects; spec APPROVED and quality APPROVED
+review_evidence: immutable efbf872d..95d3af5d package plus retained r453RED/r454GREEN; no duplicate executions
+next_experiment:
+  status: PLANNED
+  run_id: linux-build-stage-e-generator-alpha-fix-r455
+  executor: /root/generator_build, gpt-5.6-sol high
+  lifecycle: fresh_build_no_stack
+  source: exact95d3af5d source; record actual HEAD and fail closed on source drift
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  build_root: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-alpha-fix-r455
+  install_overlay: build_root/install, seven-package symlink install with all prefixes and exact helper source readback
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  scratch: durable scratch/linux-build-stage-e-generator-alpha-fix-r455/tmp; TMPDIR/TMP/TEMP and actual tempfile equality preflight
+  lodepng: complete clean r26 source cache HEADed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, strictfsck; FETCHCONTENT_SOURCE_DIR_LODEPNG and FULLY_DISCONNECTED, no fetch
+  evidence: durable run-evidence/linux-build-stage-e-generator-alpha-fix-r455; command/runner/source hashes/log/exit/time/provenance
+  stop_after: successful build and prefix/helper readback, parent checkpoint before tests
+subsequent_reserved: ordinaryr456 then one explicitbenchmarkr457; r444/r445 and r451 superseded without launch, old runners retained
+ROS_DOMAIN_ID: not_applicable_offline_build
+GZ_PARTITION: not_applicable_offline_build
+remaining: package gates and real generator acceptance before frozen new train/val protocol; no model qualification claim
+retention: all evidence retained, archived none, scratch deletion candidates only; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no data/model/inference; IoU gates unchanged
+```
+
+## Checkpoint CP-284 — Accepted-source build complete; ordinary gate planned
+
+```yaml
+checkpoint: CP-284
+status: VALID_BUILD_ORDINARY_GATE_PLANNED
+run_id: linux-build-stage-e-generator-alpha-fix-r455
+source_commit: 95d3af5de9317ed10f1a27c77c0849fa100be665
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, packages_finished: 7, elapsed_seconds: 56.12}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-alpha-fix-r455/install
+python: /data/work/venvs/so101-grounded-sam/bin/python
+readback: parent independently read all7prefixes within r455 and installed helper resolving exactly to checkout source; runner exit0 includes assertions
+cache: exact clean r26 lodepng ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a strictfsck, offline disconnected build without fetch
+warnings: unselected mujoco_vendor from ROS underlay and existing six-package stderr; no failed packages
+scratch: durable scratch/linux-build-stage-e-generator-alpha-fix-r455/tmp; actual Python tempfile preflight passed
+evidence: durable run-evidence/linux-build-stage-e-generator-alpha-fix-r455; commands/source/hashes/runner/buildlog/exit/time/prefix/helper receipts
+ROS_DOMAIN_ID: not_applicable_offline_build
+GZ_PARTITION: not_applicable_offline_build
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-alpha-r456-ordinary
+  executor: same Sol high
+  scope: colcon test packages-select so101_demo_py pytest-args test only; benchmark_test excluded
+  overlay: same accepted-source r455, exact lockedPython and seven-prefix/helper readback
+  scratch: durable scratch/linux-test-stage-e-generator-alpha-r456-ordinary/tmp, new nonexisting NVMe directory and actual tempfile preflight
+  evidence: full command/exit/time/JUnit/test-result/source/overlay/Python/scratch receipts; no source changes
+  stop_after: parent ordinary readback/checkpoint before explicit r457 benchmark
+retention: all evidence retained, archived none, scratch deletion candidates only; nothing deleted
+boundaries: no inference/generation/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-286 — Explicit benchmark valid; generator acceptance is next
+
+```yaml
+checkpoint: CP-286
+status: VALID_PACKAGE_GATES_ACTUAL_GENERATOR_ACCEPTANCE_PLANNED
+run_id: linux-test-stage-e-generator-alpha-r457-benchmark
+source_commit: 95d3af5de9317ed10f1a27c77c0849fa100be665
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 585, passed: 583, failures: 0, errors: 0, skipped: 2, warnings: 0, pytest_seconds: 646.35, elapsed_seconds: 647.73}
+partition: benchmark_namespace_cases585, ordinary_cases0; explicit benchmark command ran exactly once
+skips: two expected Linux-inapplicable macOS renameatx_np contract cases
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-alpha-fix-r455/install; all7prefixes and helper exact source readback passed
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-test-stage-e-generator-alpha-r457-benchmark/tmp; actual tempfile equality passed
+performance_observation: versus preserved r30 SATA-HDD pytest3210.78s, r457 is2564.43s lower and ratio0.201306; suite/source evolved so not causal; fsync/journaling/integrity semantics unchanged
+parent_readback: exact exit/gate/JUnit/test-result/collection and full appended package-gates report read back
+evidence: durable run-evidence/linux-test-stage-e-generator-alpha-r457-benchmark; package-gates-report SHA256 62c50a89126c5cab2c8d8f7dd88c812c8419b8d208a2d34eb11ae1a6f4f9caf2
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED_DESIGN_ONLY
+  run_id: stage-e-generator-runtime-acceptance-r458
+  executor: /root/generator_build, gpt-5.6-sol high
+  reviewer: /root/generator_review, gpt-6-astra medium
+  purpose: define minimal actual production-renderer nonpenetration acceptance against r455 overlay, exercising pre-RGB reject/retry and persisted accepted receipt without creating an official new dataset version
+  constraints: train/val development seeds only and explicit diagnostic output; no sealed-test/COCO100/PickPlace/Mac/model inference/training; no official data generation before quotas/ranges/truth/split mutual-exclusion protocol frozen
+  gate: fail closed on source/overlay/Python/GPU/output collision/receipt state SHA/pair scope/accepted distances; preserve every attempt and manifest
+  stop_before_execution: parent freezes exact samples/lifecycle/outputs after Sol design and Astra review
+package_stage: r455build+r456ordinary+r457benchmark complete for accepted source; r444/r445/r451 never launched and remain historical planned/superseded artifacts
+retention: all runs/evidence retained, archived none; all listed scratch trees deletion candidates only; nothing deleted
+boundaries: Microduck paused; no official data generation, inference, training, sealed-test/COCO100/PickPlace/Mac; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-285 — Ordinary gate valid; explicit benchmark authorized once
+
+```yaml
+checkpoint: CP-285
+status: VALID_ORDINARY_EXPLICIT_BENCHMARK_PLANNED
+run_id: linux-test-stage-e-generator-alpha-r456-ordinary
+source_commit: 95d3af5de9317ed10f1a27c77c0849fa100be665
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, tests: 1360, passed: 1360, failures: 0, errors: 0, skipped: 0, warnings: 4, pytest_seconds: 19.71, elapsed_seconds: 21.31}
+partition: benchmark_test_cases0, ordinary_namespace_cases1360; ordinary gate did not collect benchmark suite
+warnings: existing fork-from-multithreaded-process warnings only, no code failure
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-alpha-fix-r455/install; all7prefixes and helper exact source readback passed
+python: /data/work/venvs/so101-grounded-sam/bin/python
+scratch: durable scratch/linux-test-stage-e-generator-alpha-r456-ordinary/tmp; actual tempfile equality passed
+parent_readback: exit/gate-exit/JUnit summary/colcon test-result and complete package-gates report read back
+evidence: durable run-evidence/linux-test-stage-e-generator-alpha-r456-ordinary; full command/source/overlay/Python/scratch/JUnit/test-result/time receipts
+ROS_DOMAIN_ID: not_applicable_offline_test
+GZ_PARTITION: not_applicable_offline_test
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-alpha-r457-benchmark
+  executor: same Sol high
+  scope: exactly one required explicit colcon test packages-select so101_demo_py pytest-args benchmark_test due adapter/config boundary changes
+  overlay: same frozen source r455 overlay with exact provenance and source drift gate
+  scratch: durable scratch/linux-test-stage-e-generator-alpha-r457-benchmark/tmp, unique previously nonexistent NVMe path; all TMP vars and actual testPython preflight
+  performance: compare elapsed observationally to preserved r30 SATA-HDD baseline3210.78seconds; do not weaken fsync/journaling/integrity or change semantics
+  evidence: command/exit/time/JUnit/test-result/source/overlay/Python/scratch and benchmark-only collection readback
+  stop_after: parent checkpoint before any actual generator/data work
+retention: all evidence retained, archived none; r455/r456 scratch deletion candidates only, no deletion
+boundaries: no inference/generation/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
 ```
