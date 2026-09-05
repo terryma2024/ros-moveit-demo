@@ -17723,3 +17723,31 @@ roots: r470 run/scratch/output remain absent including symlinks; no GPU/render/r
 retention: all evidence retained, archived none; nothing deleted; static fix evidence will use unique IDs
 boundaries: no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
 ```
+
+## Checkpoint CP-301 — r473 final static GREEN frozen for scoped re-review
+
+```yaml
+checkpoint: CP-301
+status: VALID_STATIC_GREEN_SCOPED_REREVIEW_PLANNED
+logical_order_correction: CP-299 review rejection precedes CP-300 RED, which precedes CP-301 GREEN; CP-300 was physically inserted before CP-299 by a nonunique append anchor, and both committed historical blocks remain unchanged
+run_id: stage-e-generator-runtime-acceptance-runner-static-final-r473
+executor: /root/generator_build, gpt-5.6-sol high
+result: {exit_code: 0, checks: 15, passed: 15, failed: 0}
+red_predecessor: r471 exit1 with all14 original review contracts false; retained unchanged
+intermediate: r472 exit0/all14 true retained as superseded because final self-review added one more binding assertion
+checker_sha256: a41ba89a0cc1ce61b4261e76539a36603fc30eaa58ef95f6cb21dd173435b930
+revised_driver_sha256: 75a3f0bcaffd62d01126d20dd73d7537d735c6ffa70ef4b7bf73375b48a185c1
+revised_runner_sha256: 198e43ca8882a7f278d4b40e34763f87558b9ed8bfe1cee7a5e3633d6d666dc8
+fixed_plan_sha256: 42248b6d88b8b6e06c45f8d91b721ad8564f296bc04c1eb59a24452373296669
+preparation_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-report.md SHA256 d752f48aa2b41e2a525b2d617cc8c639a58f1dd679eb0e7550660d52f7617965
+fix_summary: exact phase allowlists/cross-record validation, independent production-PNG decode, recomputed pre-model MJCF closure, full provenance bindings, parent-to-child durable mkdir, immediate per-context receipts, explicit symlink absence and parent-supplied nonselfreferential shell hash
+launch_binding: eventual parent must export SO101_REVIEWED_SHELL_SHA256=198e43ca8882a7f278d4b40e34763f87558b9ed8bfe1cee7a5e3633d6d666dc8; shell verifies itself and the embedded reviewed driver hash before allocation
+parent_readback: all1306 driver lines and all218 shell lines read; final evidence/result/hashes/report, syntax/AST, package-diff-clean and r470 root absence confirmed
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: original two Important and one Minor findings plus exact revised semantics/provenance; no execution/import/allocation
+  stop_after: review report and parent ledger decision; r470 cannot launch without later GO
+retention: r471/r472/r473 and all prior evidence retained, archived none; nothing deleted
+boundaries: r470 run/scratch roots absent including symlinks; no official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
+```
