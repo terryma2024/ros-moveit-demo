@@ -18953,6 +18953,29 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-376 — r523 launcher-only correction statically verified; one fresh private GREEN authorized
+
+```yaml
+checkpoint: CP-376
+status: R523_LAUNCHER_STATIC_PREPARATION_VALID_ONE_PRIVATE_GREEN_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r523
+executor: /root/generator_build, gpt-5.6-sol high
+source_state: {head_local_gitee: f1d81895976f91aeada3b27e0b37942cad3fe542, branch: codex/v5-t004-yolo-seg-rgbd, scoped_source_clean: true, worktree_only_original_untracked_build_install_log: true}
+frozen_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: 093709f836dd5c66d36af5c0f5b0dde6bd8d8ee1094feeaa0497315a6d57d3c4, launcher_sha256: 1336c99b4424c3edd7d09568ab0d855ad7af06005783a03997634991efb45bce, launcher_lines: 375, antecedents_unchanged: true}
+launcher_delta: relative to immutable r522 launcher, only r523 ID/path/current HEAD, the missing subprocess.check_output close parenthesis and30-line preallocation non-heredoc parser were changed; diff +34/-3 net31
+static_readback: bash-n passed; exact locked Python independent extractor found12 quoted Python heredocs and ast.parse passed12/12; identical parser is embedded as locked-Python -c at line187 before first mkdir at line189; launcher realpath/self-hash/input hashes and exact absence gates passed without behavior invocation
+preallocation: r523 evidence/scratch/low roots and all four official roots absent by -e/-L; launcher_invocations0; harness_invocations0; driver_behavior_invocations0; r522 partial evidence/report/launcher unchanged
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_OFFLINE_R523_GREEN
+  authorized_head: this CP-376 commit after ordinary Gitee push/readback; launcher must be mechanically rebound only to that exact authorized/observed/Gitee HEAD without other byte changes, then parent reads the final launcher diff/hash before invocation
+  execution: invoke the explicit absolute launcher exactly once with its reviewed self-hash; preallocation heredoc AST gate must pass before any root; after allocation require exact locked-Python NVMe tempfile equality and the CP-374 246-case combined GREEN contract including six executable mutation kills
+  evidence: preserve command/input/source/package/static/preflight/raw exit/elapsed/result/status/final nonselfreferential inventory/readback; require source/package identities and official-root absence; failure at any point stops without reuse/backfill
+  stop_after: no candidate edit or second invocation; parent complete readback/checkpoint, then GPT-6-Astra medium performs immutable driver/shell/harness/launcher/evidence review before any official generation planning
+restrictions: private no-GL offline harness only; no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official root allocation/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+retention: r522/r521 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-375 — r522 launcher setup invalid before harness; fresh r523 launcher-only preparation planned
 
 ```yaml
