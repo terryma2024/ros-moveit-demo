@@ -17954,3 +17954,28 @@ next_experiment:
 retention: r478/r479 and all prior evidence retained, archived none; scratch deletion candidates only, nothing deleted
 boundaries: no actual r470/build/official generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; gates unchanged
 ```
+
+## Checkpoint CP-310 — exact-hash one-shot r470 runtime diagnostic GO
+
+```yaml
+checkpoint: CP-310
+status: APPROVED_ONE_SHOT_RUNTIME_DIAGNOSTIC_GO
+reviewer: /root/generator_review, gpt-6-astra medium
+verdict: {spec: APPROVED, code_quality: APPROVED, blocking_findings: 0}
+reviewed_scope: all1488 corrected driver lines, all219 shell lines, CP307-CP309, prior rejection, r478 RED and r479 GREEN plus retained result/readback/diff/static/hash receipts
+reviewed_driver_sha256: a8a02ac8a13981600761f6b6eb4259aa54c8719241da4270b42da7c319af48ee
+reviewed_shell_sha256: e1309cd7bfe8b503cb42fe0b92d8b9065f6ad37c362e7fed92131b5b7abe7287
+review_report: durable coordination/generator-r443-r1/runtime-acceptance-runner-final-launch-rereview-report.md SHA256 74f424b09dab27d3014110a67707e4b30493e627eafc4725116547fa3efecc68
+closure: canonical GPU receipt mapping and truth presence semantics fixed; prior resolved-Python, typed contracts, independent categorical bytes, PNG, exact tree, durability and hash bindings remain addressed; no deterministic post-render mismatch found
+next_experiment:
+  status: GO_ONCE
+  run_id: stage-e-generator-runtime-acceptance-r470
+  executor: /root/generator_build, gpt-5.6-sol high
+  command: SO101_REVIEWED_SHELL_SHA256=e1309cd7bfe8b503cb42fe0b92d8b9065f6ad37c362e7fed92131b5b7abe7287 bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_generator_acceptance_r470.sh
+  prerequisites: exact private hashes above; package source exact4a0ba99f; r467 overlay unchanged; locked Python; no concurrent edits; r470 run/scratch/output paths absent including dangling symlinks
+  semantics: one actual fixed one_cup_distractors diagnostic plan, seed410000127; enabled reject then accept and legacy-disabled same accepted state; actual NVIDIA EGL contexts; no network
+  stop_after: preserve all partial or complete evidence, independently read back exits/manifests/inventories/hashes/images, then parent checkpoint; never reuse or automatically retry r470
+approval_scope: r470 private runtime diagnostic only, not official generation/benchmark/inference/training/sealed-test/COCO100/PickPlace/Mac and not a runtime success claim
+retention: all prior evidence retained, archived none; nothing deleted; r470 scratch will remain retained deletion candidate after readback
+boundaries: Microduck paused; generic cup, prompt cup., frozen stateless SAM and maskIoU0.80 unchanged
+```
