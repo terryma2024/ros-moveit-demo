@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-286
+latest_checkpoint: CP-288
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r457 explicit benchmark583passed2skipped; freeze package gate checkpoint, then design actual generator nonpenetration acceptance before new immutable train/val dataset protocol
+next_action: Astra requests narrower diagnostic architecture; r459 RED for structured rejected receipt, immutable actual-boundary events and split-free renderer settings, official CLI/writer unchanged
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -17301,6 +17301,60 @@ next_experiment:
 package_stage: r455build+r456ordinary+r457benchmark complete for accepted source; r444/r445/r451 never launched and remain historical planned/superseded artifacts
 retention: all runs/evidence retained, archived none; all listed scratch trees deletion candidates only; nothing deleted
 boundaries: Microduck paused; no official data generation, inference, training, sealed-test/COCO100/PickPlace/Mac; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-287 — Runtime acceptance design complete; implementation held for review
+
+```yaml
+checkpoint: CP-287
+status: VALID_DESIGN_REVIEW_PLANNED_NO_EXECUTION
+source_commit: 5ee6055bf8cf830663f3134f0e740657c109876a, src/so101_demo_py exact accepted95d3af5d
+executor: /root/generator_build, gpt-5.6-sol high
+design_report: durable coordination/generator-r443-r1/runtime-acceptance-design-report.md
+design_report_sha256: bdf37fbf9a5122fdf502b6f65873dc9afda0e13fdc63ad3ecfc6de67ab8cd9ae
+observed_gaps:
+  - current public generator requires positive train/val/test and sample-limit still allocates all3; cannot satisfy sealed-test diagnostic boundary
+  - rejected ScenePenetrationError loses actual TaskSceneGeometry and attempt/RGB-boundary trace; absent PNG alone is insufficient proof
+proposed_design: separate diagnostic-only schema/path, receipt-bearing errors and default-disabled attempt observer/provider; actual MuJoCo renderer; no official dataset artifacts
+frozen_diagnostic: two one_cup accepted cases/three attempts at development seed410000127; enabled explicit intersecting bottle state then separated state, legacy identical accepted state; no post-hoc search
+gpu_gate: EGL contexts plus actual GL vendor/renderer fail closed on non-NVIDIA/software renderer; supporting nvidia-smi inventory without false EGL/CUDA identity claim
+execution: none; no source/runner/root/render/generation/test/build/inference or data access
+next_experiment:
+  status: PLANNED_REVIEW_ONLY
+  reviewer: /root/generator_review, gpt-6-astra medium
+  report: durable coordination/generator-r443-r1/runtime-acceptance-review-report.md
+  scope: API-gap validity, minimal architecture, production-backdoor risk, seed/state preregistration, pair/count/GPU claims and TDD completeness
+  stop_before: source change or r458 execution until review disposition and parent checkpoint
+retention: design and all prior evidence retained; archived none; no new deletion candidates
+boundaries: official dataset protocol remains unfrozen; no sealed-test/COCO100/PickPlace/Mac/model inference/training; Microduck paused; IoU gates unchanged
+```
+
+## Checkpoint CP-288 — Runtime design corrected; narrow observability RED planned
+
+```yaml
+checkpoint: CP-288
+status: DESIGN_REVIEW_CHANGES_ACCEPTED_RED_PLANNED
+source_commit: 5ee6055bf8cf830663f3134f0e740657c109876a, src/so101_demo_py baseline95d3af5d
+reviewer: /root/generator_review, gpt-6-astra medium
+review_report: durable coordination/generator-r443-r1/runtime-acceptance-review-report.md
+review_verdict: spec CHANGES_REQUESTED, quality/minimality CHANGES_REQUESTED; API gaps valid but public CLI mode and generic state-provider are overbroad
+Ruling: leave official generate_yolo_seg_dataset CLI, DatasetConfig split rules and generate_dataset writer unchanged; use reviewer-accepted direct evidence runner with a private fixed controlled-preparation subclass — minimizes reusable production surface and prevents a normal-config data backdoor; cost_if_wrong is less reusable diagnostic tooling, recoverable in retained runner
+Ruling: production change limited to message-compatible structured rejected receipt/context, immutable synchronous attempt-event sink at actual measurement/RGB/segmentation/decision boundaries, and split-free immutable renderer settings shared from DatasetConfig — enough to prove behavior without official split artifacts; cost_if_wrong is one additional fresh source gate cycle
+Ruling: historical accepted95d3af5d/r455 remains baseline only; after instrumentation freeze a distinct source commit/new overlay before actual diagnostic — avoids false provenance; cost_if_wrong is rebuild and benchmark time
+corrections: exactly3 attempt records but2 geometry receipts; stable body-pair keys, declared visible-name membership; GL checks per actual context, nvidia-smi supporting only; no claim about RNG distribution
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-observability-red-r459
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: tests only for structured penetration evidence, immutable event ordering/call-spy counts/failure aborts, split-free render settings and unchanged official path
+  production_baseline: exact95d3af5d unchanged for RED
+  python: /data/work/venvs/so101-grounded-sam/bin/python
+  overlay: accepted r455
+  scratch: durable scratch/stage-e-generator-runtime-observability-red-r459/tmp with actual lockedPython tempfile preflight
+  evidence: full test-only diff/source/static/JUnit/exit/time; stop after RED before production implementation
+future_reserved: r460GREEN, r461freshbuild, r462ordinary, r463one explicit benchmark, then r464actual diagnostic if all reviewed and valid
+retention: all design/review and prior evidence retained; archived none; scratch deletion candidates only; no deletion
+boundaries: official dataset protocol still unfrozen; no render/generation/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused; IoU gates unchanged
 ```
 
 ## Checkpoint CP-285 — Ordinary gate valid; explicit benchmark authorized once
