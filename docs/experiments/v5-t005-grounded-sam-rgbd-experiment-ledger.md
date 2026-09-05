@@ -18146,3 +18146,29 @@ phase_id_correction_after_invalid: r481 fresh RED, r482 GREEN, r483 build, r484 
 retention: r480 and all prior evidence retained, archived none; scratch deletion candidates only; nothing deleted
 boundaries: no production/official config change, MuJoCo/OpenGL/render/build/generation/sealed-test/COCO100/inference/training/PickPlace/Mac/SAM change; Microduck paused; protocol/gates unchanged
 ```
+
+## Checkpoint CP-316 — r481 authoritative train/val contract RED valid; minimal GREEN authorized
+
+```yaml
+checkpoint: CP-316
+status: VALID_AUTHORITATIVE_RED_GREEN_PLANNED
+run_id: stage-e-generator-train-val-only-red-r481
+executor: /root/generator_build, gpt-5.6-sol high
+result: {classification: VALID_AUTHORITATIVE_RED, tests: 59, expected_defects_failed: 52, controls_passed: 7, errors: 0, skips: 0, pytest_exit: 1, outer_exit: 1, tool_exit: 1, receipt_exit: 1, elapsed_seconds: 3.243441094, stderr_bytes: 0}
+coverage: exact two-way config/plan/YAML/manifest/conversion and discriminator table; visible/partial categorical RLE and polygon non-substitution; exact geometry receipt mutation table; synthetic legacy three-way compatibility and invalid-input/no-render controls
+observed_boundaries: DatasetConfig lacks dataset_contract, official config absent, seed planning demands test and converter rejects two-way YAML before new dispatch; all are intended product gaps, not fixture/collection failures
+inputs: unchanged test SHA256 a20b5af069a1ef6afe0e04737132e1273fd0349657eb642e3e4c71be7d83ad48; frozen production/config exact4a0ba99f; runner SHA256 cc968b40a2bc5b9ee2f1d76c5adf22af5c233a66dbefdf8fcadfeb353c45156c
+python_scratch: locked venv resolved /usr/bin/python3.12, pytest7.4.4 loaded from /usr/lib/python3/dist-packages, actual tempfile and explicit basetemp/cache inside unique durable r481 NVMe scratch; PASS
+evidence: durable run-evidence/stage-e-generator-train-val-only-red-r481 and unique scratch; JUnit SHA256 7a93fa324aeeb7690f2815db03f000459f3c144c8bcc5bd7635bdfebe09915e8; result SHA256 07f909b75bc6f3a1aaa50987d8a2290c24c850110f799af31c4c99f1f600936e; inventory SHA256 4fa77cc68e4d69969fe99bcb0f9a69db94a0c50715ca279ffc5e93beb9f2480f
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-red-r481-report.md SHA256 e89b469881f3930aadbd36ee4d4c77709335922c751143f16c3c6f8897eb8779
+parent_readback: complete report/result/59-case partition and test source read; invocation exactly once, r480 immutable, production unchanged and forbidden boundaries confirmed
+next_experiment:
+  status: GO_GREEN_ONLY
+  run_id: stage-e-generator-train-val-only-green-r482
+  executor: same Sol high
+  implementation: add exact optional dataset_contract dispatch and canonical split tuple to generator/config/writer while preserving absent-discriminator legacy bytes; add official immutable train-val config; generalize converter exact dispatch/output and strictly validate mandatory new-contract categorical truth plus scene_geometry receipts; no CLI/renderer/RNG/camera/mask/science change
+  tests: preserve exact r481 test bytes; all59 must pass, plus relevant existing generator/config/geometry/categorical/converter/runtime-observer regression files in one focused pytest invocation; AST/Ruff/config/source diff gates, unique NVMe scratch and exact pytest-capable locked-Python preflight
+  stop_after: freeze code/config/test hashes, diff and GREEN report for parent checkpoint plus Astra source review before commit/build; no r483 build
+retention: r480/r481 and all earlier evidence retained, archived none; scratch deletion candidates only; nothing deleted
+boundaries: no MuJoCo/OpenGL/render/build/benchmark/generation/archive/conversion run/inference/training/test namespace/sealed-test/COCO100/PickPlace/Mac/SAM change; Microduck paused; gates unchanged
+```
