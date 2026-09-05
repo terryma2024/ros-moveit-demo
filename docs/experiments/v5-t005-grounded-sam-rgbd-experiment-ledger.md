@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-371 — r519 reaches targets but misses reentry diagnostic; one-oracle RED retry required
+
+```yaml
+checkpoint: CP-371
+status: INVALID_R519_RED_OWNER_REENTRY_ORACLE_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r519
+executor: /root/generator_build, gpt-5.6-sol high
+result: {authoritative_red: false, invocations: 1, total: 40, expected_defects: 16/16, controls: 18/18, executable_mutation_kills: 5/6, harness_errors: 0, harness_exit: 2, parse_launcher_tool_exits: [0,0,0], elapsed_seconds: 29.410080845, forbidden_before_after: [[],[]]}
+valid_partial: every shell case used grammar-valid ID, nonempty target trace and no generic provenance/preflight failure; I1/I2 target defects and18 controls measured; five operation mutants killed; candidate unchanged
+survivor: owner-disarm mutant reaches stage/execute/finalizer/outer/completion exactly once, then omitted disarm permits post-completion EXIT reentry; cleared globals emit `post-allocation accounting state is incomplete`, but count-only oracle incorrectly treats1/1/1 calls as survival
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-review-red-r519; result SHA2567e72720cb96fb700709cd9e1e121a3de7a8651d38770c86bb22562cfbf3bf0be; final22-file inventory SHA25632e7d28172211c575b2d0759346545f7a3c6832b97d5e2b67af94d84adb039d1; readback SHA25603969439cd79a9af7115af9e1039e5c821fa376c036a507b539de2c52e8f6ee3
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-review-red-r519-report.md SHA2569c13e4c541d273462e8550fc60195de0a317835e6e43541c3bf905546dbba05e
+frozen_candidate: driver SHA2567739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a; shell SHA2569bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a
+next_experiment:
+  status: GO_FRESH_OWNER_REENTRY_ORACLE_ONLY_RED_RETRY
+  run_id: stage-e-generator-nonpenetrating-generation-runner-review-red-r520
+  executor: /root/generator_build, gpt-5.6-sol high
+  sole_harness_change: owner-disarm behavioral oracle requires absence of post-completion EXIT reentry/incomplete-state diagnostic on unmodified controls and treats the exact reached diagnostic on the mutant as a kill; preserve call-count/reachability assertions and all other bytes/semantics except mechanical r520 identity/path/current HEAD
+  required: exact same40 split and six unchanged mutant hashes; one fresh locked-Python/NVMe invocation;16 defects/18 controls/6 kills, zero harness error/unexpected, target reachability and forbidden imports empty; raw exit/elapsed/fsync/inventory/readback/report; stop before runner fix
+  restrictions: no candidate edit, tracked repo/Git/index/ledger, real setup/project/GL/GPU/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r519/r518 and all prior evidence retained, archived none; nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-370 — r518 shell cases fail reachability; fresh run-ID-corrected RED required
 
 ```yaml
