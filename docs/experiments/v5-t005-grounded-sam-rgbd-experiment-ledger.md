@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-382 — r525 post-persist mutation oracle statically approved; one private GREEN authorized
+
+```yaml
+checkpoint: CP-382
+status: R525_STATIC_PREPARATION_ASTRA_APPROVED_ONE_PRIVATE_GREEN_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-review-green-r525
+executor: /root/generator_build, gpt-5.6-sol high
+reviewer: /root/generator_review, gpt-6-astra medium
+source_state: {head_local_gitee: 8ac1c289f2e4c0e10847598c71d8c3482c929360, scoped_source_clean: true, worktree_only_original_untracked_build_install_log: true}
+frozen_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 8c88c49cd18d30e2b4112cccf95fb227ef3c9cc3921907ecc38b2d118fd6d781, harness_sha256: dfcfcffd11841d60b6d741edf28b79c5a213dd4183dfd6260f4863cd9fe1436e, harness_lines: 681, launcher_sha256: bbe75ec21c0411af2d9b8d2bebe2f62aabe863586d2fda46bd4aec7f6af36472, launcher_lines: 415}
+planned_gate: {total: 248, retained_r517: 167, adapted_review: {total: 42, controls: 36, mutation_kills: 6}, additional: 39, expected_exit: 0, expected_classification: VALID_R525_GREEN, forbidden_imports: []}
+static_gates: harness AST/Ruff passed; launcher bash-n/quoted-heredoc AST12of12/shared-argument parser-only15 passed; dynamic transformed review constants0defects36controls6kills42total, six mutant syntax/frozen hashes and forbidden imports passed; r522-to-r525 harness diff +123/-13 and r524-to-r525 launcher diff +10/-10
+astra_static_verdict: APPROVED with no blocking findings; verified post-persist original readback/exclusive fsync/finally restore, independent candidate/mutant roots, candidate accounting retained/final pair absent, mutant validated inventory/readback/unexpected exact SHA, preexisting and no-injection controls, mutation override lookup order and exact counts; behavior and final launch approval remain pending
+preallocation: r525 evidence/scratch/low and all four official roots absent by -e/-L; launcher/main/case invocations0; driver/shell/r524 evidence unchanged
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_OFFLINE_R525_GREEN
+  authorized_head: this CP-382 commit after ordinary Gitee push/readback; mechanically rebind only launcher HEAD, then parent inverse-hash/static/root-absence readback before invocation
+  execution: invoke final explicit launcher once under reviewed self-hash; require pre-mkdir12-heredoc/parser-only gates, exact NVMe tempfile equality, exactly one combined main and complete248/248 including36controls/6kills/additional39, zero harness errors, exit0 and VALID_R525_GREEN
+  evidence: persist full CP-374/378 provenance/source/package/static/command/raw/result/status/final inventory/readback; report is a new write-once r525 path and cannot be expanded in place; fail closed without reuse/backfill/second invocation
+  stop_after: parent full readback/checkpoint, then Astra complete immutable driver/shell/harness/launcher/evidence launch-readiness review before any official generation plan
+restrictions: private no-GL offline harness only; no tracked source edit, project/MuJoCo/OpenGL import, GPU/renderer, official root allocation/render/generation/conversion/inference/training/build/package test/benchmark/sealed traversal
+retention: r524/r523/r522 and all prior evidence retained; archived none; scratch/low roots deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-381 — Astra approves post-persist exact-membership test fix; r525 static preparation planned
 
 ```yaml
