@@ -18,8 +18,93 @@ from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
-_SPLITS = ("train", "val", "test")
+_LEGACY_SPLITS = ("train", "val", "test")
+_TRAIN_VAL_SPLITS = ("train", "val")
+_TRAIN_VAL_DATASET_CONTRACT = "so101-nonpenetrating-train-val-v1"
+_SCENE_GEOMETRY_POLICY = "task-visual-nonpenetration-v1"
+_TRAIN_VAL_SCENE_GEOMETRY = {
+    "ordinary_camera_jitter_m": [-0.015, 0.015],
+    "cup_a_xy_jitter_m": [-0.045, 0.045],
+    "cup_b_xy_jitter_m": [-0.025, 0.025],
+    "bottle_xy_jitter_m": [-0.025, 0.025],
+    "far_camera_retreat_m": [2.4, 3.0],
+    "partial_cup_xy_jitter_m": [-0.025, 0.025],
+    "partial_bottle_longitudinal_m": [0.055, 0.105],
+    "partial_bottle_perpendicular_m": [-0.025, 0.025],
+    "small_bbox_area_max_exclusive": 1024.0,
+    "visible_pixel_count_minimum": 64,
+    "partial_visible_fraction": [0.35, 0.8],
+    "maximum_deterministic_attempts": 64,
+}
+_TRAIN_VAL_TRUTH_CONTRACT = {
+    "mask_order": "row_major",
+    "mask_rle": "alternating_zero_one_counts_starting_with_zero",
+    "mask_sha256": "sha256_uint8_row_major_bytes",
+    "partial_occlusion_reference": (
+        "visible_union_paired_segmentation_with_declared_occluder_hidden"
+    ),
+    "canonical_amodal": "visible_bitwise_union_paired_reference",
+}
 _CUP_BODY_NAMES = frozenset({"plastic_cup", "plastic_cup_b"})
+_SCENARIO_CUPS = {
+    "no_cup": (),
+    "one_cup_distractors": ("plastic_cup",),
+    "two_cups": ("plastic_cup", "plastic_cup_b"),
+    "cup_near_bottle": ("plastic_cup",),
+    "small_far_cup": ("plastic_cup",),
+    "partially_occluded_cup": ("plastic_cup",),
+}
+_TRAIN_VAL_SCENARIOS = tuple(_SCENARIO_CUPS)
+_TRAIN_VAL_SPLIT_COUNTS = {"train": 1200, "val": 300}
+_TRAIN_VAL_SEED_STARTS = {"train": 450_000_000, "val": 460_000_000}
+_TRAIN_VAL_SEED_RANGES = {
+    "train": [450_000_000, 450_001_199],
+    "val": [460_000_000, 460_000_299],
+}
+_TRAIN_VAL_SCENARIO_QUOTAS = {
+    "train": {scenario: 200 for scenario in _TRAIN_VAL_SCENARIOS},
+    "val": {scenario: 50 for scenario in _TRAIN_VAL_SCENARIOS},
+}
+_VISUAL_GEOMS = {
+    "plastic_cup": frozenset(
+        {
+            "cup_a_wall_near_visual",
+            "cup_a_wall_01_visual",
+            "cup_a_wall_02_visual",
+            "cup_a_wall_03_visual",
+            "cup_a_wall_04_visual",
+            "cup_a_wall_05_visual",
+            "cup_a_wall_opposite_visual",
+            "cup_a_wall_07_visual",
+            "cup_a_wall_08_visual",
+            "cup_a_wall_09_visual",
+            "cup_a_wall_10_visual",
+            "cup_a_wall_11_visual",
+            "cup_a_bottom_visual",
+        }
+    ),
+    "plastic_cup_b": frozenset(
+        {
+            "cup_b_wall_near_visual",
+            "cup_b_wall_01_visual",
+            "cup_b_wall_02_visual",
+            "cup_b_wall_03_visual",
+            "cup_b_wall_04_visual",
+            "cup_b_wall_05_visual",
+            "cup_b_wall_opposite_visual",
+            "cup_b_wall_07_visual",
+            "cup_b_wall_08_visual",
+            "cup_b_wall_09_visual",
+            "cup_b_wall_10_visual",
+            "cup_b_wall_11_visual",
+            "cup_b_bottom_visual",
+        }
+    ),
+    "orange_bottle": frozenset({"bottle_visual", "bottle_neck_visual"}),
+    "table": frozenset({"table_visual"}),
+    "neutral_block": frozenset({"neutral_block_visual"}),
+    "base_pedestal": frozenset({"base_pedestal_visual"}),
+}
 _SAMPLE_FIELDS = {
     "configured_cup_count",
     "image",
@@ -191,7 +276,7 @@ def _integer(value: object, *, field: str, minimum: int = 0) -> int:
     return value
 
 
-def _dataset_contract(source_root: Path) -> None:
+def _dataset_contract(source_root: Path, splits: tuple[str, ...]) -> None:
     relative = PurePosixPath("dataset.yaml")
     payload = _read_bytes(source_root, relative)
     try:
@@ -204,9 +289,16 @@ def _dataset_contract(source_root: Path) -> None:
         "path": ".",
         "train": "images/train",
         "val": "images/val",
-        "test": "images/test",
         "names": {0: "plastic_cup"},
     }
+    if splits == _LEGACY_SPLITS:
+        expected = {
+            "path": ".",
+            "train": "images/train",
+            "val": "images/val",
+            "test": "images/test",
+            "names": {0: "plastic_cup"},
+        }
     if dict(document) != expected:
         raise _fail("DATASET_YAML_INVALID", "dataset contract is not the fixed cup dataset")
 
@@ -215,9 +307,26 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
     relative = PurePosixPath("dataset-manifest.json")
     payload = _read_bytes(source_root, relative)
     document = _json_mapping(payload, member=relative.as_posix())
+    dataset_contract = document.get("dataset_contract")
+    if dataset_contract is None:
+        if "dataset_contract" in document:
+            raise _fail("MANIFEST_INVALID", "dataset_contract must be a supported string")
+        splits = _LEGACY_SPLITS
+        if "member_splits" in document:
+            raise _fail("MANIFEST_INVALID", "legacy manifest must not declare member_splits")
+    elif dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+        splits = _TRAIN_VAL_SPLITS
+        if document.get("member_splits") != list(splits):
+            raise _fail("MANIFEST_INVALID", "member_splits must be exactly train then val")
+    else:
+        raise _fail("MANIFEST_INVALID", "unknown dataset_contract")
     schema_version = document.get("schema_version")
-    if schema_version not in {1, 2}:
-        raise _fail("MANIFEST_INVALID", "schema_version must be 1 or 2")
+    if splits == _TRAIN_VAL_SPLITS:
+        schema_is_valid = type(schema_version) is int and schema_version == 2
+    else:
+        schema_is_valid = schema_version in {1, 2}
+    if not schema_is_valid:
+        raise _fail("MANIFEST_INVALID", "schema_version is invalid for the dataset contract")
     samples = document.get("samples")
     if not isinstance(samples, list):
         raise _fail("MANIFEST_INVALID", "samples must be a list")
@@ -225,10 +334,14 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
     if sample_count != len(samples):
         raise _fail("MANIFEST_INVALID", "sample_count does not match samples")
     split_counts = document.get("split_counts")
-    if not isinstance(split_counts, Mapping) or set(split_counts) != set(_SPLITS):
-        raise _fail("MANIFEST_INVALID", "split_counts must contain train, val, and test")
-    for split in _SPLITS:
-        _integer(split_counts[split], field=f"split_counts.{split}")
+    if not isinstance(split_counts, Mapping) or set(split_counts) != set(splits):
+        raise _fail("MANIFEST_INVALID", "split_counts do not match the dataset contract")
+    for split in splits:
+        _integer(
+            split_counts[split],
+            field=f"split_counts.{split}",
+            minimum=1 if splits == _TRAIN_VAL_SPLITS else 0,
+        )
     _positive_dimension(document.get("image_width"), "image_width")
     _positive_dimension(document.get("image_height"), "image_height")
     generator_commit = document.get("generator_commit")
@@ -239,9 +352,9 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
         raise _fail("MANIFEST_INVALID", "mjcf_sha256 must be a lowercase SHA256")
     if schema_version == 2:
         quotas = document.get("scenario_quotas")
-        if not isinstance(quotas, Mapping) or set(quotas) != set(_SPLITS):
+        if not isinstance(quotas, Mapping) or set(quotas) != set(splits):
             raise _fail("MANIFEST_INVALID", "scenario_quotas must contain all splits")
-        for split in _SPLITS:
+        for split in splits:
             split_quotas = quotas[split]
             if not isinstance(split_quotas, Mapping) or any(
                 isinstance(value, bool) or not isinstance(value, int) or value <= 0
@@ -254,6 +367,33 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
             raise _fail("MANIFEST_INVALID", "scene_geometry must be present in schema 2")
         if not isinstance(document.get("truth_contract"), Mapping):
             raise _fail("MANIFEST_INVALID", "truth_contract must be present in schema 2")
+    if splits == _TRAIN_VAL_SPLITS:
+        if document.get("scene_geometry_policy") != _SCENE_GEOMETRY_POLICY:
+            raise _fail("MANIFEST_INVALID", "scene_geometry_policy is invalid")
+        if document.get("scene_geometry") != _TRAIN_VAL_SCENE_GEOMETRY:
+            raise _fail("MANIFEST_INVALID", "scene_geometry is invalid")
+        if document.get("truth_contract") != _TRAIN_VAL_TRUTH_CONTRACT:
+            raise _fail("MANIFEST_INVALID", "truth_contract is invalid")
+        seed_starts = document.get("seed_starts")
+        seed_ranges = document.get("seed_ranges")
+        if not isinstance(seed_starts, Mapping) or set(seed_starts) != set(splits):
+            raise _fail("MANIFEST_INVALID", "seed_starts do not match member_splits")
+        if not isinstance(seed_ranges, Mapping) or set(seed_ranges) != set(splits):
+            raise _fail("MANIFEST_INVALID", "seed_ranges do not match member_splits")
+        occupied: list[tuple[int, int]] = []
+        for split in splits:
+            start = _integer(seed_starts[split], field=f"seed_starts.{split}")
+            value = seed_ranges[split]
+            if (
+                not isinstance(value, list)
+                or len(value) != 2
+                or any(type(item) is not int for item in value)
+                or value != [start, start + split_counts[split] - 1]
+            ):
+                raise _fail("MANIFEST_INVALID", f"seed_ranges.{split} is invalid")
+            occupied.append((value[0], value[1]))
+        if occupied[0][1] >= occupied[1][0] and occupied[1][1] >= occupied[0][0]:
+            raise _fail("SPLIT_SEEDS_OVERLAP", "declared seed ranges overlap")
     return document, payload
 
 
@@ -263,12 +403,14 @@ def _sample_paths(sample: Mapping[str, Any]) -> dict[str, PurePosixPath]:
     }
 
 
-def _validate_sample_shape(sample: object, index: int) -> dict[str, Any]:
+def _validate_sample_shape(
+    sample: object, index: int, splits: tuple[str, ...] | None = None
+) -> dict[str, Any]:
     if not isinstance(sample, Mapping) or set(sample) != _SAMPLE_FIELDS:
         raise _fail("MANIFEST_INVALID", f"sample {index} has unsupported or missing fields")
     normalized = dict(sample)
     split = normalized["split"]
-    if split not in _SPLITS:
+    if split not in (_LEGACY_SPLITS if splits is None else splits):
         raise _fail("MANIFEST_INVALID", f"sample {index} has invalid split")
     _integer(normalized["seed"], field=f"samples[{index}].seed")
     configured = _integer(
@@ -287,13 +429,23 @@ def _validate_sample_shape(sample: object, index: int) -> dict[str, Any]:
     return normalized
 
 
-def _validate_manifest_members(manifest: Mapping[str, Any], samples: list[dict[str, Any]]) -> None:
+def _validate_manifest_members(
+    manifest: Mapping[str, Any],
+    samples: list[dict[str, Any]],
+    splits: tuple[str, ...] | None = None,
+) -> None:
+    if splits is None:
+        splits = (
+            _TRAIN_VAL_SPLITS
+            if manifest.get("dataset_contract") == _TRAIN_VAL_DATASET_CONTRACT
+            else _LEGACY_SPLITS
+        )
     actual_counts = Counter(sample["split"] for sample in samples)
     expected_counts = manifest["split_counts"]
-    if any(actual_counts[split] != expected_counts[split] for split in _SPLITS):
+    if any(actual_counts[split] != expected_counts[split] for split in splits):
         raise _fail("MANIFEST_INVALID", "split_counts do not match samples")
     if manifest["schema_version"] == 2:
-        for split in _SPLITS:
+        for split in splits:
             actual_scenarios = Counter(
                 sample["scenario"] for sample in samples if sample["split"] == split
             )
@@ -313,8 +465,13 @@ def _validate_manifest_members(manifest: Mapping[str, Any], samples: list[dict[s
                 f"seed {seed} appears in both {owner} and {sample['split']}",
             )
         seed_owners[seed] = sample["split"]
+    if splits == _TRAIN_VAL_SPLITS:
+        for sample in samples:
+            declared_range = manifest["seed_ranges"][sample["split"]]
+            if not declared_range[0] <= sample["seed"] <= declared_range[1]:
+                raise _fail("MANIFEST_INVALID", "sample seed is outside its declared range")
 
-    seen_by_split: dict[str, set[str]] = {split: set() for split in _SPLITS}
+    seen_by_split: dict[str, set[str]] = {split: set() for split in splits}
     all_members: set[str] = set()
     for sample in samples:
         for relative in _sample_paths(sample).values():
@@ -323,8 +480,8 @@ def _validate_manifest_members(manifest: Mapping[str, Any], samples: list[dict[s
                 raise _fail("SPLIT_MEMBERS_OVERLAP", member)
             all_members.add(member)
             seen_by_split[sample["split"]].add(member)
-    for left_index, left in enumerate(_SPLITS):
-        for right in _SPLITS[left_index + 1 :]:
+    for left_index, left in enumerate(splits):
+        for right in splits[left_index + 1 :]:
             overlap = seen_by_split[left] & seen_by_split[right]
             if overlap:
                 raise _fail("SPLIT_MEMBERS_OVERLAP", sorted(overlap)[0])
@@ -349,6 +506,108 @@ def _validate_manifest_members(manifest: Mapping[str, Any], samples: list[dict[s
     expected_artifacts = {"dataset.yaml", *all_members}
     if len(artifacts) != len(set(artifacts)) or set(artifacts) != expected_artifacts:
         raise _fail("MANIFEST_INVALID", "artifacts do not exactly match sample members")
+
+
+def _validate_official_train_val_version(manifest: Mapping[str, Any]) -> None:
+    if manifest.get("dataset_contract") != _TRAIN_VAL_DATASET_CONTRACT:
+        raise _fail("MANIFEST_INVALID", "official dataset contract discriminator is invalid")
+    if manifest.get("member_splits") != list(_TRAIN_VAL_SPLITS):
+        raise _fail("MANIFEST_INVALID", "official dataset member splits are invalid")
+    if manifest.get("split_counts") != _TRAIN_VAL_SPLIT_COUNTS:
+        raise _fail("MANIFEST_INVALID", "official dataset split counts are invalid")
+    if manifest.get("seed_starts") != _TRAIN_VAL_SEED_STARTS:
+        raise _fail("MANIFEST_INVALID", "official dataset seed starts are invalid")
+    if manifest.get("seed_ranges") != _TRAIN_VAL_SEED_RANGES:
+        raise _fail("MANIFEST_INVALID", "official dataset seed ranges are invalid")
+    quotas = manifest.get("scenario_quotas")
+    if not isinstance(quotas, Mapping) or set(quotas) != set(_TRAIN_VAL_SPLITS):
+        raise _fail("MANIFEST_INVALID", "official dataset scenario quotas are invalid")
+    if any(
+        not isinstance(quotas[split], Mapping)
+        or dict(quotas[split]) != _TRAIN_VAL_SCENARIO_QUOTAS[split]
+        for split in _TRAIN_VAL_SPLITS
+    ):
+        raise _fail("MANIFEST_INVALID", "official dataset scenario quotas are invalid")
+    samples = manifest.get("samples")
+    if not isinstance(samples, list) or len(samples) != sum(_TRAIN_VAL_SPLIT_COUNTS.values()):
+        raise _fail("MANIFEST_INVALID", "official dataset sample population is invalid")
+    position = 0
+    for split in _TRAIN_VAL_SPLITS:
+        start = _TRAIN_VAL_SEED_STARTS[split]
+        for offset in range(_TRAIN_VAL_SPLIT_COUNTS[split]):
+            sample = samples[position]
+            scenario = _TRAIN_VAL_SCENARIOS[offset % len(_TRAIN_VAL_SCENARIOS)]
+            if not isinstance(sample, Mapping) or (
+                sample.get("split") != split
+                or sample.get("seed") != start + offset
+                or sample.get("scenario") != scenario
+                or sample.get("configured_cup_count") != len(_SCENARIO_CUPS[scenario])
+            ):
+                raise _fail("MANIFEST_INVALID", "official dataset sample schedule is invalid")
+            position += 1
+
+
+def _validate_train_val_source_tree(
+    source_root: Path,
+    manifest: Mapping[str, Any],
+    samples: list[dict[str, Any]],
+) -> None:
+    expected_files = {PurePosixPath("dataset.yaml"), PurePosixPath("dataset-manifest.json")}
+    for index, sample in enumerate(samples):
+        split = sample["split"]
+        seed = sample["seed"]
+        expected_paths = {
+            "image": PurePosixPath("images") / split / f"{seed:09d}.png",
+            "label": PurePosixPath("labels") / split / f"{seed:09d}.txt",
+            "truth": PurePosixPath("truth") / split / f"{seed:09d}.json",
+        }
+        if _sample_paths(sample) != expected_paths:
+            raise _fail("MANIFEST_INVALID", f"sample {index} paths are not canonical")
+        expected_files.update(expected_paths.values())
+
+    expected_directories: set[PurePosixPath] = set()
+    for relative in expected_files:
+        parent = relative.parent
+        while parent.parts:
+            expected_directories.add(parent)
+            parent = parent.parent
+
+    actual_files: set[PurePosixPath] = set()
+    actual_directories: set[PurePosixPath] = set()
+
+    def visit(directory: Path, relative: PurePosixPath) -> None:
+        try:
+            with os.scandir(directory) as iterator:
+                entries = list(iterator)
+        except OSError as error:
+            raise _fail("SOURCE_PATH_INVALID", f"cannot inventory {relative}: {error}") from error
+        for entry in entries:
+            child_relative = relative / entry.name
+            try:
+                if entry.is_symlink():
+                    raise _fail("SOURCE_PATH_INVALID", f"source member is a symlink: {child_relative}")
+                if entry.is_dir(follow_symlinks=False):
+                    if child_relative not in expected_directories:
+                        raise _fail(
+                            "MANIFEST_INVALID",
+                            f"unexpected source directory: {child_relative}",
+                        )
+                    actual_directories.add(child_relative)
+                    visit(Path(entry.path), child_relative)
+                elif entry.is_file(follow_symlinks=False):
+                    actual_files.add(child_relative)
+                else:
+                    raise _fail(
+                        "SOURCE_PATH_INVALID", f"source member has unsupported type: {child_relative}"
+                    )
+            except OSError as error:
+                raise _fail(
+                    "SOURCE_PATH_INVALID", f"cannot inspect source member {child_relative}: {error}"
+                ) from error
+
+    visit(source_root, PurePosixPath())
+    if actual_files != expected_files or actual_directories != expected_directories:
+        raise _fail("MANIFEST_INVALID", "source tree does not exactly match canonical members")
 
 
 def _label_polygons(payload: bytes, *, member: str) -> list[list[tuple[float, float]]]:
@@ -376,6 +635,107 @@ def _label_polygons(payload: bytes, *, member: str) -> list[list[tuple[float, fl
     return polygons
 
 
+def _ordered_geometry_scope(scenario: object) -> list[tuple[str, str]]:
+    try:
+        cups = _SCENARIO_CUPS[scenario]
+    except (KeyError, TypeError) as error:
+        raise _fail("GEOMETRY_RECEIPT_INVALID", "scenario has no task geometry scope") from error
+    dynamic = [*cups, "orange_bottle"]
+    result = [
+        (dynamic[left], dynamic[right])
+        for left in range(len(dynamic))
+        for right in range(left + 1, len(dynamic))
+    ]
+    result.extend(
+        (body, static)
+        for body in dynamic
+        for static in ("table", "neutral_block", "base_pedestal")
+    )
+    return result
+
+
+def _validate_geometry_receipt(truth: Mapping[str, Any], *, member: str, scenario: object) -> None:
+    receipt = truth.get("scene_geometry")
+    if not isinstance(receipt, Mapping) or set(receipt) != {
+        "policy",
+        "accepted",
+        "pairs",
+        "state_sha256",
+    }:
+        raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: receipt keys are invalid")
+    if receipt.get("policy") != _SCENE_GEOMETRY_POLICY or receipt.get("accepted") is not True:
+        raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: policy or acceptance is invalid")
+    state_sha256 = receipt.get("state_sha256")
+    if not isinstance(state_sha256, str) or _SHA256.fullmatch(state_sha256) is None:
+        raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: state SHA256 is invalid")
+    pairs = receipt.get("pairs")
+    expected = _ordered_geometry_scope(scenario)
+    if not isinstance(pairs, list) or len(pairs) != len(expected):
+        raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: pair scope is incomplete")
+    for index, (pair, body_names) in enumerate(zip(pairs, expected, strict=True)):
+        if not isinstance(pair, Mapping) or set(pair) != {
+            "body_names",
+            "geom_names",
+            "primitive_pair_count",
+            "signed_distance_m",
+        }:
+            raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: pair {index} keys are invalid")
+        if pair.get("body_names") != list(body_names):
+            raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: pair {index} bodies are invalid")
+        geom_names = pair.get("geom_names")
+        if (
+            not isinstance(geom_names, list)
+            or len(geom_names) != 2
+            or any(type(name) is not str for name in geom_names)
+            or any(
+                geom_name not in _VISUAL_GEOMS[body_name]
+                for body_name, geom_name in zip(body_names, geom_names, strict=True)
+            )
+        ):
+            raise _fail("GEOMETRY_RECEIPT_INVALID", f"{member}: pair {index} geoms are invalid")
+        primitive_count = pair.get("primitive_pair_count")
+        if type(primitive_count) is not int or primitive_count <= 0:
+            raise _fail(
+                "GEOMETRY_RECEIPT_INVALID",
+                f"{member}: pair {index} primitive count is invalid",
+            )
+        distance = pair.get("signed_distance_m")
+        distance_is_finite = False
+        if not isinstance(distance, bool) and isinstance(distance, (int, float)):
+            try:
+                distance_is_finite = math.isfinite(distance)
+            except OverflowError:
+                pass
+        if not distance_is_finite or distance < -1e-9:
+            raise _fail(
+                "GEOMETRY_RECEIPT_INVALID", f"{member}: pair {index} distance is invalid"
+            )
+
+
+def _validate_train_val_scenario_truth(
+    sample: Mapping[str, Any], instances: list[Any], *, member: str
+) -> None:
+    scenario = sample["scenario"]
+    try:
+        allowed_bodies = _SCENARIO_CUPS[scenario]
+    except (KeyError, TypeError) as error:
+        raise _fail("TRUTH_MISMATCH", f"{member}: scenario is invalid") from error
+    if sample["configured_cup_count"] != len(allowed_bodies):
+        raise _fail("TRUTH_MISMATCH", f"{member}: configured cups differ from scenario")
+    body_names = [
+        instance.get("body_name") if isinstance(instance, Mapping) else None
+        for instance in instances
+    ]
+    if (
+        any(type(body_name) is not str for body_name in body_names)
+        or len(body_names) != len(set(body_names))
+        or not set(body_names) <= set(allowed_bodies)
+    ):
+        raise _fail("TRUTH_MISMATCH", f"{member}: target bodies differ from scenario")
+    if scenario in {"small_far_cup", "partially_occluded_cup"} and not body_names:
+        raise _fail("TRUTH_MISMATCH", f"{member}: required scenario target is absent")
+
+
 def _truth_instances(
     payload: bytes,
     *,
@@ -385,6 +745,8 @@ def _truth_instances(
     image_height: int,
     schema_version: int,
     scene_geometry: Mapping[str, Any] | None,
+    require_complete_visible_truth: bool = False,
+    require_geometry_receipt: bool = False,
 ) -> list[dict[str, Any]]:
     truth = _json_mapping(payload, member=member)
     for field in (
@@ -396,9 +758,13 @@ def _truth_instances(
     ):
         if truth.get(field) != sample[field]:
             raise _fail("TRUTH_MISMATCH", f"{member}: {field} differs from manifest")
+    if require_geometry_receipt:
+        _validate_geometry_receipt(truth, member=member, scenario=sample["scenario"])
     instances = truth.get("instances")
     if not isinstance(instances, list) or len(instances) != sample["visible_instance_count"]:
         raise _fail("TRUTH_MISMATCH", f"{member}: instances differ from visible count")
+    if require_complete_visible_truth:
+        _validate_train_val_scenario_truth(sample, instances, member=member)
     normalized: list[dict[str, Any]] = []
     for index, instance in enumerate(instances):
         if not isinstance(instance, Mapping) or instance.get("body_name") not in _CUP_BODY_NAMES:
@@ -434,6 +800,11 @@ def _truth_instances(
             }
             present_visible_fields = visible_fields.intersection(instance)
             visible_mask = None
+            if require_complete_visible_truth and present_visible_fields != visible_fields:
+                raise _fail(
+                    "VISIBLE_TRUTH_INVALID",
+                    f"{member}: instance {index} visible-mask fields are incomplete",
+                )
             if present_visible_fields:
                 if present_visible_fields != visible_fields:
                     raise _fail(
@@ -472,6 +843,24 @@ def _truth_instances(
                         "OCCLUSION_TRUTH_INVALID",
                         f"{member}: instance {index} visible mask is absent",
                     )
+                if require_complete_visible_truth:
+                    partial_fields = {
+                        "paired_reference_mask_rle_counts",
+                        "paired_reference_mask_sha256",
+                        "paired_reference_pixel_count",
+                        "amodal_mask_rle_counts",
+                        "amodal_mask_sha256",
+                        "amodal_pixel_count",
+                        "occluded_pixel_count",
+                        "visible_fraction",
+                        "occluder_body_name",
+                        "occlusion_reference",
+                    }
+                    if not partial_fields <= instance.keys():
+                        raise _fail(
+                            "OCCLUSION_TRUTH_INVALID",
+                            f"{member}: instance {index} partial truth is incomplete",
+                        )
                 try:
                     paired_reference_mask = decode_binary_mask_rle(
                         instance.get("paired_reference_mask_rle_counts"),
@@ -508,6 +897,17 @@ def _truth_instances(
                         abs_tol=1e-12,
                     )
                     or not bool((amodal_mask == (visible_mask | paired_reference_mask)).all())
+                    or (
+                        require_complete_visible_truth
+                        and (
+                            type(instance.get("paired_reference_pixel_count")) is not int
+                            or type(instance.get("amodal_pixel_count")) is not int
+                            or type(instance.get("occluded_pixel_count")) is not int
+                            or isinstance(instance.get("visible_fraction"), bool)
+                            or not bool((visible_mask <= amodal_mask).all())
+                            or not bool((amodal_mask & ~visible_mask).any())
+                        )
+                    )
                 ):
                     raise _fail(
                         "OCCLUSION_TRUTH_INVALID",
@@ -611,6 +1011,7 @@ def _profile(
     inventories: Mapping[str, list[dict[str, Any]]],
     *,
     schema_version: int,
+    include_test_seal: bool = True,
 ) -> dict[str, Any]:
     profile: dict[str, Any] = {"schema_version": 1}
     samples_by_split = {
@@ -667,10 +1068,11 @@ def _profile(
                 )
             ),
         }
-    profile["test"] = {
-        "sample_count": sum(sample["split"] == "test" for sample in samples),
-        "sealed": True,
-    }
+    if include_test_seal:
+        profile["test"] = {
+            "sample_count": sum(sample["split"] == "test" for sample in samples),
+            "sealed": True,
+        }
     return profile
 
 
@@ -727,12 +1129,22 @@ def convert_dataset(
     if _COMMIT.fullmatch(converter_commit) is None:
         raise _fail("PROVENANCE_INVALID", "converter commit is invalid")
 
-    _dataset_contract(source_root)
     manifest, manifest_payload = _manifest(source_root)
+    splits = (
+        _TRAIN_VAL_SPLITS
+        if manifest.get("dataset_contract") == _TRAIN_VAL_DATASET_CONTRACT
+        else _LEGACY_SPLITS
+    )
+    if splits == _TRAIN_VAL_SPLITS:
+        _validate_official_train_val_version(manifest)
+    _dataset_contract(source_root, splits)
     samples = [
-        _validate_sample_shape(sample, index) for index, sample in enumerate(manifest["samples"])
+        _validate_sample_shape(sample, index, splits)
+        for index, sample in enumerate(manifest["samples"])
     ]
-    _validate_manifest_members(manifest, samples)
+    _validate_manifest_members(manifest, samples, splits)
+    if splits == _TRAIN_VAL_SPLITS:
+        _validate_train_val_source_tree(source_root, manifest, samples)
     width = manifest["image_width"]
     height = manifest["image_height"]
     source_manifest_sha256 = _sha256_bytes(manifest_payload)
@@ -751,7 +1163,7 @@ def convert_dataset(
     inventories: dict[str, list[dict[str, Any]]] = {"train": [], "val": []}
     sealed_samples: list[dict[str, Any]] = []
     for sample in sorted(
-        manifest["samples"], key=lambda item: (_SPLITS.index(item["split"]), item["seed"])
+        manifest["samples"], key=lambda item: (splits.index(item["split"]), item["seed"])
     ):
         paths = _sample_paths(sample)
         payloads = {name: _read_bytes(source_root, path) for name, path in paths.items()}
@@ -776,6 +1188,8 @@ def convert_dataset(
             image_height=height,
             schema_version=manifest["schema_version"],
             scene_geometry=manifest.get("scene_geometry"),
+            require_complete_visible_truth=splits == _TRAIN_VAL_SPLITS,
+            require_geometry_receipt=splits == _TRAIN_VAL_SPLITS,
         )
         if len(polygons) != len(truth_instances):
             raise _fail("TRUTH_MISMATCH", f"{paths['label']}: label/truth instance count differs")
@@ -810,20 +1224,22 @@ def convert_dataset(
             "samples": inventories[split],
             "split": split,
         }
-    documents["test-sealed-members.json"] = {
-        "converter_commit": converter_commit,
-        "sample_count": len(sealed_samples),
-        "samples": sealed_samples,
-        "schema_version": 1,
-        "sealed": True,
-        "source_archive_sha256": source_archive_sha256,
-        "source_manifest_sha256": source_manifest_sha256,
-        "split": "test",
-    }
+    if splits == _LEGACY_SPLITS:
+        documents["test-sealed-members.json"] = {
+            "converter_commit": converter_commit,
+            "sample_count": len(sealed_samples),
+            "samples": sealed_samples,
+            "schema_version": 1,
+            "sealed": True,
+            "source_archive_sha256": source_archive_sha256,
+            "source_manifest_sha256": source_manifest_sha256,
+            "split": "test",
+        }
     documents["dataset-profile.json"] = _profile(
         samples,
         inventories,
         schema_version=manifest["schema_version"],
+        include_test_seal=splits == _LEGACY_SPLITS,
     )
     payloads = {relative: _canonical_json(document) for relative, document in documents.items()}
     output_root.mkdir(parents=True, exist_ok=False)
