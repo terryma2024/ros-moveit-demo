@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-250
+latest_checkpoint: CP-251
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7c2fc970ac874ccae701fed522f83fe4a70d0241
 active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
 confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
 open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r422 full readback passed; freeze production prompt/filter protocol and run r423 no-forward preparation before original/epoch4 SAM actual production replay, no DINO rerun
+next_action: r423 production prompt preparation passed; r424 original-SAM production replay with mapping0.98 and actual TargetSelector, no DINO rerun
 boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -16166,4 +16166,44 @@ next_after_preflight: register unique actual SAM replay IDs with complete proven
 working_tree: ledger-only update since e430ccaa implementation; original untracked build/install/log preserved
 retention: all runs retained; archived none; scratch deletion candidates only; no deletion
 boundaries: sealed-test/COCO100/PickPlace/Mac inaccessible; Microduck paused; no new SAM training; mask0.80/mapping0.98 unchanged; no deployment or task-completion claim
+```
+
+## Checkpoint CP-251 — Production prompt preflight passed; original SAM replay planned
+
+```yaml
+checkpoint: CP-251
+status: VALID_PROMPT_PREFLIGHT_ORIGINAL_SAM_REPLAY_PLANNED
+run_id: stage-e-r5-production-prompt-preflight-r423
+source_commit: 9f2c80b5af1873ca8b7d98f1f9a21f27ffd817ea
+result: {exit_code: 0, elapsed_seconds: 3.27, frames: 300, primary_frames: 250, nonempty_frames: 250, prompts: 300, new_model_forwards: 0}
+report_sha256: 31c8dab9c233a36ffd3a7ea4b07a0aa9c585093219e071b157ac2a028894a4bc
+prompts_sha256: e69ebe8cc341ac7ec67980bdcb7c75c99891a47e60c2c0f86ac77aedbaa8673a
+preparation_script_sha256: 6508aba1ed2ad729e2497bf0711e139957a22ea160bbfe7fc4e5e24796a6b105
+scenario_prompts: {no_cup: 0, two_cups: 100, one_cup_distractors: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+proven: real convert_grounding_results consumes strict upstream0.40-filtered boxes/text labels, enforces16candidate limit and0.85duplicate IoU; all production proposal identities uniquely match complete receipts and original raw candidates
+python: /data/work/venvs/so101-grounded-sam/bin/python
+overlay: r418 seven-package symlink install
+scratch: durable scratch/stage-e-r5-production-prompt-preflight-r423/tmp; actual tempfile exact match
+ROS_DOMAIN_ID: not_applicable_offline
+GZ_PARTITION: not_applicable_offline
+next_run:
+  experiment_id: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
+  status: PLANNED
+  run_id: stage-e-r5-original-sam-production-r424
+  single_variable: actual original frozen SAM production batch instead of low-floor raw batch, same r5 DINO prompts and unchanged SAM weights
+  output_root: durable val-remediation/grounded-sam-cup-r5-original-production-r1; must not exist
+  preconditions: complete r423 receipt and script hashes, exact model bundle and dependencies, CUDA-only FP32 model state, empty GPU compute process list, source unchanged since e430ccaa except ledger, unique evidence and NVMe scratch
+  inference: original Sam2Model/Sam2Processor local-only,250nonempty-frame forwards, zero DINO; empty50frames retained explicitly
+  production: actual convert_sam_results with CP-250 filters and unchanged mask-inside-box0.80; actual TargetSelector at confidence0.40; complete multimasks/qualities and accepted production RLE retained
+  mapping: unique exact raw proposal identity plus real raw/production mask IoU>=0.98 for every accepted candidate; mapping error makes replay INVALID and cannot release qualification gates
+  scoring: corrected RLE, actual production masks, box0.5 plus mask0.80, all300/primary250 and six scenario reports, no-cup/two-cup unsafe UNIQUE counts; never interpret generic valid evidence status as passing safety
+  error_retention: persist all available frame artifacts and explicit errors; no missing denominator or silent fallback; failed mapping does not authorize lowering threshold or starting PickPlace
+  script: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/replay_r5_original_sam_r424.py
+  script_sha256: 33ade3248368bf890dfb657c7418c16978101ed470e98293f43acfeb8e5fa976
+  command: bash /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_r5_val_capture_r421.sh stage-e-r5-original-sam-production-r424 replay_r5_original_sam_r424.py NEXT_SYNCED_HEAD
+  owner: unique tmux so101-exp079-r5-original-r424, direct local host, serial execution
+  verification: independent retained-artifact readback after completion; no repeat inference for audit; no production code changed, existing postprocessing/matching/selector implementations reused
+next_after_original: read back results; then retained epoch4 SAM comparison with its own raw-batch masks for mapping, not original masks; no new SAM training
+retention: all earlier runs retained; archived none; scratch deletion candidates only; no deletion
+boundaries: Microduck paused; sealed-test/COCO100/PickPlace/Mac inaccessible; mask0.80/mapping0.98 unchanged; no deployment claim
 ```
