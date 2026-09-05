@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-366 — r517 implementation statically frozen; one 167-case GREEN authorized
+
+```yaml
+checkpoint: CP-366
+status: R517_IMPLEMENTATION_STATIC_GREEN_ONE_BEHAVIORAL_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+executor: /root/generator_build, gpt-5.6-sol high
+preallocation: {run_root: absent, scratch_root: absent, low_root: absent, harness_invocations: 0, official_roots: absent}
+candidate: {driver_sha256: 7739d49d414c4546e03d5d89bb6d365327a9fc0b71140fd53981c0dc65b25b9a, shell_sha256: 9bcdd35a24f326ebb06f0218853f730cce0a082488c79ca57572880691a0807a, harness_sha256: f70cbb1b015ac65b8115c53ee99a3939d51860710a659b7e027132da07e3552e, driver_diff_vs_r516: +221/-4, shell_diff_vs_r516: +148/-77, harness_lines: 263}
+implementation_summary: deferred terminal has completion_mode=deferred and no inventory; complete_postallocation unifies normal/EXIT ownership before one finalizer, outer and accounting completion; typed nullable attempt statuses and exact launch membership close once; default immediate finalizer retained
+static_gates: driver/harness AST pass; driver/harness Ruff pass; shell Bash syntax pass; embedded driver SHA matches; parent read back candidate hashes, diff stats, expected-total/contract anchors and absence of r517 roots
+frozen_test_total: 167
+test_groups: {retained_r515: 133, strengthened_r516: 6, real_driver_schema_inventory_mutation: 28}
+behavioral_requirements: every case passes with zero harness errors/forbidden imports; one finalizer and completion, disclosed diagnostic-only outer expectation, provisional/immediate compatibility, strict types/nullability/precedence, terminal/outer/accounting consistency, exact inventory, missing/extra/symlink/collision/duplicate rejection and omission-mutation sensitivity
+next_experiment:
+  status: GO_ONE_FRESH_OFFLINE_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-diagnostic-accounting-green-r517
+  executor: /root/generator_build, gpt-5.6-sol high
+  allowed_changes_before_run: create final private launcher and mechanically bind exact frozen hashes/current HEAD/r517 paths only; no driver/shell/harness semantic or byte change
+  required: exact locked Python/fresh unique NVMe TMPDIR/TMP/TEMP preflight; static/hash gates; one top invocation;167/167, zero failure/harness error, all top exits0, forbidden imports empty; raw exit/elapsed before parse; full fsync/inventory/readback/report; stop for Astra
+  restrictions: no tracked repo edit/Git/index/ledger, real setup/project import/GPU/renderer/official roots/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: partial predecessor bytes are superseded but retained where captured in reports/diffs; all evidence retained, archived none; nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-365 — r517 durable accounting design approved with mandatory acceptance conditions
 
 ```yaml
