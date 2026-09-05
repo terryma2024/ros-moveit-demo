@@ -18953,6 +18953,34 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-359 — r514 exposes EXIT-trap scope RED; minimal shell lifecycle GREEN authorized
+
+```yaml
+checkpoint: CP-359
+status: VALID_PARTIAL_GREEN_N2_TRAP_SCOPE_RED_MINIMAL_SHELL_FIX_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r514
+executor: /root/generator_build, gpt-5.6-sol high
+classification: NON_GREEN_SUCCESS_CHAIN_N2_TRAP_SCOPE_FAILURE
+result: {authoritative_green: false, invocations: 1, total: 133, passed: 131, failed: 2, harness_errors: 0, retained_r508: 114/114, adapted_r509: 17/19, raw_harness_exit: 1, launcher_exit: 1, elapsed_seconds: 11.466486631}
+green_confirmed: exception oracle proves exact r509_frozen_private_driver.GenerationRunnerError provenance; all N3 success-chain cases, TMP mismatch, late collision and best-effort finalizer cases pass; forbidden imports empty
+red_failures: [n2_shell_stage-failure_escapes_complete_accounting, n2_shell_fsync-failure_escapes_complete_accounting]
+root_cause: execute_generation installs a shell EXIT trap but all trap-required state is function-local; after set-e failure unwinds the function, set-u raises owner_active unbound before finalization, leaving launch-terminal and outer-failure receipts absent
+frozen_inputs: driver SHA256cbb737df2a497b6b67f48bab1adff31042ea75cdda908fbafb19963d0cb34c2b unchanged; failing shell SHA25653ddc70ab21b5cf4a901cd718cc2972d643bc35a7bdb9df42625317ef47c9760 retained
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r514; invalid-result SHA256f7d3ef7217375ef5fc479e5940902ad3a09a10b9c114a9f5b3cda7f91b2ce9c7; harness SHA2568ed6c6137ec567fed5e4268d31c7421adb12af0da890be3c0250b4a20ab2baea; launcher SHA2566c28a03238c831f20052564d77b378d65704bdd0b921afdc5cd77479eb45e7a4; final17-file inventory SHA256763a94cd12d07c30383b2b810d8dfef895380e8a919bfcbf5492eee7d65b6dfc; readback SHA2564a6897320b17afb2c995e2be92beb03f30dd3aa3a5027da65e4c91ee96062034
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-success-chain-green-r514-report.md SHA256369efe3ac735d737ad261df7b4f61cc8aabac97839007e66fd17cfd922fec049
+parent_readback: complete report/result/cases/stderr/inventory/readback/shell lines205-236 and frozen hashes read; official roots absent; source/config clean; r514 retained and never rerun
+next_experiment:
+  status: GO_MINIMAL_PRIVATE_SHELL_LIFECYCLE_GREEN
+  run_id: stage-e-generator-nonpenetrating-generation-runner-success-chain-green-r515
+  executor: /root/generator_build, gpt-5.6-sol high
+  implementation: move every value required by postallocation EXIT ownership after function unwind to uniquely prefixed shell-global state initialized fail-closed; trap reads nounset-safe expansions, claims/disarms ownership exactly once before clearing; preserve separate original/finalizer exits and nonrecursive best-effort storage boundary
+  invariants: driver bytes unchanged; no N3/collision/evidence schema weakening; exact r514133 assertions/case semantics and type-provenance oracle retained; shell change restricted to trap state lifetime/renames needed by that refactor
+  required: fresh unique r515 roots/exact locked Python/NVMe preflight; static gates; one invocation;133/133 pass, zero failure/harness error, all exits0, forbidden imports empty; stage/fsync failures driver_not_called and complete durable accounting; full fsync/inventory/readback; stop for Astra review
+  restrictions: private T shell/harness only; no tracked repo edit, real setup/project import/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r514/r513 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
+boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-358 — r513 exception oracle invalid; fresh type-provenance GREEN retry required
 
 ```yaml
