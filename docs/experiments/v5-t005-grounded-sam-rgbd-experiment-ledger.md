@@ -18636,3 +18636,30 @@ future_gate: r496 one full ordinary run must collect exactly1472 ordinary/0 benc
 retention: r494 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: no full ordinary/benchmark/official generation/render/MuJoCo/OpenGL runtime/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-335 — r495 accepted-source build valid; full ordinary rerun authorized
+
+```yaml
+checkpoint: CP-335
+status: VALID_BUILD_FULL_ORDINARY_PLANNED
+run_id: linux-build-stage-e-generator-order-oracle-r495
+executor: /root/generator_build, gpt-5.6-sol high
+source_commit: 07dcd29ae496e54f3fcb70092a6613db52fc7b27
+result: {classification: VALID_BUILD, invocations: 1, packages: 7, colcon_exit: 0, tool_exit: 0, colcon_seconds: 56.22, total_elapsed_seconds: 59.593280306, scoped_clean_before: true, scoped_clean_after: true, source_unchanged: true}
+overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-e-generator-order-oracle-r495/install; all seven prefix readbacks exact
+inputs: generator SHA256 8b0844aa241ed22dedf824d4c40012e1d74f099505c223a7f37d021ce648cd59; converter SHA256 6a2176ef046592a63265986f2961c2f93f3bc34b41503f6482942766d40fd00e; config SHA256 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c; corrected test SHA256 c8047f6ff399ae5455644b02795637de594e204370b1214114bb0a4e81c68717
+lodepng: retained r26 exact ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a, strict fsck/clean before and after, explicit offline source override plus FULLY_DISCONNECTED; no fetch
+scratch: durable scratch/linux-build-stage-e-generator-order-oracle-r495/tmp exact tempfile preflight; retained deletion candidate
+evidence: durable run-evidence/linux-build-stage-e-generator-order-oracle-r495; runner SHA256 c75fe0728cf5001740f750e71cfdbfcf43222b46afe6da093e1d5f2bbe5a0cc3; result SHA256 ea700c7ef55c2cb95252a04c688d31ec882eba1b9742cb8c06e323139b02927d; inventory SHA256 dbcca3a311b6e0391f80049863fbb58cae2e3f295fd3fdd0fd4d51d1be9633b1; prefix SHA256 1619b37d8a6ff13d89b0902170d20fd8244bf3fdaeda51ba1f5468b5fc186936; import SHA256 6cdcb6109c4fa21b826eb13c470c87ce24d98043f83e84046c0715e6150c0a72
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-order-oracle-build-r495-report.md SHA256 389793fad685c5ec20fad67e01ed54dc79396d22ec830ae620d6b6eb76f865e0
+parent_readback: complete92-line report plus result/inventory/runner/prefix/import/tempfile/stdout/timing receipts read; known nonfatal warning families only
+next_experiment:
+  status: PLANNED
+  run_id: linux-test-stage-e-generator-order-oracle-r496-ordinary
+  executor: /root/generator_build, gpt-5.6-sol high
+  scope: exactly one colcon test process for so101_demo_py with pytest-args test, frozen r495 build/install; require exactly1472 ordinary cases,1472 passes, zero failure/error/skip and zero benchmark cases; colcon/test-result/receipt/tool exits all0
+  scratch: fresh unique durable scratch/linux-test-stage-e-generator-order-oracle-r496-ordinary/tmp, TMPDIR/TMP/TEMP exact locked-Python preflight, explicit basetemp/cache
+  evidence: copy JUnit before later action, full logs/command/exits/elapsed/collection partition/source/overlay/Python/import/prefix/no-drift; stop before benchmark
+retention: r495 and all earlier evidence retained, archived none; scratch deletion candidates only and nothing deleted
+boundaries: no explicit benchmark/official generation/render/inference/training/sealed-test/COCO100/PickPlace/Mac/SAM; ordinary tests may legally import MuJoCo without rendering; Microduck paused; mask0.80/mapping0.98 unchanged
+```
