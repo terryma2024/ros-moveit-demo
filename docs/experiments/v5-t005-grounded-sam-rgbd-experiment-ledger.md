@@ -17803,3 +17803,27 @@ next_experiment:
 retention: r474 and all earlier evidence retained, archived none; r474 scratch deletion candidate only, no deletion
 boundaries: no runner/source change yet, no r470/GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
 ```
+
+## Checkpoint CP-304 — r475 behavior valid but exit receipt missing; r476 planned
+
+```yaml
+checkpoint: CP-304
+status: INVALID_INCOMPLETE_EXIT_RECEIPT_FRESH_RED_PLANNED
+run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r475
+executor: /root/generator_build, gpt-5.6-sol high
+behavior_result: {classification: VALID_BEHAVIORAL_RED, total: 17, defects_reproduced: 16, valid_controls: 1, harness_errors: 0, elapsed_seconds: 0.11}
+observed: truthful Python mismatch and all semantic/PNG/exact-tree gaps reproduced; valid frozen-writer PNG accepted
+invalid_reason: post-command exclusive exit receipt placed TEST_EXIT assignment after command arguments, causing KeyError and leaving no exit.log; overall tool exit1 is known but not durably bound as required
+disposition: behavior observations retained but r475 is not the authoritative RED; never reuse/rerun or backfill its missing receipt
+evidence: durable run-evidence/stage-e-generator-runtime-acceptance-runner-behavioral-red-r475 and unique scratch; exact harness SHA8935c196, result/stdout/stderr/elapsed/command/preflight/input copies retained
+python_scratch: exact venv launch and resolved /usr/bin/python3.12 recorded; all TMP vars exact unique NVMe scratch/tmp; tempfile gate PASS
+source_state: current r470 driver75a3f0bc and shell198e43ca unchanged; package source clean; r470 root absent
+next_experiment:
+  status: PLANNED
+  run_id: stage-e-generator-runtime-acceptance-runner-behavioral-red-r476
+  executor: same Sol high
+  single_change: reuse exact r475 harness bytes/expectations, but fix outer environment-assignment placement and preflight the exclusive exit-receipt mechanism in a separate disposable file before the one test invocation
+  required: fresh evidence/scratch, exact tempfile preflight, exit.log present and equal actual test exit, total17/defects16/control1/harness0; stop before runner fix
+retention: r474/r475 and all earlier evidence retained, archived none; r474/r475 scratch deletion candidates only, no deletion
+boundaries: no current runner/source/ledger-by-agent change, no r470/GL/render/build/official data/inference/training/sealed-test/COCO100/PickPlace/Mac; Microduck paused
+```
