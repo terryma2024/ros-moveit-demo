@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-446
+latest_checkpoint: CP-447
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-d-official-base-common-val-r640
-confirmed: official pinned base also fails the same frozen near/real val, while the trained candidate improves both streams but remains ineligible; the mixed-r2 near-MuJoCo half contains zero no_cup examples, matching the dominant near-domain no-cup false-positive gap
-open: bounded mixed-r3 design awaits the required approval gate before changing data selection; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
-next_action: if approved, derive a new immutable mixed-r3 with the 800 near-MuJoCo members balanced 160 each across the five primary scenarios including no_cup, preserving the other 800 members and all 50/30/20, isolation and training constraints
+active_experiment: stage-c-dino-domain-retention-near-negative-rebalance-r641
+confirmed: user approved bounded mixed-r3; the immutable 1600-train/160-real-val bundle passes complete readback with five primary near-MuJoCo scenarios at 160 each, exact preservation of all 960 mixed-r2 COCO members, small_far_cup excluded, and zero COCO100 ID/payload overlap
+open: train frozen Swin-T/BERT from the exact official pinned base for at most three epochs and select only from near-synthetic and independent-real validation; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
+next_action: materialize the mixed-r3 training config with pinned-base initialization, head LR 0.000002 and distillation lambdas 1.0; run the bounded 6+6 CUDA smoke, then the three-epoch frozen-backbone phase with per-epoch raw DINO validation
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20577,6 +20577,61 @@ launcher_note: first low-rate invocation stopped before model load because direc
 verification_decision: no package or benchmark run; source and selected model did not change, and official base was a diagnostic fallback comparison only
 retention: r640 report and scratch plus all low-rate attempts and every prior output/evidence retained; deletion candidates only, nothing deleted or archived
 boundaries: no training/SAM/selector/COCO100/sealed-test/depth/PickPlace/Mac access; no threshold or model-family change; Microduck paused
+```
+
+## Checkpoint CP-447 — approved mixed-r3 near-domain negative rebalance is immutable and read back
+
+```yaml
+checkpoint: CP-447
+status: VALID_MIXED_R3_IMMUTABLE_COMPLETE_READBACK_FROZEN_BACKBONE_SMOKE_NEXT
+prior_checkpoint: CP-446
+user_authorization: approved mixed-r3
+run_id: stage-c-dino-domain-retention-near-negative-rebalance-r641
+source_commit: b57588d4f8f316f799a47a6786e2fe1bf60a93f1
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-near-negative-rebalance-r641
+output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r3
+single_change:
+  - mixed-r2 near_synthetic 的四个正场景各 200 改为五个 primary 场景各 160
+  - 新增 no_cup 160；one_cup_distractors、two_cups、cup_near_bottle、partially_occluded_cup 各保留 160；small_far_cup 为 0
+preserved:
+  - train 1600、real_val 160 与 50/30/20 总配比不变
+  - real_train 480、generic 160、hard_negative 160、real_val 160 的 960 个 COCO 成员身份/图像哈希逐项与 mixed-r2 完全相同
+  - prompt cup.、640x480 letterbox、官方 pinned-base 初始化、冻结 Swin-T/BERT 初始阶段、head LR 0.000002、蒸馏 lambda 各 1.0 和三 epoch 上限不变
+  - COCO100 仅作为 100 ID 与 100 payload hash denylist；未使用 outcome、score、metric 或 threshold；sealed final test 未读取
+focused_tdd:
+  red: 1 failed，缺失五场景等配额 selector API，属于预期行为 RED
+  green: 1 passed in 0.01 s；精确 Python tempfile 位于唯一 NVMe scratch
+  setup_notes:
+    - 首次 shell 在同一 export 命令中受 zsh nounset 展开影响，pytest 未启动
+    - 第二次 pytest 被 ROS 全局插件自动加载并在收集前因隔离 venv 缺 yaml 停止
+    - 新 scratch 加 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 后取得唯一有效 RED；未安装依赖、未改变环境或产品代码
+generation: {completed: 1760, train: 1600, val: 160, elapsed_seconds: 474, final_images_per_second: 2.1472447056, stderr_empty: true}
+independent_readback:
+  status: PASS
+  decoded_images: 1760
+  manifest_payload_files: 1762
+  role_counts: {near_synthetic: 800, real_train: 480, generic: 160, hard_negative: 160, real_val: 160}
+  scenario_counts: {no_cup: 160, one_cup_distractors: 160, two_cups: 160, cup_near_bottle: 160, partially_occluded_cup: 160, small_far_cup: 0}
+  coco100_overlap: {image_ids: 0, source_payload_hashes: 0}
+  r2_coco_members_exactly_preserved: true
+  frozen_modes: {files: 1763_at_0444, directories: 6_at_0555}
+hashes:
+  source_identity: 6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db
+  train_inventory: 4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a
+  val_inventory: 9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572
+  dataset_manifest: 6936125cafa9e97c9f1d14b4f7646168c51272d0debfce12aeae50e473baa5c4
+  readback: 6b7d06577e2ac43e9fdff8613e76368a3bfa33e4dd588e2380358757610f5930
+decision: KEEP_AND_FREEZE_MIXED_R3; proceed to one 6+6 frozen-backbone CUDA smoke, then at most three formal epochs from official revision a2bb814dd30d776dcf7e30523b00659f4f141c71
+verification_decision: only the focused private selector test and complete data readback ran; no package test or benchmark because tracked product/benchmark source and selected model did not change
+retention: mixed-r3 dataset and r641 evidence retained; all prior evidence retained; no deletion or archive
+deletion_candidates:
+  - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-red/tmp
+  - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-red-r2/tmp
+  - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-red-r3/tmp
+  - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-green/tmp
+  - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-data-prep/tmp
+boundaries: SAM remains frozen; no COCO100 evaluation, sealed-test read, depth, PickPlace or Mac work; no threshold relaxation; Microduck paused
+next_experiment: create the mixed-r3 config and run one fresh 6+6 CUDA smoke from exact official pinned base, with no epoch-5 warm-start
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
