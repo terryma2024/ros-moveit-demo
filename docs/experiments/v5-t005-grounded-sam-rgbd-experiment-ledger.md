@@ -19273,6 +19273,27 @@ evidence: r551 run-evidence and scratch retained; scratch is a deletion candidat
 boundaries: no source/model bytes/data/threshold/recipe change; no r551 reuse, general harness, fault injection or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-413 — r552 rejected mistyped val inventory hash; exact contract value restored
+
+```yaml
+checkpoint: CP-413
+status: INVALID_PRE_CUDA_VAL_INVENTORY_HASH_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-412
+invalid_run:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r552
+  result: {exit: 1, elapsed_seconds: 1.65, output_created: false, cuda_model_loaded: false, inference_frames: 0}
+  failure: evaluator carried a mistyped val inventory SHA from the handoff summary and CP-410 planning text
+  incorrect_planning_value: c7653a60686d828202f4f85dcacdc1f968e308761645f989469f09f719477eda
+  exact_file_sha256: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9
+  corroboration: frozen r2 training contract and selected DINO checkpoint identity independently contain exact SHA256 c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9
+  erratum: CP-410 joint_val_plan dataset inventory field is inaccurate; this checkpoint supersedes that one field only
+fresh_retry:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r553
+  sole_change: replace the mistyped expected val inventory hash with the exact frozen-file and training-contract value; use fresh run, scratch and output roots
+evidence: r552 run-evidence and scratch retained; scratch is a deletion candidate only; nothing overwritten or deleted
+boundaries: no source/model/data/threshold/recipe change; no r552 reuse, general harness, fault injection or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
