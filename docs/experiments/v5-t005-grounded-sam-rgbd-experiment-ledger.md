@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-439
+latest_checkpoint: CP-440
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-frozen-backbone-smoke-r624
+active_experiment: stage-c-dino-domain-retention-frozen-backbone-formal-r627
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: run the fresh 6+6 CUDA smoke, then train three epochs from independent official-base teacher and student on frozen mixed-r2; Linux PickPlace and all Mac work remain gated
-next_action: build the cache-reusing committed training image and launch a network-none 6+6 CUDA smoke with fresh output, finite-loss/frozen-gradient/readback gates
+open: train three epochs from independent official-base teacher and student on frozen mixed-r2 and select only from near-synthetic plus independent-real validation; Linux PickPlace and all Mac work remain gated
+next_action: launch formal-r1 in an owned local tmux session with network disabled, monitor every 25 batches and complete one readback only after all three epochs and fresh reload finish
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20248,6 +20248,46 @@ next_experiment:
 decision: GO_6_PLUS_6_SMOKE
 retention: r623/r622/r621/r620 and all prior evidence retained; registered scratch and low-rate roots remain deletion candidates only; nothing deleted or archived
 boundaries: COCO100 and sealed final test excluded from training/epoch/threshold selection; SAM unloaded and frozen; no PickPlace before DINO gate; Microduck paused
+```
+
+## Checkpoint CP-440 — frozen-backbone 6+6 CUDA smoke valid; three-epoch formal run authorized
+
+```yaml
+checkpoint: CP-440
+status: VALID_6_PLUS_6_CUDA_SMOKE_GO_FORMAL_THREE_EPOCHS
+prior_checkpoint: CP-439
+implementation_commit: a3db96d27abfadfc18e38523bb1352dcdebfd331
+gitee_readback_before_smoke: a3db96d27abfadfc18e38523bb1352dcdebfd331
+image:
+  tag: so101-grounding-dino-tiny-train:r6-domain-retention-a3db96d2
+  id: sha256:e098b254efbd6cca07e0683ee382e0b88eb6ec816bac87bface8e46f8c9d0d2e
+  build: reused every dependency layer; rebuilt only package copy/install; pinned CUDA 13.0.2, torch 2.13.0+cu130 and transformers 4.56.2
+smoke:
+  run_id: stage-c-dino-domain-retention-frozen-backbone-smoke-r624
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-r1/smoke-r1
+  first_invocation: INVALID_PRE_MODEL_PATH_BOUNDARY; caller supplied dataset parent while the verified split contract takes its images/train or images/val directory; fail-closed before output creation, model load or training; log retained
+  minimal_correction: invocation arguments only; supplied frozen mixed-r2 images/train, mixed-r2 images/val and frozen nonpenetrating images/val; no source, data, config or recipe change
+  rerun_exit: 0
+  resolved_counts: {train: 6, near_val: 3, real_val: 3, val_total: 6}
+  losses: {supervised_mean: 64371.727864583336, teacher_token_mean: 0.8595286309719086, teacher_candidate_box_mean: 0.0002595636969798439, total_mean: 64372.587239583336, all_finite: true}
+  teacher_candidates_mean: 7.166666666666667
+  gradients: {frozen_parameter_violations: 0, checked_after_batch: 1, status: PASS}
+  trainability: {teacher_trainable: 0, student_trainable: 11616776, student_total: 172249090, Swin_T_frozen: true, BERT_frozen: true, encoder_frozen: true, decoder_training: true}
+  selected_smoke_only: {thresholds: [0.50, 0.50], joint_harmonic_f1: 0.9523809523809523, near_f1: 1.0, near_recall: 1.0, real_f1: 0.9090909090909091, real_recall: 0.8333333333333334}
+  checkpoint_manifest_sha256: ebaf7bf4ed11355e033dbdeac3f4ff94f272f032e6735c993003f409b3180fb9
+  fresh_reload_sha256: d97f3e69dfa43b34752f8e7d2f501e94ae5064963ddd2c6f130ebd7b4e84432f
+readback:
+  r625: INVALID_AUDITOR_FIELD_AND_FALSE_TAIL_PASS; read-only script expected bytes instead of manifest size and its shell omitted pipefail; empty report and logs retained, never evidence for the gate
+  r626: {status: PASS, files: 19, total_bytes: 782156424, readback_sha256: c3b33272adeee5125dc98454cfb108dfe54d450988bfa238b3d0a5f9d35373de}
+  verified: every regular output file hashed; every checkpoint manifest member size/hash passes; no symlink; run/config/provenance/trainability/gradient/environment invariants pass; fresh reload is VALID
+formal:
+  run_id: stage-c-dino-domain-retention-frozen-backbone-formal-r627
+  planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-r1/formal-r1
+  recipe: 1600 samples for 3 epochs, batch1, accumulate4, AdamW head LR 0.000002, independent official-base teacher/student, dual distillation lambda1, exact same frozen/trainable boundary
+  per_epoch: 300 all-scenario synthetic plus primary near cohort, 160 independent real validation, DINO-only raw-candidate metrics and common-threshold grid; joint harmonic F1 selects checkpoint
+decision: GO_FORMAL_THREE_EPOCHS
+retention: r626/r625/r624 and smoke output plus all prior evidence retained; r625 is explicitly invalid; all registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
+boundaries: smoke thresholds are not final; COCO100 and sealed final test remain excluded; SAM frozen/unloaded; no PickPlace; no Mac; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
