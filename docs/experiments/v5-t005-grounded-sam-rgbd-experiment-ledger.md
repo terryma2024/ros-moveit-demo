@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
+
+```yaml
+checkpoint: CP-402
+status: USER_REQUESTED_SESSION_STOP_HANDOFF_COMPLETE_OFFICIAL_NO_GO
+resume_status: confirmed task remains active; interruption does not cancel it
+execution_mode: subsequent execution/debugging must be Sol-High inline serial per user; no execution subagent
+git_state_at_handoff: {branch: codex/v5-t004-yolo-seg-rgbd, local_head: 9db5fb27c6758226067936368d0305e4aaa3489f, gitee_head: 9db5fb27c6758226067936368d0305e4aaa3489f, tracked_clean: true, preserved_untracked: [build-task14-runner-access-r11/, install-task14-runner-access-r11/, log-task14-runner-access-r11/]}
+process_state: no matching generation/Grounding-DINO/Microduck/colcon-test/pytest process; reviewer interrupted at user stop; Microduck remains paused
+r535_retained: CP401 VALID_R535_GREEN 281of281 and complete post-GREEN inventory/hash remain valid for the stub-covered contract; r535 must not be rerun
+review_status: GPT-6-Astra medium fully read driver1954/shell545/harness1323/launcher470 and independently verified r535 manifest32 hashes, but was interrupted during 281-record review and emitted no r535-final-review-report; review incomplete
+unclosed_important_1: shell emits launch_stage_log_fsync_persistence and launch_stage_launch_finalizer_persistence, but real driver STORAGE_OPERATIONS omits both and _normalize_storage_failures rejects them; r535 stage cases use permissive r527 stub and do not prove real-driver round trip or ordering
+unclosed_important_2: after freezing SO101_POSTALLOCATION_ORIGINAL_EXIT, unused unguarded date/arithmetic tail reads can fail into EXIT ownership; saved original0 can replace caught95 while storage queue is empty, falsely seal success and exit0
+handoff: durable coordination/generator-r443-r1/codex-session-handoff-cp402.md SHA256 d624ed8a1db83b309e8e7b67d3a877fa464cd83b6186e3a7626417e23aba91a7,81 lines, complete readback
+next_experiment:
+  status: PLANNED_NOT_LAUNCHED_PRIVATE_REAL_DRIVER_AND_TIME_READ_RED
+  suggested_run_id: stage-e-generator-real-driver-stage-order-and-time-read-red-r536; next session must first verify uniqueness
+  red_scope: real-driver round trip for both new operation names, both valid temporal orders around main_log_fsync, uniqueness/aggregate/existing-operation controls; shell original0/original7 dead-time-read failure and no-failure control
+  expected: focused valid RED caused by real-driver unknown-operation rejection and false-success time-read behavior, never harness/provenance error
+  sequence: new session rereads handoff/CP402 and required skills/files; records PLANNED checkpoint; runs one fresh RED with exact locked Python/NVMe scratch; checkpoints/pushes; applies minimal TDD fix; prepares combined GREEN retaining r535281 plus new cases; complete inventory/hash and review only after GREEN
+  likely_fix_not_yet_authorized_or_applied: derive and add real operation ordering from all producer paths; remove redundant fallible dead time reads or explicitly account for them
+restrictions: official generation/conversion/inference/training/build/package-test/benchmark/sealed-test/COCO100/PickPlace/Mac/SAM action remains NO_GO; no evidence deletion; no valid raw inference or r535 rerun
+retention: r535/r534/r533/r532/r531 and all prior evidence/reports/scratch retained; archived none in this continuation; scratch and low-rate trees deletion candidates only; nothing deleted
+boundaries: generic cup and prompt cup.; SAM frozen/stateless; mask0.80/mapping0.98 unchanged; small_far_cup excluded only from primary cohort; production eligibility later uses measured geometry and publishes no grasp pose when ineligible
+```
+
 ## Checkpoint CP-401 — r535 authoritative 281-case GREEN and complete readback; Astra review planned
 
 ```yaml
