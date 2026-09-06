@@ -21010,6 +21010,44 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-466 — mixed-r4 frozen-backbone formal phase is valid but independent real remains underfit
+
+```yaml
+checkpoint: CP-466
+status: VALID_FROZEN_BACKBONE_FORMAL_INDEPENDENT_REAL_UNDERFIT_GO_LAST_SWIN
+prior_checkpoint: CP-465
+training_commit: e02668365fc7c346fbf4c47d0d4c812b1fb1458f
+gitee_readback_before_training: e02668365fc7c346fbf4c47d0d4c812b1fb1458f
+run:
+  run_id: stage-c-decoder-supervision-mixed-r4-formal-r708
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-decoder-supervision-r1/formal-r1
+  execution: {exit: 0, start_utc: 2026-09-06T13:24:58Z, end_utc: 2026-09-06T13:46:41Z, elapsed_seconds: 1303, epochs: 3, train_samples_per_epoch: 1600, near_val_samples: 300, real_val_samples: 160, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: none}
+  trainability: {student_trainable_numel: 11616776, teacher_trainable_numel: 0, Swin_frozen: true, BERT_frozen: true, encoder_frozen: true, decoder_trainable: true, gradient_check: PASS}
+epochs:
+  - {epoch: 1, threshold: 0.40, joint_harmonic_f1: 0.7129984834, near_f1: 0.8441064639, near_recall: 0.888, real_f1: 0.6171428571, real_recall: 0.4602272727}
+  - {epoch: 2, threshold: 0.35, joint_harmonic_f1: 0.7411578092, near_f1: 0.8381294964, near_recall: 0.932, real_f1: 0.6642984014, real_recall: 0.53125}
+  - {epoch: 3, threshold: 0.35, joint_harmonic_f1: 0.7465085167, near_f1: 0.8519195612, near_recall: 0.932, real_f1: 0.6643109541, real_recall: 0.5340909091}
+selected:
+  epoch: 3
+  checkpoint_manifest_sha256: 4521bf5b1e369e4af21ff76b75542cc47bf52688898cd3678e9fe71ed7ed7f66
+  fresh_reload_sha256: d48c4443f9971428ed9c486a570f68ec626a2a7378d8475873f90e7ebd46ef42
+readback:
+  run_id: stage-c-decoder-supervision-mixed-r4-formal-readback-r709
+  status: PASS
+  files: 37
+  bytes: 2346456207
+  members_sha256: c56b4baa501466aa5fe991fb3ee52ded8217a38f56c717a5b62a33dd66f70399
+  report_sha256: 51be1bf542e275d37cf785d3fd43a810d74d4fa5deab801f937009497db39aca
+  frozen_modes: {files: 0444, directories: 0555}
+decision: INDEPENDENT_REAL_STILL_UNDERFIT; start last-Swin stage from selected mixed-r4 epoch-003 for at most two epochs with backbone LR one tenth of head LR
+verification_decision: no package/benchmark rerun; formal CUDA execution, all epoch validation streams, fresh reload and independent full readback are the relevant gate
+scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-mixed-r4-formal-r708/tmp]
+retention: r708-r709, all three checkpoints and all prior evidence retained; nothing deleted, archived or stashed
+boundaries: no COCO100 outcome or sealed-test access; SAM frozen; PickPlace/depth/Mac NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-465 — mixed-r4 decoder-only frozen-backbone 6+6 CUDA smoke passes
 
 ```yaml
