@@ -21010,6 +21010,48 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-461 — committed last-Swin image and decoder-only 6+6 CUDA smoke pass
+
+```yaml
+checkpoint: CP-461
+status: VALID_DECODER_SUPERVISION_LAST_SWIN_SMOKE_GO_FORMAL_TWO_EPOCHS
+prior_checkpoint: CP-460
+implementation_commit: 14e3f06bfeb0b4519651750ca4a6ba263079dbb4
+gitee_readback_before_image: 14e3f06bfeb0b4519651750ca4a6ba263079dbb4
+image:
+  tag: so101-grounding-dino-tiny-train:r12-decoder-supervision-last-swin-14e3f06b
+  id: sha256:1a57bcb10f0887a9d1fcc60198a02d5b5e4f4254d1432e36d53ff0c3c6f0317b
+  size_bytes: 5142679985
+  build: {run_id: stage-c-decoder-supervision-last-swin-image-r688, exit: 0, elapsed_seconds: 17}
+  readback_attempts:
+    r688: INVALID_EMPTY_DOCKER_STDIN_READBACK; image build remains valid, empty CUDA readback is not used
+    r689: INVALID_INSTALLED_SOURCE_PATH_ASSUMPTION; CUDA Python started but source hash lookup used a nonexistent site-packages path, retained
+    r690: {status: PASS, cuda: 13.0, torch: 2.13.0+cu130, transformers: 4.56.2, gpu: NVIDIA_GeForce_RTX_5080, embedded_source_and_contract_hashes_exact: true, report_sha256: 682f0bd0755b4afc0a0bc91ecd285392923a627667d4268284119715499e8373}
+smoke:
+  run_id: stage-c-decoder-supervision-last-swin-smoke-r691
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-decoder-supervision-last-swin-r1/smoke-r1
+  execution: {exit: 0, elapsed_seconds: 21, train_samples: 6, near_val: 3, independent_real_val: 3, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: selected_decoder_supervision_phase1_epoch3, student_manifest_sha256: 53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95, student_model_sha256: 3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: unloaded}
+  trainability: {student_trainable: 25800632, teacher_trainable: 0, Swin_trainable: last_stage_only, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+  mean_losses: {supervised_decoder_only: 0.2226075359, teacher_token: 0.6755792995, teacher_box: 0.0101330949, total: 0.9083199302, all_finite: true}
+  mean_decoder_components: {loss_ce: 0.0696002594, loss_bbox: 0.0039936723, loss_giou: 0.0317193270}
+  checkpoint: {manifest_sha256: 87438b1be069560a098a87e7ed48eb1c9063e62d90391dfe388028816f49dd3e, model_sha256: cdac65b4c33efdac07ecca040ebe80154858c7558836c2baa518e7338e519bb6, fresh_reload_sha256: f1dccb928cf1a633430da2bdd6ea966baf832e9f7fab25192017535aac551e7b}
+readback:
+  run_id: stage-c-decoder-supervision-last-swin-smoke-readback-r692
+  status: PASS
+  files: 19
+  total_bytes: 895655060
+  members_sha256: 37b277987c4966d3f9861b983ce8eb802a57f955d6ca5fb719cd3e68d8e88c59
+  report_sha256: c2ea4ac13001eebe702c7bd980defa3e8b9f396879c6923a4435fa1871a28320
+  verified: all output and checkpoint hashes; exact phase-1 parent; decoder-only loss; last-Swin trainability; frozen gradient; isolation; CUDA fresh reload; no symlinks
+  frozen_modes: {all_files: 0444, all_directories: 0555}
+decision: GO_FORMAL_TWO_EPOCHS under the already authorized maximum, with identical mixed-r3 data and frozen validation streams
+verification_decision: no further package or benchmark run; the committed image and direct CUDA smoke exercise the exact changed configuration
+retention: r688-r692, both invalid readback attempts, frozen smoke output and all earlier evidence retained; nothing deleted or archived
+boundaries: COCO100 and sealed final test remain inaccessible; SAM frozen/unloaded; PickPlace and Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-460 — decoder-only last-Swin contract binds selected phase-1 epoch 3
 
 ```yaml
