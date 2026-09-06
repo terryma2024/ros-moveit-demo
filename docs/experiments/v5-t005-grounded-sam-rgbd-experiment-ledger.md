@@ -19584,6 +19584,36 @@ evidence_retention: r577-r579 evidence and NVMe scratch retained; scratch roots 
 boundaries: no formal test sample generated and no test/COCO metric read; Microduck paused
 ```
 
+## Checkpoint CP-425 — test-only package gate passes; one formal generation authorized
+
+```yaml
+checkpoint: CP-425
+status: VALID_TEST_ONLY_PACKAGE_GATE_ONE_FORMAL_GENERATION_GO
+prior_checkpoint: CP-424
+execution_head_local_gitee: 125b3566f43ad46d02ed51aad434da94d8bb29ff
+invalid_attempts:
+  r580: colcon --log-base was placed after the build verb, so parsing exited 2 before build
+  r582: single-package overlay reached 1476 passing tests but failed the existing same-overlay so101_mujoco_support provenance assertion; no source defect was found
+valid_overlay:
+  run_id: linux-build-stage-e-test-contract-full-r583
+  result: {exit: 0, packages: 7, elapsed_seconds: 56, symlink_install: true}
+  source_readback: Grounding DINO converter resolves to current repository source; preregistered test config resolves from current repository config
+valid_ordinary:
+  run_id: linux-test-stage-e-test-contract-ordinary-r584
+  result: {exit: 0, tests: 1477, passed: 1477, failed: 0, skipped: 0, elapsed_seconds: 24.36}
+  junit_sha256: eecdfe1146d0dd8f1fd6476f621ab5dca85dd7c2de44b4c291fd154f2a63e019
+benchmark_decision: not rerun; r573 already gated the frozen model selection and current change affects only generator/converter dataset contracts, not benchmark implementation, benchmark config or candidate selection
+formal_run:
+  run_id: stage-e-nonpenetrating-test-generation-r585
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/cup-nonpenetrating-test-v1
+  scratch_tmp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-nonpenetrating-test-generation-r585/tmp
+  success: exact 300 test members, seeds470000000..470000299, six quotas50, NVIDIA EGL, accepted nonpenetration receipts, categorical visible truth and zero output collision
+  failure: preserve any partial root and allocate a new output version/run ID; never resume or overwrite
+next: ordinary push and Gitee SHA readback, then collision/GPU/Python/NVMe/process preflight and exactly one generation
+retention: r580-r584 evidence and scratch retained; scratch roots are deletion candidates only; nothing deleted
+boundaries: no formal test sample generated, no test/COCO metric read, no PickPlace/Mac access; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
