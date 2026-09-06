@@ -19803,6 +19803,50 @@ retention: r598-r610 outputs, bundle, overlays, logs and scratch retained; r599-
 boundaries: no further training, sealed-test read, COCO100 rerun, PickPlace or Mac action; Microduck paused
 ```
 
+## Checkpoint CP-430 — pinned DINO epoch 5 passes sealed test but fails frozen COCO100 gate
+
+```yaml
+checkpoint: CP-430
+status: SEALED_TEST_PASS_COCO100_FAILED_FINAL_TRAINING_EXHAUSTED_PICKPLACE_NO_GO
+prior_checkpoint: CP-429
+policy_interpretation: the fast-completion plan requires user confirmation only to change a COCO100 threshold; this run kept every preregistered threshold unchanged and evaluated manifest 6e822c23 once as the new final candidate after val-only selection
+candidate_lock:
+  invalid_attempt: {run_id: stage-e-pinned-dino5-candidate-lock-freeze-r611, cause: directory fsync incorrectly used Path.open and failed after the copied lock was created; partial lock retained and ineligible}
+  formal_run: stage-e-pinned-dino5-candidate-lock-freeze-r612
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-pinned-base-epoch5-sam-decoder-epoch4-candidate-lock-r2
+  lock_sha256: bf9cc36fdc8be4b3da2f4ff03adeb5d6a17e3ecebb29847b42df4c8a41e29de9
+  mode: '0444'
+sealed_test:
+  run_id: stage-e-nonpenetrating-pinned-dino5-test-evaluation-r613
+  dataset_seal_sha256: 2003337d305d95667c38385d32eb5682a303a1254a368ce6cd0d531bf2b85347
+  bundle_manifest_sha256: 6e822c23d690fc7ededca64647eb1a3d111e2b9219484e541ae334478d4530ce
+  result: {status: VALID_FROZEN_TEST, samples: 300, errors: 0, device: cuda, elapsed_seconds: 59.30}
+  dino_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.7305848042}
+  dino_primary: {tp: 250, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.7305848042}
+  masks_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, minimum_mask_iou: 0.9186440678}
+  masks_primary: {tp: 250, fp: 0, fn: 0, f1: 1.0, minimum_mask_iou: 0.9509936766}
+  decisions: {unique: 200, target_ambiguous: 50, target_not_found: 50}
+  primary_decisions: {unique: 150, target_ambiguous: 50, target_not_found: 50}
+  qualification: {dino_primary_box: true, mask_primary: true, selector_safety: true, zero_inference_errors: true, test_pass: true}
+  readback: {files: 303, hashes_and_sizes: PASS, report_sha256: d234a3472cc58922ba2043c714e98cfa601488dbdc7d5176d6cc9529c50f95f0, output_inventory_sha256: 12540737e32ac2d605efd13333b2e23416fe2fb0f5de3539d2ac2beeb7a88a63}
+coco100:
+  invalid_preflight: {run_id: stage-e-coco100-pinned-dino5-candidate-r614, cause: preflight requested nonexistent lowercase manifest.sha256 instead of retained MANIFEST.sha256; no inference}
+  formal_run: stage-e-coco100-pinned-dino5-candidate-r615
+  handoff_manifest_sha256: 216fc518cefb3dd08e4246a37fad50dbe66ddfe664672e4437d25d544f4708e5
+  candidate: {bundle_manifest_sha256: 6e822c23d690fc7ededca64647eb1a3d111e2b9219484e541ae334478d4530ce, lock_sha256: bf9cc36fdc8be4b3da2f4ff03adeb5d6a17e3ecebb29847b42df4c8a41e29de9}
+  thresholds: {box: 0.45, text: 0.45, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, selector: 0.45}
+  result: {samples: 100, device: cuda, elapsed_seconds: 17, tp: 0, fp: 1, fn: 247, precision: 0.0, recall: 0.0, f1: 0.0, hit_images: 0, visible_non_cup_unique: 0, inference_errors: 0}
+  gates: {f1_min_0_6391: FAIL, recall_min_0_5670: FAIL, hit_images_min_83: FAIL, visible_non_cup_unique_max_0: PASS, inference_errors_max_1: PASS}
+  result_sha256: b495b3daa15d0a0371879fe187f991f6f8b9942b93951e18a1ffbc666f75e5a1
+  qualification_sha256: 805fae46d4015d30739093ca5d3a0d101dcbc22b4f8a06210ebf96d3db91c93a
+  output_manifest_sha256: 668f2232451c033c1938d818096e57dc4fb683d559833fe04256f7af0faefaba
+  readback: {regular_files: 102, provenance_symlinks: 2, hashes_and_sizes: PASS}
+decision: COCO100 evidence is frozen and cannot be used to lower thresholds or select another checkpoint; the plan's second and last formal DINO round is exhausted, SAM is not the failure source, and this candidate is ineligible for PickPlace
+required_user_decision: continuing requires new authority to change the training/data strategy or model family, or to change the COCO100 acceptance gate; otherwise V5-T005 remains stopped before Linux PickPlace
+retention: r611-r615 partial/formal outputs, masks, overlays, logs, manifests and scratch retained; r611/r614 partial roots and all scratch are deletion candidates only; nothing deleted
+boundaries: Linux PickPlace, macOS migration and Mac PickPlace remain NO_GO; no more training or external evaluation; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
