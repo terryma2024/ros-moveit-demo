@@ -19367,6 +19367,27 @@ evidence: r557 partial build root, run-evidence and scratch retained; all are de
 boundaries: no source/model/data/threshold/training change; no r557 reuse, benchmark, general harness or fault injection; Microduck paused
 ```
 
+## Checkpoint CP-417 — r558 partial-overlay gate invalid; full candidate overlay retry planned
+
+```yaml
+checkpoint: CP-417
+status: INVALID_PARTIAL_OVERLAY_PROVENANCE_FULL_OVERLAY_RETRY_PLANNED
+prior_checkpoint: CP-416
+invalid_gate:
+  run_id: linux-build-test-stage-d-val-loader-r558
+  build: {exit: 0, elapsed_seconds: 2.99, package: so101_demo_py}
+  ordinary_tests: {tests: 1473, passed: 1472, failures: 1, errors: 0, skipped: 0, benchmark_cases: 0, elapsed_seconds: 27.69}
+  unique_failure: installed-provenance test correctly rejected so101_mujoco_support from retained r418 while so101_demo_py came from partial r558 overlay
+  product_regression: none observed; all 1472 other ordinary cases, including the changed loader tests, passed
+fresh_retry:
+  run_id: linux-build-test-stage-d-full-overlay-r559
+  sole_change: build the same seven-package candidate set used by the known r418/r495 full overlays, with the existing offline lodepng cache; then test so101_demo_py from that one overlay
+  packages: [mujoco_ros2_control_msgs, mujoco_ros2_control_plugins, mujoco_3d_lidar, mujoco_ros2_control, so101_mujoco_support, so101_teleop, so101_demo_py]
+  required: full build exit0; every package prefix from r559; ordinary test and test-result exit0; zero benchmark cases
+evidence: r558 complete build/test evidence, partial overlay and NVMe scratch retained; partial overlay and scratch are deletion candidates only; nothing deleted
+boundaries: no implementation/test/model/data/threshold/training change; no r558 reuse or benchmark; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
