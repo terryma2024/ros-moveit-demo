@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-450
+latest_checkpoint: CP-451
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-formal-readback-r649
-confirmed: mixed-r3 frozen-backbone formal epochs 1-3 and independent full readback pass; epoch 3 is selected only from near-synthetic and independent-real validation, with official-base teacher/student initialization, exact frozen gradients, complete hashes and fresh CUDA reload
-open: independent real validation remains materially below near validation, so the authorized last-Swin stage is required for at most two epochs; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
-next_action: bind the last-Swin contract to the frozen mixed-r3 epoch-3 checkpoint, run focused TDD and a fresh 6+6 smoke, then run at most two formal epochs if smoke passes
+active_experiment: stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650
+confirmed: last-Swin contract is bound to the frozen mixed-r3 epoch-3 student and exact mixed-r3 inventories; focused TDD and all 9 container/config tests pass with NVMe scratch
+open: build the committed last-Swin image and run one fresh 6+6 CUDA smoke before the at-most-two-epoch formal stage; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
+next_action: commit and push CP-451, read back Gitee SHA, build the cache-reusing training image, then launch the last-Swin 6+6 smoke
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20733,6 +20733,27 @@ verification_decision: no package or benchmark rerun because no runtime/benchmar
 retention: r647/r648/r649 and frozen formal output retained; r648 invalid audit retained; nothing deleted or archived
 boundaries: COCO100 remains excluded from training, epoch selection and threshold selection; sealed test unread; SAM remains frozen/unloaded; PickPlace remains NO_GO; Microduck paused
 next_experiment: update and test the last-Swin configuration for selected mixed-r3 epoch 3, then fresh 6+6 CUDA smoke
+```
+
+## Checkpoint CP-451 — mixed-r3 last-Swin contract bound and focused tests pass
+
+```yaml
+checkpoint: CP-451
+status: VALID_MIXED_R3_LAST_SWIN_CONTRACT_GO_IMAGE_AND_SMOKE
+prior_checkpoint: CP-450
+run_id: stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650
+change: last-stage data identities now match immutable mixed-r3; student initialization is the independently selected and frozen r647 epoch-3 checkpoint, never epoch-5 or a resumed optimizer state
+student_parent: {completed_epoch: 3, checkpoint_manifest_sha256: 8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f, model_sha256: 1c302e9b14364e2b57e75ca409b3238d8ec6ac46bc59931f9f4acdae4005abb5}
+data_identity: {source_sha256: 6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db, train_inventory_sha256: 4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a, val_inventory_sha256: 9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572}
+recipe: {teacher: official_pinned_base_frozen, student: selected_phase1_epoch3, resume_checkpoint: null, trainable: [cross-modal_decoder, query, detection_heads, Swin-T_last_stage], frozen: [teacher, BERT, Swin-T_stages_1_to_3], head_lr: 0.000002, backbone_lr: 0.0000002, epochs_max: 2, teacher_token_lambda: 1.0, teacher_box_lambda: 1.0}
+tdd: {red: VALID_EXPECTED_CONFIG_RED_on_old_phase1_hash, green: 1_passed}
+ordinary_gate: 9 passed in test_grounding_dino_training_container.py
+source_hashes: {last_stage_config: 3c5bc532e83804f8a0efc1e074baa609ed7ab16271812ebaea6343614e2ac356, container_test: 7293d2e3745d7c17c5601f9b597f26fb2f3da6a7e7b98bd6cd63aeb4760c469e}
+scratch_deletion_candidates: [scratch/stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650-red, scratch/stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650-green, scratch/stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650-container]
+verification_decision: no package-wide or benchmark run because only the training contract and its focused test changed
+retention: r650 evidence and all prior evidence retained; nothing deleted or archived
+boundaries: COCO100 remains excluded from training/selection; sealed test unread; SAM frozen/unloaded; PickPlace NO_GO; Microduck paused
+next_experiment: build a committed cache-reusing last-Swin image, verify its embedded contract and CUDA environment, then run one fresh 6+6 smoke
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
