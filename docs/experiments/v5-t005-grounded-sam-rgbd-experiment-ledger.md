@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-438
+latest_checkpoint: CP-439
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-frozen-backbone-implementation-r623
+active_experiment: stage-c-dino-domain-retention-frozen-backbone-smoke-r624
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: implement and smoke the authorized frozen-backbone teacher/student experiment from official revision a2bb814d on frozen mixed-r2 plus the existing frozen near-synthetic validation; Linux PickPlace and all Mac work remain gated
-next_action: enumerate the official Transformers parameter/output contract, then TDD exact Swin-T/BERT freezing, decoder/query/detection-head allowlist, dual lambda-1 distillation, and three validation streams before a fresh 6+6 CUDA smoke
+open: run the fresh 6+6 CUDA smoke, then train three epochs from independent official-base teacher and student on frozen mixed-r2; Linux PickPlace and all Mac work remain gated
+next_action: build the cache-reusing committed training image and launch a network-none 6+6 CUDA smoke with fresh output, finite-loss/frozen-gradient/readback gates
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20203,6 +20203,51 @@ next_experiment:
 decision: GO_FROZEN_BACKBONE_IMPLEMENTATION_THEN_6_PLUS_6_SMOKE
 retention: r622/r621/r620 and all prior source/evidence retained; r622/r621/r620 scratch and low-rate roots are deletion candidates only; nothing deleted or archived
 boundaries: source and mixed-r2 frozen; SAM remains frozen/unloaded; sealed final test inaccessible; COCO100 used only as a denylist and not mounted for training; PickPlace and Mac remain NO_GO; Microduck paused
+```
+
+## Checkpoint CP-439 — frozen-backbone domain-retention implementation passes directed gates; 6+6 smoke next
+
+```yaml
+checkpoint: CP-439
+status: FROZEN_BACKBONE_IMPLEMENTATION_DIRECTED_GATES_PASS_SMOKE_PLANNED
+prior_checkpoint: CP-438
+run_id: stage-c-dino-domain-retention-frozen-backbone-implementation-r623
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-frozen-backbone-implementation-r623
+nvme_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-dino-domain-retention-frozen-backbone-implementation-r623/tmp
+implementation:
+  initialization: teacher and student each load /models/grounding-dino-tiny independently with local_files_only and safetensors; resume input is absent and forbidden
+  exact_trainable_prefixes: [model.decoder., model.query_position_embeddings., model.encoder_output_bbox_embed., model.enc_output., model.enc_output_norm.]
+  frozen: [model.backbone., model.text_backbone., model.encoder., all non-allowlisted parameters, complete teacher]
+  objective: supervised Grounding DINO loss plus lambda-1 active-token-logit MSE plus lambda-1 teacher-candidate SmoothL1 box loss
+  validation: every epoch reports complete near-synthetic, primary near-synthetic excluding only small_far_cup, independent real, common-threshold joint selection and DINO-only raw-candidate floor; SAM is never loaded
+  runtime_isolation: container accepts and mounts only mixed train, independent real val, near-synthetic val and official base; network none; no resume option; no COCO100, sealed test or SAM mount
+contract:
+  revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  contract_sha256: 24e5da382f3e7204ad66c5f2ae2fd211677fe43754808c95a9bedefd77ecb246
+  epochs: 3
+  head_learning_rate: 0.000002
+  teacher_token_logit_lambda: 1.0
+  teacher_candidate_box_lambda: 1.0
+  train_counts: {total: 1600, near_synthetic: 800, real_train: 480, generic: 160, hard_negative: 160}
+  validation_counts: {near_synthetic: 300, independent_real: 160}
+tdd:
+  valid_red: domain-retention container command rejected as unknown before implementation
+  directed_green: 22 passed in 1.21s using exact model Python with pytest plugin autoload disabled and tempfile resolved to the registered NVMe scratch
+  static: {compileall: PASS, shell_syntax: PASS, git_diff_check: PASS, ruff: PASS_after_import_sort}
+model_compatibility_probe:
+  image: so101-grounding-dino-tiny-train:r5-categorical-r396
+  cuda: true
+  total_parameters: 172249090
+  trainable_parameters: 11616776
+  teacher_trainable_parameters: 0
+  modes: {vision_backbone_training: false, text_backbone_training: false, encoder_training: false, decoder_training: true}
+next_experiment:
+  run_id: stage-c-dino-domain-retention-frozen-backbone-smoke-r624
+  action: build a cache-reusing image from the committed source, then run one fresh network-none CUDA 6-train plus 3-near/3-real validation smoke and fresh checkpoint reload
+  pass_gate: exact trainability receipt; zero frozen gradients; finite supervised/token/box/total losses; all three DINO-only validation streams; complete checkpoint manifest and fresh-process reload
+decision: GO_6_PLUS_6_SMOKE
+retention: r623/r622/r621/r620 and all prior evidence retained; registered scratch and low-rate roots remain deletion candidates only; nothing deleted or archived
+boundaries: COCO100 and sealed final test excluded from training/epoch/threshold selection; SAM unloaded and frozen; no PickPlace before DINO gate; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
