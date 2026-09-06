@@ -19173,6 +19173,35 @@ evidence: r546 container, run-evidence and scratch retained; scratch is a deleti
 boundaries: no r546 rerun or output reuse; no general harness/fault injection; package source and benchmark unchanged; sealed test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused
 ```
 
+## Checkpoint CP-409 — r548 6+6 CUDA smoke valid; pinned-base four-epoch training authorized
+
+```yaml
+checkpoint: CP-409
+status: VALID_DINO_NONPENETRATING_SMOKE_FORMAL4_PLANNED
+prior_checkpoint: CP-408
+smoke:
+  run_id: stage-c-dino-nonpenetrating-smoke-r548
+  container: so101-exp079-nonpenetrating-smoke-r548
+  result: {exit: 0, wall_seconds: 23.22, mode: smoke, train_samples: 6, val_samples: 6, scenarios: 6, mean_loss: 4.158687134583791, cpu_fallback: false}
+  selected_val: {epoch: 1, box_threshold: 0.5, text_threshold: 0.5, tp: 6, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0, small_target_recall: 1.0, multi_cup_recall: 1.0}
+  checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/smoke-warmstart-r2/checkpoints/epoch-001
+  checkpoint_manifest_sha256: 41f31887481e79af8ffa142c5beecb94c70387db2c7fdf2edfe2164ee6d04ee0
+  model_safetensors_sha256: 173bdeb28ab9e8426315d42b769260fdc6fbcb2d4600df6eaad17bf0b54df85f
+  checkpoint_readback: complete true, eight payload members independently SHA256-verified
+  fresh_reload: {status: VALID, device: 'cuda:0', finite_outputs: true, cpu_fallback: false, prompt: 'cup.', sha256: 451f890693dd09f777ec43d00b633f61dedb850c02ab0514b3560e49ed9e4a11}
+formal_plan:
+  run_id: stage-c-dino-nonpenetrating-formal4-r549
+  container: so101-exp079-nonpenetrating-formal4-r549
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/formal4-warmstart-r1
+  base: retain exact verified r5 epoch-008 model; start fresh optimizer and scheduler; do not continue from smoke
+  contract: grounding-dino-nonpenetrating-warmstart4-r2.json SHA256a6f9c9684d10a839c8dfe44fc8fb4701af0120b121418d3edaef494488d31690
+  recipe: {epochs: 4, train_samples: 1200, val_samples: 300, batch: 1, accumulation: 4, workers: 2, lr: 0.00001, seed: 20260904, train_precision: bfloat16_autocast, val_precision: float32}
+  selection: new synthetic val only; retain full all-scenario metrics and report primary near-workspace excluding only small_far_cup
+  mounts: train/val images and inventories, contract and base checkpoint read-only; dedicated output/evidence/NVMe scratch read-write; network none; no sealed test/COCO/SAM mount
+retention: r546 invalid and r548 valid containers, run-evidence, outputs and scratch retained; scratch roots are deletion candidates only; nothing deleted
+boundaries: package and benchmark source unchanged, so no package/benchmark rerun; no old optimizer resume; sealed test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
