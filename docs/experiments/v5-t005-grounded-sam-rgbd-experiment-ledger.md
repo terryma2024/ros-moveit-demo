@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-444
+latest_checkpoint: CP-445
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-d-frozen-sam-joint-val-r635
-confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: combine the frozen winning DINO checkpoint with the current verified stateless SAM and run one complete production-path val; Linux PickPlace and all Mac work remain gated
-next_action: freeze last-Swin epoch 2 plus its 0.35/0.35 DINO thresholds, then evaluate DINO boxes, production candidate mapping, stateless SAM masks, depth and no-fallback behavior on the frozen nonpenetrating val
-boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
+active_experiment: stage-d-frozen-sam-joint-val-readback-r639
+confirmed: frozen DINO epoch 2 plus frozen SAM epoch 4 has zero sub-0.80 mask failures on all 280 box-matched truths and mapping IoU minimum 1.0, but the DINO box/selector gate fails; no reasonable saved common scalar threshold has zero FP, so SAM is not eligible or required for retraining
+open: the explicitly bounded 3-epoch frozen-head plus 2-epoch final-Swin recipe is exhausted without a qualifying DINO box candidate; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
+next_action: preserve the failed candidate and diagnose only the nearest train/val product-path cause for the residual DINO false-positive/occlusion tradeoff; do not train SAM or access sealed final test/COCO100
+boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -20460,6 +20460,74 @@ next_experiment:
 decision: GO_FROZEN_STATELESS_SAM_JOINT_VAL
 retention: formal output and r633/r634 are frozen read-only; phase-1 and every prior output/evidence retained; all registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
 boundaries: no COCO100 or sealed final test access; no PickPlace before complete perception gate; no Mac; Microduck paused
+```
+
+## Checkpoint CP-445 — frozen SAM is sound on matched boxes; DINO box and selector gate remain closed
+
+```yaml
+checkpoint: CP-445
+status: VALID_STATELESS_SAM_JOINT_VAL_DINO_AND_SELECTOR_FAIL_NO_SAM_RETRAIN_NO_PICKPLACE
+prior_checkpoint: CP-444
+source_commit: c2a2bb4d6259d09d4b673c51d33a4b702652785a
+frozen_candidate:
+  combined_model_identity_sha256: 8a7e53eb0afe38c68a9e720c69416402e45f98183b7b8aa89152da53d68696fa
+  dino_checkpoint_manifest_sha256: 3bb86ea20b83bc603083c30cf71212fd88080d276d5ce565df3b8df76ae6d928
+  dino_model_sha256: 501d6738ce484b258ccfe5486edea561ff44717a8745fc3aa26e57feb43b8ca7
+  sam_checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e
+  prompt: cup.
+  thresholds: {box: 0.35, text: 0.35, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, selector: 0.35}
+raw_capture:
+  run_id: stage-d-frozen-sam-joint-val-raw-r636
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-nonpenetrating-domain-retention-dino2-sam4-raw-r2
+  result: {status: VALID_FROZEN_RAW_WITH_COMPLETE_PROPOSALS, samples: 300, dino_forwards: 300, sam_forwards: 300, proposals: 11283, accepted_raw_masks: 11067, files: 11969, elapsed_seconds: 308.2668}
+  hashes: {report: f6a611892138b165761e01d1f78fa097ee750a9128b13742259c44522db29963, inventory: 17fc673c48a54f8af197ad73f53a3d07cb36c85f83845c51c5a1b7bc7829534d, raw_manifest: 2ca9b500a18b74c4364961781fc8394f96ac9c1803737b4a165372302a915ff2, receipt_manifest: 0d04e4c86bf95a12f588c31bf6f2f43c9f074d4526c2e9b926541d00992e7302}
+production_evaluation:
+  run_id: stage-d-frozen-sam-joint-val-production-r638
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-nonpenetrating-domain-retention-dino2-sam4-production-r2
+  result: {status: VALID_PRODUCTION_EVALUATION, samples: 300, new_dino_forwards: 0, sam_forwards: 286, errors: 0, files: 1020, elapsed_seconds: 22.0358}
+  dino_all: {tp: 280, fp: 137, fn: 20, precision: 0.6714628297, recall: 0.9333333333, f1: 0.7810320781, matched_box_iou_min: 0.7132816941}
+  dino_primary_near: {tp: 237, fp: 136, fn: 13, precision: 0.6353887399, recall: 0.948, f1: 0.7608346709, matched_box_iou_min: 0.8943046353}
+  scenario_box_totals:
+    no_cup: {tp: 0, fp: 75, fn: 0, unique: 20}
+    one_cup_distractors: {tp: 50, fp: 8, fn: 0}
+    cup_near_bottle: {tp: 50, fp: 11, fn: 0}
+    partially_occluded_cup: {tp: 37, fp: 34, fn: 13}
+    two_cups: {tp: 100, fp: 8, fn: 0, unique: 0}
+    small_far_cup: {tp: 43, fp: 1, fn: 7}
+  selector: {unique: 167, target_ambiguous: 119, target_not_found: 14, no_cup_unique: 20, two_cup_unique: 0}
+  sam_on_bbox_matches: {all_matches: 280, primary_matches: 237, mask_fail_below_iou_0_80: 0, truth_mask_iou_min: 0.9330543933, truth_mask_iou_median: 0.9873577548, mapping_iou_min: 1.0}
+  qualification: {dino_primary_box: FAIL, selector_safety: FAIL, mapping: PASS, sam_matched_box_quality: PASS, joint_val: FAIL, sam_training_required: false}
+  hashes: {report_wrapper: ce414de2e23c94fdb64fc2a08289edaf4bff368f07bbeb1a0a234c6737791250, output_inventory: bf57605c1a570671302abe68fe645f6434b852582b84031f18c1095ac848af69}
+saved_threshold_terminal_scan:
+  source: selected epoch-2 DINO-only near-primary raw-candidate grid; no model, SAM, mapping or selector forward
+  full_grid: 169 points over [0.01,0.02,0.03,0.05,0.10,0.15,0.20,0.25,0.30,0.35,0.40,0.45,0.50] squared
+  reasonable_grid: 100 points with both thresholds in [0.05,0.50]
+  selected_0_35_0_35: {tp: 237, fp: 136, fn: 13, recall: 0.948, f1: 0.7608346709}
+  best_f1: {includes_thresholds: [0.45,0.45], tied_points: 17, tp: 208, fp: 23, fn: 42, precision: 0.9004329004, recall: 0.832, f1: 0.8648648649}
+  best_recall: {includes_thresholds: [0.10,0.10], tied_best_f1_points: 3, tp: 250, fp: 830, fn: 0, recall: 1.0, f1: 0.3759398496}
+  minimum_fp: {fp: 11, fn: 69, recall: 0.724, f1: 0.8190045249}
+  counts: {zero_fp_points: 0, perfect_points: 0}
+  decision: NO_COMMON_SCALAR_THRESHOLD_PASSES_PRIMARY_DINO_BOX_GATE; threshold calibration cannot close the measured safety/recall tradeoff
+independent_readback:
+  run_id: stage-d-frozen-sam-joint-val-readback-r639
+  status: PASS
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-d-frozen-sam-joint-val-readback-r639
+  readback_sha256: 4821fa989ab2140bab959798801eeb1d245b5239088a22d758a6add56b1c33fa
+  verified: exact inventories and every retained output hash/size/mode for raw11969 and production1020 files; frozen roots; report identities; complete denominators; zero mask failures; saved 169-point threshold grid recomputation; no new model forward
+  nvme_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-frozen-sam-joint-val-readback-r639/tmp
+  audit_note: two initial low-rate invocations stopped before persistent output on an ordering-sensitive tied-threshold assertion; the final order-independent audit passed and all low-rate logs are retained
+invalid_attempts_retained:
+  r635: source-before-nounset launcher defect stopped before model/output; no retry into its root
+  r637: completed offline production materialization but inherited a stale model-specific sam_forwards-equals-250 assertion; partial output retained and ineligible; r638 used a fresh root and asserted the actual nonempty prompt count
+decision:
+  sam: KEEP_FROZEN_NO_TRAINING; every bbox-matched production mask passes IoU 0.80, so SAM is not the primary failure source
+  dino: FAIL_PRODUCT_BOX_GATE; the authorized 3-epoch frozen-head and 2-epoch final-Swin phases are exhausted
+  depth: NOT_RUN_BECAUSE_EARLIER_DINO_SELECTOR_GATE_FAILED
+  test_coco_pickplace_mac: NO_GO
+next_action: preserve this failed candidate and inspect only the nearest train/val product-path cause of no-cup false positives and partial-occlusion misses; any further optimization must remain COCO100/sealed-test isolated and cannot silently exceed the user's bounded epoch recipe
+verification_decision: no ordinary package or benchmark rerun; source, benchmark implementation and configuration did not change, and this checkpoint records model-evaluation evidence only
+retention: r635/r636/r637/r638/r639, both valid frozen output trees, both invalid partial attempts and all prior evidence retained; registered scratch and low-rate trees are deletion candidates only; nothing deleted or archived
+boundaries: no sealed final test or COCO100 access, no threshold relaxation, no SAM training, no depth/PickPlace/Mac, no evidence deletion; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
