@@ -420,6 +420,7 @@ def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
     assert "  resume_checkpoint: null\n" in contents
     assert "  teacher_token_logit_lambda: 1.0\n" in contents
     assert "  teacher_candidate_box_lambda: 1.0\n" in contents
+    assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  source_archive_sha256: "
         "6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db\n"
@@ -443,6 +444,7 @@ def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
     assert "  initialization: selected_phase1_student_official_base_teacher\n" in contents
     assert "  resume_checkpoint: null\n" in contents
     assert "  backbone_learning_rate: 0.0000002\n" in contents
+    assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  student_initialization_checkpoint_manifest_sha256: "
         "8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f\n"
