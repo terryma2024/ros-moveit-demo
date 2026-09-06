@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-390 — r528 invalid on EXIT-trap local-state lifetime; fresh r529 correction preparation planned
+
+```yaml
+checkpoint: CP-390
+status: INVALID_R528_GREEN_EARLY_EXIT_STATE_LIFETIME_R529_CORRECTION_PREPARATION_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r528
+execution_mode: inline serial; no subagent after preparation completion
+classification: INVALID_R528_GREEN; authoritative_green=false; no result JSON; launcher/tool/harness exit1; elapsed22.087789416; exactly one invocation and no retry/backfill
+failure: retained r509 stage-failure and fsync-failure paths each reached the EXIT owner after execute_generation stack unwind, then set-u rejected caller-local tail_log_fsync_exit as unbound before terminal/outer/accounting persistence; retained partial r509 result17of19 controls passed
+red_regression: retained r509 early stage/fsync cases in immutable r528 stderr/raw partial result are the pre-fix RED for post-allocation state lifetime; do not rerun r528 or create a duplicate RED
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r528; manifest30 members SHA25659875d7431b4b0895090bd1e09e76e1146b94b124ffab90ce3d0e895ed9798a8; root exactly32 files; readback SHA256fd060d5a80c508abb598bbfb6d0f4ac66e88ff15512bf8987c09982e8b2178dd; all manifest members independently verified; package before/after byte-identical SHA256c0a2e7b5
+provenance: exact Python resolved /usr/bin/python3.12 and tempfile matched fresh D NVMe scratch; local/head/Gitee ea702213 and all16 private input hashes unchanged; stderr SHA256c5615796; stdout empty; four official roots absent
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-green-r528-invalid-report.md SHA256dbb8541c511389eebd7f37780128033d48521b6f08a0487efdea4efedfda1e70,74 lines
+next_experiment:
+  status: GO_INLINE_R529_STATE_LIFETIME_CORRECTION_STATIC_PREPARATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r529
+  sole_fix: replace caller-local tail status dependency with dedicated initialized post-allocation global state that exists through EXIT-trap execution, initialize it before trap activation, use it for first-nonzero capture/preseed/suppression, and reset it in clear_postallocation_state; preserve r528 tail status semantics and all other candidate bytes
+  harness_launcher: copy r528 combined264 semantics to fresh r529 identities/paths; retain early stage/fsync cases as executable GREEN regressions and all focused/double-tail/mutation gates; use fresh roots and current exact HEAD only after a separate checkpoint
+  current_stage: patch and static syntax/parser/oracle/root-absence preparation only; no r529 behavior invocation or root allocation
+restrictions: no full review before GREEN per user update; no repo source/config change, official generation, renderer/project import, training/inference/build/package test/benchmark/sealed access
+retention: r528 evidence/scratch/low roots and all prior runs retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-389 — r528 combined GREEN statically prepared; user orders GREEN before full inventory/hash/review
 
 ```yaml
