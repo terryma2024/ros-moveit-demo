@@ -26,6 +26,9 @@ _SCENARIOS = frozenset(
         "partially_occluded_cup",
     }
 )
+_DOMAIN_ROLES = frozenset(
+    {"near_synthetic", "real_train", "real_val", "generic", "hard_negative"}
+)
 
 
 class TrainingDataError(RuntimeError):
@@ -82,6 +85,7 @@ class TrainingSample:
     image_path: Path
     image_sha256: str
     boxes: tuple[BoxTruth, ...]
+    domain_role: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +277,9 @@ def load_verified_split(
         visible = raw.get("visible_instance_count")
         if type(configured) is not int or configured < 0 or visible != len(boxes):
             raise _data_error("SAMPLE_INVALID", "instance counts")
+        domain_role = raw.get("domain_role")
+        if domain_role is not None and domain_role not in _DOMAIN_ROLES:
+            raise _data_error("SAMPLE_INVALID", "domain_role")
         samples.append(
             TrainingSample(
                 seed=seed,
@@ -281,6 +288,7 @@ def load_verified_split(
                 image_path=resolved_image,
                 image_sha256=image_sha,
                 boxes=boxes,
+                domain_role=domain_role,
             )
         )
     return VerifiedSplit(

@@ -62,6 +62,8 @@ setup(
             "prepare_grounding_dino_dataset = "
             "so101_demo.cli.prepare_grounding_dino_dataset:main",
             "train_grounding_dino = so101_demo.cli.train_grounding_dino:main",
+            "train_grounding_dino_domain_retention = "
+            "so101_demo.cli.train_grounding_dino_domain_retention:main",
             "verify_grounding_dino_checkpoint = "
             "so101_demo.cli.verify_grounding_dino_checkpoint:main",
             "revalidate_grounding_dino_checkpoint = "
