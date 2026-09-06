@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-403
+latest_checkpoint: CP-407
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-e-generator-nonpenetrating-generation-official-r537
-confirmed: CP-403 records user acceptance of the two CP-402 low-probability fsync/date exceptional-path residual risks and lifts only the normal-path NO_GO; r535 281/281, r499 benchmark, r470 real-GPU acceptance, prior package gates, generic cup/prompt cup., mask IoU 0.80, mapping IoU 0.98 and stateless frozen SAM remain unchanged
-open: official 1200 train + 300 val nonpenetrating generation, one-time readback/archive/conversions, DINO training and all downstream qualification remain incomplete
-next_action: launch the frozen private driver/shell once as stage-e-generator-nonpenetrating-generation-official-r537 after the CP-403 commit is pushed and its Gitee SHA is read back
+active_experiment: stage-c-dino-nonpenetrating-smoke-r546
+confirmed: CP-403 normal-path risk decision remains in force; r537/r538/r543/r544/r545 completed exact 1200+300 nonpenetrating source, deterministic archive, byte-identical Grounding DINO conversions and immutable freeze
+open: DINO warm-start smoke/formal training and all downstream qualification remain incomplete
+next_action: execute the preregistered 6+6 CUDA warm-start smoke r546 once, read back checkpoint/reload evidence, then launch the 4-epoch formal run if valid
 boundaries: normal train/val generation/conversion/training path authorized; sealed test/COCO100/PickPlace/Mac remain gated by the fast-completion plan; Microduck paused; no r536/further fsync-date fault injection/mutation/general harness/repeated Astra review; do not claim the two exceptional-path defects fixed
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -19003,6 +19003,139 @@ planned_run:
   invalid_criteria: any provenance/hash/CUDA/tempfile/collision mismatch, nonzero process exit, or incomplete output; preserve partial roots and allocate a new version/run ID rather than resume
 next_command: approved_head=$(git rev-parse HEAD); SO101_GENERATION_RUN_ID=stage-e-generator-nonpenetrating-generation-official-r537 SO101_APPROVED_EXECUTION_HEAD=$approved_head SO101_REVIEWED_SHELL_SHA256=6cf1571fbaa3716acee7cbc095f95088fb2bb487bece66b43b5a889e0a849a97 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_nonpenetrating_train_val_v1.sh --execute
 retention: all historical evidence retained; archived none in this continuation; r537 scratch and low-rate roots become deletion candidates after readback; nothing deleted
+```
+
+## Checkpoint CP-404 — r537 generation valid; archive and reproducibility conversions planned
+
+```yaml
+checkpoint: CP-404
+status: VALID_OFFICIAL_NONPENETRATING_TRAIN_VAL_GENERATION_POSTPROCESS_PLANNED
+prior_checkpoint: CP-403
+execution_head_local_gitee: 0bbbb9e3f621ec11b034a4d3d0a1dd821b90f959
+run_id: stage-e-generator-nonpenetrating-generation-official-r537
+launch_note: the first direct-path invocation exited 126 before entering the mode-0664 frozen shell and created no root; the immediately corrected explicit bash invocation used the same still-absent r537 namespace and is the sole product invocation
+result: {classification: GENERATION_COMPLETE, process_exit: 0, elapsed_ns: 74280724329, launch_elapsed_ns: 75451410687, original_exit: 0, finalizer_exit: 0, overall_exit: 0, storage_failures: [], stderr_bytes: 0}
+gpu_receipts: {rgb: NVIDIA GeForce RTX 5080 via mujoco.egl GLContext, categorical: NVIDIA GeForce RTX 5080 via mujoco.egl GLContext, categorical_off_samples: 0}
+source_readback:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-nonpenetrating-train-val-v1
+  manifest_sha256: a44e9926f84271848c285dde0e6fd34fc6633dee4167e404612d812b94960a8a
+  files: 4502
+  artifacts_in_manifest: 4501
+  members: {images: 1500, labels: 1500, truth: 1500, dataset_metadata: 2, symlinks: 0, special: 0}
+  split_counts: {train: 1200, val: 300}
+  seed_ranges: {train: [450000000, 450001199], val: [460000000, 460000299]}
+  scenario_quotas: {train_each_of_six: 200, val_each_of_six: 50}
+  geometry: {policy: task-visual-nonpenetration-v1, accepted_receipts: 1500, minimum_signed_distance_m: 0.0}
+  visible_truth: all 1500 truth members have categorical visible mask shape/RLE/SHA fields; complete decode/hash/box validation is delegated to each existing converter invocation
+  gpu_tempfile: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-generator-nonpenetrating-generation-official-r537/tmp
+postprocess_plan:
+  - {run_id: stage-e-generator-nonpenetrating-archive-r538, action: create one sorted GNU-tar zero-mtime numeric-owner archive through gzip -n in fresh NVMe scratch; verify exact members and publish no-clobber with adjacent SHA256}
+  - {run_id: stage-e-generator-nonpenetrating-conversion-primary-r539, action: run existing prepare_grounding_dino_dataset once with source archive SHA and converter commit 0bbbb9e3f621ec11b034a4d3d0a1dd821b90f959 into the preregistered primary output}
+  - {run_id: stage-e-generator-nonpenetrating-conversion-repro-r540, action: run the same existing converter once into the preregistered repro output}
+  - {run_id: stage-e-generator-nonpenetrating-readback-r541, action: independently compare complete primary/repro inventories and payload hashes; verify prompt cup., class cup, profiles and archive binding; then freeze source/primary/repro files 0444 and directories 0555}
+postprocess_invalid_criteria: any existing output/scratch/evidence collision, exact-Python tempfile mismatch, archive special or symlink member, member/count/hash mismatch, converter nonzero, or primary/repro byte difference; preserve partial roots and do not overwrite or resume
+boundaries: no sealed test or COCO100 access; no training until r541 passes; Microduck paused; no r30/r470/r499/r535 rerun
+retention: r537 run evidence retained; r537/r538/r539/r540 scratch and low-rate roots are deletion candidates after readback only; nothing deleted
+```
+
+## Checkpoint CP-405 — r538 archive valid; r539 conversion bootstrap invalid and replacement planned
+
+```yaml
+checkpoint: CP-405
+status: VALID_ARCHIVE_INVALID_CONVERSION_BOOTSTRAP_REPLACEMENT_PLANNED
+prior_checkpoint: CP-404
+archive:
+  run_id: stage-e-generator-nonpenetrating-archive-r538
+  result: VALID
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/archives/so101-v5-t005-cup-nonpenetrating-train-val-v1.tar.gz
+  sha256: 8c7af6214d4560a6e6b875d2328e734df36dcd4f7ba20aa3c7625c4169d23221
+  bytes: 59038496
+  contract: sorted GNU tar, zero mtime, numeric zero owner/group, gzip -n
+  members: {total: 4512, regular_files: 4502, images: 1500, labels: 1500, truth: 1500, links: 0, special: 0}
+  publication: fresh scratch artifact hard-linked no-clobber to final path; archive and adjacent checksum mode 0444; SHA read back equal
+invalid_conversion:
+  run_id: stage-e-generator-nonpenetrating-conversion-primary-r539
+  status: INVALID_BEFORE_SOURCE_OR_OUTPUT_ACCESS
+  cause: direct module invocation supplied the filesystem src directory as PYTHONPATH, but this ament_python package maps modules into the r495 build/install overlay; import so101_demo failed before converter execution
+  output_created: false
+  scratch_retained: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-generator-nonpenetrating-conversion-primary-r539
+root_cause_readback: sourcing /opt/ros/jazzy/setup.zsh then r495/install/local_setup.zsh resolves ros2 prefix to r495 and imports so101_demo plus prepare_grounding_dino_dataset from the r495 build tree
+replacement_plan:
+  - {run_id: stage-e-generator-nonpenetrating-conversion-primary-r540, output: grounding-dino-cup-nonpenetrating-train-val-v1, single_variable: source verified r495 overlay before invoking the exact locked Python module}
+  - {run_id: stage-e-generator-nonpenetrating-conversion-repro-r541, output: grounding-dino-cup-nonpenetrating-train-val-v1-repro, single_variable: independent output root only}
+  - {run_id: stage-e-generator-nonpenetrating-readback-r542, action: byte/hash/profile/provenance/mode comparison and immutable freeze}
+invalid_criteria: unchanged from CP-404; do not reuse r539 scratch or run ID
+boundaries: no source code change and no tests rerun; sealed test/COCO100/training remain inaccessible until r542 passes; Microduck paused
+retention: r537/r538 retained; r539 invalid scratch retained as deletion candidate; archived none and nothing deleted
+```
+
+## Checkpoint CP-406 — r540 overlay bootstrap invalid; exact frozen-shell source boundary replacement planned
+
+```yaml
+checkpoint: CP-406
+status: INVALID_OVERLAY_NOUNSET_BOOTSTRAP_FRESH_REPLACEMENT_PLANNED
+prior_checkpoint: CP-405
+invalid_run:
+  run_id: stage-e-generator-nonpenetrating-conversion-primary-r540
+  status: INVALID_BEFORE_SOURCE_OR_OUTPUT_ACCESS
+  cause: set -u remained active while sourcing ROS and r495 zsh setup; AMENT_TRACE_SETUP_FILES and COLCON_CURRENT_PREFIX nounset errors prevented package prefix and so101_demo import
+  output_created: false
+  scratch_retained: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-generator-nonpenetrating-conversion-primary-r540
+correction: reproduce the frozen official shell boundary exactly by set +u around /opt/ros/jazzy/setup.zsh and r495/install/local_setup.zsh, then restore set -u before provenance/import/converter checks
+retired_unexecuted_plans: [stage-e-generator-nonpenetrating-conversion-repro-r541, stage-e-generator-nonpenetrating-readback-r542]
+replacement_plan:
+  - {run_id: stage-e-generator-nonpenetrating-conversion-primary-r543, role: primary}
+  - {run_id: stage-e-generator-nonpenetrating-conversion-repro-r544, role: independent_repro}
+  - {run_id: stage-e-generator-nonpenetrating-readback-r545, role: final_readback_and_freeze}
+collision_readback: both conversion outputs and both fresh conversion scratch roots absent under -e and -L
+boundaries: source, archive and frozen converter bytes unchanged; no test/harness/fault injection; sealed test/COCO100/training inaccessible; Microduck paused
+retention: r539 and r540 invalid scratch retained as deletion candidates; archived none and nothing deleted
+```
+
+## Checkpoint CP-407 — nonpenetrating data frozen; 6+6 DINO warm-start smoke planned
+
+```yaml
+checkpoint: CP-407
+status: VALID_NONPENETRATING_DATA_FROZEN_DINO_SMOKE_PLANNED
+prior_checkpoint: CP-406
+stage_b_result:
+  source: {run_id: r537, files: 4502, tree_inventory_sha256: b8f2dfb6ebd9604f7ef212ba5327351c7c0de7a43c8fa4d88514742dd5ecb89e, file_mode: '0444', directory_mode: '0555'}
+  archive: {run_id: r538, sha256: 8c7af6214d4560a6e6b875d2328e734df36dcd4f7ba20aa3c7625c4169d23221, bytes: 59038496, regular_members: 4502, links_or_special: 0, mode: '0444'}
+  primary_conversion: {run_id: r543, files: 3, tree_inventory_sha256: e60f2b176edb20b2966ae8b03461a2a0c449a4c36ae4324c5fc19c5a1ef326e5, file_mode: '0444', directory_mode: '0555'}
+  repro_conversion: {run_id: r544, files: 3, tree_inventory_sha256: e60f2b176edb20b2966ae8b03461a2a0c449a4c36ae4324c5fc19c5a1ef326e5, byte_identical_to_primary: true, file_mode: '0444', directory_mode: '0555'}
+  converter_validation: all 1500 source images, labels, complete categorical visible-mask RLE/SHA/box truth and nonpenetration geometry receipts accepted
+  payload_sha256: {dataset_profile: 9664ad39c897dcb8231b4a157abcd34436819bb89932ec477cd00e4cc634e164, train_inventory: bc7b3e4ada5bec2cf8e7c1877687643a124e13cf71b5766f3c11079944b8ea46, val_inventory: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9}
+  all_scenario: {train_images: 1200, train_instances: 1200, val_images: 300, val_instances: 300, six_scenarios_retained: true, small_far_cup_retained: true}
+  primary_near_workspace: {excluded_only: small_far_cup, train_images: 1000, train_instances: 1000, val_images: 250, val_instances: 250}
+  invalid_bootstraps_retained: [r539 wrong direct PYTHONPATH, r540 zsh setup under nounset]
+training_reuse:
+  image: so101-grounding-dino-tiny-train:r5-categorical-r396
+  image_id: sha256:75bf5c3d116d8b734e14c2f189f1cb4392912b5837387af010a36cb16fba554f
+  implementation_commit: 47e9682168937e4ff2a0a773c428f4044b6623fb
+  image_modules_sha256: {dataset: cd6201636cfb170780d565d2fb1ee8f85f39d84916c6af1be957e84a89c12466, finetune: 0838c1cf2991f175731f351ea8ccb8e0a80fd5dae8664ca025d837c7024de3ee, runtime: b348b96260475f747c12cc8a347a98183db9de147e081f19d2604b12a3e894e8}
+  warmstart_checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-r5-r1/formal-r1/checkpoints/epoch-008
+  warmstart_checkpoint_manifest_sha256: 6ca8c6b516e81b06fb862e75b9911555cf1bbedbaefe65e19a675fad535913a4
+  warmstart_model_safetensors_sha256: 359164b33dcc1aeef3120e859ed8eee35eec31860383b0bc4196bdc164367229
+  semantics: load the verified checkpoint as the read-only base model with a fresh optimizer/scheduler; do not resume old optimizer state
+contract:
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/contracts/grounding-dino-nonpenetrating-warmstart4-r1.json
+  sha256: ed9fe278a2b815572191e2cf3658918c97abfbc342e14d9eb2f0cc6958216062
+  mode: '0444'
+  recipe: {train: 1200, val: 300, epochs: 4, batch: 1, accumulation: 4, lr: 0.00001, seed: 20260904, workers: 2, precision: bfloat16_autocast, val_selection_only: true}
+bootstrap: {path: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/nonpenetrating_dino_training_bootstrap_v1.py, sha256: 07cf23ee8b026790b422c49f027a4c3af63f9e941a4fba84a53bab15e7f33ae7, mode: '0444', AST: pass, Ruff: pass}
+smoke_plan:
+  run_id: stage-c-dino-nonpenetrating-smoke-r546
+  container: so101-exp079-nonpenetrating-smoke-r546
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/smoke-warmstart-r1
+  contract: 6 train + 6 val across all six scenarios, one epoch, finite loss/backward, complete checkpoint, fresh-process CUDA reload, no CPU fallback
+  mounts: train/val images and inventories read-only; warmstart checkpoint and contract read-only; dedicated output, r546 evidence and NVMe scratch read-write; network none; no test/COCO/SAM mount
+  collision_gate: run/evidence/scratch/output/container all absent; no competing GPU process
+formal_if_smoke_valid:
+  run_id: stage-c-dino-nonpenetrating-formal4-r547
+  epochs: 4
+  selection: synthetic val only with full all-scenario metrics; primary near-workspace metrics derived without changing the historical all-scenario denominator
+boundaries: no package/benchmark rerun because source is unchanged; sealed test/COCO100/PickPlace/Mac inaccessible; Microduck paused
+retention: all Stage B roots retained; r537-r544 scratch and r539/r540 invalid scratch are deletion candidates only; archived none and nothing deleted
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
