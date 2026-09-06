@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-477
+latest_checkpoint: CP-478
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: PLANNED_STAGE_E_FOUR_POINT_ACCEPTANCE_SMOKE_R761
+active_experiment: PLANNED_STAGE_E_FOUR_POINT_ACCEPTANCE_SMOKE_RECOVERY_R762
 confirmed: the global synthetic-val winner, threshold lock b02e3be and bundle b55bb6 remain frozen; r595/r760 remain the sole COCO100 diagnostic and are not rerun; the user removed COCO100 as a pass/fail gate on 2026-09-07
-open: run the frozen four-point carrier once for acceptance-only perception smoke; if all four pass, proceed to four independent ai-station Linux FULL_RESTART PickPlace runs
-next_action: preflight and run stage-e-four-point-acceptance-smoke-r761 without changing DINO, SAM, thresholds or selector semantics
+open: complete the pre-registered r762 infrastructure recovery with the exact frozen candidate; if all four pass, proceed to four independent ai-station Linux FULL_RESTART PickPlace runs
+next_action: apply only the pre-registered overlay color-array correction in an r762 wrapper, run its directed RED-to-GREEN test, then execute the isolated four-point acceptance recovery without changing DINO, SAM, thresholds or selector semantics
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23303,4 +23303,110 @@ failure_policy: stop at the first four-point or PickPlace failure boundary and a
 retention: r595, r760, CP-476, frozen carrier, threshold locks, immutable bundle and all prior evidence remain unchanged; nothing deleted, archived, stashed, reset or force-pushed
 next_action: commit and push this policy checkpoint, read back the Gitee SHA, then preflight and execute r761
 boundaries: real hardware remains unauthorized; Microduck paused
+```
+
+## Experiment stage-e-four-point-acceptance-smoke-r761 — INVALID
+
+```yaml
+experiment_id: stage-e-four-point-acceptance-smoke-r761
+status: INVALID_EVIDENCE_RENDERING_AFTER_FIRST_POINT_FORWARD
+prior_experiment: stage-e-coco100-global-winner-adjudication-r760
+hypothesis: the frozen synthetic-val winner and stateless SAM produce one valid cup mask and world pose at each frozen acceptance point without changing model or thresholds
+prediction: all four points pass unique selection, mask IoU >=0.80, mapping IoU >=0.98, valid depth, world pose error <0.01m, synchronized source freshness, CUDA FP32 no-fallback and warmed latency <=2000ms
+single_variable: CP-477 removes only the COCO100 blocking effect and permits the first semantic open of the already frozen carrier
+lifecycle: REUSE_STACK
+preconditions:
+  - no ROS, MuJoCo, MoveIt, RViz, training or GPU compute process is active
+  - source HEAD and Gitee are a9fe02b05eac85776524697eb54ee6e133dcc88d; six frozen runtime members match code-set 9b091077
+  - threshold lock b02e3be, bundle manifest b55bb6 and carrier manifest 7d6c55 rehash exactly
+  - container image is sha256:2e02bc252f954af47efe252d6e7c4a7f9cd1693a136e779ef2675bfe14206f00 with network none
+  - /scratch maps to the registered NVMe host scratch and /opt/venv/bin/python resolves tempfile.gettempdir() exactly there
+success_criteria:
+  - all four preregistered points satisfy every frozen acceptance gate and retain production masks, DINO candidates, depth, TF, /cup_pose callback and overlay evidence
+failure_criteria:
+  - the first valid point with any failed semantic, geometry, freshness, device or latency gate stops the run
+invalid_criteria:
+  - identity mismatch, output collision, duplicate runtime stack, wrong interpreter/tempdir, model setup failure before semantic open or incomplete evidence publication
+provenance:
+  source_commit: a9fe02b05eac85776524697eb54ee6e133dcc88d
+  frozen_runtime_commit: 314df8d7c5ab02db508eb5c3ce5b3c47b01e9feb
+  install_overlay: NONE_OFFLINE_ACCEPTANCE_SOURCE_MOUNT
+  runtime_executable: /opt/venv/bin/python in image sha256:2e02bc252f954af47efe252d6e7c4a7f9cd1693a136e779ef2675bfe14206f00
+  ros_domain_id: 179
+  gz_partition: so101-v5-t005-r761-20260907
+commands:
+  - command: direct execution of run-r761.zsh
+    exit_code: 126
+    classification: INVALID_PRE_OPEN_MISSING_EXECUTABLE_BIT
+  - command: zsh run-r761.zsh before correcting the copied lock digest
+    exit_code: 1
+    classification: INVALID_PRE_OPEN_LOCK_DIGEST_LITERAL_MISMATCH
+  - command: zsh run-r761.zsh after correcting only its lock digest comparison
+    exit_code: 1
+    elapsed_seconds: 10
+observed:
+  - preflight PASS_GO_ONE_TIME_SEMANTIC_OPEN; directed self-test passed without model load or carrier access
+  - two superseded interpreter/mount probes failed before model load and carrier access and remain classified in preflight.json
+  - the first two launch attempts created no output, loaded no model and did not open carrier truth
+  - the third launch reverified the exact frozen lock/bundle/carrier, wrote semantic-open-event.json, loaded the frozen DINO/SAM pair and completed first-point production evidence including one UNIQUE detection, mask, depth cloud and published cup pose
+  - before any case acceptance result or output manifest was written, acceptance-overlay rendering raised TypeError because a Python RGB tuple was multiplied by a float
+  - partial r761 output is retained unchanged at acceptance/four-point-mujoco-smoke-r1; no semantic pass/fail decision was used for model, checkpoint or threshold changes
+inferred: the exception is confined to acceptance evidence visualization after product inference; it does not establish a perception pass or perception failure
+conclusion: INVALID_INCOMPLETE_ACCEPTANCE_EVIDENCE
+evidence:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-four-point-acceptance-smoke-r761/preflight.json
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-four-point-acceptance-smoke-r761/stderr.log
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/acceptance/four-point-mujoco-smoke-r1
+decision: preserve r761 as invalid and perform exactly one RED-to-GREEN infrastructure recovery under CP-478; no model, threshold, selector, training or COCO action is permitted
+next_experiment: stage-e-four-point-acceptance-smoke-recovery-r762
+```
+
+## Checkpoint CP-478 — preserve invalid r761 and pre-register one evidence-rendering recovery
+
+```yaml
+checkpoint: CP-478
+status: INVALID_R761_GO_ONE_MINIMAL_INFRASTRUCTURE_RECOVERY
+prior_checkpoint: CP-477
+policy_basis: CP-477 and the user's first-failure-boundary RED-to-GREEN instruction
+r761:
+  classification: INVALID_EVIDENCE_RENDERING_AFTER_FIRST_POINT_FORWARD
+  semantic_open: true
+  completed_case_reports: 0
+  first_point_product_artifacts: preserved
+  output_manifest: absent
+  perception_decision: NONE
+  root_cause: acceptance-only overlay attempted float multiplication with a Python RGB tuple
+minimal_repair:
+  scope: private acceptance wrapper only
+  change: convert each overlay RGB tuple to a NumPy float array before blending
+  forbidden_changes: [DINO, SAM, thresholds, prompt, selector, candidate_mapping_gate, frozen carrier, production source, training, COCO100]
+  directed_test: render a synthetic one-pixel truth/prediction overlay and verify a valid PNG without loading models or opening carrier
+recovery:
+  run_id: stage-e-four-point-acceptance-smoke-recovery-r762
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/acceptance/four-point-mujoco-smoke-r2
+  run_evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-four-point-acceptance-smoke-recovery-r762
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-four-point-acceptance-smoke-recovery-r762/tmp
+  ros_domain_id: 180
+  gz_partition: so101-v5-t005-r762-20260907
+  disclosure: r762 necessarily reads the carrier after r761's incomplete semantic open; this is an infrastructure recovery with no optimization feedback, not a new candidate evaluation
+  stopping_rule: stop at the first persisted semantic gate failure; if 4/4 pass, independently read back and visually inspect before Linux PickPlace
+retention: r761 partial output, logs, carrier, lock, bundle, COCO diagnostics and every historical evidence member remain preserved; no evidence is deleted, reset, stashed or overwritten
+boundaries: COCO100 remains diagnostic only; real hardware unauthorized; Microduck paused
+```
+
+## Experiment stage-e-four-point-acceptance-smoke-recovery-r762 — PLANNED
+
+```yaml
+experiment_id: stage-e-four-point-acceptance-smoke-recovery-r762
+status: PLANNED
+prior_experiment: stage-e-four-point-acceptance-smoke-r761
+hypothesis: correcting only the acceptance overlay's RGB operand type allows the unchanged frozen-candidate four-point run to publish complete acceptance evidence
+prediction: the directed overlay test passes and the recovery either records 4/4 frozen semantic results or stops with the first persisted perception gate failure
+single_variable: acceptance-only RGB tuple to NumPy float-array conversion
+lifecycle: REUSE_STACK
+success_criteria: complete immutable report and member manifest for all four points with every CP-477 acceptance gate passing
+failure_criteria: first persisted semantic, geometry, freshness, device or latency gate failure
+invalid_criteria: identity mismatch, output collision, duplicate stack, wrong tempfile, setup/rendering exception or incomplete evidence publication
+decision: PENDING
+next_experiment: NONE_UNTIL_R762_TERMINAL_AND_INDEPENDENT_READBACK
 ```
