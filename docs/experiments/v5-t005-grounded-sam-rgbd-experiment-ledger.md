@@ -21010,6 +21010,28 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-460 — decoder-only last-Swin contract binds selected phase-1 epoch 3
+
+```yaml
+checkpoint: CP-460
+status: VALID_DECODER_SUPERVISION_LAST_SWIN_CONTRACT_GO_IMAGE_AND_SMOKE
+prior_checkpoint: CP-459
+change: bind only the independently selected decoder-supervision frozen-backbone epoch-3 checkpoint as last-Swin student initialization
+student_parent: {completed_epoch: 3, checkpoint_manifest_sha256: 53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95, model_sha256: 3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d}
+preserved: {teacher: official_pinned_base_frozen, resume: null, Swin_trainable: last_stage_only, BERT: frozen, head_lr: 0.000002, backbone_lr: 0.0000002, epochs_max: 2, supervised_loss_scope: decoder_outputs_only, teacher_token_lambda: 1.0, teacher_box_lambda: 1.0, mixed_r3_data: exact, COCO100_access: none, sealed_test_access: none, SAM: frozen}
+tdd:
+  r685: {classification: VALID_EXPECTED_PARENT_IDENTITY_RED, tests: 1, failed: 1, exit: 1}
+  r686: {classification: GREEN, selected_tests: 1, passed: 1, exit: 0}
+  r687: {classification: GREEN, training_container_tests: 9, passed: 9, exit: 0}
+test_environment: {python: /usr/bin/python3, pytest: 7.4.4, exact_unique_NVMe_scratch_per_run: true, plugin_autoload: disabled}
+source_hashes: {last_swin_config: 3f594d30acc669cb0b280ee362b2327d8d564d055af3f75287e46d79898b34be, container_test: fa4db985abb5b42bc0ec4071870b9ff717b84c20ef0b9713d464f83683ddda47}
+static_gate: {ruff: PASS, git_diff_check: PASS}
+verification_decision: focused config identity RED/GREEN plus the complete nine-test training-container file; no package-wide or benchmark run because runtime and benchmark implementations are unchanged
+scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-last-swin-config-red-r685/tmp, scratch/stage-c-decoder-supervision-last-swin-config-green-r686/tmp, scratch/stage-c-decoder-supervision-last-swin-container-green-r687/tmp]
+retention: r685-r687 and all prior evidence retained; nothing deleted or archived
+boundaries: no last-Swin training before committed image and 6+6 smoke; COCO100/sealed test/SAM/PickPlace/Mac remain gated; Microduck paused
+```
+
 ## Checkpoint CP-459 — decoder-only frozen-backbone formal run selects epoch 3 and opens last-Swin
 
 ```yaml
