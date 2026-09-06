@@ -21,6 +21,8 @@ _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _LEGACY_SPLITS = ("train", "val", "test")
 _TRAIN_VAL_SPLITS = ("train", "val")
 _TRAIN_VAL_DATASET_CONTRACT = "so101-nonpenetrating-train-val-v1"
+_TEST_SPLITS = ("test",)
+_TEST_DATASET_CONTRACT = "so101-nonpenetrating-test-v1"
 _SCENE_GEOMETRY_POLICY = "task-visual-nonpenetration-v1"
 _TRAIN_VAL_SCENE_GEOMETRY = {
     "ordinary_camera_jitter_m": [-0.015, 0.015],
@@ -64,6 +66,12 @@ _TRAIN_VAL_SEED_RANGES = {
 _TRAIN_VAL_SCENARIO_QUOTAS = {
     "train": {scenario: 200 for scenario in _TRAIN_VAL_SCENARIOS},
     "val": {scenario: 50 for scenario in _TRAIN_VAL_SCENARIOS},
+}
+_TEST_SPLIT_COUNTS = {"test": 300}
+_TEST_SEED_STARTS = {"test": 470_000_000}
+_TEST_SEED_RANGES = {"test": [470_000_000, 470_000_299]}
+_TEST_SCENARIO_QUOTAS = {
+    "test": {scenario: 50 for scenario in _TRAIN_VAL_SCENARIOS},
 }
 _VISUAL_GEOMS = {
     "plastic_cup": frozenset(
@@ -287,18 +295,9 @@ def _dataset_contract(source_root: Path, splits: tuple[str, ...]) -> None:
         raise _fail("DATASET_YAML_INVALID", "dataset.yaml must contain a mapping")
     expected = {
         "path": ".",
-        "train": "images/train",
-        "val": "images/val",
+        **{split: f"images/{split}" for split in splits},
         "names": {0: "plastic_cup"},
     }
-    if splits == _LEGACY_SPLITS:
-        expected = {
-            "path": ".",
-            "train": "images/train",
-            "val": "images/val",
-            "test": "images/test",
-            "names": {0: "plastic_cup"},
-        }
     if dict(document) != expected:
         raise _fail("DATASET_YAML_INVALID", "dataset contract is not the fixed cup dataset")
 
@@ -318,10 +317,14 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
         splits = _TRAIN_VAL_SPLITS
         if document.get("member_splits") != list(splits):
             raise _fail("MANIFEST_INVALID", "member_splits must be exactly train then val")
+    elif dataset_contract == _TEST_DATASET_CONTRACT:
+        splits = _TEST_SPLITS
+        if document.get("member_splits") != list(splits):
+            raise _fail("MANIFEST_INVALID", "member_splits must be exactly test")
     else:
         raise _fail("MANIFEST_INVALID", "unknown dataset_contract")
     schema_version = document.get("schema_version")
-    if splits == _TRAIN_VAL_SPLITS:
+    if splits != _LEGACY_SPLITS:
         schema_is_valid = type(schema_version) is int and schema_version == 2
     else:
         schema_is_valid = schema_version in {1, 2}
@@ -340,7 +343,7 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
         _integer(
             split_counts[split],
             field=f"split_counts.{split}",
-            minimum=1 if splits == _TRAIN_VAL_SPLITS else 0,
+            minimum=1 if splits != _LEGACY_SPLITS else 0,
         )
     _positive_dimension(document.get("image_width"), "image_width")
     _positive_dimension(document.get("image_height"), "image_height")
@@ -367,7 +370,7 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
             raise _fail("MANIFEST_INVALID", "scene_geometry must be present in schema 2")
         if not isinstance(document.get("truth_contract"), Mapping):
             raise _fail("MANIFEST_INVALID", "truth_contract must be present in schema 2")
-    if splits == _TRAIN_VAL_SPLITS:
+    if splits != _LEGACY_SPLITS:
         if document.get("scene_geometry_policy") != _SCENE_GEOMETRY_POLICY:
             raise _fail("MANIFEST_INVALID", "scene_geometry_policy is invalid")
         if document.get("scene_geometry") != _TRAIN_VAL_SCENE_GEOMETRY:
@@ -392,8 +395,10 @@ def _manifest(source_root: Path) -> tuple[dict[str, Any], bytes]:
             ):
                 raise _fail("MANIFEST_INVALID", f"seed_ranges.{split} is invalid")
             occupied.append((value[0], value[1]))
-        if occupied[0][1] >= occupied[1][0] and occupied[1][1] >= occupied[0][0]:
-            raise _fail("SPLIT_SEEDS_OVERLAP", "declared seed ranges overlap")
+        for left_index, left in enumerate(occupied):
+            for right in occupied[left_index + 1 :]:
+                if left[1] >= right[0] and right[1] >= left[0]:
+                    raise _fail("SPLIT_SEEDS_OVERLAP", "declared seed ranges overlap")
     return document, payload
 
 
@@ -438,6 +443,8 @@ def _validate_manifest_members(
         splits = (
             _TRAIN_VAL_SPLITS
             if manifest.get("dataset_contract") == _TRAIN_VAL_DATASET_CONTRACT
+            else _TEST_SPLITS
+            if manifest.get("dataset_contract") == _TEST_DATASET_CONTRACT
             else _LEGACY_SPLITS
         )
     actual_counts = Counter(sample["split"] for sample in samples)
@@ -465,7 +472,7 @@ def _validate_manifest_members(
                 f"seed {seed} appears in both {owner} and {sample['split']}",
             )
         seed_owners[seed] = sample["split"]
-    if splits == _TRAIN_VAL_SPLITS:
+    if splits != _LEGACY_SPLITS:
         for sample in samples:
             declared_range = manifest["seed_ranges"][sample["split"]]
             if not declared_range[0] <= sample["seed"] <= declared_range[1]:
@@ -545,6 +552,39 @@ def _validate_official_train_val_version(manifest: Mapping[str, Any]) -> None:
             ):
                 raise _fail("MANIFEST_INVALID", "official dataset sample schedule is invalid")
             position += 1
+
+
+def _validate_official_test_version(manifest: Mapping[str, Any]) -> None:
+    if manifest.get("dataset_contract") != _TEST_DATASET_CONTRACT:
+        raise _fail("MANIFEST_INVALID", "official test dataset discriminator is invalid")
+    if manifest.get("member_splits") != list(_TEST_SPLITS):
+        raise _fail("MANIFEST_INVALID", "official test dataset member splits are invalid")
+    if manifest.get("split_counts") != _TEST_SPLIT_COUNTS:
+        raise _fail("MANIFEST_INVALID", "official test dataset split counts are invalid")
+    if manifest.get("seed_starts") != _TEST_SEED_STARTS:
+        raise _fail("MANIFEST_INVALID", "official test dataset seed starts are invalid")
+    if manifest.get("seed_ranges") != _TEST_SEED_RANGES:
+        raise _fail("MANIFEST_INVALID", "official test dataset seed ranges are invalid")
+    quotas = manifest.get("scenario_quotas")
+    if (
+        not isinstance(quotas, Mapping)
+        or set(quotas) != set(_TEST_SPLITS)
+        or not isinstance(quotas["test"], Mapping)
+        or dict(quotas["test"]) != _TEST_SCENARIO_QUOTAS["test"]
+    ):
+        raise _fail("MANIFEST_INVALID", "official test dataset scenario quotas are invalid")
+    samples = manifest.get("samples")
+    if not isinstance(samples, list) or len(samples) != _TEST_SPLIT_COUNTS["test"]:
+        raise _fail("MANIFEST_INVALID", "official test dataset sample population is invalid")
+    for offset, sample in enumerate(samples):
+        scenario = _TRAIN_VAL_SCENARIOS[offset % len(_TRAIN_VAL_SCENARIOS)]
+        if not isinstance(sample, Mapping) or (
+            sample.get("split") != "test"
+            or sample.get("seed") != _TEST_SEED_STARTS["test"] + offset
+            or sample.get("scenario") != scenario
+            or sample.get("configured_cup_count") != len(_SCENARIO_CUPS[scenario])
+        ):
+            raise _fail("MANIFEST_INVALID", "official test dataset sample schedule is invalid")
 
 
 def _validate_train_val_source_tree(
@@ -1016,9 +1056,9 @@ def _profile(
     profile: dict[str, Any] = {"schema_version": 1}
     samples_by_split = {
         split: [sample for sample in samples if sample["split"] == split]
-        for split in ("train", "val")
+        for split in inventories
     }
-    for split in ("train", "val"):
+    for split in inventories:
         split_samples = samples_by_split[split]
         records = inventories[split]
         area_counts: Counter[str] = Counter()
@@ -1130,20 +1170,25 @@ def convert_dataset(
         raise _fail("PROVENANCE_INVALID", "converter commit is invalid")
 
     manifest, manifest_payload = _manifest(source_root)
+    dataset_contract = manifest.get("dataset_contract")
     splits = (
         _TRAIN_VAL_SPLITS
-        if manifest.get("dataset_contract") == _TRAIN_VAL_DATASET_CONTRACT
+        if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT
+        else _TEST_SPLITS
+        if dataset_contract == _TEST_DATASET_CONTRACT
         else _LEGACY_SPLITS
     )
     if splits == _TRAIN_VAL_SPLITS:
         _validate_official_train_val_version(manifest)
+    elif splits == _TEST_SPLITS:
+        _validate_official_test_version(manifest)
     _dataset_contract(source_root, splits)
     samples = [
         _validate_sample_shape(sample, index, splits)
         for index, sample in enumerate(manifest["samples"])
     ]
     _validate_manifest_members(manifest, samples, splits)
-    if splits == _TRAIN_VAL_SPLITS:
+    if splits != _LEGACY_SPLITS:
         _validate_train_val_source_tree(source_root, manifest, samples)
     width = manifest["image_width"]
     height = manifest["image_height"]
@@ -1160,7 +1205,9 @@ def convert_dataset(
         "source_manifest_sha256": source_manifest_sha256,
         "source_mjcf_sha256": manifest["mjcf_sha256"],
     }
-    inventories: dict[str, list[dict[str, Any]]] = {"train": [], "val": []}
+    inventories: dict[str, list[dict[str, Any]]] = {
+        split: [] for split in splits if split != "test"
+    }
     sealed_samples: list[dict[str, Any]] = []
     for sample in sorted(
         manifest["samples"], key=lambda item: (splits.index(item["split"]), item["seed"])
@@ -1176,6 +1223,32 @@ def convert_dataset(
         }
         split = sample["split"]
         if split == "test":
+            if splits == _TEST_SPLITS:
+                polygons = _label_polygons(payloads["label"], member=paths["label"].as_posix())
+                truth_instances = _truth_instances(
+                    payloads["truth"],
+                    member=paths["truth"].as_posix(),
+                    sample=sample,
+                    image_width=width,
+                    image_height=height,
+                    schema_version=manifest["schema_version"],
+                    scene_geometry=manifest.get("scene_geometry"),
+                    require_complete_visible_truth=True,
+                    require_geometry_receipt=True,
+                )
+                if len(polygons) != len(truth_instances):
+                    raise _fail(
+                        "TRUTH_MISMATCH",
+                        f"{paths['label']}: label/truth instance count differs",
+                    )
+                for polygon, truth_instance in zip(polygons, truth_instances, strict=True):
+                    if not _boxes_match(
+                        polygon_to_box(polygon, width, height), truth_instance["box"]
+                    ):
+                        raise _fail(
+                            "TRUTH_MISMATCH",
+                            f"{paths['label']}: label/truth box differs",
+                        )
             sealed_samples.append(base_record)
             continue
 
@@ -1188,8 +1261,8 @@ def convert_dataset(
             image_height=height,
             schema_version=manifest["schema_version"],
             scene_geometry=manifest.get("scene_geometry"),
-            require_complete_visible_truth=splits == _TRAIN_VAL_SPLITS,
-            require_geometry_receipt=splits == _TRAIN_VAL_SPLITS,
+            require_complete_visible_truth=splits != _LEGACY_SPLITS,
+            require_geometry_receipt=splits != _LEGACY_SPLITS,
         )
         if len(polygons) != len(truth_instances):
             raise _fail("TRUTH_MISMATCH", f"{paths['label']}: label/truth instance count differs")
@@ -1217,14 +1290,14 @@ def convert_dataset(
         )
 
     documents: dict[str, dict[str, Any]] = {}
-    for split in ("train", "val"):
+    for split in inventories:
         documents[f"{split}/inventory.json"] = {
             **common,
             "sample_count": len(inventories[split]),
             "samples": inventories[split],
             "split": split,
         }
-    if splits == _LEGACY_SPLITS:
+    if "test" in splits:
         documents["test-sealed-members.json"] = {
             "converter_commit": converter_commit,
             "sample_count": len(sealed_samples),
@@ -1239,7 +1312,7 @@ def convert_dataset(
         samples,
         inventories,
         schema_version=manifest["schema_version"],
-        include_test_seal=splits == _LEGACY_SPLITS,
+        include_test_seal="test" in splits,
     )
     payloads = {relative: _canonical_json(document) for relative, document in documents.items()}
     output_root.mkdir(parents=True, exist_ok=False)

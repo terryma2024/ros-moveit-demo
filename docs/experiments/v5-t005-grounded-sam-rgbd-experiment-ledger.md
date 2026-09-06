@@ -19555,6 +19555,35 @@ cohorts: primary reporting excludes small_far_cup, while all-scenario metrics re
 boundaries: data not yet generated; no test metric, COCO100, PickPlace or Mac access; Microduck paused
 ```
 
+## Checkpoint CP-424 — exact nonpenetrating test-only contract TDD GREEN
+
+```yaml
+checkpoint: CP-424
+status: VALID_TEST_ONLY_CONTRACT_TDD_GREEN_BUILD_GATE_PLANNED
+prior_checkpoint: CP-423
+invalid_environment_attempt:
+  run_id: linux-test-stage-e-test-contract-red-r577
+  reason: flat repository src path did not expose the setup.py so101_demo package mapping and zsh reserves status; collection did not reach the behavior boundary
+red:
+  run_id: linux-test-stage-e-test-contract-red-r578
+  result: {exit: 1, selected: 3, failed: 3, elapsed_seconds: 0.16}
+  expected_failures: generator rejected unknown so101-nonpenetrating-test-v1; converter lacked exact official-test validator; dataset.yaml validator rejected test-only layout
+change:
+  config: {path: src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml, sha256: ae750c06bdaa41a230cdcb5517dec1f349ded3fb7a2927dd6b5719c3e5007209}
+  implementation: [src/so101_demo_py/src/adapters/perception/mujoco_dataset.py, src/so101_demo_py/src/training/grounding_dino_dataset.py]
+  test: src/so101_demo_py/test/test_nonpenetrating_test_contract.py
+  behavior: exact test-only split, count300, seeds470000000..470000299 and six quotas50; schema2 nonpenetration and categorical visible truth stay mandatory; converter verifies the complete canonical source tree/truth/geometry then emits only a cryptographic test seal and profile, without train/val inventories
+green:
+  run_id: linux-test-stage-e-test-contract-green-r579
+  related_result: {exit: 0, selected: 112, passed: 112, elapsed_seconds: 3.42}
+  scope: new test-only contract plus complete existing nonpenetrating train/val contract and Grounding DINO dataset converter tests
+  static: final Ruff pass and git diff --check pass; an earlier trailing Ruff invocation used the model venv without Ruff and a following read-only Ruff check found one excess blank line in the test, corrected without behavior change
+compatibility: legacy train/val/test and exact train/val contracts remain covered by the 112 related tests
+next: commit and push this exact contract, build a fresh symlink overlay, run the related ordinary package gate, then allocate the preregistered outputs and generate once
+evidence_retention: r577-r579 evidence and NVMe scratch retained; scratch roots are deletion candidates only; nothing deleted
+boundaries: no formal test sample generated and no test/COCO metric read; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
