@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-435
+latest_checkpoint: CP-437
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-data-preparation-r620
+active_experiment: stage-c-dino-domain-retention-data-preparation-stratified-r622
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: build COCO100-disjoint mixed train and independent real/Web validation inventories, then train the authorized frozen-backbone teacher/student experiment from official revision a2bb814d; Linux PickPlace and all Mac work remain gated
-next_action: discover and verify local/Hugging-Face sources for a license-traceable COCO100-disjoint real cup training population and independent validation, then freeze the 50/30/20 mixed-data inventory without consulting COCO100 outcomes
+open: replace the invalid unstratified r620 mixed candidate with one fresh r622 candidate using the preregistered cup-area by single/multi-cup stratification, then train the authorized frozen-backbone teacher/student experiment from official revision a2bb814d; Linux PickPlace and all Mac work remain gated
+next_action: TDD the missing six-stratum positive selector only, then reuse the frozen verified source to generate and exhaustively read back a fresh mixed-r2 root without consulting COCO100 outcomes
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20048,6 +20048,101 @@ training_constraints:
   - each epoch evaluates near synthetic val, independent real/Web val and DINO-only raw candidates; SAM stays frozen
 next_experiment: stage-c-dino-domain-retention-data-preparation-r620
 retention: r619 output/run evidence and r617/r618 invalid partial roots retained; archived none; r617/r618/r619 scratch and low-rate roots are deletion candidates only; nothing deleted
+```
+
+## Checkpoint CP-436 — COCO100-isolated mixed-data preparation planned
+
+```yaml
+checkpoint: CP-436
+status: PLANNED_COCO100_ISOLATED_DOMAIN_RETENTION_DATA_PREPARATION
+prior_checkpoint: CP-435
+run_id: stage-c-dino-domain-retention-data-preparation-r620
+hypothesis: a deterministic 50/30/20 mixture can preserve the corrected near-workspace synthetic geometry while adding enough real-cup appearance diversity and generic/hard-negative replay to prevent the CP-435 domain collapse
+single_variable: replace the prior synthetic-only training population with the authorized mixed population; model initialization/training is not part of r620
+lifecycle: ISOLATED_STACK
+provenance:
+  source_commit: db1269c677a4231317d595583d7af01fdeff36ca
+  install_overlay: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/install-task14-runner-access-r11
+  runtime_executable: isolated data-prep Python under the registered evidence root
+  ros_domain_id: NONE_DATA_PREPARATION
+  gz_partition: NONE_DATA_PREPARATION
+source:
+  transport: Hugging Face CLI authenticated read-only download
+  repository: detection-datasets/coco
+  revision: cf0b22332314a937e9dc8a1957b21725430bb41d
+  files: README.md, dataset_infos.json and train parquet shards 00000 through 00004 of 00040
+  estimated_download_bytes: approximately 2.41 GB
+  authoritative_semantics: COCO 2017 train split; official COCO states train/val are public object-detection sets with instance annotations, and per-image license metadata must be retained
+isolation:
+  forbidden_evaluation_ids: exact 100 coco_image_id values from frozen COCO100 metadata/sources.json, stored only as a denylist hash and never copied as images or targets
+  split_rule: only COCO train2017 rows are eligible; all COCO100 members are val2017 and membership is additionally checked by ID and image payload SHA256
+  train_val_disjoint: image ID and image SHA256 intersections must both be empty
+  coco100_usage: denylist construction only; no COCO100 image, annotation, metric, score or threshold may enter training, epoch selection or threshold selection
+planned_population:
+  mixed_train_total: 1600
+  corrected_near_mujoco: {count: 800, fraction: 0.50, source: existing immutable train split, scenarios: [one_cup_distractors, two_cups, cup_near_bottle, partially_occluded_cup], count_per_scenario: 200}
+  independent_real_cup_train: {count: 480, fraction: 0.30, source: deterministic COCO train2017 cup rows}
+  generic_replay_and_hard_negatives: {count: 320, fraction: 0.20, generic_teacher_replay: 160, explicit_hard_negatives: 160, hard_negative_categories: [bottle, wine glass, bowl, vase], cup_instances_required: 0}
+  independent_real_validation: {count: 160, source: held-out deterministic COCO train2017 cup rows, not used for optimization or threshold selection beyond the authorized per-epoch domain-retention validation}
+  synthetic_validation: existing immutable 300-image nonpenetrating val retained; primary near-workspace excludes small_far_cup but all-scenario metrics remain complete
+selection:
+  seed: 20260906
+  real_train_and_val: stratify deterministically by cup box area and single-versus-multi-cup before seeded selection
+  negatives: deterministic seeded selection after required category/no-cup predicates
+  no_result_based_sampling: CP-430/CP-435 per-image outcomes are forbidden inputs
+outputs:
+  source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/domain-retention-coco-train2017-source-r1
+  mixed_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r1
+  run_evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-data-preparation-r620
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-dino-domain-retention-data-preparation-r620/tmp
+success_criteria:
+  - exact 800/480/320 composition and independent real validation 160; all files have source URL/revision, image/annotation SHA, original dimensions, transformed box and license metadata
+  - COCO100 image-ID and payload-hash intersections are zero; train/val image-ID and payload-hash intersections are zero
+  - all images decode, every cup box is in-frame and nondegenerate, every negative has zero cup target, every hard negative contains a declared confusing category
+  - deterministic inventory and full SHA256 readback pass; source and final roots freeze read-only
+invalid_criteria:
+  - source revision/file mismatch, insufficient quotas, unknown license, duplicate/leaked image, malformed annotation, output collision or non-deterministic replay
+restrictions:
+  - no model training, SAM access, sealed final-test read, PickPlace, Mac work, evidence deletion or Microduck resume in r620
+decision: PENDING
+next_experiment: frozen-backbone 6+6 smoke from official revision a2bb814d after r620 is VALID
+```
+
+## Checkpoint CP-437 — r620 mixed-data candidate invalid; stratified-only r622 retry planned
+
+```yaml
+checkpoint: CP-437
+status: INVALID_UNSTRATIFIED_POSITIVE_SELECTION_FRESH_STRATIFIED_RETRY_PLANNED
+prior_checkpoint: CP-436
+invalid_candidate:
+  run_id: stage-c-dino-domain-retention-data-preparation-r620
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r1
+  classification: INVALID_EXPERIMENT_PROTOCOL_DEVIATION
+  exact_reason: the private selector applied deterministic role-salted hashing to the whole positive pool but did not first stratify by cup area bucket and single-versus-multi-cup as preregistered in CP-436
+  scope_of_invalidity: experiment selection only; downloaded source, output bytes, annotations, licenses, geometry transformations, quotas and isolation readbacks remain internally valid and are retained unchanged
+observed_candidate:
+  source: {hf_repository: detection-datasets/coco, revision: cf0b22332314a937e9dc8a1957b21725430bb41d, parquet_shards: 5, rows: 14660, cup_images: 1148, hard_negative_images: 1457}
+  official_annotations: {url: 'http://images.cocodataset.org/annotations/annotations_trainval2017.zip', bytes: 252907541, sha256: 113a836d90195ee1f884e704da6304dfaaecff1f023f49b6ca93c4aaae470268, unzip_test: PASS, opened_for_selection: instances_train2017.json only}
+  source_identity_sha256: 789cc8ea9f3fc7b989b783acb97379203a3c481f6bcaef1520d3ab2e57ea7d3d
+  mix: {train_total: 1600, near_synthetic: 800, real_cup_train: 480, generic_replay: 160, hard_negative: 160, independent_real_val: 160}
+  instances: {near_synthetic: 1000, real_train: 1034, real_val: 319, generic: 0, hard_negative: 0}
+  readback: {decoded_images: 1760, manifest_payload_files: 1762, stored_files: 1763, coco100_id_overlap: 0, coco100_source_payload_overlap: 0, train_inventory_sha256: 523dc34260543ee7d78033aa22f730f15e39a574b01ac5f6934c60188d2ac5b9, val_inventory_sha256: 1ff1fa7cf4c5a93722da1ae25fd87c5031edeab0d75ea31d1cab5818dde429b1, manifest_sha256: f52bdef3b95ffa7c1917752d02edf5d0dc6c7fd988d9132caae101957e03ef04}
+  modes: {source_files: '0444', source_directories: '0555', mixed_files: '0444', mixed_directories: '0555'}
+evidence_seal_correction:
+  r620_issue: its final evidence-files.sha256 was created inside the directory being enumerated and therefore contains one invalid self-reference; it is frozen and was not rewritten
+  r621: {run_id: stage-c-dino-domain-retention-readback-r621, status: VALID_READ_ONLY_SEAL, r620_files_verified: 59, source_files_verified: 25, mixed_files_verified: 1763, evidence_manifest_sha256: 47016c21a0ef39d43beb8a39aa98f4346399689988f6a8ecc325d662571abb4d}
+  interpretation: r621 validates the retained r620 bytes but does not cure the preregistered selection deviation
+invalid_bootstraps:
+  - the first private pytest invocation auto-loaded the ROS launch_testing plugin and failed for absent PyYAML before collecting the intended test; the corrected isolated pytest disables plugin autoload
+  - two optional current-loader import probes failed before data load because direct PYTHONPATH cannot express setup.py package_dir and then an importlib dataclass module was not registered; corrected importlib probe loaded all 1600 plus 160 samples successfully
+next_experiment:
+  run_id: stage-c-dino-domain-retention-data-preparation-stratified-r622
+  single_change: add deterministic balanced selection across [small, medium, large] by [single, multi] for real_train and independent real_val; keep source bytes, seed, quotas, negative selectors, letterbox, licenses, prompt and denylist exact
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r2
+  tdd: first require each positive split to cover all six strata with counts differing by at most one, then one fresh generation and one exhaustive readback
+  restrictions: no source redownload, COCO100 outcomes, sealed final test, DINO/SAM load, training, PickPlace, Mac, evidence deletion or Microduck resume
+decision: RETAIN_R620_R621_INVALID_FOR_TRAINING_GO_R622_STRATIFIED_ONLY
+retention: r620/r621 roots and all prior evidence retained; r620/r621 scratch and low-rate roots are deletion candidates only; nothing deleted or archived
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
