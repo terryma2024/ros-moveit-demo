@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-297
+latest_checkpoint: CP-403
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: EXP-079-STAGE-E-R5-FROZEN-SAM-PRODUCTION-REPLAY-R1
-confirmed: r5 categorical train/val truth and epoch8 DINO checkpoint independently verified; val box-only TP300 FP0 FN0 is not mask qualification; observer RED/GREEN, r411 build, ordinary1283passed and explicit583passed2skipped passed
-open: corrected-DINO frozen-SAM val reevaluation, production geometry eligibility and final model qualification remain incomplete
-next_action: r469 explicit benchmark583passed2skipped; prepare immutable fixed-plan r470 diagnostic runner and Astra review it before any GL/render/output allocation
-boundaries: sealed test/COCO100/PickPlace/Mac remain inaccessible; Microduck paused; no old inference rerun; mask IoU 0.80 unchanged
+active_experiment: stage-e-generator-nonpenetrating-generation-official-r537
+confirmed: CP-403 records user acceptance of the two CP-402 low-probability fsync/date exceptional-path residual risks and lifts only the normal-path NO_GO; r535 281/281, r499 benchmark, r470 real-GPU acceptance, prior package gates, generic cup/prompt cup., mask IoU 0.80, mapping IoU 0.98 and stateless frozen SAM remain unchanged
+open: official 1200 train + 300 val nonpenetrating generation, one-time readback/archive/conversions, DINO training and all downstream qualification remain incomplete
+next_action: launch the frozen private driver/shell once as stage-e-generator-nonpenetrating-generation-official-r537 after the CP-403 commit is pushed and its Gitee SHA is read back
+boundaries: normal train/val generation/conversion/training path authorized; sealed test/COCO100/PickPlace/Mac remain gated by the fast-completion plan; Microduck paused; no r536/further fsync-date fault injection/mutation/general harness/repeated Astra review; do not claim the two exceptional-path defects fixed
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -18951,6 +18951,58 @@ next_experiment:
 review_after: Astra must read every corrected file/evidence and approve actual launch readiness before any GL or official generation checkpoint
 retention: r503/r502/r501/r500 and all prior evidence retained, archived none; scratch deletion candidates only and nothing deleted
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
+## Checkpoint CP-403 — user accepts two exceptional-path residual risks; normal path generation GO
+
+```yaml
+checkpoint: CP-403
+status: USER_ACCEPTED_EXCEPTIONAL_PATH_RESIDUAL_RISK_NORMAL_PATH_GO
+decision_time_local: 2026-09-06 Asia/Shanghai
+execution_mode: Sol-High inline serial on AI-STATION-001; no SSH to ai-station; no execution subagent
+prior_checkpoint: CP-402
+user_risk_decision:
+  accepted_residual_risks:
+    - the real driver rejects the shell-only launch_stage_log_fsync_persistence and launch_stage_launch_finalizer_persistence operation names on the low-probability injected persistence-failure path
+    - the redundant fallible date/arithmetic tail after SO101_POSTALLOCATION_ORIGINAL_EXIT capture can replace a caught exceptional status on the low-probability date-failure path
+  cancelled_work: r536, further fsync/date fault injection, mutation expansion, general harness work and repeated Astra review
+  claim_boundary: neither exceptional-path defect is fixed; CP-403 does not reinterpret r535 as proof of those real-driver paths
+authorization:
+  lifted: CP-402 NO_GO only for the fast-completion plan normal path covering official 1200 train + 300 val nonpenetrating generation, one-time readback/archive/conversions and subsequent train/val-only model work
+  retained: normal fsync, persistent logs, file/inventory integrity, output collision checks, source and hash provenance, CUDA-only execution, exact-Python NVMe scratch, generic cup/prompt cup., stateless frozen SAM and robot safety gates
+  still_gated: sealed synthetic test, COCO100, PickPlace and macOS until their preceding fast-completion-plan exits pass
+preflight:
+  repo: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+  branch: codex/v5-t004-yolo-seg-rgbd
+  pre_checkpoint_head_local_gitee: da894db07432311a9470623ae9915119e0533889
+  tracked_state: clean before CP-403 edit; fast-completion plan untracked and intentionally owned for this commit
+  preserved_untracked: [build-task14-runner-access-r11/, install-task14-runner-access-r11/, log-task14-runner-access-r11/]
+  submodule: third_party/mujoco_ros2_control at 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+  cp402_handoff_sha256: d624ed8a1db83b309e8e7b67d3a877fa464cd83b6186e3a7626417e23aba91a7
+  private_driver: {sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, lines: 1954}
+  private_shell: {sha256: 6cf1571fbaa3716acee7cbc095f95088fb2bb487bece66b43b5a889e0a849a97, lines: 545, bash_syntax: valid}
+  retained_r535_harness: {sha256: e21c345ec623bc911373c0c7e2d370acf81b1fce5845512d40a7dbcdc97f31ce, lines: 1323, not_rerun: true}
+  retained_r535_launcher: {sha256: a1e949186aa0ca78697674387523e1d776817f20dc95a37e1c4d0f437ce232a5, lines: 470, not_rerun: true}
+  accepted_package_source: {commit: 07dcd29ae496e54f3fcb70092a6613db52fc7b27, scoped_drift: none, r495_seven_prefixes: present}
+  config: {sha256: 677a48fa3613372e6979d56fd41f4ab43ade8206d22a7da7562dae720337c00c, contract: so101-nonpenetrating-train-val-v1, train: 1200, val: 300, scenarios: 6, train_each: 200, val_each: 50, train_seed_start: 450000000, val_seed_start: 460000000}
+  collision_gate: all four official output roots and r537 run-evidence/scratch/low-rate roots absent under both -e and -L
+  python: /data/work/venvs/so101-grounded-sam/bin/python -> /usr/bin/python3.12; Python 3.12.3
+  gpu: NVIDIA GeForce RTX 5080; torch 2.13.0+cu130; CUDA 13.0 available; preflight utilization 0 percent and memory 483/16303 MiB
+  nvme: /data on /dev/nvme0n1p5 ext4; 214 GiB available; registered scratch parent writable
+  processes: no matching generation, Grounding DINO, Microduck, colcon-test, pytest, Gazebo, move_group, RViz or PickPlace process; ROS node list empty; existing codex and so101-exp079-linux-r3 tmux sessions preserved; codex-cua absent
+  probe_note: an initial read-only zsh probe was invalid after using special variable path as a loop name; a fresh probe with candidate_path passed completely and no product or evidence root was modified
+planned_run:
+  run_id: stage-e-generator-nonpenetrating-generation-official-r537
+  lifecycle: ISOLATED_STACK
+  source_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/yolo-seg-nonpenetrating-train-val-v1
+  archive_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/archives/so101-v5-t005-cup-nonpenetrating-train-val-v1.tar.gz
+  converted_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-nonpenetrating-train-val-v1
+  repro_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-cup-nonpenetrating-train-val-v1-repro
+  scratch_tmp: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-generator-nonpenetrating-generation-official-r537/tmp
+  success_criteria: exact 1200/300 six-scenario quotas, exact seed ranges, NVIDIA EGL/CUDA path, zero forbidden test/COCO access, nonpenetration receipts, complete normal-path fsync/inventory evidence and exit 0
+  invalid_criteria: any provenance/hash/CUDA/tempfile/collision mismatch, nonzero process exit, or incomplete output; preserve partial roots and allocate a new version/run ID rather than resume
+next_command: approved_head=$(git rev-parse HEAD); SO101_GENERATION_RUN_ID=stage-e-generator-nonpenetrating-generation-official-r537 SO101_APPROVED_EXECUTION_HEAD=$approved_head SO101_REVIEWED_SHELL_SHA256=6cf1571fbaa3716acee7cbc095f95088fb2bb487bece66b43b5a889e0a849a97 /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/run_nonpenetrating_train_val_v1.sh --execute
+retention: all historical evidence retained; archived none in this continuation; r537 scratch and low-rate roots become deletion candidates after readback; nothing deleted
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
