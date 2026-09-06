@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-442
+latest_checkpoint: CP-443
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-last-swin-stage-smoke-r631
+active_experiment: stage-c-dino-domain-retention-last-swin-stage-formal-r633
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: run the last-Swin-stage 6+6 smoke, then at most two formal epochs and compare them with the retained frozen-phase epoch 2 using only the same val streams; Linux PickPlace and all Mac work remain gated
-next_action: build the cache-reusing committed image, run a fresh network-none 6+6 CUDA smoke from the hash-pinned phase-1 epoch-002 student plus separate official-base teacher, then read back once
+open: run at most two last-Swin-stage formal epochs and compare them with the retained frozen-phase epoch 2 using only the same val streams; Linux PickPlace and all Mac work remain gated
+next_action: run a fresh network-none two-epoch CUDA formal phase from the hash-pinned phase-1 epoch-002 student plus separate official-base teacher, read it back once, and select across phase-1 epoch 2 plus both new epochs
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20368,6 +20368,50 @@ next_experiment:
 decision: GO_LAST_SWIN_STAGE_6_PLUS_6_SMOKE
 retention: r629 and every prior output/evidence retained; registered scratch and low-rate roots remain deletion candidates only; nothing deleted or archived
 boundaries: phase-1 output remains immutable; no COCO100/sealed test tuning; SAM frozen/unloaded; no PickPlace or Mac; Microduck paused
+```
+
+## Checkpoint CP-443 — last-Swin-stage 6+6 CUDA smoke valid; two-epoch formal run authorized
+
+```yaml
+checkpoint: CP-443
+status: VALID_LAST_SWIN_STAGE_6_PLUS_6_CUDA_SMOKE_GO_FORMAL_TWO_EPOCHS
+prior_checkpoint: CP-442
+implementation_commit: 6820fe8a24b959954920e9865f26111f4483d496
+gitee_readback_before_smoke: 6820fe8a24b959954920e9865f26111f4483d496
+image:
+  tag: so101-grounding-dino-tiny-train:r7-last-swin-6820fe8a
+  id: sha256:490a7bf6afc3bb5a2f5311dc92f6b02569650162136c53e8af37d4094591f047
+  evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-last-swin-stage-image-r630
+smoke:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-smoke-r631
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-last-swin-stage-r1/smoke-r1
+  exit: 0
+  resolved_counts: {train: 6, near_val: 3, real_val: 3, val_total: 6}
+  trainability: {student_total: 172249090, student_trainable: 25800632, last_swin_stage_parameter_tensors: 34, teacher_trainable: 0}
+  optimizer: {head_learning_rate: 0.000002, last_swin_stage_learning_rate: 0.0000002, ratio: 0.1}
+  gradients: {checked_after_batch: 1, frozen_parameter_violations: 0, status: PASS}
+  selected_smoke_only: {thresholds: [0.45, 0.45], joint_harmonic_f1: 0.9523809523809523, near_f1: 1.0, near_recall: 1.0, real_f1: 0.9090909090909091, real_recall: 0.8333333333333334}
+  checkpoint_manifest_sha256: c92c39693d6d01f087968fa829e4388e1dea37f80562c6d820877a8303a8c411
+  model_safetensors_sha256: 8ecd8bf0c34866ec1d73a7305c784c81683b0868d3dfe220fe044bb5b53ac255
+  fresh_reload_sha256: 80aea6dd8d94f868139c35089874fcb4e22f3b0b3708bcb3848a875ffb9cea24
+  training_log_sha256: 16bf98403b1617d9665a0fd19004fce554a2654b1d0a144b8c17743a3f26d23b
+readback:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-smoke-readback-r632
+  status: PASS
+  files: 19
+  total_bytes: 895656753
+  readback_sha256: 28f855e60daabf10a0ac2962036a2bd8dfedf74e08b9441b44766eb1f3485cea
+  verified: all output files and checkpoint members hash/size match; phase-1 epoch-002 parent manifest/model hashes match; exact stage-3 trainability and LR split pass; frozen gradients are zero; CUDA fresh reload is finite
+  nvme_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-dino-domain-retention-last-swin-stage-smoke-readback-r632/tmp
+formal:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-formal-r633
+  planned_output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-last-swin-stage-r1/formal-r1
+  recipe: 1600 mixed samples for 2 epochs; student initializes from hash-pinned phase-1 epoch-002; teacher independently initializes from official pinned base; only head allowlist plus final Swin stage train; head LR 0.000002 and backbone LR 0.0000002
+  per_epoch: 300 all-scenario synthetic plus primary near cohort, 160 independent real validation, DINO-only raw candidates and common-threshold joint selection
+  final_selection: compare phase-1 epoch 2 and both last-stage epochs using only the same near/real validation streams; retain the higher joint score
+decision: GO_LAST_SWIN_STAGE_FORMAL_TWO_EPOCHS
+retention: smoke output and r630/r631/r632 are frozen read-only; all prior evidence retained; registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
+boundaries: smoke metrics are not a model-selection result; no COCO100 or sealed final test access; SAM frozen/unloaded; no PickPlace before DINO gate; no Mac; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
