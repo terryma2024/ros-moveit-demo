@@ -19411,6 +19411,30 @@ evidence_retention: r557 partial pre-build, r558 partial overlay and r559 valid 
 boundaries: no benchmark rerun, model/data/threshold/training change or SAM training; sealed test/COCO/PickPlace/Mac remain inaccessible; Microduck paused
 ```
 
+## Checkpoint CP-419 — r560 joint raw capture valid; production replay planned
+
+```yaml
+checkpoint: CP-419
+status: VALID_JOINT_RAW_COMPLETE_PRODUCTION_REPLAY_PLANNED
+prior_checkpoint: CP-418
+raw_capture:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r560
+  source_commit: ef398d3f726f3e015f94c3cce4a049fb7838fbc7
+  result: {exit: 0, elapsed_seconds: 109.54, inference_seconds: 102.621, samples: 300, primary_samples: 250, dino_forwards: 300, sam_forwards: 300, proposals: 1924, accepted_raw_masks: 1850, fallback: false}
+  model_identity_sha256: 0320f1e8d019abe4efdd1f4d58f209a1d30852653f8dbe6778ecce0ac99f4b48
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/val-remediation/grounded-sam-cup-nonpenetrating-dino1-sam4-raw-r5
+  output_readback: {files: 2752, symlinks: 0, writable_files: 0, raw_manifest_sha256: a9971f117184e0046a30518c801146e76cfb96bdb31ee189f3d3bb63a9c73ff8, proposal_receipt_manifest_sha256: 1b3c83b96b76fb88df4bd09d92e02fa0c75e3104815b7a1ade9e2849c459d9f8, inventory_sha256: ccdddb3a98d8211397b28893ac3882a5bcaedd1caaa94a4d8ef6ce11fdff28ed}
+production_plan:
+  run_id: stage-d-nonpenetrating-dino1-sam4-production-r561
+  detector_thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16}
+  sam_filters: {quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, mask_inside_box: 0.8}
+  gates: {truth_mask_iou: 0.8, raw_production_mapping_iou: 0.98, selector_confidence: 0.5}
+  execution: load and verify frozen r560 proposal receipts and raw masks; run adapted SAM once on production prompts; preserve actual masks; score DINO boxes independently and production masks for all scenarios, primary near-workspace and each scenario
+  decision: train no SAM unless DINO box metrics pass while mask failures are the measured primary deficit
+evidence_retention: r560 output, run-evidence and scratch retained; scratch is a deletion candidate only; nothing deleted
+boundaries: production replay performs zero DINO forwards and no threshold selection; no sealed test/COCO/PickPlace/Mac access, benchmark rerun or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
