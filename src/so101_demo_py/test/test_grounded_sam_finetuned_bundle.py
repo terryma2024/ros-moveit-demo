@@ -5,11 +5,9 @@ import json
 from pathlib import Path
 
 import pytest
-
 import so101_demo.adapters.perception.model_bundle as model_bundle
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
-
 
 BASE_MANIFEST_SHA256 = "b" * 64
 CHECKPOINT_IDENTITY = {
@@ -35,6 +33,12 @@ def _canonical(document: object) -> bytes:
 def _compose(**kwargs: object) -> str:
     compose = getattr(model_bundle, "compose_finetuned_model_bundle", None)
     assert callable(compose), "fine-tuned bundle composition is not implemented"
+    return compose(**kwargs)
+
+
+def _compose_adapted(**kwargs: object) -> str:
+    compose = getattr(model_bundle, "compose_adapted_model_bundle", None)
+    assert callable(compose), "adapted Grounded-SAM bundle composition is not implemented"
     return compose(**kwargs)
 
 
@@ -139,6 +143,41 @@ def _checkpoint(root: Path) -> tuple[Path, str]:
     return root, _sha256(payload)
 
 
+def _sam_checkpoint(root: Path, source_manifest_sha256: str) -> tuple[Path, str, dict]:
+    model = root / "model"
+    model.mkdir(parents=True)
+    payloads = {
+        "epoch-receipt.json": b"sam-epoch-receipt",
+        "model/config.json": b"adapted-sam-config",
+        "model/model.safetensors": b"adapted-sam-weights",
+        "model/preprocessor_config.json": b"adapted-sam-preprocessor",
+        "model/processor_config.json": b"adapted-sam-processor",
+        "training-state.pt": b"sam-optimizer-must-not-ship",
+    }
+    for name, payload in payloads.items():
+        (root / name).write_bytes(payload)
+    identity = {
+        "base_manifest_sha256": source_manifest_sha256,
+        "recipe": "decoder-only-five-epoch",
+        "source_commit": "6" * 40,
+        "source_manifest_sha256": "7" * 64,
+        "train_inventory_sha256": "8" * 64,
+    }
+    document = {
+        "complete": True,
+        "completed_epoch": 4,
+        "files": [
+            {"path": name, "sha256": _sha256(payload), "size": len(payload)}
+            for name, payload in sorted(payloads.items())
+        ],
+        "identity": identity,
+        "schema_version": 1,
+    }
+    payload = _canonical(document)
+    (root / "checkpoint-manifest.json").write_bytes(payload)
+    return root, _sha256(payload), identity
+
+
 def test_compose_finetuned_bundle_binds_generic_cup_and_excludes_training_state(
     tmp_path: Path,
 ) -> None:
@@ -166,6 +205,44 @@ def test_compose_finetuned_bundle_binds_generic_cup_and_excludes_training_state(
     assert (verified.detector_dir / "model.safetensors").read_bytes() == b"fine-weights"
     assert (verified.segmenter_dir / "model.safetensors").read_bytes() == b"frozen-sam"
     assert not (verified.detector_dir / "training-state.pt").exists()
+    assert not any(path.is_symlink() for path in destination.rglob("*"))
+
+
+def test_compose_adapted_bundle_binds_both_checkpoints_and_excludes_training_state(
+    tmp_path: Path,
+) -> None:
+    """Catch shipping adapted SAM bytes under frozen-snapshot provenance."""
+
+    source_root, source_sha = _source_bundle(tmp_path / "source-bundle")
+    detector, detector_sha = _checkpoint(tmp_path / "detector-checkpoint")
+    segmenter, segmenter_sha, segmenter_identity = _sam_checkpoint(
+        tmp_path / "segmenter-checkpoint", source_sha
+    )
+    destination = tmp_path / "adapted-bundle"
+
+    digest = _compose_adapted(
+        detector_checkpoint_root=detector,
+        expected_detector_checkpoint_manifest_sha256=detector_sha,
+        segmenter_checkpoint_root=segmenter,
+        expected_segmenter_checkpoint_manifest_sha256=segmenter_sha,
+        source_bundle_root=source_root,
+        expected_source_manifest_sha256=source_sha,
+        destination=destination,
+    )
+
+    verified = verify_model_bundle(destination, digest)
+    assert verified.manifest["schema_version"] == 3
+    assert verified.target_class_id == "cup"
+    assert verified.prompt == "cup."
+    assert verified.manifest["models"]["detector"]["checkpoint_manifest_sha256"] == detector_sha
+    adapted = verified.manifest["models"]["segmenter"]
+    assert adapted["artifact_kind"] == "decoder_only_checkpoint"
+    assert adapted["checkpoint_manifest_sha256"] == segmenter_sha
+    assert adapted["checkpoint_identity"] == segmenter_identity
+    assert adapted["source_bundle_manifest_sha256"] == source_sha
+    assert (verified.detector_dir / "model.safetensors").read_bytes() == b"fine-weights"
+    assert (verified.segmenter_dir / "model.safetensors").read_bytes() == b"adapted-sam-weights"
+    assert not any("training-state" in path.name for path in destination.rglob("*"))
     assert not any(path.is_symlink() for path in destination.rglob("*"))
 
 

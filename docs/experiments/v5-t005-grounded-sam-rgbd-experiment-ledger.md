@@ -19464,6 +19464,34 @@ evidence_retention: r561 output, run-evidence and scratch retained; scratch is a
 boundaries: no SAM training, threshold search, sealed test, COCO, PickPlace or Mac access before bundle/lock freeze; Microduck paused
 ```
 
+## Checkpoint CP-421 — schema-v3 adapted bundle TDD GREEN; package and benchmark gates planned
+
+```yaml
+checkpoint: CP-421
+status: VALID_ADAPTED_BUNDLE_TDD_GREEN_FULL_GATES_PLANNED
+prior_checkpoint: CP-420
+red:
+  run_id: linux-test-stage-d-adapted-bundle-red-r562
+  result: {exit: 1, selected: 1, failed: 1, elapsed_seconds: 0.39}
+  failure: exact expected missing compose_adapted_model_bundle capability
+change:
+  implementation: src/so101_demo_py/src/adapters/perception/model_bundle.py
+  test: src/so101_demo_py/test/test_grounded_sam_finetuned_bundle.py
+  behavior: schema-v3 verifies DINO and decoder-only SAM checkpoint manifests/member hashes, binds SAM checkpoint identity to the verified base bundle, copies only detector and segmenter runtime files, and excludes optimizer/training receipts; schema-v1/v2 validation and composition remain supported
+green:
+  targeted_run: linux-test-stage-d-adapted-bundle-green-r563
+  targeted_result: {exit: 0, selected: 1, passed: 1, elapsed_seconds: 0.38}
+  static_note: r563 test passed but its trailing Ruff check identified only one excess blank line in the test import block; no production behavior failure
+  related_file_run: linux-test-stage-d-adapted-bundle-file-green-r564
+  related_file_result: {exit: 0, tests: 4, passed: 4, elapsed_seconds: 0.39, ruff: pass, diff_check: pass}
+next:
+  build: fresh seven-package candidate overlay from this checkpoint
+  tests: full ordinary so101_demo_py gate and explicit benchmark_test gate, each with a distinct fresh NVMe scratch root
+  if_valid: compose the real DINO epoch1 plus SAM epoch4 immutable bundle once, verify fresh CUDA reload, then write the final threshold lock
+evidence: r562-r564 run-evidence and scratch retained; scratch roots are deletion candidates only; nothing deleted
+boundaries: no model/data/threshold/training change, sealed test/COCO/PickPlace/Mac access or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
