@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-397 — r532 harness run-ID invalid; fresh slug-only RED retry planned
+
+```yaml
+checkpoint: CP-397
+status: INVALID_R532_RED_HARNESS_RUN_ID_FRESH_SLUG_ONLY_RETRY_PLANNED
+run_id: stage-e-generator-postdriver-stage-persistence-red-r532
+execution_mode: inline serial
+classification: INVALID_R532_RED
+result: {authoritative_red: false, invocations: 1, harness_exit: 1, launcher_exit: 1, elapsed_seconds: 0.152245034, stdout_empty: true, cases_constructed: 0}
+cause: frozen r527 run_shell helper rejects the first synthetic slug because log_fsync contains an underscore outside its strict lowercase-digit-hyphen grammar; harness raised before the shell fixture or any semantic case ran
+frozen_candidate: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, behavior_measured: false}
+evidence: durable run-evidence/stage-e-generator-postdriver-stage-persistence-red-r532 retained; raw-exit SHA2566afbaf7ea1fc591b988fb30b79e4b4764c9904980567fbe506ab2e6e95b123a1; stderr SHA256bf51563c4cef421bd7c930007f3aa2b0aa64b60b629b228bcdefae45bfbf60d8; launcher-status SHA256b5aa0b843ebec72c2d787b5224e77eb5cb6a587cf104421f1cebe03902cfcc46; final19-member manifest SHA25644a76d332f0af1c4707f8719881a1f11f82744d6ec1d80d483b6efdc33242df1; root21 files; readback SHA256540c8959d1ede9a3de7d11f0b4616d4f81791127c9fcce9762b8a6c8218dc830; every member independently verified; exact NVMe tempfile valid; package before/after byte-identical
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-stage-persistence-red-r532-invalid-report.md SHA256485d6f3f548014e55db91f57f6896a49792de78539663cf52b76b79cb93b08a0,36 lines, fsynced/read back
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_STAGE_PERSISTENCE_RED_RETRY_INLINE
+  planned_run_id: stage-e-generator-postdriver-stage-persistence-red-r533
+  sole_harness_change: replace underscores with hyphens only in synthetic run-ID slugs; preserve human-facing case names, all seven defect semantics, seven controls, reachability oracles and frozen candidate bytes
+  launcher_change: fresh r533 ID/paths/current committed HEAD and exact private hashes only; preserve all static, provenance, exact Python/NVMe, raw-exit-before-parse and evidence gates
+  required: static gates and roots absent; exactly one invocation; harness exit1 by valid-RED convention, launcher/tool exit0; VALID_R533_STAGE_PERSISTENCE_RED,14 total/7 expected defects/7 controls/0 harness errors, forbidden imports empty; retain evidence and stop before implementation fix
+restrictions: no rerun/backfill of r532, no candidate fix before valid RED, official generation or roots, project/MuJoCo/OpenGL/GPU/renderer/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r532 and all earlier evidence/reports/scratch retained; archived/deleted none
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-396 — r531 combined GREEN retained; Astra finds adjacent post-driver stage-persistence gap; focused RED authorized
 
 ```yaml
