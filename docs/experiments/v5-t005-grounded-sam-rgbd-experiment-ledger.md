@@ -22872,3 +22872,45 @@ scratch_deletion_candidates: [scratch/stage-c-last-swin-mixed-r4-formal-r719/tmp
 retention: r719-r720, both formal checkpoints and all prior evidence retained; nothing deleted, archived, stashed or reset
 boundaries: no COCO100 outcome or sealed-test access; SAM frozen; PickPlace/depth/Mac NO_GO until perception gate; Microduck paused
 ```
+
+## Checkpoint CP-469 — mixed-r4 epoch 2 DINO-only prompt coverage passes; strict selector remains open
+
+```yaml
+checkpoint: CP-469
+status: VALID_DINO_ONLY_BOX_PROMPT_GATE_GO_FROZEN_STATELESS_SAM_STRICT_SELECTOR_STILL_NO_GO
+prior_checkpoint: CP-468
+commit: ec8bed3ec7e74da4aeddaee5947f6c9c6f708e99
+invalid_attempt:
+  run_id: stage-d-mixed-r4-last-swin-dino-only-gate-r721
+  classification: PRIVATE_DRIVER_VAL_SAMPLE_FIELD_MISMATCH
+  scope: one DINO forward then AttributeError before first proposal receipt; no SAM/COCO/sealed access; partial evidence retained and frozen
+  correction: replace nonexistent ValSample.boxes with the established ValSample.truths absolute_xyxy field only
+valid_run:
+  run_id: stage-d-mixed-r4-last-swin-dino-only-gate-r722
+  execution: {exit: 0, elapsed_seconds: 56, samples: 300, dino_forwards: 300, sam_loaded: false, sam_forwards: 0, device: cuda:0, cpu_fallback: false, network: none}
+  inputs: {checkpoint_manifest_sha256: 679513214b0057b0627c6df3e4bf7dd94ac9c50e59d27f28d4453c2acb94bbd8, model_sha256: 4884f76fdd6a73dc3f6de9e3e34afb71943fd04ef858ef2498f37e6cb806d22a, val_inventory_sha256: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9, source_manifest_sha256: a44e9926f84271848c285dde0e6fd34fc6633dee4167e404612d812b94960a8a, prompt: cup.}
+  method: fresh low-floor DINO proposals followed by 445 common strict box/text score breakpoints from 0.25 through 0.80; greedy box IoU 0.50; no SAM, mask, mapping or selector geometry
+  proposals: 5794
+  fixed_0_35: {primary_tp: 239, primary_fp: 30, primary_fn: 11, primary_precision: 0.8884758364, primary_recall: 0.956, primary_f1: 0.9210019268, all_recall: 0.94, all_f1: 0.9215686275, no_cup_unique: 15, two_cups_unique: 0}
+  best_primary_f1: {threshold: 0.4116820097, primary_recall: 0.92, primary_precision: 0.9745762712, primary_f1: 0.9465020576, no_cup_unique: 2, partial_occlusion_recall: 0.60, two_cups_unique: 0}
+  best_selector_safe: {threshold: 0.4818496406, primary_recall: 0.84, primary_precision: 0.9952606635, primary_f1: 0.9110629067, no_cup_unique: 0, partial_occlusion_recall: 0.26, two_cups_unique: 0}
+  strict_selector_pass_count: 0
+  report_sha256: 91d0c6f51f20b797c0064921270588899b6765b5cc9eadff48cf09629abcb635
+readback:
+  run_id: stage-d-mixed-r4-last-swin-dino-only-gate-readback-r723
+  status: PASS
+  files_verified: 302
+  proposal_receipts: 300
+  proposal_count: 5794
+  fixed_0_35_reproduces_training_metrics: true
+  selection_recomputed: true
+  no_symlinks: true
+  report_sha256: 9a1bd3fcddf609a02e03d167c9e1ea1a00b8ecc5bdc512fb6ac23d7b9bd27ea4
+dino_box_gate: {decision: PASS_FOR_FROZEN_STATELESS_SAM_VALIDATION, frozen_thresholds: [0.35,0.35], basis: val-selected primary Recall 0.956 plus two-cup Recall 1.0 and all-scenario Recall 0.94 retain box-prompt coverage}
+strict_selector_gate: {decision: NO_GO, reason: no common score threshold simultaneously preserves near/occluded recall and eliminates empty-scene UNIQUE results}
+next_action: run one complete frozen stateless SAM validation at the already val-selected 0.35 thresholds; SAM training remains forbidden unless box matches pass and mask IoU failures become the dominant source
+verification_decision: no package/benchmark rerun; no tracked source or benchmark change, and fresh CUDA DINO-only inference plus independent full readback are the relevant model gate
+scratch_deletion_candidates: [scratch/stage-d-mixed-r4-last-swin-dino-only-gate-r721/tmp, scratch/stage-d-mixed-r4-last-swin-dino-only-gate-r722/tmp]
+retention: r721-r723 and every prior evidence root retained; nothing deleted, archived, stashed or reset; r721 remains explicitly invalid
+boundaries: COCO100 outcome and sealed final test unread; SAM remains frozen/unloaded through this checkpoint; PickPlace/depth/Mac remain NO_GO; Microduck paused
+```
