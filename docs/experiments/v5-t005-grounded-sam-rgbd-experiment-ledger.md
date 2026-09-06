@@ -19294,6 +19294,32 @@ evidence: r552 run-evidence and scratch retained; scratch is a deletion candidat
 boundaries: no source/model/data/threshold/recipe change; no r552 reuse, general harness, fault injection or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-414 — r553 valid loader-contract RED; minimal TDD correction planned
+
+```yaml
+checkpoint: CP-414
+status: VALID_PRODUCT_LOADER_CONTRACT_RED_MINIMAL_TDD_FIX_PLANNED
+prior_checkpoint: CP-413
+symptom:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r553
+  first_boundary: load_locked_val_dataset rejects formal sample index1, seed460000001 with VAL_ANNOTATION_INVALID before any CUDA model load or inference
+  result: {exit: 1, elapsed_seconds: 1.66, output_created: false, cuda_model_loaded: false, inference_frames: 0}
+observed:
+  converter_contract: inventory absolute box is exact visible-mask pixel extent and normalized box divides those coordinates by image width/height for trainer input
+  loader_contract: compares only BoundingBox.normalized_xyxy against label polygon and visible-mask normalization, which divide pixel centers by width-minus-one/height-minus-one
+  example: inventory left 191/640=0.2984375; visible-mask normalization 191/639=0.298904538341; all absolute extents are [191,186,253,267]
+hypothesis: loader was not updated when the converter adopted trainer-coordinate box documents; its own frozen new converter output cannot enter joint val
+tdd_plan:
+  red_run: linux-test-stage-d-visible-trainer-box-red-r554
+  test: extend the existing val-loader fixture with the current trainer-normalized inventory form and require the same exact visible mask and absolute box
+  minimal_fix: when complete visible RLE exists, bind label polygon to visible-mask pixel-center normalization and separately bind inventory absolute coordinates plus trainer normalization to the same visible mask; retain the legacy normalized form for old immutable datasets
+  green_run: linux-test-stage-d-visible-trainer-box-green-r555
+  runtime_retry_if_green: stage-d-nonpenetrating-dino1-sam4-raw-r556 with fresh roots
+  verification: exact targeted pytest first; then ordinary package tests because tracked Python source changes; no benchmark because benchmark implementation/config/model selection is unchanged
+evidence: r553 run-evidence and scratch retained; scratch is a deletion candidate only; nothing overwritten or deleted
+boundaries: one product loader root cause only; no data/model/threshold/training change, general harness, fault injection or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
