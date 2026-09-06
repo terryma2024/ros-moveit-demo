@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-479
+latest_checkpoint: CP-480
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: PLANNED_STAGE_F_LINUX_FOUR_POINT_FULL_RESTART_R765
-confirmed: the frozen candidate passed independent byte/contract readback and fresh visual inspection at all four acceptance points; COCO100 remains historical diagnostic evidence only
-open: run four independent ai-station Linux FULL_RESTART PickPlace trials with the exact immutable bundle and fresh Gazebo/MoveIt/controller/pose/contact/GUI evidence
-next_action: preflight the canonical /data/work/ws_moveit runtime and launch the task_start FULL_RESTART trial without changing DINO, SAM, thresholds, selector or bundle identity
+active_experiment: STAGE_F_LINUX_FOUR_POINT_FULL_RESTART_R765_PRE_REGISTERED
+confirmed: the frozen candidate passed independent byte/contract readback and fresh visual inspection at all four acceptance points; CP-480 read-only preflight binds the exact Linux runtime, immutable model identity and four collision-free FULL_RESTART trials; COCO100 remains historical diagnostic evidence only
+open: execute the pre-registered task_start trial, validate its first failure boundary, then continue the remaining three independent Linux trials only after the preceding trial is valid
+next_action: launch task_start as r765-task-start under ROS_DOMAIN_ID 181 and capture product plus fresh window evidence without changing DINO, SAM, thresholds, selector or bundle identity
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23468,4 +23468,56 @@ prohibitions: no COCO rerun or gate restoration; no threshold tuning, checkpoint
 retention: r761-r764 and all historical evidence retained; no deletion, stash, reset, cleanup or force-push; protected two-file diff and three untracked build/install/log directories remain untouched
 next_action: preflight canonical /data/work/ws_moveit and start Linux point task_start under a unique ROS_DOMAIN_ID and GZ_PARTITION
 boundaries: Microduck paused; macOS migration starts only after Linux 4/4 passes
+```
+
+## Checkpoint CP-480 — pre-register ai-station Linux four-point FULL_RESTART
+
+```yaml
+checkpoint: CP-480
+status: PRE_REGISTERED_GO_LINUX_TASK_START_FULL_RESTART
+prior_checkpoint: CP-479
+policy_time: 2026-09-07T07:35:57+08:00
+source_and_remote:
+  worktree_head: 81911ac53c7f3994a661099766eda2e5344116db
+  gitee_branch_head: 81911ac53c7f3994a661099766eda2e5344116db
+  branch: codex/v5-t004-yolo-seg-rgbd
+canonical_runtime:
+  root: /data/work/ws_moveit
+  source_head: e6ab8c1b7398bf757b2ab2f2ac9a503a93f5d2a4
+  mujoco_ros2_control_head: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+  so101_demo_py_prefix: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/install-task14-runner-access-r11/so101_demo_py
+  so101_mujoco_support_prefix: /data/work/ws_moveit/install/so101_mujoco_support
+  mujoco_ros2_control_prefix: /data/work/ws_moveit/.worktrees/ws_mujoco_ros2_control_fork/install
+  protected_canonical_status: one pre-existing untracked ai-station Linux ledger, preserved and read-only
+frozen_identity:
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  container_image_id: sha256:2e02bc252f954af47efe252d6e7c4a7f9cd1693a136e779ef2675bfe14206f00
+  thresholds: {dino_box: 0.50, dino_text: 0.50, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.50, minimum_mask_pixels: 64, maximum_mask_area_ratio: 0.50, selector: 0.50, mapping_iou: 0.98}
+preflight:
+  host: AI-STATION-001
+  direct_execution_no_ssh: true
+  data_filesystem: /dev/nvme0n1p5 ext4
+  data_available: 155G
+  gpu: NVIDIA_GeForce_RTX_5080
+  gpu_utilization_percent: 0
+  gpu_compute_processes: 0
+  ros_domains_181_through_184: EMPTY
+  relevant_ros_mujoco_moveit_docker_stack: NONE
+  gui_contract: X11 window inventory succeeded; no pre-existing MuJoCo window
+  output_collision: PASS_ALL_PLANNED_ROOTS_ABSENT_UNDER_E_AND_L
+  protected_last_swin_diff_sha256: c1cfb9a07302aff1bfb0fc4731e71092b958a9756b1730207ac6817374cb0b43
+trials:
+  - {id: r765-task-start, keyframe: task_start, truth_xyz_m: [0.02, -0.28, 0.165], ros_domain_id: 181, partition: so101-v5-t005-linux-r765-task-start-20260907}
+  - {id: r765-forward-5cm, keyframe: cup_test_forward_5cm, truth_xyz_m: [0.02, -0.33, 0.165], ros_domain_id: 182, partition: so101-v5-t005-linux-r765-forward-20260907}
+  - {id: r765-left-5cm, keyframe: cup_test_left_5cm, truth_xyz_m: [-0.03, -0.28, 0.165], ros_domain_id: 183, partition: so101-v5-t005-linux-r765-left-20260907}
+  - {id: r765-right-5cm, keyframe: cup_test_right_5cm, truth_xyz_m: [0.07, -0.28, 0.165], ros_domain_id: 184, partition: so101-v5-t005-linux-r765-right-20260907}
+lifecycle: each trial owns a new ROS graph, MuJoCo process, controller stack, MoveIt process, two camera TF publishers, one CUDA Grounded-SAM container and one dynamic workflow; each must shut down and leave its domain/process set empty before the next starts
+runtime_composition: existing product components only; launch so101_mujoco.launch.py without its fixed workflow, run the exact installed camera TF and dynamic workflow entrypoints, and run the frozen Grounded-SAM ROS node in the frozen CUDA image with host ROS libraries mounted read-only
+success: each independent trial proves one cup detection and SAM mask, valid depth, TF to world, fresh /cup_pose handoff, 19-state DONE workflow, MoveIt trajectories, controller completion, bilateral physical grasp/contact, actual cup displacement and stable released placement, clean shutdown and a fresh exact-window MuJoCo capture
+failure_policy: stop at the first persisted product boundary; keep its evidence and use one minimal-hypothesis RED-to-GREEN correction before one directed rerun; do not restore COCO gating or change the frozen model identity
+test_policy: no package or benchmark rerun because no product, benchmark, configuration or model-selection source changed
+retention: preserve all historical evidence, r761-r764, r595/r760, the protected two-file diff, three untracked build/install/log directories, the canonical untracked ledger and the dead historical tmux session; delete, reset, stash and force-push remain forbidden
+boundaries: real hardware unauthorized; sealed final test unread; Microduck paused; macOS begins only after Linux 4/4 is validated
+next_action: ordinary commit/push/readback CP-480, create the registered evidence-only launcher, then execute r765-task-start
 ```
