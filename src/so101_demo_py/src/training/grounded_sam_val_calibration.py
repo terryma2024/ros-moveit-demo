@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -290,6 +291,34 @@ def _visible_mask_from_truth(
     return mask, box
 
 
+def _trainer_box_matches(
+    visible_box: BoundingBox,
+    inventory_box: BoundingBox,
+    *,
+    width: int,
+    height: int,
+) -> bool:
+    if not all(
+        math.isclose(a, b, rel_tol=0.0, abs_tol=1e-6)
+        for a, b in zip(
+            visible_box.absolute_xyxy,
+            inventory_box.absolute_xyxy,
+            strict=True,
+        )
+    ):
+        return False
+    left, top, right, bottom = visible_box.absolute_xyxy
+    trainer_normalized = (left / width, top / height, right / width, bottom / height)
+    return all(
+        math.isclose(a, b, rel_tol=0.0, abs_tol=1e-6)
+        for a, b in zip(
+            trainer_normalized,
+            inventory_box.normalized_xyxy,
+            strict=True,
+        )
+    )
+
+
 def load_locked_val_dataset(
     *,
     inventory_path: Path,
@@ -470,8 +499,6 @@ def _load_locked_split_dataset(
                 )
             except (KeyError, TypeError, ValueError) as error:
                 raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index)) from error
-            if not _boxes_match(converted, expected_box):
-                raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index))
             visible = _visible_mask_from_truth(
                 truth_instance,
                 width=width,
@@ -480,13 +507,23 @@ def _load_locked_split_dataset(
             )
             canonical_box = converted
             if visible is None:
+                if not _boxes_match(converted, expected_box):
+                    raise ValCalibrationError("VAL_ANNOTATION_INVALID", str(index))
                 if split == "train":
                     raise ValCalibrationError("TRAIN_VISIBLE_MASK_REQUIRED", str(index))
                 mask = rasterize_polygon(tuple(polygon), width, height)
                 mask.setflags(write=False)
             else:
                 mask, canonical_box = visible
-                if not _boxes_match(canonical_box, expected_box):
+                if not _boxes_match(converted, canonical_box) or not (
+                    _boxes_match(canonical_box, expected_box)
+                    or _trainer_box_matches(
+                        canonical_box,
+                        expected_box,
+                        width=width,
+                        height=height,
+                    )
+                ):
                     raise ValCalibrationError("VAL_VISIBLE_MASK_INVALID", "box identity")
             truths.append(
                 {
