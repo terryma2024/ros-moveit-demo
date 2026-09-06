@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-399 — r534 authoritative post-driver stage-persistence RED; scoped GREEN planned
+
+```yaml
+checkpoint: CP-399
+status: VALID_R534_STAGE_PERSISTENCE_RED_SCOPED_GREEN_PLANNED
+run_id: stage-e-generator-postdriver-stage-persistence-red-r534
+execution_mode: inline serial
+result: {classification: VALID_R534_STAGE_PERSISTENCE_RED, authoritative: true, invocations: 1, total: 14, expected_defects: 7, controls: 7, harness_errors: 0, harness_exit: 1, launcher_tool_exit: 0, elapsed_seconds: 19.060868888, stderr_empty: true, forbidden_before_after: [[],[]]}
+defects: isolated log_fsync-stage95 and launch_finalizer-stage95 each replace original0or7 with95, omit storage/outer and exit95; after tail-fsync1=96, launch_finalizer-stage95 remains unrecorded while original becomes95 and overall95; finalizer9 keeps overall9 but original95 and missing later storage remain wrong
+reachability: all seven defects independently prove write-complete/fsync-failed injected stage, driver execute, target stage, contiguous fsync trace, single frozen EXIT owner, single finalizer and single completion; missing target/reachability is HARNESS_ERROR
+controls: no-failure original0/7; pre-driver stage failure owner no recursion; independent injection reachability; malformed/partial stage streams rejected; post-seal diagnostic failure no reopen
+frozen_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, harness_sha256: 594ec750c6341f3b6ce75e6b524239c504412c1e5ede1221183cc64b5bd4f2b9, launcher_sha256: db6bdd41f5ae61351caba0fb0a23447dd446a07a70d337abba409abb22228001, execution_head_local_gitee: 207ffa9268db773e184078768b34969de5527032}
+evidence: durable run-evidence/stage-e-generator-postdriver-stage-persistence-red-r534; result/stdout SHA2568687a2019accf0adf5f39425bfcc9e4fd83c7004e389fafc9c79499679011673; raw-exit SHA256561404aed8c58a6d76de06fdc5ae61ab6570676ab71a65d4744f00c4357b8c2c; launcher-status SHA256ab3fe296db2e6ccb0b41ca2e7f62f7ae4320b6067d64a55e48211674eded4696; final20-member manifest SHA256b0ef7340d2ade5b4260ff88b0452b6a0c649d79ca97494096eae5da4bb96ab0b; root22 files; readback SHA256a73144b85a7a564b7552417ce9b92ea9d515fd0e39b65bdf0f15d3c580ac31e0; every member independently verified; exact NVMe tempfile and package before/after valid
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-stage-persistence-red-r534-report.md SHA256ad23cfaec1f087e9b041395b2423ead539d8d8c3ecd0fc4bc984aeee8943469d,43 lines, fsynced/read back
+next_experiment:
+  status: GO_PRIVATE_STAGE_PERSISTENCE_GREEN_STATIC_PREPARATION_INLINE
+  planned_run_id: stage-e-generator-postdriver-stage-persistence-green-r535
+  minimal_shell_fix: preserve the most recent pre-tail original result in initialized/reset trap-safe global state; explicitly capture both post-driver stage operations outside errexit; store every captured stage/main-log tail failure exactly once in one ordered trap-safe queue; completion seeds ordered storage and first diagnostic from that queue, with backward-compatible tail-global fallback only when queue is empty
+  operation_contract: launch_stage_log_fsync_persistence and launch_stage_launch_finalizer_persistence; mixed tail96 then stage95 storage order exactly main_log_fsync then launch_stage_launch_finalizer_persistence; finalizer > original > first storage > outer precedence unchanged
+  green_harness: adapt r534 defects to GREEN while allowing zero EXIT-owner calls for explicit capture; retain all seven controls and complete r531264 combined suite; add executable omission/substitution mutations for original preservation and stage-failure propagation; missing mutation target/generic failure is HARNESS_ERROR
+  sequence: implement private shell and prepare combined harness/launcher; static gates and checkpoint before exactly one fresh GREEN; only after GREEN perform complete inventory/hash readback and Astra immutable review
+restrictions: no repo source/config edit, official generation/roots, real stack, render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r534/r533/r532/r531 and all prior evidence/reports/scratch retained; archived/deleted none
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-398 — r533 stage-injection globals binding invalid; fresh one-binding RED retry planned
 
 ```yaml
