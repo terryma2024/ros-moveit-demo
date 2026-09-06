@@ -19349,6 +19349,24 @@ evidence: r554-r556 run-evidence and scratch retained; all scratch roots are del
 boundaries: no model/data/threshold/training change, general harness, fault injection or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-416 — r557 pre-build launcher invalid; corrected Python path retry planned
+
+```yaml
+checkpoint: CP-416
+status: INVALID_PRE_BUILD_PYTHONPATH_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-415
+invalid_run:
+  run_id: linux-build-test-stage-d-val-loader-r557
+  result: {exit: 1, build_started: false, test_started: false}
+  failure: venv Python invoked /usr/bin/colcon before /usr/lib/python3/dist-packages was added to PYTHONPATH, so importlib metadata could not locate installed colcon-core
+fresh_retry:
+  run_id: linux-build-test-stage-d-val-loader-r558
+  sole_change: export system dist-packages before invoking colcon; use fresh build, install, log, run-evidence and NVMe scratch roots
+  required: build exit0; installed overlay readback; ordinary so101_demo_py test exit0 and test-result exit0; zero benchmark cases
+evidence: r557 partial build root, run-evidence and scratch retained; all are deletion candidates only; nothing overwritten or deleted
+boundaries: no source/model/data/threshold/training change; no r557 reuse, benchmark, general harness or fault injection; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
