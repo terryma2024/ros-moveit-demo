@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-398 — r533 stage-injection globals binding invalid; fresh one-binding RED retry planned
+
+```yaml
+checkpoint: CP-398
+status: INVALID_R533_RED_STAGE_STUB_GLOBALS_BINDING_FRESH_RETRY_PLANNED
+run_id: stage-e-generator-postdriver-stage-persistence-red-r533
+execution_mode: inline serial
+classification: INVALID_R533_RED
+result: {authoritative_red: false, invocations: 1, total: 14, expected_defects: 0, controls_passed: 6, controls_failed: 1, harness_errors: 7, harness_exit: 2, launcher_exit: 1, elapsed_seconds: 19.19651224, stderr_empty: true, forbidden_before_after: [[],[]]}
+cause: load_base changed SHELL_STUB only in runpy's returned mapping, while the reused shell_fixture resolves it through its function __globals__; requested stage failures occurred but retained stub records lacked injected=true, so all seven semantic cases correctly failed reachability as HARNESS_ERROR and the independent injection control failed
+frozen_candidate: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, semantic_red_accepted: false}
+passing_controls: no-failure original0/7; pre-driver owner no recursion; malformed and partial stage streams rejected; post-seal diagnostic failure no reopen
+evidence: durable run-evidence/stage-e-generator-postdriver-stage-persistence-red-r533; result/stdout SHA256c3cdb8310585b073a71f666cae680f6248f409731f60d5eacb50d4a851184b62; raw-exit SHA256a8a88bc1d44d1665573f1e35f3cc1d4133ee85ca8074f34e7444a54bb364bc8f; launcher-status SHA256bc1a275a5c4e75be3ce89d4e074943b2d87dd8c1753030cc9303462c13411cdf; final20-member manifest SHA256ce5b7886f7babdf7361c25df3d4f4e80d20c54189885a93194b0e62cdc344746; root22 files; readback SHA256e7a604def1ec8db1b60469b46b140ebdfc0c46674a27ab72db501b859867bad9; every member independently verified; exact NVMe tempfile and package before/after valid
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-stage-persistence-red-r533-invalid-report.md SHA2567ce547d2575bee5366c758aa406009ded0792a8f838ce228b4c0e12c1ccc3e64,35 lines, fsynced/read back
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_STAGE_PERSISTENCE_RED_RETRY_INLINE
+  planned_run_id: stage-e-generator-postdriver-stage-persistence-red-r534
+  sole_harness_change: bind the already constructed injected-stage stub into reused shell_fixture.__globals__[SHELL_STUB]; retain r533 hyphen-only synthetic slugs, human case names, seven defects, seven controls and all oracles byte-for-byte otherwise
+  launcher_change: fresh r534 ID/paths/current committed HEAD and exact private hashes only; all provenance, static, raw-exit-before-parse, exact Python/NVMe and evidence checks unchanged
+  required: exactly one invocation after static/root absence gates; harness exit1 by valid-RED convention, launcher/tool exit0; VALID_R534_STAGE_PERSISTENCE_RED,14 total/7 expected defects/7 controls/0 harness errors; stop and checkpoint before implementation fix
+restrictions: no rerun/backfill r533/r532; no candidate fix before valid RED; no official generation/roots, real stack, training/inference/package test/benchmark/sealed access
+retention: r533/r532 and all earlier evidence/reports/scratch retained; archived/deleted none
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-397 — r532 harness run-ID invalid; fresh slug-only RED retry planned
 
 ```yaml
