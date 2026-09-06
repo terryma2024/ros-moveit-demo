@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .grounding_dino_finetune import ValidationResult
 
@@ -31,6 +31,26 @@ class JointThresholdSelection:
     near: ValidationResult
     real: ValidationResult
     harmonic_f1: float
+
+
+def compute_decoder_supervised_loss(
+    *,
+    loss_dict: Mapping[str, Any],
+    bbox_loss_coefficient: float,
+    giou_loss_coefficient: float,
+) -> Any:
+    """Weight only image-conditioned decoder detection losses."""
+
+    if bbox_loss_coefficient <= 0.0 or giou_loss_coefficient <= 0.0:
+        raise RuntimeError("DECODER_SUPERVISED_LOSS_COEFFICIENT_INVALID")
+    try:
+        return (
+            2.0 * loss_dict["loss_ce"]
+            + bbox_loss_coefficient * loss_dict["loss_bbox"]
+            + giou_loss_coefficient * loss_dict["loss_giou"]
+        )
+    except (KeyError, TypeError) as error:
+        raise RuntimeError("DECODER_SUPERVISED_LOSS_INPUT_INVALID") from error
 
 
 def _parameter_receipt(model: Any) -> dict[str, Any]:
@@ -308,6 +328,7 @@ def validate_domain_retention_contract(contract: dict[str, Any]) -> None:
             and model["revision"] == "a2bb814dd30d776dcf7e30523b00659f4f141c71"
             and training["resume_checkpoint"] is None
             and math.isclose(training["learning_rate"], 0.000002)
+            and training["supervised_loss_scope"] == "decoder_outputs_only"
             and math.isclose(training["teacher_token_logit_lambda"], 1.0)
             and math.isclose(training["teacher_candidate_box_lambda"], 1.0)
             and 0.0 < training["teacher_candidate_threshold"] < 1.0
