@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-480
+latest_checkpoint: CP-481
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_FOUR_POINT_FULL_RESTART_R765_PRE_REGISTERED
-confirmed: the frozen candidate passed independent byte/contract readback and fresh visual inspection at all four acceptance points; CP-480 read-only preflight binds the exact Linux runtime, immutable model identity and four collision-free FULL_RESTART trials; COCO100 remains historical diagnostic evidence only
-open: execute the pre-registered task_start trial, validate its first failure boundary, then continue the remaining three independent Linux trials only after the preceding trial is valid
-next_action: launch task_start as r765-task-start under ROS_DOMAIN_ID 181 and capture product plus fresh window evidence without changing DINO, SAM, thresholds, selector or bundle identity
+active_experiment: STAGE_F_LINUX_TASK_START_INFRASTRUCTURE_RECOVERY_R766
+confirmed: r765-task-start stopped before stack or model startup because a deprecation warning made the byte-size graph preflight nonempty; CP-481 preserves that invalid attempt and authorizes one wrapper-only recovery with an actually empty node list
+open: execute r766-task-start, validate its first product boundary, then continue the remaining three independent Linux trials only after task_start is valid
+next_action: launch task_start recovery r766 under ROS_DOMAIN_ID 185 with the unchanged product stack and frozen model identity
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23520,4 +23520,44 @@ test_policy: no package or benchmark rerun because no product, benchmark, config
 retention: preserve all historical evidence, r761-r764, r595/r760, the protected two-file diff, three untracked build/install/log directories, the canonical untracked ledger and the dead historical tmux session; delete, reset, stash and force-push remain forbidden
 boundaries: real hardware unauthorized; sealed final test unread; Microduck paused; macOS begins only after Linux 4/4 is validated
 next_action: ordinary commit/push/readback CP-480, create the registered evidence-only launcher, then execute r765-task-start
+```
+
+## Checkpoint CP-481 — preserve invalid pre-stack r765 and authorize one wrapper recovery
+
+```yaml
+checkpoint: CP-481
+status: INVALID_PRE_STACK_R765_GO_ONE_MINIMAL_WRAPPER_RECOVERY_R766
+prior_checkpoint: CP-480
+policy_time: 2026-09-07T07:41:40+08:00
+r765_task_start:
+  classification: INVALID_PRE_STACK_GRAPH_PREFLIGHT_WARNING
+  stack_started: false
+  model_loaded: false
+  model_forwards: 0
+  carrier_or_truth_access: none
+  product_conclusion: NONE
+  retained_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/pickplace/linux-four-point-r765/r765-task-start
+first_boundary:
+  cause: explicitly exporting deprecated ROS_LOCALHOST_ONLY=0 emitted two warnings to preflight-nodes.txt; the fail-closed byte-size check classified those warning bytes as a nonempty ROS graph even though no node name was present
+  secondary_wrapper_issue: cleanup passed unquoted empty PID variables to a strict-undefined function, producing a parameter-not-set message after the primary stop
+minimal_repair:
+  scope: registered evidence-only run-one-full-restart.zsh; no repository product source, model, threshold, selector, configuration or container image change
+  changes: omit deprecated ROS_LOCALHOST_ONLY=0 from host and container; make signal_group safely no-op on an absent PID and quote PID arguments
+  repaired_wrapper_sha256: 24c6297a225200ea963b010aaee93798bedf800bf3524599dcf28213d690032d
+directed_red_to_green:
+  syntax: PASS_ZSH_N
+  empty_pid_cleanup: PASS
+  ros_domain_185_without_deprecated_variable: EMPTY_ZERO_BYTES
+recovery:
+  id: r766-task-start
+  keyframe: task_start
+  truth_xyz_m: [0.02, -0.28, 0.165]
+  ros_domain_id: 185
+  partition: so101-v5-t005-linux-r766-task-start-20260907
+  run_root_and_scratch_collision: PASS_ABSENT_UNDER_E_AND_L
+  product_identity: exactly CP-480; unchanged
+stopping_rule: r766 is the single directed rerun; stop at its first persisted product failure, or validate fully before continuing the other points
+retention: r765 preflight artifacts and all historical evidence remain unchanged; no delete, reset, stash or force-push
+boundaries: COCO100 remains diagnostic only and cannot trigger training; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-481 and execute r766-task-start
 ```
