@@ -423,17 +423,17 @@ def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
     assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  source_archive_sha256: "
-        "6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db\n"
+        "212532111f1918af2be7cb88e37bc4ff18cd13bd026b8c7e58cc03685301a3ea\n"
         in contents
     )
     assert (
         "  train_inventory_sha256: "
-        "4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a\n"
+        "404fd8d14522e59ab99897d383a7c53ac2bb4cfb996c8f2c7a07e32b8d06c986\n"
         in contents
     )
     assert (
         "  val_inventory_sha256: "
-        "9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572\n"
+        "213ced2a1458f62b07cc83d12f9f4dc98ccc11f66a013d8f8bd1e169987afb7b\n"
         in contents
     )
 
