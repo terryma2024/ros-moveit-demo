@@ -7,6 +7,7 @@ import torch
 from so101_demo.training.grounding_dino_domain_retention import (
     LAST_SWIN_STAGE_PREFIX,
     TRAINABLE_PREFIXES,
+    compute_decoder_supervised_loss,
     compute_distillation_losses,
     configure_last_stage_trainability,
     configure_student_trainability,
@@ -151,6 +152,27 @@ def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> Non
     assert torch.isfinite(student_boxes.grad).all()
 
 
+def test_decoder_supervised_loss_excludes_image_invariant_encoder_terms() -> None:
+    class _ForbiddenEncoderLoss:
+        def __mul__(self, other):
+            raise AssertionError("image-invariant encoder loss was consumed")
+
+        __rmul__ = __mul__
+
+    loss = compute_decoder_supervised_loss(
+        loss_dict={
+            "loss_ce": 1.0,
+            "loss_bbox": 2.0,
+            "loss_giou": 3.0,
+            "loss_ce_enc": _ForbiddenEncoderLoss(),
+        },
+        bbox_loss_coefficient=5.0,
+        giou_loss_coefficient=2.0,
+    )
+
+    assert loss == pytest.approx(18.0)
+
+
 def _metric(*, f1: float, recall: float, box: float = 0.25, text: float = 0.25):
     return ValidationResult(
         epoch=1,
@@ -225,6 +247,7 @@ def test_domain_retention_contract_rejects_epoch5_resume_or_wrong_recipe() -> No
             "resume_checkpoint": None,
             "learning_rate": 0.000002,
             "epochs": 3,
+            "supervised_loss_scope": "decoder_outputs_only",
             "teacher_token_logit_lambda": 1.0,
             "teacher_candidate_box_lambda": 1.0,
             "teacher_candidate_threshold": 0.25,
@@ -242,6 +265,7 @@ def test_domain_retention_contract_rejects_epoch5_resume_or_wrong_recipe() -> No
         (("training", "resume_checkpoint"), "/epoch-005"),
         (("training", "learning_rate"), 0.00001),
         (("training", "teacher_candidate_box_lambda"), 0.5),
+        (("training", "supervised_loss_scope"), "all_two_stage_outputs"),
         (("model", "revision"), "epoch-5"),
     ):
         changed = {key: dict(item) for key, item in contract.items()}
@@ -262,6 +286,7 @@ def test_last_stage_contract_requires_new_phase_checkpoint_and_one_tenth_lr() ->
             "learning_rate": 0.000002,
             "backbone_learning_rate": 0.0000002,
             "epochs": 2,
+            "supervised_loss_scope": "decoder_outputs_only",
             "teacher_token_logit_lambda": 1.0,
             "teacher_candidate_box_lambda": 1.0,
             "teacher_candidate_threshold": 0.25,

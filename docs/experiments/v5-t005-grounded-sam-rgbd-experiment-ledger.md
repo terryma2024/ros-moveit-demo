@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-456
+latest_checkpoint: CP-457
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-mixed-r3-encoder-loss-audit-r673
-confirmed: the pinned two-stage encoder CE is image-invariant for the fixed cup prompt and its weighted output-gradient norm is 194-234x the decoder CE; this is the nearest measured cause of simultaneous no-cup false positives and occluded-cup score collapse
-open: implement one contract-bound decoder-output-only supervised objective while preserving lambda-1 teacher distillation, mixed-r3 data and official-base initialization; sealed test, COCO100 requalification, SAM, depth/PickPlace and Mac remain gated
-next_action: focused TDD for supervised loss scope, then a fresh committed image and 6+6 CUDA smoke before any formal rerun
+active_experiment: stage-c-decoder-supervision-container-r678-green
+confirmed: decoder-output-only supervised loss is contract-bound and passes focused RED/GREEN plus all nine training-container ordinary tests; lambda-1 distillation and all data/model boundaries are unchanged
+open: commit/push/read back, build one fresh image from the exact commit, and run 6+6 CUDA smoke before any formal rerun; sealed test, COCO100, SAM, depth/PickPlace and Mac remain gated
+next_action: commit the six-file minimal change with CP-457, verify Gitee SHA, build a cache-reusing training image and prove decoder component evidence in one smoke
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20976,6 +20976,38 @@ invalid_attempts_retained:
 decision: GO_MINIMAL_DECODER_SUPERVISION_TDD
 retention: r669-r673 and all prior evidence retained; nothing deleted or archived
 boundaries: no new training until TDD/image/smoke gates pass; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
+```
+
+## Checkpoint CP-457 — decoder-only supervision implementation passes focused TDD and container tests
+
+```yaml
+checkpoint: CP-457
+status: VALID_DECODER_SUPERVISION_TDD_GO_COMMIT_IMAGE_SMOKE
+prior_checkpoint: CP-456
+change:
+  helper: compute_decoder_supervised_loss weights only decoder loss_ce*2, loss_bbox*model coefficient and loss_giou*model coefficient
+  runtime: one former student_outputs.loss callsite now uses the helper; progress and epoch evidence include exact decoder component losses
+  contract: both frozen-backbone and last-Swin configs require supervised_loss_scope equal to decoder_outputs_only; runtime validation rejects missing or other values
+  unchanged: teacher token-logit lambda1; teacher candidate-box lambda1; candidate threshold/top-k; optimizer/LR/epochs; trainability; mixed-r3 identities; official pinned base; val grids; model family
+tdd:
+  r674: INVALID_TEST_RUNNER; training venv has torch but no pytest, so it failed before collection and is retained
+  r675: {classification: VALID_EXPECTED_RED, exit: 2, cause: missing compute_decoder_supervised_loss import}
+  r676: {classification: GREEN, selected_tests: 3, passed: 3, deselected: 5, elapsed_seconds: 0}
+  r677: {classification: GREEN, packaged_config_tests: 2, passed: 2, deselected: 7, elapsed_seconds: 0}
+  r678: {classification: GREEN, training_container_tests: 9, passed: 9, elapsed_seconds: 0}
+test_environment: {python: /usr/bin/python3, pytest: 7.4.4, torch: collection-only stub for r675/r676, source: existing build overlay, tmp: fresh per-run NVMe scratch verified by exact interpreter}
+source_hashes:
+  domain_retention_helper: e6dcef1792ca7632246be4087d293b536c8a50a358d1404e03f32a56f7a56423
+  domain_retention_runtime: b9691c80d9f81118d8db38945dd1d79a026d0d167de5eebf42d5a998f29db218
+  frozen_backbone_config: 8d93e130af81e28a934ed9190a9b0eddacf33eb81e79b9edfc5066b267f2a1b8
+  last_swin_config: ad4796d24504a8c475b8dbddfc876b01361bea2dda79994ec496cd758248d314
+  unit_test: 8e76a32f71f5b479f3858a09f950e8c30d3bcf13181ea75b47987cd8c2c90271
+  container_test: 39acec21f5219ffa564dbb15b8249c85b21ce3d55f7974239e0096d0d13f3db0
+verification_decision: related ordinary tests only; benchmark was not run because no benchmark implementation or selected production model changed, and the real CUDA smoke is the next runtime gate
+decision: GO_COMMIT_PUSH_READBACK_THEN_FRESH_IMAGE_AND_6_PLUS_6_SMOKE
+retention: r674-r678 and every earlier evidence root retained; nothing deleted or archived
+scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, scratch/stage-c-decoder-supervision-tdd-r675-red, scratch/stage-c-decoder-supervision-tdd-r676-green, scratch/stage-c-decoder-supervision-config-r677-green, scratch/stage-c-decoder-supervision-container-r678-green]
+boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
