@@ -63,6 +63,7 @@ training:
   disable_memory_efficient_sdp: true
   augmentations: none
   supervised_loss_scope: decoder_outputs_only
+  teacher_distillation_scope: positive_samples_only
   teacher_token_logit_lambda: 1.0
   teacher_candidate_box_lambda: 1.0
   teacher_candidate_threshold: 0.25

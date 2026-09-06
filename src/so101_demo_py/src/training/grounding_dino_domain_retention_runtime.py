@@ -451,6 +451,8 @@ def run_domain_retention_training(
             "loss_giou": 0.0,
         }
         candidate_total = 0
+        distilled_sample_total = 0
+        skipped_negative_sample_total = 0
         for batch_index, batch in enumerate(loader, start=1):
             moved = _move_batch(batch, device)
             teacher_inputs = {key: value for key, value in moved.items() if key != "labels"}
@@ -465,12 +467,18 @@ def run_domain_retention_training(
                     bbox_loss_coefficient=student.config.bbox_loss_coefficient,
                     giou_loss_coefficient=student.config.giou_loss_coefficient,
                 )
+                distill_samples = torch.tensor(
+                    [label["boxes"].shape[0] > 0 for label in moved["labels"]],
+                    dtype=torch.bool,
+                    device=device,
+                )
                 distillation = compute_distillation_losses(
                     student_logits=student_outputs.logits,
                     student_boxes=student_outputs.pred_boxes,
                     teacher_logits=teacher_outputs.logits,
                     teacher_boxes=teacher_outputs.pred_boxes,
                     attention_mask=moved["attention_mask"],
+                    distill_samples=distill_samples,
                     candidate_threshold=training["teacher_candidate_threshold"],
                     topk_fallback=training["teacher_candidate_topk_fallback"],
                 )
@@ -506,6 +514,8 @@ def run_domain_retention_training(
             for key, value in supervised_components.items():
                 supervised_component_sums[key] += value
             candidate_total += distillation.candidate_count
+            distilled_sample_total += int(distill_samples.sum().item())
+            skipped_negative_sample_total += int((~distill_samples).sum().item())
             (total_loss / accumulation).backward()
             if not frozen_gradient_check_recorded:
                 violations = [
@@ -543,6 +553,10 @@ def run_domain_retention_training(
                             "teacher_candidate_box_loss": values["box"],
                             "total_loss": values["total"],
                             "teacher_candidate_count": distillation.candidate_count,
+                            "teacher_distillation_samples": int(distill_samples.sum().item()),
+                            "teacher_distillation_skipped_negative_samples": int(
+                                (~distill_samples).sum().item()
+                            ),
                             "eta_seconds": eta,
                         },
                         sort_keys=True,
@@ -604,6 +618,8 @@ def run_domain_retention_training(
                 key: value / len(loader) for key, value in supervised_component_sums.items()
             },
             "mean_teacher_candidates": candidate_total / len(loader),
+            "teacher_distillation_samples": distilled_sample_total,
+            "teacher_distillation_skipped_negative_samples": skipped_negative_sample_total,
             "selected_thresholds": {
                 "box": joint.near.box_threshold,
                 "text": joint.near.text_threshold,

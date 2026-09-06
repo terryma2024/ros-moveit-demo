@@ -22914,3 +22914,84 @@ scratch_deletion_candidates: [scratch/stage-d-mixed-r4-last-swin-dino-only-gate-
 retention: r721-r723 and every prior evidence root retained; nothing deleted, archived, stashed or reset; r721 remains explicitly invalid
 boundaries: COCO100 outcome and sealed final test unread; SAM remains frozen/unloaded through this checkpoint; PickPlace/depth/Mac remain NO_GO; Microduck paused
 ```
+
+## Checkpoint CP-470 — frozen SAM passes; selector failure traced to negative-sample teacher conflict
+
+```yaml
+checkpoint: CP-470
+status: VALID_JOINT_SAM_GATE_NEGATIVE_DISTILLATION_ROOT_CAUSE_MINIMAL_RETRAIN_PLANNED
+prior_checkpoint: CP-469
+source_head_before_change: 47eda1bd95c9a7fcb0ab0033ebf043900abdd62f
+invalid_joint_attempts:
+  - {run_id: stage-d-mixed-r4-last-swin-frozen-sam-raw-r724, cause: container did not bind the deep private-driver path, exit: 2, model_loads: 0, outputs: 0}
+  - {run_id: stage-d-mixed-r4-last-swin-frozen-sam-raw-r725, cause: wrong training-image dependency set failed exact assertion, model_loads: 0, outputs: 0}
+  - {run_id: stage-d-mixed-r4-last-swin-frozen-sam-raw-r726, cause: host runtime omitted the existing install overlay, error: ModuleNotFoundError, model_loads: 0, outputs: 0}
+  - {run_id: stage-d-mixed-r4-last-swin-frozen-sam-production-r728, cause: inherited assertion expected 250 SAM frames but frozen threshold produced 252, production_frames_completed: 300, retained_as_invalid_partial: true}
+joint_raw:
+  run_id: stage-d-mixed-r4-last-swin-frozen-sam-raw-r727
+  execution: {exit: 0, elapsed_seconds: 196, samples: 300, dino_forwards: 300, sam_forwards: 300, proposals: 5794, raw_masks: 5752, files: 6654}
+  identities: {combined_model_sha256: dab18cdd0af7c3a04b8a7c29bcb31e1849bf204706a3ff318dba19d34e2ce8e5, raw_report_sha256: 45dc34ac3b7a332a54d4fe9acfbc25affe3bd1cd1520599141cb755e9c52842c, raw_manifest_sha256: c7b6304453893f2dd1f20a5efe1a38375b2cc421bfe51e999d589d7d4fde2302, proposal_receipt_manifest_sha256: 9df1657f483170aa84ee28bb552288b76f297c1f359d4bb58868ad90050f04bb}
+  models: {dino_manifest_sha256: 679513214b0057b0627c6df3e4bf7dd94ac9c50e59d27f28d4453c2acb94bbd8, dino_model_sha256: 4884f76fdd6a73dc3f6de9e3e34afb71943fd04ef858ef2498f37e6cb806d22a, sam_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e, sam_model_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893}
+joint_production:
+  run_id: stage-d-mixed-r4-last-swin-frozen-sam-production-r729
+  execution: {exit: 0, elapsed_seconds: 27, samples: 300, dino_forwards: 0, sam_forwards: 252}
+  thresholds: {dino_box: 0.35, dino_text: 0.35, selector: 0.35, sam_quality: 0.50, duplicate_iou: 0.85, mask_pixels_min: 64, mask_area_ratio_max: 0.50}
+  primary: {tp: 239, fp: 30, fn: 11, precision: 0.8884758364, recall: 0.956, f1: 0.9210019268}
+  all_scenario: {tp: 282, fp: 30, fn: 18, precision: 0.9038461538, recall: 0.94, f1: 0.9215686275}
+  selector: {decisions: {AMBIGUOUS: 59, NOT_FOUND: 48, UNIQUE: 193}, no_cup_unique: 15, two_cups_unique: 0}
+  sam_mask: {matched: 282, truth_iou_pass: 282, truth_iou_fail: 0, minimum_iou: 0.9330543933, median_iou: 0.9873834018}
+  mapping: {passed: 282, failed: 0, minimum_iou: 0.9997899601}
+  hashes: {wrapper_report_sha256: 6dd64645517f3c7d7391271c89d09c91afdb398dee41129113cb90e246ff2a00, result_sha256: 1e07466765ce26ddd7ea1ae07931947977a88f41aa9004014114eb9dc7ccd93e, output_inventory_sha256: 3d03e5ec2e3a1b6a19319f180db3269f54b7f94f960fa4b6e2e705f03c1c460b}
+joint_readback:
+  run_id: stage-d-mixed-r4-last-swin-frozen-sam-readback-r730
+  status: PASS
+  verified: raw6654 files plus production915 files, complete hashes/receipts/identities/thresholds, no symlinks, 282 mask and mapping matches, zero DINO replay forwards
+  decision: SAM_PASS_DINO_SELECTOR_NO_GO_NO_SAM_TRAINING
+  report_sha256: 23d739f5032693aa981870339caf00cd71daade0069331ba5545a634735beba1
+joint_threshold_scan:
+  run_id: stage-d-mixed-r4-last-swin-joint-threshold-scan-r731
+  method: saved verified val candidates only; common DINO threshold 0.01..0.50 step0.01 and frozen SAM quality 0.50..0.99 step0.01; 2500 points; no model forward
+  strict_pass_count: 0
+  best_primary: {dino: 0.41, sam_quality: 0.97, f1: 0.9484536082, recall: 0.92, no_cup_unique: 2}
+  best_selector_safe: {dino: 0.48, sam_quality: 0.97, f1: 0.9110629067, recall: 0.84, no_cup_unique: 0}
+  report_sha256: 1e8e4dbcf7f67129b91a8c1a141e0e1e6415438327ade222b6150b00cfaefe50
+  readback: {run_id: stage-d-mixed-r4-last-swin-joint-threshold-scan-readback-r732, status: PASS, point_count: 2500, selector_safe_points: 879, report_sha256: d4a7dc29554b16be4cdebbdd46736bdc602ed1a791444919abe575b2944f204e}
+geometry_diagnosis:
+  run_id: stage-d-mixed-r4-last-swin-selector-geometry-r733
+  result: {primary_tp: 239, primary_fp: 30, no_cup_unique: 15, single_feature_perfect_separators: 0, false_candidates_inside_joint_tp_geometry_envelope: 1, depth_in_frozen_dataset: false}
+  observed: dangerous false UNIQUE candidates include both tall bottles and neutral blocks whose box/mask geometry overlaps true cups; no runtime-legal single box/mask feature removes them while preserving every primary TP
+  decision: NO_ROBUST_BOX_OR_MASK_GEOMETRY_ONLY_SELECTOR_FIX
+  report_sha256: 2ca3af32a9908a86f5b7cd2dee18baad13b91be95ef58963d31ad978b9c6af37
+  contact_sheet_sha256: bd38ca871a9aa5957047b759f19f0431881dcd7e1ab363e5a4a02ea7bb4a59a4
+official_base_control:
+  run_id: stage-d-official-base-dino-only-val-r734
+  identity: {bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775, model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71}
+  execution: {exit: 0, samples: 300, dino_forwards: 300, sam_loaded: false, cpu_fallback: false, proposal_count: 23490}
+  best_primary: {threshold: 0.5430387855, f1: 0.8099173554, recall: 0.784, no_cup_unique: 29}
+  best_selector_safe: {threshold: 0.3872683644, f1: 0.5975308642, recall: 0.968, no_cup_unique: 0}
+  conclusion: COMMON_THRESHOLD_CANNOT_SATISFY_STRICT_GATE; official base is materially worse than mixed-r4 on the frozen near val and is not a safe fallback
+  report_sha256: a28b67e4ae21ccb58c5f9164b82272adf1befdb1e3b9f53abd2951286fc6adfd
+  readback: {run_id: stage-d-official-base-dino-only-val-readback-r740, status: PASS, files: 302, proposals: 23490, report_sha256: 9a31916fe47dab4c21c5083e22e2d047315d2663e9756fd46ef6cdba4fb86c49}
+root_cause:
+  data: mixed-r4 train has 1600 samples with 520 empty-label negatives, including explicit no_cup and hard-negative populations
+  implementation: prior runtime applies teacher token distillation to every negative and forces teacher top-k box distillation when no teacher candidate reaches 0.25; this directly conflicts with supervised background loss and preserves the official-base bottle/block false positives
+  classification: TRAINING_OBJECTIVE_CONFLICT_SUPPORTED_BY_CODE_DATA_AND_VAL_FAILURES
+minimal_change:
+  behavior: keep teacher token and candidate-box lambdas at1.0 on positive cup samples; make both distillation losses differentiable exact zero on empty-label negatives; retain their supervised decoder background loss
+  immutable_contract: teacher_distillation_scope=positive_samples_only in both frozen-backbone and last-Swin configs and contract validation
+  files: [grounding_dino_domain_retention.py, grounding_dino_domain_retention_runtime.py, grounding_dino_domain_retention_training.yaml, grounding_dino_domain_retention_last_stage_training.yaml, test_grounding_dino_domain_retention.py, test_grounding_dino_training_container.py]
+verification:
+  invalid_environment_attempts:
+    - {run_id: stage-c-negative-distillation-tdd-red-r735, cause: model venv has no pytest, test_collected: false}
+    - {run_id: stage-c-negative-distillation-tdd-red-r736, cause: system Python has no torch, test_collected: false}
+  valid_red: {run_id: stage-c-negative-distillation-tdd-red-r737, result: 2 failed, cause: distill_samples contract absent}
+  functional_green: {run_id: stage-c-negative-distillation-tdd-green-r738, result: 2 passed}
+  pre_contract_ordinary: {run_id: stage-c-negative-distillation-ordinary-r739, result: 18 passed, ruff: PASS, diff_check: PASS}
+  contract_red: {run_id: stage-c-positive-only-distillation-contract-red-r741, result: 1 failed, cause: all_samples scope was not rejected}
+  final_ordinary: {run_id: stage-c-positive-only-distillation-ordinary-r742, result: 18 passed, ruff: PASS, diff_check: PASS}
+decision: GO_ONE_FRESH_6_PLUS_6_CUDA_SMOKE_THEN_ONE_THREE_EPOCH_FROZEN_BACKBONE_RERUN_FROM_EXACT_OFFICIAL_BASE_ON_IMMUTABLE_MIXED_R4
+restrictions: no epoch-5 or prior fine-tuned initialization; no COCO100/sealed-test/SAM/PickPlace/Mac access; no SAM training; if frozen phase remains independently real-underfit, only the already authorized last-Swin final stage may run for at most two epochs at one-tenth head LR
+scratch_deletion_candidates: [scratch/stage-d-mixed-r4-last-swin-joint-threshold-scan-r731/tmp, scratch/stage-d-mixed-r4-last-swin-joint-threshold-scan-readback-r732/tmp, scratch/stage-d-mixed-r4-last-swin-selector-geometry-r733/tmp, scratch/stage-d-official-base-dino-only-val-r734/tmp, scratch/stage-d-official-base-dino-only-val-readback-r740/tmp, scratch/stage-c-negative-distillation-tdd-red-r735/tmp, scratch/stage-c-negative-distillation-tdd-red-r736/tmp, scratch/stage-c-negative-distillation-tdd-red-r737/tmp, scratch/stage-c-negative-distillation-tdd-green-r738/tmp, scratch/stage-c-negative-distillation-ordinary-r739/tmp, scratch/stage-c-positive-only-distillation-contract-red-r741/tmp, scratch/stage-c-positive-only-distillation-ordinary-r742/tmp]
+retention: r724-r742 and all prior evidence retained; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
+boundaries: COCO100 outcome and sealed final test unread in this checkpoint; PickPlace/depth/Mac remain NO_GO; Microduck paused
+```
