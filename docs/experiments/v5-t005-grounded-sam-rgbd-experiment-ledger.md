@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-481
+latest_checkpoint: CP-482
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_TASK_START_INFRASTRUCTURE_RECOVERY_R766
-confirmed: r765-task-start stopped before stack or model startup because a deprecation warning made the byte-size graph preflight nonempty; CP-481 preserves that invalid attempt and authorizes one wrapper-only recovery with an actually empty node list
-open: execute r766-task-start, validate its first product boundary, then continue the remaining three independent Linux trials only after task_start is valid
-next_action: launch task_start recovery r766 under ROS_DOMAIN_ID 185 with the unchanged product stack and frozen model identity
+active_experiment: STAGE_F_LINUX_TASK_START_QUALIFIED_BINARY_RECOVERY_R767
+confirmed: r766 reached the visible sensor-rendering stack but the stale canonical Aug-13 MuJoCo binary hit a concurrent GLFW initialization assertion; CP-482 binds the same-source Aug-28 qualified binary that already passed visible RGB-D FULL_RESTART and leaves all perception identity frozen
+open: execute r767-task-start, validate its first product boundary, then continue the remaining three independent Linux trials only after task_start is valid
+next_action: launch r767-task-start under ROS_DOMAIN_ID 186 using the qualified MuJoCo binary and unchanged current SO-101 product overlay
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23560,4 +23560,48 @@ stopping_rule: r766 is the single directed rerun; stop at its first persisted pr
 retention: r765 preflight artifacts and all historical evidence remain unchanged; no delete, reset, stash or force-push
 boundaries: COCO100 remains diagnostic only and cannot trigger training; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-481 and execute r766-task-start
+```
+
+## Checkpoint CP-482 — bind the previously qualified visible RGB-D MuJoCo binary
+
+```yaml
+checkpoint: CP-482
+status: INVALID_STACK_R766_GO_QUALIFIED_BINARY_RECOVERY_R767
+prior_checkpoint: CP-481
+policy_time: 2026-09-07T07:44:43+08:00
+r766_task_start:
+  classification: INVALID_STACK_GLFW_CONCURRENT_INITIALIZATION_ASSERTION
+  scene_setup_readback: PASS
+  stack_started: true
+  mujoco_camera_ready: false
+  model_loaded: false
+  model_forwards: 0
+  dynamic_workflow_started: false
+  product_perception_or_pickplace_conclusion: NONE
+  first_boundary: canonical Aug-13 libmujoco_ros2_control.so aborted in _glfwGrabErrorHandlerX11 while the visible viewer and RGB-D camera rendering threads initialized concurrently
+  retained_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/pickplace/linux-four-point-r765/r766-task-start
+binary_readback:
+  canonical_source_revision: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+  stale_canonical_binary_sha256: df6398499ec0055658c4759a824bfd205926eb4618f7603ff63ba930645a3087
+  qualified_source_revision: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+  qualified_binary_sha256: 607883ad216c3cdbbde9bc18fcb78993205eba9743e62940576cb19550a49cd0
+  qualified_binary_root: /data/work/so101-evidence/fusion/ai-station-linux-headless-rgbd-four-point-20260828/candidate/ws_mujoco_ros2_control_fork/install
+  prior_visible_full_restart_evidence: exp-215-visible-task-start acceptance-summary status VALID, clean_shutdown true, sha256 4a173cbc4c8011e95c8cfa5ebfdd15735139a107e3e6e13c34b6bfdb5e7c3cf8
+minimal_repair:
+  scope: runtime dependency selection in the evidence-only wrapper
+  change: source the already qualified same-revision MuJoCo install last so its exact proven binary and plugins are selected; keep canonical so101_mujoco_support and current task so101_demo_py overlay
+  forbidden_and_unchanged: [Grounding_DINO, SAM, thresholds, prompt, selector, model_bundle, SO-101_product_source, MoveIt_policy]
+  wrapper_sha256: 436fbc629c8ba5e1aec548d730cde95d0659ae93c4e2c20040eed7c3f5b20a0d
+  directed_readback: ros2 package prefix and runtime library SHA resolve exactly to the qualified install; empty-PID cleanup and zsh syntax checks pass; ROS domain 186 and output roots are collision-free
+recovery:
+  id: r767-task-start
+  keyframe: task_start
+  truth_xyz_m: [0.02, -0.28, 0.165]
+  ros_domain_id: 186
+  partition: so101-v5-t005-linux-r767-task-start-20260907
+  source_head_at_preregistration: e551e1e0be23de26ef8fb3d8c321eecfd863b2f8
+stopping_rule: stop at the first persisted r767 product failure; if valid, use the same exact runtime identity for the other three independent FULL_RESTART points
+retention: r765 and r766 invalid attempts plus every historical artifact remain preserved; no rebuild, deletion, reset, stash or force-push
+boundaries: COCO100 remains diagnostic only and cannot trigger optimization; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-482 and execute r767-task-start
 ```
