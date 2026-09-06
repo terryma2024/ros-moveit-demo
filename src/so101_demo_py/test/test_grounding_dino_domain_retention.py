@@ -140,6 +140,7 @@ def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> Non
         teacher_logits=teacher_logits,
         teacher_boxes=teacher_boxes,
         attention_mask=torch.tensor([[1, 1, 0, 0]]),
+        distill_samples=torch.tensor([True]),
         candidate_threshold=0.25,
         topk_fallback=1,
     )
@@ -150,6 +151,35 @@ def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> Non
     (losses.token_logits + losses.candidate_boxes).backward()
     assert torch.isfinite(student_logits.grad[:, :, :2]).all()
     assert torch.isfinite(student_boxes.grad).all()
+
+
+def test_distillation_skips_empty_target_samples_without_breaking_gradients() -> None:
+    teacher_logits = torch.tensor([[[4.0, 3.0], [2.0, 1.0]]])
+    student_logits = torch.tensor(
+        [[[1.0, 0.5], [-1.0, -2.0]]], requires_grad=True
+    )
+    teacher_boxes = torch.tensor([[[0.5, 0.5, 0.2, 0.2], [0.2, 0.2, 0.1, 0.1]]])
+    student_boxes = torch.tensor(
+        [[[0.4, 0.6, 0.3, 0.1], [0.8, 0.8, 0.4, 0.4]]], requires_grad=True
+    )
+
+    losses = compute_distillation_losses(
+        student_logits=student_logits,
+        student_boxes=student_boxes,
+        teacher_logits=teacher_logits,
+        teacher_boxes=teacher_boxes,
+        attention_mask=torch.tensor([[1, 1]]),
+        distill_samples=torch.tensor([False]),
+        candidate_threshold=0.25,
+        topk_fallback=1,
+    )
+
+    assert losses.candidate_count == 0
+    assert losses.token_logits.item() == 0.0
+    assert losses.candidate_boxes.item() == 0.0
+    (losses.token_logits + losses.candidate_boxes).backward()
+    assert torch.equal(student_logits.grad, torch.zeros_like(student_logits))
+    assert torch.equal(student_boxes.grad, torch.zeros_like(student_boxes))
 
 
 def test_decoder_supervised_loss_excludes_image_invariant_encoder_terms() -> None:
@@ -248,6 +278,7 @@ def test_domain_retention_contract_rejects_epoch5_resume_or_wrong_recipe() -> No
             "learning_rate": 0.000002,
             "epochs": 3,
             "supervised_loss_scope": "decoder_outputs_only",
+            "teacher_distillation_scope": "positive_samples_only",
             "teacher_token_logit_lambda": 1.0,
             "teacher_candidate_box_lambda": 1.0,
             "teacher_candidate_threshold": 0.25,
@@ -265,6 +296,7 @@ def test_domain_retention_contract_rejects_epoch5_resume_or_wrong_recipe() -> No
         (("training", "resume_checkpoint"), "/epoch-005"),
         (("training", "learning_rate"), 0.00001),
         (("training", "teacher_candidate_box_lambda"), 0.5),
+        (("training", "teacher_distillation_scope"), "all_samples"),
         (("training", "supervised_loss_scope"), "all_two_stage_outputs"),
         (("model", "revision"), "epoch-5"),
     ):
@@ -287,6 +319,7 @@ def test_last_stage_contract_requires_new_phase_checkpoint_and_one_tenth_lr() ->
             "backbone_learning_rate": 0.0000002,
             "epochs": 2,
             "supervised_loss_scope": "decoder_outputs_only",
+            "teacher_distillation_scope": "positive_samples_only",
             "teacher_token_logit_lambda": 1.0,
             "teacher_candidate_box_lambda": 1.0,
             "teacher_candidate_threshold": 0.25,

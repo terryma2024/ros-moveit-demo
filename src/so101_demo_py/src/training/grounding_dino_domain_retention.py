@@ -157,6 +157,7 @@ def compute_distillation_losses(
     teacher_logits: Any,
     teacher_boxes: Any,
     attention_mask: Any,
+    distill_samples: Any,
     candidate_threshold: float,
     topk_fallback: int,
 ) -> DistillationLosses:
@@ -172,6 +173,9 @@ def compute_distillation_losses(
         or attention_mask.ndim != 2
         or attention_mask.shape[0] != student_logits.shape[0]
         or attention_mask.shape[1] > student_logits.shape[2]
+        or distill_samples.ndim != 1
+        or distill_samples.shape[0] != student_logits.shape[0]
+        or distill_samples.dtype != torch.bool
         or not 0.0 < candidate_threshold < 1.0
         or type(topk_fallback) is not int
         or topk_fallback <= 0
@@ -180,11 +184,18 @@ def compute_distillation_losses(
     token_count = attention_mask.shape[1]
     active = attention_mask.to(device=student_logits.device, dtype=torch.bool)
     active = active[:, None, :].expand(-1, student_logits.shape[1], -1)
+    distill_samples = distill_samples.to(device=student_logits.device)
+    active = active & distill_samples[:, None, None]
     student_active = student_logits[:, :, :token_count][active]
     teacher_active = teacher_logits[:, :, :token_count].to(student_logits.device)[active]
+    if not bool(distill_samples.any()):
+        return DistillationLosses(
+            token_logits=student_active.sum(),
+            candidate_boxes=student_boxes[distill_samples].sum() * 0.0,
+            candidate_count=0,
+        )
     if (
-        student_active.numel() == 0
-        or not torch.isfinite(student_active).all()
+        not torch.isfinite(student_active).all()
         or not torch.isfinite(teacher_active).all()
         or not torch.isfinite(student_boxes).all()
         or not torch.isfinite(teacher_boxes).all()
@@ -193,13 +204,14 @@ def compute_distillation_losses(
     token_loss = functional.mse_loss(student_active, teacher_active)
     teacher_slice = teacher_logits[:, :, :token_count].to(student_logits.device)
     confidence = teacher_slice.sigmoid().masked_fill(~active, 0.0).amax(dim=-1)
-    candidates = confidence >= candidate_threshold
-    if not bool(candidates.any()):
-        count = min(topk_fallback, confidence.numel())
-        flat_indices = confidence.flatten().topk(count, sorted=False).indices
-        candidates = torch.zeros_like(confidence, dtype=torch.bool).flatten()
-        candidates[flat_indices] = True
-        candidates = candidates.reshape_as(confidence)
+    candidates = torch.zeros_like(confidence, dtype=torch.bool)
+    for sample_index in distill_samples.nonzero(as_tuple=False).flatten().tolist():
+        sample_candidates = confidence[sample_index] >= candidate_threshold
+        if not bool(sample_candidates.any()):
+            count = min(topk_fallback, confidence.shape[1])
+            indices = confidence[sample_index].topk(count, sorted=False).indices
+            sample_candidates[indices] = True
+        candidates[sample_index] = sample_candidates
     candidate_count = int(candidates.sum().item())
     box_loss = functional.smooth_l1_loss(
         student_boxes[candidates], teacher_boxes.to(student_boxes.device)[candidates]
@@ -329,6 +341,7 @@ def validate_domain_retention_contract(contract: dict[str, Any]) -> None:
             and training["resume_checkpoint"] is None
             and math.isclose(training["learning_rate"], 0.000002)
             and training["supervised_loss_scope"] == "decoder_outputs_only"
+            and training["teacher_distillation_scope"] == "positive_samples_only"
             and math.isclose(training["teacher_token_logit_lambda"], 1.0)
             and math.isclose(training["teacher_candidate_box_lambda"], 1.0)
             and 0.0 < training["teacher_candidate_threshold"] < 1.0
