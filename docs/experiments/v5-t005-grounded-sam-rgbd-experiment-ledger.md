@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-451
+latest_checkpoint: CP-452
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-mixed-r3-last-swin-config-r650
-confirmed: last-Swin contract is bound to the frozen mixed-r3 epoch-3 student and exact mixed-r3 inventories; focused TDD and all 9 container/config tests pass with NVMe scratch
-open: build the committed last-Swin image and run one fresh 6+6 CUDA smoke before the at-most-two-epoch formal stage; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
-next_action: commit and push CP-451, read back Gitee SHA, build the cache-reusing training image, then launch the last-Swin 6+6 smoke
+active_experiment: stage-c-dino-domain-retention-last-swin-epoch-contract-r657-green
+confirmed: the runtime contract now accepts selected frozen-phase epochs 1-3 and still rejects epoch 5; valid focused RED/GREEN proves the minimal boundary change
+open: rebuild from the committed runtime contract and run one fresh 6+6 CUDA smoke before the at-most-two-epoch formal stage; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
+next_action: commit and push CP-452, read back Gitee SHA, build a fresh non-stale image, then launch the last-Swin 6+6 smoke
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20754,6 +20754,32 @@ verification_decision: no package-wide or benchmark run because only the trainin
 retention: r650 evidence and all prior evidence retained; nothing deleted or archived
 boundaries: COCO100 remains excluded from training/selection; sealed test unread; SAM frozen/unloaded; PickPlace NO_GO; Microduck paused
 next_experiment: build a committed cache-reusing last-Swin image, verify its embedded contract and CUDA environment, then run one fresh 6+6 smoke
+```
+
+## Checkpoint CP-452 — last-Swin epoch-3 parent contract fixed by focused TDD
+
+```yaml
+checkpoint: CP-452
+status: VALID_LAST_SWIN_PHASE1_EPOCH_RANGE_TDD_GO_REBUILD
+prior_checkpoint: CP-451
+finding: runtime contract hard-coded student_initialization_completed_epoch equal to 2, so the independently selected legal mixed-r3 epoch 3 would fail closed before smoke
+minimal_change: accept integer phase-1 completed epochs 1 through 3, matching the frozen-backbone recipe bound; epoch 5 remains explicitly invalid
+tdd:
+  r653: INVALID_HOST_COLLECTION_NO_TORCH; retained, no behavioral result
+  r654: INVALID_CONTAINER_TEST_ENV_NO_PYTEST; retained, no behavioral result
+  r655: INVALID_SOURCE_IMPORT_PATH; retained, no behavioral result
+  r656: {classification: VALID_EXPECTED_EPOCH3_CONTRACT_RED, exit: 1, failure: DOMAIN_RETENTION_CONTRACT_INVALID}
+  r657: {classification: GREEN, tests: 1, passed: 1, exit: 0}
+source_hashes: {implementation: a71117731d855d4ea996a467ffeaaa6359e8c1babe492a9f8881338d1c4cebe2, test: 3c8ba94852b6c4b4ab1d3c1ea09fa5c9720603cf4b662f1925a0ff926877b099}
+image_attempts:
+  r651: image build itself exit0, but CUDA readback command incorrectly allowed the default training ENTRYPOINT to consume Python arguments; retained as invalid readback attempt
+  r652: explicit Python entrypoint readback passes for r9 image f1ff6101, CUDA13/Torch2.13/Transformers4.56.2/RTX5080 and embedded contract hash valid
+  disposition: r9 predates this runtime fix and is superseded; it must not run smoke or formal training
+verification_decision: focused contract test only for the one-line validator change; no package-wide or benchmark run
+scratch_deletion_candidates: [scratch/stage-c-dino-domain-retention-last-swin-epoch-contract-r653-red, scratch/stage-c-dino-domain-retention-last-swin-epoch-contract-r654-red, scratch/stage-c-dino-domain-retention-last-swin-epoch-contract-r655-red, scratch/stage-c-dino-domain-retention-last-swin-epoch-contract-r656-red, scratch/stage-c-dino-domain-retention-last-swin-epoch-contract-r657-green]
+retention: r651-r657 and all earlier evidence retained; nothing deleted or archived
+boundaries: no smoke/formal launch used stale r9; COCO100/sealed test/SAM/PickPlace/Mac remain gated; Microduck paused
+next_experiment: commit/push/readback, build fresh image from that exact commit, verify embedded source/config and CUDA, then 6+6 last-Swin smoke
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects

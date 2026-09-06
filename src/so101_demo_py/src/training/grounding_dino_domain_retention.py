@@ -340,7 +340,7 @@ def validate_domain_retention_contract(contract: dict[str, Any]) -> None:
                 and isinstance(model_sha, str)
                 and len(model_sha) == 64
                 and all(character in "0123456789abcdef" for character in model_sha)
-                and training["student_initialization_completed_epoch"] == 2
+                and 1 <= training["student_initialization_completed_epoch"] <= 3
             )
         else:
             phase_valid = False
