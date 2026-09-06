@@ -21010,6 +21010,46 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-459 — decoder-only frozen-backbone formal run selects epoch 3 and opens last-Swin
+
+```yaml
+checkpoint: CP-459
+status: VALID_DECODER_SUPERVISION_FROZEN_BACKBONE_FORMAL_REAL_UNDERFIT_GO_LAST_SWIN
+prior_checkpoint: CP-458
+run:
+  run_id: stage-c-dino-domain-retention-mixed-r3-decoder-supervision-formal-r683
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-decoder-supervision-r1/formal-r1
+  execution: {exit: 0, elapsed_seconds: 1326, epochs: 3, train_samples_per_epoch: 1600, near_val_per_epoch: 300, independent_real_val_per_epoch: 160, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, base_model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: unloaded}
+  trainability: {student_trainable: 11616776, teacher_trainable: 0, Swin_T_frozen: true, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+epochs:
+  - {epoch: 1, thresholds: [0.40,0.40], joint_f1: 0.7096495192, near_tp: 224, near_fp: 63, near_fn: 26, near_recall: 0.896, near_f1: 0.8342644320, real_recall: 0.4630681818, real_f1: 0.6174242424, all_recall: 0.88, all_f1: 0.8421052632}
+  - {epoch: 2, thresholds: [0.35,0.35], joint_f1: 0.7311420548, near_tp: 233, near_fp: 89, near_fn: 17, near_recall: 0.932, near_f1: 0.8146853147, real_recall: 0.5340909091, real_f1: 0.6631393298, all_recall: 0.9166666667, all_f1: 0.8283132530}
+  - {epoch: 3, thresholds: [0.35,0.35], joint_f1: 0.7452736486, near_tp: 233, near_fp: 71, near_fn: 17, near_recall: 0.932, near_f1: 0.8411552347, real_recall: 0.5397727273, real_f1: 0.6690140845, all_recall: 0.9166666667, all_f1: 0.8513931889, all_small_recall: 0.84, all_multi_recall: 1.0}
+selection:
+  rule: highest joint harmonic F1 using only frozen near-primary and independent-real validation
+  epoch: 3
+  thresholds: {box: 0.35, text: 0.35}
+  checkpoint_manifest_sha256: 53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95
+  model_sha256: 3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d
+  fresh_reload_sha256: 27c89d8eec9f44cc976c45aa643666f8d802652104e07d16b0b379f876808202
+readback:
+  run_id: stage-c-dino-domain-retention-mixed-r3-decoder-supervision-formal-readback-r684
+  status: PASS
+  files: 37
+  total_bytes: 2346456766
+  members_sha256: 37d0275befbaafae81abc9285e2f462371ab6777ee354f56ed6d68db7ebca608
+  report_sha256: 3197e151bb258366106c8d8bed26f9f16dde5adad5fcc86648460126435c9d5e
+  verified: every output and three checkpoint manifests; exact identities; decoder-only components; finite losses; frozen gradients; isolation; CUDA fresh reload; epoch ordering and selection recomputation; no symlinks
+  frozen_modes: {all_files: 0444, all_directories: 0555}
+underfit_gate: OPEN_LAST_SWIN; selected independent-real F1 0.6690 and Recall 0.5398 remain materially below near F1 0.8412 and Recall 0.932, with real small-target Recall 0.2411 and multi-cup Recall 0.4890
+decision: bind only selected decoder-supervision epoch 3 as the phase-1 student; keep official pinned base as frozen teacher; unfreeze only Swin-T last stage at backbone LR 0.0000002 versus head LR 0.000002 for at most two epochs; retain decoder-only supervision and both distillation lambdas at 1.0
+verification_decision: no package or benchmark rerun; this is a model-training/selection gate with independent readback
+retention: r683/r684, frozen formal-r1 and every earlier evidence root retained; nothing deleted or archived
+boundaries: COCO100 excluded from training/selection; sealed final test unread; SAM frozen/unloaded; PickPlace and Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-458 — decoder-only mixed-r3 6+6 CUDA smoke passes complete readback
 
 ```yaml
