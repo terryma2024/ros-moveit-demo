@@ -22995,3 +22995,49 @@ scratch_deletion_candidates: [scratch/stage-d-mixed-r4-last-swin-joint-threshold
 retention: r724-r742 and all prior evidence retained; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
 boundaries: COCO100 outcome and sealed final test unread in this checkpoint; PickPlace/depth/Mac remain NO_GO; Microduck paused
 ```
+
+## Checkpoint CP-471 — positive-only distillation image and 6+6 smoke are valid
+
+```yaml
+checkpoint: CP-471
+status: VALID_POSITIVE_ONLY_DISTILLATION_SMOKE_GO_THREE_EPOCH_FROZEN_BACKBONE_FORMAL
+prior_checkpoint: CP-470
+training_commit: 7a7887c27c15d5657d98e9c5bac1b7e9f9c271a8
+gitee_readback_before_smoke: 7a7887c27c15d5657d98e9c5bac1b7e9f9c271a8
+image:
+  run_id: stage-c-positive-only-distillation-image-r743
+  tag: so101-grounding-dino-tiny-train:r15-positive-only-7a7887c2
+  image_id: sha256:2e02bc252f954af47efe252d6e7c4a7f9cd1693a136e779ef2675bfe14206f00
+  size_bytes: 5142685885
+  build_stderr_sha256: 4c0d448d0d4424109e4234f4baf12e0dbfbbb915ae42716178e67ec1576b4a71
+image_readback:
+  run_id: stage-c-positive-only-distillation-image-readback-r744
+  status: PASS
+  execution: {CUDA: true, device: NVIDIA_GeForce_RTX_5080, precision: float32}
+  embedded_hashes: {domain_retention_source: 7bd4484, runtime_source: 43cf51d, frozen_config: cbc1f93, last_stage_config: 78f1ec6}
+  stdout_sha256: 06b8b15c8b2c9dae47076859641fd714c81d1949c0af0d5cf8c8f0b95b797c37
+invalid_attempts:
+  - {run_id: stage-c-positive-only-distillation-smoke-r745, classification: INPUT_IMAGE_ROOT_MISMATCH_BEFORE_MODEL_LOAD, cause: inventory-relative images/train path was mounted from the mixed dataset root instead of its images/train member, model_output: none}
+  - {run_id: stage-c-positive-only-distillation-smoke-readback-r747, classification: READBACK_PATH_ASSUMPTION_ERROR, cause: audit expected a per-epoch JSON subdirectory but this trainer emits epoch-metrics.jsonl, report_output: none}
+smoke:
+  run_id: stage-c-positive-only-distillation-smoke-r746
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-positive-only-r1/smoke-r2
+  training_payload: {status: VALID, mode: smoke, train_samples: 6, near_val_samples: 3, real_val_samples: 3, device: cuda:0, cpu_fallback: false}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, resume: null, prior_finetuned_checkpoint_access: none}
+  trainability: {phase: frozen_backbone, teacher_distillation_scope: positive_samples_only, positive_distillation_samples: 4, skipped_negative_samples: 2, negative_teacher_token_logit_loss: 0.0, negative_teacher_candidate_box_loss: 0.0, negative_teacher_candidate_count: 0}
+  isolation: {COCO100: none, sealed_test: none, SAM: none}
+  selected: {epoch: 1, checkpoint_manifest_sha256: dce11ba92aeca5a20e2f1ca4e598b25507bd3458a8dc6647aa147a72da33e4ad, checkpoint_model_sha256: b6b14f48dbdb20d834b504b47f8e2a522986d4ca051acb1f6845a5fb2b2df1c8, fresh_reload_sha256: 2c32cde251132c673bf51e970940d90aa58a37c47e161e8570396298516acbf5}
+  wrapper_note: model training, validation, checkpointing and fresh reload completed before the outer zsh wrapper rejected Bash-only PIPESTATUS indexing; local exit/end receipt is absent and this bookkeeping limitation is retained, not rewritten
+readback:
+  run_id: stage-c-positive-only-distillation-smoke-readback-r748
+  status: PASS
+  files: 19
+  report_sha256: 57e0470d11ae634b02125cb44b79b85f8b2c23ae486d2abd23b7e5ddfe606b6e
+  verified: complete JSON readability, no symlinks, official revision, immutable positive-only scope, exact 4/2 distillation counts, zero negative teacher losses, checkpoint-manifest rehash, fresh CUDA reload identity and isolation
+input_hashes: {train_inventory: 404fd8d14522e59ab99897d383a7c53ac2bb4cfb996c8f2c7a07e32b8d06c986, real_val_inventory: 213ced2a1458f62b07cc83d12f9f4dc98ccc11f66a013d8f8bd1e169987afb7b, near_val_inventory: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9}
+decision: GO_ONE_THREE_EPOCH_FROZEN_BACKBONE_FORMAL_FROM_EXACT_OFFICIAL_BASE_WITH_THE_SAME_IMMUTABLE_MIXED_R4_AND_POSITIVE_ONLY_DISTILLATION_CONTRACT
+verification_decision: no package or benchmark rerun; the tracked source was already covered by CP-470 ordinary tests, and this checkpoint adds the relevant fresh CUDA smoke plus independent artifact readback
+scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-smoke-r745/tmp, scratch/stage-c-positive-only-distillation-smoke-r746/tmp]
+retention: r743-r748, smoke-r2 and all prior evidence retained and frozen where complete; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
+boundaries: COCO100 outcome and sealed final test remain unread; SAM remains frozen and unloaded; PickPlace/depth/Mac remain NO_GO; Microduck paused
+```
