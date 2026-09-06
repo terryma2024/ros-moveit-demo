@@ -19492,6 +19492,69 @@ evidence: r562-r564 run-evidence and scratch retained; scratch roots are deletio
 boundaries: no model/data/threshold/training change, sealed test/COCO/PickPlace/Mac access or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-422 — adapted dual-model bundle frozen; package and CUDA gates pass
+
+```yaml
+checkpoint: CP-422
+status: VALID_ADAPTED_BUNDLE_AND_THRESHOLD_LOCK_FROZEN
+prior_checkpoint: CP-421
+source_commit: d8b6fbc8609aac0625dac905b559d30a1688078d
+overlay:
+  valid_build: {run_id: linux-build-stage-d-adapted-bundle-r570, packages: 7, elapsed_seconds: 55.7, python: /data/work/venvs/so101-grounded-sam/bin/python, setuptools: 68.1.2, source_symlink_readback: pass}
+  valid_ordinary: {run_id: linux-test-stage-d-adapted-bundle-ordinary-r571, passed: 1474, failed: 0, skipped: 0, elapsed_seconds: 26.14, junit_sha256: b04e54476071db7016584b877bc362b2adca9b5f8600c6427891cd1e7810d30d}
+  valid_benchmark: {run_id: linux-test-stage-d-adapted-bundle-benchmark-r573, passed: 583, failed: 0, skipped: 2, elapsed_seconds: 647.71, junit_sha256: 692b0658511a7592cde93b2d42c4958debacd02875622c0885f5be0726fb0ce0}
+  invalid_attempts: r565 and r574 placed set -u before ROS setup; r566 built a regular system-Python install; r567 therefore failed 10 source-provenance checks; r568 used venv setuptools84 and again produced a regular install; r572 put system Pillow before the pinned venv and failed 60 rasterizer-version checks; all are retained diagnostic evidence and none changes model validity
+bundle:
+  run_id: stage-d-compose-adapted-model-bundle-r575
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  schema_version: 3
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  detector: {checkpoint_manifest_sha256: 4b10d2b730c2352b715f010bf36b7fe5c3348d0489fe5559e5f48dcfb92c58e7, model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b}
+  segmenter: {checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e, model_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893, source_bundle_manifest_sha256: 884e1ac743102784ef4bb134ab683b5d7d78d6c039413f98441c856ab9adfa66}
+  inventory: {runtime_members: 11, physical_files_with_manifest: 12, symlinks: 0, writable_files: 0, bundle_files_sha256: 322fae583c5223389529d6877c33ff30b2560bd1e1cbcc7b6ca5d9972c054ca8}
+cuda_reload:
+  run_id: stage-d-adapted-model-bundle-cuda-reload-r576
+  result: {torch: 2.13.0+cu130, gpu: NVIDIA_GeForce_RTX_5080, dino_device: cuda, sam_device: cuda, dino_dtype: float32, sam_dtype: float32, fallback: false, pass: true}
+  log_sha256: 37079378621d11ddb3a390616d5b367bc4fbbf70012026fb5664f18205d7c942
+threshold_lock:
+  tracked_path: src/so101_demo_py/config/perception/grounded_sam_nonpenetrating_candidate_v1.json
+  sha256: f90560f87c51dbfc4492e3cf6299c355514b7ad9ad25f88dea752695c21b472a
+  detector: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16}
+  segmenter: {quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, mask_inside_box: 0.8}
+  gates: {truth_mask_iou: 0.8, raw_production_mapping_iou: 0.98, selector_confidence: 0.5}
+  runtime_eligibility: depth, reachability, bbox geometry and mask geometry only; scenario-label access forbidden
+decision: CP-420 joint-val result and r571/r573 gates freeze DINO epoch1 plus existing decoder-only SAM epoch4; SAM retraining remains unauthorized
+evidence_retention: r565-r576 evidence and all NVMe scratch retained; scratch roots are deletion candidates only; nothing deleted
+boundaries: no sealed-test generation/evaluation or COCO100 has run; Microduck paused
+```
+
+## Checkpoint CP-423 — independent nonpenetrating test population preregistered
+
+```yaml
+checkpoint: CP-423
+status: TEST_ONLY_CONTRACT_TDD_PLANNED_DATA_NOT_GENERATED
+prior_checkpoint: CP-422
+candidate_lock: {path: src/so101_demo_py/config/perception/grounded_sam_nonpenetrating_candidate_v1.json, sha256: f90560f87c51dbfc4492e3cf6299c355514b7ad9ad25f88dea752695c21b472a}
+dataset_contract: so101-nonpenetrating-test-v1
+population:
+  split: test
+  samples: 300
+  seed_range: [470000000, 470000299]
+  schedule: deterministic round-robin across [no_cup, one_cup_distractors, two_cups, cup_near_bottle, small_far_cup, partially_occluded_cup]
+  scenario_quotas: {no_cup: 50, one_cup_distractors: 50, two_cups: 50, cup_near_bottle: 50, small_far_cup: 50, partially_occluded_cup: 50}
+  geometry_policy: task-visual-nonpenetration-v1
+  truth: categorical visible mask/RLE with complete geometry receipt; convex-hull truth forbidden
+outputs:
+  source: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/cup-nonpenetrating-test-v1
+  archive: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/archives/so101-v5-t005-cup-nonpenetrating-test-v1.tar.gz
+  sealed_conversion: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/grounding-dino-cup-nonpenetrating-test-v1
+collision_gate: all three outputs must be absent under both -e and -L immediately before allocation; failure closes the run
+tdd_scope: add only the exact test-only generator/converter contract and its focused tests; no generic split harness and no mutation or fault injection
+evaluation_rule: generate and seal once after this preregistration; evaluate the frozen candidate once; results cannot select a checkpoint or modify thresholds
+cohorts: primary reporting excludes small_far_cup, while all-scenario metrics remain complete; runtime selection may not read scenario labels
+boundaries: data not yet generated; no test metric, COCO100, PickPlace or Mac access; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
