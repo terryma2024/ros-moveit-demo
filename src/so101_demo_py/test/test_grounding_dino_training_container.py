@@ -420,6 +420,7 @@ def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
     assert "  resume_checkpoint: null\n" in contents
     assert "  teacher_token_logit_lambda: 1.0\n" in contents
     assert "  teacher_candidate_box_lambda: 1.0\n" in contents
+    assert "  teacher_distillation_scope: positive_samples_only\n" in contents
     assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  source_archive_sha256: "
