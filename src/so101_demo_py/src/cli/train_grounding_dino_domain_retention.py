@@ -24,6 +24,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--real-val-images", required=True, type=_absolute_path)
     parser.add_argument("--near-val-images", required=True, type=_absolute_path)
     parser.add_argument("--base-model", required=True, type=_absolute_path)
+    parser.add_argument("--student-model", type=_absolute_path)
     parser.add_argument("--output", required=True, type=_absolute_path)
     parser.add_argument("--mode", required=True, choices=("smoke", "formal"))
     parser.add_argument("--training-commit", required=True)
@@ -46,6 +47,7 @@ def main(arguments: list[str] | None = None) -> int:
             output_root=parsed.output,
             mode=parsed.mode,
             training_commit=parsed.training_commit,
+            student_model=parsed.student_model,
         )
     except (FileExistsError, OSError, RuntimeError, ValueError) as error:
         print(json.dumps({"failure": str(error), "status": "ERROR"}, sort_keys=True))
