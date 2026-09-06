@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-394 — r530 harness264/264 GREEN but launcher mutant-hash gate stale; r531 launcher-only retry planned
+
+```yaml
+checkpoint: CP-394
+status: R530_HARNESS_GREEN_LAUNCHER_INVALID_R531_LAUNCHER_ONLY_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r530
+execution_mode: inline serial; no subagent
+overall: {classification: INVALID_R530_GREEN, authoritative: false, launcher_tool_exit: 1, harness_invocations: 1, elapsed_seconds: 90.37680456, retry: none}
+harness: {classification: VALID_R530_GREEN, authoritative: true, exit: 0, total: 264, passed: 264, failed: 0, harness_errors: 0, retained: 167/167, review: 36pass_plus6kills, additional: 39/39, focused: 12/12, tail_extension: 3pass_plus1kill, forbidden_before_after: [[],[]], stderr_empty: true}
+launcher_failure: only check8of21 false because five shell-derived review mutant SHA constants remained from the pre-tail-fix shell; driver-only exact-membership hash unchanged; all other result/provenance/package/private checks true
+derived_review_mutants: {accounting_completion: 4034a5a3431c83645cf5c3306c1f6ac85e30d59851c5aff926ffa39c99ad12c9, conditional_outer: 0524c39024526d437c2c127736c4eabdca95a1bb56f962e9cea99e5d9a76ff72, deferred_inventory: 543f97e415cf7468fa83214dc07706593dd819d4fddced5305a3cf9b9a0d7e99, diagnostic_propagation: afccd9cc049cf9bcc168586ea44e36e55cb00a141874e5dba29709bff058ecab, exact_membership: 318ae7f78b14855bc5c8f4f56a8d9f922a2af550593f4172941c5e76231caf24, owner_disarm: 9e36e98daddcabe5f2fe2312e534d129a34b336992840194e963fce8eb190549}
+independent_derivation: pure static loading of frozen r530 adaptation and its shell_mutations/driver_mutation reproduced all six result hashes exactly; this is provenance correction, not result tuning
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r530; result/stdout SHA256c2600a8a88c74e273ae3d568a332acc3a7721c7de41185e7cf86aa3d7289e939; manifest31 members SHA25644220b89a70d9847d181499dbec33134a07c7e589bffc4f20b990e2c8e9a6445; root33 files; all members verified; readback SHA2567ab00e508b79f49d185ff85931ff105429af1293e01ff59b605c2a96893f1f64; package before/after identical; exact NVMe/provenance/private gates valid
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-green-r530-launcher-invalid-report.md SHA256e54dc3392e6b1319db6445171aa3a1fb0aed9dc044db058813912dc091d59d22,60 lines
+next_experiment:
+  status: GO_INLINE_R531_LAUNCHER_ONLY_STATIC_PREPARATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r531
+  frozen: candidate driver/shell and r530 harness byte-identical; retain exact264 behavior and seven mutation kills
+  sole_launcher_correction: fresh ID/paths/current HEAD plus replace six expected review mutant hashes with independently derived frozen-candidate identities; no harness/candidate semantic change
+  required_before_run: launcher bash/heredoc/parser, independent static mutant derivation equality, hashes/root absence; separate checkpoint; fresh roots/no r530 rerun
+restrictions: no pre-overall-GREEN Astra review, no repo source/config/candidate/harness change, official generation, project/renderer import, training/inference/build/package test/benchmark/sealed access
+retention: r530/r529/r528/r527 complete evidence retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-393 — r530 harness-only optional-env correction statically valid; one fresh combined GREEN authorized
 
 ```yaml
