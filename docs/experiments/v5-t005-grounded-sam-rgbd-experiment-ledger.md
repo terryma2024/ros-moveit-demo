@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-393 — r530 harness-only optional-env correction statically valid; one fresh combined GREEN authorized
+
+```yaml
+checkpoint: CP-393
+status: R530_HARNESS_ONLY_CORRECTION_STATIC_VALID_ONE_COMBINED_GREEN_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r530
+execution_mode: inline serial; no subagent
+single_change_from_r529: transformed focused fixture stores optional R528_FSYNC_FAILURES with empty default before comma expansion; candidate driver/shell byte-identical
+red_regression: immutable r529 focused partial result records unset-map set-u failure; r529 not rerun
+private_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, harness_sha256: 845189ddd80ca945e4f12f6b98de667fa71c6b085d2da857c613af66ec00724d, harness_lines: 1071, launcher_sha256_before_head_rebind: 48742a0c6fb1bcbaacb258005b22ba62beca1364a241a13261510fb5532a961a, launcher_lines: 455}
+combined_contract:264=167+42+39+12+4; candidate tail state-lifetime and focused/double-tail semantics unchanged
+static_readback: AST/Ruff, shell/launcher/transformed/mutant bash syntax,12of12 heredoc AST, parser16/static-preparation, r527 reachability/hash/r530 first-nonzero oracles all pass; new pure-Bash optional-map oracle accepts unset as empty and populated as exact two entries; forbidden imports empty
+root_state: r530 evidence/NVMe scratch/low roots absent; four official roots absent; local/Gitee2e569bd and source scoped clean
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_COMBINED_GREEN_INLINE
+  prelaunch: commit/push/read back CP393; mechanically rebind only three launcher expected HEAD/Gitee literals to new SHA, prove inverse transform restores48742a0c, recompute launcher SHA/bash/root checks
+  invocation: exactly once with matching SO101_REVIEWED_LAUNCHER_SHA256; no retry/backfill
+  required: exact Python/NVMe tempfile; VALID_R530_GREEN,264of264, zero failures/errors, exits0, all cohorts and mutation hashes exact, forbidden imports empty, package/source/private before-after unchanged
+  after_green_only: full inventory/hash readback and Astra review, then checkpoint before official generation
+restrictions: no candidate/repo source change, no pre-GREEN full review, official generation, project/renderer import, training/inference/build/package test/benchmark/sealed access
+retention: r529/r528/r527 and all earlier evidence retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-392 — r529 candidate clears retained gates but focused fixture lacks optional-env default; r530 harness retry planned
 
 ```yaml
