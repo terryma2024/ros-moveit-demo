@@ -18953,6 +18953,32 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-400 — r535 combined stage-persistence GREEN statically prepared; one invocation authorized
+
+```yaml
+checkpoint: CP-400
+status: R535_COMBINED_STAGE_PERSISTENCE_GREEN_STATIC_VALID_ONE_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-postdriver-stage-persistence-green-r535
+execution_mode: inline serial
+candidate: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, driver_unchanged: true, shell_sha256: 6cf1571fbaa3716acee7cbc095f95088fb2bb487bece66b43b5a889e0a849a97, shell_lines: 545}
+minimal_fix: trap-safe original status is initialized/reset and frozen before fallible tail auditing; both post-driver stage persistence operations are explicitly captured; a trap-safe ordered queue seeds typed storage failures and first diagnostic; later main-log failures are de-duplicated so first-nonzero semantics remain; legacy tail-global fallback applies only when queue empty
+operation_contract: launch_stage_log_fsync_persistence and launch_stage_launch_finalizer_persistence; mixed tail96 then stage95 order is main_log_fsync then launch_stage_launch_finalizer_persistence; finalizer9 > original7 > first storage > outer precedence unchanged
+combined_harness: {sha256: e21c345ec623bc911373c0c7e2d370acf81b1fce5845512d40a7dbcdc97f31ce, lines: 1323, expected_total: 281, decomposition: [retained_r531_264, corrected_stage_persistence_14, trap_safe_original_control_1, executable_new_mutation_kills_2]}
+mutation_proof: original-preservation SHA256ea6dab9e; stage-failure-propagation SHA256 37bb4b99; correct trap-injection source SHA2568babc1bf; retained first-nonzero mutant adapted to queue guard SHA25686250b7e; six retained review mutant identities independently rederived and pinned
+launcher: {sha256_before_head_rebind: 8697a8313080d8a0990b14646fac0c0295f4839209e796f20a9ab398fa5ec92d, python_heredocs: 12of12, parser_fields: 17}
+static_result: AST/Ruff, candidate/launcher/transformed/mutant Bash syntax, parser, r527/r534 negative reachability oracles, private hash/optional-map/first-nonzero oracles, stage mutation target counts and hashes, forbidden imports, local/Gitee0de5b3b0, scoped package clean, fresh roots absent and official boundaries all pass; behavior invocations0
+prep_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-stage-persistence-green-r535-prep-report.md SHA256962196841b5df002779b1ea678b06c60ce5ca1e35cf9ac52b3c611e4cd6d6444,32 lines, fsynced/read back
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_COMBINED_GREEN_INLINE
+  prelaunch: commit/push/read back CP400; mechanically rebind only three launcher expected HEAD/Gitee literals to new local/Gitee SHA, prove inverse transform restores SHA2568697a831, recompute launcher SHA/Bash/heredoc/parser/root checks
+  invocation: exactly once with matching SO101_REVIEWED_LAUNCHER_SHA256; fresh r535 evidence/NVMe scratch/low roots; no retry/backfill
+  required: exact locked Python/tempfile; VALID_R535_GREEN281of281, zero failures/harness errors, all exits0; retained264, stage14, trap control1 and total nine executable mutation kills; forbidden imports empty; package/source/private before-after unchanged
+  after_green_only: complete inventory/hash readback and Astra immutable review, then checkpoint before any official generation
+restrictions: no repo source/config edit, official generation/roots, real renderer/GPU, training/inference/build/package test/benchmark/sealed access
+retention: r534/r533/r532/r531 and all prior evidence/reports/scratch retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-399 — r534 authoritative post-driver stage-persistence RED; scoped GREEN planned
 
 ```yaml
