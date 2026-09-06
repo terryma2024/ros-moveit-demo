@@ -447,27 +447,27 @@ def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
     assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  student_initialization_checkpoint_manifest_sha256: "
-        "53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95\n"
+        "4521bf5b1e369e4af21ff76b75542cc47bf52688898cd3678e9fe71ed7ed7f66\n"
         in contents
     )
     assert (
         "  student_initialization_model_sha256: "
-        "3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d\n"
+        "4837f6d2d08e335c7ddb3524b10a5e4482b9ca3f63009f3894bc13202b938a71\n"
         in contents
     )
     assert "  student_initialization_completed_epoch: 3\n" in contents
     assert (
         "  source_archive_sha256: "
-        "6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db\n"
+        "212532111f1918af2be7cb88e37bc4ff18cd13bd026b8c7e58cc03685301a3ea\n"
         in contents
     )
     assert (
         "  train_inventory_sha256: "
-        "4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a\n"
+        "404fd8d14522e59ab99897d383a7c53ac2bb4cfb996c8f2c7a07e32b8d06c986\n"
         in contents
     )
     assert (
         "  val_inventory_sha256: "
-        "9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572\n"
+        "213ced2a1458f62b07cc83d12f9f4dc98ccc11f66a013d8f8bd1e169987afb7b\n"
         in contents
     )
