@@ -12,15 +12,19 @@ from pathlib import Path
 from typing import Any
 
 from .grounding_dino_domain_retention import (
+    LAST_SWIN_STAGE_PREFIX,
     compute_distillation_losses,
+    configure_last_stage_trainability,
     configure_student_trainability,
     freeze_teacher,
+    optimizer_parameter_groups,
     select_joint_threshold,
     select_smoke_samples,
     validate_domain_retention_contract,
 )
 from .grounding_dino_finetune import (
     ValidationResult,
+    checkpoint_file_entries,
     exclusive_json,
     load_contract,
     load_verified_split,
@@ -45,12 +49,57 @@ from .grounding_dino_runtime import (
 )
 
 
-def _student_training_mode(student: Any) -> None:
+def _last_swin_stage(student: Any) -> Any:
+    layers = student.model.backbone.conv_encoder.model.encoder.layers
+    if len(layers) != 4:
+        raise RuntimeError("LAST_SWIN_STAGE_MODEL_MISMATCH")
+    return layers[3]
+
+
+def _student_training_mode(student: Any, *, train_last_swin_stage: bool = False) -> None:
     student.eval()
     student.model.decoder.train()
     student.model.encoder_output_bbox_embed.train()
     student.model.enc_output.train()
     student.model.enc_output_norm.train()
+    if train_last_swin_stage:
+        _last_swin_stage(student).train()
+
+
+def _verify_student_initialization(root: Path, training: dict[str, Any]) -> dict[str, Any]:
+    candidate = Path(root)
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise RuntimeError("STUDENT_INITIALIZATION_INVALID")
+    candidate = candidate.resolve()
+    manifest_path = candidate / "checkpoint-manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise RuntimeError("STUDENT_INITIALIZATION_MANIFEST_INVALID")
+    if sha256_file(manifest_path) != training[
+        "student_initialization_checkpoint_manifest_sha256"
+    ]:
+        raise RuntimeError("STUDENT_INITIALIZATION_MANIFEST_SHA256_MISMATCH")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("STUDENT_INITIALIZATION_MANIFEST_INVALID") from error
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != 1
+        or manifest.get("complete") is not True
+        or manifest.get("completed_epoch")
+        != training["student_initialization_completed_epoch"]
+        or manifest.get("files") != checkpoint_file_entries(candidate)
+    ):
+        raise RuntimeError("STUDENT_INITIALIZATION_MANIFEST_INVALID")
+    model_path = candidate / "model.safetensors"
+    if sha256_file(model_path) != training["student_initialization_model_sha256"]:
+        raise RuntimeError("STUDENT_INITIALIZATION_MODEL_SHA256_MISMATCH")
+    return {
+        "root": str(candidate),
+        "checkpoint_manifest_sha256": sha256_file(manifest_path),
+        "model_safetensors_sha256": sha256_file(model_path),
+        "completed_epoch": manifest["completed_epoch"],
+    }
 
 
 def _result_at(
@@ -92,6 +141,7 @@ def run_domain_retention_training(
     output_root: Path,
     mode: str,
     training_commit: str,
+    student_model: Path | None = None,
 ) -> dict[str, Any]:
     import numpy as np
     import torch
@@ -109,6 +159,22 @@ def run_domain_retention_training(
     model_contract = contract["model"]
     data_contract = contract["data"]
     training = dict(contract["training"])
+    train_last_swin_stage = (
+        training["initialization"] == "selected_phase1_student_official_base_teacher"
+    )
+    if train_last_swin_stage:
+        if student_model is None:
+            raise RuntimeError("STUDENT_INITIALIZATION_REQUIRED")
+        student_initialization = _verify_student_initialization(student_model, training)
+    else:
+        if student_model is not None:
+            raise RuntimeError("STUDENT_INITIALIZATION_FORBIDDEN")
+        student_initialization = {
+            "root": str(Path(base_model).resolve()),
+            "checkpoint_manifest_sha256": None,
+            "model_safetensors_sha256": model_contract["files"]["model.safetensors"],
+            "completed_epoch": 0,
+        }
     _validate_sha_mapping(Path(base_model), model_contract["files"])
     device = require_cuda(torch)
     if output_root.exists() or output_root.is_symlink():
@@ -214,6 +280,8 @@ def run_domain_retention_training(
             "coco100_mounted": False,
             "sam_loaded": False,
             "resume_checkpoint": None,
+            "phase": "last_swin_stage" if train_last_swin_stage else "frozen_backbone",
+            "student_initialization": student_initialization,
         },
     )
     exclusive_json(
@@ -243,7 +311,12 @@ def run_domain_retention_training(
             "training_commit": training_commit,
             "base_model_root": str(Path(base_model).resolve()),
             "teacher_initialization": "official_pinned_base",
-            "student_initialization": "official_pinned_base",
+            "student_initialization": (
+                "selected_phase1_checkpoint"
+                if train_last_swin_stage
+                else "official_pinned_base"
+            ),
+            "student_initialization_detail": student_initialization,
             "epoch5_checkpoint_access": "none",
             "train_inventory": str(Path(train_inventory).resolve()),
             "real_val_inventory": str(Path(real_val_inventory).resolve()),
@@ -260,10 +333,16 @@ def run_domain_retention_training(
         base_model, local_files_only=True, use_safetensors=True
     )
     student = GroundingDinoForObjectDetection.from_pretrained(
-        base_model, local_files_only=True, use_safetensors=True
+        student_model if train_last_swin_stage else base_model,
+        local_files_only=True,
+        use_safetensors=True,
     )
     teacher_receipt = freeze_teacher(teacher)
-    student_receipt = configure_student_trainability(student)
+    student_receipt = (
+        configure_last_stage_trainability(student)
+        if train_last_swin_stage
+        else configure_student_trainability(student)
+    )
     teacher.to(device)
     student.to(device)
     teacher.eval()
@@ -271,7 +350,7 @@ def run_domain_retention_training(
         checkpointing_method = enable_grounding_dino_gradient_checkpointing(student)
     else:
         checkpointing_method = "disabled"
-    _student_training_mode(student)
+    _student_training_mode(student, train_last_swin_stage=train_last_swin_stage)
     if student.model.backbone.training or student.model.text_backbone.training:
         raise RuntimeError("FROZEN_BACKBONE_TRAINING_MODE_INVALID")
     exclusive_json(
@@ -283,6 +362,10 @@ def run_domain_retention_training(
             "student_text_backbone_training": student.model.text_backbone.training,
             "student_encoder_training": student.model.encoder.training,
             "student_decoder_training": student.model.decoder.training,
+            "student_last_swin_stage_training": _last_swin_stage(student).training,
+            "last_swin_stage_prefix": (
+                LAST_SWIN_STAGE_PREFIX if train_last_swin_stage else None
+            ),
             "gradient_checkpointing_method": checkpointing_method,
             "teacher_and_student_initialized_separately": True,
         },
@@ -290,8 +373,17 @@ def run_domain_retention_training(
     trainable_parameters = [parameter for parameter in student.parameters() if parameter.requires_grad]
     if not trainable_parameters:
         raise RuntimeError("NO_TRAINABLE_PARAMETERS")
+    optimizer_parameters: Any = (
+        optimizer_parameter_groups(
+            student,
+            head_learning_rate=training["learning_rate"],
+            backbone_learning_rate=training["backbone_learning_rate"],
+        )
+        if train_last_swin_stage
+        else trainable_parameters
+    )
     optimizer = torch.optim.AdamW(
-        trainable_parameters,
+        optimizer_parameters,
         lr=training["learning_rate"],
         betas=tuple(training["betas"]),
         eps=training["epsilon"],
@@ -338,7 +430,7 @@ def run_domain_retention_training(
     training_started = time.monotonic()
     frozen_gradient_check_recorded = False
     for epoch in range(1, training["epochs"] + 1):
-        _student_training_mode(student)
+        _student_training_mode(student, train_last_swin_stage=train_last_swin_stage)
         teacher.eval()
         torch.cuda.reset_peak_memory_stats()
         loader = _training_loader(
