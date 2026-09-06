@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-475
+latest_checkpoint: CP-476
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 314df8d7c5ab02db508eb5c3ce5b3c47b01e9feb
-active_experiment: stage-e-coco100-global-best-frozen-candidate-r760
-confirmed: optimization ended at r749/r751; r753/r754 selected one global winner using only the preregistered synthetic val; the independent four-point carrier is byte-frozen and remains semantically unopened; the winner's DINO/SAM bundle and all thresholds are frozen and independently read back
-open: run the globally selected immutable candidate on frozen COCO100 exactly once; do not tune or reselect from its outcome
-next_action: preflight the COCO100 inventory, frozen threshold lock, bundle, CUDA/Python/NVMe/process state and execute the one-time r760 evaluation; stop and report if any COCO gate fails
+source_parent: 8ede98e038328d2dc9e0a249b69b922342625f92
+active_experiment: STOPPED_AT_COCO100_FIRST_FAILURE_BOUNDARY
+confirmed: global synthetic-val winner is byte-identical to the candidate whose one valid COCO100 run was already consumed by r595; r760 rehashed and bound that result without a prohibited rerun; COCO F1, Recall and hit-image gates fail
+open: user direction is required before any materially different optimization or candidate policy; the current directive forbids COCO-driven tuning, threshold changes, checkpoint reselection, four-point opening, bundle promotion and PickPlace after this failure
+next_action: report the COCO100 failure to the user; keep the four-point carrier semantically unopened and preserve all evidence
 boundaries: COCO100 and four-point smoke cannot select a model or tune thresholds; sealed final test remains unread; real hardware is unauthorized; PickPlace remains NO_GO until COCO100 and all four perception smoke points pass; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23213,4 +23213,53 @@ verification_decision: no package or benchmark rerun; no product or benchmark so
 scratch_deletion_candidates: [scratch/stage-e-four-point-acceptance-generation-r755/tmp, scratch/stage-e-four-point-acceptance-generation-r756/tmp, scratch/stage-e-four-point-acceptance-readback-r757/tmp, scratch/stage-d-global-best-threshold-lock-r758/tmp, scratch/stage-d-global-best-threshold-lock-readback-r759/tmp]
 retention: r754-r759, the invalid r755 evidence, frozen four-point carrier, threshold lock, immutable bundle and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
 boundaries: four-point semantic evaluation count remains zero; sealed final test unread; real hardware unauthorized; PickPlace and Mac remain NO_GO; Microduck paused
+```
+
+## Checkpoint CP-476 — global winner fails its already-consumed one-time COCO100 gate
+
+```yaml
+checkpoint: CP-476
+status: STOPPED_AT_FIRST_COCO100_FAILURE_BOUNDARY
+prior_checkpoint: CP-475
+source_head_before_record: 8ede98e038328d2dc9e0a249b69b922342625f92
+identity_binding:
+  current_global_threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  historical_candidate_threshold_lock_sha256: f90560f87c51dbfc4492e3cf6299c355514b7ad9ad25f88dea752695c21b472a
+  common_candidate_id: grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  common_bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  common_dino_model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b
+  common_sam_model_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893
+  common_thresholds: {dino_box: 0.50, dino_text: 0.50, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.50, minimum_mask_pixels: 64, maximum_mask_area_ratio: 0.50, selector: 0.50}
+one_time_rule:
+  existing_valid_run: stage-e-coco100-frozen-candidate-r595
+  existing_results_sha256: a3bc075987fb4549b0ea70c060d1ac0722ee7a71c0dd6bbcd61a53c2d265f9e0
+  existing_qualification_sha256: 39a09a23be3207f6160ea572a39c736d4d8b574f690aa5789e889abe48f602f8
+  existing_output_manifest_sha256: f9f1d9a55c7d7c3c2ea0b3a7ad9b2f6b8461df35c2c6b3906e6f142418940212
+  evaluation_total_for_exact_candidate: 1
+  current_model_forwards: 0
+  adjudication: because r753 selected the exact byte-identical historical candidate and CP-427 explicitly forbids rerunning it, r760 reuses only the sole valid frozen result rather than creating a second COCO evaluation
+current_adjudication:
+  run_id: stage-e-coco100-global-winner-adjudication-r760
+  status: FAIL_STOP_COCO100_NONINFERIORITY
+  result: {images: 100, tp: 0, fp: 0, fn: 247, hit_images: 0, target_not_found: 100, visible_non_cup_unique: 0, inference_errors: 0, precision: 0.0, recall: 0.0, f1: 0.0}
+  delta_f1_vs_pinned_base_0_6591: -0.6591
+  gates: {F1_ge_0_6391: FAIL, Recall_ge_0_5670: FAIL, hit_images_ge_83: FAIL, visible_non_cup_UNIQUE_le_0: PASS, inference_errors_le_1: PASS}
+  report_sha256: 120bbcca90b85def57c5937b2d0b027c2a9d58970efe152809263803c4d10660
+  evidence_rehash: PASS
+failure_action:
+  optimization: STOP
+  threshold_tuning_from_COCO100: FORBIDDEN
+  checkpoint_reselection_from_COCO100: FORBIDDEN
+  new_training_or_model_round: FORBIDDEN_UNDER_CURRENT_DIRECTIVE
+  four_point_acceptance_open: FORBIDDEN
+  four_point_semantic_evaluation_count: 0
+  bundle_promotion: FORBIDDEN
+  linux_pickplace: FORBIDDEN
+  mac_migration_and_pickplace: FORBIDDEN
+worktree: superseded two-file last-Swin diff remains unstaged and untouched; three required untracked build/install/log directories remain present; GPU remains idle with zero compute processes
+verification_decision: no second COCO forward, no package test and no benchmark rerun; exact candidate/result SHA binding and the prior complete r595 output readback are the applicable evidence
+scratch_deletion_candidates: [scratch/stage-e-coco100-global-winner-adjudication-r760/tmp]
+retention: r760, r595, frozen four-point carrier, threshold locks, immutable bundle and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed
+next_action: report the first failure boundary to the user and await materially new direction; do not open the four-point carrier
+boundaries: sealed final test unread; real hardware unauthorized; PickPlace/Mac NO_GO; Microduck paused
 ```
