@@ -19662,6 +19662,45 @@ retention: r585-r592 source, archive, seal, candidate lock, masks, reports and a
 boundaries: COCO100 has not yet run for this candidate; no PickPlace or Mac action yet; Microduck paused
 ```
 
+## Checkpoint CP-427 — frozen candidate fails COCO100; final pinned-base training round authorized
+
+```yaml
+checkpoint: CP-427
+status: COCO100_NONINFERIORITY_FAILED_FINAL_TRAIN_VAL_ONLY_ROUND_GO
+prior_checkpoint: CP-426
+handoff_readback: {root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external/coco100-baseline-handoff-r1, manifest_sha256: 216fc518cefb3dd08e4246a37fad50dbe66ddfe664672e4437d25d544f4708e5, entries: 419, images: 100, truth_instances: 247, verification: PASS}
+invalid_attempts:
+  r593: ROS overlay was sourced by the caller shell with nounset active, leaving so101_demo unavailable; failed before detector construction and inference
+  r594: retained handoff script's one-argument prompt override was incompatible with the current two-argument production prompt API; all frames failed before DINO forward; model result invalid
+  remediation: one private compatibility adaptation accepts the optional prompt-profile argument; directed one-argument and two-argument calls both pass; no model, threshold, image or truth change
+formal_coco100:
+  run_id: stage-e-coco100-frozen-candidate-r595
+  candidate_bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  candidate_lock_sha256: f90560f87c51dbfc4492e3cf6299c355514b7ad9ad25f88dea752695c21b472a
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, selector: 0.5}
+  device: CUDA
+  samples: 100
+  counts: {tp: 0, fp: 0, fn: 247, hit_images: 0, visible_non_cup_unique: 0, inference_errors: 0}
+  metrics: {precision: 0.0, recall: 0.0, f1: 0.0}
+  decisions: {TARGET_NOT_FOUND: 100}
+  gates: {f1_min_0_6391: FAIL, recall_min_0_5670: FAIL, hit_images_min_83: FAIL, visible_non_cup_unique_max_0: PASS, inference_errors_max_1: PASS}
+  result_sha256: a3bc075987fb4549b0ea70c060d1ac0722ee7a71c0dd6bbcd61a53c2d265f9e0
+  qualification_sha256: 39a09a23be3207f6160ea572a39c736d4d8b574f690aa5789e889abe48f602f8
+  output_manifest_sha256: f9f1d9a55c7d7c3c2ea0b3a7ad9b2f6b8461df35c2c6b3906e6f142418940212
+decision: candidate is ineligible for PickPlace; do not change thresholds, select checkpoints from COCO100, or rerun this candidate
+remaining_training_authority:
+  reason: severe synthetic-to-real generalization gap; the fast-completion plan permits one final train/val-only round after COCO failure
+  contract: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/contracts/grounding-dino-nonpenetrating-pinned-base8-r1.json
+  contract_sha256: abde7a0e7d7155cf3f46c606ca9bb70260eaf05623b2a273b12fe17366bb99de
+  base: official pinned IDEA-Research/grounding-dino-tiny revision a2bb814dd30d776dcf7e30523b00659f4f141c71, model_sha256 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+  recipe: original frozen 8 epochs, same 1200 train plus 300 val, seed20260904, batch1, accumulation4, lr0.00001, bfloat16 train and float32 val
+  selection: synthetic train/val only; COCO100 and sealed test stay inaccessible and read-only throughout
+  limit: this is the second and last formal DINO training round; no SAM retraining because DINO generalization is the measured failure source
+next: launch one fresh network-none CUDA training container, retain every epoch, select only by preregistered val ordering and stop PickPlace unless a later policy-compliant external gate is available
+retention: r593-r595 outputs, overlays, evidence and scratch retained; COCO100 handoff unchanged; scratch and invalid roots are deletion candidates only; nothing deleted
+boundaries: PickPlace and Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
