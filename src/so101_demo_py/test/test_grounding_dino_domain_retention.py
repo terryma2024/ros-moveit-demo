@@ -278,10 +278,15 @@ def test_last_stage_contract_requires_new_phase_checkpoint_and_one_tenth_lr() ->
     }
     validate_domain_retention_contract(contract)
 
+    selected_epoch_three = {key: dict(item) for key, item in contract.items()}
+    selected_epoch_three["training"]["student_initialization_completed_epoch"] = 3
+    validate_domain_retention_contract(selected_epoch_three)
+
     for field, value in (
         ("backbone_learning_rate", 0.000002),
         ("epochs", 3),
         ("student_initialization_checkpoint_manifest_sha256", "epoch-5"),
+        ("student_initialization_completed_epoch", 5),
     ):
         changed = {key: dict(item) for key, item in contract.items()}
         changed["training"][field] = value
