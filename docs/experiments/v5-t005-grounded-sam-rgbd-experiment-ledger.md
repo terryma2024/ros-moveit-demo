@@ -19750,6 +19750,59 @@ retention: r596/r597 containers, all eight checkpoints, logs, manifests, evidenc
 boundaries: no further DINO or SAM training authorized; PickPlace and Mac remain NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-429 — pinned DINO epoch 5 joint val and immutable bundle pass; external gates require policy decision
+
+```yaml
+checkpoint: CP-429
+status: VALID_FINAL_JOINT_VAL_AND_IMMUTABLE_BUNDLE_EXTERNAL_ONE_TIME_GATES_CLOSED
+prior_checkpoint: CP-428
+raw_capture:
+  run_id: stage-d-nonpenetrating-pinned-dino5-sam4-raw-r598
+  source_commit: 446587981006e7e7d5cfb37297299071c970ce14
+  model_identity_sha256: 7d2962f4ce51c1362ce8d4b8e33603137519b5858b9a0ef5ff927f4f9c502e53
+  result: {status: VALID_FROZEN_RAW_WITH_COMPLETE_PROPOSALS, samples: 300, dino_forwards: 300, sam_forwards: 300, proposals: 3469, accepted_raw_masks: 3184, elapsed_seconds: 130.20, sealed_access: none}
+  readback: {files: 4086, output_inventory_sha256: d1a6e4d67fcfd9f2449826adcf381988826fcd94c42ee6f039818994e971099a, report_sha256: 22e9a12a8c61f8d2eacd9790a9b54f316d18c9ddb8f22b96d062648243cc617f, hashes_and_sizes: PASS}
+production_replay:
+  invalid_pre_inference_attempts:
+    - {run_id: r599, cause: retained private script still asserted the old raw-evidence path}
+    - {run_id: r600, cause: zsh nounset rejected an uninitialized EPOCHSECONDS timing variable}
+    - {run_id: r601, cause: direct source PYTHONPATH did not provide the installed so101_demo package mapping}
+    - {run_id: r602, cause: ROS overlay was sourced after nounset was enabled}
+  diagnostic_run: {run_id: r603, status: VALID_PRODUCTION_EVALUATION, joint_val_pass: false, reason: selector confidence remained 0.50 while accepted DINO proposals used 0.45, two_cup_unique: 7}
+  correction: align selector minimum confidence with the val-selected detector threshold at 0.45; DINO, SAM, mask filters, data and model outputs unchanged
+  formal_run: stage-d-nonpenetrating-pinned-dino5-sam4-production-r604
+  result: {status: VALID_PRODUCTION_EVALUATION, samples: 300, dino_forwards: 0, sam_forwards: 250, errors: 0, elapsed_seconds: 18.11}
+  dino_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.8278377685}
+  dino_primary: {tp: 250, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.9111580676}
+  masks_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, mask_failures: 0, minimum_mask_iou: 0.9213973799}
+  selector: {unique: 200, target_ambiguous: 50, target_not_found: 50, two_cup_unique: 0, no_cup_unique: 0}
+  qualification: {dino_primary_box: true, mask_primary: true, mapping: true, selector_safety: true, joint_val: true, sam_training_required: false}
+  readback: {files: 903, hashes_and_sizes: PASS, output_report_sha256: 1c90ff4a1efc39589912d5e348b147c85cc1fafa01437fa0d4622088306e81fd, output_inventory_sha256: dc65ab7162e3a2b8e307fda518e7aecdd745a7bb33fb26e80090eafe2103ab5e, evidence_manifest_sha256: efc1f1c62987ae1a95cfa748b959c4b1e07d5f902a9e293a6a827887fbae0660}
+immutable_candidate:
+  compose_run: stage-d-compose-pinned-dino5-adapted-bundle-r605
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-pinned-base-epoch5-sam-decoder-epoch4-r1
+  schema_version: 3
+  manifest_sha256: 6e822c23d690fc7ededca64647eb1a3d111e2b9219484e541ae334478d4530ce
+  detector: {checkpoint_manifest_sha256: ea54331d04f89fef02728a717656a117188529f8ecdc7abf349d438b041bb394, model_sha256: eb9c485bb6f73ccd7a202055af408069d5ef55565693285d0f16ec7798af5457}
+  segmenter: {checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e, model_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893}
+  filesystem: {files_including_manifest: 12, symlinks: 0, writable_files: 0, bundle_inventory_sha256: 4c32983fa3f06a1e767b1356cfb46d7c588f695e54dd73793e45626a81808cc2}
+  cuda_reload: {run_id: stage-d-pinned-dino5-adapted-bundle-cuda-reload-r606, result: PASS, gpu: NVIDIA_GeForce_RTX_5080, detector_device: cuda, segmenter_device: cuda, cpu_fallback: false}
+candidate_lock:
+  path: src/so101_demo_py/config/perception/grounded_sam_nonpenetrating_candidate_v1.json
+  sha256: bf9cc36fdc8be4b3da2f4ff03adeb5d6a17e3ecebb29847b42df4c8a41e29de9
+  thresholds: {box: 0.45, text: 0.45, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, minimum_pixels: 64, maximum_area_ratio: 0.5, selector: 0.45}
+  runtime_eligibility: depth, reachability, bbox geometry and mask geometry only; scenario-label access forbidden
+verification:
+  related_ordinary: {run_id: linux-test-stage-d-pinned-candidate-lock-related-r608, passed: 21, failed: 0, elapsed_seconds: 0.26}
+  fresh_overlay: {run_id: linux-build-stage-d-pinned-candidate-lock-r609, packages: [so101_demo_py], exit: 0, elapsed_seconds: 6}
+  explicit_benchmark: {run_id: linux-test-stage-d-pinned-candidate-benchmark-r610, passed: 583, failed: 0, skipped: 2, elapsed_seconds: 645, junit_sha256: 5540d7d4d042ff45117221072125f2cb370502a53333230a61e9d66e8bc3088b}
+decision: DINO and SAM are frozen and SAM retraining is not authorized; the new identity is ready only for external qualification, not PickPlace
+policy_blocker: CP-426 already consumed the one-time synthetic test and CP-427 already consumed the one-time COCO100 check for the superseded model identity; both artifacts remain immutable and their results cannot transfer to this bundle
+required_user_decision: either authorize exactly one new sealed-test plus COCO100 qualification cycle for manifest 6e822c23 at unchanged preregistered gates, or keep the one-time policy and stop before PickPlace
+retention: r598-r610 outputs, bundle, overlays, logs and scratch retained; r599-r602 invalid roots and all scratch/low-rate trees are deletion candidates only; nothing deleted
+boundaries: no further training, sealed-test read, COCO100 rerun, PickPlace or Mac action; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
