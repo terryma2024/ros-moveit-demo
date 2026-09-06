@@ -19320,6 +19320,35 @@ evidence: r553 run-evidence and scratch retained; scratch is a deletion candidat
 boundaries: one product loader root cause only; no data/model/threshold/training change, general harness, fault injection or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-415 — visible trainer-box loader TDD GREEN; ordinary package gate planned
+
+```yaml
+checkpoint: CP-415
+status: VALID_VISIBLE_TRAINER_BOX_TDD_GREEN_ORDINARY_GATE_PLANNED
+prior_checkpoint: CP-414
+red:
+  run_id: linux-test-stage-d-visible-trainer-box-red-r554
+  result: {exit: 1, selected: 1, failed: 1, elapsed_seconds: 0.83}
+  failure: exact expected VAL_ANNOTATION_INVALID at the pre-fix normalized-only comparison
+change:
+  source: src/so101_demo_py/src/training/grounded_sam_val_calibration.py
+  test: src/so101_demo_py/test/test_grounded_sam_val_calibration.py
+  behavior: complete visible-RLE samples first bind label polygons to visible-mask pixel-center normalization, then accept either the legacy inventory normalization or the current converter's exact absolute pixel extent plus width/height trainer normalization
+  scope: non-visible legacy val behavior and train visible-mask requirement are unchanged
+green:
+  targeted_run: linux-test-stage-d-visible-trainer-box-green-r555
+  targeted_result: {exit: 0, selected: 1, passed: 1, elapsed_seconds: 0.45}
+  related_file_run: linux-test-stage-d-val-loader-file-green-r556
+  related_file_result: {exit: 0, passed: 15, elapsed_seconds: 0.52}
+  static: Ruff passes both changed files; git diff check passes
+next:
+  build: fresh task-specific overlay, source commit from this checkpoint
+  ordinary_test: so101_demo_py ordinary tests only with fresh NVMe scratch; benchmark explicitly not collected because benchmark code/config/adapters/model-selection logic is unchanged
+  runtime_retry_if_valid: fresh stage-d nonpenetrating joint raw capture; no r553 reuse
+evidence: r554-r556 run-evidence and scratch retained; all scratch roots are deletion candidates only; nothing deleted
+boundaries: no model/data/threshold/training change, general harness, fault injection or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
