@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-447
+latest_checkpoint: CP-448
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-near-negative-rebalance-r641
-confirmed: user approved bounded mixed-r3; the immutable 1600-train/160-real-val bundle passes complete readback with five primary near-MuJoCo scenarios at 160 each, exact preservation of all 960 mixed-r2 COCO members, small_far_cup excluded, and zero COCO100 ID/payload overlap
-open: train frozen Swin-T/BERT from the exact official pinned base for at most three epochs and select only from near-synthetic and independent-real validation; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
-next_action: materialize the mixed-r3 training config with pinned-base initialization, head LR 0.000002 and distillation lambdas 1.0; run the bounded 6+6 CUDA smoke, then the three-epoch frozen-backbone phase with per-epoch raw DINO validation
+active_experiment: stage-c-dino-domain-retention-mixed-r3-config-r642
+confirmed: mixed-r3 immutable data and its pinned training contract are both ready; the contract preserves official-base teacher/student initialization, frozen Swin-T/BERT, head LR 0.000002, dual distillation lambdas 1.0 and no resume
+open: build the cache-reusing mixed-r3 training image, run 6+6 CUDA smoke, then at most three frozen-backbone epochs selected only on near-synthetic and independent-real validation; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
+next_action: commit and push the mixed-r3 contract, build an immutable image from that exact commit, and run one fresh 6+6 CUDA smoke from official pinned base
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20632,6 +20632,36 @@ deletion_candidates:
   - scratch/stage-c-dino-domain-retention-near-negative-rebalance-r641-data-prep/tmp
 boundaries: SAM remains frozen; no COCO100 evaluation, sealed-test read, depth, PickPlace or Mac work; no threshold relaxation; Microduck paused
 next_experiment: create the mixed-r3 config and run one fresh 6+6 CUDA smoke from exact official pinned base, with no epoch-5 warm-start
+```
+
+## Checkpoint CP-448 — mixed-r3 pinned training contract passes its ordinary gate
+
+```yaml
+checkpoint: CP-448
+status: VALID_MIXED_R3_TRAINING_CONTRACT_IMAGE_BUILD_NEXT
+prior_checkpoint: CP-447
+run_id: stage-c-dino-domain-retention-mixed-r3-config-r642
+source_parent: f419b18595f976b03ca02bae169323425afd4031
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-mixed-r3-config-r642
+change: bind grounding_dino_domain_retention_training.yaml to mixed-r3 source identity and train/val inventory hashes; training recipe and model identity are unchanged
+contract:
+  model_revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  initialization: official_base_teacher_and_student
+  resume_checkpoint: null
+  data_source_identity_sha256: 6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db
+  train_inventory_sha256: 4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a
+  val_inventory_sha256: 9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572
+  frozen: [Swin-T, BERT, encoder, complete teacher]
+  trainable: [cross-modal decoder, query_position_embeddings, encoder_output_bbox_embed, enc_output, enc_output_norm]
+  learning_rate: 0.000002
+  distillation_lambdas: {teacher_token_logits: 1.0, teacher_candidate_boxes: 1.0}
+  epochs_max: 3
+tdd: {red: expected old mixed-r2 hash assertion failure, green: 1_passed}
+ordinary_gate: 9 passed in test_grounding_dino_training_container.py
+non_product_attempt: an expanded collection including unchanged training-math tests stopped before collection because host /usr/bin/python3 lacks torch; no dependency or environment mutation; prior image-level training implementation gates remain valid
+verification_decision: config/container tests only; no package-wide or benchmark run because no runtime or benchmark implementation changed
+boundaries: no student checkpoint mount, epoch-5 resume, COCO100, SAM, sealed test, depth, PickPlace or Mac access; Microduck paused
+next_experiment: build a cache-reusing image from this committed contract, verify image/config hashes, then launch one fresh network-none 6+6 CUDA smoke
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
