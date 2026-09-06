@@ -18953,6 +18953,36 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-396 — r531 combined GREEN retained; Astra finds adjacent post-driver stage-persistence gap; focused RED authorized
+
+```yaml
+checkpoint: CP-396
+status: R531_GREEN_RETAINED_ASTRA_CHANGES_REQUESTED_STAGE_PERSISTENCE_RED_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r531
+execution_mode: inline serial, gpt-5.6-sol high requested by user; review remains gpt-6-astra medium
+r531_result: {classification: VALID_R531_GREEN, authoritative: true, harness_classification: VALID_R530_GREEN, invocations: 1, total: 264, passed: 264, failed: 0, harness_errors: 0, harness_launcher_tool_exits: [0,0,0], elapsed_seconds: 88.125211956, forbidden_before_after: [[],[]], stderr_empty: true}
+r531_evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r531; result/stdout SHA256542027cbe31d4d8d492d5f40ee641ceff2ed68dc5ba88ff86274975d26740703; launcher-status SHA256 0d7d7295139edcdf6fd1f273eb19723b0024b6e7a26c1ee2340f71f2d1fc1bf1; raw-exit-elapsed SHA256 9783ec902e68537d7a6f8a6da2d2078391a797f4e2f15af71a72fad54a161d70; final31-member manifest SHA256 55780578ab140b4f96f34d99de39c6dedd6916b7c98bfaebbc12f126f4f57337; root33 files; readback SHA256 5f5df49b90e8b09b6f1ab4bbd441bb9c7ffdeba0d2d6b156064adb11ffd0799e; every member independently verified; exact NVMe tempfile and source/package/private provenance valid
+r531_report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-green-r531-report.md SHA25689c49d32c6ff30884f99b08566d27b9d2d59c4c71c54b6ecb05b866c6c503631,90 lines, complete readback verified
+reviewer: /root/generator_review, gpt-6-astra medium
+review_verdict: {spec: CHANGES_REQUESTED, task_quality: CHANGES_REQUESTED, official_generation: NO_GO, critical: 0, important: 1, minor: 0}
+review_report: durable coordination/generator-r443-r1/r531-final-review-report.md SHA256ca550effa47bf4cca17bf1b0acf4d2f84f239057a8998ff37058f44d707c0db3,91 lines, complete readback verified
+Important_I1: after the driver saves original0or7 only in caller-local state, both normal-tail record_launch_stage operations still run under errexit; a real append/fsync/close/parent-fsync failure enters EXIT ownership with audit95 as caught original, so finalizer/accounting can substitute original95 and omit or misorder storage accounting
+retained_closure: r531 remains authoritative for its exact264 cases and seven executable mutation kills; the prior two normal-tail fsync call defects, double-failure first-nonzero behavior, state lifetime, optional-env harness and launcher mutant-identity issues remain closed on covered paths
+next_experiment:
+  status: GO_ONE_PRIVATE_FOCUSED_STAGE_PERSISTENCE_RED_INLINE
+  planned_run_id: stage-e-generator-postdriver-stage-persistence-red-r532
+  frozen_candidate: driver SHA256b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651 and shell SHA256f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665 byte-identical; no implementation fix before RED
+  seven_defects: log_fsync-stage95 crossed with original0or7; launch_finalizer-stage95 crossed with original0or7; tail-fsync1=96 then launch_finalizer-stage95 crossed with original0or7; preceding double failure with original7 plus finalizer9
+  expected: preserve original0or7, first storage95 or96 by temporal order, exactly one outer/finalizer/accounting completion, overall storage for original0, original7 over storage, finalizer9 over original7; stage/injection reachability independent of semantic oracle
+  controls: no failure original0or7; pre-driver stage failure; write-complete/fsync-failed stage persistence; malformed/partial stage stream; post-seal diagnostic failure without reopening
+  harness_rules: frozen-shell source-preserving offline fixture only; independent unique case roots; restore injection state in finally; missing reachability/target or generic early failure is HARNESS_ERROR; no real setup/project import/GPU/renderer/generation
+  required: static AST/Ruff/Bash and transformed syntax; exact locked Python with fresh unique D NVMe scratch and tempfile.gettempdir exact preflight; one invocation; complete machine-readable expected defects/controls, zero harness errors/forbidden imports; raw exit before parse and durable fsync/inventory/readback; stop and checkpoint before any fix
+future_if_valid: minimal trap-safe original-status state plus explicit capture and typed stage-persistence storage/audit operations, first-failure order and reset semantics; then retained264 combined gate plus executable omission/substitution mutations and Astra re-review
+restrictions: no official generation or roots, repo source/config edit, real setup/project/MuJoCo/OpenGL/GPU/renderer/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r531/r530/r529/r528/r527 and all prior evidence/reports/scratch retained; archived/deleted none
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-395 — r531 launcher-only mutant identity correction statically valid; one fresh combined GREEN authorized
 
 ```yaml
