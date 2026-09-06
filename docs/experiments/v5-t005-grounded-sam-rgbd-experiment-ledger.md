@@ -18953,6 +18953,33 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-401 — r535 authoritative 281-case GREEN and complete readback; Astra review planned
+
+```yaml
+checkpoint: CP-401
+status: VALID_R535_PRIVATE_OFFLINE_GREEN_COMPLETE_READBACK_ASTRA_REVIEW_PLANNED
+run_id: stage-e-generator-postdriver-stage-persistence-green-r535
+execution_mode: inline serial; post-GREEN review delegated only to gpt-6-astra medium per user
+result: {classification: VALID_R535_GREEN, authoritative: true, invocations: 1, total: 281, passed: 281, failed: 0, harness_errors: 0, harness_launcher_tool_exits: [0,0,0], elapsed_seconds: 109.885176464, stderr_empty: true, forbidden_before_after: [[],[]]}
+decomposition: {retained_r517: 167/167, review: 36pass_plus6kills, additional: 39/39, focused_r527: 12/12, tail_extension: 3pass_plus1kill, stage_persistence: 14/14, stage_mutations: 1pass_plus2kills, total_mutation_kills: 9}
+stage_green: isolated stage95 preserves original0or7 and ordered typed storage; tail96 then launch-finalizer-stage95 stores main_log_fsync first then launch_stage_launch_finalizer_persistence while diagnostic remains96; finalizer9/original7/storage precedence intact; normal explicit paths have no EXIT reentry
+trap_green: injected post-capture exit94 reaches EXIT owner once after stage95 is queued but finalizer/accounting keep original7/storage95/overall7; omission mutant records original94 and is killed; stage-propagation omission yields empty storage/overall0 and is killed
+retained_green: first main-log96 remains unique when second failure97 occurs and overwrite/duplicate mutant is killed; all prior seven r531 mutation kills, stage-stream validation, pre-driver owner and post-seal no-reopen controls pass
+private_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: 6cf1571fbaa3716acee7cbc095f95088fb2bb487bece66b43b5a889e0a849a97, harness_sha256: e21c345ec623bc911373c0c7e2d370acf81b1fce5845512d40a7dbcdc97f31ce, launcher_sha256: a1e949186aa0ca78697674387523e1d776817f20dc95a37e1c4d0f437ce232a5, execution_head_local_gitee: a48f009d1d5316b03ac7c3b0a08f21046102fb9d}
+evidence: durable run-evidence/stage-e-generator-postdriver-stage-persistence-green-r535; result/stdout SHA256cc578afbaf13b65f6510caa7078906beae1545bf183fe60218ba78bf10bc9e04; launcher-status SHA256 49b87ce67c8d7129b30e43ca2d2792eeb58be7299b6abbadc154b2c8616ae22f; raw-exit SHA256 355de54609dbd55b5f1f1191f9657e9921d0250dd9118c1251e5f44ffe0de5cf; final32-member manifest SHA2560dbe2251cc4cc36ae24c9b6146b6e7e2a2e49efeabcc57b0bd4e20ebe3baa1e1; readback SHA2565dc8ce49f18decd2ce14df12ea2ac69d2742d6464b28e3f7d6a35e314b16b875; root34 files; all members independently verified
+complete_readback: package before/after/current exact630 members match SHA256c0a2e7b5; current driver/shell/harness/launcher equal retained inputs; exact locked Python/NVMe tempfile; source before/after and local/Gitee/scoped status valid; four official roots absent
+report: durable coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-stage-persistence-green-r535-report.md SHA2562e639e8007970ca2ba4c93a8a41aa4d28c590084c1daa077ca1df26207bc35cd,47 lines, fsynced/read back
+next_experiment:
+  status: GO_READ_ONLY_IMMUTABLE_ASTRA_FINAL_LAUNCH_REVIEW
+  reviewer: /root/generator_review, gpt-6-astra medium
+  scope: complete frozen driver/shell/r535 harness/launcher and r535 evidence plus causal r534/r533/r532 and r531 review; verify original/storage/finalizer/outer precedence, temporal queue uniqueness/reset/trap lifetime, both new and seven retained mutation kills, launcher gates and exact official1500 production wiring
+  output: one new write-once r535 final-review report, fsync/readback, APPROVED or CHANGES_REQUESTED with explicit official_generation GO/NO_GO
+  restrictions: read-only except report; no candidate/test/import/root allocation/real stack/Git/ledger/sealed access
+future_if_approved: parent checkpoints exactly one fresh official1500 train/val generation with reviewed hashes, exact GPU/context/provenance/collision gates; no conversion/readback phase conflation
+retention: r535/r534/r533/r532/r531 and all earlier evidence/reports/scratch retained; archived/deleted none
+boundaries: official generation and roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-400 — r535 combined stage-persistence GREEN statically prepared; one invocation authorized
 
 ```yaml
