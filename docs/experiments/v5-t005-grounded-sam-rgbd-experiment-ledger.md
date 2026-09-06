@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-452
+latest_checkpoint: CP-453
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-last-swin-epoch-contract-r657-green
-confirmed: the runtime contract now accepts selected frozen-phase epochs 1-3 and still rejects epoch 5; valid focused RED/GREEN proves the minimal boundary change
-open: rebuild from the committed runtime contract and run one fresh 6+6 CUDA smoke before the at-most-two-epoch formal stage; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
-next_action: commit and push CP-452, read back Gitee SHA, build a fresh non-stale image, then launch the last-Swin 6+6 smoke
+active_experiment: stage-c-dino-domain-retention-mixed-r3-last-swin-smoke-readback-r662
+confirmed: committed r10 image and last-Swin 6+6 CUDA smoke pass complete independent readback; exact phase-1 epoch-3 parent, trainability boundary, finite losses and fresh reload are valid
+open: run at most two last-Swin formal epochs selected only on near-synthetic and independent-real validation; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
+next_action: launch one fresh network-none 1600-sample x 2-epoch last-Swin formal run from the selected frozen-phase epoch-3 student and official pinned teacher
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20780,6 +20780,43 @@ scratch_deletion_candidates: [scratch/stage-c-dino-domain-retention-last-swin-ep
 retention: r651-r657 and all earlier evidence retained; nothing deleted or archived
 boundaries: no smoke/formal launch used stale r9; COCO100/sealed test/SAM/PickPlace/Mac remain gated; Microduck paused
 next_experiment: commit/push/readback, build fresh image from that exact commit, verify embedded source/config and CUDA, then 6+6 last-Swin smoke
+```
+
+## Checkpoint CP-453 — committed last-Swin image and 6+6 CUDA smoke pass
+
+```yaml
+checkpoint: CP-453
+status: VALID_MIXED_R3_LAST_SWIN_SMOKE_GO_FORMAL_TWO_EPOCHS
+prior_checkpoint: CP-452
+implementation_commit: 6623f82ecc3ff4d957d1038b2519369c78fc2bcd
+gitee_readback_before_image_and_smoke: 6623f82ecc3ff4d957d1038b2519369c78fc2bcd
+image:
+  run_id: stage-c-dino-domain-retention-mixed-r3-last-swin-image-r658
+  tag: so101-grounding-dino-tiny-train:r10-mixed-r3-last-swin-6623f82e
+  id: sha256:1b9c01db97fb04f5644f9303dccdce6a830715a9043c73949d5688648488e34a
+  build: {exit: 0, elapsed_seconds: 8, dependency_layers: reused}
+  readback: {contract_sha256: 3c5bc532e83804f8a0efc1e074baa609ed7ab16271812ebaea6343614e2ac356, source_sha256: a71117731d855d4ea996a467ffeaaa6359e8c1babe492a9f8881338d1c4cebe2, cuda: 13.0, torch: 2.13.0+cu130, transformers: 4.56.2, gpu: NVIDIA_GeForce_RTX_5080}
+pretraining_path_attempts:
+  r659: INVALID_PRETRAINING_IMAGE_ROOT; dataset root supplied where loader requires split image directory; fail-closed before samples/model/optimizer
+  r660: INVALID_PRETRAINING_NEAR_IMAGE_ROOT; train/real roots corrected but near converted inventory images live in the frozen YOLO source tree; fail-closed before container/GPU/output creation
+  r661: corrected all three image roots from loader contract and payload hash readback; no code or data mutation
+smoke:
+  run_id: stage-c-dino-domain-retention-mixed-r3-last-swin-smoke-r661
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-last-swin-r1/smoke-r3
+  execution: {exit: 0, elapsed_seconds: 21, train_samples: 6, near_val: 3, real_val: 3, network: none, cpu_fallback: false}
+  parent: {completed_epoch: 3, manifest_sha256: 8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f, model_sha256: 1c302e9b14364e2b57e75ca409b3238d8ec6ac46bc59931f9f4acdae4005abb5}
+  trainability: {student_trainable: 25800632, teacher_trainable: 0, last_swin_parameter_items: 34, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+  mean_losses: {supervised: 60211.368489583336, token: 0.7675786117712656, box: 0.012392476800394311, total: 60212.150390625, all_finite: true}
+  mean_teacher_candidates: 7.166666666666667
+  checkpoint: {manifest_sha256: 2c088aca6940b97667080d687a0ab15953e1914111ff324f32ac50ddf76061e5, model_sha256: 1726af930225cfecea5ad0895755f3e97f8d3032d78f34be676bb851b3326d2e, fresh_reload: VALID}
+readback:
+  run_id: stage-c-dino-domain-retention-mixed-r3-last-swin-smoke-readback-r662
+  result: {status: PASS, files: 19, total_bytes: 895655157, readback_sha256: 8f265632ede33ab592705d7a9552f881476149c7675b97c7dc51a5d3d14829b3, no_symlinks: true}
+  frozen_modes: {files: 19_at_0444, directories: 3_at_0555}
+verification_decision: smoke directly exercises the changed validator/config and unchanged training math; no package or benchmark rerun
+retention: r658-r662, frozen smoke-r3 and every earlier evidence root retained; nothing deleted or archived
+boundaries: smoke thresholds are not final; COCO100, sealed test and SAM remain inaccessible/unloaded; PickPlace NO_GO; Microduck paused
+next_experiment: stage-c-dino-domain-retention-mixed-r3-last-swin-formal-r663, exactly 1600 samples x 2 epochs with per-epoch 300 near plus 160 real and raw candidates
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
