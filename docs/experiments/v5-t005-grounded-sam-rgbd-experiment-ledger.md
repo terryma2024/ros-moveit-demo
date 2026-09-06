@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-407
+latest_checkpoint: CP-435
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-nonpenetrating-smoke-r546
-confirmed: CP-403 normal-path risk decision remains in force; r537/r538/r543/r544/r545 completed exact 1200+300 nonpenetrating source, deterministic archive, byte-identical Grounding DINO conversions and immutable freeze
-open: DINO warm-start smoke/formal training and all downstream qualification remain incomplete
-next_action: execute the preregistered 6+6 CUDA warm-start smoke r546 once, read back checkpoint/reload evidence, then launch the 4-epoch formal run if valid
-boundaries: normal train/val generation/conversion/training path authorized; sealed test/COCO100/PickPlace/Mac remain gated by the fast-completion plan; Microduck paused; no r536/further fsync-date fault injection/mutation/general harness/repeated Astra review; do not claim the two exceptional-path defects fixed
+active_experiment: stage-c-dino-domain-retention-data-preparation-r620
+confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
+open: build COCO100-disjoint mixed train and independent real/Web validation inventories, then train the authorized frozen-backbone teacher/student experiment from official revision a2bb814d; Linux PickPlace and all Mac work remain gated
+next_action: discover and verify local/Hugging-Face sources for a license-traceable COCO100-disjoint real cup training population and independent validation, then freeze the 50/30/20 mixed-data inventory without consulting COCO100 outcomes
+boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -19879,6 +19879,175 @@ minimal_product_path_if_authorized: keep Grounding DINO Tiny plus SAM and all CO
 verification_decision: no package or benchmark rerun because source, benchmark implementation, candidate and thresholds did not change; this checkpoint adds only read-only diagnostic evidence
 required_user_decision: authorize the additional data/training round and trainable-surface change, or authorize a model-family/COCO-gate change; without one of these authorities the terminal objective cannot safely proceed
 retention: r616 result and all prior evidence retained; nothing deleted or archived; Microduck remains paused
+```
+
+## Checkpoint CP-432 — final DINO-only score-calibration versus forgetting gate planned
+
+```yaml
+checkpoint: CP-432
+status: PLANNED_DINO_ONLY_COCO100_COMMON_THRESHOLD_DIAGNOSTIC
+prior_checkpoint: CP-431
+authorization: user explicitly authorizes the additional COCO100-disjoint real-cup data preparation and frozen-backbone retraining only after this final forgetting gate
+run_id: diagnostic-coco100-dino-only-score-gate-r617
+hypothesis: epoch-5 may retain generic cup box localization with scores shifted below 0.45; if so a common low-threshold replay will recover pinned-base-like DINO-only Recall and F1 without SAM, mapping or selector
+competing_hypothesis: if no low threshold recovers pinned-base-like raw-box quality and the best reasonable-threshold Recall and F1 remain materially lower, unrestricted synthetic-only fine-tuning caused catastrophic forgetting rather than a scalar calibration drift
+single_variable: detector weights, official pinned base versus pinned-base epoch 5; images, frozen COCO100 annotations, official-base processor, prompt cup., FP32 CUDA runtime, raw floor, box matching and threshold grid are common
+lifecycle: ISOLATED_STACK
+preconditions:
+  source_commit: d27ad0db681916510be68c5688392a4a684d0b57
+  install_overlay: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/install-task14-runner-access-r11
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  ros_domain_id: NONE_OFFLINE_DINO_ONLY
+  gz_partition: NONE_OFFLINE_DINO_ONLY
+  dataset: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external/coco100-baseline-handoff-r1
+  dataset_manifest: MANIFEST.sha256 must pass in full before inference
+  official_base: {revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3}
+  epoch5: {model_sha256: eb9c485bb6f73ccd7a202055af408069d5ef55565693285d0f16ec7798af5457, checkpoint_manifest_sha256: ea54331d04f89fef02728a717656a117188529f8ecdc7abf349d438b041bb394}
+  prompt: cup.
+  common_processor: official pinned-base processor and tokenizer only
+  raw_floor: {box: 0.01, text: 0.01}
+  output_collision_policy: output, run-evidence, low-rate and scratch roots must all be absent under both -e and -L before allocation
+threshold_grid:
+  diagnostic: Cartesian product of [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50] for box and text thresholds
+  reasonable_product_range: each threshold in [0.05, 0.50]
+  required_points: [{box: 0.35, text: 0.25}, {box: 0.45, text: 0.45}]
+  box_iou: 0.50
+decision_rule:
+  score_calibration_drift: an epoch-5 diagnostic-grid point reaches both within 0.02 absolute of the official-base DINO-only 0.35/0.25 Recall and F1; stop retraining and keep the scan diagnostic-only, not a new production threshold selection
+  catastrophic_forgetting_confirmed: no epoch-5 diagnostic-grid point meets the recovery rule and the epoch-5 best reasonable-range Recall and best reasonable-range F1 are each at least 0.10 absolute below official-base DINO-only 0.35/0.25
+  otherwise: INCONCLUSIVE; preserve evidence and do not claim either mechanism confirmed
+success_criteria:
+  - exactly 100 base and 100 epoch-5 DINO forwards on the same frozen images; no SAM model load or forward, mapping or selector call
+  - every retained proposal includes bbox_xyxy, grounding_box_score and grounding_text_score and can be replayed without inference
+  - complete common-grid metrics, per-image TP/FP/FN, hit-image count, score distributions, CUDA provenance, hashes and readback are durable
+invalid_criteria:
+  - COCO100 manifest mismatch, model or processor hash mismatch, CPU fallback, output collision, prompt/preprocessing divergence, missing image or inference error
+restrictions:
+  - diagnostic COCO100 results cannot enter training, epoch choice or later threshold choice
+  - do not read sealed final test, run SAM, start PickPlace, resume epoch 5, alter acceptance gates, delete evidence or resume Microduck
+evidence: PENDING
+decision: PENDING
+next_experiment: if confirmed, prepare the user-authorized COCO100-disjoint mixed training/validation experiment from official revision a2bb814d; otherwise follow the decision rule
+```
+
+## Checkpoint CP-433 — r617 invalid before inference; overlay-only r618 retry planned
+
+```yaml
+checkpoint: CP-433
+status: INVALID_R617_IMPORT_PROVENANCE_FRESH_OVERLAY_RETRY_PLANNED
+prior_checkpoint: CP-432
+invalid_run:
+  run_id: diagnostic-coco100-dino-only-score-gate-r617
+  exit_code: 1
+  first_bad_boundary: importing so101_demo.perception_benchmark.adapters.grounded_sam
+  error: ModuleNotFoundError for so101_demo because direct source PYTHONPATH omitted setup.py package_dir mapping
+  inference_effect: {base_model_loads: 0, epoch5_model_loads: 0, dino_forwards: 0, sam_loads: 0, sam_forwards: 0}
+  retained_partial:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external-diagnostics/coco100-dino-only-score-gate-r1
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/diagnostic-coco100-dino-only-score-gate-r617
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/diagnostic-coco100-dino-only-score-gate-r617
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/diagnostic-coco100-dino-only-score-gate-r617
+root_cause: the package uses package_dir={so101_demo: src}; sourcing install-task14-runner-access-r11/setup.zsh provides the verified build/install mapping, while appending src/so101_demo_py/src directly does not
+single_change_retry: source /opt/ros/jazzy/setup.zsh and install-task14-runner-access-r11/setup.zsh; scanner bytes, dataset, processor, models, prompt, raw floor, grid, matching and CP-432 decision rule remain unchanged
+retry:
+  run_id: diagnostic-coco100-dino-only-score-gate-r618
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external-diagnostics/coco100-dino-only-score-gate-r2
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/diagnostic-coco100-dino-only-score-gate-r618/tmp
+  expected_import: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/build-task14-runner-access-r11/so101_demo_py/so101_demo/perception_benchmark/adapters/grounded_sam.py
+decision: REPEAT_FRESH_ROOTS_ONE_PROVENANCE_CHANGE
+next_experiment: diagnostic-coco100-dino-only-score-gate-r618
+```
+
+## Checkpoint CP-434 — r618 invalid in nounset-sensitive overlay preflight; r619 planned
+
+```yaml
+checkpoint: CP-434
+status: INVALID_R618_OVERLAY_SOURCE_ORDER_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-433
+invalid_run:
+  run_id: diagnostic-coco100-dino-only-score-gate-r618
+  exit_code: 1
+  first_bad_boundary: source /opt/ros/jazzy/setup.zsh under already-enabled zsh nounset
+  errors: [AMENT_TRACE_SETUP_FILES parameter not set, COLCON_TRACE parameter not set, subsequent so101_demo import unavailable]
+  inference_effect: {base_model_loads: 0, epoch5_model_loads: 0, dino_forwards: 0, sam_loads: 0, sam_forwards: 0}
+  retained_partial:
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/diagnostic-coco100-dino-only-score-gate-r618
+    - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/diagnostic-coco100-dino-only-score-gate-r618
+    - /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/diagnostic-coco100-dino-only-score-gate-r618
+root_cause: ROS/colcon zsh setup scripts require unset trace variables to remain readable during sourcing; nounset must be enabled only after both overlays are sourced
+single_change_retry: source /opt/ros/jazzy/setup.zsh and install-task14-runner-access-r11/setup.zsh before set -u; all CP-432 inference and decision semantics remain byte-identical
+retry:
+  run_id: diagnostic-coco100-dino-only-score-gate-r619
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external-diagnostics/coco100-dino-only-score-gate-r3
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/diagnostic-coco100-dino-only-score-gate-r619/tmp
+decision: REPEAT_FRESH_ROOTS_ONE_SOURCE_ORDER_CHANGE
+next_experiment: diagnostic-coco100-dino-only-score-gate-r619
+```
+
+## Checkpoint CP-435 — DINO-only replay rejects calibration-only explanation; catastrophic forgetting confirmed
+
+```yaml
+checkpoint: CP-435
+status: VALID_DINO_ONLY_COMMON_THRESHOLD_GATE_CATASTROPHIC_FORGETTING_CONFIRMED
+prior_checkpoint: CP-434
+valid_run: diagnostic-coco100-dino-only-score-gate-r619
+provenance:
+  source_commit: d27ad0db681916510be68c5688392a4a684d0b57
+  install_overlay: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/install-task14-runner-access-r11
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python
+  imported_adapter: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11/build-task14-runner-access-r11/so101_demo_py/so101_demo/perception_benchmark/adapters/grounded_sam.py
+  ros_domain_id: NONE_OFFLINE_DINO_ONLY
+  gz_partition: NONE_OFFLINE_DINO_ONLY
+  device: {gpu: NVIDIA GeForce RTX 5080, torch: 2.13.0+cu130, cuda_runtime: '13.0', base: 'cuda:0', epoch5: 'cuda:0', cpu_fallback: false}
+  tempfile: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/diagnostic-coco100-dino-only-score-gate-r619/tmp
+inputs:
+  coco100: {images: 100, instances: 247, verified_manifest_members: 419, manifest_sha256: 216fc518cefb3dd08e4246a37fad50dbe66ddfe664672e4437d25d544f4708e5}
+  prompt: cup.
+  common_processor: official pinned-base processor/tokenizer for both weights
+  official_base: {revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3}
+  epoch5: {model_sha256: eb9c485bb6f73ccd7a202055af408069d5ef55565693285d0f16ec7798af5457}
+isolation: {sam_loaded: false, sam_forwards: 0, candidate_mapping_calls: 0, selector_calls: 0, sealed_test_access: none}
+capture:
+  dino_forwards: {official_base: 100, epoch5: 100}
+  raw_floor: {box: 0.01, text: 0.01}
+  raw_proposals: {official_base: 18560, epoch5: 7018}
+  threshold_pairs_per_model: 196
+required_points:
+  official_base_0_35_0_25: {tp: 175, fp: 70, fn: 72, hit_images: 93, precision: 0.7142857143, recall: 0.7085020243, f1: 0.7113821138}
+  epoch5_0_35_0_25: {tp: 16, fp: 5, fn: 231, hit_images: 15, precision: 0.7619047619, recall: 0.0647773279, f1: 0.1194029851}
+  official_base_0_45_0_45: {tp: 150, fp: 19, fn: 97, hit_images: 84, precision: 0.8875739645, recall: 0.6072874494, f1: 0.7211538462}
+  epoch5_0_45_0_45: {tp: 0, fp: 1, fn: 247, hit_images: 0, precision: 0.0, recall: 0.0, f1: 0.0}
+best_epoch5_points:
+  best_reasonable_f1: {box: 0.05, text: 0.15, tp: 161, fp: 242, fn: 86, hit_images: 87, precision: 0.3995037221, recall: 0.6518218623, f1: 0.4953846154}
+  best_reasonable_recall: {box: 0.05, text: 0.05, tp: 217, fp: 1433, fn: 30, hit_images: 96, precision: 0.1315151515, recall: 0.8785425101, f1: 0.2287822878}
+  joint_recovery_points_within_0_02_of_base_recall_and_f1: 0
+interpretation:
+  - OBSERVED: lowering the threshold can recover raw localization recall only by admitting 1433 false positives; it never restores Recall and F1 together
+  - OBSERVED: at the maximum-F1 reasonable point, F1 remains 0.2159974984 below base and precision falls from 0.7142857143 to 0.3995037221
+  - CORRECTION: the scanner's embedded extra-conservative classifier printed INCONCLUSIVE because it compared the independent maximum-recall point; that label is retained unchanged, but independent maximum recall with 1433 FP is not the user-specified joint Recall/F1 recovery test
+  - CONCLUSION: scalar score calibration drift is rejected; combined with CP-431's 968/978 changed tensors across vision, text, encoder and decoder, CP-431 is promoted to CATASTROPHIC_DOMAIN_FORGETTING_CONFIRMED for this product gate
+  - LIMIT: this does not claim every localization feature was erased; the confirmed failure is unrecoverable generic-cup precision/recall tradeoff under common scalar thresholds
+evidence:
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/external-diagnostics/coco100-dino-only-score-gate-r3
+  output_manifest_sha256: ae80d20b1bfdfcf344bf6c697eda414156b36db0a061f7cb885986e50d0c2c65
+  summary_sha256: 355f328920e50a5dbb2c9b687c3afe93a1d09508f67fd3a6dddf65a266db99b1
+  threshold_scan_sha256: 2618026ebe372bb729a5dab1612a232c935f8040f73a81a9b4bd71f4880b320f
+  official_base_raw_sha256: a541e6cab0ddc22cdb946638cb26f18d9a1ac6ca1b451bf3068da0bd1c35d936
+  epoch5_raw_sha256: 3d8c48e37b3a21293ce42465ab2243c9a18b2bbe40913bcedf24c78174fea156
+  run_evidence_manifest_sha256: 3e6bc23c2734dccf1d34db94fc4ff6fd83d02ba7410a7b3e4d8cf53b5c984e44
+  readback: all declared members pass SHA256; output and run-evidence files are 0444 and directories 0555; stderr empty
+invalid_attempts:
+  - r617 failed before model load because direct-source PYTHONPATH did not supply setup.py package mapping; retained, no inference
+  - r618 failed in nounset-sensitive overlay preflight; retained, no inference
+decision: RETRAIN_FROM_OFFICIAL_PINNED_BASE_WITH_FROZEN_BACKBONES_AND_COCO100_DISJOINT_MIXED_DATA
+training_constraints:
+  - initialize both frozen teacher and student from official revision a2bb814dd30d776dcf7e30523b00659f4f141c71; never resume epoch 5
+  - COCO100 cannot enter training, epoch selection or threshold selection
+  - initial mix is 50 percent corrected near-workspace MuJoCo, 30 percent independent real or Web cup train, 20 percent generic replay plus explicit hard negatives
+  - freeze Swin-T and BERT; train only cross-modal decoder, query and detection heads for 2 to 3 epochs; head LR is one-fifth to one-tenth the prior LR; teacher token-logit and candidate-box distillation lambdas start at 1.0
+  - each epoch evaluates near synthetic val, independent real/Web val and DINO-only raw candidates; SAM stays frozen
+next_experiment: stage-c-dino-domain-retention-data-preparation-r620
+retention: r619 output/run evidence and r617/r618 invalid partial roots retained; archived none; r617/r618/r619 scratch and low-rate roots are deletion candidates only; nothing deleted
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
