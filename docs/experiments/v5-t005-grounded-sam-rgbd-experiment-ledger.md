@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-448
+latest_checkpoint: CP-449
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-mixed-r3-config-r642
-confirmed: mixed-r3 immutable data and its pinned training contract are both ready; the contract preserves official-base teacher/student initialization, frozen Swin-T/BERT, head LR 0.000002, dual distillation lambdas 1.0 and no resume
-open: build the cache-reusing mixed-r3 training image, run 6+6 CUDA smoke, then at most three frozen-backbone epochs selected only on near-synthetic and independent-real validation; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
-next_action: commit and push the mixed-r3 contract, build an immutable image from that exact commit, and run one fresh 6+6 CUDA smoke from official pinned base
+active_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-smoke-r644
+confirmed: the exact committed mixed-r3 image and 6+6 CUDA smoke pass complete readback; official-base teacher/student initialization, exact trainability, zero frozen-gradient violations, finite losses, raw near/real candidates and fresh checkpoint reload are valid
+open: run at most three frozen-backbone formal epochs selected only on near-synthetic and independent-real validation; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
+next_action: launch one fresh network-none 1600-sample x 3-epoch formal run from official pinned base with the frozen mixed-r3 data and committed image
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20662,6 +20662,46 @@ non_product_attempt: an expanded collection including unchanged training-math te
 verification_decision: config/container tests only; no package-wide or benchmark run because no runtime or benchmark implementation changed
 boundaries: no student checkpoint mount, epoch-5 resume, COCO100, SAM, sealed test, depth, PickPlace or Mac access; Microduck paused
 next_experiment: build a cache-reusing image from this committed contract, verify image/config hashes, then launch one fresh network-none 6+6 CUDA smoke
+```
+
+## Checkpoint CP-449 — mixed-r3 6+6 CUDA smoke and complete readback pass
+
+```yaml
+checkpoint: CP-449
+status: VALID_MIXED_R3_6_PLUS_6_CUDA_SMOKE_GO_FORMAL_THREE_EPOCHS
+prior_checkpoint: CP-448
+implementation_commit: 4127f224b5c643db2e50592f94ed70b2d24a20ce
+gitee_readback_before_smoke: 4127f224b5c643db2e50592f94ed70b2d24a20ce
+image:
+  tag: so101-grounding-dino-tiny-train:r8-mixed-r3-4127f224
+  id: sha256:17c2e4d2e88e6f31b967899a8df20990a1d0795d66db5b3a82a08bf974db7228
+  contract_sha256: e842aba9a78f2937dfc48842005a78616d781c3e6ae027e49694573abd171326
+  versions: {cuda: 13.0, torch: 2.13.0+cu130, transformers: 4.56.2, gpu: NVIDIA_GeForce_RTX_5080}
+  build: all dependency layers reused; only package copy/install rebuilt
+smoke:
+  run_id: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-smoke-r644
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-r1/smoke-r1
+  execution: {exit: 0, elapsed_seconds: 18, train_samples: 6, near_val: 3, real_val: 3, network: none, cpu_fallback: false}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, base_model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3, completed_epoch: 0, resume: null, epoch5_access: none}
+  trainability: {student_trainable: 11616776, student_total: 172249090, teacher_trainable: 0, last_swin_stage: null, Swin_T_frozen: true, BERT_frozen: true, encoder_frozen: true}
+  gradient_check: {status: PASS, violations: 0, batch: 1}
+  mean_losses: {supervised: 64371.727864583336, token: 0.8595286309719086, box: 0.0002595636969798439, total: 64372.587239583336, all_finite: true}
+  mean_teacher_candidates: 7.166666666666667
+  selected_smoke_only: {thresholds: [0.50,0.50], joint_harmonic_f1: 0.9523809524, near_f1: 1.0, real_f1: 0.9090909091}
+  checkpoint_manifest_sha256: 30f8249690c81c4e0c88d3fffbb51f421a6d4a49cb55621c19f2e63e1c9707df
+  checkpoint_model_sha256: a2b91242c05c0386419eff0aaa7b0dfc7d56b624d33cad63b1c38f2812401ef6
+  fresh_reload_sha256: f52f7c9ec6d5fc88c1620eb4c51f0335028729d851722b7b03f1923477d13076
+readback:
+  r645: INVALID_AUDITOR_FIELD_AND_FALSE_PIPELINE_RECEIPT; audit expected train_losses instead of actual mean_losses and the outer pipeline lacked pipefail; empty report and incorrect outer receipt retained, never used for the gate
+  r646: {status: PASS, files: 19, total_bytes: 782156952, readback_sha256: dbfe781327dde5f9550e2eee35c1e84113974628a5beaf1d324a887d0d7ae69c}
+  verified: every output file hashed; all checkpoint-manifest sizes/hashes pass; no symlink; mixed-r3 config/data identities, official-base initialization, isolation, trainability, gradient, environment, raw-candidate and fresh-reload invariants pass
+  frozen_modes: {files: 19_at_0444, directories: 3_at_0555}
+decision: GO_FORMAL_THREE_EPOCHS
+formal_recipe: 1600 samples x 3 epochs, batch1, accumulate4, AdamW head LR 0.000002, independent official-base teacher/student, dual distillation lambda1, same exact frozen boundary; each epoch evaluates 300 near and 160 real plus DINO-only raw candidates
+verification_decision: no package or benchmark rerun; smoke directly exercises the changed config and unchanged training implementation
+retention: r643/r644/r645/r646, frozen smoke output, all r641/r642 and prior evidence retained; nothing deleted or archived
+boundaries: smoke thresholds are not final; COCO100, sealed final test and SAM remain inaccessible/unloaded; no PickPlace or Mac; Microduck paused
+next_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-formal-r647
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
