@@ -19232,6 +19232,24 @@ evidence: r549 output and run-evidence retained; final evidence inventory SHA256
 boundaries: source and benchmark are unchanged, so package/benchmark suites are not rerun; sealed test/COCO100/PickPlace/Mac remain inaccessible until their planned stages; Microduck paused
 ```
 
+## Checkpoint CP-411 — r550 launch shell invalid; fresh bash retry planned
+
+```yaml
+checkpoint: CP-411
+status: INVALID_PRE_MODEL_LAUNCH_SHELL_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-410
+invalid_run:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r550
+  result: {exit: 127, output_created: false, model_loaded: false, gpu_access: false, dataset_access: false}
+  cause: the parent zsh sourced /opt/ros/jazzy/setup.bash directly; inherited colcon prefix resolution attempted a nonexistent repository-root setup.sh before the Python preflight
+  evidence: only immutable audit.py SHA256 f7f162ca65c639f2c697d2fc09993a836c8bf970bfb5f4429b6505825e5ecbf7 and launcher-failure.json are retained; the fresh r550 NVMe scratch is retained as a deletion candidate; nothing was overwritten or deleted
+fresh_retry:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r551
+  sole_change: execute the same task-specific Python through an explicit /bin/bash launcher with fresh run, scratch and output roots
+  required: exact Python resolves tempfile inside fresh NVMe scratch; current source imports from the repository; no competing GPU process; 300 DINO forwards and complete proposal receipts; adapted SAM raw masks; immutable readback
+boundaries: no source/model/data/threshold/recipe change and no r550 reuse; no general harness or fault injection; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
