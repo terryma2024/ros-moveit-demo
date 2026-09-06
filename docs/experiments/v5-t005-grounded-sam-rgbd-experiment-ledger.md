@@ -19202,6 +19202,36 @@ retention: r546 invalid and r548 valid containers, run-evidence, outputs and scr
 boundaries: package and benchmark source unchanged, so no package/benchmark rerun; no old optimizer resume; sealed test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused
 ```
 
+## Checkpoint CP-410 — four-epoch DINO training valid; epoch 1 frozen for joint val
+
+```yaml
+checkpoint: CP-410
+status: VALID_DINO_NONPENETRATING_FORMAL4_JOINT_VAL_PLANNED
+prior_checkpoint: CP-409
+formal_training:
+  run_id: stage-c-dino-nonpenetrating-formal4-r549
+  container: so101-exp079-nonpenetrating-formal4-r549
+  result: {exit: 0, wall_seconds: 1221.2, mode: formal, epochs: 4, train_samples_per_epoch: 1200, val_samples_per_epoch: 300, device: 'cuda:0', gpu: 'NVIDIA GeForce RTX 5080', cpu_fallback: false}
+  epoch_val: [{epoch: 1, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}, {epoch: 2, thresholds: [0.3, 0.3], tp: 300, fp: 0, fn: 0, f1: 1.0}, {epoch: 3, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}, {epoch: 4, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}]
+selection:
+  rule: new synthetic val only; rank validation metrics first and choose the earliest epoch on a complete tie
+  selected_epoch: 1
+  selected_checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/formal4-warmstart-r1/checkpoints/epoch-001
+  checkpoint_manifest_sha256: 4b10d2b730c2352b715f010bf36b7fe5c3348d0489fe5559e5f48dcfb92c58e7
+  model_safetensors_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b
+  fresh_reload: {status: VALID, cuda: true, finite_outputs: true, cpu_fallback: false, sha256: 4d9e538b49362fe5125c32c92d7b56cd91272f2ae9da9f6b15dca87dacc1b873}
+  checkpoint_readback: all four canonical manifests and all 32 declared payload members independently SHA256-verified
+decision: no pinned-base eight-epoch fallback because the four-epoch run reached the validation ceiling with zero FP/FN; this is not a claim that the selected checkpoint exceeds the base on an unmeasured dataset
+joint_val_plan:
+  dino: freeze selected epoch 1 at box_threshold0.5 and text_threshold0.5
+  sam: reuse verified stateless decoder-only epoch 4, checkpoint manifest SHA256 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e
+  dataset: exact frozen nonpenetrating 300-image val, inventory SHA256 c7653a60686d828202f4f85dcacdc1f968e308761645f989469f09f719477eda
+  evaluation: one complete DINO-to-SAM-to-production-candidate-to-mask-truth pass; preserve actual proposal and mask artifacts, all-scenario metrics and primary near-workspace metrics excluding only small_far_cup
+  sam_retrain_rule: train no SAM unless DINO boxes qualify and masks are the measured primary failure source
+evidence: r549 output and run-evidence retained; final evidence inventory SHA256 27372b66adea951edb1537810fd9a90412fe6edbfe766ea66560279830e2570a; scratch is a deletion candidate only; nothing deleted
+boundaries: source and benchmark are unchanged, so package/benchmark suites are not rerun; sealed test/COCO100/PickPlace/Mac remain inaccessible until their planned stages; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
