@@ -358,7 +358,7 @@ class DatasetConfig:
     def __post_init__(self) -> None:
         if type(self.require_nonpenetrating_scene) is not bool:
             raise ValueError("require_nonpenetrating_scene must be boolean")
-        if self.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+        if self.dataset_contract in _NONPENETRATING_DATASET_CONTRACTS:
             if self.require_nonpenetrating_scene is not True:
                 raise ValueError("nonpenetrating dataset contract requires its geometry gate")
             if type(self.schema_version) is not int or self.schema_version != 2:
@@ -389,6 +389,8 @@ class DatasetConfig:
         quotas = _validated_scenario_quotas(counts, self.scenario_quotas)
         if self.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
             _validate_official_train_val_population(counts, starts, quotas)
+        elif self.dataset_contract == _TEST_DATASET_CONTRACT:
+            _validate_official_test_population(counts, starts, quotas)
         object.__setattr__(self, "mjcf_path", path)
         object.__setattr__(self, "split_counts", MappingProxyType(counts))
         object.__setattr__(self, "seed_starts", MappingProxyType(starts))
@@ -418,11 +420,21 @@ _MAX_SEED = 999_999_999
 _LEGACY_SPLITS = ("train", "val", "test")
 _TRAIN_VAL_SPLITS = ("train", "val")
 _TRAIN_VAL_DATASET_CONTRACT = "so101-nonpenetrating-train-val-v1"
+_TEST_SPLITS = ("test",)
+_TEST_DATASET_CONTRACT = "so101-nonpenetrating-test-v1"
+_NONPENETRATING_DATASET_CONTRACTS = frozenset(
+    {_TRAIN_VAL_DATASET_CONTRACT, _TEST_DATASET_CONTRACT}
+)
 _TRAIN_VAL_SPLIT_COUNTS = {"train": 1200, "val": 300}
 _TRAIN_VAL_SEED_STARTS = {"train": 450_000_000, "val": 460_000_000}
 _TRAIN_VAL_SCENARIO_QUOTAS = {
     "train": {scenario.value: 200 for scenario in DatasetScenario},
     "val": {scenario.value: 50 for scenario in DatasetScenario},
+}
+_TEST_SPLIT_COUNTS = {"test": 300}
+_TEST_SEED_STARTS = {"test": 470_000_000}
+_TEST_SCENARIO_QUOTAS = {
+    "test": {scenario.value: 50 for scenario in DatasetScenario},
 }
 
 
@@ -431,12 +443,14 @@ def _dataset_splits(dataset_contract: str | None) -> tuple[str, ...]:
         return _LEGACY_SPLITS
     if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
         return _TRAIN_VAL_SPLITS
+    if dataset_contract == _TEST_DATASET_CONTRACT:
+        return _TEST_SPLITS
     raise ValueError("unknown dataset contract")
 
 
 def _splits_for_maps(*maps: Mapping[str, object]) -> tuple[str, ...]:
     key_sets = [set(item) for item in maps]
-    for splits in (_LEGACY_SPLITS, _TRAIN_VAL_SPLITS):
+    for splits in (_LEGACY_SPLITS, _TRAIN_VAL_SPLITS, _TEST_SPLITS):
         if all(keys == set(splits) for keys in key_sets):
             return splits
     raise ValueError("split maps must exactly match a supported dataset contract")
@@ -478,6 +492,19 @@ def _validate_official_train_val_population(
         for split in _TRAIN_VAL_SPLITS
     ):
         raise ValueError("official dataset contract population has invalid scenario quotas")
+
+
+def _validate_official_test_population(
+    split_counts: Mapping[str, int],
+    seed_starts: Mapping[str, int],
+    scenario_quotas: Mapping[str, Mapping[str, int]] | None,
+) -> None:
+    if dict(split_counts) != _TEST_SPLIT_COUNTS:
+        raise ValueError("official test dataset contract population has invalid split counts")
+    if dict(seed_starts) != _TEST_SEED_STARTS:
+        raise ValueError("official test dataset contract population has invalid seed starts")
+    if scenario_quotas is None or dict(scenario_quotas["test"]) != _TEST_SCENARIO_QUOTAS["test"]:
+        raise ValueError("official test dataset contract population has invalid scenario quotas")
 
 
 def scenario_plan(config: DatasetConfig) -> dict[str, tuple[DatasetScenario, ...]]:
@@ -612,7 +639,7 @@ def load_dataset_config(
         raise ValueError("sample_limit cannot alter preregistered scenario quotas")
     counts = limited_split_counts(raw_counts, sample_limit)
     schema_version = document.get("schema_version")
-    if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT and (
+    if dataset_contract in _NONPENETRATING_DATASET_CONTRACTS and (
         type(schema_version) is not int or schema_version != 2
     ):
         raise ValueError("nonpenetrating dataset contract requires schema version 2")
@@ -1053,9 +1080,9 @@ def generate_dataset(
                         "truth": truth_relative.as_posix(),
                     }
                 )
-        dataset_yaml = "path: .\ntrain: images/train\nval: images/val\n"
-        if config.dataset_contract is None:
-            dataset_yaml += "test: images/test\n"
+        dataset_yaml = "path: .\n"
+        for split in config.split_counts:
+            dataset_yaml += f"{split}: images/{split}\n"
         dataset_yaml += "names:\n  0: plastic_cup\n"
         _exclusive_text(root / "dataset.yaml", dataset_yaml)
         artifacts.append("dataset.yaml")
@@ -1089,9 +1116,9 @@ def generate_dataset(
         }
         if config.require_nonpenetrating_scene:
             manifest["scene_geometry_policy"] = "task-visual-nonpenetration-v1"
-        if config.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
+        if config.dataset_contract is not None:
             manifest["dataset_contract"] = config.dataset_contract
-            manifest["member_splits"] = list(_TRAIN_VAL_SPLITS)
+            manifest["member_splits"] = list(_dataset_splits(config.dataset_contract))
         atomic_json(root / "dataset-manifest.json", manifest)
         return manifest
     finally:
