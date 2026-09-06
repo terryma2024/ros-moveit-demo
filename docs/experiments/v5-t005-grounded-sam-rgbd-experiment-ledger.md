@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-483
+latest_checkpoint: CP-484
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_TASK_START_READINESS_RECOVERY_R768
-confirmed: r767 proved the qualified visible RGB-D stack reaches a healthy scene, controllers and exact MuJoCo window, but its evidence wrapper watched obsolete readiness text and was stopped before perception; CP-483 binds the actual structured scene_setup success record
-open: execute r768-task-start, validate the complete product path, then continue the remaining three independent Linux trials only after task_start is valid
-next_action: launch r768-task-start under ROS_DOMAIN_ID 187 with the same qualified binary and unchanged frozen perception identity
+active_experiment: STAGE_F_LINUX_TASK_START_TIMER_RECOVERY_R769
+confirmed: r768 reached stack ready, workflow subscription ready and frozen CUDA model setup, then stopped before any model forward because the evidence wrapper used an unavailable zsh timer parameter; all owned ROS and container state is now empty
+open: execute r769-task-start with the portable zsh timer, validate the complete product path, then continue the remaining three independent Linux trials only after task_start is valid
+next_action: launch r769-task-start under ROS_DOMAIN_ID 188 with the same runtime and model identities
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23642,4 +23642,40 @@ stopping_rule: r768 must stop at its first persisted product boundary or validat
 retention: r765-r767 and every historical artifact remain preserved; no delete, rebuild, reset, stash or force-push
 boundaries: COCO100 remains diagnostic only; DINO/SAM/threshold optimization forbidden; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-483 and execute r768-task-start directly, without a pipeline wrapper
+```
+
+## Checkpoint CP-484 — replace unavailable zsh timer in the evidence wrapper
+
+```yaml
+checkpoint: CP-484
+status: INVALID_PRE_FORWARD_R768_GO_TIMER_RECOVERY_R769
+prior_checkpoint: CP-483
+policy_time: 2026-09-07T07:49:46+08:00
+r768_task_start:
+  classification: INVALID_PRE_FORWARD_WRAPPER_TIMER_UNAVAILABLE
+  stack: PASS_READY_VISIBLE_RGBD
+  dynamic_subscription: PASS_READY
+  frozen_model_setup: PASS_MODEL_PROVENANCE_WRITTEN
+  model_forwards: 0
+  perception_result: absent
+  workflow_motion: not_started
+  first_boundary: zsh EPOCHSECONDS was unset under strict undefined-variable handling when the workflow deadline was constructed
+  cleanup: exact container stopped; ROS domain 187, owned processes and GPU compute read back empty
+  retained_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/pickplace/linux-four-point-r765/r768-task-start
+minimal_repair:
+  scope: evidence-only elapsed-time implementation
+  change: use zsh built-in SECONDS for the workflow and cleanup deadlines
+  directed_test: a one-second SECONDS deadline passes; zsh syntax passes; domain 188 and output roots are empty
+  wrapper_sha256: c6cb27ed9f465ce079c9bbdf29b190491dc4900727b3e0356529de8ab1f8970c
+  unchanged: qualified MuJoCo binary, SO-101 product code, MoveIt policy, DINO, SAM, bundle, thresholds, prompt and selector
+recovery:
+  id: r769-task-start
+  keyframe: task_start
+  truth_xyz_m: [0.02, -0.28, 0.165]
+  ros_domain_id: 188
+  partition: so101-v5-t005-linux-r769-task-start-20260907
+stopping_rule: stop at the first persisted r769 product failure; if valid, reuse its exact wrapper/runtime identity for the other three FULL_RESTART points
+retention: r765-r768 and all historical evidence remain preserved; no delete, rebuild, reset, stash or force-push
+boundaries: COCO100 remains diagnostic only; optimization forbidden; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-484 and execute r769-task-start
 ```
