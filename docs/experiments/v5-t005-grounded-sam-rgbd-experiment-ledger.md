@@ -19847,6 +19847,40 @@ retention: r611-r615 partial/formal outputs, masks, overlays, logs, manifests an
 boundaries: Linux PickPlace, macOS migration and Mac PickPlace remain NO_GO; no more training or external evaluation; Microduck paused
 ```
 
+## Checkpoint CP-431 — read-only weight audit isolates unrestricted synthetic fine-tuning as the leading domain-gap cause
+
+```yaml
+checkpoint: CP-431
+status: COCO_FAILURE_ROOT_CAUSE_SUPPORTED_NEW_TRAINING_AUTHORITY_REQUIRED
+prior_checkpoint: CP-430
+run_id: diagnostic-pinned-dino5-full-model-delta-r616
+scope: read-only comparison of official pinned-base and selected epoch-5 safetensors; no inference, sealed-test or COCO100 access
+baseline_identity:
+  model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+  historical_coco100: {manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775, f1: 0.6590909091, recall: 0.5870445344, true_positive: 145}
+finetuned_identity:
+  model_sha256: eb9c485bb6f73ccd7a202055af408069d5ef55565693285d0f16ec7798af5457
+  coco100: {f1: 0.0, recall: 0.0, true_positive: 0}
+optimizer_scope: grounding_dino_runtime.py constructs AdamW(model.parameters()) without a requires_grad allowlist, so the formal synthetic recipe updates every trainable Grounding DINO component
+exact_delta:
+  floating_tensors: 978
+  changed_tensors: 968
+  elements: 172249090
+  global_relative_l2_delta: 0.00525730495
+  groups:
+    vision_backbone: {changed: 223, total: 223, relative_l2_delta: 0.00494735102}
+    text_backbone: {changed: 197, total: 197, relative_l2_delta: 0.00969922139}
+    encoder: {changed: 300, total: 300, relative_l2_delta: 0.00357802264}
+    decoder: {changed: 222, total: 222, relative_l2_delta: 0.00382312984}
+    bbox_embed: {changed: 6, total: 6, relative_l2_delta: 0.00183765077}
+  result_sha256: 7cec2ba86e84be7cb557bf8e02c4239d27b61525a4bf0204cd0c0024aa07ef6f
+inference: the combination of identical official-base identity, historical passing COCO result, current synthetic ceiling, current COCO collapse and broad vision/text parameter drift supports unrestricted synthetic-only fine-tuning as the leading catastrophic-domain-forgetting mechanism; this is causal evidence by convergence, not a claim that a defect is fixed
+minimal_product_path_if_authorized: keep Grounding DINO Tiny plus SAM and all COCO gates unchanged; add a COCO100-disjoint real-cup train/val population, freeze visual and text backbones with an exact trainable-parameter contract, train only the smallest detection adaptation surface from the official base, select only on the new train/val, and require a new untouched external holdout before one final COCO qualification
+verification_decision: no package or benchmark rerun because source, benchmark implementation, candidate and thresholds did not change; this checkpoint adds only read-only diagnostic evidence
+required_user_decision: authorize the additional data/training round and trainable-surface change, or authorize a model-family/COCO-gate change; without one of these authorities the terminal objective cannot safely proceed
+retention: r616 result and all prior evidence retained; nothing deleted or archived; Microduck remains paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
