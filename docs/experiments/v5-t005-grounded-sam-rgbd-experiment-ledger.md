@@ -18953,6 +18953,29 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-392 — r529 candidate clears retained gates but focused fixture lacks optional-env default; r530 harness retry planned
+
+```yaml
+checkpoint: CP-392
+status: INVALID_R529_GREEN_HARNESS_OPTIONAL_ENV_DEFAULT_R530_RETRY_PLANNED
+run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r529
+execution_mode: inline serial; no subagent
+classification: INVALID_R529_GREEN; authoritative_green=false; no result JSON; launcher/tool/harness exit1; elapsed74.992553271; exactly one invocation, no retry/backfill
+observed_progress: r528 candidate EXIT-trap state-lifetime defect is closed; r529 passes retained r517/review/additional execution and reaches focused r527 adaptation
+failure: focused transformed fixture expands unset R528_FSYNC_FAILURES under set-u; five target controls become HARNESS_ERROR, six ordinary focused controls fail at the same fixture seam and real-driver control passes; this is harness-only and not candidate semantic evidence
+red_regression: retained r529 stderr and focused partial result are the pre-fix RED for optional failure-map default handling; never rerun r529
+evidence: durable run-evidence/stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r529; manifest30 members SHA2569a7c0ee98545b43e80a3fc1fadbba5c359df46cd000b9dfd76bad7aeb0e7946a; root exactly32 files; all members independently verified; readback SHA2569f8bfddd7e04f123a4b3732105375cff528653123964cd5aa561b3b6b9c0da5f; package before/after byte-identical SHA256c0a2e7b5; exact NVMe tempfile and all provenance/private hashes valid
+report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-green-r529-invalid-report.md SHA25676790b21258084e0c9e79c2f98e877e32ba6ed94ffe30982a73dfff4e6310bd2,51 lines
+next_experiment:
+  status: GO_INLINE_R530_HARNESS_ONLY_STATIC_PREPARATION
+  planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r530
+  sole_change: in transformed fixture, expand optional multi-failure map with an empty default safe under set-u; candidate driver/shell remain byte-identical
+  required_before_run: fresh r530 harness/launcher identities and paths; static AST/Ruff/bash/heredoc/parser/oracle pass; add explicit unset-map static/executable oracle if safely no candidate behavior; r530 roots absent; separate checkpoint before invocation
+restrictions: no candidate change, no full review before GREEN per user, no repo source/config change, official generation, project/renderer import, training/inference/build/package test/benchmark/sealed access
+retention: r529/r528/r527 complete evidence retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-391 — r529 global state-lifetime correction statically valid; one fresh combined GREEN authorized
 
 ```yaml
