@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-440
+latest_checkpoint: CP-441
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-frozen-backbone-formal-r627
+active_experiment: stage-c-dino-domain-retention-last-swin-stage-implementation-r629
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: train three epochs from independent official-base teacher and student on frozen mixed-r2 and select only from near-synthetic plus independent-real validation; Linux PickPlace and all Mac work remain gated
-next_action: launch formal-r1 in an owned local tmux session with network disabled, monitor every 25 batches and complete one readback only after all three epochs and fresh reload finish
+open: independent-real Recall remains below 0.50 after the initial frozen-backbone phase; execute the authorized last-Swin-stage phase for at most two epochs with backbone LR one tenth of head LR; Linux PickPlace and all Mac work remain gated
+next_action: TDD exact last-Swin-stage allowlist, phase-1 selected-checkpoint identity/readback and two optimizer groups, then one 6+6 smoke before the at-most-two-epoch phase
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20288,6 +20288,48 @@ formal:
 decision: GO_FORMAL_THREE_EPOCHS
 retention: r626/r625/r624 and smoke output plus all prior evidence retained; r625 is explicitly invalid; all registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
 boundaries: smoke thresholds are not final; COCO100 and sealed final test remain excluded; SAM frozen/unloaded; no PickPlace; no Mac; Microduck paused
+```
+
+## Checkpoint CP-441 — initial frozen-backbone phase valid but independent-real underfit; unlock final Swin stage
+
+```yaml
+checkpoint: CP-441
+status: VALID_INITIAL_PHASE_SELECTED_EPOCH2_REAL_UNDERFIT_GO_LAST_SWIN_STAGE
+prior_checkpoint: CP-440
+run_id: stage-c-dino-domain-retention-frozen-backbone-formal-r627
+launch_owner: local tmux so101-exp079-dino-retention-r627; no SSH; exit 0; session ended normally
+implementation_commit: a3db96d27abfadfc18e38523bb1352dcdebfd331
+gitee_checkpoint_before_launch: d271c15313455879645a9933fb59fe830a910c88
+output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-r1/formal-r1
+epochs:
+  - {epoch: 1, thresholds: [0.40, 0.40], joint_f1: 0.6922208753082807, near_f1: 0.7360000000000001, near_recall: 0.92, real_f1: 0.6533575317604355, real_recall: 0.5113636363636364, real_small_recall: 0.20567375886524822, real_multi_recall: 0.45955882352941174, all_f1: 0.7576601671309191, all_recall: 0.9066666666666666, all_small_recall: 0.84, all_multi_recall: 1.0}
+  - {epoch: 2, thresholds: [0.40, 0.40], joint_f1: 0.6989502201151372, near_f1: 0.7741935483870968, near_recall: 0.912, real_f1: 0.6370370370370371, real_recall: 0.48863636363636365, real_small_recall: 0.18439716312056736, real_multi_recall: 0.4338235294117647, all_f1: 0.7929515418502202, all_recall: 0.9, all_small_recall: 0.84, all_multi_recall: 1.0}
+  - {epoch: 3, thresholds: [0.40, 0.40], joint_f1: 0.6951379402029908, near_f1: 0.7841105354058723, near_recall: 0.908, real_f1: 0.6242990654205608, real_recall: 0.4744318181818182, real_small_recall: 0.1702127659574468, real_multi_recall: 0.41544117647058826, all_f1: 0.8017883755588673, all_recall: 0.8966666666666666, all_small_recall: 0.84, all_multi_recall: 1.0}
+selection:
+  epoch: 2
+  rule: joint harmonic F1 on near-primary and independent-real validation only
+  checkpoint_manifest_sha256: ea07e89acaa4c330da5e549d473396df1841fae8a5f8faef848683c31d0c1bd3
+  model_safetensors_sha256: 28178b0bee95ffe044d75e3eae5c511c2522eb08dc45b64b6b536a004e4b67e6
+  fresh_reload_sha256: 1aa737e71b764eeaf781b00fc0e49af8335d74bdc14830a97bd40e59c8532f91
+readback:
+  run_id: stage-c-dino-domain-retention-frozen-backbone-formal-readback-r628
+  status: PASS
+  files: 37
+  total_bytes: 2346454317
+  readback_sha256: 4a9083dc04b24297cf30ba7b9db44013dcce41e4ca51aba22f7e93581a942f1f
+  verified: all output members regular and hashed; all three checkpoint manifests fully match their members; epoch order and joint selection recomputed; provenance excludes epoch5, COCO100, sealed test, SAM and network; frozen-gradient and CUDA-only gates pass
+underfit_gate:
+  evidence: selected independent-real Recall 0.4886, small-target Recall 0.1844 and multi-cup Recall 0.4338 remain materially below the near-primary Recall 0.912; epochs 2 and 3 do not recover the real stream
+  interpretation: independent-real domain remains underfit while near synthetic and all-scenario synthetic remain strong; this meets the user's conditional authorization for a final-Swin-stage phase
+next_experiment:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-implementation-r629
+  initialization: student from the newly selected phase-1 epoch-002 only; frozen teacher remains a separate official pinned base a2bb814d load; historical epoch-5 remains forbidden
+  trainable: phase-1 head allowlist plus only model.backbone.conv_encoder.model.encoder.layers.3.; BERT, Swin stages 0-2, fusion encoder and all other parameters remain frozen
+  optimizer: {head_learning_rate: 0.000002, last_swin_stage_learning_rate: 0.0000002, ratio: 0.1}
+  duration: one 6+6 smoke, then at most 2 formal epochs; same train/near/real data and selection streams
+decision: GO_TDD_LAST_SWIN_STAGE_THEN_SMOKE
+retention: formal-r1, r628/r627 and every prior output/evidence retained and frozen read-only; registered scratch/low-rate roots remain deletion candidates only; nothing deleted or archived
+boundaries: no COCO100 or sealed final test tuning; SAM remains frozen/unloaded; no PickPlace before DINO gate; no Mac; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
