@@ -19435,6 +19435,35 @@ evidence_retention: r560 output, run-evidence and scratch retained; scratch is a
 boundaries: production replay performs zero DINO forwards and no threshold selection; no sealed test/COCO/PickPlace/Mac access, benchmark rerun or SAM training; Microduck paused
 ```
 
+## Checkpoint CP-420 — joint val passes at ceiling; adapted dual-model bundle TDD planned
+
+```yaml
+checkpoint: CP-420
+status: VALID_JOINT_VAL_NO_SAM_TRAINING_ADAPTED_BUNDLE_TDD_PLANNED
+prior_checkpoint: CP-419
+production:
+  run_id: stage-d-nonpenetrating-dino1-sam4-production-r561
+  result: {exit: 0, elapsed_seconds: 24.17, production_seconds: 17.699, samples: 300, sam_forwards: 250, dino_forwards: 0, errors: 0}
+  dino_all: {tp: 300, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0, minimum_matched_box_iou: 0.8180225619}
+  dino_primary: {tp: 250, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0, minimum_matched_box_iou: 0.9046045301}
+  mask_all: {tp: 300, fp: 0, fn: 0, mask_failures: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+  mask_primary: {tp: 250, fp: 0, fn: 0, mask_failures: 0, precision: 1.0, recall: 1.0, f1: 1.0}
+  mask_iou: {count: 300, minimum: 0.9257641921, median: 0.9867151021, gate: 0.8}
+  mapping: {minimum_iou: 1.0, gate: 0.98}
+  selector: {unique: 200, target_ambiguous: 50, target_not_found: 50, two_cup_unique: 0, no_cup_unique: 0}
+  qualification: {dino_primary_box: true, mask_primary: true, mapping: true, selector_safety: true, joint_val: true}
+  evidence: {output_files: 903, symlinks: 0, writable_files: 0, output_report_sha256: 458721ec1a18b308bb176814b82d494ea3619418bfd4bf88b7ab3051d9726b82, output_inventory_sha256: e840b02c296ba612111204a3b135c075778340d12b03231cea3d756cf9dbb748, run_report_sha256: 30d5280eda0f9fe6113f255269f6b89d7e97fd37b5098f0980638725db4604b1}
+decision: SAM decoder training is not authorized because masks are not a primary failure source; retain verified decoder epoch4 unchanged
+bundle_tdd:
+  reason: existing schema-v2 composer can bind a fine-tuned DINO but only copies and declares the original frozen SAM snapshot; using it for decoder epoch4 would make provenance false
+  red: require a new composition path that verifies both checkpoint manifests, binds the adapted-SAM checkpoint identity/base source, copies only runtime model members and excludes both optimizer states
+  green: minimal schema-v3 verifier/composer while keeping schema-v1/v2 behavior unchanged
+  gates: targeted ordinary tests, then fresh full-overlay ordinary package and explicit benchmark suite because bundle implementation/model selection changes
+  final_inputs: DINO epoch1 manifest 4b10d2b7; SAM epoch4 manifest 9c4ba6a0; SAM base bundle manifest 884e1ac7; thresholds box/text0.5, SAM quality0.5, mapping0.98
+evidence_retention: r561 output, run-evidence and scratch retained; scratch is a deletion candidate only; nothing deleted
+boundaries: no SAM training, threshold search, sealed test, COCO, PickPlace or Mac access before bundle/lock freeze; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
