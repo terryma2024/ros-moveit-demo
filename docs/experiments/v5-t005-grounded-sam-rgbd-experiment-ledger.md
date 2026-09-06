@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-445
+latest_checkpoint: CP-446
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-d-frozen-sam-joint-val-readback-r639
-confirmed: frozen DINO epoch 2 plus frozen SAM epoch 4 has zero sub-0.80 mask failures on all 280 box-matched truths and mapping IoU minimum 1.0, but the DINO box/selector gate fails; no reasonable saved common scalar threshold has zero FP, so SAM is not eligible or required for retraining
-open: the explicitly bounded 3-epoch frozen-head plus 2-epoch final-Swin recipe is exhausted without a qualifying DINO box candidate; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
-next_action: preserve the failed candidate and diagnose only the nearest train/val product-path cause for the residual DINO false-positive/occlusion tradeoff; do not train SAM or access sealed final test/COCO100
+active_experiment: stage-d-official-base-common-val-r640
+confirmed: official pinned base also fails the same frozen near/real val, while the trained candidate improves both streams but remains ineligible; the mixed-r2 near-MuJoCo half contains zero no_cup examples, matching the dominant near-domain no-cup false-positive gap
+open: bounded mixed-r3 design awaits the required approval gate before changing data selection; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
+next_action: if approved, derive a new immutable mixed-r3 with the 800 near-MuJoCo members balanced 160 each across the five primary scenarios including no_cup, preserving the other 800 members and all 50/30/20, isolation and training constraints
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20528,6 +20528,55 @@ next_action: preserve this failed candidate and inspect only the nearest train/v
 verification_decision: no ordinary package or benchmark rerun; source, benchmark implementation and configuration did not change, and this checkpoint records model-evaluation evidence only
 retention: r635/r636/r637/r638/r639, both valid frozen output trees, both invalid partial attempts and all prior evidence retained; registered scratch and low-rate trees are deletion candidates only; nothing deleted or archived
 boundaries: no sealed final test or COCO100 access, no threshold relaxation, no SAM training, no depth/PickPlace/Mac, no evidence deletion; Microduck paused
+```
+
+## Checkpoint CP-446 — official base cannot replace the failed candidate; missing near-domain negatives isolated
+
+```yaml
+checkpoint: CP-446
+status: VALID_OFFICIAL_BASE_COMMON_VAL_FAIL_TRAINED_CANDIDATE_IMPROVES_BUT_NEAR_NEGATIVE_COVERAGE_GAP_FOUND
+prior_checkpoint: CP-445
+run_id: stage-d-official-base-common-val-r640
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-d-official-base-common-val-r640
+source_commit: a3f9441d512450cf4370aff07b1bdf3bcbc3e6af
+model: {id: IDEA-Research/grounding-dino-tiny, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3, prompt: cup., device: cuda:0, dtype: float32, cpu_fallback: false}
+inputs: {near_samples: 300, near_inventory_sha256: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9, real_samples: 160, real_inventory_sha256: 3f12c9348f13a69f7a85202e24bd570407c4529f28f302867699643d6c78ed8a}
+execution: {model_forwards: 460, grid_points: 169, elapsed_seconds: 73.8539, torch: 2.13.0+cu130, transformers: 4.56.2, cuda: 13.0, gpu: NVIDIA_GeForce_RTX_5080}
+official_base_joint_selection:
+  thresholds: [0.45,0.45]
+  joint_harmonic_f1: 0.6827046499
+  near_primary: {tp: 229, fp: 163, fn: 21, precision: 0.5841836735, recall: 0.916, f1: 0.7133956386}
+  real: {tp: 180, fp: 18, fn: 172, precision: 0.9090909091, recall: 0.5113636364, f1: 0.6545454545}
+  all_scenario: {tp: 271, fp: 165, fn: 29, precision: 0.6215596330, recall: 0.9033333333, f1: 0.7364130435, small_target_recall: 0.84, multi_cup_recall: 1.0}
+official_base_near_terminal_scan:
+  best_reasonable_f1: {includes_thresholds: [0.50,0.50], tp: 210, fp: 88, fn: 40, precision: 0.7046979866, recall: 0.84, f1: 0.7664233577}
+  perfect_points: 0
+  at_0_35_0_35: {tp: 244, fp: 421, fn: 6, recall: 0.976, f1: 0.5333333333}
+  no_cup_at_joint: {fp: 80}
+trained_epoch2_comparison:
+  thresholds: [0.35,0.35]
+  joint_harmonic_f1: 0.7126228873
+  near_primary: {tp: 237, fp: 136, fn: 13, precision: 0.6353887399, recall: 0.948, f1: 0.7608346709}
+  real: {tp: 192, fp: 29, fn: 160, precision: 0.8687782805, recall: 0.5454545455, f1: 0.6701570681}
+interpretation:
+  - official base fails the same near product gate and cannot be selected as a zero-training fallback
+  - the bounded retention training improves joint, near and real metrics, so it is not a simple val-domain regression relative to base
+  - mixed-r2 has 800 near_synthetic members comprising exactly 200 each of one_cup_distractors, two_cups, cup_near_bottle and partially_occluded_cup, but zero near_synthetic no_cup members
+  - all 320 zero-box training members are generic/hard-negative COCO-domain images, while the dominant residual is 75 false candidates on the 50 near-MuJoCo no_cup validation frames
+  - the nearest data cause is therefore absent near-domain negative coverage; this is an evidence-backed correlation and not yet a claim that a new dataset fixes the gate
+proposed_bounded_design:
+  classification: bounded existing private data-selection flow
+  single_change: replace the four-scenario 200-each near_synthetic selection with five primary-scenario 160-each selection including no_cup and excluding only small_far_cup
+  preserved: total1600 and exact 50/30/20 mix; real_train480 stratification; generic160; hard_negative160; independent real_val160; official pinned-base initialization; frozen Swin/BERT initial phase; head LR0.000002; distillation lambdas1.0; three-epoch maximum; COCO100 denylist-only isolation; sealed test exclusion
+  tests: one focused private selection RED/GREEN plus complete immutable mixed-r3 readback; no generalized harness or unrelated tests
+  approval_state: WAITING_FOR_POST_DESIGN_USER_APPROVAL_REQUIRED_BY_SUPERPOWERS_BRAINSTORMING
+result: NO_BASE_FALLBACK; KEEP_SAM_FROZEN; PERCEPTION_AND_PICKPLACE_GATES_REMAIN_CLOSED
+report_sha256: 818a6480df97aecc2c2370202beec3ea34949e7b75e3b3932f14360a5e5a5dbe
+nvme_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-d-official-base-common-val-r640/tmp
+launcher_note: first low-rate invocation stopped before model load because direct PYTHONPATH did not account for setup.py package_dir mapping; the corrected low-rate-only so101_demo source link ran the unchanged evaluator and produced the sole persistent report
+verification_decision: no package or benchmark run; source and selected model did not change, and official base was a diagnostic fallback comparison only
+retention: r640 report and scratch plus all low-rate attempts and every prior output/evidence retained; deletion candidates only, nothing deleted or archived
+boundaries: no training/SAM/selector/COCO100/sealed-test/depth/PickPlace/Mac access; no threshold or model-family change; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
