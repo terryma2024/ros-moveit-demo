@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-474
+latest_checkpoint: CP-475
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 597a5c78760426f172424accfc70e75b2b2d1aad
-active_experiment: stage-d-global-synthetic-val-selection-r753
-confirmed: positive-only frozen-backbone optimization ended at valid r749/r751; no further training is allowed; read-only global ranking over 35 valid checkpoints on the exact preregistered synthetic val selected warm-start epoch 1 provisionally, pending independent ranking readback
-open: independently read back r753, generate and freeze the isolated four-point acceptance smoke without opening truth for optimization, then freeze the selected DINO/SAM threshold lock before one-time COCO100 and one-time four-point perception acceptance
-next_action: create the four-point acceptance dataset from rgbd_task_points.yaml with independent seeds/root/inventory, member hashes and read-only freeze; keep it sealed until the candidate and threshold lock are immutable
+source_parent: 314df8d7c5ab02db508eb5c3ce5b3c47b01e9feb
+active_experiment: stage-e-coco100-global-best-frozen-candidate-r760
+confirmed: optimization ended at r749/r751; r753/r754 selected one global winner using only the preregistered synthetic val; the independent four-point carrier is byte-frozen and remains semantically unopened; the winner's DINO/SAM bundle and all thresholds are frozen and independently read back
+open: run the globally selected immutable candidate on frozen COCO100 exactly once; do not tune or reselect from its outcome
+next_action: preflight the COCO100 inventory, frozen threshold lock, bundle, CUDA/Python/NVMe/process state and execute the one-time r760 evaluation; stop and report if any COCO gate fails
 boundaries: COCO100 and four-point smoke cannot select a model or tune thresholds; sealed final test remains unread; real hardware is unauthorized; PickPlace remains NO_GO until COCO100 and all four perception smoke points pass; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23161,4 +23161,56 @@ semantic_boundary: the four-point smoke is perception acceptance and cannot coun
 worktree_boundary: preserve the CP-473 classified superseded two-file unstaged last-Swin identity diff without modifying, staging, testing, resetting, stashing or executing it
 retention: r753 and all existing evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
 boundaries: sealed final test unread; GPU idle; Microduck paused
+```
+
+## Checkpoint CP-475 — global winner, isolated four-point carrier and threshold lock are frozen
+
+```yaml
+checkpoint: CP-475
+status: GLOBAL_SYNTHETIC_WINNER_AND_ACCEPTANCE_CARRIER_FROZEN_GO_ONE_TIME_COCO100
+prior_checkpoint: CP-474
+source_head_before_record: 314df8d7c5ab02db508eb5c3ce5b3c47b01e9feb
+global_selection_readback:
+  run_id: stage-d-global-synthetic-val-selection-readback-r754
+  status: PASS
+  eligible_checkpoints: 35
+  unique_winner: true
+  winner: {run: grounding-dino-cup-nonpenetrating-r1/formal4-warmstart-r1, epoch: 1, checkpoint_manifest_sha256: 4b10d2b730c2352b715f010bf36b7fe5c3348d0489fe5559e5f48dcfb92c58e7, model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b}
+  evidence: {selection_report_sha256: ad37a9a18becb577e9242698c063e8d2ac39580aef24ee9ec2299191b23ba1bc, readback_sha256: 5649dfcc6194de53d5e024ff929b47e03b7882e72fe4e00c1211531b94a6c260}
+  selection_inputs: {preregistered_synthetic_val_only: true, val_inventory_sha256: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9, COCO100: false, four_point_smoke: false, real_or_web_val: false, sealed_test: false}
+invalid_acceptance_attempt:
+  run_id: stage-e-four-point-acceptance-generation-r755
+  classification: INVALID_PRE_GENERATION_PACKAGE_IMPORT_MAPPING
+  result: {exit: 1, generated_cases: 0, model_forwards: 0, truth_opened: false, output_root: not_created}
+  root_cause: source package_dir maps the source directory to package name so101_demo only through build/install; adding that directory directly to sys.path did not create the package name
+  disposition: preserved read-only; one minimal private-driver fix used direct importlib loading of the geometry helper; no product source changed and no evidence was deleted or overwritten
+four_point_acceptance_carrier:
+  generator_run_id: stage-e-four-point-acceptance-generation-r756
+  readback_run_id: stage-e-four-point-acceptance-readback-r757
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/acceptance/four-point-mujoco-r2
+  source: {task_points_sha256: 75591214ba3d1dfdd2827c390c0f2ec1d61e7a8dca80d89daabb1e7840627e73, mjcf_sha256: d40494c9f88294840d8e8a90859c6a28dc361149b5878b785b787ea96c61e083}
+  seeds: [906005001, 906005002, 906005003, 906005004]
+  points: [task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm]
+  generation: {status: PASS_FROZEN_UNOPENED_ACCEPTANCE_CARRIER, cases: 4, members: 16, bytes: 5097447, model_forwards: 0, manifest_sha256: 7d6c559ea5a87eab0fb63798cea4f199a5f17163d7cf2578feac03af5bacd50c, inventory_sha256: c3e33708600ffcf979c5d2ef8d63f91054456857e3108e053c63793c259c8fbd}
+  independent_readback: {status: PASS_INDEPENDENT_BYTE_READBACK_UNOPENED, members_verified: 16, semantic_truth_members_parsed: false, candidate_model_access: none, evaluation_count: 0, report_sha256: 8600e9e8496e558bcda239c10127228d7c840f72bf6c0514cb9c7da4f4646932}
+  mode: {files: 0444, directories: 0555, symlinks: none}
+  isolation: no member may be copied, linked or merged into train, val, sealed test or COCO100; no member may influence gradients, checkpoint or epoch ranking, threshold calibration or optimization
+threshold_lock:
+  freeze_run_id: stage-d-global-best-threshold-lock-r758
+  readback_run_id: stage-d-global-best-threshold-lock-readback-r759
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-global-synthetic-best-threshold-lock-r1/threshold-lock.json
+  sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  immutable_bundle: {path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1, manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05, members_verified: 11}
+  models: {dino_model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b, sam_model_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893, dino_checkpoint_members_verified: 8, sam_checkpoint_members_verified: 6}
+  runtime: {code_commit: 314df8d7c5ab02db508eb5c3ce5b3c47b01e9feb, code_set_sha256: 9b091077b66966f6d86963df88c48cde8553dbd53e4d2729272a1353b542fb96, stateless_per_frame: true}
+  prompt: cup.
+  thresholds: {dino_box: 0.50, dino_text: 0.50, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.50, mask_inside_box: 0.80, minimum_mask_pixels: 64, maximum_mask_area_ratio: 0.50, selector_confidence: 0.50, candidate_mapping_iou_gate: 0.98}
+  selector: one matching cup is UNIQUE; zero is TARGET_NOT_FOUND; more than one is TARGET_AMBIGUOUS; near-workspace exclusion may use only real depth, reachability and bbox/mask geometry, never a scenario name
+  independent_readback: {status: PASS, lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278, report_sha256: ad589e1425bb3f46cadb391f98ac4f97ea0d2208ca03192adedd5abd83a9091f, COCO100_access: none, four_point_semantic_access: none, model_forwards: 0}
+next_action: run exactly one frozen-candidate COCO100 evaluation; require F1>=0.6391, Recall>=0.5670, hit images>=83/100, visible non-cup UNIQUE=0 and inference errors<=1, and report delta from pinned-base F1 0.6591
+failure_boundary: if any COCO100 gate fails, preserve and report the result and stop; do not open the four-point carrier, tune thresholds, reselect a checkpoint, compose a new bundle or start PickPlace
+verification_decision: no package or benchmark rerun; no product or benchmark source changed, and the relevant gates are byte readback plus the forthcoming explicitly authorized one-time model evaluation
+scratch_deletion_candidates: [scratch/stage-e-four-point-acceptance-generation-r755/tmp, scratch/stage-e-four-point-acceptance-generation-r756/tmp, scratch/stage-e-four-point-acceptance-readback-r757/tmp, scratch/stage-d-global-best-threshold-lock-r758/tmp, scratch/stage-d-global-best-threshold-lock-readback-r759/tmp]
+retention: r754-r759, the invalid r755 evidence, frozen four-point carrier, threshold lock, immutable bundle and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
+boundaries: four-point semantic evaluation count remains zero; sealed final test unread; real hardware unauthorized; PickPlace and Mac remain NO_GO; Microduck paused
 ```
