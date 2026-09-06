@@ -4,7 +4,7 @@
 
 **Goal:** 停止继续扩展低概率 fsync 故障注入测试，立即完成无穿透数据合成、Grounding DINO Tiny 微调、冻结 SAM 联合评测、ai-station Linux 四个预置点位 PickPlace，再把同一模型包迁移到 macOS 并完成相同四点验收。
 
-**Architecture:** Grounding DINO Tiny 只检测通用 `cup`，用类别、bbox 和 DINO score 标识候选；冻结的 SAM 2.1 Hiera Tiny 以 box prompt 逐帧无状态生成实例 mask。唯一近工作区目标通过 RGB-D 反投影和 TF 生成 `/cup_pose`，MoveIt 只消费通过几何与安全门的 pose。训练、阈值选择只使用新合成 train/val；独立 test 与 COCO100 只用于冻结候选的最终验证。
+**Architecture:** Grounding DINO Tiny 只检测通用 `cup`，用类别、bbox 和 DINO score 标识候选；冻结的 SAM 2.1 Hiera Tiny 以 box prompt 逐帧无状态生成实例 mask。唯一近工作区目标通过 RGB-D 反投影和 TF 生成 `/cup_pose`，MoveIt 只消费通过几何与安全门的 pose。训练、阈值选择只使用新合成 train/val；独立 test 用于冻结候选的最终验证，COCO100 只保留为一次性历史诊断证据，不再是晋级门。
 
 **Primary spec:** `docs/superpowers/specs/2026-09-04-grounding-dino-tiny-cup-finetune-linux-first-design.md`
 
@@ -20,6 +20,7 @@
 - r535 的 `281/281`、r499 的 benchmark、r470 的真实 GPU 渲染验证和已有普通测试结果继续复用，不重复运行。
 - 正常路径仍保留 fsync、文件系统日志和完整性校验；ai-station 上 fsync-heavy 任务仍按 `AGENTS.md` 使用 `/data` NVMe scratch，并用实际 Python 验证 `TMPDIR/TMP/TEMP`。
 - CP-402 的 `NO_GO` 由新的账本 checkpoint 显式解除，解除范围仅为本计划的正常路径。不能把它改写成“r535 已经证明所有异常路径”。
+- 用户于 2026-09-07 移除 COCO100 的 pass/fail 门控。r595/r760 的失败结果和 CP-476 原样保留，不重跑 COCO100，也不依据该结果调阈值、重选 checkpoint 或继续训练；这项政策只解除其对四点 smoke、bundle promotion 和 PickPlace 的阻断作用。
 - Microduck 继续暂停，直到 Linux、macOS 四点 PickPlace 和最终报告全部完成，或用户另行允许恢复。
 
 ## 2. 当前可信起点
@@ -117,17 +118,19 @@
 
 **Exit:** frozen Grounded-SAM candidate 在新 val 的近工作区 cohort 通过候选唯一性、mask、深度与无 fallback 门。
 
-## 8. 阶段 E：一次性内部 test 与 COCO100
+## 8. 阶段 E：一次性内部 test 与 COCO100 历史诊断
 
 - [ ] 在 bundle 和阈值冻结后，用同一非穿透协议、独立 seed 生成 `300` 张只用于最终评测的 test（六场景各 50）。先登记成员/seed/输出协议，生成后立即封存；任何结果都不能回流训练或调阈值。
 - [ ] 对 test 只运行一次完整 Grounded-SAM production 评测并保存实际 SAM mask。报告 all-scenario 和排除 `small_far_cup` 的 primary near-workspace；历史指标不能改写。
-- [ ] 只有 near-workspace 安全门通过，才对 frozen candidate 运行一次 COCO100：`F1>=0.6391`、`Recall>=0.5670`、命中图片 `>=83/100`、非杯 `UNIQUE=0`、inference errors `<=1`。
-- [ ] 如果 COCO100 未达到保护线，不继续 PickPlace；只允许基于 train/val 开一个有明确数据缺口的最后训练轮次。COCO100 不得用来调阈值或挑 checkpoint。
+- [x] frozen candidate 的唯一一次 COCO100 运行已由 r595 完成，r760 只做身份绑定与结果裁决。历史结果为 F1 `0.0`、Recall `0.0`、命中图片 `0/100`；保留该结果和原保护线，不再运行第二次。
+- [x] 2026-09-07 起，COCO100 不再参与模型晋级，也不阻断四点 smoke、bundle promotion 或 PickPlace。它仍不得用于调阈值、挑 checkpoint、决定训练数据或启动新训练。
 
-**Exit:** 非穿透 test 的 near-workspace 安全门和 COCO100 非劣化门都通过。
+**Exit:** 非穿透 test 的 near-workspace 安全门通过；COCO100 历史结果已完整保留并与冻结身份绑定。
 
 ## 9. 阶段 F：ai-station Linux 四个预置点位 PickPlace
 
+- [ ] 先用已冻结的四点 carrier、threshold lock `b02e3be…` 和 bundle `b55bb6…` 完成一次 acceptance-only perception smoke。四点 truth 只能用于本次验收，不得进入训练、阈值选择或生产候选生成。
+- [ ] 四点分别验证唯一 cup、生产 SAM mask truth IoU `>=0.80`、candidate mapping IoU `>=0.98`、有效深度、world `/cup_pose` 误差 `<0.01m`、source freshness 和 warmed latency `<=2000ms`。四点全部语义正确后才进入 PickPlace。
 - [ ] 建立新 Linux overlay，仅在源码有变化时运行相关 ordinary tests；只有 benchmark 代码/配置或模型选择发生变化时才显式运行 benchmark suite。禁止每个 checkpoint 都全量测试。
 - [ ] 四个点位各用独立 run ID 和 `FULL_RESTART`。每次确认唯一 ROS/MuJoCo stack、CUDA、bundle SHA、`ROS_DOMAIN_ID`、`GZ_PARTITION` 和 controller 状态。
 - [ ] 每个点位保存 RGB、DINO candidates、production SAM mask、depth 统计、TF、`/cup_pose`、MoveIt plan/execute、controller、attachment/contact、杯子起终位姿和 fresh GUI 截图。
@@ -161,4 +164,4 @@
 下一步与 ETA：一句话
 ```
 
-只有下列情况需要停下来问用户：改变模型家族、改变 COCO100 门槛、扩大到真实机械臂、删除证据、恢复 Microduck，或出现无法用一次最小修复解决的安全问题。其他正常执行步骤直接继续。
+只有下列情况需要停下来问用户：改变模型家族、恢复或重跑 COCO100 门控、扩大到真实机械臂、删除证据、恢复 Microduck，或出现无法用一次最小修复解决的安全问题。其他正常执行步骤直接继续。
