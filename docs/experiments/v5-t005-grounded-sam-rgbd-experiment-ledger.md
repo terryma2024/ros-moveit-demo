@@ -18953,6 +18953,31 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-389 — r528 combined GREEN statically prepared; user orders GREEN before full inventory/hash/review
+
+```yaml
+checkpoint: CP-389
+status: R528_COMBINED_GREEN_STATIC_PREPARED_ONE_INLINE_INVOCATION_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r528
+execution_mode: inline serial per user; current preparation subagent completed and no further delegation
+user_sequence_update: run GREEN first; only after GREEN perform complete evidence inventory, full hash readback and Astra re-review
+candidate: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, unchanged_driver: true, shell_sha256: e8e12320e60f0caa71e98b287db9c58335f716f20a76f033a78a374751d42d82, shell_lines: 502, diff_from_r527_shell: +20/-2}
+minimal_fix: both normal-tail fsync calls explicitly capture status without errexit takeover; first nonzero tail status is retained as main_log_fsync, seeds the single completion owner's storage and diagnostic state, survives the later tail call and helper retry, preserves original process status, forces outer evidence for storage failure, and retains finalizer9/original7/storage96 precedence
+combined_harness: {sha256: 06ac11fb3162e86fe2ebe83b1a3cd8f049716da4411bc3c2ae65b1ed4f0ef241, lines: 1032, expected_total: 264, decomposition: [retained_r517_167, review36_plus6_mutation_kills, additional39, focused_r527_12, double_tail3_plus1_mutation_kill]}
+launcher: {sha256_before_head_rebind: d1f3660df00dc5fcdfd2b2aa75fb85eac21fb04fec18264dc9e2744cd40c543e, lines: 455, frozen_head: b6efb6760bc743e6097c5ec387beb2f7b6ca099f, argument_fields: 16, heredoc_ast: 12of12}
+static_only_result: AST/Ruff/candidate-launcher-transformed-mutant bash syntax, parser16, source anchors, retained r527 reachability oracles, private-hash drift oracle and r528 first-nonzero oracle pass; forbidden imports empty; behavior invocations0
+prep_report: write-once coordination/generator-r443-r1/nonpenetrating-train-val-generation-runner-tail-fsync-green-r528-prep-report.md SHA25625101acd3df82e4de897cb25a1488c757c40fa053531a01feb4742d5da2c81b7,54 lines
+next_experiment:
+  status: GO_ONE_PRIVATE_COMBINED_GREEN_INLINE
+  prelaunch: commit/push/read back this checkpoint; mechanically rebind only launcher HEAD_EXPECTED and embedded post-run expected HEAD/Gitee values to the new exact local/Gitee SHA, prove inverse transform restores d1f3660d, recompute launcher SHA and verify bash syntax/root absence
+  invocation: call the rebound launcher exactly once with its exact SO101_REVIEWED_LAUNCHER_SHA256; no retry or evidence backfill on any outcome
+  required: exact locked Python and run-specific D NVMe TMPDIR/TMP/TEMP tempfile preflight;264/264 pass,0 failures/errors, harness/launcher/tool exits0, forbidden imports empty, before/after package/source/private provenance unchanged
+  after_green_only: complete evidence member inventory and sha256 readback, then Astra immutable review; checkpoint outcome before any official generation
+restrictions: no further subagent execution; no repo source/config edit, real setup/project/MuJoCo/OpenGL/GPU/renderer/official root/render/generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r527 and all prior evidence retained; r528 roots absent before launch; no deletion
+boundaries: four official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-388 — r527 authoritative tail-fsync RED; scoped private GREEN static preparation authorized
 
 ```yaml
