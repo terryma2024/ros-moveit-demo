@@ -23041,3 +23041,49 @@ scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-smoke-r
 retention: r743-r748, smoke-r2 and all prior evidence retained and frozen where complete; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
 boundaries: COCO100 outcome and sealed final test remain unread; SAM remains frozen and unloaded; PickPlace/depth/Mac remain NO_GO; Microduck paused
 ```
+
+## Checkpoint CP-472 — corrected frozen-backbone formal selects epoch 3; real validation remains underfit
+
+```yaml
+checkpoint: CP-472
+status: VALID_POSITIVE_ONLY_FROZEN_FORMAL_REAL_UNDERFIT_GO_LAST_SWIN_SMOKE
+prior_checkpoint: CP-471
+training_commit: e587b57aa8442da4b0e0498e929b198627663cfc
+gitee_readback_before_training: e587b57aa8442da4b0e0498e929b198627663cfc
+formal:
+  run_id: stage-c-positive-only-distillation-formal-r749
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-positive-only-r1/formal-r1
+  execution: {exit: 0, elapsed_seconds: 1302, epochs: 3, train_samples_per_epoch: 1600, near_val_samples: 300, real_val_samples: 160, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, resume: null, epoch5_access: none, prior_finetuned_checkpoint_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: none}
+  trainability: {student_trainable_numel: 11616776, teacher_trainable_numel: 0, Swin: frozen, BERT: frozen, decoder: trainable, encoder: frozen, gradient_check: PASS}
+  objective: {teacher_distillation_scope: positive_samples_only, teacher_token_logit_lambda: 1.0, teacher_candidate_box_lambda: 1.0, positive_samples_per_epoch: 1080, skipped_negative_samples_per_epoch: 520}
+epochs:
+  - {epoch: 1, joint_harmonic_f1: 0.7134512219, near_f1: 0.7642276423, near_recall: 0.94, near_fp: 130, real_f1: 0.6690017513, real_recall: 0.5426136364, all_f1: 0.7824858757, all_recall: 0.9233333333}
+  - {epoch: 2, joint_harmonic_f1: 0.7442666542, near_f1: 0.8442028986, near_recall: 0.932, near_fp: 69, real_f1: 0.6654867257, real_recall: 0.5340909091, all_f1: 0.8540372671, all_recall: 0.9166666667}
+  - {epoch: 3, joint_harmonic_f1: 0.7510072522, near_f1: 0.8597785978, near_recall: 0.932, near_fp: 59, real_f1: 0.6666666667, real_recall: 0.5369318182, all_f1: 0.8675078864, all_recall: 0.9166666667}
+selected:
+  epoch: 3
+  thresholds: {box: 0.35, text: 0.35}
+  checkpoint_manifest_sha256: c8880419f8a4bde268d6dcd5dbb66d92fddc9e5b12953e2e123b1df48ae16652
+  checkpoint_model_sha256: f62be6e9f62474814eab94f4e2be92955fea0ea9e3c51e6229f7dc10828cbe56
+  fresh_reload_sha256: 4d35a3e36af7bb2690b5bfa6dd8816d5d00799acd4956a6d4e94e060f8f0cd72
+invalid_readback:
+  run_id: stage-c-positive-only-distillation-formal-readback-r750
+  classification: AUDIT_SCHEMA_PATH_ERROR
+  cause: read-only audit addressed top-level trainability flags inside the student object and stopped on KeyError after writing only a partial inventory; training output was not modified
+readback:
+  run_id: stage-c-positive-only-distillation-formal-readback-r751
+  status: PASS
+  files: 37
+  bytes: 2346457918
+  members_sha256: cbcb730305fd871d81289e6cf6bde5eecda3451567b9f2577cd8be3c4a2dc867
+  report_sha256: fd597debcc53d3db02d94c73880167cd29124a4e8152f850d1d0f3ff43aada71
+  verified: all files and three checkpoint manifests/members rehashed; finite grids and epoch selection recomputed; exact official teacher/student initialization, trainability, positive-only 1080/520 counts, CUDA fresh reload and isolation
+underfit_decision: independent real validation remains materially underfit at selected epoch3 with Recall0.5369 and F10.6667 while near Recall0.932; the user-authorized conditional for unfreezing only the last Swin stage is met
+next_action: run one fresh 6+6 last-Swin smoke initialized only from selected corrected epoch3, with official pinned teacher, head LR2e-6 and backbone LR2e-7; if valid run at most two formal epochs and select only on allowed near plus independent real validation
+verification_decision: no package/benchmark rerun; source and benchmark implementation are unchanged since the tested CP-470 commit, and fresh CUDA formal execution plus independent artifact readback are the relevant gate
+scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-formal-r749/tmp]
+retention: r749-r751, all three formal checkpoints and all prior evidence retained and frozen where complete; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
+boundaries: COCO100 outcome and sealed final test remain unread; SAM remains frozen/unloaded; DINO selector is not yet qualified; PickPlace/depth/Mac remain NO_GO; Microduck paused
+```
