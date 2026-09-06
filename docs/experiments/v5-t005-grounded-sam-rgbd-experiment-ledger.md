@@ -18953,6 +18953,30 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-391 — r529 global state-lifetime correction statically valid; one fresh combined GREEN authorized
+
+```yaml
+checkpoint: CP-391
+status: R529_STATE_LIFETIME_CORRECTION_STATIC_VALID_ONE_COMBINED_GREEN_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r529
+execution_mode: inline serial; no subagent
+sole_candidate_change_from_r528: replace caller-local tail_log_fsync_exit with SO101_POSTALLOCATION_TAIL_LOG_FSYNC_EXIT, initialize global default and again before trap activation, consume it in completion preseed/duplicate suppression and both tail capture sites, reset it in clear_postallocation_state; driver unchanged and r528 tail semantics otherwise byte-identical
+red_regression: immutable r528 retained r509 stage-failure and fsync-failure traces both demonstrate the prior unbound local after EXIT stack unwind; no duplicate RED or r528 rerun
+private_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, shell_lines: 505, harness_sha256: eb45db792c1312093e688fff73036bbb06b9ce9f4464226d37cd76748071a229, harness_lines: 1032, launcher_sha256_before_head_rebind: e436acab0f6b12f58b70bdb5e19905fda9ee4b547ebb02a72ee72a7d9d0b8ebd, launcher_lines: 455, first_nonzero_mutant_sha256: 5fa67e6e1cc499e2a4cdf38301d2ec0cfeca27c37a6e09589f157036c771557b}
+combined_contract:264=retained167+review42(36 pass+6 kills)+additional39+focused12+tail extension4(3 pass+1 kill); expected VALID_R529_GREEN and264of264
+static_readback: harness AST/Ruff pass; shell/launcher/transformed/mutant bash syntax pass; launcher12of12 quoted heredoc AST pass; exact16-field parser/static-preparation gate pass; r527 reachability, hash-drift and r529 first-nonzero oracles pass; forbidden imports empty
+root_state: r529 evidence/NVMe scratch/low roots absent and four official roots absent; r528 invalid evidence retained untouched
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_COMBINED_GREEN_INLINE
+  prelaunch: commit/push/read back CP391; mechanically rebind only all three launcher expected HEAD/Gitee literals to the new SHA, prove inverse transform restores e436acab, recompute launcher hash and verify root absence
+  invocation: exact rebound launcher once with matching SO101_REVIEWED_LAUNCHER_SHA256; fresh unique r529 roots; exact locked Python and D NVMe TMPDIR/TMP/TEMP preflight; no retry/backfill
+  required: harness/launcher/tool exits0; VALID_R529_GREEN;264 passed,0 failed/errors; all cohort counts/mutation hashes exact; forbidden imports empty; package/source/private before-after unchanged
+  after_green_only: complete evidence inventory/hash readback and Astra review per user sequence, then checkpoint before official generation
+restrictions: no repo source/config edit, real setup/project/MuJoCo/OpenGL/GPU/renderer/official generation/conversion/inference/training/build/package test/benchmark/sealed access
+retention: r528/r527 and all prior evidence retained; archived/deleted none
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-390 — r528 invalid on EXIT-trap local-state lifetime; fresh r529 correction preparation planned
 
 ```yaml
