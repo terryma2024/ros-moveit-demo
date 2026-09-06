@@ -13,6 +13,7 @@ from typing import Any
 
 from .grounding_dino_domain_retention import (
     LAST_SWIN_STAGE_PREFIX,
+    compute_decoder_supervised_loss,
     compute_distillation_losses,
     configure_last_stage_trainability,
     configure_student_trainability,
@@ -444,6 +445,11 @@ def run_domain_retention_training(
         )
         optimizer.zero_grad(set_to_none=True)
         sums = {"supervised": 0.0, "token": 0.0, "box": 0.0, "total": 0.0}
+        supervised_component_sums = {
+            "loss_ce": 0.0,
+            "loss_bbox": 0.0,
+            "loss_giou": 0.0,
+        }
         candidate_total = 0
         for batch_index, batch in enumerate(loader, start=1):
             moved = _move_batch(batch, device)
@@ -452,7 +458,13 @@ def run_domain_retention_training(
                 teacher_outputs = teacher(**teacher_inputs)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 student_outputs = student(**moved)
-                supervised_loss = student_outputs.loss
+                if student_outputs.loss_dict is None:
+                    raise RuntimeError("SUPERVISED_LOSS_COMPONENTS_MISSING")
+                supervised_loss = compute_decoder_supervised_loss(
+                    loss_dict=student_outputs.loss_dict,
+                    bbox_loss_coefficient=student.config.bbox_loss_coefficient,
+                    giou_loss_coefficient=student.config.giou_loss_coefficient,
+                )
                 distillation = compute_distillation_losses(
                     student_logits=student_outputs.logits,
                     student_boxes=student_outputs.pred_boxes,
@@ -485,6 +497,14 @@ def run_domain_retention_training(
             }
             for key, value in values.items():
                 sums[key] += value
+            supervised_components = {
+                key: float(student_outputs.loss_dict[key].detach().cpu())
+                for key in supervised_component_sums
+            }
+            if not all(math.isfinite(value) for value in supervised_components.values()):
+                raise RuntimeError("NONFINITE_SUPERVISED_LOSS_COMPONENT")
+            for key, value in supervised_components.items():
+                supervised_component_sums[key] += value
             candidate_total += distillation.candidate_count
             (total_loss / accumulation).backward()
             if not frozen_gradient_check_recorded:
@@ -518,6 +538,7 @@ def run_domain_retention_training(
                             "batch": batch_index,
                             "batches": len(loader),
                             "supervised_loss": values["supervised"],
+                            "supervised_decoder_loss_components": supervised_components,
                             "teacher_token_logit_loss": values["token"],
                             "teacher_candidate_box_loss": values["box"],
                             "total_loss": values["total"],
@@ -579,6 +600,9 @@ def run_domain_retention_training(
             "event": "epoch_complete",
             "epoch": epoch,
             "mean_losses": {key: value / len(loader) for key, value in sums.items()},
+            "mean_supervised_decoder_loss_components": {
+                key: value / len(loader) for key, value in supervised_component_sums.items()
+            },
             "mean_teacher_candidates": candidate_total / len(loader),
             "selected_thresholds": {
                 "box": joint.near.box_threshold,
