@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-455
+latest_checkpoint: CP-456
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-d-frozen-sam-joint-val-mixed-r3-readback-r668
-confirmed: mixed-r3 joint val and independent readback are valid; SAM has zero matched-box mask failures, but DINO primary boxes and no-cup selector safety fail and no reasonable common threshold closes the tradeoff
-open: inspect only saved raw candidates and the frozen mixed-r3 train/val composition for the nearest evidence-backed no-cup/partial-occlusion correction; sealed test, COCO100 requalification, depth/PickPlace and all Mac work remain gated
-next_action: quantify score/geometry/error overlap for the 27 no-cup UNIQUE errors and 19 partial-occlusion misses without new model forwards, then choose the smallest same-family data or loss correction within the authorized path
+active_experiment: stage-c-mixed-r3-encoder-loss-audit-r673
+confirmed: the pinned two-stage encoder CE is image-invariant for the fixed cup prompt and its weighted output-gradient norm is 194-234x the decoder CE; this is the nearest measured cause of simultaneous no-cup false positives and occluded-cup score collapse
+open: implement one contract-bound decoder-output-only supervised objective while preserving lambda-1 teacher distillation, mixed-r3 data and official-base initialization; sealed test, COCO100 requalification, SAM, depth/PickPlace and Mac remain gated
+next_action: focused TDD for supervised loss scope, then a fresh committed image and 6+6 CUDA smoke before any formal rerun
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20930,6 +20930,52 @@ next_action: inspect only the retained raw candidate score/geometry/error overla
 verification_decision: no ordinary package or benchmark rerun; source, benchmark implementation and configuration did not change, and this checkpoint records model-evaluation evidence only
 retention: r665-r668, both valid frozen output trees, invalid r667 attempt, and all earlier evidence retained; nothing deleted or archived
 boundaries: no sealed final test or COCO100 access, no threshold relaxation, no SAM training, no depth/PickPlace/Mac, no evidence deletion; Microduck paused
+```
+
+## Checkpoint CP-456 — image-invariant encoder CE isolated as the dominant mixed-r3 training defect
+
+```yaml
+checkpoint: CP-456
+status: VALID_ROOT_CAUSE_ENCODER_CE_IMAGE_INVARIANT_GO_DECODER_SUPERVISION_TDD
+prior_checkpoint: CP-455
+saved_candidate_forensics:
+  no_cup: {production_candidates: 58, prior_candidate_candidates: 75, frames_with_candidates: 42, false_box_aspect_tall_ge_1_8: 31, false_box_aspect_compact: 27, score_range: [0.3505787551, 0.5324279666]}
+  partially_occluded: {production_misses: 19, correct_raw_localization_iou_min: 0.9184054648, correct_raw_localization_iou_max: 0.9644454465, all_19_have_iou_ge_0_5_below_threshold: true, score_range: [0.0101592848, 0.3381829858]}
+  interpretation: DINO localizes every missed occluded cup at the raw floor, but its class score overlaps the bottle/block false-positive band; this is a discrimination-loss failure, not a box-localization or common-threshold failure
+distillation_direction_audit:
+  valid_run: stage-c-mixed-r3-distillation-gradient-audit-r671
+  result: {status: PASS, samples: 12, no_cup_negative_cosine: 6_of_6, no_cup_mean_opposition_fraction: 0.7211168309, partial_mean_opposition_fraction: 0.7119843562}
+  report_sha256: 4eb47856d97c42bf8d84dffd1ebbc536a25214781b4511d50615e625793c1ee2
+  scale_run: stage-c-mixed-r3-distillation-gradient-scale-audit-r672
+  scale_result: {status: PASS, samples: 6, no_cup_distill_to_supervised_logit_gradient_norm: 0.0626184965, partial_distill_to_supervised_logit_gradient_norm: 0.0712699369}
+  scale_report_sha256: 8ecac02882f68b6f2a9d78e28f2ea8c70d4310bb142ab27f2c0e4c10c328c738
+  decision: teacher distillation is directionally opposing on domain samples but only 6-7 percent of decoder logit-gradient norm; keep the user-pinned lambda1 objective unchanged for the next minimal experiment
+encoder_loss_audit:
+  run_id: stage-c-mixed-r3-encoder-loss-audit-r673
+  result: {status: PASS, samples: 2, encoder_logits_image_invariant: true, decoder_logits_image_conditioned: true, stderr_empty: true}
+  no_cup: {decoder_loss_ce: 0.1331014335, encoder_loss_ce: 31382.3203125, encoder_to_decoder_weighted_logit_gradient_norm: 194.1517487}
+  partially_occluded: {decoder_loss_ce: 0.1410011351, encoder_loss_ce: 31367.2265625, encoder_to_decoder_weighted_logit_gradient_norm: 234.0705414}
+  tensor_identity: {encoder_logits_sha256_both_images: 58284d4927a3858688a1f4ebfd5313e34b28ba3e4fbf63e6f127782cc420eb07, decoder_logits_differ: true}
+  report_sha256: c58c5fe2816ae43a22433892fef5b97c979eeb6564e674df9073a6decff22e77
+pinned_source:
+  transformers: 4.56.2
+  model_config: {two_stage: true, embedding_init_target: true, num_queries: 900, max_text_len: 256}
+  behavior: encoder_logits are calculated from repeated query_position_embeddings plus fixed prompt text and are then passed to the two-stage encoder criterion; they do not consume image-conditioned object_query_embedding in this configuration
+  hashes: {modeling_grounding_dino_py: 06b3972eb77c885d1ac7f39fc12baa16a725b96404a5b6accab28f34ee6ddd37, loss_grounding_dino_py: 11f8791a64736478cadd9a0d08d091854d4657da5c06d1c32b115bac9c2bdcad}
+root_cause: the weighted image-invariant encoder classification gradient is two orders of magnitude larger than the image-conditioned decoder classification gradient, so the current supervised scalar is dominated by a prompt/query objective that cannot distinguish cup, bottle and empty scenes
+minimal_design:
+  selected: reconstruct supervised detection loss only from decoder loss_ce, loss_bbox and loss_giou with the pinned model coefficients; retain teacher token-logit and candidate-box distillation at lambda1
+  contract: add supervised_loss_scope equal to decoder_outputs_only and reject any other value; persist component losses in progress and epoch evidence
+  preserved: Grounding DINO Tiny family/revision/base hashes; mixed-r3 immutable data; 50/30/20 composition; frozen Swin/BERT initial phase; LR and epoch bounds; val-only selection; COCO100/sealed-test isolation; frozen SAM
+  rejected_vendor_fork: replacing the pinned Transformers loss internals with a custom image-conditioned encoder criterion is broader, changes third-party semantics and adds avoidable reproducibility risk
+  rejected_more_data_first: expanding data while the measured objective remains image-invariant would not repair the closest causal defect
+tdd_plan: add a focused unit RED for a huge encoder loss being excluded while decoder CE/bbox/GIoU retain exact weights; add contract RED for missing/wrong supervised_loss_scope; implement one helper and one runtime callsite; run only related ordinary tests, then rebuild the pinned image and run one 6+6 CUDA smoke
+invalid_attempts_retained:
+  r669: package import path failed before model load
+  r670: one diagnostic sample completed, then FP32 retained graph OOM; no model mutation or training
+decision: GO_MINIMAL_DECODER_SUPERVISION_TDD
+retention: r669-r673 and all prior evidence retained; nothing deleted or archived
+boundaries: no new training until TDD/image/smoke gates pass; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
