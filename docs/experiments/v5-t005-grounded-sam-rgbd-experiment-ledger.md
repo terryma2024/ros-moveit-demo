@@ -21010,6 +21010,41 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-464 — mixed-r4 train-only rebalance is immutable and frozen-backbone contract is GREEN
+
+```yaml
+checkpoint: CP-464
+status: VALID_MIXED_R4_IMMUTABLE_CONFIG_GREEN_GO_IMAGE_SMOKE
+prior_checkpoint: CP-463
+user_authorization: mixed-r3 and additional data preparation/frozen-backbone retraining approved; continuous inline serial execution
+design:
+  run_id: stage-c-decoder-supervision-mixed-r4-data-design-r701
+  observation: source train has 200 members in every near scenario while mixed-r3 used 160; source train and frozen near val image hashes have zero overlap
+  candidate_overlap: {no_cup_score_max: 0.4863526225, no_cup_candidates_gt_0_40: 5, partial_truth_score_median: 0.3508203477, partial_truth_gt_0_40: 21_of_50}
+  single_change: near-synthetic allocation only, from five equal 160 quotas to no_cup200/partial200/one134/bottle133/two133; small_far0 remains excluded
+  report_sha256: 3f30082e4d81a4d58264fa1945d374104b5ec23a5e6007ffd05b480ba3b9a6ac
+data_preparation:
+  run_id: stage-c-decoder-supervision-mixed-r4-data-prep-r702
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r4
+  execution: {exit: 0, elapsed_seconds: 479, completed: 1760, final_images_per_second: 2.1031855810, stderr_empty: true}
+  source_identity_sha256: 212532111f1918af2be7cb88e37bc4ff18cd13bd026b8c7e58cc03685301a3ea
+  composition: {near_synthetic: 800, real_train: 480, generic: 160, hard_negative: 160, real_val: 160, train_total: 1600, val_total: 160}
+  focused_tdd: {red: expected unexpected scenario_quotas argument, green: 1_passed, exact_python_tmp_on_nvme: true}
+  independent_readback: {status: PASS, decoded_images: 1760, manifest_payload_files: 1762, all_files: 1763_at_0444, all_directories: 6_at_0555, train_val_image_overlap: 0, coco100_id_overlap: 0, coco100_payload_overlap: 0, mixed_r3_coco_members_exactly_preserved: true}
+  hashes: {train_inventory: 404fd8d14522e59ab99897d383a7c53ac2bb4cfb996c8f2c7a07e32b8d06c986, val_inventory: 213ced2a1458f62b07cc83d12f9f4dc98ccc11f66a013d8f8bd1e169987afb7b, manifest: 704e0a1955673fd98c340dcd20aeaa9b40d4c947bdc4351be2cdf715d132a615, readback: 74fb6d81a53ed020d533cd3e5decd58b73c6ec8da8ab1371a349889b567e126a}
+training_contract:
+  run_id: stage-c-decoder-supervision-mixed-r4-config-r703
+  changed: frozen-backbone data source identity, execution commit and train/real-val inventory hashes only
+  preserved: official revision a2bb814dd30d776dcf7e30523b00659f4f141c71 initializes frozen teacher and student; resume null; frozen Swin-T/BERT; decoder-only supervised loss; head LR0.000002; distillation lambdas1.0; three epochs maximum; same frozen near val; COCO100/sealed test isolation; SAM frozen
+  tests: {focused_red: 1_failed_expected, focused_green: 1_passed_8_deselected, complete_training_container_file: 9_passed, ruff: PASS, exact_python_tmp_on_nvme: true}
+  source_hashes: {config: d066795a1faa0570c1461aa79d2ca462b23596c0bf36b38497612f7364c4fa80, test: 8ce8a92a6c49215e63203cd2343d85b4ac7b4bf773f066b7268ccdf5e73c715b}
+decision: COMMIT_PUSH_READBACK_THEN_BUILD_FRESH_IMAGE_AND_RUN_ONE_6_PLUS_6_CUDA_SMOKE
+verification_decision: no benchmark run; model is not selected and benchmark implementation/config is unchanged; only focused ordinary contract tests ran
+retention: r701-r703, immutable mixed-r4 dataset, all prior evidence and three required untracked build/install/log directories retained; nothing deleted, archived or stashed
+deletion_candidates: [scratch/stage-c-decoder-supervision-mixed-r4-data-prep-r702-red/tmp, scratch/stage-c-decoder-supervision-mixed-r4-data-prep-r702-green/tmp, scratch/stage-c-decoder-supervision-mixed-r4-data-prep-r702-run/tmp, scratch/stage-c-decoder-supervision-mixed-r4-config-r703-red/tmp, scratch/stage-c-decoder-supervision-mixed-r4-config-r703-green/tmp, scratch/stage-c-decoder-supervision-mixed-r4-config-r703-full/tmp]
+boundaries: no COCO100 outcome or sealed-test access; no SAM training; PickPlace/depth/Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-463 — frozen DINO/SAM validation passes mask gate but common-threshold selector gate fails
 
 ```yaml
