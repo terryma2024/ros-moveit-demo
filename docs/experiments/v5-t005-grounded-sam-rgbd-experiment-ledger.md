@@ -21010,6 +21010,52 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-467 — mixed-r4 last-Swin contract, image and 6+6 CUDA smoke pass
+
+```yaml
+checkpoint: CP-467
+status: VALID_MIXED_R4_LAST_SWIN_SMOKE_GO_FORMAL_TWO_EPOCHS
+prior_checkpoint: CP-466
+implementation_commit: b4f486de8eb9a6437e35d6bfe8c7c5045f1fb8f9
+gitee_readback_before_image: b4f486de8eb9a6437e35d6bfe8c7c5045f1fb8f9
+contract:
+  config_sha256: 52b9edbbaa7b3bc9a2ee254d7725259eb25681cf5029004b02c4c3bc8239720e
+  parent_checkpoint_manifest_sha256: 4521bf5b1e369e4af21ff76b75542cc47bf52688898cd3678e9fe71ed7ed7f66
+  parent_model_sha256: 4837f6d2d08e335c7ddb3524b10a5e4482b9ca3f63009f3894bc13202b938a71
+  parent_completed_epoch: 3
+  head_learning_rate: 0.000002
+  backbone_learning_rate: 0.0000002
+  epochs: 2
+tests:
+  tdd_red: {run_id: stage-c-last-swin-mixed-r4-tdd-r710-red, status: EXPECTED_RED, result: 1_failed_8_deselected}
+  focused_green: {run_id: stage-c-last-swin-mixed-r4-tdd-r710-green, status: PASS, result: 1_passed_8_deselected}
+  ordinary: {run_id: stage-c-last-swin-mixed-r4-ordinary-r711, status: PASS, result: 9_passed}
+  ruff_initial: {run_id: stage-c-last-swin-mixed-r4-ruff-r712, status: INVALID_INVOCATION, cause: system_Python_has_no_ruff_module, source_defect_claimed: false}
+  ruff_corrected: {run_id: stage-c-last-swin-mixed-r4-ruff-r713, status: PASS, executable: /home/lenovo/.local/bin/ruff}
+image:
+  tag: so101-grounding-dino-tiny-train:r14-last-swin-mixed-r4-b4f486de
+  id: sha256:9c5fb074a9bc13b4d114a301df7292812e9e33a0dca30b1c9297a81b89fe4434
+  size_bytes: 5142679806
+  build: {run_id: stage-c-last-swin-mixed-r4-image-r714, exit: 0, elapsed_seconds: 14}
+  readback_initial: {run_id: stage-c-last-swin-mixed-r4-image-readback-r715, status: INVALID_COMMAND_PATH, source_defect_claimed: false}
+  readback: {run_id: stage-c-last-swin-mixed-r4-image-readback-r716, status: PASS, cuda: 13.0, torch: 2.13.0+cu130, transformers: 4.56.2, gpu: NVIDIA_GeForce_RTX_5080, embedded_config_exact: true, verification_sha256: 39d88b3a16d700a1e7cd191cd9a98a5894f62196f5300e53a8672ed7d4e2fc8a}
+smoke:
+  run_id: stage-c-last-swin-mixed-r4-smoke-r717
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-last-swin-r1/smoke-r1
+  execution: {exit: 0, elapsed_seconds: 21, train_samples: 6, near_val_samples: 3, real_val_samples: 3, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: selected_mixed_r4_phase1_epoch_003, resume: null, epoch5_access: none}
+  trainability: {student_trainable_numel: 25800632, teacher_trainable_numel: 0, last_Swin_stage: true, decoder: true, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+  checkpoint_manifest_sha256: f1d1b02230788060c7b716830557f76fc05495e7fac7767215fbd34cefcd6693
+  checkpoint_model_sha256: 373676717a8cf034a73345c015a54680ae16037d622e00d63b6026259bc6926d
+  fresh_reload_sha256: b7a2787485c3c7e677e5a619b3f4cc350cec7424f96f51a210cd97bdc480b5a9
+readback: {run_id: stage-c-last-swin-mixed-r4-smoke-readback-r718, status: PASS, files: 19, bytes: 895654920, members_sha256: 1d3ece8d04a59ee183d3cbf853769d0e5cf69ff002d8a2a2d4f8469161aed2c1, report_sha256: 22808d61bc59c4689e9ca7414fd1f1c66d1ffa89e50994b48c28d71de937bc0f}
+decision: GO_LAST_SWIN_FORMAL_TWO_EPOCHS
+verification_decision: no package/benchmark rerun; relevant config tests, fresh image CUDA readback, smoke gradients/reload and independent output readback passed
+scratch_deletion_candidates: [scratch/stage-c-last-swin-mixed-r4-tdd-r710-red/tmp, scratch/stage-c-last-swin-mixed-r4-tdd-r710-green/tmp, scratch/stage-c-last-swin-mixed-r4-ordinary-r711/tmp, scratch/stage-c-last-swin-mixed-r4-smoke-r717/tmp]
+retention: r710-r718, smoke output and all prior evidence retained; nothing deleted, archived or stashed
+boundaries: no COCO100 outcome or sealed-test access; SAM frozen; PickPlace/depth/Mac NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-466 — mixed-r4 frozen-backbone formal phase is valid but independent real remains underfit
 
 ```yaml
