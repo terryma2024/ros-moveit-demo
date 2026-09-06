@@ -19614,6 +19614,54 @@ retention: r580-r584 evidence and scratch retained; scratch roots are deletion c
 boundaries: no formal test sample generated, no test/COCO metric read, no PickPlace/Mac access; Microduck paused
 ```
 
+## Checkpoint CP-426 — independent nonpenetrating test passes; COCO100 one-time gate authorized
+
+```yaml
+checkpoint: CP-426
+status: VALID_FROZEN_TEST_COCO100_ONE_TIME_GO
+prior_checkpoint: CP-425
+execution_head_local_gitee: e072846faf6c91ef25818ffe7cac801b25173670
+generation:
+  invalid_preflight: {run_id: stage-e-nonpenetrating-test-generation-r585, classification: INVALID_SELF_MATCHING_PROCESS_SCAN, product_output_created: false}
+  formal_run: {run_id: stage-e-nonpenetrating-test-generation-r586, result: PASS, samples: 300, elapsed_seconds: 17, device: NVIDIA_EGL}
+  source: {path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/cup-nonpenetrating-test-v1, manifest_sha256: fe341332c71463889f0da56eeb1daf68ccea6f00db01e0440773080c3f70e3e9, files: 902, symlinks: 0}
+  population_readback: {run_id: stage-e-nonpenetrating-test-readback-r587, images: 300, labels: 300, truth: 300, seeds: 470000000..470000299, each_scenario: 50, minimum_signed_distance: 0.0}
+archive:
+  run_id: stage-e-nonpenetrating-test-archive-r588
+  path: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/archives/so101-v5-t005-cup-nonpenetrating-test-v1.tar.gz
+  sha256: 256ebac25d8a3a89b26274de62073419145d787dd3dfa4b38f8e012f4f54b0e8
+sealed_conversion:
+  run_id: stage-e-nonpenetrating-test-sealed-conversion-r589
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/test-data/grounding-dino-cup-nonpenetrating-test-v1
+  seal_sha256: 2003337d305d95667c38385d32eb5682a303a1254a368ce6cd0d531bf2b85347
+  profile_sha256: 8536aea7c32ec2bef0a8a87af60d8dc8505637d72b477f2322c366a0a210030b
+  readback: {run_id: stage-e-nonpenetrating-test-seal-readback-freeze-r590, result: PASS, sealed_members: 300, source_and_archive_binding: exact}
+frozen_candidate:
+  bundle: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  lock_run: stage-e-nonpenetrating-candidate-lock-freeze-r591
+  lock_sha256: f90560f87c51dbfc4492e3cf6299c355514b7ad9ad25f88dea752695c21b472a
+evaluation:
+  run_id: stage-e-nonpenetrating-frozen-test-evaluation-r592
+  result: VALID_FROZEN_TEST
+  samples: 300
+  device: CUDA
+  errors: 0
+  dino_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.8269886001}
+  mask_all: {tp: 300, fp: 0, fn: 0, f1: 1.0, minimum_mask_iou: 0.9186440678}
+  dino_primary: {tp: 250, fp: 0, fn: 0, f1: 1.0, minimum_box_iou: 0.8837459332}
+  mask_primary: {tp: 250, fp: 0, fn: 0, f1: 1.0, minimum_mask_iou: 0.9456975773}
+  decisions_all: {UNIQUE: 200, TARGET_AMBIGUOUS: 50, TARGET_NOT_FOUND: 50}
+  decisions_primary: {UNIQUE: 150, TARGET_AMBIGUOUS: 50, TARGET_NOT_FOUND: 50}
+  runtime_scenario_access: forbidden and absent; scenario is used only after inference for reporting
+  report_sha256: 7aa320216ee8121b95dffdb4e5fa9a08b07581c1fb64f05d08827e65dfb55ae4
+  output_inventory_sha256: fc24fc55b3cdd00dbbde60af3908115f0683c4053a764395b9d955ee1e0a92df
+decision: independent synthetic safety gate passes with the previously frozen candidate; thresholds and checkpoint remain immutable
+next: run the same candidate exactly once on the frozen COCO100 handoff and apply only the preregistered noninferiority gates
+retention: r585-r592 source, archive, seal, candidate lock, masks, reports and all scratch retained; scratch and invalid empty roots are deletion candidates only; nothing deleted
+boundaries: COCO100 has not yet run for this candidate; no PickPlace or Mac action yet; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
