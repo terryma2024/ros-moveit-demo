@@ -445,6 +445,27 @@ def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
     assert "  backbone_learning_rate: 0.0000002\n" in contents
     assert (
         "  student_initialization_checkpoint_manifest_sha256: "
-        "ea07e89acaa4c330da5e549d473396df1841fae8a5f8faef848683c31d0c1bd3\n"
+        "8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f\n"
+        in contents
+    )
+    assert (
+        "  student_initialization_model_sha256: "
+        "1c302e9b14364e2b57e75ca409b3238d8ec6ac46bc59931f9f4acdae4005abb5\n"
+        in contents
+    )
+    assert "  student_initialization_completed_epoch: 3\n" in contents
+    assert (
+        "  source_archive_sha256: "
+        "6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db\n"
+        in contents
+    )
+    assert (
+        "  train_inventory_sha256: "
+        "4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a\n"
+        in contents
+    )
+    assert (
+        "  val_inventory_sha256: "
+        "9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572\n"
         in contents
     )
