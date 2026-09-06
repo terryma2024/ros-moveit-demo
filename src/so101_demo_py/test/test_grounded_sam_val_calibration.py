@@ -282,6 +282,7 @@ def test_low_grid_selection_requires_truth_mask_iou_and_counts_mask_failure(
     "split,corruption,error",
     [
         ("val", None, None),
+        ("val", "trainer_normalized_box", None),
         ("train", None, None),
         ("train", "inventory_split", "VAL_INVENTORY_INVALID"),
         ("train", "member_split", "VAL_MEMBER_PATH_INVALID"),
@@ -391,6 +392,13 @@ def test_val_loader_binds_inventory_and_only_val_members(
         inventory["samples"][0]["truth_sha256"] = hashlib.sha256(truth.read_bytes()).hexdigest()
     elif corruption == "member_hash":
         inventory["samples"][0]["image_sha256"] = "f" * 64
+    elif corruption == "trainer_normalized_box":
+        inventory["samples"][0]["boxes"][0]["normalized_xyxy"] = [
+            2.0 / 16.0,
+            2.0 / 16.0,
+            9.0 / 16.0,
+            9.0 / 16.0,
+        ]
     inventory_path = inventory_root / "inventory.json"
     inventory_path.write_bytes(canonical_json_bytes(inventory))
     expected_inventory_sha = hashlib.sha256(inventory_path.read_bytes()).hexdigest()
