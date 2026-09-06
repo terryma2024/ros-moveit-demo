@@ -420,6 +420,21 @@ def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
     assert "  resume_checkpoint: null\n" in contents
     assert "  teacher_token_logit_lambda: 1.0\n" in contents
     assert "  teacher_candidate_box_lambda: 1.0\n" in contents
+    assert (
+        "  source_archive_sha256: "
+        "6479714bd350dc3460ec2b26e9b683bf608bd24ac6c7b159c95d5fea754fa2db\n"
+        in contents
+    )
+    assert (
+        "  train_inventory_sha256: "
+        "4f32d9f7e780baacffb4134b557f64f8b510eaa38ba984e2f0a5f4466c74442a\n"
+        in contents
+    )
+    assert (
+        "  val_inventory_sha256: "
+        "9db4e3a6db44e0e2c690af4cd959d1019c46e352f874d8a4b32ce70bc56e7572\n"
+        in contents
+    )
 
 
 def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
