@@ -81,6 +81,25 @@ _CHECKPOINT_IDENTITY_FIELDS = {
     "training_commit",
     "val_inventory_sha256",
 }
+_SAM_CHECKPOINT_RUNTIME_FILES = frozenset(
+    {
+        "model/config.json",
+        "model/model.safetensors",
+        "model/preprocessor_config.json",
+        "model/processor_config.json",
+    }
+)
+_SAM_CHECKPOINT_FILES = _SAM_CHECKPOINT_RUNTIME_FILES | {
+    "epoch-receipt.json",
+    "training-state.pt",
+}
+_SAM_CHECKPOINT_IDENTITY_FIELDS = {
+    "base_manifest_sha256",
+    "recipe",
+    "source_commit",
+    "source_manifest_sha256",
+    "train_inventory_sha256",
+}
 _SELECTED_METRIC_FIELDS = {
     "box_threshold",
     "epoch",
@@ -185,7 +204,26 @@ def _validate_selected_metrics(value: object, completed_epoch: int) -> Mapping[s
     return metrics
 
 
-def _validate_finetuned_models(value: object) -> Mapping[str, Any]:
+def _validate_sam_checkpoint_identity(value: object) -> Mapping[str, str]:
+    if not isinstance(value, Mapping) or set(value) != _SAM_CHECKPOINT_IDENTITY_FIELDS:
+        raise _invalid("adapted SAM checkpoint identity is invalid")
+    identity = dict(value)
+    for name in _SAM_CHECKPOINT_IDENTITY_FIELDS - {"recipe", "source_commit"}:
+        if not _valid_sha256(identity[name]):
+            raise _invalid(f"adapted SAM checkpoint identity {name} is invalid")
+    if (
+        not isinstance(identity["recipe"], str)
+        or not identity["recipe"]
+        or not isinstance(identity["source_commit"], str)
+        or _COMMIT.fullmatch(identity["source_commit"]) is None
+    ):
+        raise _invalid("adapted SAM checkpoint recipe or source commit is invalid")
+    return identity  # type: ignore[return-value]
+
+
+def _validate_finetuned_models(
+    value: object, *, adapted_segmenter: bool = False
+) -> Mapping[str, Any]:
     if not isinstance(value, Mapping) or set(value) != {"detector", "segmenter"}:
         raise _invalid("fine-tuned manifest models are invalid")
     detector = value["detector"]
@@ -214,20 +252,45 @@ def _validate_finetuned_models(value: object) -> Mapping[str, Any]:
     _validate_checkpoint_identity(detector["checkpoint_identity"])
     _validate_selected_metrics(detector["selected_val_metrics"], completed_epoch)
 
-    segmenter_fields = {
-        "artifact_kind",
-        "directory",
-        "model_id",
-        "revision",
-        "source_bundle_manifest_sha256",
-    }
+    segmenter_fields = (
+        {
+            "artifact_kind",
+            "checkpoint_identity",
+            "checkpoint_manifest_sha256",
+            "completed_epoch",
+            "directory",
+            "model_id",
+            "revision",
+            "source_bundle_manifest_sha256",
+        }
+        if adapted_segmenter
+        else {
+            "artifact_kind",
+            "directory",
+            "model_id",
+            "revision",
+            "source_bundle_manifest_sha256",
+        }
+    )
     if not isinstance(segmenter, Mapping) or set(segmenter) != segmenter_fields:
         raise _invalid("frozen segmenter provenance is invalid")
     if any(segmenter[name] != _MODELS["segmenter"][name] for name in _MODELS["segmenter"]):
         raise _invalid("frozen segmenter identity is invalid")
-    if segmenter["artifact_kind"] != "frozen_snapshot" or not _valid_sha256(
-        segmenter["source_bundle_manifest_sha256"]
-    ):
+    if not _valid_sha256(segmenter["source_bundle_manifest_sha256"]):
+        raise _invalid("frozen segmenter source provenance is invalid")
+    if adapted_segmenter:
+        completed_epoch = segmenter["completed_epoch"]
+        identity = _validate_sam_checkpoint_identity(segmenter["checkpoint_identity"])
+        if (
+            segmenter["artifact_kind"] != "decoder_only_checkpoint"
+            or not _valid_sha256(segmenter["checkpoint_manifest_sha256"])
+            or type(completed_epoch) is not int
+            or completed_epoch <= 0
+            or identity["base_manifest_sha256"]
+            != segmenter["source_bundle_manifest_sha256"]
+        ):
+            raise _invalid("adapted segmenter provenance is invalid")
+    elif segmenter["artifact_kind"] != "frozen_snapshot":
         raise _invalid("frozen segmenter source provenance is invalid")
     return value
 
@@ -236,8 +299,8 @@ def _manifest_files(document: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
     if set(document) != _MANIFEST_FIELDS:
         raise _invalid("manifest has unsupported or missing fields")
     schema_version = document.get("schema_version")
-    if schema_version not in {1, 2}:
-        raise _invalid("manifest schema_version must be 1 or 2")
+    if schema_version not in {1, 2, 3}:
+        raise _invalid("manifest schema_version must be 1, 2, or 3")
     if document.get("pipeline_id") != _PIPELINE_ID:
         raise _invalid("manifest pipeline_id is not the fixed pipeline")
     if schema_version == 1:
@@ -246,10 +309,16 @@ def _manifest_files(document: Mapping[str, Any]) -> dict[str, tuple[int, str]]:
         if document.get("models") != _MODELS:
             raise _invalid("manifest models do not match the fixed revisions")
         models = document["models"]
-    else:
+    elif schema_version == 2:
         if document.get("prompt_profile") != _FINETUNED_PROMPT_PROFILE:
             raise _invalid("manifest prompt_profile is not generic cup")
         models = _validate_finetuned_models(document.get("models"))
+    else:
+        if document.get("prompt_profile") != _FINETUNED_PROMPT_PROFILE:
+            raise _invalid("manifest prompt_profile is not generic cup")
+        models = _validate_finetuned_models(
+            document.get("models"), adapted_segmenter=True
+        )
     if document.get("dependencies") != _LOCKED_DEPENDENCIES:
         raise _invalid("manifest dependencies do not match the fixed dependency pins")
     entries = document.get("files")
@@ -597,6 +666,74 @@ def _verified_checkpoint_document(
     return document
 
 
+def _verified_sam_checkpoint_document(
+    checkpoint_root: Path,
+    expected_manifest_sha256: str,
+) -> Mapping[str, Any]:
+    root = Path(checkpoint_root)
+    if not root.is_absolute() or root.is_symlink() or not root.is_dir():
+        raise ValueError("SAM checkpoint root must be an absolute, non-symlink directory")
+    if not _valid_sha256(expected_manifest_sha256):
+        raise ValueError("expected SAM checkpoint manifest SHA256 is invalid")
+    manifest_path = root / "checkpoint-manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("SAM checkpoint manifest must be a regular file")
+    payload = manifest_path.read_bytes()
+    observed_sha256 = hashlib.sha256(payload).hexdigest()
+    if observed_sha256 != expected_manifest_sha256:
+        raise ValueError(
+            "SAM checkpoint manifest SHA256 mismatch: "
+            f"expected {expected_manifest_sha256}, observed {observed_sha256}"
+        )
+    try:
+        document = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("SAM checkpoint manifest is not valid UTF-8 JSON") from error
+    if payload != _canonical_manifest(document):
+        raise ValueError("SAM checkpoint manifest is not canonically encoded")
+    if (
+        not isinstance(document, Mapping)
+        or set(document) != {"complete", "completed_epoch", "files", "identity", "schema_version"}
+        or document["schema_version"] != 1
+        or document["complete"] is not True
+        or type(document["completed_epoch"]) is not int
+        or document["completed_epoch"] <= 0
+    ):
+        raise ValueError("SAM checkpoint manifest is incomplete or unsupported")
+    try:
+        _validate_sam_checkpoint_identity(document["identity"])
+    except ModelSetupError as error:
+        raise ValueError(error.detail) from error
+    entries = document["files"]
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("SAM checkpoint files are invalid")
+    expected: dict[str, tuple[int, str]] = {}
+    for entry in entries:
+        if not isinstance(entry, Mapping) or set(entry) != {"path", "sha256", "size"}:
+            raise ValueError("SAM checkpoint file entry is invalid")
+        relative = _relative_path(entry["path"]).as_posix()
+        size = entry["size"]
+        sha256 = entry["sha256"]
+        if (
+            relative == "checkpoint-manifest.json"
+            or type(size) is not int
+            or size < 0
+            or not _valid_sha256(sha256)
+            or relative in expected
+        ):
+            raise ValueError(f"SAM checkpoint file metadata is invalid for {relative}")
+        expected[relative] = (size, sha256)
+    if set(expected) != _SAM_CHECKPOINT_FILES:
+        raise ValueError("SAM checkpoint file set is incomplete")
+    if _regular_files(root) != set(expected) | {"checkpoint-manifest.json"}:
+        raise ValueError("SAM checkpoint regular-file set does not match manifest")
+    for relative, (size, sha256) in expected.items():
+        path = root.joinpath(*PurePosixPath(relative).parts)
+        if path.stat().st_size != size or _sha256_file(path) != sha256:
+            raise ValueError(f"SAM checkpoint member hash mismatch for {relative}")
+    return document
+
+
 def compose_finetuned_model_bundle(
     *,
     checkpoint_root: Path,
@@ -661,6 +798,118 @@ def compose_finetuned_model_bundle(
                 "segmenter": {
                     **_MODELS["segmenter"],
                     "artifact_kind": "frozen_snapshot",
+                    "source_bundle_manifest_sha256": expected_source_manifest_sha256,
+                },
+            },
+            "files": sorted(files, key=lambda entry: str(entry["path"])),
+            "dependencies": dict(source_bundle.manifest["dependencies"]),
+        }
+        manifest_bytes = _canonical_manifest(document)
+        (staging / "manifest.json").write_bytes(manifest_bytes)
+        digest = hashlib.sha256(manifest_bytes).hexdigest()
+        verify_model_bundle(staging, digest)
+        try:
+            _rename_exclusive(staging, destination)
+        except OSError as error:
+            if error.errno == errno.EEXIST:
+                raise FileExistsError(
+                    f"bundle destination already exists: {destination}"
+                ) from error
+            raise
+        return digest
+    except BaseException:
+        if staging.exists():
+            shutil.rmtree(staging)
+        raise
+
+
+def compose_adapted_model_bundle(
+    *,
+    detector_checkpoint_root: Path,
+    expected_detector_checkpoint_manifest_sha256: str,
+    segmenter_checkpoint_root: Path,
+    expected_segmenter_checkpoint_manifest_sha256: str,
+    source_bundle_root: Path,
+    expected_source_manifest_sha256: str,
+    destination: Path,
+) -> str:
+    """Compose a generic-cup bundle from verified DINO and decoder-only SAM checkpoints."""
+
+    destination = Path(destination)
+    if not destination.parent.is_dir():
+        raise FileNotFoundError(
+            f"bundle destination parent does not exist: {destination.parent}"
+        )
+    if os.path.lexists(destination):
+        raise FileExistsError(f"bundle destination already exists: {destination}")
+    detector_root = Path(detector_checkpoint_root).resolve()
+    segmenter_root = Path(segmenter_checkpoint_root).resolve()
+    detector = _verified_checkpoint_document(
+        detector_root, expected_detector_checkpoint_manifest_sha256
+    )
+    segmenter = _verified_sam_checkpoint_document(
+        segmenter_root, expected_segmenter_checkpoint_manifest_sha256
+    )
+    source_bundle = verify_model_bundle(
+        Path(source_bundle_root), expected_source_manifest_sha256
+    )
+    source_schema = source_bundle.manifest["schema_version"]
+    source_segmenter = source_bundle.manifest["models"]["segmenter"]
+    if source_schema not in {1, 2} or (
+        source_schema == 2 and source_segmenter.get("artifact_kind") != "frozen_snapshot"
+    ):
+        raise ValueError("adapted SAM source must be an original frozen snapshot bundle")
+    if segmenter["identity"]["base_manifest_sha256"] != expected_source_manifest_sha256:
+        raise ValueError("SAM checkpoint base bundle identity mismatch")
+
+    staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent))
+    try:
+        detector_dir = staging / _MODELS["detector"]["directory"]
+        segmenter_dir = staging / _MODELS["segmenter"]["directory"]
+        detector_dir.mkdir()
+        segmenter_dir.mkdir()
+        files: list[dict[str, object]] = []
+        for name in sorted(_CHECKPOINT_RUNTIME_FILES):
+            source = detector_root / name
+            target = detector_dir / name
+            shutil.copyfile(source, target)
+            files.append(
+                {
+                    "path": target.relative_to(staging).as_posix(),
+                    "size": target.stat().st_size,
+                    "sha256": _sha256_file(target),
+                }
+            )
+        for relative in sorted(_SAM_CHECKPOINT_RUNTIME_FILES):
+            source = segmenter_root.joinpath(*PurePosixPath(relative).parts)
+            target = segmenter_dir / PurePosixPath(relative).name
+            shutil.copyfile(source, target)
+            files.append(
+                {
+                    "path": target.relative_to(staging).as_posix(),
+                    "size": target.stat().st_size,
+                    "sha256": _sha256_file(target),
+                }
+            )
+        document: dict[str, Any] = {
+            "schema_version": 3,
+            "pipeline_id": _PIPELINE_ID,
+            "prompt_profile": _FINETUNED_PROMPT_PROFILE,
+            "models": {
+                "detector": {
+                    **_MODELS["detector"],
+                    "artifact_kind": "fine_tuned_checkpoint",
+                    "checkpoint_manifest_sha256": expected_detector_checkpoint_manifest_sha256,
+                    "checkpoint_identity": dict(detector["identity"]),
+                    "completed_epoch": detector["completed_epoch"],
+                    "selected_val_metrics": dict(detector["selected_val_metrics"]),
+                },
+                "segmenter": {
+                    **_MODELS["segmenter"],
+                    "artifact_kind": "decoder_only_checkpoint",
+                    "checkpoint_manifest_sha256": expected_segmenter_checkpoint_manifest_sha256,
+                    "checkpoint_identity": dict(segmenter["identity"]),
+                    "completed_epoch": segmenter["completed_epoch"],
                     "source_bundle_manifest_sha256": expected_source_manifest_sha256,
                 },
             },
