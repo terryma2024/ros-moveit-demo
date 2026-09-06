@@ -23087,3 +23087,41 @@ scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-formal-
 retention: r749-r751, all three formal checkpoints and all prior evidence retained and frozen where complete; nothing deleted, archived, stashed or reset; three required untracked build/install/log directories retained
 boundaries: COCO100 outcome and sealed final test remain unread; SAM remains frozen/unloaded; DINO selector is not yet qualified; PickPlace/depth/Mac remain NO_GO; Microduck paused
 ```
+
+## Checkpoint CP-473 — optimization stops at r749/r751; last-Swin route superseded
+
+```yaml
+checkpoint: CP-473
+status: OPTIMIZATION_COMPLETE_AT_R749_R751_GO_GLOBAL_SYNTHETIC_VAL_SELECTION
+prior_checkpoint: CP-472
+user_override: the latest instruction supersedes the previously authorized last-Swin continuation; r749 plus its valid independent r751 readback are the terminal artifacts of this optimization attempt
+terminal_candidate:
+  training_run_id: stage-c-positive-only-distillation-formal-r749
+  readback_run_id: stage-c-positive-only-distillation-formal-readback-r751
+  selected_epoch: 3
+  checkpoint_manifest_sha256: c8880419f8a4bde268d6dcd5dbb66d92fddc9e5b12953e2e123b1df48ae16652
+  checkpoint_model_sha256: f62be6e9f62474814eab94f4e2be92955fea0ea9e3c51e6229f7dc10828cbe56
+  fresh_reload_sha256: 4d35a3e36af7bb2690b5bfa6dd8816d5d00799acd4956a6d4e94e060f8f0cd72
+  readback_report_sha256: fd597debcc53d3db02d94c73880167cd29124a4e8152f850d1d0f3ff43aada71
+superseded_attempt:
+  run_id: stage-c-positive-only-distillation-last-swin-smoke-r752
+  classification: INVALID_PRETRAIN_STUDENT_IDENTITY_MISMATCH
+  result: {exit: 1, training_batches: 0, validation_forwards: 0, model_output: none, failure: STUDENT_INITIALIZATION_MANIFEST_SHA256_MISMATCH}
+  cause: the frozen last-Swin contract remained pinned to an older phase1 checkpoint and correctly rejected the corrected r749 epoch3 student before model training
+  evidence: {stdout_stderr_sha256: 2fcd4c4ecb16a4969645d38f06cb105dc6be2435ab7b0a9aaa33ebce195f094a, preflight_sha256: 7d3e995bd00338a7f7c0538a76fa9523255600a5cb99f304821d6396604e6f3b, exit_code_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865}
+  disposition: retained invalid; no retry, no identity update, no tests, no image rebuild and no further last-Swin training under the latest user instruction
+uncommitted_diff:
+  classification: SUPERSEDED_UNCOMMITTED_LAST_SWIN_IDENTITY_EDIT_RETAINED_NOT_EXECUTED
+  files: [src/so101_demo_py/config/perception/grounding_dino_domain_retention_last_stage_training.yaml, src/so101_demo_py/test/test_grounding_dino_training_container.py]
+  diff_sha256: c1cfb9a07302aff1bfb0fc4731e71092b958a9756b1730207ac6817374cb0b43
+  config_worktree_sha256: 5acc83bca0a3eadfd112f33a1711892e70e8b172273c20d4191ab79a8896eb71
+  test_worktree_sha256: 9a999c031733164a21e8b7d9236743929174bfb8134ad01678ed581ea84f091b
+  disposition: preserve unstaged exactly as found at override; do not modify, stage, commit, test, reset, stash or use it for execution
+gpu_after_stop: {utilization_percent: 0, compute_processes: 0, memory_free_mib: 15326}
+decision: perform a read-only inventory of every historically valid model checkpoint and rank candidates only by the preregistered synthetic validation contract; select one unique global best before creating an isolated four-point acceptance smoke
+selection_boundaries: no COCO100 or four-point acceptance smoke outcome may affect candidate selection, thresholds or training; no further optimization or last-Swin work
+verification_decision: no tests or image build under the explicit override; r752 never crossed the identity gate and GPU is idle
+scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-last-swin-smoke-r752/tmp]
+retention: r752, its empty training parent, the superseded unstaged diff and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
+boundaries: sealed final test remains unread; COCO100 and four-point smoke are selection-blind future checks; SAM frozen; PickPlace remains NO_GO until ordered acceptance gates; Microduck paused
+```
