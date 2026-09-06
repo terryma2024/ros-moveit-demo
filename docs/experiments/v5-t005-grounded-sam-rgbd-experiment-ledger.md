@@ -21010,6 +21010,46 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-465 — mixed-r4 decoder-only frozen-backbone 6+6 CUDA smoke passes
+
+```yaml
+checkpoint: CP-465
+status: VALID_MIXED_R4_DECODER_SUPERVISION_SMOKE_GO_FORMAL_THREE_EPOCHS
+prior_checkpoint: CP-464
+implementation_commit: 0b7943c7f1323c6a29cb3935109c902ed80a9991
+gitee_readback_before_image: 0b7943c7f1323c6a29cb3935109c902ed80a9991
+image:
+  tag: so101-grounding-dino-tiny-train:r13-decoder-supervision-mixed-r4-0b7943c7
+  id: sha256:b560654b58c785bf7a5ed6bb56d98fbc16dfbe707a1da98d58d13a78d402d71c
+  size_bytes: 5142680781
+  build: {run_id: stage-c-decoder-supervision-mixed-r4-image-r704, exit: 0, elapsed_seconds: 14}
+  readback: {run_id: stage-c-decoder-supervision-mixed-r4-image-readback-r705, status: PASS, cuda: 13.0, torch: 2.13.0+cu130, transformers: 4.56.2, gpu: NVIDIA_GeForce_RTX_5080, embedded_hashes_exact: true, report_sha256: 7e3267ec4e4ff686e5ee557e7aae9f4fd1f2939f1493a462b3f44347e4871bca}
+smoke:
+  run_id: stage-c-decoder-supervision-mixed-r4-smoke-r706
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-decoder-supervision-r1/smoke-r1
+  execution: {exit: 0, elapsed_seconds: 20, train_samples: 6, near_val_samples: 3, real_val_samples: 3, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: none}
+  trainability: {student_trainable_numel: 11616776, teacher_trainable_numel: 0, Swin_frozen: true, BERT_frozen: true, encoder_frozen: true, decoder_trainable: true, gradient_check: PASS}
+  mean_losses: {supervised: 0.4654250486, teacher_token: 0.8477804065, teacher_box: 0.0003881585, total: 1.3135935962}
+  decoder_components: {loss_ce: 0.1851393748, loss_bbox: 0.0047703153, loss_giou: 0.0356473625}
+  checkpoint_manifest_sha256: 37c7a3df06f5ea30354a2f28bb1b9dd997eeec71733ed4b66619af1bf09bf89e
+  checkpoint_model_sha256: 6f22d8805a3e45b884a000239d6057685af67fe5687882bcd43b398e56adbe9b
+  fresh_reload_sha256: cf72405b2807c062dbfafbabccefb1a7187801dadc775217c8e8c89db764134a
+readback:
+  run_id: stage-c-decoder-supervision-mixed-r4-smoke-readback-r707
+  status: PASS
+  files: 19
+  bytes: 782157279
+  members_sha256: 313c20e7fb00db228ffbd935a300e5de150d463a1cefaa9cd9cc5685e7b13828
+  report_sha256: 9652f0605ac2a33eb57116e660a817796fd35f7643e7fc0765929b8da08eade4
+  frozen_modes: {files: 0444, directories: 0555}
+decision: GO_FORMAL_THREE_EPOCHS; each epoch uses all 1600 mixed-r4 train members and evaluates only frozen 300 near plus independent 160 real validation with DINO-only raw candidates
+verification_decision: no package/benchmark rerun; fresh image, CUDA smoke and complete independent output readback are the relevant gate
+retention: r704-r707, smoke output and all prior evidence retained; nothing deleted, archived or stashed
+boundaries: no COCO100 outcome or sealed-test access; SAM frozen; PickPlace/depth/Mac NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-464 — mixed-r4 train-only rebalance is immutable and frozen-backbone contract is GREEN
 
 ```yaml
