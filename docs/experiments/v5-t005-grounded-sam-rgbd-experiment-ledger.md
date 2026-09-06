@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-482
+latest_checkpoint: CP-483
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_TASK_START_QUALIFIED_BINARY_RECOVERY_R767
-confirmed: r766 reached the visible sensor-rendering stack but the stale canonical Aug-13 MuJoCo binary hit a concurrent GLFW initialization assertion; CP-482 binds the same-source Aug-28 qualified binary that already passed visible RGB-D FULL_RESTART and leaves all perception identity frozen
-open: execute r767-task-start, validate its first product boundary, then continue the remaining three independent Linux trials only after task_start is valid
-next_action: launch r767-task-start under ROS_DOMAIN_ID 186 using the qualified MuJoCo binary and unchanged current SO-101 product overlay
+active_experiment: STAGE_F_LINUX_TASK_START_READINESS_RECOVERY_R768
+confirmed: r767 proved the qualified visible RGB-D stack reaches a healthy scene, controllers and exact MuJoCo window, but its evidence wrapper watched obsolete readiness text and was stopped before perception; CP-483 binds the actual structured scene_setup success record
+open: execute r768-task-start, validate the complete product path, then continue the remaining three independent Linux trials only after task_start is valid
+next_action: launch r768-task-start under ROS_DOMAIN_ID 187 with the same qualified binary and unchanged frozen perception identity
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23604,4 +23604,42 @@ stopping_rule: stop at the first persisted r767 product failure; if valid, use t
 retention: r765 and r766 invalid attempts plus every historical artifact remain preserved; no rebuild, deletion, reset, stash or force-push
 boundaries: COCO100 remains diagnostic only and cannot trigger optimization; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-482 and execute r767-task-start
+```
+
+## Checkpoint CP-483 — correct the scene-readiness observer without changing runtime
+
+```yaml
+checkpoint: CP-483
+status: INVALID_PRE_PERCEPTION_R767_GO_READINESS_OBSERVER_RECOVERY_R768
+prior_checkpoint: CP-482
+policy_time: 2026-09-07T07:47:52+08:00
+r767_task_start:
+  classification: INVALID_PRE_PERCEPTION_OBSOLETE_READINESS_PATTERN
+  qualified_mujoco_stack: healthy
+  scene_setup_structured_readback: {backend: mujoco, phase: READ_BACK, success: true, failure_code: null}
+  controllers: joint_state_broadcaster, arm_controller and gripper_controller activated
+  moveit: ready
+  exact_gui_window: MuJoCo/MuJoCo title MuJoCo : so101_task_scene
+  model_loaded: false
+  model_forwards: 0
+  dynamic_workflow_started: false
+  intervention: the owned launch process group was stopped with SIGINT after direct log inspection proved the observer mismatch; ROS domain 186 read back empty afterward
+  retained_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/pickplace/linux-four-point-r765/r767-task-start
+minimal_repair:
+  scope: evidence-only readiness predicate
+  red: wrapper searched for legacy SCENE_SETUP_OK or status OK strings that the current structured scene_setup does not emit
+  green: require the retained real line from scene_setup with backend mujoco and success true
+  directed_test: corrected predicate matches the retained r767 structured success record; zsh syntax passes; domain 187 and output roots are empty
+  wrapper_sha256: 762b039ff7cca02f8e2a3208937bd5a39d37bd020737dd0293fd8ea7b5e4040c
+recovery:
+  id: r768-task-start
+  keyframe: task_start
+  truth_xyz_m: [0.02, -0.28, 0.165]
+  ros_domain_id: 187
+  partition: so101-v5-t005-linux-r768-task-start-20260907
+  runtime_and_model_identity: exactly CP-482; unchanged
+stopping_rule: r768 must stop at its first persisted product boundary or validate fully before any other point starts
+retention: r765-r767 and every historical artifact remain preserved; no delete, rebuild, reset, stash or force-push
+boundaries: COCO100 remains diagnostic only; DINO/SAM/threshold optimization forbidden; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-483 and execute r768-task-start directly, without a pipeline wrapper
 ```
