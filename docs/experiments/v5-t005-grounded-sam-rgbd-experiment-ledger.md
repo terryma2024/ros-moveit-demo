@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-476
+latest_checkpoint: CP-477
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 8ede98e038328d2dc9e0a249b69b922342625f92
-active_experiment: STOPPED_AT_COCO100_FIRST_FAILURE_BOUNDARY
-confirmed: global synthetic-val winner is byte-identical to the candidate whose one valid COCO100 run was already consumed by r595; r760 rehashed and bound that result without a prohibited rerun; COCO F1, Recall and hit-image gates fail
-open: user direction is required before any materially different optimization or candidate policy; the current directive forbids COCO-driven tuning, threshold changes, checkpoint reselection, four-point opening, bundle promotion and PickPlace after this failure
-next_action: report the COCO100 failure to the user; keep the four-point carrier semantically unopened and preserve all evidence
-boundaries: COCO100 and four-point smoke cannot select a model or tune thresholds; sealed final test remains unread; real hardware is unauthorized; PickPlace remains NO_GO until COCO100 and all four perception smoke points pass; Microduck paused
+source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
+active_experiment: PLANNED_STAGE_E_FOUR_POINT_ACCEPTANCE_SMOKE_R761
+confirmed: the global synthetic-val winner, threshold lock b02e3be and bundle b55bb6 remain frozen; r595/r760 remain the sole COCO100 diagnostic and are not rerun; the user removed COCO100 as a pass/fail gate on 2026-09-07
+open: run the frozen four-point carrier once for acceptance-only perception smoke; if all four pass, proceed to four independent ai-station Linux FULL_RESTART PickPlace runs
+next_action: preflight and run stage-e-four-point-acceptance-smoke-r761 without changing DINO, SAM, thresholds or selector semantics
+boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -23262,4 +23262,45 @@ scratch_deletion_candidates: [scratch/stage-e-coco100-global-winner-adjudication
 retention: r760, r595, frozen four-point carrier, threshold locks, immutable bundle and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed
 next_action: report the first failure boundary to the user and await materially new direction; do not open the four-point carrier
 boundaries: sealed final test unread; real hardware unauthorized; PickPlace/Mac NO_GO; Microduck paused
+```
+
+## Checkpoint CP-477 — user removes the COCO100 gate and authorizes the frozen four-point smoke
+
+```yaml
+checkpoint: CP-477
+status: COCO100_GATE_SUPERSEDED_GO_FROZEN_FOUR_POINT_SMOKE
+prior_checkpoint: CP-476
+policy_time: 2026-09-07T06:57:16+08:00
+source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
+superseding_policy:
+  authority: user
+  change: COCO100 is no longer a pass/fail gate for model promotion, four-point smoke, bundle promotion or PickPlace
+  preserved_history: CP-476 and the r595/r760 result remain unchanged diagnostic evidence
+  prohibited: rerun COCO100; use its result to tune thresholds, reselect a checkpoint, change training data or continue training
+frozen_identity:
+  global_synthetic_winner_model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  dino_sam_thresholds_and_selector: unchanged
+four_point_carrier:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/acceptance/four-point-mujoco-r2
+  manifest_sha256: 7d6c559ea5a87eab0fb63798cea4f199a5f17163d7cf2578feac03af5bacd50c
+  inventory_sha256: c3e33708600ffcf979c5d2ef8d63f91054456857e3108e053c63793c259c8fbd
+  readback_status: PASS_INDEPENDENT_BYTE_READBACK_UNOPENED
+  semantic_evaluation_count_before_r761: 0
+next_run:
+  run_id: stage-e-four-point-acceptance-smoke-r761
+  status: PLANNED
+  output_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/acceptance/four-point-mujoco-smoke-r1
+  run_evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-e-four-point-acceptance-smoke-r761
+  scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-e-four-point-acceptance-smoke-r761/tmp
+  collision_preflight: all three paths absent under both -e and -L
+  model_policy: exactly one valid semantic evaluation of the four frozen points; no training or threshold selection
+  success: each point has one cup, production SAM truth IoU >=0.80, mapping IoU >=0.98, valid depth, world pose error <0.01m, fresh source and warmed latency <=2000ms
+worktree: preserve the superseded two-file unstaged last-Swin diff without modifying, staging, testing, resetting, stashing or executing it; preserve the three untracked build/install/log directories
+runtime_boundary: before r761 confirm no duplicate ROS/MuJoCo/MoveIt stack, idle GPU, exact source/runtime/bundle provenance, evidence root and NVMe tempfile resolution
+failure_policy: stop at the first four-point or PickPlace failure boundary and apply one minimal RED-to-GREEN repair; never restore the COCO gate or start COCO-driven training
+retention: r595, r760, CP-476, frozen carrier, threshold locks, immutable bundle and all prior evidence remain unchanged; nothing deleted, archived, stashed, reset or force-pushed
+next_action: commit and push this policy checkpoint, read back the Gitee SHA, then preflight and execute r761
+boundaries: real hardware remains unauthorized; Microduck paused
 ```

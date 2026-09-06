@@ -8,6 +8,8 @@
 
 **第一验收平台：** ai-station Linux CUDA
 
+**政策更新：** 用户于 2026-09-07 移除 COCO100 的模型晋级门控。唯一有效运行 r595 及 r760 裁决继续作为历史诊断证据，不重跑，也不用于调阈值、重选 checkpoint 或继续训练。其余冻结身份、四点感知验收和机器人安全门不变。
+
 ## 1. 背景与结论
 
 冻结的 Grounding DINO Tiny + SAM 2.1 Hiera Tiny 在合成评测和 COCO 杯子图片上都暴露了明显短板。COCO 100 张外部基线共有 247 个 `cup` 实例，固定配置得到 `TP/FP/FN=145/48/102`，Precision 为 `75.13%`，Recall 为 `58.70%`，F1 为 `65.91%`。小目标和多杯场景漏检较多。当前模型可以继续作为基线，不能直接用于无人值守 PickPlace。
@@ -64,9 +66,9 @@ SAM 仍使用冻结的 `facebook/sam2.1-hiera-tiny`。YOLO polygon 可以继续�
 
 旧 benchmark test 已经打开，只保留为历史基线，不再用于新的超参数、数据配比或 checkpoint 选择。
 
-COCO100 交付物位于 `/private/tmp/so101-grounded-dino-cup-100-handoff-20260904`。它是外部非劣化集合，不加入训练，也不参与 checkpoint 选择。最终候选在合成 val 上冻结后，才允许对 COCO100 运行一次。逐图结果即使不理想，也不得据此继续调参后重跑同一 run ID。
+COCO100 交付物位于 `/private/tmp/so101-grounded-dino-cup-100-handoff-20260904`。它不加入训练，也不参与 checkpoint 选择。冻结候选的唯一有效运行 r595 已完成，r760 已将结果绑定到相同 bundle；后续不得重跑。逐图结果不得用于调参、重选 checkpoint、改变训练数据或继续训练。
 
-## 7. COCO100 非劣化门槛
+## 7. COCO100 历史诊断口径
 
 基线固定为：
 
@@ -78,7 +80,7 @@ COCO100 交付物位于 `/private/tmp/so101-grounded-dino-cup-100-handoff-202609
 | 至少检出一个真杯子的图片 | 85/100 |
 | 肉眼可见的非杯 UNIQUE | 0 |
 
-微调模型通过外部非劣化检查需要同时满足：
+2026-09-04 预注册的外部非劣化保护线为：
 
 - F1 不低于 `0.6391`；
 - Recall 不低于 `0.5670`；
@@ -86,7 +88,7 @@ COCO100 交付物位于 `/private/tmp/so101-grounded-dino-cup-100-handoff-202609
 - 不新增肉眼可见的非杯 UNIQUE 选择；
 - 推理错误数不高于基线的 `1/100`。
 
-这些是回归保护线，不是训练目标。正式报告同时给出 Precision、Recall、F1、TP/FP/FN、尺度分层和单杯/多杯分层，不用单一门槛掩盖退化。
+唯一有效运行 r595 的结果为 `TP/FP/FN=0/0/247`、Recall `0.0`、F1 `0.0`、命中图片 `0/100`、肉眼可见非杯 UNIQUE `0`、inference errors `0`。CP-476 据此记录了当时的停止边界。用户于 2026-09-07 取消这些保护线的 pass/fail 作用，但没有撤销结果本身：它们继续写入报告，只是不再阻断四点 smoke、bundle promotion 或 PickPlace。
 
 ## 8. 微调方案
 
@@ -102,8 +104,8 @@ checkpoint 只能按合成 val 的预注册目标选择。建议主目标为 cup
 2. 修复并验证候选映射契约，在 ai-station 重新构建相同 commit 的 Linux overlay。
 3. 导入并校验 COCO100 交付物；转换 YOLO-Seg 数据，生成训练/val/新 test inventory。
 4. 在 ai-station 微调 Grounding DINO Tiny，按合成 val 冻结 checkpoint 和阈值。
-5. 对新合成 test 与 COCO100 各运行一次正式评测。
-6. 只有安全决策门和 COCO100 非劣化门同时通过，才进入 Linux PickPlace。
+5. 对新合成 test 运行一次正式评测；COCO100 只读回已经完成的 r595/r760，不再推理。
+6. 用冻结的四点 carrier 对同一候选做一次 perception smoke。四点全部通过安全决策、mask、mapping、深度、pose、freshness 和 latency 验收后，才进入 Linux PickPlace；COCO100 不再参与这个判断。
 7. ai-station 四个预置点位分别执行一次完整 MuJoCo PickPlace。每次都需要 RGB-D、`/cup_pose`、TF、MoveIt、controller、MuJoCo 物体位姿/attachment 与新截图证据。
 8. Linux 四点位全部成功后，发布不可变模型包并迁移 macOS。Mac 使用相同 prompt、阈值、模型 SHA 和接口语义，另做平台兼容与四点位验收。
 
@@ -125,8 +127,9 @@ Linux 阶段完成的最低标准：
 - 候选映射 RED -> GREEN，包级普通测试与显式 benchmark 测试通过；
 - 训练数据和 COCO100 inventory、SHA 与许可信息可读回；
 - 新合成 test 的安全门通过；
-- COCO100 非劣化门通过；
+- COCO100 的唯一历史运行、失败指标和身份绑定可读回，且没有重跑或回流优化；
+- 冻结四点 perception smoke 全部通过；
 - 四个预置点位各有一次新的、可追溯的完整 PickPlace 成功证据；
 - 没有 CPU fallback、混入 test 调参或复用无效 run。
 
-未满足上述条件时，不宣称 Grounded-SAM 可部署，也不启动 macOS 迁移。
+未满足四点感知与 Linux PickPlace 安全条件时，不宣称 Grounded-SAM 可部署，也不启动 macOS 迁移。COCO100 历史失败不再单独触发该阻断。
