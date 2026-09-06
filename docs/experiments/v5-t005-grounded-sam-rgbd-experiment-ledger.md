@@ -19388,6 +19388,29 @@ evidence: r558 complete build/test evidence, partial overlay and NVMe scratch re
 boundaries: no implementation/test/model/data/threshold/training change; no r558 reuse or benchmark; Microduck paused
 ```
 
+## Checkpoint CP-418 — full candidate overlay and ordinary gate valid; joint val raw retry planned
+
+```yaml
+checkpoint: CP-418
+status: VALID_FULL_OVERLAY_ORDINARY_GATE_JOINT_VAL_RAW_PLANNED
+prior_checkpoint: CP-417
+build_and_test:
+  run_id: linux-build-test-stage-d-full-overlay-r559
+  source_commit: 2bd73b3bce64e4d5b0d573ea74f89ebf516ec027
+  overlay: /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/linux-build-stage-d-full-overlay-r559/install
+  build: {packages: 7, exit: 0, elapsed_seconds: 56.79}
+  prefix_readback: all seven packages resolve inside the r559 candidate overlay; loader module resolves through its symlink to current repository source
+  ordinary_tests: {exit: 0, test_result_exit: 0, tests: 1473, passed: 1473, failures: 0, errors: 0, skipped: 0, benchmark_cases: 0, elapsed_seconds: 25.99}
+  evidence: {junit_sha256: ddf3d377581a333f9a4f33146ec686516e1a2756b9f7bc5d320132bfe25354f3, readback_sha256: 12094ec70ef5e7b750332bf871b4b63096e62100fd3cf6363276432ce5dc3a75}
+joint_val_raw:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r560
+  inputs: selected immutable DINO epoch1, immutable adapted SAM epoch4, exact frozen nonpenetrating val and r559 overlay
+  contract: 300 DINO CUDA forwards, complete proposal receipts, actual adapted-SAM raw masks, no fallback, immutable output/readback
+  collision: fresh run, scratch and output roots only; r550-r553 never reused
+evidence_retention: r557 partial pre-build, r558 partial overlay and r559 valid full overlay plus all run evidence retained; r557/r558 overlays and r557-r559 scratch are deletion candidates only; nothing deleted
+boundaries: no benchmark rerun, model/data/threshold/training change or SAM training; sealed test/COCO/PickPlace/Mac remain inaccessible; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
