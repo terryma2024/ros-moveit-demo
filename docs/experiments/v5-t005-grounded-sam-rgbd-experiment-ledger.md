@@ -21010,6 +21010,56 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-463 — frozen DINO/SAM validation passes mask gate but common-threshold selector gate fails
+
+```yaml
+checkpoint: CP-463
+status: VALID_STATELESS_SAM_MASK_PASS_DINO_SELECTOR_NO_GO
+prior_checkpoint: CP-462
+frozen_inputs:
+  dino: {checkpoint_manifest_sha256: 0157b4e0cd82df8e33fdb5900d8edb1c6bfb3f6d19c2717bc54756e6ac1cbf0c, model_sha256: 81f0b15a3769eabc81d2b2df70c8e59b389108c9435a51acaea55dc90e653e5b}
+  sam: {checkpoint_manifest_sha256: 9c4ba6a0a6ffd0a459daf9429b165ff6dfc8cd6b7ee804974864968aff0cfe7e, model_sha256: 0d2528f31c2ace2576b238079febef7506ac8786b4130250ad4223a4d47735d4}
+  combined_model_identity_sha256: 9bb08feb7815cabe48968f2dee59bd61cb5e86a0de3e3f0887009b6032873569
+  prompt: cup.
+raw_capture:
+  run_id: stage-d-decoder-supervision-frozen-sam-joint-val-raw-r695
+  result: {status: PASS, samples: 300, dino_forwards: 300, sam_forwards: 300, proposals: 5708, accepted_raw_masks: 5665, elapsed_seconds: 187.115}
+  output_files: 6567
+  report_sha256: 48207cfc26e9421196fa2e8680bd199f05cbb889222718cf7d8aff21d9a38161
+production_replay:
+  run_id: stage-d-decoder-supervision-frozen-sam-joint-val-production-r697
+  thresholds: {box: 0.30, text: 0.30, selector_confidence: 0.30}
+  execution: {exit: 0, dino_forwards: 0, sam_forwards: 282, errors: 0, elapsed_seconds: 20.7138764620}
+  all: {tp: 289, fp: 80, fn: 11, recall: 0.9633333333, precision: 0.7831978320, f1: 0.8639760837}
+  primary_near: {tp: 242, fp: 79, fn: 8, recall: 0.968, precision: 0.7538940810, f1: 0.8476357268}
+  decisions: {unique: 198, ambiguous: 84, not_found: 18, no_cup_unique: 26, two_cup_unique: 0}
+  masks: {matched: 289, iou_gate: 0.80, pass: 289, fail: 0, mapping_iou_min: 1.0}
+  report_sha256: ea1e46e69f6cf40f8080647ff69e4443d32629b38906cbf6c4a5d9be1a9bab08
+threshold_scan:
+  invalid_attempt: r698 parsed truth box objects as arrays and stopped before report/model/GPU activity; empty retained directory is not evidence
+  valid_run: stage-d-decoder-supervision-last-swin2-threshold-scan-r699
+  method: saved DINO proposal receipts only; 439 common strict box/text score breakpoints from 0.25 through 0.80; greedy box IoU 0.50; no DINO/SAM forward and no selector geometry
+  result: {strict_selector_pass_count: 0, conclusion: COMMON_THRESHOLD_CANNOT_SATISFY_STRICT_GATE}
+  best_primary_f1: {threshold: 0.4414256513, recall: 0.916, precision: 0.9786324786, f1: 0.9462809917, no_cup_unique: 2, two_cups_unique: 0}
+  best_selector_safe: {threshold: 0.4863526225, primary_recall: 0.84, primary_f1: 0.9110629067, partial_occlusion_recall: 0.26, no_cup_unique: 0, two_cups_unique: 0}
+  fixed_0_35: {primary_recall: 0.948, primary_f1: 0.8926553672, no_cup_unique: 26}
+  report_sha256: 8cdf1420941bbee36147cba0accfcdf43a93fb392b13b75036839948c26b3632
+readback:
+  run_id: stage-d-decoder-supervision-last-swin2-joint-readback-r700
+  status: PASS
+  verified: all raw 6567 and production 972 inventory members; every file and directory frozen 0444/0555; no symlinks; all 300 proposal receipts rehashed; r699 selection recomputed; threshold 0.30 exactly reproduces r697
+  report_sha256: b6ce22851d82efe91fc204a60ed79cdf4b4b20dae06e0bf63c72f1e24954bb99
+invalid_attempts_retained:
+  r696: pre-execution exact replacement typo; no output or GPU activity
+  r698: offline truth schema mismatch; no report, model forward or GPU activity
+interpretation: SAM is not the limiting component; score calibration alone cannot remove empty-scene UNIQUE results without unacceptable partial-occlusion recall loss
+decision: DINO_AND_SELECTOR_REMAIN_NO_GO; KEEP_SAM_FROZEN; DO_NOT_ACCESS_SEALED_TEST_OR_START_PICKPLACE
+next_experiment: prepare a new isolated mixed dataset revision focused on current false-positive visual negatives and partial-occlusion positives, retaining independent real/Web cup data and generic replay; initialize teacher and student only from official pinned revision, keep COCO100 excluded, then run frozen-backbone 6+6 smoke before formal epochs
+verification_decision: no package or benchmark rerun because source and benchmark implementation/config were unchanged; saved-candidate replay plus independent full readback is the relevant model-selection gate
+retention: r695-r700 and all prior evidence retained; nothing deleted or archived
+boundaries: sealed final test and COCO100 remain unread; SAM remains frozen; depth/PickPlace/Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-462 — decoder-only last-Swin epoch 2 selected and DINO frozen
 
 ```yaml
