@@ -15,6 +15,7 @@ TRAINABLE_PREFIXES = (
     "model.enc_output.",
     "model.enc_output_norm.",
 )
+LAST_SWIN_STAGE_PREFIX = "model.backbone.conv_encoder.model.encoder.layers.3."
 _FROZEN_BACKBONE_PREFIXES = ("model.backbone.", "model.text_backbone.")
 
 
@@ -53,16 +54,14 @@ def _parameter_receipt(model: Any) -> dict[str, Any]:
     }
 
 
-def configure_student_trainability(model: Any) -> dict[str, Any]:
-    """Freeze every student parameter outside the exact decoder/query/head allowlist."""
-
+def _configure_trainability(model: Any, prefixes: tuple[str, ...]) -> dict[str, Any]:
     names = []
-    prefix_hits = {prefix: 0 for prefix in TRAINABLE_PREFIXES}
+    prefix_hits = {prefix: 0 for prefix in prefixes}
     frozen_backbone_hits = {prefix: 0 for prefix in _FROZEN_BACKBONE_PREFIXES}
     for name, parameter in model.named_parameters():
         names.append(name)
         trainable = False
-        for prefix in TRAINABLE_PREFIXES:
+        for prefix in prefixes:
             if name.startswith(prefix):
                 trainable = True
                 prefix_hits[prefix] += 1
@@ -75,10 +74,50 @@ def configure_student_trainability(model: Any) -> dict[str, Any]:
     if any(count == 0 for count in frozen_backbone_hits.values()):
         raise RuntimeError("FROZEN_BACKBONE_MODEL_MISMATCH")
     receipt = _parameter_receipt(model)
-    receipt["trainable_prefixes"] = list(TRAINABLE_PREFIXES)
+    receipt["trainable_prefixes"] = list(prefixes)
     receipt["prefix_parameter_counts"] = prefix_hits
     receipt["frozen_backbone_parameter_counts"] = frozen_backbone_hits
     return receipt
+
+
+def configure_student_trainability(model: Any) -> dict[str, Any]:
+    """Freeze every student parameter outside the exact decoder/query/head allowlist."""
+
+    return _configure_trainability(model, TRAINABLE_PREFIXES)
+
+
+def configure_last_stage_trainability(model: Any) -> dict[str, Any]:
+    """Open only the final Swin stage in addition to the frozen-phase heads."""
+
+    return _configure_trainability(model, (*TRAINABLE_PREFIXES, LAST_SWIN_STAGE_PREFIX))
+
+
+def optimizer_parameter_groups(
+    model: Any, *, head_learning_rate: float, backbone_learning_rate: float
+) -> list[dict[str, Any]]:
+    if (
+        not math.isclose(head_learning_rate, 0.000002)
+        or not math.isclose(backbone_learning_rate, head_learning_rate / 10.0)
+    ):
+        raise RuntimeError("LAST_STAGE_LEARNING_RATE_INVALID")
+    head = []
+    backbone = []
+    unexpected = []
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad:
+            continue
+        if name.startswith(LAST_SWIN_STAGE_PREFIX):
+            backbone.append(parameter)
+        elif any(name.startswith(prefix) for prefix in TRAINABLE_PREFIXES):
+            head.append(parameter)
+        else:
+            unexpected.append(name)
+    if unexpected or not head or not backbone:
+        raise RuntimeError("LAST_STAGE_OPTIMIZER_GROUP_INVALID")
+    return [
+        {"params": head, "lr": head_learning_rate},
+        {"params": backbone, "lr": backbone_learning_rate},
+    ]
 
 
 def freeze_teacher(model: Any) -> dict[str, Any]:
@@ -263,23 +302,49 @@ def validate_domain_retention_contract(contract: dict[str, Any]) -> None:
         model = contract["model"]
         training = contract["training"]
         validation = contract["validation"]
-        valid = (
+        initialization = training["initialization"]
+        common_valid = (
             model["model_id"] == "IDEA-Research/grounding-dino-tiny"
             and model["revision"] == "a2bb814dd30d776dcf7e30523b00659f4f141c71"
-            and training["initialization"] == "official_base_teacher_and_student"
             and training["resume_checkpoint"] is None
-            and 2 <= training["epochs"] <= 3
             and math.isclose(training["learning_rate"], 0.000002)
             and math.isclose(training["teacher_token_logit_lambda"], 1.0)
             and math.isclose(training["teacher_candidate_box_lambda"], 1.0)
             and 0.0 < training["teacher_candidate_threshold"] < 1.0
             and type(training["teacher_candidate_topk_fallback"]) is int
             and training["teacher_candidate_topk_fallback"] > 0
-            and tuple(training["trainable_prefixes"]) == TRAINABLE_PREFIXES
             and validation["streams"]
             == ["near_synthetic", "real", "dino_only_raw_candidates"]
             and validation["checkpoint_selection"] == "joint_harmonic_f1"
         )
+        if initialization == "official_base_teacher_and_student":
+            phase_valid = (
+                2 <= training["epochs"] <= 3
+                and tuple(training["trainable_prefixes"]) == TRAINABLE_PREFIXES
+                and "backbone_learning_rate" not in training
+                and "student_initialization_checkpoint_manifest_sha256" not in training
+            )
+        elif initialization == "selected_phase1_student_official_base_teacher":
+            checkpoint_sha = training["student_initialization_checkpoint_manifest_sha256"]
+            model_sha = training["student_initialization_model_sha256"]
+            phase_valid = (
+                1 <= training["epochs"] <= 2
+                and math.isclose(
+                    training["backbone_learning_rate"], training["learning_rate"] / 10.0
+                )
+                and tuple(training["trainable_prefixes"])
+                == (*TRAINABLE_PREFIXES, LAST_SWIN_STAGE_PREFIX)
+                and isinstance(checkpoint_sha, str)
+                and len(checkpoint_sha) == 64
+                and all(character in "0123456789abcdef" for character in checkpoint_sha)
+                and isinstance(model_sha, str)
+                and len(model_sha) == 64
+                and all(character in "0123456789abcdef" for character in model_sha)
+                and training["student_initialization_completed_epoch"] == 2
+            )
+        else:
+            phase_valid = False
+        valid = common_valid and phase_valid
     except (KeyError, TypeError, ValueError):
         valid = False
     if not valid:

@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-441
+latest_checkpoint: CP-442
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-last-swin-stage-implementation-r629
+active_experiment: stage-c-dino-domain-retention-last-swin-stage-smoke-r631
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: independent-real Recall remains below 0.50 after the initial frozen-backbone phase; execute the authorized last-Swin-stage phase for at most two epochs with backbone LR one tenth of head LR; Linux PickPlace and all Mac work remain gated
-next_action: TDD exact last-Swin-stage allowlist, phase-1 selected-checkpoint identity/readback and two optimizer groups, then one 6+6 smoke before the at-most-two-epoch phase
+open: run the last-Swin-stage 6+6 smoke, then at most two formal epochs and compare them with the retained frozen-phase epoch 2 using only the same val streams; Linux PickPlace and all Mac work remain gated
+next_action: build the cache-reusing committed image, run a fresh network-none 6+6 CUDA smoke from the hash-pinned phase-1 epoch-002 student plus separate official-base teacher, then read back once
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20330,6 +20330,44 @@ next_experiment:
 decision: GO_TDD_LAST_SWIN_STAGE_THEN_SMOKE
 retention: formal-r1, r628/r627 and every prior output/evidence retained and frozen read-only; registered scratch/low-rate roots remain deletion candidates only; nothing deleted or archived
 boundaries: no COCO100 or sealed final test tuning; SAM remains frozen/unloaded; no PickPlace before DINO gate; no Mac; Microduck paused
+```
+
+## Checkpoint CP-442 — exact last-Swin-stage implementation passes directed gates; 6+6 smoke next
+
+```yaml
+checkpoint: CP-442
+status: LAST_SWIN_STAGE_IMPLEMENTATION_DIRECTED_GATES_PASS_SMOKE_PLANNED
+prior_checkpoint: CP-441
+run_id: stage-c-dino-domain-retention-last-swin-stage-implementation-r629
+evidence: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-c-dino-domain-retention-last-swin-stage-implementation-r629
+nvme_scratch: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/scratch/stage-c-dino-domain-retention-last-swin-stage-implementation-r629/tmp
+tdd:
+  valid_red: collection failed on absent LAST_SWIN_STAGE_PREFIX before implementation
+  directed_green: 26 passed in 1.20s using exact model Python, plugin autoload disabled and tempfile resolved to the registered NVMe scratch
+  static: {compileall: PASS, shell_syntax: PASS, git_diff_check: PASS, ruff: PASS}
+contract:
+  contract_sha256: 009bb12439f4956c13eaefe18071f72388646b69e13b0ed3f3960a4ca17bca49
+  official_teacher_revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  student_checkpoint_manifest_sha256: ea07e89acaa4c330da5e549d473396df1841fae8a5f8faef848683c31d0c1bd3
+  student_model_sha256: 28178b0bee95ffe044d75e3eae5c511c2522eb08dc45b64b6b536a004e4b67e6
+  student_completed_epoch: 2
+  optimizer: {head_learning_rate: 0.000002, last_swin_stage_learning_rate: 0.0000002, ratio: 0.1, epochs: 2}
+implementation:
+  trainable_prefixes: [model.decoder., model.query_position_embeddings., model.encoder_output_bbox_embed., model.enc_output., model.enc_output_norm., model.backbone.conv_encoder.model.encoder.layers.3.]
+  parent_integrity: requires exact manifest SHA, complete epoch 2, exact member inventory and hashes, and exact model.safetensors SHA before model load
+  isolation: selected phase-1 student mounted read-only only when last-stage config is selected; official base independently mounted read-only for teacher and processor; network none; no epoch-5, COCO100, sealed test or SAM mount
+model_compatibility_probe:
+  total_parameters: 172249090
+  trainable_parameters: 25800632
+  last_stage_parameter_tensors: 34
+  optimizer_parameter_tensors: {head: 239, last_swin_stage: 34}
+  modes: {backbone_parent_training: false, Swin_stage2_training: false, Swin_stage3_training: true, BERT_training: false, fusion_encoder_training: false, decoder_training: true}
+next_experiment:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-smoke-r631
+  action: fresh 6-train plus 3-near/3-real CUDA smoke, exact parent and optimizer receipts, zero forbidden gradients, finite losses and fresh reload
+decision: GO_LAST_SWIN_STAGE_6_PLUS_6_SMOKE
+retention: r629 and every prior output/evidence retained; registered scratch and low-rate roots remain deletion candidates only; nothing deleted or archived
+boundaries: phase-1 output remains immutable; no COCO100/sealed test tuning; SAM frozen/unloaded; no PickPlace or Mac; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects

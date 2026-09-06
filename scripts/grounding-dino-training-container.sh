@@ -15,7 +15,8 @@ usage() {
     "  scripts/grounding-dino-training-container.sh domain-retention --train-images DIR" \
     "    --real-val-images DIR --near-val-images DIR --train-inventory FILE" \
     "    --real-val-inventory FILE --near-val-inventory FILE --base-model DIR" \
-    "    --output NEW_ROOT --mode smoke|formal --training-commit SHA [--image IMAGE]" >&2
+    "    --output NEW_ROOT --mode smoke|formal --training-commit SHA [--image IMAGE]" \
+    "    [--student-model PHASE1_CHECKPOINT_DIR]" >&2
   exit 2
 }
 
@@ -188,9 +189,10 @@ case $command_name in
     output=
     mode=
     training_commit=
+    student_model=
     while [ "$#" -gt 0 ]; do
       case $1 in
-        --image | --train-images | --real-val-images | --near-val-images | --train-inventory | --real-val-inventory | --near-val-inventory | --base-model | --output | --mode | --training-commit)
+        --image | --train-images | --real-val-images | --near-val-images | --train-inventory | --real-val-inventory | --near-val-inventory | --base-model | --output | --mode | --training-commit | --student-model)
           [ "$#" -ge 2 ] || usage
           option_name=$1
           option_value=$2
@@ -207,6 +209,7 @@ case $command_name in
             --output) output=$option_value ;;
             --mode) mode=$option_value ;;
             --training-commit) training_commit=$option_value ;;
+            --student-model) student_model=$option_value ;;
           esac
           ;;
         *) usage ;;
@@ -230,6 +233,11 @@ case $command_name in
     real_val_inventory=$(absolute_file "$real_val_inventory")
     near_val_inventory=$(absolute_file "$near_val_inventory")
     base_model=$(absolute_directory "$base_model")
+    contract=/opt/so101_demo_py/config/perception/grounding_dino_domain_retention_training.yaml
+    if [ -n "$student_model" ]; then
+      student_model=$(absolute_directory "$student_model")
+      contract=/opt/so101_demo_py/config/perception/grounding_dino_domain_retention_last_stage_training.yaml
+    fi
     output_parent=$(CDPATH='' cd -- "$(dirname -- "$output")" 2>/dev/null && pwd -P) || {
       printf 'output parent directory does not exist: %s\n' "$(dirname -- "$output")" >&2
       exit 2
@@ -247,6 +255,9 @@ case $command_name in
       "$base_model" "$output_parent"; do
       reject_mount_path "$mount_source"
     done
+    if [ -n "$student_model" ]; then
+      reject_mount_path "$student_model"
+    fi
     set -- run --rm \
       --gpus all \
       --network none \
@@ -265,10 +276,14 @@ case $command_name in
       --mount "type=bind,src=$real_val_inventory,dst=/inventories/real-val.json,readonly" \
       --mount "type=bind,src=$near_val_inventory,dst=/inventories/near-val.json,readonly" \
       --mount "type=bind,src=$base_model,dst=/models/grounding-dino-tiny,readonly" \
-      --mount "type=bind,src=$output_parent,dst=/training-output" \
+      --mount "type=bind,src=$output_parent,dst=/training-output"
+    if [ -n "$student_model" ]; then
+      set -- "$@" --mount "type=bind,src=$student_model,dst=/models/student-initialization,readonly"
+    fi
+    set -- "$@" \
       --entrypoint train_grounding_dino_domain_retention \
       "$image" \
-      --contract /opt/so101_demo_py/config/perception/grounding_dino_domain_retention_training.yaml \
+      --contract "$contract" \
       --train-inventory /inventories/train.json \
       --real-val-inventory /inventories/real-val.json \
       --near-val-inventory /inventories/near-val.json \
@@ -279,6 +294,9 @@ case $command_name in
       --output "/training-output/$output_name" \
       --mode "$mode" \
       --training-commit "$training_commit"
+    if [ -n "$student_model" ]; then
+      set -- "$@" --student-model /models/student-initialization
+    fi
     exec docker "$@"
     ;;
   *) usage ;;
