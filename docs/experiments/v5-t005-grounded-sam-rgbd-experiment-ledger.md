@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-484
+latest_checkpoint: CP-485
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_TASK_START_TIMER_RECOVERY_R769
-confirmed: r768 reached stack ready, workflow subscription ready and frozen CUDA model setup, then stopped before any model forward because the evidence wrapper used an unavailable zsh timer parameter; all owned ROS and container state is now empty
-open: execute r769-task-start with the portable zsh timer, validate the complete product path, then continue the remaining three independent Linux trials only after task_start is valid
-next_action: launch r769-task-start under ROS_DOMAIN_ID 188 with the same runtime and model identities
+active_experiment: STAGE_F_LINUX_FORWARD_5CM_FULL_RESTART_R770
+confirmed: r769-task-start independently validates the complete Grounded-SAM to physical PickPlace path, 19-state workflow, actual cup displacement, stable release, clean stack shutdown and fresh GUI evidence; its long-lived perception exit 130 is the ordered post-workflow SIGINT, not a product failure
+open: execute and independently validate the forward, left and right FULL_RESTART points with the exact r769 runtime and frozen perception identity
+next_action: launch r770-forward-5cm under ROS_DOMAIN_ID 189
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23678,4 +23678,41 @@ stopping_rule: stop at the first persisted r769 product failure; if valid, reuse
 retention: r765-r768 and all historical evidence remain preserved; no delete, rebuild, reset, stash or force-push
 boundaries: COCO100 remains diagnostic only; optimization forbidden; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-484 and execute r769-task-start
+```
+
+## Checkpoint CP-485 — Linux task_start FULL_RESTART is valid
+
+```yaml
+checkpoint: CP-485
+status: LINUX_TASK_START_VALID_GO_FORWARD_5CM
+prior_checkpoint: CP-484
+policy_time: 2026-09-07T07:55:30+08:00
+r769_task_start:
+  status: VALID
+  session: v5-t005-r769-task-start
+  model_bundle_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  perception: {candidate_count: 1, class: cup, dino_confidence: 0.828974, sam_quality: 0.988694, mask_pixels: 4669, selected_depth_points: 4657, runtime_device: cuda, inference_latency_ms: 282.495}
+  pose: {world_xyz_m: [0.0200586, -0.280479, 0.165], error_m: 0.000482, source_stamp_ns: 14788000000, fresh_handoff_to_dynamic: true}
+  workflow: {status: DONE, transitions: 19, maximum_terminal_position_error_m: 0.000710, physical_micro_lift_m: 0.003591, bilateral_contact: true}
+  outcome: {actual_cup_displacement_m: 0.103874, final_xyz_m: [-0.0785654, -0.247219, 0.164972], final_xy_error_m: 0.001791, stable_table_release: true}
+  gui: {baseline_sha256: fadf6b58852b0b962cb7e4927a3accd621035d709665d334bf2dbbbd37ea7d6f, final_sha256: 99cb6255beda4e6d876b4c882d68e464d86bf05a96f34eec0356fa1c86239e19, exact_window: true, manual_visual_readback: PASS}
+  cleanup: {dynamic_exit: 0, perception_exit: 130_ORDERED_POST_WORKFLOW_SIGINT, launch_exit: 0, tf_exits: [0, 0], controller_and_moveit_markers: PASS, ros_domain_empty: true, container_empty: true, gpu_compute_empty: true}
+  acceptance_summary_sha256: be0fa67334c40e958a1224d7345253fb90278abe8007fe4e224c307bfb17049d
+  validator_sha256: 1e4f3307c78bae9e6497333c8099b2f1a8d602a04f56cf52d5b7f7d8b8017d7b
+wrapper_readback_correction:
+  finding: r769 completed all product work and evidence before the wrapper rejected the intentionally interrupted long-lived perception process and matched its own command line during postflight
+  correction: record ORDERED_AFTER_WORKFLOW_SUCCESS before stopping perception; accept exit 130 only with a successful CUDA /cup_pose result; postflight matches only actual product executable paths
+  corrected_wrapper_sha256: 75011642cc9666e253d6ece2be3cb5d175126b28a83b61cbd82cc1f712f6a506
+  model_or_product_change: none
+next_trial:
+  id: r770-forward-5cm
+  keyframe: cup_test_forward_5cm
+  truth_xyz_m: [0.02, -0.33, 0.165]
+  ros_domain_id: 189
+  partition: so101-v5-t005-linux-r770-forward-20260907
+  graph_output_and_scratch_collision: PASS_EMPTY_OR_ABSENT
+stopping_rule: stop at the first persisted r770 product failure; if valid, continue left then right with independent FULL_RESTART
+retention: r765-r769 and all historical evidence retained; protected worktree diff remains c1cfb9a; no deletion, reset, stash, rebuild or force-push
+boundaries: COCO100 remains diagnostic only; model optimization forbidden; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-485 and execute r770-forward-5cm
 ```
