@@ -19701,6 +19701,55 @@ retention: r593-r595 outputs, overlays, evidence and scratch retained; COCO100 h
 boundaries: PickPlace and Mac remain NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-428 — last pinned-base DINO round valid; epoch 5 selected on val
+
+```yaml
+checkpoint: CP-428
+status: VALID_FINAL_TRAIN_VAL_ONLY_DINO_ROUND_EXTERNAL_GATES_STILL_CLOSED
+prior_checkpoint: CP-427
+invalid_launch:
+  run_id: stage-c-dino-nonpenetrating-pinned-base8-r596
+  reason: Docker image ENTRYPOINT was not overridden, so bootstrap arguments reached train_grounding_dino directly and argparse exited 2 before bootstrap, model load, output allocation or training
+formal_training:
+  run_id: stage-c-dino-nonpenetrating-pinned-base8-r597
+  container: so101-exp079-nonpenetrating-pinned-base8-r597
+  image: so101-grounding-dino-tiny-train:r5-categorical-r396
+  image_id: sha256:75bf5c3d116d8b734e14c2f189f1cb4392912b5837387af010a36cb16fba554f
+  contract_sha256: abde7a0e7d7155cf3f46c606ca9bb70260eaf05623b2a273b12fe17366bb99de
+  base_model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+  result: {exit: 0, epochs: 8, train_samples_per_epoch: 1200, val_samples_per_epoch: 300, elapsed_seconds: 2501.52, peak_gpu_memory_bytes: 9310089216, device: 'cuda:0', cpu_fallback: false}
+  epoch_val:
+    - {epoch: 1, thresholds: [0.25, 0.25], tp: 17, fp: 0, fn: 283, f1: 0.1072555205}
+    - {epoch: 2, thresholds: [0.3, 0.3], tp: 9, fp: 0, fn: 291, f1: 0.0582524272}
+    - {epoch: 3, thresholds: [0.3, 0.3], tp: 34, fp: 0, fn: 266, f1: 0.2035928144}
+    - {epoch: 4, thresholds: [0.35, 0.35], tp: 297, fp: 0, fn: 3, f1: 0.9949748744}
+    - {epoch: 5, thresholds: [0.45, 0.45], tp: 300, fp: 0, fn: 0, f1: 1.0}
+    - {epoch: 6, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}
+    - {epoch: 7, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}
+    - {epoch: 8, thresholds: [0.5, 0.5], tp: 300, fp: 0, fn: 0, f1: 1.0}
+selection:
+  rule: synthetic val metrics only; earliest epoch on a complete metric tie
+  checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-pinned-base-r2/formal8-pinned-base-r1/checkpoints/epoch-005
+  checkpoint_manifest_sha256: ea54331d04f89fef02728a717656a117188529f8ecdc7abf349d438b041bb394
+  model_sha256: eb9c485bb6f73ccd7a202055af408069d5ef55565693285d0f16ec7798af5457
+  thresholds: {box: 0.45, text: 0.45}
+  val: {tp: 300, fp: 0, fn: 0, precision: 1.0, recall: 1.0, f1: 1.0, small_target_recall: 1.0, multi_cup_recall: 1.0}
+  fresh_reload: {status: VALID, device: 'cuda:0', finite_outputs: true, cpu_fallback: false, sha256: e3a69c3ff3a1ec8b838c5a068353d1ba2bd121c4b66eddcbe6f4e096f8551410}
+readback:
+  checkpoints: 8
+  declared_members_per_checkpoint: 8
+  all_declared_member_hashes_and_sizes: PASS
+  output_files: 81
+  evidence_manifest_sha256: 6098d42ccbf442483ae4591d6b350446690d0e7775ca9b998f4dac1142f66d7e
+  output_mode: files0444, directories0555
+  invalid_host_readbacks: first attempt was permission-blocked by root-created 0700 output; second assumed files mapping rather than the observed list schema; both were read-only and retained, and corrected r3 readback passed
+access: {sealed_test: none, coco100: none, sam: none, network: none}
+decision: this is the second and last formal DINO training round; epoch 5 is eligible for unsealed joint-val evaluation only, while prior synthetic-test and COCO100 results cannot be transferred to the new model identity
+next: pair epoch 5 with the unchanged SAM epoch 4 and run joint val; do not run PickPlace, synthetic test or COCO100 without resolving their one-time external-gate policy
+retention: r596/r597 containers, all eight checkpoints, logs, manifests, evidence and scratch retained; scratch/invalid empty outputs are deletion candidates only; nothing deleted
+boundaries: no further DINO or SAM training authorized; PickPlace and Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
