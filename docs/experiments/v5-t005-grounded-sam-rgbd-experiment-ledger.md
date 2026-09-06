@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-443
+latest_checkpoint: CP-444
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-last-swin-stage-formal-r633
+active_experiment: stage-d-frozen-sam-joint-val-r635
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: run at most two last-Swin-stage formal epochs and compare them with the retained frozen-phase epoch 2 using only the same val streams; Linux PickPlace and all Mac work remain gated
-next_action: run a fresh network-none two-epoch CUDA formal phase from the hash-pinned phase-1 epoch-002 student plus separate official-base teacher, read it back once, and select across phase-1 epoch 2 plus both new epochs
+open: combine the frozen winning DINO checkpoint with the current verified stateless SAM and run one complete production-path val; Linux PickPlace and all Mac work remain gated
+next_action: freeze last-Swin epoch 2 plus its 0.35/0.35 DINO thresholds, then evaluate DINO boxes, production candidate mapping, stateless SAM masks, depth and no-fallback behavior on the frozen nonpenetrating val
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20412,6 +20412,54 @@ formal:
 decision: GO_LAST_SWIN_STAGE_FORMAL_TWO_EPOCHS
 retention: smoke output and r630/r631/r632 are frozen read-only; all prior evidence retained; registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
 boundaries: smoke metrics are not a model-selection result; no COCO100 or sealed final test access; SAM frozen/unloaded; no PickPlace before DINO gate; no Mac; Microduck paused
+```
+
+## Checkpoint CP-444 — final-Swin epoch 2 wins the val-only DINO selection; freeze for SAM joint validation
+
+```yaml
+checkpoint: CP-444
+status: VALID_LAST_SWIN_FORMAL_SELECTED_DINO_FROZEN_GO_STATELESS_SAM_VAL
+prior_checkpoint: CP-443
+run_id: stage-c-dino-domain-retention-last-swin-stage-formal-r633
+launch_owner: local tmux so101-exp079-dino-last-swin-r633; no SSH; exit 0; session ended normally
+implementation_commit: 6820fe8a24b959954920e9865f26111f4483d496
+gitee_checkpoint_before_launch: 22a6e60d2df414dc0c656f5c7947f613150e32d1
+output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-last-swin-stage-r1/formal-r1
+recipe: {train_samples: 1600, epochs: 2, head_learning_rate: 0.000002, last_swin_stage_learning_rate: 0.0000002, teacher_token_logit_lambda: 1.0, teacher_candidate_box_lambda: 1.0}
+epochs:
+  - {epoch: 1, thresholds: [0.35, 0.35], joint_f1: 0.7062521098397104, near_f1: 0.7464566929133859, near_recall: 0.948, real_f1: 0.6701570680628272, real_recall: 0.5454545454545454, real_small_recall: 0.2553191489361702, real_multi_recall: 0.49264705882352944, all_f1: 0.7681755829903978, all_recall: 0.9333333333333333, all_small_recall: 0.86, all_multi_recall: 1.0}
+  - {epoch: 2, thresholds: [0.35, 0.35], joint_f1: 0.7126228872784505, near_f1: 0.7608346709470305, near_recall: 0.948, real_f1: 0.6701570680628272, real_recall: 0.5454545454545454, real_small_recall: 0.2553191489361702, real_multi_recall: 0.49264705882352944, all_f1: 0.7810320781032078, all_recall: 0.9333333333333333, all_small_recall: 0.86, all_multi_recall: 1.0}
+cross_phase_selection:
+  compared: [{phase: frozen_backbone, epoch: 2, joint_f1: 0.6989502201151372}, {phase: last_swin_stage, epoch: 1, joint_f1: 0.7062521098397104}, {phase: last_swin_stage, epoch: 2, joint_f1: 0.7126228872784505}]
+  selected: {phase: last_swin_stage, epoch: 2, thresholds: [0.35, 0.35]}
+  rule: highest joint harmonic F1 using only the same frozen near-primary and independent-real validation streams
+frozen_dino:
+  checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-last-swin-stage-r1/formal-r1/checkpoints/epoch-002
+  checkpoint_manifest_sha256: 3bb86ea20b83bc603083c30cf71212fd88080d276d5ce565df3b8df76ae6d928
+  model_safetensors_sha256: 501d6738ce484b258ccfe5486edea561ff44717a8745fc3aa26e57feb43b8ca7
+  fresh_reload_sha256: 772de738b08afdf49ab06eb5647224a25a9d668a5b92a7184af8a1dca969501b
+  prompt: cup.
+  box_threshold: 0.35
+  text_threshold: 0.35
+readback:
+  run_id: stage-c-dino-domain-retention-last-swin-stage-formal-readback-r634
+  status: PASS
+  files: 28
+  total_bytes: 1791279054
+  readback_sha256: 05a7f7887bef108c6be22923e03d0dc89d0863c70950b25ac1b986b65ee268bc
+  training_log_sha256: 89958ecfa67bb0f82dda73885c3ae57c3f3ac61799d10e98bd9397603700d6df
+  verified: every output and checkpoint member hash/size; both epoch manifests; official-base teacher and exact phase-1 parent; trainability, LR split, finite losses, frozen gradients, CUDA fresh reload, epoch ordering, harmonic-score recomputation and cross-phase selection
+dino_box_gate:
+  decision: PASS_FOR_NEAR_WORKSPACE_SAM_EVALUATION
+  basis: near-primary Recall 0.948 and multi-cup Recall 1.0 provide sufficient box prompts for the product-path mask/depth gate; all-scenario Recall 0.9333 and small-target Recall 0.86 remain fully reported
+  qualification_limit: independent-real Recall 0.5455 is retained as an explicit limitation and is not silently promoted to the separate COCO100 non-regression threshold
+next_experiment:
+  run_id: stage-d-frozen-sam-joint-val-r635
+  action: one complete frozen DINO-to-stateless-SAM-to-production-candidate-to-mask/depth val pass; preserve all actual boxes and masks and report primary plus all-scenario metrics
+  sam_rule: retrain no SAM unless DINO boxes pass while sub-0.80 mask truth IoU is the measured dominant primary failure source
+decision: GO_FROZEN_STATELESS_SAM_JOINT_VAL
+retention: formal output and r633/r634 are frozen read-only; phase-1 and every prior output/evidence retained; all registered scratch and low-rate roots are deletion candidates only; nothing deleted or archived
+boundaries: no COCO100 or sealed final test access; no PickPlace before complete perception gate; no Mac; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
