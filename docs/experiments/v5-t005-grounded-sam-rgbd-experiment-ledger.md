@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-437
+latest_checkpoint: CP-438
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-data-preparation-stratified-r622
+active_experiment: stage-c-dino-domain-retention-frozen-backbone-implementation-r623
 confirmed: CP-435 promotes CP-431 to catastrophic domain forgetting confirmed for the product gate; a 196-point common raw DINO threshold replay found no epoch-5 point that jointly restores pinned-base Recall and F1, so scalar score calibration drift is rejected
-open: replace the invalid unstratified r620 mixed candidate with one fresh r622 candidate using the preregistered cup-area by single/multi-cup stratification, then train the authorized frozen-backbone teacher/student experiment from official revision a2bb814d; Linux PickPlace and all Mac work remain gated
-next_action: TDD the missing six-stratum positive selector only, then reuse the frozen verified source to generate and exhaustively read back a fresh mixed-r2 root without consulting COCO100 outcomes
+open: implement and smoke the authorized frozen-backbone teacher/student experiment from official revision a2bb814d on frozen mixed-r2 plus the existing frozen near-synthetic validation; Linux PickPlace and all Mac work remain gated
+next_action: enumerate the official Transformers parameter/output contract, then TDD exact Swin-T/BERT freezing, decoder/query/detection-head allowlist, dual lambda-1 distillation, and three validation streams before a fresh 6+6 CUDA smoke
 boundaries: SAM, production candidate mapping and selector excluded from CP-432; COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20143,6 +20143,66 @@ next_experiment:
   restrictions: no source redownload, COCO100 outcomes, sealed final test, DINO/SAM load, training, PickPlace, Mac, evidence deletion or Microduck resume
 decision: RETAIN_R620_R621_INVALID_FOR_TRAINING_GO_R622_STRATIFIED_ONLY
 retention: r620/r621 roots and all prior evidence retained; r620/r621 scratch and low-rate roots are deletion candidates only; nothing deleted or archived
+```
+
+## Checkpoint CP-438 — r622 stratified mixed data valid and frozen; frozen-backbone implementation planned
+
+```yaml
+checkpoint: CP-438
+status: VALID_STRATIFIED_MIXED_DATA_FROZEN_BACKBONE_IMPLEMENTATION_PLANNED
+prior_checkpoint: CP-437
+run_id: stage-c-dino-domain-retention-data-preparation-stratified-r622
+execution_head: bd0e7bf892eafebaf1d5f9785acc4f82599cf5f8
+tdd:
+  red: new positive-stratum contract failed exactly because cup_stratum was absent; existing four tests remained green
+  green: 5 passed with deterministic balanced selection inside [small, medium, large] by [single, multi]
+  private_sources: {converter_sha256: 652a5fdb37eda7cf60cf1608170bb8519c635ac460c6cf48fe7f4096eb059b9a, test_sha256: b075a65eded56f623f5ca6e9a192f4b9fb61c619f6065a4b57b11fb3db4b49e4, readback_sha256: 5afdd7be12ee8ec634013ee820e8b9a5cf23e3216454552cd2d9d95221243526}
+source:
+  reused_frozen_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/domain-retention-coco-train2017-source-r1
+  source_files: 25
+  source_file_hash_list_sha256: 13588a98493cb0f92b6f5beee2a3fb63b0c1a2cdcbe83dab87d805dcf96c7da8
+  source_readback: all 25 hashes pass after r622; files0444/directories0555
+  source_identity_sha256: 391a3a8e9561741d8f7b1444dda4735d667345cfeedda0fc8c33a1685ffde3f7
+result:
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training-data/grounding-dino-domain-retention-mixed-r2
+  train: {samples: 1600, near_synthetic: 800, real_cup: 480, generic_replay: 160, hard_negative: 160, cup_instances: 2054}
+  independent_real_val: {samples: 160, cup_instances: 352}
+  positive_strata:
+    real_train: {small_single: 80, small_multi: 80, medium_single: 80, medium_multi: 80, large_single: 80, large_multi: 80}
+    real_val: {small_single: 27, small_multi: 27, medium_single: 27, medium_multi: 27, large_single: 26, large_multi: 26}
+  near_synthetic: {one_cup_distractors: 200, two_cups: 200, cup_near_bottle: 200, partially_occluded_cup: 200}
+  negative_contract: {generic_without_cup_or_hard_categories: 160, hard_without_cup_and_with_bottle_wine_glass_bowl_or_vase: 160}
+readback:
+  status: PASS
+  decoded_images: 1760
+  manifest_payload_files: 1762
+  stored_files: 1763
+  coco100_id_overlap: 0
+  coco100_source_payload_overlap: 0
+  train_val_id_overlap: 0
+  train_val_seed_overlap: 0
+  license_metadata: retained for all 960 COCO train images across seven observed license names
+  output_manifest_sha256: aef39fd7246846198ba0fd7ce0474e1d79262bdbbaf3473b25eb15b841f2198a
+  train_inventory_sha256: adfb9a3cf5d7aaf79abee485c1c0a0b8660cd19b345c4aa0db614fa7caf90c0b
+  real_val_inventory_sha256: 3f12c9348f13a69f7a85202e24bd570407c4529f28f302867699643d6c78ed8a
+  mixed_file_hash_list_sha256: b04dfe87355528dfc916b314837dfa5c3c54fd693fd8bd40849994822ec6e9db
+  run_evidence_manifest_sha256: c5ca85a14167d37c8fe2c7210d49371ecfcc10c8591882bb8716e2b772786c2c
+  modes: {mixed_files: '0444', mixed_directories: '0555', evidence_files: '0444', evidence_directories: '0555'}
+training_boundary:
+  official_base: {model_id: IDEA-Research/grounding-dino-tiny, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3}
+  initialization: frozen teacher and student both load the official base independently; epoch-5 is forbidden as initialization or resume source
+  frozen: [Swin-T vision backbone, BERT text backbone]
+  trainable: [cross-modal decoder, learned query embeddings, detection heads]
+  optimizer: {head_learning_rate: 0.000002, relationship_to_prior: one_fifth, teacher_token_logit_lambda: 1.0, teacher_candidate_box_lambda: 1.0, initial_epochs: 3}
+  per_epoch_validation: [existing frozen 300-image all-scenario synthetic val with near-workspace cohort reported separately, frozen independent 160-image real val, DINO-only raw-candidate metrics]
+  checkpoint_selection: joint near-synthetic and independent-real validation only; COCO100, sealed final test and scenario-name runtime eligibility remain forbidden
+next_experiment:
+  run_id: stage-c-dino-domain-retention-frozen-backbone-implementation-r623
+  scope: read-only official model structure/output enumeration, tests-first minimal training implementation and config, related ordinary tests only, fresh build only if source changes require it; no benchmark until model selection/evaluation
+  smoke_after_green: fresh network-none CUDA 6+6 with teacher/student from official base, finite supervised and both distillation losses, exact trainable allowlist and zero frozen gradients, then fresh checkpoint reload
+decision: GO_FROZEN_BACKBONE_IMPLEMENTATION_THEN_6_PLUS_6_SMOKE
+retention: r622/r621/r620 and all prior source/evidence retained; r622/r621/r620 scratch and low-rate roots are deletion candidates only; nothing deleted or archived
+boundaries: source and mixed-r2 frozen; SAM remains frozen/unloaded; sealed final test inaccessible; COCO100 used only as a denylist and not mounted for training; PickPlace and Mac remain NO_GO; Microduck paused
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
