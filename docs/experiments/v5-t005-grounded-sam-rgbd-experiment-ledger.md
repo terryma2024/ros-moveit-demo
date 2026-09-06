@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-457
+latest_checkpoint: CP-474
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-decoder-supervision-container-r678-green
-confirmed: decoder-output-only supervised loss is contract-bound and passes focused RED/GREEN plus all nine training-container ordinary tests; lambda-1 distillation and all data/model boundaries are unchanged
-open: commit/push/read back, build one fresh image from the exact commit, and run 6+6 CUDA smoke before any formal rerun; sealed test, COCO100, SAM, depth/PickPlace and Mac remain gated
-next_action: commit the six-file minimal change with CP-457, verify Gitee SHA, build a cache-reusing training image and prove decoder component evidence in one smoke
-boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
+source_parent: 597a5c78760426f172424accfc70e75b2b2d1aad
+active_experiment: stage-d-global-synthetic-val-selection-r753
+confirmed: positive-only frozen-backbone optimization ended at valid r749/r751; no further training is allowed; read-only global ranking over 35 valid checkpoints on the exact preregistered synthetic val selected warm-start epoch 1 provisionally, pending independent ranking readback
+open: independently read back r753, generate and freeze the isolated four-point acceptance smoke without opening truth for optimization, then freeze the selected DINO/SAM threshold lock before one-time COCO100 and one-time four-point perception acceptance
+next_action: create the four-point acceptance dataset from rgbd_task_points.yaml with independent seeds/root/inventory, member hashes and read-only freeze; keep it sealed until the candidate and threshold lock are immutable
+boundaries: COCO100 and four-point smoke cannot select a model or tune thresholds; sealed final test remains unread; real hardware is unauthorized; PickPlace remains NO_GO until COCO100 and all four perception smoke points pass; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -23124,4 +23124,41 @@ verification_decision: no tests or image build under the explicit override; r752
 scratch_deletion_candidates: [scratch/stage-c-positive-only-distillation-last-swin-smoke-r752/tmp]
 retention: r752, its empty training parent, the superseded unstaged diff and all historical evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
 boundaries: sealed final test remains unread; COCO100 and four-point smoke are selection-blind future checks; SAM frozen; PickPlace remains NO_GO until ordered acceptance gates; Microduck paused
+```
+
+## Checkpoint CP-474 — four-point acceptance and final selection order are frozen
+
+```yaml
+checkpoint: CP-474
+status: DIRECTIVE_RECORDED_GLOBAL_SELECTION_COMPLETE_ACCEPTANCE_DATA_GENERATION_NEXT
+prior_checkpoint: CP-473
+optimization_boundary: r749 plus valid independent r751 complete the positive-only distillation optimization; no new training round, last-Swin identity change, test, training-image rebuild, smoke training or formal training may continue
+global_selection:
+  run_id: stage-d-global-synthetic-val-selection-r753
+  status: PASS_PENDING_INDEPENDENT_READBACK
+  method: rehash every complete checkpoint from every VALID formal run whose validation inventory is exactly c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9; exclude smoke and different-inventory historical runs
+  rank: [F1, Recall, small_target_Recall, multi_cup_Recall, negative_FP, negative_epoch]
+  eligible_checkpoints: 35
+  unique_winner: {run: grounding-dino-cup-nonpenetrating-r1/formal4-warmstart-r1, epoch: 1, checkpoint_manifest_sha256: 4b10d2b730c2352b715f010bf36b7fe5c3348d0489fe5559e5f48dcfb92c58e7, model_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b, box_threshold: 0.50, text_threshold: 0.50, F1: 1.0, Recall: 1.0, FP: 0}
+  report_sha256: ad37a9a18becb577e9242698c063e8d2ac39580aef24ee9ec2299191b23ba1bc
+  prohibited_inputs_used: {COCO100: false, four_point_smoke: false, independent_real_val: false, sealed_test: false, superseded_last_swin_diff: false}
+acceptance_generation:
+  source: src/so101_demo_py/config/mujoco/rgbd_task_points.yaml
+  points:
+    - {id: task_start, cup_position_world_m: [0.02, -0.28, 0.165]}
+    - {id: cup_test_forward_5cm, cup_position_world_m: [0.02, -0.33, 0.165]}
+    - {id: cup_test_left_5cm, cup_position_world_m: [-0.03, -0.28, 0.165]}
+    - {id: cup_test_right_5cm, cup_position_world_m: [0.07, -0.28, 0.165]}
+  contract: allocate an independent run ID, seeds, directory and inventory; persist per-point truth, manifest and every member SHA256; freeze read-only before any candidate opens it
+  isolation: never copy, link or merge these four samples into train, val, sealed test or COCO100; never use them for gradients, epochs/checkpoint ranking, threshold calibration or any optimization decision
+ordered_gates:
+  - freeze one threshold lock containing selected DINO checkpoint/model/config/processor, frozen stateless SAM, source commit, prompt cup., DINO box/text thresholds, SAM quality, mapping IoU0.98 and selector rule
+  - run that immutable candidate on COCO100 exactly once; require F1>=0.6391, Recall>=0.5670, hit_images>=83/100, visible_non_cup_UNIQUE=0 and inference_errors<=1; report delta from pinned-base F1 0.6591; never tune or reselect from the outcome
+  - only after COCO100 passes, open the frozen four-point smoke once; each point requires one cup, production SAM truth IoU>=0.80, candidate mapping IoU>=0.98, valid depth, world /cup_pose error<0.01m, fresh source and warmed latency<=2000ms; truth is acceptance-only and never enters production candidate generation
+  - only after all four perception points pass, stop model/threshold optimization, build and member-readback one immutable bundle, then run four independent Linux MuJoCo FULL_RESTART PickPlace points
+failure_boundary: if COCO100 or any smoke point fails, preserve the facts and stop at the first failure without threshold tuning, checkpoint changes, bundle promotion or PickPlace; report to the user
+semantic_boundary: the four-point smoke is perception acceptance and cannot count as PickPlace success; real hardware remains unauthorized
+worktree_boundary: preserve the CP-473 classified superseded two-file unstaged last-Swin identity diff without modifying, staging, testing, resetting, stashing or executing it
+retention: r753 and all existing evidence retained; nothing deleted, archived, stashed, reset or force-pushed; three required untracked build/install/log directories retained
+boundaries: sealed final test unread; GPU idle; Microduck paused
 ```
