@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-485
+latest_checkpoint: CP-486
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_FORWARD_5CM_FULL_RESTART_R770
-confirmed: r769-task-start independently validates the complete Grounded-SAM to physical PickPlace path, 19-state workflow, actual cup displacement, stable release, clean stack shutdown and fresh GUI evidence; its long-lived perception exit 130 is the ordered post-workflow SIGINT, not a product failure
-open: execute and independently validate the forward, left and right FULL_RESTART points with the exact r769 runtime and frozen perception identity
-next_action: launch r770-forward-5cm under ROS_DOMAIN_ID 189
+active_experiment: STAGE_F_LINUX_LEFT_THEN_RIGHT_FULL_RESTART_R771_R772
+confirmed: task_start and forward 5 cm both independently validate the complete Grounded-SAM to physical PickPlace path with fresh GUI evidence; r770 exited its evidence wrapper cleanly after ordered shutdown
+open: execute and independently validate left 5 cm then right 5 cm with the exact same runtime and frozen perception identity
+next_action: launch r771-left-5cm under ROS_DOMAIN_ID 190; start r772-right-5cm only if r771 is valid
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23715,4 +23715,32 @@ stopping_rule: stop at the first persisted r770 product failure; if valid, conti
 retention: r765-r769 and all historical evidence retained; protected worktree diff remains c1cfb9a; no deletion, reset, stash, rebuild or force-push
 boundaries: COCO100 remains diagnostic only; model optimization forbidden; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-485 and execute r770-forward-5cm
+```
+
+## Checkpoint CP-486 — Linux forward 5 cm is valid; pre-register left and right
+
+```yaml
+checkpoint: CP-486
+status: LINUX_TWO_OF_FOUR_VALID_GO_LEFT_THEN_RIGHT
+prior_checkpoint: CP-485
+policy_time: 2026-09-07T07:58:33+08:00
+r770_forward_5cm:
+  status: VALID
+  session: v5-t005-r770-forward-5cm
+  perception: {candidate_count: 1, dino_confidence: 0.852553, sam_quality: 0.985631, mask_pixels: 5097, selected_depth_points: 5082, runtime_device: cuda, inference_latency_ms: 236.859}
+  pose: {world_xyz_m: [0.0201402, -0.330431, 0.165], error_m: 0.000453, source_stamp_ns: 14698000000, fresh_handoff: true}
+  workflow: {status: DONE, transitions: 19, maximum_terminal_position_error_m: 0.001183, physical_micro_lift_m: 0.003262, bilateral_contact: true}
+  outcome: {actual_cup_displacement_m: 0.129248, final_xyz_m: [-0.0791475, -0.247085, 0.165022], final_xy_error_m: 0.001194, stable_table_release: true}
+  gui: {baseline_sha256: 6c8de20846721f75a0795984f0c211a3f133bee86d40cc287d9cbe0af15282bc, final_sha256: 040415eb45f2acb12375dc857b232a2b6ece721bdde6e8e16991a6bd1fdf4504, exact_window_and_manual_readback: PASS}
+  cleanup: PASS_ZERO_EXIT_WRAPPER_EMPTY_ROS_CONTAINER_GPU
+  acceptance_summary_sha256: 81faf46bae7a6b1030aa3b8876d14c9a8aee0ce135706e8d531781048ba664ac
+remaining_preregistered_trials:
+  - {id: r771-left-5cm, keyframe: cup_test_left_5cm, truth_xyz_m: [-0.03, -0.28, 0.165], ros_domain_id: 190, partition: so101-v5-t005-linux-r771-left-20260907}
+  - {id: r772-right-5cm, keyframe: cup_test_right_5cm, truth_xyz_m: [0.07, -0.28, 0.165], ros_domain_id: 191, partition: so101-v5-t005-linux-r772-right-20260907}
+preflight: domains 190 and 191 empty; run and scratch roots absent under both -e and -L; GPU compute and Docker containers empty
+identity: exact CP-485 wrapper/runtime, bundle b55bb6, threshold lock b02e3be and frozen selector; no product or model changes
+stopping_rule: independently validate r771 before r772; stop at the first persisted failure boundary
+retention: all preceding runs and historical evidence retained; no deletion, reset, stash, rebuild or force-push
+boundaries: COCO100 diagnostic only; optimization forbidden; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-486 and execute r771-left-5cm
 ```
