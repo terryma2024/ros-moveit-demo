@@ -22833,3 +22833,42 @@ future_if_valid: authorize minimal evidence-ownership correction: driver-final e
 retention: r504/r503/r502/r501/r500 and all prior evidence retained, archived none; scratch/low-rate deletion candidates only and nothing deleted
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
+
+## Checkpoint CP-468 — mixed-r4 last-Swin formal two-epoch phase is valid; epoch 2 selected
+
+```yaml
+checkpoint: CP-468
+status: VALID_MIXED_R4_LAST_SWIN_FORMAL_GO_DINO_ONLY_PRODUCTION_GATE
+prior_checkpoint: CP-467
+training_commit: a8d2855eea137655edaf2ad7d914f0f67681901b
+gitee_readback_before_training: a8d2855eea137655edaf2ad7d914f0f67681901b
+run:
+  run_id: stage-c-last-swin-mixed-r4-formal-r719
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r4-last-swin-r1/formal-r1
+  execution: {exit: 0, start_utc: 2026-09-06T13:58:48Z, end_utc: 2026-09-06T14:16:02Z, elapsed_seconds: 1034, epochs: 2, train_samples_per_epoch: 1600, near_val_samples: 300, real_val_samples: 160, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: selected_mixed_r4_phase1_epoch_003, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: none}
+  trainability: {student_trainable_numel: 25800632, teacher_trainable_numel: 0, last_Swin_stage: true, decoder: true, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+epochs:
+  - {epoch: 1, threshold: 0.35, joint_harmonic_f1: 0.7759532002, near_f1: 0.9003831418, near_recall: 0.94, real_f1: 0.6817391304, real_recall: 0.5568181818, all_f1: 0.9022801303, all_recall: 0.9233333333}
+  - {epoch: 2, threshold: 0.35, joint_harmonic_f1: 0.7849029825, near_f1: 0.9210019268, near_recall: 0.956, real_f1: 0.6838487973, real_recall: 0.5653409091, all_f1: 0.9215686275, all_recall: 0.94}
+selected:
+  epoch: 2
+  checkpoint_manifest_sha256: 679513214b0057b0627c6df3e4bf7dd94ac9c50e59d27f28d4453c2acb94bbd8
+  checkpoint_model_sha256: 4884f76fdd6a73dc3f6de9e3e34afb71943fd04ef858ef2498f37e6cb806d22a
+  fresh_reload_sha256: ac65073e33bf71bce524e9a113ce6c8ab7f4991dbda16a389e317dd902e43187
+readback:
+  run_id: stage-c-last-swin-mixed-r4-formal-readback-r720
+  status: PASS
+  files: 28
+  bytes: 1791278894
+  members_sha256: 54213c34d757f02afb7a4da88027afab73a9387cb0cd094b6e14d787cf652e02
+  report_sha256: e4d00bade63a0155db48428117548538edb4ea1f533875632072f593fb4347ba
+  verified: all members and both checkpoint manifests rehashed; no symlinks; finite epoch grids; selection recomputed; exact parent/teacher/trainability/isolation; CUDA fresh reload
+  frozen_modes: {files: 0444, directories: 0555}
+decision: freeze epoch-002 as the candidate and run the DINO-only raw-candidate plus production selector gate on allowed frozen near/real validation; do not load SAM yet
+verification_decision: no package/benchmark rerun; source and benchmark implementation are unchanged, and formal CUDA execution plus independent full readback are the relevant gate
+scratch_deletion_candidates: [scratch/stage-c-last-swin-mixed-r4-formal-r719/tmp]
+retention: r719-r720, both formal checkpoints and all prior evidence retained; nothing deleted, archived, stashed or reset
+boundaries: no COCO100 outcome or sealed-test access; SAM frozen; PickPlace/depth/Mac NO_GO until perception gate; Microduck paused
+```
