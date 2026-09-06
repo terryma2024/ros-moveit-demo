@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-478
+latest_checkpoint: CP-479
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: PLANNED_STAGE_E_FOUR_POINT_ACCEPTANCE_SMOKE_RECOVERY_R762
-confirmed: the global synthetic-val winner, threshold lock b02e3be and bundle b55bb6 remain frozen; r595/r760 remain the sole COCO100 diagnostic and are not rerun; the user removed COCO100 as a pass/fail gate on 2026-09-07
-open: complete the pre-registered r762 infrastructure recovery with the exact frozen candidate; if all four pass, proceed to four independent ai-station Linux FULL_RESTART PickPlace runs
-next_action: apply only the pre-registered overlay color-array correction in an r762 wrapper, run its directed RED-to-GREEN test, then execute the isolated four-point acceptance recovery without changing DINO, SAM, thresholds or selector semantics
+active_experiment: PLANNED_STAGE_F_LINUX_FOUR_POINT_FULL_RESTART_R765
+confirmed: the frozen candidate passed independent byte/contract readback and fresh visual inspection at all four acceptance points; COCO100 remains historical diagnostic evidence only
+open: run four independent ai-station Linux FULL_RESTART PickPlace trials with the exact immutable bundle and fresh Gazebo/MoveIt/controller/pose/contact/GUI evidence
+next_action: preflight the canonical /data/work/ws_moveit runtime and launch the task_start FULL_RESTART trial without changing DINO, SAM, thresholds, selector or bundle identity
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23394,11 +23394,11 @@ retention: r761 partial output, logs, carrier, lock, bundle, COCO diagnostics an
 boundaries: COCO100 remains diagnostic only; real hardware unauthorized; Microduck paused
 ```
 
-## Experiment stage-e-four-point-acceptance-smoke-recovery-r762 — PLANNED
+## Experiment stage-e-four-point-acceptance-smoke-recovery-r762 — PASS
 
 ```yaml
 experiment_id: stage-e-four-point-acceptance-smoke-recovery-r762
-status: PLANNED
+status: PASS_FOUR_POINT_PERCEPTION_4_OF_4
 prior_experiment: stage-e-four-point-acceptance-smoke-r761
 hypothesis: correcting only the acceptance overlay's RGB operand type allows the unchanged frozen-candidate four-point run to publish complete acceptance evidence
 prediction: the directed overlay test passes and the recovery either records 4/4 frozen semantic results or stops with the first persisted perception gate failure
@@ -23407,6 +23407,65 @@ lifecycle: REUSE_STACK
 success_criteria: complete immutable report and member manifest for all four points with every CP-477 acceptance gate passing
 failure_criteria: first persisted semantic, geometry, freshness, device or latency gate failure
 invalid_criteria: identity mismatch, output collision, duplicate stack, wrong tempfile, setup/rendering exception or incomplete evidence publication
-decision: PENDING
-next_experiment: NONE_UNTIL_R762_TERMINAL_AND_INDEPENDENT_READBACK
+observed:
+  - all points selected exactly one cup and passed every frozen acceptance gate
+  - mask truth IoU range 0.985858-0.989156; candidate mapping IoU 1.0 at every point
+  - world /cup_pose error range 0.000567-0.000625m; selected valid depth points range 4316-5090
+  - CUDA-synchronized warmed latency range 152.578-276.022ms; DINO and SAM remained FP32 eval on CUDA with no fallback
+  - output has 53 frozen members, inventory 7bb66d and manifest 9caa3c
+decision: PASS_GO_INDEPENDENT_READBACK
+next_experiment: stage-e-four-point-acceptance-readback-r763
+```
+
+## Experiment stage-e-four-point-acceptance-readback-r763 — INVALID
+
+```yaml
+experiment_id: stage-e-four-point-acceptance-readback-r763
+status: INVALID_PRODUCER_REPORT_UID_READ_BOUNDARY
+model_forwards: 0
+carrier_access: none
+observed: output manifest members and modes verified before the readback container running as the host UID could not read the producer's root-owned 0600 report
+result_written: false
+disposition: preserved; repeat the identical readback in r764 using the producer UID, without model or carrier access
+```
+
+## Experiment stage-e-four-point-acceptance-readback-r764 — PASS
+
+```yaml
+experiment_id: stage-e-four-point-acceptance-readback-r764
+status: PASS_INDEPENDENT_BYTE_CONTRACT_AND_VISUAL_READBACK_4_OF_4
+model_forwards: 0
+carrier_access: none
+byte_readback:
+  output_manifest_sha256: 9caa3cfa0ca4cde1d4b62eab517175776c93e8cf36adf24c406c1f8002181080
+  output_inventory_sha256: 7bb66dd444c9725793b8fef8746aaf22cf88b789fff8d10a3f04e9ea95e6cba1
+  members_verified: 53
+  producer_report_sha256: 4d186c6400ef48e81b5ddb13b28a6baf4b99107a67d02063473ede5adb5dab19
+  readback_report_sha256: 3c5b59a98bef2c16cb8c36aaf5329a0c238960851a7ce3aecf76c2d6756d9ace
+visual_readback:
+  status: PASS_VISUALLY_SEMANTICALLY_CORRECT_4_OF_4
+  observation: each original-resolution overlay follows the single green cup while excluding the orange cylinder and gray block
+  optimization_feedback: NONE
+decision: PASS_GO_LINUX_FOUR_POINT_FULL_RESTART
+next_experiment: stage-f-linux-four-point-full-restart-r765
+```
+
+## Checkpoint CP-479 — frozen four-point perception acceptance passes 4/4
+
+```yaml
+checkpoint: CP-479
+status: FOUR_POINT_PERCEPTION_PASS_GO_LINUX_FULL_RESTART
+prior_checkpoint: CP-478
+frozen_identity:
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  output_manifest_sha256: 9caa3cfa0ca4cde1d4b62eab517175776c93e8cf36adf24c406c1f8002181080
+acceptance: {points_passed: 4, points_total: 4, semantic_status: correct, byte_readback: PASS, visual_readback: PASS}
+r761_disclosure: retained invalid partial attempt opened truth and failed in evidence rendering before any case acceptance record; r762 was the pre-registered no-optimization RED-to-GREEN recovery
+promotion: freeze the accepted candidate unchanged and proceed to ai-station Linux four independent FULL_RESTART PickPlace trials
+linux_requirements: each point must independently prove DINO, SAM, valid depth, TF, fresh /cup_pose, MoveIt, controller execution, MuJoCo cup displacement/contact outcome and a fresh GUI capture
+prohibitions: no COCO rerun or gate restoration; no threshold tuning, checkpoint reselection or training; four-point truth remains acceptance-only; no real hardware
+retention: r761-r764 and all historical evidence retained; no deletion, stash, reset, cleanup or force-push; protected two-file diff and three untracked build/install/log directories remain untouched
+next_action: preflight canonical /data/work/ws_moveit and start Linux point task_start under a unique ROS_DOMAIN_ID and GZ_PARTITION
+boundaries: Microduck paused; macOS migration starts only after Linux 4/4 passes
 ```
