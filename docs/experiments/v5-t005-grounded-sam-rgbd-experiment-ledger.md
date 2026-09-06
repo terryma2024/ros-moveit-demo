@@ -21010,6 +21010,46 @@ scratch_deletion_candidates: [scratch/stage-c-decoder-supervision-tdd-r674-red, 
 boundaries: no training launched with uncommitted code; no COCO100 or sealed-test access; SAM frozen; PickPlace/Mac NO_GO; Microduck paused
 ```
 
+## Checkpoint CP-462 — decoder-only last-Swin epoch 2 selected and DINO frozen
+
+```yaml
+checkpoint: CP-462
+status: VALID_DECODER_SUPERVISION_LAST_SWIN_SELECTED_DINO_FROZEN_GO_STATELESS_SAM_VAL
+prior_checkpoint: CP-461
+run:
+  run_id: stage-c-decoder-supervision-last-swin-formal-r693
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-decoder-supervision-last-swin-r1/formal-r1
+  execution: {exit: 0, elapsed_seconds: 1042, epochs: 2, train_samples_per_epoch: 1600, near_val_per_epoch: 300, independent_real_val_per_epoch: 160, device: cuda:0, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: selected_decoder_supervision_phase1_epoch3, parent_manifest_sha256: 53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95, parent_model_sha256: 3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: unloaded}
+  trainability: {student_trainable: 25800632, teacher_trainable: 0, Swin_trainable: last_stage_only, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+epochs:
+  - {epoch: 1, thresholds: [0.30,0.30], joint_f1: 0.7705144059, near_tp: 242, near_fp: 88, near_fn: 8, near_recall: 0.968, near_f1: 0.8344827586, real_recall: 0.6363636364, real_f1: 0.7156549521, all_recall: 0.9633333333, all_f1: 0.8525073746}
+  - {epoch: 2, thresholds: [0.30,0.30], joint_f1: 0.7764228219, near_tp: 242, near_fp: 78, near_fn: 8, near_recall: 0.968, near_f1: 0.8491228070, real_recall: 0.6420454545, real_f1: 0.7151898734, all_recall: 0.9633333333, all_f1: 0.8652694611, all_small_recall: 0.94, all_multi_recall: 1.0}
+selection:
+  rule: highest joint harmonic F1 using only the same frozen near-primary and independent-real streams
+  epoch: 2
+  thresholds: {box: 0.30, text: 0.30}
+  checkpoint: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-decoder-supervision-last-swin-r1/formal-r1/checkpoints/epoch-002
+  checkpoint_manifest_sha256: 0157b4e0cd82df8e33fdb5900d8edb1c6bfb3f6d19c2717bc54756e6ac1cbf0c
+  model_sha256: 81f0b15a3769eabc81d2b2df70c8e59b389108c9435a51acaea55dc90e653e5b
+  fresh_reload_sha256: d30c3440a2a92cd6ae4c5e3268e5aa31bb57cac3cb8ecc722a0458b3139d4733
+readback:
+  run_id: stage-c-decoder-supervision-last-swin-formal-readback-r694
+  status: PASS
+  files: 28
+  total_bytes: 1791277798
+  members_sha256: b2bf061bb8945f5017e1357918eb36646cdf1a26ad06f3c51b928d0cf3418bad
+  report_sha256: d8fe1dc0d217c12405af5e9ee7456b5b35561b949d9ccff11e4a94a9f5adec56
+  verified: all members and both checkpoint manifests; exact parent and recipe; decoder-only finite losses; last-Swin trainability; frozen gradients; isolation; CUDA fresh reload; epoch ordering and selection recomputation; no symlinks
+  frozen_modes: {all_files: 0444, all_directories: 0555}
+dino_box_gate: {decision: PASS_FOR_STATELESS_SAM_VALIDATION, near_primary_recall: 0.968, all_recall: 0.9633333333, multi_cup_recall: 1.0, small_target_recall: 0.94, qualification_limit: independent_real_recall_0.6420_and_not_COCO100_nonregression}
+decision: freeze selected DINO and thresholds for one complete original-300 joint pass with the already validated frozen stateless SAM; SAM training remains forbidden unless matched-box masks fail IoU 0.80 and become the dominant source
+verification_decision: no package or benchmark rerun; model-selection execution and independent readback are the relevant gate
+retention: r693/r694, frozen formal-r1 and every earlier evidence root retained; nothing deleted or archived
+boundaries: COCO100 remained excluded from training/epoch/threshold selection; sealed final test unread; SAM unloaded during training; depth/PickPlace/Mac remain NO_GO; Microduck paused
+```
+
 ## Checkpoint CP-461 — committed last-Swin image and decoder-only 6+6 CUDA smoke pass
 
 ```yaml
