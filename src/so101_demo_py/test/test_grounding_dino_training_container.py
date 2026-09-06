@@ -12,6 +12,9 @@ TRAINING_CONFIG = PACKAGE_ROOT / "config/perception/grounding_dino_training.yaml
 DOMAIN_RETENTION_CONFIG = (
     PACKAGE_ROOT / "config/perception/grounding_dino_domain_retention_training.yaml"
 )
+DOMAIN_RETENTION_LAST_STAGE_CONFIG = (
+    PACKAGE_ROOT / "config/perception/grounding_dino_domain_retention_last_stage_training.yaml"
+)
 
 
 def _write_fake_executable(path: Path, body: str) -> None:
@@ -320,6 +323,75 @@ def test_domain_retention_mounts_only_three_allowed_splits_and_official_base(
     assert "test-sealed-members" not in joined
 
 
+def test_domain_retention_last_stage_mounts_selected_phase1_student_read_only(
+    tmp_path: Path,
+) -> None:
+    inputs = _domain_retention_inputs(tmp_path)
+    student = tmp_path / "selected-phase1-epoch-002"
+    student.mkdir()
+    (student / "checkpoint-manifest.json").write_text("{}\n", encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    capture = tmp_path / "docker-args.txt"
+    _write_fake_executable(fake_bin / "docker", 'printf "%s\\n" "$@" > "$DOCKER_ARGS_CAPTURE"')
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+    environment["DOCKER_ARGS_CAPTURE"] = str(capture)
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "domain-retention",
+            "--image",
+            "so101-grounding-dino:test",
+            "--train-images",
+            str(inputs["train_images"]),
+            "--real-val-images",
+            str(inputs["real_val_images"]),
+            "--near-val-images",
+            str(inputs["near_val_images"]),
+            "--train-inventory",
+            str(inputs["train_inventory"]),
+            "--real-val-inventory",
+            str(inputs["real_val_inventory"]),
+            "--near-val-inventory",
+            str(inputs["near_val_inventory"]),
+            "--base-model",
+            str(inputs["model"]),
+            "--student-model",
+            str(student),
+            "--output",
+            str(inputs["output"]),
+            "--mode",
+            "smoke",
+            "--training-commit",
+            "3" * 40,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    arguments = capture.read_text(encoding="utf-8").splitlines()
+    mounts = {
+        arguments[index + 1] for index, value in enumerate(arguments[:-1]) if value == "--mount"
+    }
+    assert (
+        f"type=bind,src={student.resolve()},dst=/models/student-initialization,readonly"
+        in mounts
+    )
+    image_index = arguments.index("so101-grounding-dino:test")
+    assert arguments[image_index + 1 : image_index + 3] == [
+        "--contract",
+        "/opt/so101_demo_py/config/perception/grounding_dino_domain_retention_last_stage_training.yaml",
+    ]
+    assert arguments[-2:] == ["--student-model", "/models/student-initialization"]
+    joined = "\n".join(arguments).lower()
+    assert "epoch-005" not in joined and "coco100" not in joined and "sam2" not in joined
+
+
 def test_dockerfile_pins_locked_cuda_torch_and_transformers() -> None:
     contents = DOCKERFILE.read_text(encoding="utf-8")
 
@@ -348,3 +420,16 @@ def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
     assert "  resume_checkpoint: null\n" in contents
     assert "  teacher_token_logit_lambda: 1.0\n" in contents
     assert "  teacher_candidate_box_lambda: 1.0\n" in contents
+
+
+def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
+    contents = DOMAIN_RETENTION_LAST_STAGE_CONFIG.read_text(encoding="utf-8")
+
+    assert "  initialization: selected_phase1_student_official_base_teacher\n" in contents
+    assert "  resume_checkpoint: null\n" in contents
+    assert "  backbone_learning_rate: 0.0000002\n" in contents
+    assert (
+        "  student_initialization_checkpoint_manifest_sha256: "
+        "ea07e89acaa4c330da5e549d473396df1841fae8a5f8faef848683c31d0c1bd3\n"
+        in contents
+    )

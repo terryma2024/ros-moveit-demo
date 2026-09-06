@@ -5,10 +5,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 from so101_demo.training.grounding_dino_domain_retention import (
+    LAST_SWIN_STAGE_PREFIX,
     TRAINABLE_PREFIXES,
     compute_distillation_losses,
+    configure_last_stage_trainability,
     configure_student_trainability,
     freeze_teacher,
+    optimizer_parameter_groups,
     select_joint_threshold,
     select_smoke_samples,
     validate_domain_retention_contract,
@@ -29,7 +32,8 @@ class _Model:
     def __init__(self) -> None:
         self.training = True
         self.parameters_by_name = {
-            "model.backbone.stage.weight": _Parameter(11),
+            "model.backbone.conv_encoder.model.encoder.layers.2.weight": _Parameter(11),
+            "model.backbone.conv_encoder.model.encoder.layers.3.weight": _Parameter(12),
             "model.text_backbone.encoder.weight": _Parameter(13),
             "model.encoder.layers.0.weight": _Parameter(17),
             "model.decoder.layers.0.weight": _Parameter(19),
@@ -68,7 +72,9 @@ def test_trainability_is_an_exact_allowlist_and_teacher_is_fully_frozen() -> Non
         parameter.requires_grad == (name in expected_trainable)
         for name, parameter in student.named_parameters()
     )
-    assert not student.parameters_by_name["model.backbone.stage.weight"].requires_grad
+    assert not student.parameters_by_name[
+        "model.backbone.conv_encoder.model.encoder.layers.3.weight"
+    ].requires_grad
     assert not student.parameters_by_name["model.text_backbone.encoder.weight"].requires_grad
     assert not student.parameters_by_name["model.encoder.layers.0.weight"].requires_grad
 
@@ -77,6 +83,41 @@ def test_trainability_is_an_exact_allowlist_and_teacher_is_fully_frozen() -> Non
     assert teacher.training is False
     assert teacher_receipt["trainable_numel"] == 0
     assert all(not parameter.requires_grad for parameter in teacher.parameters())
+
+
+def test_last_stage_trainability_and_optimizer_groups_are_exact() -> None:
+    student = _Model()
+
+    receipt = configure_last_stage_trainability(student)
+    groups = optimizer_parameter_groups(
+        student, head_learning_rate=0.000002, backbone_learning_rate=0.0000002
+    )
+
+    expected = {
+        name
+        for name in student.parameters_by_name
+        if name.startswith(LAST_SWIN_STAGE_PREFIX)
+        or any(name.startswith(prefix) for prefix in TRAINABLE_PREFIXES)
+    }
+    assert set(receipt["trainable_parameter_names"]) == expected
+    assert student.parameters_by_name[
+        "model.backbone.conv_encoder.model.encoder.layers.3.weight"
+    ].requires_grad
+    assert not student.parameters_by_name[
+        "model.backbone.conv_encoder.model.encoder.layers.2.weight"
+    ].requires_grad
+    assert not student.parameters_by_name["model.text_backbone.encoder.weight"].requires_grad
+    assert [group["lr"] for group in groups] == [0.000002, 0.0000002]
+    assert groups[0]["params"] == [
+        parameter
+        for name, parameter in student.named_parameters()
+        if any(name.startswith(prefix) for prefix in TRAINABLE_PREFIXES)
+    ]
+    assert groups[1]["params"] == [
+        student.parameters_by_name[
+            "model.backbone.conv_encoder.model.encoder.layers.3.weight"
+        ]
+    ]
 
 
 def test_distillation_masks_inactive_tokens_and_uses_teacher_candidates() -> None:
@@ -205,5 +246,44 @@ def test_domain_retention_contract_rejects_epoch5_resume_or_wrong_recipe() -> No
     ):
         changed = {key: dict(item) for key, item in contract.items()}
         changed[path[0]][path[1]] = value
+        with pytest.raises(RuntimeError, match="DOMAIN_RETENTION_CONTRACT_INVALID"):
+            validate_domain_retention_contract(changed)
+
+
+def test_last_stage_contract_requires_new_phase_checkpoint_and_one_tenth_lr() -> None:
+    contract = {
+        "model": {
+            "model_id": "IDEA-Research/grounding-dino-tiny",
+            "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+        },
+        "training": {
+            "initialization": "selected_phase1_student_official_base_teacher",
+            "resume_checkpoint": None,
+            "learning_rate": 0.000002,
+            "backbone_learning_rate": 0.0000002,
+            "epochs": 2,
+            "teacher_token_logit_lambda": 1.0,
+            "teacher_candidate_box_lambda": 1.0,
+            "teacher_candidate_threshold": 0.25,
+            "teacher_candidate_topk_fallback": 16,
+            "trainable_prefixes": [*TRAINABLE_PREFIXES, LAST_SWIN_STAGE_PREFIX],
+            "student_initialization_checkpoint_manifest_sha256": "a" * 64,
+            "student_initialization_model_sha256": "b" * 64,
+            "student_initialization_completed_epoch": 2,
+        },
+        "validation": {
+            "streams": ["near_synthetic", "real", "dino_only_raw_candidates"],
+            "checkpoint_selection": "joint_harmonic_f1",
+        },
+    }
+    validate_domain_retention_contract(contract)
+
+    for field, value in (
+        ("backbone_learning_rate", 0.000002),
+        ("epochs", 3),
+        ("student_initialization_checkpoint_manifest_sha256", "epoch-5"),
+    ):
+        changed = {key: dict(item) for key, item in contract.items()}
+        changed["training"][field] = value
         with pytest.raises(RuntimeError, match="DOMAIN_RETENTION_CONTRACT_INVALID"):
             validate_domain_retention_contract(changed)
