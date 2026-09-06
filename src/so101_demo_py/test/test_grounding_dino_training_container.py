@@ -9,6 +9,9 @@ REPOSITORY_ROOT = Path(__file__).parents[3]
 RUNNER = REPOSITORY_ROOT / "scripts/grounding-dino-training-container.sh"
 DOCKERFILE = REPOSITORY_ROOT / "src/so101_demo_py/docker/grounding-dino-training/Dockerfile"
 TRAINING_CONFIG = PACKAGE_ROOT / "config/perception/grounding_dino_training.yaml"
+DOMAIN_RETENTION_CONFIG = (
+    PACKAGE_ROOT / "config/perception/grounding_dino_domain_retention_training.yaml"
+)
 
 
 def _write_fake_executable(path: Path, body: str) -> None:
@@ -25,6 +28,26 @@ def _inputs(tmp_path: Path) -> dict[str, Path]:
         inventory = tmp_path / f"{split}-inventory.json"
         inventory.write_text("{}\n", encoding="utf-8")
         result[f"{split}_inventory"] = inventory
+    model = tmp_path / "grounding-dino-tiny"
+    model.mkdir()
+    (model / "config.json").write_text("{}\n", encoding="utf-8")
+    result["model"] = model
+    output_parent = tmp_path / "outputs"
+    output_parent.mkdir()
+    result["output"] = output_parent / "smoke-r1"
+    return result
+
+
+def _domain_retention_inputs(tmp_path: Path) -> dict[str, Path]:
+    result: dict[str, Path] = {}
+    for split in ("train", "real-val", "near-val"):
+        key = split.replace("-", "_")
+        image_root = tmp_path / f"{split}-images"
+        image_root.mkdir()
+        result[f"{key}_images"] = image_root
+        inventory = tmp_path / f"{split}-inventory.json"
+        inventory.write_text("{}\n", encoding="utf-8")
+        result[f"{key}_inventory"] = inventory
     model = tmp_path / "grounding-dino-tiny"
     model.mkdir()
     (model / "config.json").write_text("{}\n", encoding="utf-8")
@@ -201,6 +224,102 @@ def test_runner_rejects_output_collision_before_docker(tmp_path: Path) -> None:
     assert "already exists" in result.stderr
 
 
+def test_domain_retention_mounts_only_three_allowed_splits_and_official_base(
+    tmp_path: Path,
+) -> None:
+    inputs = _domain_retention_inputs(tmp_path)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    capture = tmp_path / "docker-args.txt"
+    _write_fake_executable(fake_bin / "docker", 'printf "%s\\n" "$@" > "$DOCKER_ARGS_CAPTURE"')
+    environment = os.environ.copy()
+    environment["PATH"] = f"{fake_bin}{os.pathsep}{environment['PATH']}"
+    environment["DOCKER_ARGS_CAPTURE"] = str(capture)
+
+    result = subprocess.run(
+        [
+            str(RUNNER),
+            "domain-retention",
+            "--image",
+            "so101-grounding-dino:test",
+            "--train-images",
+            str(inputs["train_images"]),
+            "--real-val-images",
+            str(inputs["real_val_images"]),
+            "--near-val-images",
+            str(inputs["near_val_images"]),
+            "--train-inventory",
+            str(inputs["train_inventory"]),
+            "--real-val-inventory",
+            str(inputs["real_val_inventory"]),
+            "--near-val-inventory",
+            str(inputs["near_val_inventory"]),
+            "--base-model",
+            str(inputs["model"]),
+            "--output",
+            str(inputs["output"]),
+            "--mode",
+            "smoke",
+            "--training-commit",
+            "2" * 40,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    arguments = capture.read_text(encoding="utf-8").splitlines()
+    expected_mounts = {
+        f"type=bind,src={inputs['train_images'].resolve()},dst=/images/train,readonly",
+        f"type=bind,src={inputs['real_val_images'].resolve()},dst=/images/real-val,readonly",
+        f"type=bind,src={inputs['near_val_images'].resolve()},dst=/images/near-val,readonly",
+        f"type=bind,src={inputs['train_inventory'].resolve()},dst=/inventories/train.json,readonly",
+        f"type=bind,src={inputs['real_val_inventory'].resolve()},dst=/inventories/real-val.json,readonly",
+        f"type=bind,src={inputs['near_val_inventory'].resolve()},dst=/inventories/near-val.json,readonly",
+        f"type=bind,src={inputs['model'].resolve()},dst=/models/grounding-dino-tiny,readonly",
+        f"type=bind,src={inputs['output'].parent.resolve()},dst=/training-output",
+    }
+    mounts = {
+        arguments[index + 1] for index, value in enumerate(arguments[:-1]) if value == "--mount"
+    }
+    assert mounts == expected_mounts
+    image_index = arguments.index("so101-grounding-dino:test")
+    assert arguments[image_index - 2 : image_index] == [
+        "--entrypoint",
+        "train_grounding_dino_domain_retention",
+    ]
+    assert arguments[image_index + 1 :] == [
+        "--contract",
+        "/opt/so101_demo_py/config/perception/grounding_dino_domain_retention_training.yaml",
+        "--train-inventory",
+        "/inventories/train.json",
+        "--real-val-inventory",
+        "/inventories/real-val.json",
+        "--near-val-inventory",
+        "/inventories/near-val.json",
+        "--train-images",
+        "/images/train",
+        "--real-val-images",
+        "/images/real-val",
+        "--near-val-images",
+        "/images/near-val",
+        "--base-model",
+        "/models/grounding-dino-tiny",
+        "--output",
+        "/training-output/smoke-r1",
+        "--mode",
+        "smoke",
+        "--training-commit",
+        "2" * 40,
+    ]
+    joined = "\n".join(arguments).lower()
+    assert "coco100" not in joined
+    assert "sam2" not in joined
+    assert "test-sealed-members" not in joined
+
+
 def test_dockerfile_pins_locked_cuda_torch_and_transformers() -> None:
     contents = DOCKERFILE.read_text(encoding="utf-8")
 
@@ -220,3 +339,12 @@ def test_training_contract_records_the_cuda_determinism_exception() -> None:
     assert "  cudnn_deterministic: true\n" in contents
     assert "  disable_flash_sdp: true\n" in contents
     assert "  disable_memory_efficient_sdp: true\n" in contents
+
+
+def test_domain_retention_contract_is_packaged_and_has_no_resume() -> None:
+    contents = DOMAIN_RETENTION_CONFIG.read_text(encoding="utf-8")
+
+    assert "  initialization: official_base_teacher_and_student\n" in contents
+    assert "  resume_checkpoint: null\n" in contents
+    assert "  teacher_token_logit_lambda: 1.0\n" in contents
+    assert "  teacher_candidate_box_lambda: 1.0\n" in contents
