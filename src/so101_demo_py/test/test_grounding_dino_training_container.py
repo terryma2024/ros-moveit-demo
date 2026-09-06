@@ -447,12 +447,12 @@ def test_last_stage_contract_pins_parent_and_one_tenth_backbone_lr() -> None:
     assert "  supervised_loss_scope: decoder_outputs_only\n" in contents
     assert (
         "  student_initialization_checkpoint_manifest_sha256: "
-        "8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f\n"
+        "53e4ec88bc1f03e005a2eb31a1cafd82c34ff33aa7676924404ba5d6cb129f95\n"
         in contents
     )
     assert (
         "  student_initialization_model_sha256: "
-        "1c302e9b14364e2b57e75ca409b3238d8ec6ac46bc59931f9f4acdae4005abb5\n"
+        "3a3873f715eb17e378a22f43baa4e8200c708fdce6103b6cd04c3683f6fa013d\n"
         in contents
     )
     assert "  student_initialization_completed_epoch: 3\n" in contents
