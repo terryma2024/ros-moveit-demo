@@ -11,7 +11,11 @@ usage() {
     "  scripts/grounding-dino-training-container.sh build [--image IMAGE] [--refresh-base]" \
     "  scripts/grounding-dino-training-container.sh train --train-images DIR --val-images DIR" \
     "    --train-inventory FILE --val-inventory FILE --base-model DIR --output NEW_ROOT" \
-    "    --mode smoke|formal --training-commit SHA [--image IMAGE] [--resume-checkpoint DIR]" >&2
+    "    --mode smoke|formal --training-commit SHA [--image IMAGE] [--resume-checkpoint DIR]" \
+    "  scripts/grounding-dino-training-container.sh domain-retention --train-images DIR" \
+    "    --real-val-images DIR --near-val-images DIR --train-inventory FILE" \
+    "    --real-val-inventory FILE --near-val-inventory FILE --base-model DIR" \
+    "    --output NEW_ROOT --mode smoke|formal --training-commit SHA [--image IMAGE]" >&2
   exit 2
 }
 
@@ -170,6 +174,111 @@ case $command_name in
       --mode "$mode" \
       --training-commit "$training_commit"
     [ -z "$resume_checkpoint" ] || set -- "$@" --resume-checkpoint /resume
+    exec docker "$@"
+    ;;
+  domain-retention)
+    image=$default_image
+    train_images=
+    real_val_images=
+    near_val_images=
+    train_inventory=
+    real_val_inventory=
+    near_val_inventory=
+    base_model=
+    output=
+    mode=
+    training_commit=
+    while [ "$#" -gt 0 ]; do
+      case $1 in
+        --image | --train-images | --real-val-images | --near-val-images | --train-inventory | --real-val-inventory | --near-val-inventory | --base-model | --output | --mode | --training-commit)
+          [ "$#" -ge 2 ] || usage
+          option_name=$1
+          option_value=$2
+          shift 2
+          case $option_name in
+            --image) image=$option_value ;;
+            --train-images) train_images=$option_value ;;
+            --real-val-images) real_val_images=$option_value ;;
+            --near-val-images) near_val_images=$option_value ;;
+            --train-inventory) train_inventory=$option_value ;;
+            --real-val-inventory) real_val_inventory=$option_value ;;
+            --near-val-inventory) near_val_inventory=$option_value ;;
+            --base-model) base_model=$option_value ;;
+            --output) output=$option_value ;;
+            --mode) mode=$option_value ;;
+            --training-commit) training_commit=$option_value ;;
+          esac
+          ;;
+        *) usage ;;
+      esac
+    done
+    if [ -z "$train_images" ] || [ -z "$real_val_images" ] \
+      || [ -z "$near_val_images" ] || [ -z "$train_inventory" ] \
+      || [ -z "$real_val_inventory" ] || [ -z "$near_val_inventory" ] \
+      || [ -z "$base_model" ] || [ -z "$output" ] \
+      || [ -z "$mode" ] || [ -z "$training_commit" ]; then
+      usage
+    fi
+    case $mode in smoke | formal) ;; *) usage ;; esac
+    case $training_commit in
+      *[!0-9a-f]* | ??????????????????????????????????????? | ?????????????????????????????????????????*) usage ;;
+    esac
+    train_images=$(absolute_directory "$train_images")
+    real_val_images=$(absolute_directory "$real_val_images")
+    near_val_images=$(absolute_directory "$near_val_images")
+    train_inventory=$(absolute_file "$train_inventory")
+    real_val_inventory=$(absolute_file "$real_val_inventory")
+    near_val_inventory=$(absolute_file "$near_val_inventory")
+    base_model=$(absolute_directory "$base_model")
+    output_parent=$(CDPATH='' cd -- "$(dirname -- "$output")" 2>/dev/null && pwd -P) || {
+      printf 'output parent directory does not exist: %s\n' "$(dirname -- "$output")" >&2
+      exit 2
+    }
+    output_name=$(basename -- "$output")
+    if [ -z "$output_name" ] || [ "$output_name" = . ] || [ "$output_name" = .. ]; then
+      usage
+    fi
+    [ ! -e "$output_parent/$output_name" ] || {
+      printf 'training output root already exists: %s\n' "$output_parent/$output_name" >&2
+      exit 2
+    }
+    for mount_source in "$train_images" "$real_val_images" "$near_val_images" \
+      "$train_inventory" "$real_val_inventory" "$near_val_inventory" \
+      "$base_model" "$output_parent"; do
+      reject_mount_path "$mount_source"
+    done
+    set -- run --rm \
+      --gpus all \
+      --network none \
+      --shm-size 8g \
+      --user "$(id -u):$(id -g)" \
+      --env HF_HUB_OFFLINE=1 \
+      --env TRANSFORMERS_OFFLINE=1 \
+      --env CUDA_VISIBLE_DEVICES=0 \
+      --env CUBLAS_WORKSPACE_CONFIG=:4096:8 \
+      --env PYTHONUNBUFFERED=1 \
+      --env HOME=/training-output \
+      --mount "type=bind,src=$train_images,dst=/images/train,readonly" \
+      --mount "type=bind,src=$real_val_images,dst=/images/real-val,readonly" \
+      --mount "type=bind,src=$near_val_images,dst=/images/near-val,readonly" \
+      --mount "type=bind,src=$train_inventory,dst=/inventories/train.json,readonly" \
+      --mount "type=bind,src=$real_val_inventory,dst=/inventories/real-val.json,readonly" \
+      --mount "type=bind,src=$near_val_inventory,dst=/inventories/near-val.json,readonly" \
+      --mount "type=bind,src=$base_model,dst=/models/grounding-dino-tiny,readonly" \
+      --mount "type=bind,src=$output_parent,dst=/training-output" \
+      --entrypoint train_grounding_dino_domain_retention \
+      "$image" \
+      --contract /opt/so101_demo_py/config/perception/grounding_dino_domain_retention_training.yaml \
+      --train-inventory /inventories/train.json \
+      --real-val-inventory /inventories/real-val.json \
+      --near-val-inventory /inventories/near-val.json \
+      --train-images /images/train \
+      --real-val-images /images/real-val \
+      --near-val-images /images/near-val \
+      --base-model /models/grounding-dino-tiny \
+      --output "/training-output/$output_name" \
+      --mode "$mode" \
+      --training-commit "$training_commit"
     exec docker "$@"
     ;;
   *) usage ;;

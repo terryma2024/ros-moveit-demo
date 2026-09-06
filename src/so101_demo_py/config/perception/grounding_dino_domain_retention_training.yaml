@@ -1,0 +1,93 @@
+schema_version: 1
+model:
+  model_id: IDEA-Research/grounding-dino-tiny
+  revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  bundle_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  files:
+    .gitattributes: 11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361
+    README.md: cf46f74c7b6850f1d5cbe406028324d8798148726016d46a69a365b4a2d3e89f
+    added_tokens.json: 909e96cb32d92ce728a01bc99850cbba26196d74115c17ebeb019275412588f2
+    config.json: eec82c5ab66e16df12a9a212e68ac011779927c2536cf9078658e35d85f0c67a
+    model.safetensors: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3
+    preprocessor_config.json: 8454179ba95e2ad22947835aad7b45862a601fc0055ab88bf1ee70892d3aea60
+    pytorch_model.bin: f4d69c8403b9a569d90362c5fe8c6ea93dee4c8f08166df5b39e5eca8d227bbe
+    special_tokens_map.json: b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3
+    tokenizer.json: d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66
+    tokenizer_config.json: d40ab645b68211910b9170d22433d43186a6ec8ee6fd10ba170524b25bf4fb56
+    vocab.txt: 07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3
+data:
+  source_archive_sha256: 391a3a8e9561741d8f7b1444dda4735d667345cfeedda0fc8c33a1685ffde3f7
+  source_manifest_sha256: 391a3a8e9561741d8f7b1444dda4735d667345cfeedda0fc8c33a1685ffde3f7
+  generator_commit: bd0e7bf892eafebaf1d5f9785acc4f82599cf5f8
+  converter_commit: bd0e7bf892eafebaf1d5f9785acc4f82599cf5f8
+  train_inventory_sha256: adfb9a3cf5d7aaf79abee485c1c0a0b8660cd19b345c4aa0db614fa7caf90c0b
+  val_inventory_sha256: 3f12c9348f13a69f7a85202e24bd570407c4529f28f302867699643d6c78ed8a
+  train_sample_count: 1600
+  val_sample_count: 160
+  near_val:
+    inventory_sha256: c765357f5388c90d94e1ca2f95c060b2bc7ffa116565b130a31aabd0907ff5d9
+    sample_count: 300
+    source_archive_sha256: 8c7af6214d4560a6e6b875d2328e734df36dcd4f7ba20aa3c7625c4169d23221
+    source_manifest_sha256: a44e9926f84271848c285dde0e6fd34fc6633dee4167e404612d812b94960a8a
+    generator_commit: 07dcd29ae496e54f3fcb70092a6613db52fc7b27
+    converter_commit: 0bbbb9e3f621ec11b034a4d3d0a1dd821b90f959
+  class_name: cup
+  prompt: cup.
+training:
+  initialization: official_base_teacher_and_student
+  resume_checkpoint: null
+  seed: 20260906
+  optimizer: AdamW
+  learning_rate: 0.000002
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0001
+  scheduler: linear_decay
+  warmup_ratio: 0.10
+  epochs: 3
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  max_grad_norm: 0.1
+  train_precision: bfloat16_autocast
+  validation_precision: float32
+  checkpoint_precision: float32
+  gradient_checkpointing: true
+  data_workers: 2
+  checkpoint_frequency_epochs: 1
+  deterministic_algorithms: true
+  deterministic_warn_only: true
+  cudnn_benchmark: false
+  cudnn_deterministic: true
+  cublas_workspace_config: ':4096:8'
+  disable_flash_sdp: true
+  disable_memory_efficient_sdp: true
+  augmentations: none
+  teacher_token_logit_lambda: 1.0
+  teacher_candidate_box_lambda: 1.0
+  teacher_candidate_threshold: 0.25
+  teacher_candidate_topk_fallback: 16
+  trainable_prefixes:
+    - model.decoder.
+    - model.query_position_embeddings.
+    - model.encoder_output_bbox_embed.
+    - model.enc_output.
+    - model.enc_output_norm.
+smoke:
+  epochs: 1
+  batch_size: 1
+  gradient_accumulation_steps: 1
+  expected_train_samples: 6
+  expected_val_samples: 6
+  near_val_samples: 3
+  real_val_samples: 3
+validation:
+  streams: [near_synthetic, real, dino_only_raw_candidates]
+  checkpoint_selection: joint_harmonic_f1
+  primary_near_excluded_scenario: small_far_cup
+  box_iou_threshold: 0.50
+  box_threshold_grid: [0.01, 0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  text_threshold_grid: [0.01, 0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+  small_area_max_exclusive_px2: 1024.0
+  multi_cup_scenario: two_cups
+  threshold_rank_descending: [f1, recall, small_target_recall, multi_cup_recall, negative_fp, box_threshold, text_threshold]
+  checkpoint_rank_descending: [f1, recall, small_target_recall, multi_cup_recall, negative_fp, negative_epoch]
