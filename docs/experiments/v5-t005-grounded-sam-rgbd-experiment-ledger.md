@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-449
+latest_checkpoint: CP-450
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 7e91137f5c9cab7aff37f5da2d1ef8a517dda733
-active_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-smoke-r644
-confirmed: the exact committed mixed-r3 image and 6+6 CUDA smoke pass complete readback; official-base teacher/student initialization, exact trainability, zero frozen-gradient violations, finite losses, raw near/real candidates and fresh checkpoint reload are valid
-open: run at most three frozen-backbone formal epochs selected only on near-synthetic and independent-real validation; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
-next_action: launch one fresh network-none 1600-sample x 3-epoch formal run from official pinned base with the frozen mixed-r3 data and committed image
+active_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-formal-readback-r649
+confirmed: mixed-r3 frozen-backbone formal epochs 1-3 and independent full readback pass; epoch 3 is selected only from near-synthetic and independent-real validation, with official-base teacher/student initialization, exact frozen gradients, complete hashes and fresh CUDA reload
+open: independent real validation remains materially below near validation, so the authorized last-Swin stage is required for at most two epochs; sealed test, COCO100 requalification, SAM joint evaluation, depth/PickPlace and all Mac work remain gated
+next_action: bind the last-Swin contract to the frozen mixed-r3 epoch-3 checkpoint, run focused TDD and a fresh 6+6 smoke, then run at most two formal epochs if smoke passes
 boundaries: COCO100 remains excluded from training, epoch selection and future threshold selection; sealed final test is not read; no threshold relaxation; PickPlace remains NO_GO; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -20702,6 +20702,37 @@ verification_decision: no package or benchmark rerun; smoke directly exercises t
 retention: r643/r644/r645/r646, frozen smoke output, all r641/r642 and prior evidence retained; nothing deleted or archived
 boundaries: smoke thresholds are not final; COCO100, sealed final test and SAM remain inaccessible/unloaded; no PickPlace or Mac; Microduck paused
 next_experiment: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-formal-r647
+```
+
+## Checkpoint CP-450 — mixed-r3 frozen-backbone formal run valid; real underfit opens last-Swin stage
+
+```yaml
+checkpoint: CP-450
+status: VALID_MIXED_R3_FROZEN_BACKBONE_FORMAL_REAL_UNDERFIT_GO_LAST_SWIN
+prior_checkpoint: CP-449
+run:
+  run_id: stage-c-dino-domain-retention-mixed-r3-frozen-backbone-formal-r647
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-domain-retention-mixed-r3-r1/formal-r1
+  execution: {exit: 0, elapsed_seconds: 1323, epochs: 3, train_samples_per_epoch: 1600, near_val_per_epoch: 300, real_val_per_epoch: 160, device: cuda:0, gpu: NVIDIA_GeForce_RTX_5080, cpu_fallback: false, network: none}
+  initialization: {teacher: official_pinned_base, student: official_pinned_base, revision: a2bb814dd30d776dcf7e30523b00659f4f141c71, base_model_sha256: 1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3, completed_epoch: 0, resume: null, epoch5_access: none}
+  isolation: {COCO100: none, sealed_test: none, SAM: unloaded}
+  trainability: {student_trainable: 11616776, teacher_trainable: 0, Swin_T_frozen: true, BERT_frozen: true, encoder_frozen: true, gradient_check: PASS}
+epoch_metrics:
+  epoch_1: {thresholds: [0.40,0.40], near_f1: 0.7495908347, near_recall: 0.916, real_f1: 0.6422018349, real_recall: 0.4971590909, joint_harmonic_f1: 0.6917533336}
+  epoch_2: {thresholds: [0.35,0.35], near_f1: 0.7236641221, near_recall: 0.948, real_f1: 0.6724738676, real_recall: 0.5482954545, joint_harmonic_f1: 0.6971305338}
+  epoch_3: {thresholds: [0.35,0.35], near_f1: 0.7363494540, near_recall: 0.944, real_f1: 0.6701570681, real_recall: 0.5454545455, joint_harmonic_f1: 0.7016957027}
+selection: {epoch: 3, checkpoint_manifest_sha256: 8b511bbed06f6b950ab74a6010a3c61d8e55b9d8b9ab760435a2fb1b09423f7f, model_sha256: 1c302e9b14364e2b57e75ca409b3238d8ec6ac46bc59931f9f4acdae4005abb5, rule: joint_harmonic_f1_near_and_independent_real_only}
+readback:
+  r648: INVALID_AUDITOR_FIELD; audit used legacy raw_near/raw_real keys instead of dino_only_raw_candidates; no PASS report exists, evidence retained, training output unchanged
+  r649: {status: PASS, files: 37, total_bytes: 2346455980, readback_sha256: 78d1f3f6e07e15f3e381ef0eeab2331bf2ba94c0847469a83c0bac8dde2760ff, selection_recomputed_epoch: 3, no_symlinks: true}
+  verified: all three checkpoint manifests and every member size/hash; exact mixed-r3 identities; official-base initialization/no resume; isolation; finite epoch losses; threshold/epoch selection; trainability/frozen gradients; fresh CUDA reload
+  frozen_modes: {files: 37_at_0444, directories: 5_at_0555}
+underfit_gate: OPEN_LAST_SWIN; selected independent-real F1 0.6702 and recall 0.5455 remain materially below near F1 0.7363 and recall 0.944, with real small-target recall 0.2553 and multi-cup recall 0.4926
+decision: bind only selected mixed-r3 epoch 3 as phase-1 student; keep official pinned base as frozen teacher; unfreeze only Swin-T last stage at backbone LR 0.0000002 versus head LR 0.000002 for at most two epochs; retain dual distillation lambda1
+verification_decision: no package or benchmark rerun because no runtime/benchmark code changed; formal execution and independent readback are the relevant gate
+retention: r647/r648/r649 and frozen formal output retained; r648 invalid audit retained; nothing deleted or archived
+boundaries: COCO100 remains excluded from training, epoch selection and threshold selection; sealed test unread; SAM remains frozen/unloaded; PickPlace remains NO_GO; Microduck paused
+next_experiment: update and test the last-Swin configuration for selected mixed-r3 epoch 3, then fresh 6+6 CUDA smoke
 ```
 
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
