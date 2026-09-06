@@ -19138,6 +19138,41 @@ boundaries: no package/benchmark rerun because source is unchanged; sealed test/
 retention: all Stage B roots retained; r537-r544 scratch and r539/r540 invalid scratch are deletion candidates only; archived none and nothing deleted
 ```
 
+## Checkpoint CP-408 — r546 smoke rejected mistyped contract hash; corrected immutable contract and fresh retry planned
+
+```yaml
+checkpoint: CP-408
+status: INVALID_SMOKE_PREFLIGHT_CONTRACT_HASH_TYPO_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-407
+invalid_run:
+  run_id: stage-c-dino-nonpenetrating-smoke-r546
+  container: so101-exp079-nonpenetrating-smoke-r546
+  result: {exit: 1, elapsed_seconds: 2.36, output_created: false, container_preflight_created: false, training_samples_accessed: 0}
+  failure: 'RuntimeError: BASE_MODEL_SHA256_MISMATCH: config.json'
+root_cause:
+  classification: preparation transcription error, not a model mutation, mount defect, fsync event, or training-code defect
+  r1_contract_expected_config_sha256: 91d35e7af35f3a03f501a16eb6ff2358e2ffdf7a2106d25c4ae7dbd545ea61
+  independently_read_host_and_container_config_sha256: 91d35e7af35f3a03f501a16eb6ff2358e2f2ffdf7a2106d25c4ae7dbd545ea61
+  exact_difference: r1 omitted one character `2`; all other eight warm-start files independently match the r1 mapping
+correction:
+  scope: one data-only correction; no source, image, model, dataset, recipe, threshold, or bootstrap change
+  old_contract_retained_immutable: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/contracts/grounding-dino-nonpenetrating-warmstart4-r1.json
+  replacement_contract: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/contracts/grounding-dino-nonpenetrating-warmstart4-r2.json
+  replacement_contract_sha256: a6f9c9684d10a839c8dfe44fc8fb4701af0120b121418d3edaef494488d31690
+  replacement_contract_mode: '0444'
+replacement_smoke:
+  run_id: stage-c-dino-nonpenetrating-smoke-r548
+  container: so101-exp079-nonpenetrating-smoke-r548
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/smoke-warmstart-r2
+  required: exact 6 train plus 6 val, one epoch, finite loss and backward, checkpoint completeness, fresh-process CUDA reload, no CPU fallback
+formal_if_valid:
+  run_id: stage-c-dino-nonpenetrating-formal4-r549
+  output: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/training/grounding-dino-cup-nonpenetrating-r1/formal4-warmstart-r1
+  epochs: 4
+evidence: r546 container, run-evidence and scratch retained; scratch is a deletion candidate only; nothing deleted
+boundaries: no r546 rerun or output reuse; no general harness/fault injection; package source and benchmark unchanged; sealed test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
