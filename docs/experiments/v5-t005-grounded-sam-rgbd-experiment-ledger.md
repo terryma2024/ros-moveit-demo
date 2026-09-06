@@ -18953,6 +18953,28 @@ retention: r503/r502/r501/r500 and all prior evidence retained, archived none; s
 boundaries: official roots absent; sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
 ```
 
+## Checkpoint CP-395 — r531 launcher-only mutant identity correction statically valid; one fresh combined GREEN authorized
+
+```yaml
+checkpoint: CP-395
+status: R531_LAUNCHER_ONLY_CORRECTION_STATIC_VALID_ONE_COMBINED_GREEN_PLANNED
+planned_run_id: stage-e-generator-nonpenetrating-generation-runner-tail-fsync-green-r531
+execution_mode: inline serial; no subagent
+frozen_behavior: r530 candidate driver/shell and exact r530 harness byte-identical; prior harness result VALID_R530_GREEN264of264
+sole_change: fresh launcher ID/path/current HEAD plus six expected review mutant SHA values independently derived from frozen candidate; no candidate/harness or behavioral oracle change
+private_inputs: {driver_sha256: b5c3754cb150803d92db9be47894c94acd2280ee2c9958582e1f764c139cb651, shell_sha256: f7a0699f4dc139dc2d737a839a810cd68017d46c65c3800b91aa75d1276bd665, harness_sha256: 845189ddd80ca945e4f12f6b98de667fa71c6b085d2da857c613af66ec00724d, launcher_sha256_before_head_rebind: e24ff1920d95a3dc37815bdde646d09f347aabc1a10419b63b43a2f8dab96c6c}
+static_readback: launcher and candidate bash syntax,12of12 heredoc AST, exact expected mutant map equals independent frozen-source derivation, r531 roots absent, local/Gitee19a5b528 and official boundaries valid
+next_experiment:
+  status: GO_ONE_FRESH_PRIVATE_COMBINED_GREEN_INLINE
+  prelaunch: commit/push/read back CP395; mechanically rebind three expected HEAD/Gitee literals, prove inverse transform restores e24ff192, recompute launcher SHA/bash/root checks
+  invocation: exactly once with matching launcher SHA; fresh r531 roots; no retry/backfill
+  required: harness output remains VALID_R530_GREEN264of264 and test exit0; launcher status VALID_R531_GREEN authoritative true/tool exit0; all21 final checks true; exact NVMe/provenance/inventory
+  after_green_only: complete inventory/hash readback and Astra immutable review, then checkpoint
+restrictions: no candidate/harness/repo source change, official generation, project/renderer import, training/inference/build/package test/benchmark/sealed access
+retention: r530/r529/r528/r527 evidence retained; no deletion
+boundaries: sealed-test/COCO100/PickPlace/Mac/SAM inaccessible; Microduck paused; mask0.80/mapping0.98 unchanged
+```
+
 ## Checkpoint CP-394 — r530 harness264/264 GREEN but launcher mutant-hash gate stale; r531 launcher-only retry planned
 
 ```yaml
