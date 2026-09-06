@@ -19250,6 +19250,29 @@ fresh_retry:
 boundaries: no source/model/data/threshold/recipe change and no r550 reuse; no general harness or fault injection; Microduck paused
 ```
 
+## Checkpoint CP-412 — r551 exposed writable selected checkpoint; bytes verified and frozen
+
+```yaml
+checkpoint: CP-412
+status: INVALID_PRE_CUDA_CHECKPOINT_MODE_SELECTED_DINO_NOW_IMMUTABLE_FRESH_RETRY_PLANNED
+prior_checkpoint: CP-411
+invalid_run:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r551
+  result: {exit: 1, elapsed_seconds: 1.86, output_created: false, cuda_model_loaded: false, inference_frames: 0}
+  preflight: exact Python and fresh NVMe tempfile valid; package resolves through the r418 symlink build to current repository source; no competing GPU process
+  failure: selected DINO checkpoint regular files retained training-time mode 0644; the adapted SAM checkpoint was already immutable
+freeze_action:
+  target: selected epoch-001 checkpoint only
+  operation: regular files 0444 and directories 0555; no byte rewrite
+  before_after: {checkpoint_manifest_sha256: 4b10d2b730c2352b715f010bf36b7fe5c3348d0489fe5559e5f48dcfb92c58e7, model_safetensors_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b}
+  readback: complete checkpoint schema, every declared member hash, selected epoch1 and val metrics independently verified after chmod; writable regular members zero
+fresh_retry:
+  run_id: stage-d-nonpenetrating-dino1-sam4-raw-r552
+  sole_changes: fresh IDs/roots and the already-planned selected-checkpoint immutability action; Python evaluator semantics remain byte-identical except IDs/paths
+evidence: r551 run-evidence and scratch retained; scratch is a deletion candidate only; nothing deleted
+boundaries: no source/model bytes/data/threshold/recipe change; no r551 reuse, general harness, fault injection or SAM training; Microduck paused
+```
+
 ## Checkpoint CP-402 — session handoff; interrupted r535 review found two unclosed real-path defects
 
 ```yaml
