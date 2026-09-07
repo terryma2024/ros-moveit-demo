@@ -107,6 +107,14 @@ def main(arguments: list[str] | None = None) -> int:
         default="/perception/overlay",
     )
     parser.add_argument("--output-topic", type=_absolute_topic, default="/cup_pose")
+    parser.add_argument("--require-output-subscriber", action="store_true")
+    parser.add_argument(
+        "--profiling",
+        choices=("off", "summary", "trace"),
+        default="off",
+    )
+    parser.add_argument("--profiling-output-root", type=_absolute_path)
+    parser.add_argument("--profiling-session-id")
     parsed = parser.parse_args(_application_arguments(arguments))
 
     from so101_demo.ros.rgbd_object_pose_node import (
@@ -152,10 +160,37 @@ def main(arguments: list[str] | None = None) -> int:
             detections_topic=parsed.detections_topic,
             overlay_topic=parsed.overlay_topic,
             output_topic=parsed.output_topic,
+            require_output_subscriber=parsed.require_output_subscriber,
         )
     except ValueError as error:
         parser.error(str(error))
-    return run_rgbd_object_pose(options)
+    if parsed.profiling == "off":
+        return run_rgbd_object_pose(options)
+
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+
+    if parsed.profiling_output_root is None:
+        parser.error("enabled profiling requires --profiling-output-root")
+    if not parsed.profiling_session_id or not parsed.profiling_session_id.strip():
+        parser.error("enabled profiling requires --profiling-session-id")
+    try:
+        profiler = build_profiler(
+            ProfilingConfig(
+                mode=ProfilingMode.parse(parsed.profiling),
+                output_root=parsed.profiling_output_root,
+                session_id=parsed.profiling_session_id.strip(),
+                process_role="perception",
+                request_id=options.request_id,
+            )
+        )
+    except OSError:
+        return run_rgbd_object_pose(options)
+    assert profiler is not None
+    try:
+        return run_rgbd_object_pose(options, profiler=profiler)
+    finally:
+        profiler.close()
 
 
 if __name__ == "__main__":
