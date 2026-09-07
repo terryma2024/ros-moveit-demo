@@ -7,7 +7,7 @@ success_contract: The new launch exits zero only after a valid workflow event tr
 worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
 branch: codex/text-agent-multibackend-e2e
 base_commit: ef9466c602da710ec89d4ca5c36dd0d7596a83c4
-current_commit: 870807e15fb60eadbfaa73cb7b6c1c3fd9c12622
+current_commit: 79eeb7922ebf86c2162a333930e5639506e2a45d
 evidence_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
 confirmed_conclusions:
   - The macOS source worktree is clean when inspected with its explicit git-dir and work-tree; ordinary Git status is invalid because repository core.worktree points at the shared checkout. OBSERVED before EXP-001.
@@ -17,8 +17,8 @@ disproven_routes:
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
   - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-001
-next_experiment: EXP-003
+latest_checkpoint: CP-002
+next_experiment: EXP-004
 ```
 
 ## Registered model inputs
@@ -151,4 +151,67 @@ open_risks:
   - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Write the Task 2 failing shared-perception-construction test and run it to RED.
+```
+
+```yaml
+experiment_id: EXP-003
+status: VALID
+prior_experiment: EXP-002
+hypothesis: Shared perception declarations, validation, and action construction can be extracted without changing either legacy launch contract.
+prediction: Each new helper test first fails for the missing interface, then both legacy launch test files pass after the extraction.
+single_variable: Move perception-only launch behavior from launch_composition.py into runtime/perception_launch.py while retaining the legacy caller's backend default and process order.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS or MuJoCo stack is started for this test-only experiment.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - The Task 1 legacy contract baseline is 170 passing selected tests.
+success_criteria:
+  - New tests cover caller-owned defaults, full parsing, and color, YOLO host, and Grounded SAM action construction.
+  - test_perception_pick_place_launch.py and test_text_pick_agent_launch.py collect nonzero tests and exit zero.
+  - Legacy argument defaults, action arguments, and process order remain unchanged.
+failure_criteria:
+  - Any legacy launch test fails after successful collection from the correct source tree.
+invalid_criteria:
+  - rclpy cannot import, no tests collect, or so101_demo resolves outside the isolated worktree mapping.
+provenance:
+  source_commit: 79eeb7922ebf86c2162a333930e5639506e2a45d
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: 0
+  gz_partition: not-used-test-only
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_perception_pick_place_launch.py src/so101_demo_py/test/test_text_pick_agent_launch.py -q
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: the declaration-helper test first failed because so101_demo.runtime.perception_launch did not exist.
+  - OBSERVED 2026-09-08: parser and builder tests then failed in sequence for the missing parser, missing color builder, unsupported YOLO builder, and unsupported Grounded SAM builder.
+  - OBSERVED 2026-09-08: the first full legacy regression had seven failures because existing tests patch launch_composition.platform.system as a compatibility seam.
+  - OBSERVED 2026-09-08: retaining the platform module import in launch_composition.py restored that seam without duplicating parsing logic.
+  - OBSERVED 2026-09-08: 172 selected tests passed in 3.19 seconds after the extraction.
+inferred:
+  - The shared module preserves the legacy launch surface while making backend construction reusable by the new E2E launch.
+conclusion: VALID; shared perception construction is ready for the workflow runner and the legacy launch contracts remain green.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-003
+decision: KEEP
+next_experiment: EXP-004
+```
+
+```yaml
+checkpoint_id: CP-002
+last_valid_experiment: EXP-003
+current_hypothesis: A strict workflow event protocol can reject malformed, duplicate, out-of-order, and cross-workflow evidence before orchestration is added.
+working_tree_status: Task 2 changes are limited to the shared perception module, launch composition refactor, focused tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - Shared perception declarations retain caller-owned backend defaults.
+  - Shared parsing and action construction preserve legacy color, YOLO host, YOLO Docker, and Grounded SAM behavior.
+  - EXP-003 established a 172-test regression pass from the isolated worktree source.
+disproven_routes:
+  - Removing the launch_composition.platform import; existing compatibility tests require that patch seam.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Run Task 2 static and diff checks, commit the extraction, then write the Task 3 workflow-event protocol test to RED.
 ```
