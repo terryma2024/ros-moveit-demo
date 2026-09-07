@@ -423,7 +423,14 @@ printf '%s\n' "$MODEL_MANIFEST_SHA256"
 52b8334358e5ff11f94f10f7c14b1697ef44d964
 ```
 
-有访问权限的机器可以下载到新目录：
+这是私有仓库。目标机先完成一次 Hugging Face 登录并确认当前身份，不要把 token 写进命令、日志或仓库：
+
+```bash
+hf auth login
+hf auth whoami
+```
+
+有访问权限的机器再下载到新目录：
 
 ```bash
 hf download zjumty/so101-grounded-sam-cup-pickplace \
@@ -492,6 +499,8 @@ python -c 'import rclpy, torch, transformers; print(rclpy.__file__); print(torch
 
 正式参数使用 `perception_device:=mps` 和 `perception_allow_cpu_fallback:=false`。MPS 不可用时返回 `DEVICE_UNAVAILABLE`，不会静默转 CPU。
 
+这次迁移还暴露了两个容易忽略的安装问题。第一，验收 overlay 要用 `--symlink-install` 构建，否则 provenance 测试可能解析到复制出来的旧源码。第二，ROS 消息包也要来自目标机的 Jazzy 环境；`mac-mini` 最终使用 `vision_msgs 4.1.0`，并把 `so101_mujoco_support` 与 `so101_demo_py` 放进同一个候选 overlay。只重建 Python 包、继续从旧工作区加载支持插件，会被 provenance 门禁拒绝。
+
 ## 20. Linux CUDA 本地部署
 
 ai-station 使用 zsh。先确认主机和 overlay：
@@ -539,11 +548,11 @@ ros2 run so101_demo_py rgbd_object_pose \
   --model-root /absolute/path/to/grounded-sam-bundle \
   --model-manifest-sha256 <manifest_sha256_from_prepare_output> \
   --device mps \
-  --grounding-box-threshold 0.35 \
-  --grounding-text-threshold 0.25 \
+  --grounding-box-threshold 0.50 \
+  --grounding-text-threshold 0.50 \
   --duplicate-iou 0.85 \
   --max-candidates 16 \
-  --sam-quality-threshold 0.75 \
+  --sam-quality-threshold 0.50 \
   --min-mask-pixels 64 \
   --max-mask-area-ratio 0.50 \
   --request-id grounded-sam-smoke-001 \
@@ -560,30 +569,30 @@ Linux 把 `--device mps` 改为 `--device cuda`。`--once` 适合 smoke；一体
 ```bash
 mkdir -p /tmp/so101-debug-grounded-sam-tutorial
 
-ros2 run so101_demo_py so101_mujoco_perception_pick_place \
+ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py \
   run_mode:=execute \
   execute:=true \
   headless:=false \
   sensor_rendering:=true \
   session_id:=grounded-sam-tutorial-001 \
   evidence_file:=/tmp/so101-debug-grounded-sam-tutorial/run-001.json \
-  mujoco_scene:="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml" \
+  mujoco_scene:="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/assets/mujoco/scene.xml" \
   mujoco_initial_keyframe:=task_start \
   perception_backend:=grounded_sam \
   perception_model_root:=/absolute/path/to/grounded-sam-bundle \
   perception_model_manifest_sha256:=<manifest_sha256_from_prepare_output> \
   perception_device:=mps \
   perception_allow_cpu_fallback:=false \
-  grounding_box_threshold:=0.35 \
-  grounding_text_threshold:=0.25 \
+  grounding_box_threshold:=0.50 \
+  grounding_text_threshold:=0.50 \
   grounding_duplicate_iou:=0.85 \
   grounding_max_candidates:=16 \
-  sam_mask_quality_threshold:=0.75 \
+  sam_mask_quality_threshold:=0.50 \
   sam_min_mask_pixels:=64 \
   sam_max_mask_area_ratio:=0.50
 ```
 
-Linux 使用 `perception_device:=cuda`。注意 launch 参数是 `sam_mask_quality_threshold`，传给 `rgbd_object_pose` 时会转换为 CLI 参数 `--sam-quality-threshold`。
+Linux 使用 `perception_device:=cuda`。上面的 `0.50/0.50/0.50` 来自当前冻结的 `threshold-lock.json`，不是通用默认值；换模型或换场景时不能沿用它们而跳过验证。注意 launch 参数是 `sam_mask_quality_threshold`，传给 `rgbd_object_pose` 时会转换为 CLI 参数 `--sam-quality-threshold`。
 
 `sensor_rendering:=true` 不能省略。topic 名存在不代表相机真的在产生新 RGB-D。
 
@@ -677,7 +686,18 @@ Mac 和 Linux 分开统计，四个预置点分别是 `task_start`、`cup_test_f
 
 每次成功不能只看 `DONE`。还要有 controller/joint/TF 变化、Gazebo 杯子 pose/contact、MoveIt attached/world scene 收敛，以及动作后的新截图。
 
-截至 2026-09-07，ai-station Linux CUDA 已完成四点 `4/4`。四次 `/cup_pose` 误差为 `0.000453..0.001918 m`，最终落点 XY 误差为 `0.001194..0.003473 m`，且都有物理抬升、位移、稳定桌面释放和新鲜截图。当前本机 macOS 与 `ssh mac-mini` 尚未完成同样的四点验收，不能从 Linux 结果直接推断它们已经通过。
+截至 2026-09-07，ai-station Linux CUDA、当前 Mac MPS 和 `ssh mac-mini` MPS 都已完成四点 `4/4`。三台机器使用同一 bundle manifest 和同一感知阈值；每个点位都有一个候选、有效深度、`DONE/19`、杯体位移、稳定桌面释放和单独截图。Linux 使用验收提交 `7743690b...` 和 2 秒 source-age 预算；两台 Mac 使用 `d0eb6a83...`，只把这项 MuJoCo 预算提高到 5 秒，以容纳较慢的 MPS 推理。模型、prompt 和感知阈值没有随平台变化。
+
+功能通过不等于性能相同。Linux 四次推理约 `230..282 ms`，`mac-mini` 约 `1493..1530 ms`，都通过 2 秒线；当前 Mac 最终批次只有 `task_start` 的 `1413 ms` 通过，其余三次为 `3224..3264 ms`。因此当前 Mac 的结论是“功能通过，性能有例外”，不能写成完整性能验收通过。
+
+最终交付在 ai-station 的注册证据根下：
+
+```text
+/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/
+  20260901-b55c869/remediation/exp-079/delivery/cross-platform-r818/
+```
+
+目录中的 `SHA256SUMS` 覆盖三台机器的压缩证据包、两份 Mac 验收摘要和 HF 远端回读记录。`so101-cross-platform-delivery-r818.json` 记录了源码、模型、阈值、点位结果与已知边界，SHA-256 为 `8893553d284271f54bf4a48cc2bce15c5454e379e9a0ee93060bf16b9acf36d3`。这里没有实体机器人验收，`4/4` 指 MuJoCo。
 
 ## 28. 为什么后来仍然需要合成数据和微调
 
@@ -723,7 +743,7 @@ SAM 的大部分参数负责通用图像特征和 prompt 编码，当前数据�
 | 推理链 | DINO 框 + SAM mask | 单模型直接给 bbox/class/mask |
 | 延迟与显存 | 通常更高 | 通常更低 |
 | 新类别试验 | 改受控映射后重新验收 | 通常需要补数据并训练 |
-| 当前项目状态 | Linux MuJoCo 四点 4/4；web 泛化弱；两台 Mac 待验 | 已有合成数据与微调教学链 |
+| 当前项目状态 | 三台机器 MuJoCo 四点均为 4/4；当前 Mac 有延迟例外；web 泛化弱 | 已有合成数据与微调教学链 |
 
 开放词汇模型适合快速建立基线和定位失败边界。进入固定机械臂任务后，仍要根据速度、显存、泛化和维护成本决定保留 Grounded SAM，还是蒸馏/替换成更轻的专用模型。
 
