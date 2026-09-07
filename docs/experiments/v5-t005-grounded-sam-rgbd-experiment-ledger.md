@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-488
+latest_checkpoint: CP-489
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_G_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+active_experiment: stage-g-linux-immutable-publication-r774
 confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; user requires every macOS operation to run on the Mac itself
-open: from a Codex session running locally on the registered Mac, import the exact immutable bundle and threshold lock, read back every member, then execute the same four independent FULL_RESTART points
-next_action: continue Stage G only after the active Codex session is running locally on macOS; do not initiate macOS commands, transfer, SSH or remote control from ai-station
+open: publish a deterministic Linux-side transfer archive with the frozen model bundle, threshold lock and essential four-point acceptance evidence; afterward, a session running locally on the registered Mac must import and validate it before the four independent FULL_RESTART points
+next_action: execute preregistered Linux-only publication stage-g-linux-immutable-publication-r774; do not initiate macOS commands, transfer, SSH or remote control from ai-station
 boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23816,4 +23816,74 @@ retention: all Linux product evidence, invalid attempts, historical COCO100 diag
 boundaries: COCO100 remains diagnostic only and cannot gate or trigger optimization; four-point truth remains acceptance-only; sealed final test remains unread; real hardware unauthorized; Microduck paused
 decision: PAUSE_CROSS_PLATFORM_EXECUTION_ON_AI_STATION_ONLY
 next_action: ordinary commit/push/readback CP-488; then continue from a local macOS session with exact bundle member readback, MPS FP32 no-fallback verification and four independent FULL_RESTART runs
+```
+
+## Experiment stage-g-linux-immutable-publication-r774 — PLANNED
+
+```yaml
+experiment_id: stage-g-linux-immutable-publication-r774
+status: PLANNED
+prior_experiment: stage-f-linux-four-point-readback-r773
+hypothesis: ai-station can publish the already frozen model and Linux acceptance identities as one deterministic, regular-file-only archive without changing any model, threshold, source or historical evidence
+prediction: the output root is collision-free; all 11 model payload digests and both lock/manifest digests pass before packaging; the archive contains only the 20 preregistered regular files; streaming readback reproduces every member SHA256; no Mac endpoint is contacted
+single_variable: package existing immutable bytes into the preregistered Linux publication format
+lifecycle: ISOLATED_STACK
+preconditions:
+  - live host is AI-STATION-001 and the publication root does not exist
+  - GPU compute process count is zero and no owned ROS, MuJoCo, MoveIt or model process is running
+  - frozen bundle manifest SHA256 is b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  - threshold lock SHA256 is b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  - protected last-Swin diff SHA256 remains c1cfb9a07302aff1bfb0fc4731e71092b958a9756b1730207ac6817374cb0b43
+success_criteria:
+  - deterministic gzip archive and external SHA256 receipt are written under the registered evidence root
+  - archive has exactly 20 regular members and no symlink, device, socket or FIFO
+  - streaming archive readback matches the preregistered source SHA256 for every member
+  - model bundle, threshold lock, runtime code identity and Linux perception/PickPlace acceptance summaries remain unchanged
+failure_criteria:
+  - any source/member/archive hash mismatch, non-regular member, missing required member or output collision
+invalid_criteria:
+  - any Mac command, transfer or remote control is attempted; source/model/threshold bytes change; publication consumes an unregistered root
+provenance:
+  source_commit: 9ba6fd99cf32bce7900792e6acf7df68dfc4c265
+  install_overlay: NOT_USED_PUBLICATION_ONLY
+  runtime_executable: GNU_tar_and_gzip_on_AI_STATION-001
+  ros_domain_id: NOT_USED
+  gz_partition: NOT_USED
+publication_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/model-bundle/linux-publication-r774
+archive_name: grounded-sam-v5-t005-linux-acceptance-r774.tar.gz
+archive_layout:
+  - publication-metadata.json
+  - models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1/**
+  - models/grounded-sam-global-synthetic-best-threshold-lock-r1/threshold-lock.json
+  - acceptance/four-point-perception-readback-r764/{readback.json,visual-inspection.json}
+  - pickplace/linux-four-point-r765/{aggregate-summary-r2.json,batch-inventory-r2.tsv,batch-manifest-r2.json}
+  - pickplace/linux-four-point-readback-r773/readback.json
+commands:
+  - {command: create deterministic archive and SHA/inventory receipts locally on ai-station, exit_code: PENDING}
+observed: [PENDING]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [PENDING]
+decision: PENDING
+next_experiment: NONE_UNTIL_LOCAL_MACOS_SESSION
+```
+
+## Checkpoint CP-489 — pre-register Linux immutable publication
+
+```yaml
+checkpoint: CP-489
+status: GO_LINUX_ONLY_IMMUTABLE_PUBLICATION_R774
+prior_checkpoint: CP-488
+policy_time: 2026-09-07T08:15:27+08:00
+last_valid_experiment: stage-f-linux-four-point-readback-r773
+current_hypothesis: the already frozen bytes can be represented as one deterministic cross-platform archive with complete streaming readback
+working_tree_status: only the ledger is owned; protected last-Swin two-file diff and three untracked build/install/log directories remain user-owned and unchanged
+owned_processes: NONE
+preserved_processes: codex and historical so101-exp079-linux-r3 tmux sessions; no Mac endpoint may be contacted
+confirmed_conclusions:
+  - Linux FULL_RESTART remains valid 4/4 under CP-487
+  - exact model bundle and threshold lock member readback passed immediately before preregistration
+open_risks:
+  - frozen carrier root contains Docker-owned files that are not required by the publication archive; use accessible independent readback r764 instead and do not chmod or copy protected carrier members
+next_command: create publication root exactly once, write publication-metadata.json, make deterministic tar.gz, then stream-read every archive member before recording VALID or failure
 ```
