@@ -1,6 +1,27 @@
-# Grounded DINO + SAM 2.1 与 YOLO-Seg 双平台 Benchmark 失败报告
+# Grounded DINO + SAM 2.1 Benchmark 与生产验收报告
 
-## 结论
+## 当前结论（2026-09-07）
+
+当前生产候选已经不再是最初的零样本组合，而是 `Grounding DINO Tiny epoch 1 + SAM 2.1 Hiera Tiny decoder epoch 4`。冻结 bundle manifest 的 SHA-256 为 `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05`，阈值锁 SHA-256 为 `b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278`。
+
+这组模型在 300 张 nonpenetrating synthetic val 上完成了实际的 `DINO -> SAM -> production candidate` 联合评测：DINO box 和 SAM mask 的 precision、recall、F1 均为 `1.0`；最低 matched box IoU 为 `0.8180`，最低 mask IoU 为 `0.9258`，最低 production/raw mapping IoU 为 `1.0`。这只是当前 MuJoCo 数据分布内的结果，不等于通用图像能力。
+
+Linux 端随后用四个预置点各做一次独立 `FULL_RESTART` MuJoCo PickPlace，结果为 `4/4`：
+
+| 点位 | DINO | SAM quality | `/cup_pose` 误差 | 杯子位移 | 最终 XY 误差 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `task_start` | 0.8290 | 0.9887 | 0.000482 m | 0.103874 m | 0.001791 m |
+| `cup_test_forward_5cm` | 0.8526 | 0.9856 | 0.000453 m | 0.129248 m | 0.001194 m |
+| `cup_test_left_5cm` | 0.8523 | 0.9859 | 0.001918 m | 0.056960 m | 0.003473 m |
+| `cup_test_right_5cm` | 0.8191 | 0.9871 | 0.000495 m | 0.151997 m | 0.001942 m |
+
+四次运行都有一个 cup candidate、有效深度、CUDA 推理、19 次状态迁移、双侧接触、实际抬升、稳定桌面释放、Planning Scene 回读、controller 成功和新鲜 MuJoCo 窗口截图。独立复核重新校验了清单内 276 个普通文件、7 个 symlink 和四份摘要；四张最终截图也逐张检查过。日志中的 `Attached body 'plastic_cup' not found` 出现在初始化或已 detach 后的幂等场景同步附近；同一运行的权威回读为 `attached=[]`、`plastic_cup` 在 world，后续执行和最终落点均通过，因此把它保留为已知的非阻塞 MoveIt 日志噪声，不把它隐藏成“零报错”。
+
+模型和训练数据已经发布到私有 Hugging Face 仓库 [zjumty/so101-grounded-sam-cup-pickplace](https://huggingface.co/zjumty/so101-grounded-sam-cup-pickplace)，固定 revision 为 `52b8334358e5ff11f94f10f7c14b1697ef44d964`。训练数据只以一个 `tar.gz` 上传，SHA-256 为 `c4b9624e9f68a96087f58ff961c67bfa10ceb28f4ea821e501e9fd16a0e00dbe`；远端新目录下载后，22 个 payload 和 9036 个归档成员均已回读通过。
+
+当前跨平台终态仍未完成：本机 macOS 和 `ssh mac-mini` 的四点 PickPlace 尚待执行。本文后面的旧 benchmark `INVALID` 结论仍按原意保留，它描述的是修复前 raw adapter 的实验，不能拿来否定或证明当前冻结 bundle。
+
+## 历史 benchmark 结论（修复前）
 
 本轮 benchmark 的总体状态是 `INVALID`。现有证据不能支持 Grounded-SAM 与 YOLO-Seg 的正式优劣排序，也不能支持任何一方可部署或可进入 Pick & Place 的结论。
 
@@ -155,7 +176,7 @@ benchmark_remediation_proposal:
 
 ## 证据生命周期
 
-- Retained：本轮所有 val/test、threshold-lock、test access、模型/数据资产、source bundle、build/install/log、诊断脚本和失败工件。
+- Retained：本轮所有 val/test、threshold-lock、test access、模型/数据资产、source bundle、build/install/log、诊断脚本和失败工件；另保留 Linux 四点 `r769-r773`、不可变发布包 `r774-r775`、HF 发布目录 `r778`、失败的私有仓库无认证回读 `r779` 和成功的远端 commit 回读 `r780`。
 - Archived：none。
-- Deletion candidates：先前 ledger 已列出的失败 checkout、superseded overlay、invalid dry-run 与 R10/R11/R12 失败目录；全部需要用户明确授权后才能删除。
+- Deletion candidates：先前 ledger 已列出的失败 checkout、superseded overlay、invalid dry-run、R10/R11/R12 失败目录，以及 HF 回读 cache；全部需要用户明确授权后才能删除。
 - 本报告没有删除、覆盖或重写任何 evidence，也没有修改旧 Task 11 ledger。
