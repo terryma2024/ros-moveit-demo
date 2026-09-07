@@ -30,7 +30,11 @@
   tree as a deletion candidate after readback, and do not delete it without explicit user
   authorization. Do not apply this `/data` path rule on macOS or other hosts, and do not disable
   `fsync`, filesystem journaling, or integrity checks or substitute `tmpfs` to make the test faster.
-- The `origin` remote is hosted on Gitee, not GitHub.
+- This repository uses the following remote mapping:
+  - `origin`: `git@gitee.com:zjumty/ros-moveit-demo.git`
+  - `github`: `git@github.com:terryma2024/ros-moveit-demo.git`
+- Gitee `origin/main` maps to GitHub `github/main`. When copying published changes between them,
+  preserve commits that exist on only one remote and do not force-push either branch.
 - Do not use the `gh` CLI for remote push, pull request, or repository operations in this workspace.
 - Use standard Git commands for remote operations, for example `git push origin <branch>`.
 - Do not run `ament_uncrustify --reformat`. Use it only for read-only checks; make any required
