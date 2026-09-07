@@ -314,7 +314,7 @@ def _fake_detector(
 def test_detector_loads_both_local_models_offline_and_warms_them(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Catch bypassing verified local paths or omitting either warm-up model call."""
+    """Catch bypassing local paths or omitting the detector warm-up calls."""
 
     monkeypatch.setenv("HF_HUB_OFFLINE", "0")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "0")
@@ -357,7 +357,7 @@ def test_detector_loads_both_local_models_offline_and_warms_them(
     assert detector.runtime_device == "mps"
     assert detector.cold_start_latency_ms == 5.0
     assert grounding_model.call_count == 1
-    assert sam_model.call_count == 1
+    assert sam_model.call_count == 2
 
 
 def test_finetuned_detector_uses_bundle_cup_prompt_and_emits_generic_class(
@@ -402,10 +402,10 @@ def test_finetuned_detector_uses_bundle_cup_prompt_and_emits_generic_class(
     assert [candidate.class_id for candidate in batch.candidates] == ["cup"]
 
 
-def test_detector_construction_warms_formal_rgb_shape_and_max_candidate_sam_batch(
+def test_detector_construction_warms_max_candidate_and_single_candidate_sam_shapes(
     tmp_path: Path,
 ) -> None:
-    """Catch READY construction omitting the real image shape or multi-box SAM batch."""
+    """Catch READY construction leaving the common one-cup MPS shape cold."""
 
     grounding_processor = _FakeGroundingProcessor()
     sam_processor = _FakeSamProcessor()
@@ -423,8 +423,8 @@ def test_detector_construction_warms_formal_rgb_shape_and_max_candidate_sam_batc
     )
 
     assert grounding_processor.image_shapes == [(480, 640, 3)]
-    assert sam_processor.image_shapes == [(480, 640, 3)]
-    assert sam_processor.input_box_shapes == [(1, 16, 4)]
+    assert sam_processor.image_shapes == [(480, 640, 3), (480, 640, 3)]
+    assert sam_processor.input_box_shapes == [(1, 16, 4), (1, 1, 4)]
 
 
 def test_multi_box_formal_warmup_failure_fails_closed(tmp_path: Path) -> None:
