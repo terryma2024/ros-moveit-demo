@@ -99,7 +99,13 @@ def _policy_document(dynamic: dict[str, object]) -> dict[str, object]:
     if type(path_value) is not str:
         raise ValueError("dynamic policy path is missing")
     path = Path(path_value)
-    if not path.is_absolute() or path.is_symlink() or not path.is_file():
+    if not path.is_absolute():
+        raise ValueError("dynamic policy path is invalid")
+    try:
+        path = path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError("dynamic policy path is invalid") from error
+    if path.is_symlink() or not path.is_file():
         raise ValueError("dynamic policy path is invalid")
     digest = _sha256(path)
     if digest != dynamic.get("policy_sha256"):
