@@ -266,8 +266,8 @@ def test_missing_evidence_is_rejected():
 
 **Interfaces:** `launch_composition.py` 新增 `build_text_pick_agent_e2e_launch_description() -> LaunchDescription`、`E2ESupervisor`。supervisor 提供 `on_stdout(child: ExecuteProcess, chunk: bytes) -> list[Action]`、`on_exit(child: ExecuteProcess, returncode: int) -> list[Action]`；内部保存 `primary_failure/secondary_failures/current_phase/shutting_down`、per-child decoder、owned process/container registry 和 timer generation。`Action` 使用 `launch.Action`。
 
-- [ ] 在 `test_text_pick_agent_e2e_launch.py` 建立当前两个 launch 测试相同风格的 materialize helper，RED 覆盖全部公共参数与三重授权。无授权、坏 instruction、坏 sensor flag、坏模型参数、既有 evidence 文件时，断言 `_mujoco_stack_actions` 调用为零。
-- [ ] 写 thin wrapper：
+- [x] 在 `test_text_pick_agent_e2e_launch.py` 建立当前两个 launch 测试相同风格的 materialize helper，RED 覆盖全部公共参数与三重授权。无授权、坏 instruction、坏 sensor flag、坏模型参数、既有 evidence 文件时，断言 `_mujoco_stack_actions` 调用为零。
+- [x] 写 thin wrapper：
 
 ```python
 from so101_demo.runtime.launch_composition import build_text_pick_agent_e2e_launch_description
@@ -278,8 +278,8 @@ def generate_launch_description():
 
 所有参数校验在创建 Node/ExecuteProcess 前完成，资源目录拒绝 symlink/穿越/已有结果。新 `evidence_file` 就是本轮顶层 result 文件；默认生成唯一 root 下的 `e2e-result.json`。显式自定义文件名时，该文件是唯一权威 summary，run root 由它所在的独占目录确定，其他设计 §10 子路径相对该 root；不再生成第二个同义成功文件。
 
-- [ ] 复用 `_mujoco_stack_actions` 和 camera TF；不 include 旧业务 launch。注册所有 handler 后才启动 child；scene_setup 退出 0 且 stack readiness 完成后，由 supervisor 发内部 `STACK_READY` 并只启动 TextAgent。
-- [ ] 为 TextAgent child 允许 `{text_agent, dynamic_runtime}`，感知仅 `{perception}`，validator 仅 `{e2e_validator}`；`STACK_READY` 属于 supervisor，不能由 child 冒充。`OnProcessIO` 每个目标独立累积字节。调度 effect 示例：
+- [x] 复用 `_mujoco_stack_actions` 和 camera TF；不 include 旧业务 launch。注册所有 handler 后才启动 child；scene_setup 退出 0 且 stack readiness 完成后，由 supervisor 发内部 `STACK_READY` 并只启动 TextAgent。
+- [x] 为 TextAgent child 允许 `{text_agent, dynamic_runtime}`，感知仅 `{perception}`，validator 仅 `{e2e_validator}`；`STACK_READY` 属于 supervisor，不能由 child 冒充。`OnProcessIO` 每个目标独立累积字节。调度 effect 示例：
 
 ```python
 effect = self.workflow_state.accept(event)
@@ -292,12 +292,12 @@ if effect == 'START_PERCEPTION':
 
 `self.perception_action` 由 Task 2 builder 生成，`workflow_state` 来自 Task 3。`DISPATCH_PREVIEW` 永远返回空 action。对重复、丢失和跨阶段事件必须拒绝，不能通过普通日志补齐。
 
-- [ ] readiness、perception startup 和 cup pose timeout 分别从 stack 启动、感知启动、runtime subscriber ready 计时。timer 绑定 workflow/phase generation，旧 timer 不得杀新阶段。runtime/validator/recovery/teardown 再设内部有限 deadline（不新增公共参数）：runtime 600 秒、validator 30 秒、recovery 30 秒，SIGINT 10 秒、SIGTERM 5 秒，SIGKILL 后 5 秒确认退出；测试用 fake clock。
-- [ ] 首次有效失败写 primary（component/code/phase/message/exit code/timestamp），之后只追加 secondary。perception 失败时停止等待 pose 的 runtime：已进入动作则走现有取消/recovery 路径，等待 recovery 窗口后才 teardown。无支撑且仍物理持杯时保持，不自动开夹爪。若现有 runtime 取消接口不足，先在 Task 4 补 stop/recovery 边界测试，再连接；不得用世界 reset 代替恢复。
-- [ ] required long-lived child 在 accepted 前即使 exit 0 也失败；spawner/scene_setup 为一次性角色，0 可成功；TextAgent 只有合法 runtime terminal 后的 0 才正常；一次性感知只有合法发布事件后的 0 才正常；颜色节点持续存活。无合法 terminal 的非零退出使用 `CHILD_EXITED_WITHOUT_TERMINAL_EVENT`。
-- [ ] Docker 用本轮唯一 name/label/CID 记录 ownership，只清理 registry 内的容器；清理只作用本轮 child。保留 Ollama daemon、DeepSeek 服务、其他 tmux 和未知 PID。信号升级、destroy 异常、容器残留记录 secondary，已有 primary 不被 signal exit 覆盖。
-- [ ] `RUNTIME_COMPLETED` 只启动一次 validator，保持 stack。`E2E_ACCEPTED` 后完成 owned cleanup，再原子写最终结果；cleanup 有未解决错误时顶层仍非零。机器验收通过与资源清理成功分开记录。
-- [ ] 事件 trace 每次更新通过同 root 临时文件、flush/fsync、`os.replace` 原子替换完整 NDJSON；最终 JSON 同样处理。若 trace/result 写入失败，以证据错误失败并进入 cleanup，不保留 success 字段。原子 writer 放 supervisor 私有 helper，避免给协议模块加文件所有权职责。
+- [x] readiness、perception startup 和 cup pose timeout 分别从 stack 启动、感知启动、runtime subscriber ready 计时。timer 绑定 workflow/phase generation，旧 timer 不得杀新阶段。runtime/validator/recovery/teardown 再设内部有限 deadline（不新增公共参数）：runtime 600 秒、validator 30 秒、recovery 30 秒，SIGINT 10 秒、SIGTERM 5 秒，SIGKILL 后 5 秒确认退出；测试用 fake clock。
+- [x] 首次有效失败写 primary（component/code/phase/message/exit code/timestamp），之后只追加 secondary。perception 失败时停止等待 pose 的 runtime：已进入动作则走现有取消/recovery 路径，等待 recovery 窗口后才 teardown。无支撑且仍物理持杯时保持，不自动开夹爪。若现有 runtime 取消接口不足，先在 Task 4 补 stop/recovery 边界测试，再连接；不得用世界 reset 代替恢复。
+- [x] required long-lived child 在 accepted 前即使 exit 0 也失败；spawner/scene_setup 为一次性角色，0 可成功；TextAgent 只有合法 runtime terminal 后的 0 才正常；一次性感知只有合法发布事件后的 0 才正常；颜色节点持续存活。无合法 terminal 的非零退出使用 `CHILD_EXITED_WITHOUT_TERMINAL_EVENT`。
+- [x] Docker 用本轮唯一 name/label/CID 记录 ownership，只清理 registry 内的容器；清理只作用本轮 child。保留 Ollama daemon、DeepSeek 服务、其他 tmux 和未知 PID。信号升级、destroy 异常、容器残留记录 secondary，已有 primary 不被 signal exit 覆盖。
+- [x] `RUNTIME_COMPLETED` 只启动一次 validator，保持 stack。`E2E_ACCEPTED` 后完成 owned cleanup，再原子写最终结果；cleanup 有未解决错误时顶层仍非零。机器验收通过与资源清理成功分开记录。
+- [x] 事件 trace 每次更新通过同 root 临时文件、flush/fsync、`os.replace` 原子替换完整 NDJSON；最终 JSON 同样处理。若 trace/result 写入失败，以证据错误失败并进入 cleanup，不保留 success 字段。原子 writer 放 supervisor 私有 helper，避免给协议模块加文件所有权职责。
 - [ ] 完整保存设计 §10 summary 字段与所有 artifact paths；外部模型路径只作 provenance，不算本轮可清理文件。将 failure 状态连接 `_terminal_launch_actions` 的失败传播机制并做真实进程测试，不能只测内存 returncode。
 - [ ] 运行 Task 7 contract 与 Task 3 协议测试到 GREEN；提交 `feat: compose supervised text agent multibackend e2e launch`。
 
