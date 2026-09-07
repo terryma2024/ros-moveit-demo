@@ -969,3 +969,207 @@ deletion_candidates:
   - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T035100Z-b62451d9
 next_command: Commit the policy-link fix and EXP-013 record, transfer the exact commit, pass a fresh ai-station NVMe package gate, preregister EXP-014, and run one fresh Linux YOLO E2E.
 ```
+
+```yaml
+experiment_id: EXP-014
+status: VALID
+prior_experiment: EXP-013
+hypothesis: Resolving the hash-bound colcon policy link to its real regular file will let the independent validator collect final MuJoCo and Planning Scene state and accept the otherwise fixed workflow.
+prediction: The exact workflow reaches E2E_ACCEPTED, writes both final readback files and accepted outcomes, cleans every owned resource, and exits zero.
+single_variable: Add only commit 4d3d7ce7898b4641beb487d7a0b38107ab556deb, which resolves the planned symlink-installed policy path before existing digest and manifest validation.
+lifecycle: FULL_RESTART
+preconditions:
+  - The exact commit passed 1662 ordinary tests on macOS in 38.69 seconds and on ai-station in 32.80 seconds.
+  - The ai-station gate used /usr/bin/python3 with verified fresh scratch /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T041000Z-44aa651c/tmp.
+  - The fixed YOLO weights, image digest, Ollama provider/model, task scene, execution policy, and authorization are unchanged.
+  - ROS_DOMAIN_ID 221, session text-e2e-linux-yolo-014, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-linux-yolo-run-01 are fresh.
+success_criteria:
+  - The strict trace reaches E2E_ACCEPTED after all planner, perception, and runtime events.
+  - Independent final readback proves stable MuJoCo placement and matching Planning Scene world state with no attachment.
+  - The authoritative result records machine_accepted true, runtime_exit_code zero, cleanup complete with no remainder, and launch exit zero.
+failure_criteria:
+  - Any strict event, readback, physical, Planning Scene, evidence, cleanup, or exit gate fails.
+invalid_criteria:
+  - Source, image, model, provider, input, or run identity drifts; a previous root is reused; or an unrelated process is altered.
+provenance:
+  source_commit: 4d3d7ce7898b4641beb487d7a0b38107ab556deb
+  transfer_bundle_sha256: 732f2499683cce6d15b5380661aa56f148bc29ae692c6ae70403ea2016cb1557
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  yolo_weights: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  perception_runtime: docker
+  perception_device: cuda
+  perception_allow_cpu_fallback: false
+  container_image: so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+  container_image_digest: sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  ros_domain_id: 221
+  session_id: text-e2e-linux-yolo-014
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-linux-yolo-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Pick the plastic cup. Apply no constraints.' run_mode:=execute execute:=true skip_confirmation:=true headless:=true sensor_rendering:=true session_id:=text-e2e-linux-yolo-014 evidence_file:=<run-root>/e2e-result.json perception_backend:=yolo_seg perception_runtime:=docker perception_device:=cuda perception_allow_cpu_fallback:=false perception_weights:=<registered-best.pt> perception_weights_sha256:=f281d252... perception_container_image:=so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: scripted preflight passed exact commit, image digest, provider model, fresh domain/root, and empty workflow-container checks.
+  - OBSERVED 2026-09-08: planner, CUDA perception, 19-state runtime, and independent final readback all completed. MuJoCo final state was stable, supported by the table, free of fingertip contact, and nearly stationary.
+  - OBSERVED 2026-09-08: the validator rejected with E2E_DYNAMIC_EVIDENCE_INVALID and E2E_PLANNING_SCENE_INVALID. The Planning Scene position difference was 0.0011658013223472305 m and orientation difference 0.000009062552536113162 rad, both below the configured geometric tolerances.
+  - OBSERVED 2026-09-08: all seven motion event position/orientation errors passed policy, the final publisher sequence exceeded the release marker, and dynamic world/attached membership was correct.
+  - OBSERVED 2026-09-08: dynamic input_frame_id was world while perception source_frame_id was task_camera_frame; the validator currently requires equality although they describe output and sensor-source frames respectively.
+  - OBSERVED 2026-09-08: MuJoCo source_timestamp_ns was 58704000000 while Planning Scene source_timestamp_ns was 1788810607533085057. Their clocks are simulation time and wall time, so the 5-second skew comparison necessarily failed.
+  - OBSERVED 2026-09-08: launch exited nonzero, machine_accepted remained false, runtime_exit_code was zero, and owned cleanup completed with no remainder.
+inferred:
+  - The remaining success-path rejection is architectural evidence-schema and clock-domain mismatch, not motion instability or a need to loosen policy thresholds.
+conclusion: VALID rejection; the live workflow is physically stable but cannot satisfy the current validator until published-frame provenance and final-readback clock semantics are redesigned coherently.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-linux-yolo-run-01.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-preflight.txt
+decision: HOLD_SUCCESS_PATH_FOR_ARCHITECTURE_REVIEW
+next_experiment: EXP-015
+```
+
+```yaml
+experiment_id: EXP-015
+status: VALID
+prior_experiment: EXP-014
+hypothesis: The actual Ollama planner rejects an instruction outside the supported plastic-cup pick capability before dispatch, perception, or motion side effects.
+prediction: The launch exits nonzero with a planner or command rejection as primary failure, without RUNTIME_STARTED, perception events, or a dynamic execution manifest.
+single_variable: Replace only the natural-language instruction with `Do not pick anything. Fly the robot to the moon.`; keep commit, model, provider, backend, scene, and authorization fixed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Source commit remains 4d3d7ce7898b4641beb487d7a0b38107ab556deb and the registered image/model inputs are unchanged.
+  - This run tests the actual provider. If it still emits a supported fixed command, the run does not count as the required Planner-rejection case and no result is relabeled.
+  - ROS_DOMAIN_ID 222, session text-e2e-linux-yolo-015, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-linux-planner-negative-run-01 are fresh.
+success_criteria:
+  - Actual provider/model provenance is recorded and the request is rejected before runtime/perception/motion effects.
+  - Authoritative result is non-accepted, cleanup completes, no owned resource remains, and launch exits nonzero.
+failure_criteria:
+  - The provider emits a supported command, any runtime/perception/motion event occurs, or the launch/result/cleanup semantics are inconsistent.
+invalid_criteria:
+  - Provider availability, source, model, domain, root, or unrelated-process isolation drifts.
+provenance:
+  source_commit: 4d3d7ce7898b4641beb487d7a0b38107ab556deb
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  perception_backend: yolo_seg
+  ros_domain_id: 222
+  session_id: text-e2e-linux-yolo-015
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-linux-planner-negative-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Do not pick anything. Fly the robot to the moon.' <same explicit execute and frozen YOLO arguments>
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: exact preflight passed and actual Ollama qwen3.5:4b returned planner_outcome unsupported in 1091 ms with dispatch false.
+  - OBSERVED 2026-09-08: the strict trace contained only STACK_READY then DISPATCH_REJECTED with primary PLANNER_OUTCOME_UNSUPPORTED.
+  - OBSERVED 2026-09-08: no RUNTIME_STARTED, perception event, dynamic execution manifest, controller motion, or acceptance readback occurred.
+  - OBSERVED 2026-09-08: launch exited 1, machine_accepted was false, cleanup completed with no remainder, and no workflow container was created.
+inferred:
+  - The actual provider respects the unsupported request and the supervisor stops before any business-side physical effect.
+conclusion: VALID; the required live Planner rejection path is demonstrated with real provider output and fail-closed cleanup.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-linux-planner-negative-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-linux-planner-negative-run-01.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-preflight.txt
+decision: KEEP
+next_experiment: EXP-016
+```
+
+```yaml
+experiment_id: EXP-016
+status: INVALID
+prior_experiment: EXP-015
+hypothesis: With the two-cup MuJoCo keyframe, YOLO-Seg detects multiple matching plastic_cup instances and the selector fails closed before publishing /cup_pose or starting motion.
+prediction: Perception emits PERCEPTION_READY then PERCEPTION_FAILED with TARGET_AMBIGUOUS, no CUP_POSE_PUBLISHED or RUNTIME_COMPLETED occurs, and cleanup returns a nonzero authoritative result with no owned remainder.
+single_variable: Replace only mujoco_initial_keyframe task_start with v5_two_cups; restore the supported pick instruction and keep all other inputs fixed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Source commit, image, weights, provider/model, device, policy, and authorization remain fixed from EXP-014.
+  - ROS_DOMAIN_ID 223, session text-e2e-linux-yolo-016, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-linux-two-cup-negative-run-01 are fresh.
+success_criteria:
+  - Perception evidence records at least two matching plastic_cup candidates and no published cup pose.
+  - Primary failure is TARGET_AMBIGUOUS, dynamic runner does not begin motion, cleanup completes, and launch exits nonzero.
+failure_criteria:
+  - A pose is published, motion begins, the wrong primary failure is recorded, or any owned resource remains.
+invalid_criteria:
+  - Source/model/provider/run identity drifts or the two-cup keyframe does not actually contain two visible matching cups.
+provenance:
+  source_commit: 4d3d7ce7898b4641beb487d7a0b38107ab556deb
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  container_image_digest: sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  mujoco_initial_keyframe: v5_two_cups
+  ros_domain_id: 223
+  session_id: text-e2e-linux-yolo-016
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-linux-two-cup-negative-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Pick the plastic cup. Apply no constraints.' mujoco_initial_keyframe:=v5_two_cups <same explicit execute and frozen YOLO arguments>
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: exact source, provider, image, weights, fresh root, domain, and workflow identity passed preflight; Ollama returned a supported pick command and dynamic runtime emitted RUNTIME_READY.
+  - OBSERVED 2026-09-08: ros2_control then waited for robot_description, while the perception process waited for a positive simulation clock. No PERCEPTION_READY or candidate evidence was produced before the 30-second perception-startup deadline.
+  - OBSERVED 2026-09-08: the authoritative primary failure was WORKFLOW_TIMEOUT at PERCEPTION_STARTUP, followed by CHILD_EXITED_WITHOUT_TERMINAL_EVENT during recovery. The run did not test whether the two visible cups produce TARGET_AMBIGUOUS.
+  - OBSERVED 2026-09-08: launch exited 1, machine_accepted was false, runtime_exit_code was -2, cleanup completed with no remainder, and no workflow container or ROS_DOMAIN_ID 223 node remained.
+inferred:
+  - This run exposed a startup-order or robot-description publication failure distinct from the planned target-selection variable.
+conclusion: INVALID; the two-cup negative acceptance case remains unproven because the stack never reached perception inference.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-linux-two-cup-negative-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-linux-two-cup-negative-run-01.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-preflight.txt
+decision: RETAIN_INVALID
+next_experiment: HOLD_FOR_ARCHITECTURE_AND_STARTUP_REVIEW
+```
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-015
+current_hypothesis: Success-path qualification should resume only after the frame-provenance and clock-domain contract is redesigned and the two-cup startup failure is isolated.
+working_tree_status: Production code is committed at 4d3d7ce7898b4641beb487d7a0b38107ab556deb; the remaining scoped files are the guide, plan progress, and EXP-015/016 ledger closeout for one documentation checkpoint.
+owned_processes: NONE
+preserved_processes:
+  - ai-station /data/work/microduck_rl/.venv/bin/python3 GPU process
+confirmed_conclusions:
+  - The candidate passes 1662 ordinary tests on macOS and ai-station from qualified source/install roots.
+  - Linux CUDA YOLO inference, the actual Ollama planner, all 19 runtime transitions, stable MuJoCo placement, and Planning Scene geometric agreement have each been observed in EXP-014.
+  - The actual Planner rejects an unsupported instruction before perception or motion side effects in EXP-015.
+  - The success-path validator compares an output world frame with a sensor input frame and compares MuJoCo simulation time with Planning Scene wall time; those facts cannot meet the current equality/skew contract.
+  - EXP-016 cannot support the TARGET_AMBIGUOUS claim because perception never crossed its startup boundary.
+  - The task-owned reverse SSH tunnel was closed after the final remote checks; ROS domains 218 through 223 and the workflow-container set were empty.
+  - Final macOS verification loaded the ROS underlay and EXP-009 dependency overlay, resolved so101_demo from the isolated source mapping, and passed all 1662 ordinary tests in 38.77 seconds.
+  - Two preceding final-verification attempts are INVALID environment records: the first omitted the ROS underlay, and the second omitted the candidate so101_mujoco_support overlay; both stopped during collection before tests ran.
+disproven_routes:
+  - Loosening geometry tolerances to address EXP-014; both position and orientation already passed their configured limits.
+  - Counting EXP-016 as a two-cup negative acceptance result.
+open_risks:
+  - Linux and macOS YOLO acceptance, both Grounded SAM cells, five consecutive successes, MoveIt live abort, valid two-cup ambiguity, GUI video, and learner evidence remain incomplete.
+  - No PickPlace-qualified Grounded SAM bundle is registered for either platform.
+  - The EXP-016 robot_description/simulation-clock startup failure needs an isolated reproduction after the evidence-protocol redesign is settled.
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/final-verification-20260908-r3/so101_demo_py-pytest.xml
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-014-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-015-linux-planner-negative-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-016-linux-two-cup-negative-run-01
+archived_runs: []
+deletion_candidates:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/final-verification-20260908
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/final-verification-20260908-r2
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/final-verification-20260908-r3
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/build
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-venv-r1
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T032450Z-6a0a7e72
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033050Z-9163c7af
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033920Z-39d0f6c1
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T034900Z-ff561f4a
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T035100Z-b62451d9
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T041000Z-44aa651c
+deletion_performed: false
+next_command: Redesign the published-frame and timestamp-domain schema, add a focused startup-order reproduction for EXP-016, then rerun the required fresh acceptance matrix.
+```
