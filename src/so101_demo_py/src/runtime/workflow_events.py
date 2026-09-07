@@ -74,6 +74,7 @@ _FAILURE_CODES_BY_EVENT = {
             "DYNAMIC_RUNTIME_RESULT_INVALID",
             "EXECUTOR_RESULT_INVALID",
             "DYNAMIC_EXECUTION_NOT_QUALIFIED",
+            "DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED",
             "DYNAMIC_EXECUTION_FAILED",
             "DYNAMIC_EXECUTION_FINISH_FAILED",
             "DYNAMIC_EXECUTION_CLEANUP_FAILED",
@@ -84,6 +85,11 @@ _FAILURE_CODES_BY_EVENT = {
             "CUP_POSE_TIMEOUT",
             "CUP_POSE_INVALID",
             "CUP_POSE_TF_UNAVAILABLE",
+            "CUP_POSE_SCENE_IDENTITY_MISSING",
+            "CUP_POSE_SCENE_SESSION_MISMATCH",
+            "CUP_POSE_SCENE_RESET_EPOCH_MISMATCH",
+            "CUP_POSE_SCENE_PAUSED",
+            "CUP_POSE_SCENE_DIVERGENCE",
             "DYNAMIC_SESSION_MISMATCH",
             "DYNAMIC_RESET_EPOCH_MISMATCH",
             "DYNAMIC_EVIDENCE_TIMEOUT",
@@ -102,6 +108,8 @@ _FAILURE_CODES_BY_EVENT = {
             "JOINT_STATE_TIMEOUT",
             "MOVEIT_EXECUTION_FAILED",
             "GRIPPER_COMMAND_FAILED",
+            "RCLPY_INIT_FAILED",
+            "NODE_CREATE_FAILED",
             "DYNAMIC_RUNTIME_INTERNAL_ERROR",
         }
     ),
@@ -161,6 +169,14 @@ _REQUIRED_PAYLOAD_FIELDS = {
     "RUNTIME_COMPLETED": frozenset({"manifest_path", "runtime_exit_code"}),
     "E2E_ACCEPTED": frozenset({"result_path"}),
     "E2E_REJECTED": frozenset({"result_path"}),
+}
+_INTERNAL_FAILURE_CODE = {
+    "PLANNER_FAILED": "PLANNER_INTERNAL_ERROR",
+    "COMMAND_INVALID": "COMMAND_INTERNAL_ERROR",
+    "DISPATCH_REJECTED": "DISPATCH_INTERNAL_ERROR",
+    "RUNTIME_FAILED": "DYNAMIC_RUNTIME_INTERNAL_ERROR",
+    "PERCEPTION_FAILED": "PERCEPTION_INTERNAL_ERROR",
+    "E2E_REJECTED": "E2E_VALIDATION_INTERNAL_ERROR",
 }
 _STRING_PAYLOAD_FIELDS = frozenset(
     {
@@ -235,6 +251,16 @@ def _validate_payload(event: str, payload: object) -> dict[str, object]:
     if event == "RUNTIME_COMPLETED" and payload["runtime_exit_code"] != 0:
         raise _invalid("RUNTIME_COMPLETED requires runtime_exit_code zero")
     return dict(payload)
+
+
+def normalize_failure_code(event: str, candidate: object) -> str:
+    """Return a registered code or the event's fixed internal failure code."""
+
+    if event not in _FAILURE_CODES_BY_EVENT:
+        raise ValueError("event does not accept a failure code")
+    if type(candidate) is str and candidate in _FAILURE_CODES_BY_EVENT[event]:
+        return candidate
+    return _INTERNAL_FAILURE_CODE[event]
 
 
 def _validate_document(
@@ -324,6 +350,19 @@ class EventEmitter:
             flush = getattr(write, "flush", None)
         self._flush = flush if callable(flush) else None
         self._sequence = 0
+        self._last_event: WorkflowEvent | None = None
+
+    @property
+    def workflow_id(self) -> str:
+        return self._workflow_id
+
+    @property
+    def component(self) -> str:
+        return self._component
+
+    @property
+    def last_event(self) -> WorkflowEvent | None:
+        return self._last_event
 
     def emit(
         self,
@@ -363,6 +402,7 @@ class EventEmitter:
         self._write(f"SO101_EVENT {encoded}\n")
         if self._flush is not None:
             self._flush()
+        self._last_event = workflow_event
         return workflow_event
 
 

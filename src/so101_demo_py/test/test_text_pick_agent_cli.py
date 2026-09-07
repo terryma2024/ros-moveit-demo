@@ -105,6 +105,50 @@ def test_cli_rejects_partial_execute_before_agent_or_ros(
 
 
 @pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--emit-workflow-events"],
+        ["--workflow-id", "w1"],
+        ["--emit-workflow-events", "--workflow-id", "bad workflow"],
+    ],
+)
+def test_cli_rejects_unpaired_or_invalid_workflow_event_configuration(
+    capsys, arguments: list[str]
+) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        ["--instruction", "帮我拿杯子", *arguments], _agent=agent
+    ) == 1
+
+    assert agent.requests == []
+    assert output(capsys)["reason_code"] == "WORKFLOW_EVENT_CONFIGURATION_INVALID"
+
+
+def test_enabled_workflow_mode_keeps_ordinary_result_off_stdout(capsys) -> None:
+    from so101_demo.cli import text_pick_agent
+
+    agent = StubAgent(result())
+
+    assert text_pick_agent.main(
+        [
+            "--instruction",
+            "帮我拿杯子",
+            "--emit-workflow-events",
+            "--workflow-id",
+            "w1",
+        ],
+        _agent=agent,
+    ) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["status"] == "DISPATCH_PREVIEW"
+
+
+@pytest.mark.parametrize(
     ("arguments", "reason_code"),
     [
         (["--skip-confirmation"], "CONFIRMATION_BYPASS_REQUIRES_EXECUTE"),

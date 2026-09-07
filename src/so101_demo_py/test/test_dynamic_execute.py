@@ -135,6 +135,16 @@ def test_dynamic_execute_registers_every_shared_workflow_action() -> None:
     assert set(actions) == SO101_WORKFLOW.action_states
 
 
+def test_dynamic_manifest_identity_fields_are_paired_and_backward_compatible() -> None:
+    assert RosDynamicMujocoExecution._workflow_identity_fields(None, None) == {}
+    assert RosDynamicMujocoExecution._workflow_identity_fields("w1", "r1") == {
+        "workflow_id": "w1",
+        "request_id": "r1",
+    }
+    with pytest.raises(ValueError, match="provenance is incomplete"):
+        RosDynamicMujocoExecution._workflow_identity_fields("w1", None)
+
+
 def test_dynamic_mujoco_descent_allows_only_touch_collision_before_planning() -> None:
     adapter = object.__new__(RosDynamicMujocoExecution)
     adapter._initial = object()

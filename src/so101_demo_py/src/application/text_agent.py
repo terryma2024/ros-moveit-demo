@@ -25,6 +25,7 @@ from ..ports.pick_place_executor import (
 )
 from ..ports.task_planner import PlannerMetadata, PlannerPort, PlannerProviderError
 from ..profiling.session import SemanticProfiler
+from ..runtime.workflow_events import EventEmitter
 from .task_dispatch import DispatchRejectedError, TaskDispatcher
 
 
@@ -136,11 +137,13 @@ class TextAgent:
         executor: PickPlaceExecutorPort,
         dispatcher: TaskDispatcher | None = None,
         profiler: SemanticProfiler | None = None,
+        event_emitter: EventEmitter | None = None,
     ) -> None:
         self._planner = planner
         self._executor = executor
         self._dispatcher = dispatcher or TaskDispatcher()
         self._profiler = profiler
+        self._event_emitter = event_emitter
         self._claimed_request_ids: set[str] = set()
         self._request_claim_lock = Lock()
 
@@ -338,6 +341,16 @@ class TextAgent:
                 planner_outcome=outcome.kind,
             )
 
+        if self._event_emitter is not None:
+            self._event_emitter.emit(
+                "DISPATCH_PREVIEW",
+                payload={
+                    "request_id": request.request_id,
+                    "provider": planned.metadata.provider,
+                    "model": planned.metadata.model,
+                    "fallback": planned.metadata.fallback_used,
+                },
+            )
         try:
             runtime = self._executor.dispatch(dispatch_request)
         except ExecutorDispatchError as error:
@@ -469,8 +482,8 @@ class TextAgent:
             )
         )
 
-    @staticmethod
     def _terminal_result(
+        self,
         request: AgentRequest,
         status: AgentStatus,
         reason_code: str | None = None,
@@ -480,7 +493,7 @@ class TextAgent:
         planner_outcome: PlannerOutcomeKind | None = None,
         confirmation_digest: str | None = None,
     ) -> AgentResult:
-        return AgentResult(
+        result = AgentResult(
             request_id=TextAgent._safe_request_id(request),
             status=status,
             reason_code=reason_code,
@@ -493,6 +506,22 @@ class TextAgent:
             planner_outcome=planner_outcome,
             confirmation_digest=confirmation_digest,
         )
+        if self._event_emitter is not None and status in {
+            AgentStatus.PLANNER_FAILED,
+            AgentStatus.COMMAND_INVALID,
+            AgentStatus.DISPATCH_REJECTED,
+        }:
+            internal_code = {
+                AgentStatus.PLANNER_FAILED: "PLANNER_INTERNAL_ERROR",
+                AgentStatus.COMMAND_INVALID: "COMMAND_INTERNAL_ERROR",
+                AgentStatus.DISPATCH_REJECTED: "DISPATCH_INTERNAL_ERROR",
+            }[status]
+            self._event_emitter.emit(
+                status.value,
+                payload={},
+                failure_code=reason_code or internal_code,
+            )
+        return result
 
     @staticmethod
     def _safe_request_id(request: AgentRequest) -> str:

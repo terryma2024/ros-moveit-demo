@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +27,7 @@ from ..core.runner import StateMachineRunner
 from ..profiling.session import SemanticProfiler
 from ..profiling.wrappers import profile_actions
 from ..runtime.dynamic_plan_manifest import write_dynamic_plan_manifest
+from ..runtime.workflow_events import EventEmitter, normalize_failure_code
 from .cup_pose_source import RosCupPoseSource
 from .cup_scene_observer import RosCupSceneObserver
 from .dynamic_planner import RosDynamicPlanner
@@ -287,16 +289,35 @@ def run_dynamic_execute(
     options,
     *,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
     _runtime=None,
 ) -> int:
     """Run the MuJoCo dynamic strategy through the shared state machine."""
+
+    status_stream = sys.stderr if event_emitter is not None else sys.stdout
+    terminal_emitted = False
+
+    def emit_failure(candidate: object) -> None:
+        nonlocal terminal_emitted
+        if event_emitter is None or terminal_emitted:
+            return
+        event_emitter.emit(
+            "RUNTIME_FAILED",
+            payload={},
+            failure_code=normalize_failure_code("RUNTIME_FAILED", candidate),
+        )
+        terminal_emitted = True
 
     if (
         not options.session_id
         or options.expected_reset_epoch is None
         or options.evidence_root is None
     ):
-        print("status=ERROR failure=DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED")
+        emit_failure("DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED")
+        print(
+            "status=ERROR failure=DYNAMIC_LIVE_RUNTIME_CONFIG_REQUIRED",
+            file=status_stream,
+        )
         return 1
 
     from ..application.cup_pose_preflight import (
@@ -327,18 +348,34 @@ def run_dynamic_execute(
     try:
         loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
-        finish_setup("rejected", _failure_code(error))
-        print(status_line("ERROR", failure=_failure_code(error), message=error))
+        failure_code = _failure_code(error)
+        finish_setup("rejected", failure_code)
+        emit_failure(failure_code)
+        print(
+            status_line("ERROR", failure=failure_code, message=error),
+            file=status_stream,
+        )
         return 1
     if not loaded.execution_allowed:
         finish_setup("rejected", "DYNAMIC_EXECUTION_NOT_QUALIFIED")
-        print("status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED")
+        emit_failure("DYNAMIC_EXECUTION_NOT_QUALIFIED")
+        print(
+            "status=ERROR failure=DYNAMIC_EXECUTION_NOT_QUALIFIED",
+            file=status_stream,
+        )
         return 1
     try:
-        geometry = runtime.load_geometry(share_dir / "assets" / "common" / "geometry-manifest.yaml")
+        geometry = runtime.load_geometry(
+            share_dir / "assets" / "common" / "geometry-manifest.yaml"
+        )
     except Exception as error:
-        finish_setup("rejected", _failure_code(error))
-        print(status_line("ERROR", failure=_failure_code(error), message=error))
+        failure_code = _failure_code(error)
+        finish_setup("rejected", failure_code)
+        emit_failure(failure_code)
+        print(
+            status_line("ERROR", failure=failure_code, message=error),
+            file=status_stream,
+        )
         return 1
 
     initialized_here = False
@@ -360,7 +397,22 @@ def run_dynamic_execute(
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
         source = runtime.cup_pose_source(node, loaded.template)
-        print("status=READY subscription=/cup_pose", flush=True)
+        if event_emitter is not None:
+            ready_payload = {
+                "session_id": options.session_id,
+                "reset_epoch": options.expected_reset_epoch,
+            }
+            if hasattr(options, "request_id"):
+                ready_payload["request_id"] = options.request_id
+            event_emitter.emit(
+                "RUNTIME_READY",
+                payload=ready_payload,
+            )
+        print(
+            "status=READY subscription=/cup_pose",
+            flush=True,
+            file=status_stream,
+        )
         sample = source.get_one(options.cup_pose_timeout_s)
         truth_observer = runtime.cup_scene_observer(
             node,
@@ -413,6 +465,8 @@ def run_dynamic_execute(
             urdf_path=share_dir / "assets" / "mujoco" / "so101.urdf",
             policy_path=loaded.path,
             policy_sha256=loaded.sha256,
+            workflow_id=getattr(options, "workflow_id", None),
+            request_id=getattr(options, "request_id", None),
         )
         actions = profile_actions(
             runtime.build_actions(execution, targets),
@@ -470,14 +524,18 @@ def run_dynamic_execute(
             )
 
     if primary_failure is not None:
+        emit_failure(primary_failure)
         fields = {"failure": primary_failure}
         if result is not None:
             fields["evidence"] = evidence_file
         if primary_message is not None:
             fields["message"] = primary_message
-        print(status_line("ERROR", **fields))
+        print(status_line("ERROR", **fields), file=status_stream)
         for failure, error in secondary_failures:
-            print(status_line("ERROR", failure=failure, message=error, secondary=True))
+            print(
+                status_line("ERROR", failure=failure, message=error, secondary=True),
+                file=status_stream,
+            )
         if cleanup.failures:
             print(
                 status_line(
@@ -485,27 +543,37 @@ def run_dynamic_execute(
                     failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
                     message=cleanup.message,
                     secondary=True,
-                )
+                ),
+                file=status_stream,
             )
         return 1
 
     if cleanup.failures:
+        emit_failure("DYNAMIC_EXECUTION_CLEANUP_FAILED")
         print(
             status_line(
                 "ERROR",
                 failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
                 message=cleanup.message,
                 workflow_status="DONE",
-            )
+            ),
+            file=status_stream,
         )
         return 1
 
+    if event_emitter is not None:
+        event_emitter.emit(
+            "RUNTIME_COMPLETED",
+            payload={"manifest_path": str(evidence_file), "runtime_exit_code": 0},
+        )
+        terminal_emitted = True
     print(
         status_line(
             "DONE",
             strategy="dynamic",
             evidence=evidence_file,
             transition_count=result.transition_count,
-        )
+        ),
+        file=status_stream,
     )
     return 0

@@ -39,6 +39,21 @@ class RosDynamicMujocoExecution:
     _RELEASE_Q6 = 0.75
     _MAX_FORCE_N = 11.60
 
+    @staticmethod
+    def _workflow_identity_fields(
+        workflow_id: str | None, request_id: str | None
+    ) -> dict[str, str]:
+        if workflow_id is None and request_id is None:
+            return {}
+        if (
+            type(workflow_id) is not str
+            or not workflow_id.strip()
+            or type(request_id) is not str
+            or not request_id.strip()
+        ):
+            raise ValueError("dynamic execution provenance is incomplete")
+        return {"workflow_id": workflow_id, "request_id": request_id}
+
     def __init__(
         self,
         node: Any,
@@ -51,6 +66,8 @@ class RosDynamicMujocoExecution:
         urdf_path: Path,
         policy_path: Path,
         policy_sha256: str,
+        workflow_id: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         from control_msgs.action import FollowJointTrajectory
         from moveit_msgs.action import ExecuteTrajectory
@@ -61,6 +78,7 @@ class RosDynamicMujocoExecution:
 
         from ..backends.mujoco.observer import MujocoWorldObserver
 
+        workflow_identity = self._workflow_identity_fields(workflow_id, request_id)
         if not session_id or expected_reset_epoch < 0:
             raise ValueError("dynamic execution provenance is incomplete")
         self._node = node
@@ -130,6 +148,7 @@ class RosDynamicMujocoExecution:
             "state_events": self._state_events,
             "final_samples": self._final_samples,
         }
+        self._document.update(workflow_identity)
         self._write()
 
     @property

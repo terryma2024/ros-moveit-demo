@@ -7,7 +7,7 @@ success_contract: The new launch exits zero only after a valid workflow event tr
 worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
 branch: codex/text-agent-multibackend-e2e
 base_commit: ef9466c602da710ec89d4ca5c36dd0d7596a83c4
-current_commit: 8f191ad0be933ea877fc59f2936cf4bf6754f32b
+current_commit: ea850f48c13fea0d32b2c44ec1b755c55038386d
 evidence_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
 confirmed_conclusions:
   - The macOS source worktree is clean when inspected with its explicit git-dir and work-tree; ordinary Git status is invalid because repository core.worktree points at the shared checkout. OBSERVED before EXP-001.
@@ -17,8 +17,8 @@ disproven_routes:
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
   - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-003
-next_experiment: EXP-005
+latest_checkpoint: CP-004
+next_experiment: EXP-006
 ```
 
 ## Registered model inputs
@@ -280,4 +280,71 @@ open_risks:
   - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Commit Task 3, then add the Task 4 TextAgent pre-dispatch event ordering test and run it to RED.
+```
+
+```yaml
+experiment_id: EXP-005
+status: VALID
+prior_experiment: EXP-004
+hypothesis: TextAgent and the dynamic runtime can emit correlated workflow milestones at their existing authorization and execution boundaries without changing disabled-mode behavior.
+prediction: Focused tests first fail at missing event interfaces and boundaries, then all selected agent, executor, runtime, CLI, provenance, and protocol tests pass with exact legacy output preserved.
+single_variable: Connect the Task 3 event protocol to TextAgent, DynamicCupPickPlaceExecutor, run_dynamic_execute, the text CLI, and final provenance.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS graph, MuJoCo process, or perception process is started; all execution dependencies are injected fakes.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - Task 3 is committed at ea850f48c13fea0d32b2c44ec1b755c55038386d.
+success_criteria:
+  - DISPATCH_PREVIEW occurs only after every static authorization and request-identity gate and immediately before executor dispatch.
+  - RUNTIME_STARTED and RUNTIME_READY preserve workflow/request identity, and exactly one runtime terminal event is emitted.
+  - Runtime manifests and text-agent provenance contain correlated identity and actual planner provider/model/fallback fields only when enabled.
+  - Disabled-mode stdout, runtime options, manifest shape, and exit behavior remain unchanged.
+failure_criteria:
+  - A rejected request creates a runtime side effect or emits DISPATCH_PREVIEW.
+  - Enabled status output contaminates command stdout, a runtime terminal is duplicated, or legacy exact-shape assertions fail.
+invalid_criteria:
+  - No tests collect or so101_demo resolves outside the isolated worktree mapping.
+provenance:
+  source_commit: ea850f48c13fea0d32b2c44ec1b755c55038386d
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used-injected-tests
+  gz_partition: not-used-injected-tests
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_text_agent.py src/so101_demo_py/test/test_text_agent_final_review.py src/so101_demo_py/test/test_planner_chain.py src/so101_demo_py/test/test_pick_place_executor_adapter.py src/so101_demo_py/test/test_dynamic_scene_sync.py src/so101_demo_py/test/test_dynamic_execute.py src/so101_demo_py/test/test_text_pick_agent_cli.py src/so101_demo_py/test/test_text_agent_execution_provenance.py src/so101_demo_py/test/test_workflow_events.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-005/pytest-agent-runtime-events.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: the first TextAgent RED rejected event_emitter at construction; later RED runs exposed missing failure events, DynamicRuntimeContext fields, runtime emitter support, runtime identity propagation, and paired CLI arguments.
+  - OBSERVED 2026-09-08: the first full CLI run exposed a missing sys import; the next run exposed three legacy monkeypatched TextAgent constructor signatures, which were preserved by omitting the optional keyword when disabled.
+  - OBSERVED 2026-09-08: later RED tests exposed missing RosDynamicMujocoExecution identity fields, cross-bound emitter acceptance, and an executor path without a fallback terminal event.
+  - OBSERVED 2026-09-08: the final selected run collected and passed 277 tests in 1.903 seconds with zero failures, errors, or skips and wrote JUnit evidence.
+  - OBSERVED 2026-09-08: Python byte compilation and git diff --check passed after the final run.
+inferred:
+  - The agent and dynamic runtime now expose strict orchestration milestones while their disabled public contracts remain compatible.
+conclusion: VALID; Task 4 identity, ordering, terminal ownership, output routing, and provenance requirements are ready for perception integration.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-005
+decision: KEEP
+next_experiment: EXP-006
+```
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-005
+current_hypothesis: Color and model perception can emit readiness, selection, publication, and fixed failures at their real gate boundaries without changing legacy output or publication behavior.
+working_tree_status: Task 4 changes are limited to agent, executor, dynamic runtime, CLI, provenance, focused tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - Rejected requests do not emit DISPATCH_PREVIEW and do not reach the executor or runtime.
+  - Runtime event identity is paired and cross-bound emitters fail closed.
+  - Enabled event mode separates status from command output; disabled mode preserves exact legacy output and option shapes.
+  - EXP-005 established a 277-test selected regression pass from the isolated worktree source.
+disproven_routes:
+  - Always passing optional constructor keywords to legacy test doubles.
+  - Allowing the executor and runtime layers to emit duplicate terminal events.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Commit Task 4, then add the Task 5 perception workflow event tests and run them to RED.
 ```
