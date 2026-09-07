@@ -7,7 +7,7 @@ success_contract: The new launch exits zero only after a valid workflow event tr
 worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
 branch: codex/text-agent-multibackend-e2e
 base_commit: ef9466c602da710ec89d4ca5c36dd0d7596a83c4
-current_commit: 79eeb7922ebf86c2162a333930e5639506e2a45d
+current_commit: 8f191ad0be933ea877fc59f2936cf4bf6754f32b
 evidence_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
 confirmed_conclusions:
   - The macOS source worktree is clean when inspected with its explicit git-dir and work-tree; ordinary Git status is invalid because repository core.worktree points at the shared checkout. OBSERVED before EXP-001.
@@ -17,8 +17,8 @@ disproven_routes:
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
   - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-002
-next_experiment: EXP-004
+latest_checkpoint: CP-003
+next_experiment: EXP-005
 ```
 
 ## Registered model inputs
@@ -214,4 +214,70 @@ open_risks:
   - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Run Task 2 static and diff checks, commit the extraction, then write the Task 3 workflow-event protocol test to RED.
+```
+
+```yaml
+experiment_id: EXP-004
+status: VALID
+prior_experiment: EXP-003
+hypothesis: A strict per-child decoder and global phase state can reject malformed or unauthorised workflow output without accepting ordinary logs as control evidence.
+prediction: Focused tests first fail at each missing protocol boundary, then pass for byte-split UTF-8, exact schema, component sequence, payload, failure-code, timestamp, identity, and phase validation.
+single_variable: Add runtime/workflow_events.py and its focused unit tests without connecting it to production processes yet.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS or MuJoCo stack is started for this protocol-only experiment.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - Task 2 is committed at 8f191ad0be933ea877fc59f2936cf4bf6754f32b.
+success_criteria:
+  - Arbitrarily split UTF-8 event lines decode exactly once and ordinary log lines never create events.
+  - Exact fields, types, workflow, component, per-component sequence, five-second wall-clock window, status/failure pairing, payload allowlists, and fixed failure codes fail closed.
+  - Model backends require TARGET_SELECTED, color_geometry may skip it, and only active-stage failures return FAIL.
+  - Cross-stage request, session, and reset identity mismatches are rejected.
+failure_criteria:
+  - Any malformed record, duplicate, jump, stale record, unknown failure code, or identity mismatch is accepted.
+invalid_criteria:
+  - No tests collect or so101_demo resolves outside the isolated worktree mapping.
+provenance:
+  source_commit: 8f191ad0be933ea877fc59f2936cf4bf6754f32b
+  install_overlay: not-used-protocol-only
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used
+  gz_partition: not-used-test-only
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_workflow_events.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-004/pytest-workflow-events.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: the first split-line test failed at collection because workflow_events.py did not exist.
+  - OBSERVED 2026-09-08: later RED runs separately exposed the missing EOF finalizer, strict schema checks, EventEmitter, failure transitions, and identity correlation.
+  - OBSERVED 2026-09-08: an unrelated verification command without the ROS underlay failed to import launch; it was excluded from protocol evidence and rerun correctly for the Task 2 gate.
+  - OBSERVED 2026-09-08: the final protocol run collected and passed 66 tests in 0.03 seconds and wrote JUnit evidence.
+  - OBSERVED 2026-09-08: Python byte compilation and git diff --check passed.
+inferred:
+  - The protocol module now supplies a fail-closed boundary suitable for Task 7 process supervision while remaining independent of ROS actions.
+conclusion: VALID; event transport, schema, fixed failure vocabulary, phase transitions, and identity correlation are ready to connect to TextAgent and dynamic runtime.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-004
+decision: KEEP
+next_experiment: EXP-005
+```
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: EXP-004
+current_hypothesis: TextAgent and dynamic runtime can emit protocol milestones at their existing authorization, subscription-ready, terminal-success, and terminal-failure boundaries without changing disabled-mode output.
+working_tree_status: Task 3 changes are limited to workflow_events.py, test_workflow_events.py, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - EventDecoder handles arbitrary byte chunks and keeps an independent sequence per allowed component.
+  - EventEmitter owns status and sequence and flushes every emitted record.
+  - WorkflowState enforces the backend-specific success path and active-stage failure boundaries.
+  - EXP-004 established a 66-test protocol pass from the isolated worktree source.
+disproven_routes:
+  - Accepting planner or model text as an arbitrary failure code.
+  - Treating ordinary status text or an event-like malformed prefix as a workflow transition.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Commit Task 3, then add the Task 4 TextAgent pre-dispatch event ordering test and run it to RED.
 ```
