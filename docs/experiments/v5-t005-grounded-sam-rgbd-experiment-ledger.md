@@ -3,15 +3,15 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-487
+latest_checkpoint: CP-488
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_G_MACOS_IMMUTABLE_BUNDLE_MIGRATION_PREFLIGHT
-confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback
-open: migrate the exact immutable bundle and threshold lock to the registered macOS runtime, read back every member, then execute the same four independent FULL_RESTART points
-next_action: read the existing Mac handoff and platform ledger for the exact host, workspace, overlay and transport contract before copying any bytes
-boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
+active_experiment: STAGE_G_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; user requires every macOS operation to run on the Mac itself
+open: from a Codex session running locally on the registered Mac, import the exact immutable bundle and threshold lock, read back every member, then execute the same four independent FULL_RESTART points
+next_action: continue Stage G only after the active Codex session is running locally on macOS; do not initiate macOS commands, transfer, SSH or remote control from ai-station
+boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -23783,4 +23783,37 @@ decision: PASS_GO_MACOS_SAME_IMMUTABLE_BUNDLE
 retention: all Linux product evidence, invalid attempts, scratch deletion candidates and historical evidence retained; nothing deleted, reset, stashed, rebuilt or force-pushed
 boundaries: COCO100 remains historical diagnostic evidence only; model optimization forbidden; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-487, then read Mac handoff and perform read-only Mac preflight before migration
+```
+
+## Checkpoint CP-488 — macOS work must execute locally on the Mac
+
+```yaml
+checkpoint: CP-488
+status: AI_STATION_STAGE_G_STOPPED_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+prior_checkpoint: CP-487
+policy_time: 2026-09-07T08:10:48+08:00
+superseding_user_directive: do not execute Mac operations from ai-station
+execution_boundary:
+  ai_station_allowed: preserve and report the already frozen Linux evidence; update the ledger and plan; ordinary commit/push/readback to Gitee
+  ai_station_forbidden: macOS SSH commands, remote process execution, bundle transfer to Mac, MPS checks, remote GUI control, screenshots and Mac FULL_RESTART runs
+  macos_required: resume Stage G from a Codex session whose live hostname and workspace prove that it runs directly on the registered Mac
+pre_directive_preflight_disclosure:
+  - read-only endpoint discovery used existing shell history and Tailscale status
+  - attempted noninteractive SSH identity probes did not authenticate, and attempted Tailscale SSH did not pass host-key verification
+  - no command executed on either Mac, no bundle byte was transferred, and no Mac process, workspace or evidence was changed
+  - ai-station SSH known_hosts gained host-key records during the failed preflight; they are retained and do not affect frozen product evidence
+frozen_linux_result:
+  status: PASS_4_OF_4
+  batch_manifest_sha256: d49b029d749a0f0268d8572f6fbf93ffbf0e9b882d3eda4a010dbb7379f5f890
+  independent_readback_sha256: 12b754fc7569f4d0c55a64d32def6109aac1fef6a96d490266e69ac4fe41550f
+frozen_model_identity:
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  policy: DINO, SAM, processor, prompt, thresholds, mapping and selector remain unchanged
+owned_processes: NONE
+tests: not run because no source, benchmark, model or threshold implementation changed
+retention: all Linux product evidence, invalid attempts, historical COCO100 diagnostics and scratch deletion candidates remain preserved; nothing deleted, reset, stashed, rebuilt or force-pushed
+boundaries: COCO100 remains diagnostic only and cannot gate or trigger optimization; four-point truth remains acceptance-only; sealed final test remains unread; real hardware unauthorized; Microduck paused
+decision: PAUSE_CROSS_PLATFORM_EXECUTION_ON_AI_STATION_ONLY
+next_action: ordinary commit/push/readback CP-488; then continue from a local macOS session with exact bundle member readback, MPS FP32 no-fallback verification and four independent FULL_RESTART runs
 ```
