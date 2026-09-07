@@ -422,4 +422,17 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 - [ ] 平台矩阵、连续有效运行、三条负向和视频均有当前来源证据；未满足的项不得勾选。
 - [ ] learner 掌握度独立记录，未因代码或计划完成自动更新。
 
+## Task 10：修订证据语义、旧入口回归与四点位验收
+
+**Files:** 修改 `application/e2e_acceptance.py`、`ros/e2e_acceptance_readback.py`、感知事件生产位置及对应普通测试；更新本设计、指南和实验账本。旧 launch wrapper、参数集合、默认值和进程顺序不得改变。
+
+- [ ] RED 证明 model 与颜色感知当前把传感器 frame 错写为发布 frame；修复后 `CUP_POSE_PUBLISHED.frame_id=world`，同时保留原 `source_stamp_ns`。
+- [ ] RED 证明 validator 当前错误比较 `dynamic.input_frame_id` 与 `perception.source_frame_id`；改为校验 dynamic 输入与发布事件的 `world` 语义，传感器 frame 只做非空来源检查。
+- [ ] RED 证明 MuJoCo 仿真时间与 Planning Scene 墙上时间被错误执行 skew；两份读回增加 `clock_domain` 和同域 `readback_monotonic_ns`，来源各自检查 freshness，只在 `host_monotonic` 域比较 skew。
+- [ ] 运行两个旧入口的 exact 参数、默认值、action 参数与顺序测试；运行 installed launch 集合与未启用事件参数时的 stdout/exit contract，任何漂移都先修复。
+- [ ] 运行 focused tests、完整 `src/so101_demo_py/test/` 普通门、macOS fresh overlay 和 ai-station NVMe scratch gate；不运行 benchmark suite。
+- [ ] 用 exact commit 重建 YOLO inference image，确认新 image 的事件 frame 修复和 digest，旧 image 保留审计。
+- [ ] 每个双平台 × 双模型配置分别执行 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm`、`cup_test_right_5cm` 四个独立 `FULL_RESTART`。每一点都要求 machine accepted、launch 0、实际 MPS/CUDA、完整联合证据和 owned cleanup。
+- [ ] 原有三条负例、每配置连续五次、GUI 视频与学习者验收继续生效；未完成项不得因四点通过而自动勾选。
+
 执行可使用 executing-plans 在当前会话逐项推进；选择子代理执行时再使用 subagent-driven-development。计划编写阶段不创建子代理或实现分支。
