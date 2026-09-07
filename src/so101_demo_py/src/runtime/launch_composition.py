@@ -50,6 +50,12 @@ from .provenance import (
     installed_bundle,
     resolve_installed_execution_identity,
 )
+from .perception_launch import (
+    PerceptionLaunchOptions,
+    build_perception_action,
+    declare_perception_arguments,
+    parse_perception_options,
+)
 
 COMMON_ARGUMENTS = {
     "run_mode",
@@ -75,19 +81,6 @@ MUJOCO_CUP_KEYFRAMES = (
 )
 
 _SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
-_DEFAULT_YOLO_INFERENCE_IMAGE = (
-    "so101-yolo11n-seg-inference:"
-    "ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
-)
-_GROUNDED_SAM_THRESHOLD_DEFAULTS = (
-    ("grounding_box_threshold", "0.35"),
-    ("grounding_text_threshold", "0.25"),
-    ("grounding_duplicate_iou", "0.85"),
-    ("grounding_max_candidates", "16"),
-    ("sam_mask_quality_threshold", "0.75"),
-    ("sam_min_mask_pixels", "64"),
-    ("sam_max_mask_area_ratio", "0.50"),
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,213 +437,29 @@ def _mujoco_perception_execute_actions(
     session_id: str,
     *,
     evidence_paths: _PerceptionEvidencePaths,
-    perception_timeout: str,
     cup_pose_timeout: str,
-    perception_backend: str,
-    perception_weights: Path | None,
-    perception_weights_sha256: str | None,
-    perception_model_root: Path | None,
-    perception_model_manifest_sha256: str | None,
-    perception_device: str,
-    perception_allow_cpu_fallback: bool,
-    perception_runtime: str,
-    perception_container_image: str,
-    perception_source_root: Path | None,
-    grounded_thresholds: tuple[str, ...] | None,
+    perception_options: PerceptionLaunchOptions,
     exit_status: PerceptionLaunchExitStatus,
     profiling_session: LaunchProfilingSession | None = None,
 ):
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     camera_transforms = tuple(camera_static_transform_nodes())
     profiling_arguments = (
-        list(profiling_session.child_arguments)
+        tuple(profiling_session.child_arguments)
         if profiling_session is not None
-        else []
+        else ()
     )
-    if perception_backend == "color_geometry":
-        perception = Node(
-            package="so101_demo_py",
-            executable="rgbd_cup_pose",
-            arguments=[
-                "--startup-timeout-s",
-                perception_timeout,
-                "--output-topic",
-                "/cup_pose",
-                "--output-ply",
-                str(evidence_paths.perception / "cup.ply"),
-                "--evidence-json",
-                str(evidence_paths.perception / "summary.json"),
-                *profiling_arguments,
-            ],
-            parameters=[{"use_sim_time": True}],
-            output="both",
-        )
-    elif perception_backend == "yolo_seg":
-        if perception_weights is None or perception_weights_sha256 is None:
-            raise RuntimeError("validated YOLO perception weights are missing")
-        arguments = [
-            "--startup-timeout-s",
-            perception_timeout,
-            "--output-topic",
-            "/cup_pose",
-            "--detections-topic",
-            "/perception/detections",
-            "--overlay-topic",
-            "/perception/overlay",
-            "--weights",
-            str(perception_weights),
-            "--weights-sha256",
-            perception_weights_sha256,
-            "--device",
-            perception_device,
-            "--request-id",
-            session_id,
-            "--evidence-root",
-            str(evidence_paths.perception),
-            "--require-output-subscriber",
-            *profiling_arguments,
-        ]
-        if perception_allow_cpu_fallback:
-            arguments.append("--allow-cpu-fallback")
-        if perception_runtime in {"docker", "docker_dev"}:
-            container_arguments = list(arguments)
-            container_arguments[container_arguments.index(str(perception_weights))] = (
-                "/models/best.pt"
-            )
-            container_arguments[
-                container_arguments.index(str(evidence_paths.perception))
-            ] = "/evidence"
-            if profiling_session is not None:
-                container_arguments[
-                    container_arguments.index(str(profiling_session.profiling_root))
-                ] = "/profiling"
-            device_index = container_arguments.index("--device") + 1
-            container_arguments[device_index] = "cuda"
-            container_command = [
-                "docker",
-                "run",
-                "--rm",
-                "--name",
-                f"so101-yolo-seg-{session_id}",
-                "--gpus",
-                "all",
-                "--network",
-                "host",
-                "--ipc",
-                "host",
-                "--user",
-                f"{os.geteuid()}:{os.getegid()}",
-                "--env",
-                f"ROS_DOMAIN_ID={os.environ.get('ROS_DOMAIN_ID', '0')}",
-                "--env",
-                "RMW_IMPLEMENTATION="
-                + os.environ.get("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp"),
-                "--env",
-                f"ROS_LOCALHOST_ONLY={os.environ.get('ROS_LOCALHOST_ONLY', '0')}",
-                "--env",
-                "HOME=/tmp/yolo-home",
-                "--env",
-                "YOLO_CONFIG_DIR=/opt/ultralytics",
-                "--env",
-                "TORCH_HOME=/opt/torch-cache",
-            ]
-            if perception_runtime == "docker_dev":
-                container_command.extend(
-                    [
-                        "--env",
-                        "PYTHONPATH=/workspace/so101-source",
-                        "--mount",
-                        "type=bind,"
-                        f"src={perception_source_root},"
-                        "dst=/workspace/so101-source/so101_demo,readonly",
-                    ]
-                )
-            container_command.extend(
-                [
-                    "--mount",
-                    f"type=bind,src={perception_weights},dst=/models/best.pt,readonly",
-                    "--mount",
-                    f"type=bind,src={evidence_paths.perception},dst=/evidence",
-                    *(
-                        [
-                            "--mount",
-                            "type=bind,"
-                            f"src={profiling_session.profiling_root},"
-                            "dst=/profiling",
-                        ]
-                        if profiling_session is not None
-                        else []
-                    ),
-                    perception_container_image,
-                    *container_arguments,
-                ]
-            )
-            perception = ExecuteProcess(
-                cmd=container_command,
-                output="both",
-            )
-        else:
-            perception = Node(
-                package="so101_demo_py",
-                executable="rgbd_object_pose",
-                arguments=arguments,
-                parameters=[{"use_sim_time": True}],
-                output="both",
-            )
-    else:
-        if (
-            perception_model_root is None
-            or perception_model_manifest_sha256 is None
-            or grounded_thresholds is None
-        ):
-            raise RuntimeError("validated Grounded SAM perception artifacts are missing")
-        arguments = [
-            "--startup-timeout-s",
-            perception_timeout,
-            "--output-topic",
-            "/cup_pose",
-            "--detections-topic",
-            "/perception/detections",
-            "--overlay-topic",
-            "/perception/overlay",
-            "--backend",
-            "grounded_sam",
-            "--model-root",
-            str(perception_model_root),
-            "--model-manifest-sha256",
-            perception_model_manifest_sha256,
-            "--device",
-            perception_device,
-            "--grounding-box-threshold",
-            grounded_thresholds[0],
-            "--grounding-text-threshold",
-            grounded_thresholds[1],
-            "--duplicate-iou",
-            grounded_thresholds[2],
-            "--max-candidates",
-            grounded_thresholds[3],
-            "--sam-quality-threshold",
-            grounded_thresholds[4],
-            "--min-mask-pixels",
-            grounded_thresholds[5],
-            "--max-mask-area-ratio",
-            grounded_thresholds[6],
-            "--request-id",
-            session_id,
-            "--evidence-root",
-            str(evidence_paths.perception),
-            "--require-output-subscriber",
-            *profiling_arguments,
-        ]
-        if perception_allow_cpu_fallback:
-            arguments.append("--allow-cpu-fallback")
-        perception = Node(
-            package="so101_demo_py",
-            executable="rgbd_object_pose",
-            arguments=arguments,
-            parameters=[{"use_sim_time": True}],
-            output="both",
-        )
+    perception = build_perception_action(
+        perception_options,
+        evidence_root=evidence_paths.perception,
+        request_id=session_id,
+        child_arguments=profiling_arguments,
+        profiling_root=(
+            profiling_session.profiling_root
+            if profiling_session is not None
+            else None
+        ),
+    )
     workflow = Node(
         package="so101_demo_py",
         executable="dynamic_cup_pick_place",
@@ -694,7 +503,9 @@ def _mujoco_perception_execute_actions(
         ),
         exit_status=exit_status,
         perception_start_delay_s=(
-            1.0 if perception_backend in {"yolo_seg", "grounded_sam"} else 0.0
+            1.0
+            if perception_options.backend in {"yolo_seg", "grounded_sam"}
+            else 0.0
         ),
     )
     profiling_handlers = (
@@ -1083,42 +894,6 @@ def _positive_finite_launch_value(context, name: str) -> str:
     return value
 
 
-def _grounded_sam_threshold_launch_values(context) -> tuple[str, ...]:
-    values: list[str] = []
-    for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS:
-        value = LaunchConfiguration(name).perform(context) or default
-        if name in {"grounding_max_candidates", "sam_min_mask_pixels"}:
-            try:
-                parsed = int(value)
-            except ValueError as error:
-                raise RuntimeError(f"{name} must be a positive integer") from error
-            if str(parsed) != value or parsed <= 0:
-                raise RuntimeError(f"{name} must be a positive integer")
-        else:
-            try:
-                parsed = float(value)
-            except ValueError as error:
-                raise RuntimeError(f"{name} must be a finite probability") from error
-            if not isfinite(parsed) or not 0.0 <= parsed <= 1.0:
-                raise RuntimeError(f"{name} must be a finite probability")
-            if name == "sam_max_mask_area_ratio" and parsed <= 0.0:
-                raise RuntimeError(f"{name} must be greater than zero")
-        values.append(value)
-    return tuple(values)
-
-
-def _forbidden_backend_arguments(context, names: tuple[str, ...]) -> None:
-    for name in names:
-        if LaunchConfiguration(name).perform(context):
-            raise RuntimeError(f"{name} is only valid for its matching perception backend")
-
-
-def _reject_nondefault_grounded_sam_thresholds(context) -> None:
-    for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS:
-        if LaunchConfiguration(name).perform(context) != default:
-            raise RuntimeError(f"{name} is only valid for the grounded_sam perception backend")
-
-
 def _owned_directory(path: Path, label: str) -> Path:
     try:
         path.mkdir(mode=0o700)
@@ -1216,138 +991,8 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
 
     _positive_finite_launch_value(context, "readiness_timeout_s")
-    perception_timeout = _positive_finite_launch_value(context, "perception_startup_timeout_s")
+    perception_options = parse_perception_options(context)
     cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
-
-    perception_backend = LaunchConfiguration("perception_backend").perform(context)
-    if perception_backend not in {"color_geometry", "yolo_seg", "grounded_sam"}:
-        raise RuntimeError("perception_backend must be color_geometry, yolo_seg, or grounded_sam")
-    perception_weights: Path | None = None
-    perception_weights_sha256: str | None = None
-    perception_model_root: Path | None = None
-    perception_model_manifest_sha256: str | None = None
-    grounded_thresholds: tuple[str, ...] | None = None
-    perception_device = LaunchConfiguration("perception_device").perform(context)
-    if perception_device not in {"auto", "cuda", "mps", "cpu"}:
-        raise RuntimeError("perception_device must be auto, cuda, mps, or cpu")
-    perception_runtime = LaunchConfiguration("perception_runtime").perform(context)
-    if perception_runtime not in {"auto", "host", "docker", "docker_dev"}:
-        raise RuntimeError(
-            "perception_runtime must be auto, host, docker, or docker_dev"
-        )
-    host_platform = platform.system()
-    if perception_runtime == "auto":
-        if host_platform == "Darwin":
-            perception_runtime = "host"
-            if perception_device == "auto":
-                perception_device = "mps"
-        elif host_platform == "Linux":
-            perception_runtime = "docker"
-        else:
-            raise RuntimeError(
-                f"perception_runtime auto does not support platform {host_platform}"
-            )
-    docker_runtimes = {"docker", "docker_dev"}
-    if perception_runtime in docker_runtimes and host_platform != "Linux":
-        raise RuntimeError("YOLO inference Docker runtime is supported only on Linux")
-    if perception_runtime in docker_runtimes and perception_device not in {
-        "auto",
-        "cuda",
-    }:
-        raise RuntimeError("YOLO inference Docker runtime requires CUDA")
-    perception_container_image = LaunchConfiguration(
-        "perception_container_image"
-    ).perform(context)
-    if not perception_container_image or any(
-        character.isspace() for character in perception_container_image
-    ):
-        raise RuntimeError("perception_container_image must be a non-empty image reference")
-    source_root_value = LaunchConfiguration("perception_source_root").perform(
-        context
-    )
-    perception_source_root: Path | None = None
-    if perception_runtime == "docker_dev":
-        candidate_source_root = Path(source_root_value)
-        if (
-            not candidate_source_root.is_absolute()
-            or candidate_source_root.is_symlink()
-            or not candidate_source_root.is_dir()
-            or not (candidate_source_root / "__init__.py").is_file()
-            or not (candidate_source_root / "runtime").is_dir()
-            or "," in source_root_value
-        ):
-            raise RuntimeError(
-                "perception_source_root must be an absolute, non-symlink Python "
-                "source directory for so101_demo"
-            )
-        perception_source_root = candidate_source_root.resolve(strict=True)
-    elif source_root_value:
-        raise RuntimeError(
-            "perception_source_root is accepted only with perception_runtime=docker_dev"
-        )
-    cpu_fallback_value = LaunchConfiguration("perception_allow_cpu_fallback").perform(context)
-    if cpu_fallback_value not in {"true", "false"}:
-        raise RuntimeError("perception_allow_cpu_fallback must be true or false")
-    if perception_backend == "color_geometry":
-        _forbidden_backend_arguments(
-            context,
-            (
-                "perception_weights",
-                "perception_weights_sha256",
-                "perception_model_root",
-                "perception_model_manifest_sha256",
-            ),
-        )
-        _reject_nondefault_grounded_sam_thresholds(context)
-    elif perception_backend == "yolo_seg":
-        _forbidden_backend_arguments(
-            context,
-            (
-                "perception_model_root",
-                "perception_model_manifest_sha256",
-            ),
-        )
-        _reject_nondefault_grounded_sam_thresholds(context)
-        perception_weights = Path(
-            LaunchConfiguration("perception_weights").perform(context)
-        )
-        if (
-            not perception_weights.is_absolute()
-            or perception_weights.is_symlink()
-            or not perception_weights.is_file()
-        ):
-            raise RuntimeError("perception_weights must be an existing absolute file")
-        perception_weights_sha256 = LaunchConfiguration(
-            "perception_weights_sha256"
-        ).perform(context)
-        if re.fullmatch(r"[0-9a-f]{64}", perception_weights_sha256) is None:
-            raise RuntimeError(
-                "perception_weights_sha256 must be a lowercase SHA256 digest"
-            )
-    else:
-        _forbidden_backend_arguments(
-            context,
-            ("perception_weights", "perception_weights_sha256"),
-        )
-        perception_model_root = Path(
-            LaunchConfiguration("perception_model_root").perform(context)
-        )
-        if (
-            not perception_model_root.is_absolute()
-            or perception_model_root.is_symlink()
-            or not perception_model_root.is_dir()
-        ):
-            raise RuntimeError(
-                "perception_model_root must be an existing absolute non-symlink directory"
-            )
-        perception_model_manifest_sha256 = LaunchConfiguration(
-            "perception_model_manifest_sha256"
-        ).perform(context)
-        if re.fullmatch(r"[0-9a-f]{64}", perception_model_manifest_sha256) is None:
-            raise RuntimeError(
-                "perception_model_manifest_sha256 must be a lowercase SHA256 digest"
-            )
-        grounded_thresholds = _grounded_sam_threshold_launch_values(context)
 
     session_id = LaunchConfiguration("session_id").perform(context)
     if not _SESSION_ID_PATTERN.fullmatch(session_id):
@@ -1384,19 +1029,8 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         share,
         session_id,
         evidence_paths=evidence_paths,
-        perception_timeout=perception_timeout,
         cup_pose_timeout=cup_pose_timeout,
-        perception_backend=perception_backend,
-        perception_weights=perception_weights,
-        perception_weights_sha256=perception_weights_sha256,
-        perception_model_root=perception_model_root,
-        perception_model_manifest_sha256=perception_model_manifest_sha256,
-        perception_device=perception_device,
-        perception_allow_cpu_fallback=cpu_fallback_value == "true",
-        perception_runtime=perception_runtime,
-        perception_container_image=perception_container_image,
-        perception_source_root=perception_source_root,
-        grounded_thresholds=grounded_thresholds,
+        perception_options=perception_options,
         exit_status=exit_status,
         profiling_session=profiling_session,
     )
@@ -1578,39 +1212,7 @@ def build_perception_pick_place_launch_description(
             ),
             DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
             DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
-            DeclareLaunchArgument(
-                "perception_backend",
-                default_value="color_geometry",
-                choices=("color_geometry", "yolo_seg", "grounded_sam"),
-            ),
-            DeclareLaunchArgument("perception_weights", default_value=""),
-            DeclareLaunchArgument("perception_weights_sha256", default_value=""),
-            DeclareLaunchArgument("perception_model_root", default_value=""),
-            DeclareLaunchArgument("perception_model_manifest_sha256", default_value=""),
-            DeclareLaunchArgument(
-                "perception_device",
-                default_value="auto",
-                choices=("auto", "cuda", "mps", "cpu"),
-            ),
-            DeclareLaunchArgument(
-                "perception_allow_cpu_fallback",
-                default_value="false",
-                choices=("true", "false"),
-            ),
-            DeclareLaunchArgument(
-                "perception_runtime",
-                default_value="auto",
-                choices=("auto", "host", "docker", "docker_dev"),
-            ),
-            DeclareLaunchArgument(
-                "perception_container_image",
-                default_value=_DEFAULT_YOLO_INFERENCE_IMAGE,
-            ),
-            DeclareLaunchArgument("perception_source_root", default_value=""),
-            *(
-                DeclareLaunchArgument(name, default_value=default)
-                for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS
-            ),
+            *declare_perception_arguments(default_backend="color_geometry"),
             DeclareLaunchArgument(
                 "profiling",
                 default_value="off",

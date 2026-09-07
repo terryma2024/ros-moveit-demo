@@ -211,6 +211,178 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
     assert module.generate_launch_description() is not None
 
 
+def test_perception_argument_default_is_owned_by_the_calling_launch() -> None:
+    from so101_demo.runtime.perception_launch import declare_perception_arguments
+
+    legacy = {
+        argument.name: argument
+        for argument in declare_perception_arguments(default_backend="color_geometry")
+    }
+    text_e2e = {
+        argument.name: argument
+        for argument in declare_perception_arguments(default_backend="yolo_seg")
+    }
+
+    assert set(legacy) == set(text_e2e) == {
+        "perception_backend",
+        "perception_weights",
+        "perception_weights_sha256",
+        "perception_model_root",
+        "perception_model_manifest_sha256",
+        "perception_device",
+        "perception_allow_cpu_fallback",
+        "perception_runtime",
+        "perception_container_image",
+        "perception_source_root",
+        "grounding_box_threshold",
+        "grounding_text_threshold",
+        "grounding_duplicate_iou",
+        "grounding_max_candidates",
+        "sam_mask_quality_threshold",
+        "sam_min_mask_pixels",
+        "sam_max_mask_area_ratio",
+    }
+    assert _default(legacy["perception_backend"]) == "color_geometry"
+    assert _default(text_e2e["perception_backend"]) == "yolo_seg"
+
+
+def test_shared_perception_parser_resolves_macos_auto_without_model_artifacts(
+    monkeypatch,
+) -> None:
+    from so101_demo.runtime import perception_launch
+
+    context = LaunchContext()
+    for argument in perception_launch.declare_perception_arguments(
+        default_backend="color_geometry"
+    ):
+        context.launch_configurations[argument.name] = _default(argument)
+    context.launch_configurations["perception_startup_timeout_s"] = "30.0"
+    monkeypatch.setattr(perception_launch.platform, "system", lambda: "Darwin")
+
+    options = perception_launch.parse_perception_options(context)
+
+    assert options.backend == "color_geometry"
+    assert options.runtime == "host"
+    assert options.device == "mps"
+    assert options.allow_cpu_fallback is False
+    assert options.weights_path is None
+    assert options.model_root is None
+    assert options.grounded_thresholds is None
+
+
+def test_shared_perception_builder_preserves_color_geometry_arguments(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from so101_demo.runtime import perception_launch
+
+    context = LaunchContext()
+    for argument in perception_launch.declare_perception_arguments(
+        default_backend="color_geometry"
+    ):
+        context.launch_configurations[argument.name] = _default(argument)
+    context.launch_configurations["perception_startup_timeout_s"] = "30.0"
+    monkeypatch.setattr(perception_launch.platform, "system", lambda: "Darwin")
+    options = perception_launch.parse_perception_options(context)
+
+    action = perception_launch.build_perception_action(
+        options,
+        evidence_root=tmp_path,
+        request_id="session-123",
+    )
+
+    assert isinstance(action, Node)
+    assert action.node_executable == "rgbd_cup_pose"
+    assert action._Node__arguments == [
+        "--startup-timeout-s",
+        "30.0",
+        "--output-topic",
+        "/cup_pose",
+        "--output-ply",
+        str(tmp_path / "cup.ply"),
+        "--evidence-json",
+        str(tmp_path / "summary.json"),
+    ]
+
+
+def test_shared_perception_builder_requires_subscriber_for_yolo(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from so101_demo.runtime import perception_launch
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    context = LaunchContext()
+    for argument in perception_launch.declare_perception_arguments(
+        default_backend="yolo_seg"
+    ):
+        context.launch_configurations[argument.name] = _default(argument)
+    context.launch_configurations.update(
+        {
+            "perception_startup_timeout_s": "30.0",
+            "perception_runtime": "host",
+            "perception_weights": str(weights),
+            "perception_weights_sha256": hashlib.sha256(b"weights-v1").hexdigest(),
+        }
+    )
+    monkeypatch.setattr(perception_launch.platform, "system", lambda: "Darwin")
+    options = perception_launch.parse_perception_options(context)
+
+    action = perception_launch.build_perception_action(
+        options,
+        evidence_root=tmp_path / "evidence",
+        request_id="session-123",
+    )
+
+    assert isinstance(action, Node)
+    assert action.node_executable == "rgbd_object_pose"
+    assert "--require-output-subscriber" in action._Node__arguments
+    assert action._Node__arguments[
+        action._Node__arguments.index("--request-id") + 1
+    ] == "session-123"
+
+
+def test_shared_perception_builder_forwards_grounded_sam_thresholds(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from so101_demo.runtime import perception_launch
+
+    model_root = _grounded_bundle(tmp_path)
+    context = LaunchContext()
+    for argument in perception_launch.declare_perception_arguments(
+        default_backend="grounded_sam"
+    ):
+        context.launch_configurations[argument.name] = _default(argument)
+    context.launch_configurations.update(
+        {
+            "perception_startup_timeout_s": "30.0",
+            "perception_runtime": "host",
+            "perception_model_root": str(model_root),
+            "perception_model_manifest_sha256": "a" * 64,
+        }
+    )
+    monkeypatch.setattr(perception_launch.platform, "system", lambda: "Darwin")
+    options = perception_launch.parse_perception_options(context)
+
+    action = perception_launch.build_perception_action(
+        options,
+        evidence_root=tmp_path / "evidence",
+        request_id="session-123",
+    )
+
+    assert isinstance(action, Node)
+    assert action.node_executable == "rgbd_object_pose"
+    assert action._Node__arguments[
+        action._Node__arguments.index("--backend") + 1
+    ] == "grounded_sam"
+    assert action._Node__arguments[
+        action._Node__arguments.index("--grounding-box-threshold") + 1
+    ] == "0.35"
+    assert "--require-output-subscriber" in action._Node__arguments
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     (

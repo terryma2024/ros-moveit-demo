@@ -124,11 +124,11 @@ ai-station 每次 pytest 前必须执行下文的 NVMe scratch gate。环境失�
 
 ## Task 2：抽取共享感知构造，保留旧时序
 
-**Interfaces:** 在 `runtime/perception_launch.py` 定义 `PerceptionLaunchOptions`（frozen dataclass），字段为设计 §5.2 的后端参数去掉 `perception_` 前缀，另含 `startup_timeout_s: float`。Grounded SAM 七个阈值保留原名及类型。
+**Interfaces:** 在 `runtime/perception_launch.py` 定义 `PerceptionLaunchOptions`（frozen dataclass），字段为设计 §5.2 的后端参数去掉 `perception_` 前缀，另含保留 launch 参数文本的 `startup_timeout_s: str`；parser 在构造前验证其为正有限数。Grounded SAM 七个阈值保留原名及类型。
 
-定义 `declare_perception_arguments(*, default_backend: str) -> list[DeclareLaunchArgument]`、`parse_perception_options(context: LaunchContext) -> PerceptionLaunchOptions`、`build_perception_action(options: PerceptionLaunchOptions, *, evidence_root: Path, workflow_id: str | None = None, child_arguments: tuple[str, ...] = ()) -> ExecuteProcess`。`Node` 是可返回的 ExecuteProcess 子类；profiling 通过 `child_arguments` 保留原转发。
+定义 `declare_perception_arguments(*, default_backend: str) -> list[DeclareLaunchArgument]`、`parse_perception_options(context: LaunchContext) -> PerceptionLaunchOptions`、`build_perception_action(options: PerceptionLaunchOptions, *, evidence_root: Path, request_id: str, workflow_id: str | None = None, child_arguments: tuple[str, ...] = (), profiling_root: Path | None = None) -> ExecuteProcess`。`request_id` 是现有感知 CLI 与 owned container name 的必要输入；`Node` 是可返回的 ExecuteProcess 子类，profiling 通过 `child_arguments` 与可选挂载根保留原转发。
 
-- [ ] 在 `test_perception_pick_place_launch.py` 加 RED：完整 backend 参数声明一次；将旧 builder 的 backend 默认值设为 `color_geometry`，新调用可以传 `yolo_seg`，二者互不改默认。
+- [x] 在 `test_perception_pick_place_launch.py` 加 RED：完整 backend 参数声明一次；将旧 builder 的 backend 默认值设为 `color_geometry`，新调用可以传 `yolo_seg`，二者互不改默认。
 
 ```python
 def test_backend_argument_default_is_caller_owned():
@@ -140,8 +140,8 @@ def test_backend_argument_default_is_caller_owned():
     assert _default(new['perception_backend']) == 'yolo_seg'
 ```
 
-- [ ] 运行该测试，预期新模块不存在而失败；不能把 ROS import 错误当 RED。
-- [ ] 移动当前 backend 校验、阈值常量与 host/Docker 构造代码，保留原值：`0.35/0.25/0.85/16/0.75/64/0.50`。复用已登记默认 image，不新加依赖。调用方式：
+- [x] 运行该测试，预期新模块不存在而失败；不能把 ROS import 错误当 RED。
+- [x] 移动当前 backend 校验、阈值常量与 host/Docker 构造代码，保留原值：`0.35/0.25/0.85/16/0.75/64/0.50`。复用已登记默认 image，不新加依赖。调用方式：
 
 ```python
 options = parse_perception_options(context)
@@ -153,8 +153,8 @@ perception = build_perception_action(
 
 旧调用 `workflow_id=None`，argv、文件名和事件顺序必须与基线相同；新调用启用事件时再用设计 §10 的规范文件名。不得顺手修改旧 artifact contract。
 
-- [ ] 覆盖绝对路径/哈希错误、错误 backend 专属参数、非默认错配阈值、NaN/Inf、CPU fallback、macOS MPS、Linux Docker CUDA、Docker 挂载路径和 image，模型后端必须带 `--require-output-subscriber`。
-- [ ] 运行 Task 1 两个旧 launch 测试文件到 GREEN。审查 diff 仅抽取构造逻辑，提交 `refactor: share perception action construction`。
+- [x] 覆盖绝对路径/哈希错误、错误 backend 专属参数、非默认错配阈值、NaN/Inf、CPU fallback、macOS MPS、Linux Docker CUDA、Docker 挂载路径和 image，模型后端必须带 `--require-output-subscriber`。
+- [x] 运行 Task 1 两个旧 launch 测试文件到 GREEN。审查 diff 仅抽取构造逻辑，提交 `refactor: share perception action construction`。
 
 ## Task 3：实现严格事件协议与阶段机
 
