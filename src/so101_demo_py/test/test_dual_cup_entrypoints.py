@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -63,6 +64,57 @@ def test_dynamic_mujoco_execute_dispatches_only_with_explicit_live_provenance(
 
     assert result == 23
     assert len(calls) == 1
+
+
+def test_dynamic_execute_enabled_profiling_passes_and_closes_runtime_profiler(
+    monkeypatch, tmp_path
+) -> None:
+    from so101_demo.cli import dynamic_cup_pick_place
+    from so101_demo.ros import dynamic_runtime
+
+    calls = []
+
+    def run(options, *, profiler) -> int:
+        calls.append((options, profiler))
+        return 0
+
+    monkeypatch.setattr(dynamic_runtime, "run_dynamic_execute", run, raising=False)
+    profiling_root = tmp_path / "profiling"
+
+    assert dynamic_cup_pick_place.main(
+        [
+            "--backend",
+            "mujoco",
+            "--mode",
+            "execute",
+            "--execute",
+            "--session-id",
+            "dynamic-test",
+            "--expected-reset-epoch",
+            "0",
+            "--evidence-root",
+            str(tmp_path),
+            "--profiling",
+            "trace",
+            "--profiling-output-root",
+            str(profiling_root),
+            "--profiling-session-id",
+            "session-1",
+        ]
+    ) == 0
+
+    assert len(calls) == 1
+    assert calls[0][1].config.process_role == "runtime"
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/runtime.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    completed = [event for event in events if event["event_type"] == "span_complete"]
+    assert completed[-1]["name"] == "runtime.total"
+    assert completed[-1]["outcome"] == "ok"
+    assert events[-1]["event_type"] == "process_close"
 
 
 def test_dynamic_cli_removes_launch_injected_ros_arguments(monkeypatch, tmp_path) -> None:
