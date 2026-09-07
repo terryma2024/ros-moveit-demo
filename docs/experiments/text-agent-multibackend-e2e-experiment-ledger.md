@@ -738,3 +738,146 @@ deletion_candidates:
   - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033920Z-39d0f6c1
 next_command: Commit the Task 8 ai-station checkpoint, then preregister EXP-011 and run one fresh headless Linux YOLO-Seg E2E.
 ```
+
+```yaml
+experiment_id: EXP-011
+status: VALID
+prior_experiment: EXP-010
+hypothesis: The supervised E2E launch can use the frozen YOLO-Seg model on ai-station CUDA and the existing Ollama planner to complete one unique-cup headless MuJoCo pick-place, independently validate physics and Planning Scene state, clean every owned process and container, and exit zero.
+prediction: The strict workflow trace reaches E2E_ACCEPTED in order, e2e-result.json records machine_accepted and cleanup_complete, and the launch exits zero with no owned process or container remaining.
+single_variable: Start the first real Linux YOLO-Seg E2E run; keep source, model, policy, provider model, scene, and authorization fixed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Source commit is fixed at 09b8bc0c and will be transferred without changing production code.
+  - Candidate prefixes and the 1661-test package gate from EXP-010 remain valid.
+  - The unique-cup task_start keyframe, plastic-cup-yolo11s-seg-v2 weights, and Docker image digest are fixed to the registered model inputs.
+  - The local Ollama qwen3.5:4b preview returned plastic_cup plus pick plus empty constraints; a task-owned reverse tunnel will expose that unchanged localhost endpoint during this run and will be closed during cleanup.
+  - ROS_DOMAIN_ID 218, session text-e2e-linux-yolo-011, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01 are fresh.
+  - The unrelated GPU process /data/work/microduck_rl/.venv/bin/python3 is preserved; no ROS nodes or Docker containers were present at preregistration.
+success_criteria:
+  - Actual planner provider and model are ollama and qwen3.5:4b with a supported fixed command.
+  - Actual perception device is CUDA with fallback_used false and weights SHA f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781.
+  - RGB, depth, CameraInfo, tf2, selected cup pose, request/session/reset identities, dynamic DONE trace, controller feedback, lift/transport/release stability, contact, world membership, and Planning Scene readback all satisfy the validator.
+  - e2e-result.json is atomically present only after all owned processes and the workflow-scoped Docker container have exited; launch exit code is zero.
+failure_criteria:
+  - Any strict event, model, provider, perception, motion, physical, Planning Scene, evidence-write, or cleanup gate fails, or launch exit is nonzero.
+invalid_criteria:
+  - Source/prefix/model/image identity drifts, provider tunnel fails before launch, a previous run root exists, the requested ROS domain is occupied, or an unrelated process is altered.
+provenance:
+  source_commit: 09b8bc0c2ec480230fb9b1e636216b3f30f0ff01
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  yolo_weights: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  perception_runtime: docker
+  perception_device: cuda
+  perception_allow_cpu_fallback: false
+  container_image: so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115
+  container_image_digest: sha256:fafdb147fab33758b45f8edb39d6ddb231b38ebe59b99dce17f01a0bf35d3a3e
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  ros_domain_id: 218
+  session_id: text-e2e-linux-yolo-011
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Pick the plastic cup. Apply no constraints.' run_mode:=execute execute:=true skip_confirmation:=true headless:=true sensor_rendering:=true session_id:=text-e2e-linux-yolo-011 evidence_file:=<run-root>/e2e-result.json perception_backend:=yolo_seg perception_runtime:=docker perception_device:=cuda perception_allow_cpu_fallback:=false perception_weights:=<registered-best.pt> perception_weights_sha256:=f281d252... perception_container_image:=<registered-image>
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: the stack reached STACK_READY, the Ollama fallback produced a supported fixed command, and dynamic runtime emitted RUNTIME_STARTED then RUNTIME_READY.
+  - OBSERVED 2026-09-08: the frozen image exited with code 2 because its installed rgbd_object_pose did not recognize --require-output-subscriber, --emit-workflow-events, or --workflow-id.
+  - OBSERVED 2026-09-08: the primary failure was CHILD_EXITED_WITHOUT_TERMINAL_EVENT for perception; machine_accepted was false and physical and Planning Scene outcomes remained empty.
+  - OBSERVED 2026-09-08: owned cleanup completed with an empty remainder; no workflow-scoped container or ROS_DOMAIN_ID 218 node remained.
+  - OBSERVED 2026-09-08: a new image was built under the distinct tag so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c from the exact candidate source. Its digest is sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7 and its installed help exposes all three required flags.
+inferred:
+  - The first live supervised boundary and cleanup semantics work for an early perception failure, but the frozen pre-candidate image cannot satisfy the new child event protocol.
+conclusion: VALID failure reproduction; the success hypothesis is disproven because the registered image predates the required perception CLI contract.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-image-build.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-image-cli-help.txt
+decision: REPEAT
+next_experiment: EXP-012
+```
+
+```yaml
+experiment_id: EXP-012
+status: VALID
+prior_experiment: EXP-011
+hypothesis: Rebuilding only the YOLO-Seg inference image from the exact candidate source removes the perception CLI mismatch and lets the fixed Linux E2E workflow advance through the strict event protocol.
+prediction: The new image accepts the supervisor flags, emits PERCEPTION_READY and POSE_PUBLISHED, and the workflow either reaches E2E_ACCEPTED or produces a later evidence-backed failure without leaking owned resources.
+single_variable: Replace the pre-candidate inference image with so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c; keep source, weights, scene, policy, provider, device, and authorization fixed.
+lifecycle: FULL_RESTART
+preconditions:
+  - Source commit remains 09b8bc0c2ec480230fb9b1e636216b3f30f0ff01 in the isolated candidate worktree and overlay.
+  - The new image digest is sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7, and its installed help exposes --require-output-subscriber, --emit-workflow-events, and --workflow-id.
+  - The same frozen weights and SHA256 from EXP-011 are used with CUDA and CPU fallback disabled.
+  - The Ollama qwen3.5:4b endpoint remains reachable only through the task-owned reverse tunnel.
+  - ROS_DOMAIN_ID 219, session text-e2e-linux-yolo-012, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01 are fresh.
+success_criteria:
+  - Planner, perception, runtime, physical outcome, Planning Scene readback, evidence finalization, and cleanup satisfy the same strict criteria as EXP-011.
+  - The workflow reaches E2E_ACCEPTED and exits zero.
+failure_criteria:
+  - Any strict event, perception, motion, physical, Planning Scene, evidence-write, or cleanup gate fails with a valid result and nonzero launch exit.
+invalid_criteria:
+  - Image/source/weights identity drifts, the new run identity is not fresh, the provider tunnel fails before launch, or an unrelated process is altered.
+provenance:
+  source_commit: 09b8bc0c2ec480230fb9b1e636216b3f30f0ff01
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  yolo_weights: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  perception_runtime: docker
+  perception_device: cuda
+  perception_allow_cpu_fallback: false
+  container_image: so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+  container_image_digest: sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  ros_domain_id: 219
+  session_id: text-e2e-linux-yolo-012
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Pick the plastic cup. Apply no constraints.' run_mode:=execute execute:=true skip_confirmation:=true headless:=true sensor_rendering:=true session_id:=text-e2e-linux-yolo-012 evidence_file:=<run-root>/e2e-result.json perception_backend:=yolo_seg perception_runtime:=docker perception_device:=cuda perception_allow_cpu_fallback:=false perception_weights:=<registered-best.pt> perception_weights_sha256:=f281d252... perception_container_image:=so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: the candidate image emitted PERCEPTION_READY, selected exactly one plastic_cup, published a world-transformed cup pose, and recorded runtime_device cuda with the fixed weights SHA and no failure.
+  - OBSERVED 2026-09-08: dynamic execution reached DONE with all 19 transitions, bilateral grasp contact, physical lift, transport, release settling, table contact, zero final fingertip contacts, world plastic_cup membership, and no attached Planning Scene object.
+  - OBSERVED 2026-09-08: after RUNTIME_COMPLETED, launch_ros appended --ros-args to the Node-based e2e_acceptance invocation; its argparse parser rejected that token and exited 2 before readback.
+  - OBSERVED 2026-09-08: the final result preserved CHILD_EXITED_WITHOUT_TERMINAL_EVENT for the E2E validator at phase RUNTIME_COMPLETED; machine_accepted was false and cleanup completed with no owned remainder.
+  - OBSERVED 2026-09-08: a red test reproduced the exact SystemExit 2, and the minimal parser-boundary change used the same rclpy.utilities.remove_ros_args pattern as the repository's other ROS CLIs. The focused acceptance, launch, and real-process suites then passed 44 tests.
+inferred:
+  - Rebuilding the perception image fixed the EXP-011 boundary, and the runtime evidence is a complete successful pick-place, but formal E2E acceptance cannot be claimed until the independent validator runs and records fresh readback.
+conclusion: VALID failure reproduction; the new image hypothesis advanced through perception and motion, then exposed a separate validator argument-boundary defect.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01.console.log
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-012-acceptance-cli-fix-expanded.xml
+decision: FIX_AND_REPEAT
+next_experiment: EXP-013
+```
+
+```yaml
+checkpoint_id: CP-010
+last_valid_experiment: EXP-012
+current_hypothesis: Removing ROS launch arguments before parsing application arguments will let the independent validator read final MuJoCo and Planning Scene state after an otherwise successful fixed workflow.
+working_tree_status: The validator argument-boundary fix, its red-then-green test, and EXP-011/EXP-012 evidence records are uncommitted pending the full ordinary package gate.
+owned_processes:
+  - local reverse SSH tunnel session 62665 exposing task-owned Ollama localhost to ai-station
+preserved_processes:
+  - ai-station /data/work/microduck_rl/.venv/bin/python3 GPU process
+confirmed_conclusions:
+  - The candidate YOLO image closes the strict perception event protocol and runs on CUDA with the fixed weights.
+  - The dynamic runtime completed all 19 transitions with physical grasp, release, final table stability, and synchronized Planning Scene world membership.
+  - The validator failure is isolated to application argument parsing before any final readback occurs.
+disproven_routes:
+  - Reusing the pre-candidate inference image for a workflow-events-qualified run.
+  - Treating a ROS Node console executable as if launch_ros would pass only its explicit application arguments.
+open_risks:
+  - The fixed validator has not yet run on ai-station or produced an E2E_ACCEPTED result.
+  - Five consecutive YOLO successes, both Mac matrix cells, and both Grounded SAM cells remain incomplete.
+retained_runs:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-011-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-012-linux-yolo-run-01
+archived_runs: []
+deletion_candidates: []
+next_command: Run the full ordinary macOS package gate, commit the one-boundary fix, transfer the exact commit, run its ai-station NVMe package gate, then preregister and execute EXP-013.
+```
