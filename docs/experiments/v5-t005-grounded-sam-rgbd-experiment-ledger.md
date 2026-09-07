@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-491
+latest_checkpoint: CP-493
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: stage-g-gitee-lfs-model-publication-r776
-confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; Linux publication r774 is frozen and independently validates all 20 archive members; user requires every macOS operation to run on the Mac itself
-open: publish the exact r774 archive and receipts through Gitee Git LFS so a session running locally on the registered Mac can retrieve it without ai-station initiating Mac operations; afterward perform local Mac import/readback, MPS and four independent FULL_RESTART points
-next_action: execute preregistered Gitee LFS publication r776 for exact archive SHA256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868; do not initiate macOS commands, transfer, SSH or remote control from ai-station
+source_parent: 7743690b9b8f3730d782d8b5d13b051b0b57f209
+active_experiment: stage-h-local-macos-four-point-migration
+confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch passes byte, mode, contract and visual readback; the exact model bundle and one compressed training-data archive are published to a new private Hugging Face repository and independently downloaded from its remote commit
+open: commit and push the Linux delivery documentation to Gitee; then import the exact Hugging Face revision on the local Mac, prove MPS FP32 without CPU fallback and execute four independent FULL_RESTART points; repeat the same contract on ssh mac-mini
+next_action: publish the documentation-only Gitee commit, then begin collision-free local macOS import and four-point acceptance
 boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23988,4 +23988,126 @@ confirmed_conclusions:
 open_risks:
   - Gitee LFS quota or upload policy is not yet proven for this new 755296813-byte object; any rejection is retained as the first external boundary and must not cause a model rebuild or byte change
 next_command: verify models/v5-t005 collision absence, add one models/**/*.tar.gz LFS rule, copy exact r774 archive plus receipts, stage and inspect the pointer before commit
+```
+
+## Experiment stage-g-gitee-lfs-model-publication-r776 — SUPERSEDED
+
+```yaml
+experiment_id: stage-g-gitee-lfs-model-publication-r776
+status: SUPERSEDED_NOT_EXECUTED
+prior_experiment: stage-g-linux-immutable-publication-r774
+superseding_directive: publish model weights and one compressed training-data archive to a new Hugging Face repository; keep Gitee for source, documentation, report and ledger
+observed:
+  - no r774 model archive or new model LFS pointer was committed to Gitee
+  - the pre-existing staged .gitattributes edit and untracked model preparation directory in the ai-station worktree were preserved as user-owned changes
+conclusion: the Gitee LFS route is no longer part of this delivery and must not be resumed
+decision: DROP_ROUTE_KEEP_RECORD
+next_experiment: stage-g-hf-private-publication-r778
+```
+
+## Experiment stage-g-linux-delivery-independent-audit-r781 — VALID
+
+```yaml
+experiment_id: stage-g-linux-delivery-independent-audit-r781
+status: VALID
+prior_experiment: stage-f-linux-four-point-readback-r773
+hypothesis: the frozen Linux four-point batch independently proves four distinct Grounded-SAM perception and physical MuJoCo PickPlace successes
+single_variable: independent read-only audit of the existing frozen batch; no model, threshold, source, runner or evidence byte changed
+lifecycle: READ_ONLY_INDEPENDENT_AUDIT
+provenance:
+  source_commit: 7743690b9b8f3730d782d8b5d13b051b0b57f209
+  host: AI-STATION-001
+  device: cuda
+  bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+observed:
+  - all 276 inventoried regular files and 7 symlinks match the frozen inventory; bad file and directory modes are zero
+  - aggregate, inventory, batch manifest and bundle manifest SHA256 values are 254e23dad2ee2e5f022356910372c10f25f02738d706a04c3212ee79decbdbc3, 192f1bd03142a36a408d72abac885945d00562e1429eb729e4a4fc175e39ce94, d49b029d749a0f0268d8572f6fbf93ffbf0e9b882d3eda4a010dbb7379f5f890 and b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  - task_start, forward, left and right each have a distinct source RGB hash, one valid cup candidate, valid depth, CUDA inference, 19 state transitions, physical lift/displacement, stable release and a new final screenshot
+  - cup-pose errors span 0.000453263..0.001918371 m; final XY errors span 0.001194..0.003473 m
+  - all launch and dynamic runners exit 0; detector exit 130 is ordered post-workflow SIGINT
+  - visual inspection of all four final screenshots and DINO/SAM overlays confirms four different starts and stable cup release inside the red target
+  - Attached body plastic_cup not found appears only at setup or after detach; authoritative scene readbacks show the cup attached during transfer and detached in world afterward
+inferred:
+  - the MoveIt message is non-blocking idempotent scene-sync noise, not evidence of a failed attach or release
+  - Linux production acceptance is PASS 4/4 for the four preset MuJoCo positions
+evidence:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-g-linux-delivery-independent-audit-r781/readback.json sha256=9ccc77f2dce68d42864fb6b8384f1f35b6258941fa0bf1005749160e82ee3f60
+decision: KEEP_PASS_4_OF_4
+next_experiment: stage-g-hf-private-publication-r778
+```
+
+## Experiment stage-g-hf-private-publication-r778 — VALID
+
+```yaml
+experiment_id: stage-g-hf-private-publication-r778
+status: VALID
+prior_experiment: stage-g-linux-delivery-independent-audit-r781
+hypothesis: a new Hugging Face model repository can preserve the exact production weights and one deterministic compressed training-data archive without uploading the training set as thousands of small files
+lifecycle: ISOLATED_PUBLICATION_AND_REMOTE_READBACK
+repository: zjumty/so101-grounded-sam-cup-pickplace
+visibility: private
+remote_commit: 52b8334358e5ff11f94f10f7c14b1697ef44d964
+publication:
+  files: 23
+  bytes: 934200813
+  model_bundle_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  dino_weight_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b
+  sam_weight_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893
+  training_archive: datasets/so101-v5-t005-grounded-sam-training-data-r777.tar.gz
+  training_archive_bytes: 118059232
+  training_archive_members: 9036
+  training_archive_sha256: c4b9624e9f68a96087f58ff961c67bfa10ceb28f4ea821e501e9fd16a0e00dbe
+observed:
+  - the archive contains only the four preregistered training roots; four-point acceptance, sealed test and COCO100 are excluded
+  - the first private-repository readback r779 was invalid because an empty HF_HOME hid the authenticated token; it is retained and does not count
+  - fresh readback r780 downloaded exact remote commit into a collision-free cache and verified all 22 payload digests, the gzip stream, all 9036 archive members, the bundle manifest and the threshold lock
+  - the Hugging Face API reports private=true and the exact expected remote commit
+evidence:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/model-bundle/hf-publication-r778
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/hf-publication-readback-r780/readback.json sha256=94098f70b96670bd05b653c594fbed7cf023c975d5ad0d362bd9b738eefc9f3f
+decision: KEEP_REMOTE_PINNED_COMMIT
+next_experiment: stage-h-local-macos-four-point-migration
+```
+
+## Checkpoint CP-492 — Linux delivery and HF publication complete
+
+```yaml
+checkpoint: CP-492
+status: LINUX_AND_HF_DELIVERY_VALID
+prior_checkpoint: CP-491
+policy_time: 2026-09-07T11:40:00+08:00
+last_valid_experiment: stage-g-hf-private-publication-r778
+confirmed_conclusions:
+  - Linux four-point MuJoCo PickPlace is independently validated 4/4
+  - production DINO epoch 1, SAM decoder epoch 4 and threshold lock are frozen by digest
+  - one compressed training-data archive and direct model payloads are present at the pinned private Hugging Face commit and pass independent remote download readback
+  - no new model or training-data payload was added to Gitee
+open_risks:
+  - local Mac MPS and ssh mac-mini four-point runtime acceptance have not run
+  - historical COCO100 zero recall remains a disclosed generalization risk but is not a promotion gate
+retention:
+  retained: Linux r769-r781, publication r774-r780, all historical training and diagnostic evidence
+  archived: none newly
+  deletion_candidates: failed HF auth-isolation readback r779 and fresh-download caches after documented readback; no deletion authorized or performed
+next_action: commit and push report, guide and ledger to Gitee, then run local Mac import and four-point acceptance
+```
+
+## Checkpoint CP-493 — pre-register local Mac and ssh mac-mini acceptance
+
+```yaml
+checkpoint: CP-493
+status: GO_MACOS_TWO_HOST_FOUR_POINT_ACCEPTANCE
+prior_checkpoint: CP-492
+current_hypothesis: the exact pinned Hugging Face bundle can reproduce Linux behavior on local Mac MPS and then on ssh mac-mini without CPU fallback or threshold changes
+success_contract:
+  - each Mac downloads or receives exact Hugging Face commit 52b8334358e5ff11f94f10f7c14b1697ef44d964 into a new directory and verifies SHA256SUMS before use
+  - actual detector and segmenter device is mps, dtype is fp32 and CPU fallback remains disabled
+  - task_start, cup_test_forward_5cm, cup_test_left_5cm and cup_test_right_5cm each run from FULL_RESTART
+  - every point has one production candidate, a fresh valid /cup_pose, physical lift/displacement, stable release, authoritative scene/controller readback and a new exact-window screenshot
+  - source commit, model bundle manifest and threshold lock are identical across Linux and both Macs
+failure_boundary: stop the current host batch after the first valid product failure; preserve evidence and diagnose before changing source, model or thresholds
+invalid_boundary: environment contamination, stale frames, CPU fallback, missing GUI evidence or incomplete provenance invalidates the run but does not count as a model failure
+boundaries: MuJoCo only; no physical robot command is authorized; four-point truth is acceptance-only; sealed test remains unread; COCO100 remains diagnostic only
+next_action: run read-only local Mac preflight, import exact bundle, verify MPS inference, then execute four independent FULL_RESTART points
 ```
