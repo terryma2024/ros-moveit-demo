@@ -481,3 +481,71 @@ open_risks:
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Commit Task 6, then add the Task 7 launch supervisor contract test and run it to RED.
 ```
+
+```yaml
+experiment_id: EXP-008
+status: VALID
+prior_experiment: EXP-007
+hypothesis: A supervisor built around the strict event state machine can compose the new launch without changing either legacy launch contract.
+prediction: Invalid authorization, instruction, sensor, model, or evidence inputs create no stack; valid events start each business child once, preserve the first failure, and write the final result only after owned cleanup.
+single_variable: Add the supervised E2E launch graph and owned-resource policy on top of the previously validated producers and acceptance reader.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS graph, simulator, Docker container, or model inference is started; launch actions and child event streams are inspected with deterministic fakes.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - Task 6 is committed at 17a8da72c20935bf5d9b4f1dea2f5e5e7799de75.
+success_criteria:
+  - The E2E wrapper remains thin and exposes the exact agent and perception parameter contract with yolo_seg as its backend default.
+  - All preflight gates run before evidence directories or MuJoCo actions are created.
+  - STACK_READY starts only Text Agent; RUNTIME_READY starts one perception child; RUNTIME_COMPLETED starts one validator; only E2E_ACCEPTED begins successful cleanup.
+  - Each child has its own strict decoder, stale timer generations are inert, required processes fail even on early zero exit, and nonterminal nonzero exits use CHILD_EXITED_WITHOUT_TERMINAL_EVENT.
+  - Event and result writes use fsync plus atomic replacement, and the final success record is absent until every registered owned process has exited.
+  - Docker runs created for this workflow carry a unique name, workflow label, and CID file; cleanup targets only that registered name.
+failure_criteria:
+  - Ordinary stack stdout drives workflow state, an invalid launch creates resources, a second error replaces the primary failure, or machine acceptance is written before cleanup completes.
+invalid_criteria:
+  - No tests collect or so101_demo resolves outside the isolated worktree mapping.
+provenance:
+  source_commit: 17a8da72c20935bf5d9b4f1dea2f5e5e7799de75
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used-launch-action-tests
+  gz_partition: not-used-launch-action-tests
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 ROS_HOME=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-home ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-logs /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_text_pick_agent_e2e_launch.py src/so101_demo_py/test/test_workflow_events.py src/so101_demo_py/test/test_text_pick_agent_launch.py src/so101_demo_py/test/test_perception_pick_place_launch.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/task7-contract.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: the dedicated contract test collected 12 RED failures because the E2E builder and supervisor did not exist.
+  - OBSERVED 2026-09-08: the first GREEN iteration exposed that stack processes must have exit handlers without event-stream handlers; business children now exclusively own event decoders.
+  - OBSERVED 2026-09-08: the installed development scene is a symlink, so the E2E default is resolved to its ordinary source file while explicit symlink scene inputs remain rejected.
+  - OBSERVED 2026-09-08: the selected combined run collected and passed 255 protocol, E2E launch, and legacy launch tests in 3.35 seconds with zero failures, errors, or skips.
+  - OBSERVED 2026-09-08: Python byte compilation and git diff --check passed.
+inferred:
+  - The new launch graph is structurally isolated from both legacy business launches and can proceed to real LaunchService process-boundary tests.
+conclusion: VALID; Task 7 launch composition, state-driven scheduling, primary-failure retention, atomic evidence, timeout generation, and scoped ownership are ready for installed and process-boundary verification.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/task7-contract.xml
+decision: KEEP
+next_experiment: EXP-009
+```
+
+```yaml
+checkpoint_id: CP-007
+last_valid_experiment: EXP-008
+current_hypothesis: The installed package and a real LaunchService can preserve event bytes through ProcessIO/ProcessExited races and expose reliable zero/nonzero top-level exit semantics.
+working_tree_status: Task 7 changes are limited to the new thin launch, E2E supervisor composition, workflow-scoped Docker ownership metadata, focused tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - Business actions are not part of the initial action set and can only start from validated state-machine effects.
+  - Stack stdout cannot masquerade as a workflow event because only the three business children have OnProcessIO handlers.
+  - Successful top-level evidence separates machine acceptance from owned-process cleanup completion.
+  - EXP-008 established a 255-test protocol, E2E launch, and legacy launch regression pass from the isolated worktree source.
+disproven_routes:
+  - Registering an event decoder for every stack process.
+  - Treating a shutdown request as proof that owned processes and containers have exited.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Commit Task 7, then add Task 8 installed-launch and real LaunchService process-boundary tests.
+```

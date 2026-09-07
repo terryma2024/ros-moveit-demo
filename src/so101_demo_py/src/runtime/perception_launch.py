@@ -412,6 +412,16 @@ def build_perception_action(
         "--rm",
         "--name",
         f"so101-yolo-seg-{request_id}",
+        *(
+            [
+                "--label",
+                f"so101.workflow_id={workflow_id}",
+                "--cidfile",
+                str(evidence_root / "container.cid"),
+            ]
+            if workflow_id is not None
+            else []
+        ),
         "--gpus",
         "all",
         "--network",

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
+import signal
 import stat
+import sys
+import tempfile
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import partial
 from math import isfinite
 from pathlib import Path
@@ -26,15 +31,17 @@ from launch.actions import (
     Shutdown,
     TimerAction,
 )
-from launch.event_handlers import OnProcessExit, OnProcessStart
+from launch.event_handlers import OnProcessExit, OnProcessIO, OnProcessStart
 from launch.events import Shutdown as ShutdownEvent
+from launch.events.process import SignalProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
 
-from launch import LaunchDescription
+from launch import Action, LaunchDescription
 
+from ..core.task_command import CommandValidationError, validate_instruction
 from ..core.policy_registry import load_policy_variant
 from ..ports.capabilities import CapabilityRequirements
 from ..profiling.launch_support import (
@@ -55,6 +62,13 @@ from .perception_launch import (
     build_perception_action,
     declare_perception_arguments,
     parse_perception_options,
+)
+from .workflow_events import (
+    EventDecoder,
+    EventEmitter,
+    WorkflowEvent,
+    WorkflowProtocolError,
+    WorkflowState,
 )
 
 COMMON_ARGUMENTS = {
@@ -127,6 +141,546 @@ class PerceptionLaunchExitStatus:
         if self.returncode in {None, 0}:
             return launch_service_returncode
         return self.returncode
+
+
+@dataclass(slots=True)
+class _OwnedE2EProcess:
+    action: ExecuteProcess
+    label: str
+    required_long_lived: bool
+    cleanup_only: bool = False
+    started: bool = False
+    exited: bool = False
+
+
+class E2ESupervisor:
+    """Drive one E2E graph exclusively from validated child events."""
+
+    _RUNTIME_TIMEOUT_S = 600.0
+    _VALIDATOR_TIMEOUT_S = 30.0
+    _RECOVERY_TIMEOUT_S = 30.0
+    _SIGINT_TIMEOUT_S = 10.0
+    _SIGTERM_TIMEOUT_S = 5.0
+    _SIGKILL_TIMEOUT_S = 5.0
+
+    def __init__(
+        self,
+        *,
+        workflow_id: str,
+        request_id: str,
+        session_id: str,
+        backend: str,
+        source_commit: str,
+        installed_prefix: str,
+        run_root: Path,
+        result_file: Path,
+        text_agent_action: ExecuteProcess,
+        perception_action: ExecuteProcess,
+        validator_action: ExecuteProcess,
+        container_cleanup_actions: tuple[ExecuteProcess, ...] = (),
+        model_provenance: dict[str, object] | None = None,
+        perception_startup_timeout_s: float = 30.0,
+        cup_pose_timeout_s: float = 45.0,
+        clock_ns=time.time_ns,
+    ) -> None:
+        self.workflow_id = workflow_id
+        self.request_id = request_id
+        self.session_id = session_id
+        self.backend = backend
+        self.source_commit = source_commit
+        self.installed_prefix = installed_prefix
+        self.run_root = run_root
+        self.result_file = result_file
+        self.text_agent_action = text_agent_action
+        self.perception_action = perception_action
+        self.validator_action = validator_action
+        self.container_cleanup_actions = container_cleanup_actions
+        self.model_provenance = dict(model_provenance or {})
+        self.perception_startup_timeout_s = perception_startup_timeout_s
+        self.cup_pose_timeout_s = cup_pose_timeout_s
+        self._clock_ns = clock_ns
+        self.workflow_state = WorkflowState(backend)
+        self.current_phase = "STACK_READINESS"
+        self.primary_failure: dict[str, object] | None = None
+        self.secondary_failures: list[dict[str, object]] = []
+        self.shutting_down = False
+        self._recovery_pending = False
+        self.accepted = False
+        self.runtime_exit_code: int | None = None
+        self.perception_started = False
+        self.validator_started = False
+        self._terminal_children: set[int] = set()
+        self._events: list[WorkflowEvent] = []
+        self._owned: dict[int, _OwnedE2EProcess] = {}
+        self._deadline_generations: dict[str, int] = {}
+        self._decoders = {
+            id(text_agent_action): EventDecoder(
+                workflow_id, frozenset({"text_agent", "dynamic_runtime"})
+            ),
+            id(perception_action): EventDecoder(
+                workflow_id, frozenset({"perception"})
+            ),
+            id(validator_action): EventDecoder(
+                workflow_id, frozenset({"e2e_validator"})
+            ),
+        }
+        self.register_owned(
+            text_agent_action,
+            label="Text Agent and dynamic runtime",
+            required_long_lived=False,
+        )
+        self.register_owned(
+            perception_action,
+            label="perception",
+            required_long_lived=backend == "color_geometry",
+        )
+        self.register_owned(
+            validator_action,
+            label="E2E validator",
+            required_long_lived=False,
+        )
+        for cleanup_action in container_cleanup_actions:
+            self.register_owned(
+                cleanup_action,
+                label="owned perception container cleanup",
+                required_long_lived=False,
+                cleanup_only=True,
+            )
+
+    def register_owned(
+        self,
+        action: ExecuteProcess,
+        *,
+        label: str,
+        required_long_lived: bool,
+        started: bool = False,
+        cleanup_only: bool = False,
+    ) -> None:
+        self._owned[id(action)] = _OwnedE2EProcess(
+            action=action,
+            label=label,
+            required_long_lived=required_long_lived,
+            cleanup_only=cleanup_only,
+            started=started,
+        )
+
+    def _atomic_write(self, path: Path, data: bytes) -> None:
+        temporary: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=self.run_root, prefix=f".{path.name}.", delete=False
+            ) as stream:
+                temporary = stream.name
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                try:
+                    Path(temporary).unlink()
+                except OSError:
+                    pass
+
+    def _persist_trace(self) -> None:
+        content = b"".join(
+            (
+                json.dumps(
+                    asdict(event),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+            for event in self._events
+        )
+        self._atomic_write(self.run_root / "workflow-events.ndjson", content)
+
+    def _failure_record(
+        self,
+        *,
+        component: str,
+        code: str,
+        message: str,
+        exit_code: int | None = None,
+    ) -> dict[str, object]:
+        return {
+            "component": component,
+            "code": code,
+            "phase": self.current_phase,
+            "message": message,
+            "exit_code": exit_code,
+            "timestamp_ns": self._clock_ns(),
+        }
+
+    def _record_failure(self, **values) -> None:
+        record = self._failure_record(**values)
+        if self.primary_failure is None:
+            self.primary_failure = record
+        else:
+            self.secondary_failures.append(record)
+
+    def _artifact_paths(self) -> dict[str, str]:
+        return {
+            "event_trace": str(self.run_root / "workflow-events.ndjson"),
+            "result": str(self.result_file),
+            "perception": str(self.run_root / "perception"),
+            "dynamic": str(self.run_root / "dynamic"),
+            "acceptance": str(self.run_root / "acceptance"),
+        }
+
+    def _write_result(self, *, cleanup_complete: bool) -> None:
+        acceptance: dict[str, object] = {}
+        acceptance_path = self.run_root / "acceptance" / "result.json"
+        if acceptance_path.is_file() and not acceptance_path.is_symlink():
+            try:
+                loaded = json.loads(acceptance_path.read_text(encoding="utf-8"))
+                if type(loaded) is dict:
+                    acceptance = loaded
+            except (OSError, ValueError):
+                acceptance = {}
+        document = {
+            "schema_version": 1,
+            "workflow_id": self.workflow_id,
+            "request_id": self.request_id,
+            "simulation_session_id": self.session_id,
+            "source_commit": self.source_commit,
+            "installed_prefix": self.installed_prefix,
+            "perception_backend": self.backend,
+            "model_provenance": self.model_provenance,
+            "event_trace": [asdict(event) for event in self._events],
+            "primary_failure": self.primary_failure,
+            "secondary_failures": self.secondary_failures,
+            "runtime_exit_code": self.runtime_exit_code,
+            "physical_outcome": acceptance.get("physical_outcome", {}),
+            "planning_scene_outcome": acceptance.get(
+                "planning_scene_outcome", {}
+            ),
+            "machine_accepted": self.accepted,
+            "owned_process_cleanup": {
+                "complete": cleanup_complete,
+                "remaining": [
+                    owned.label
+                    for owned in self._owned.values()
+                    if owned.started and not owned.exited
+                ],
+            },
+            "artifact_paths": self._artifact_paths(),
+        }
+        self._atomic_write(
+            self.result_file,
+            (json.dumps(document, indent=2, sort_keys=True) + "\n").encode(),
+        )
+
+    def arm_timeout(self, phase: str, seconds: float) -> TimerAction:
+        generation = self._deadline_generations.get(phase, 0) + 1
+        self._deadline_generations[phase] = generation
+        return TimerAction(
+            period=seconds,
+            actions=[
+                OpaqueFunction(
+                    function=lambda _context: self.on_timeout(phase, generation)
+                )
+            ],
+        )
+
+    def _cancel_timeout(self, phase: str) -> None:
+        self._deadline_generations[phase] = (
+            self._deadline_generations.get(phase, 0) + 1
+        )
+
+    def on_timeout(self, phase: str, generation: int) -> list[Action]:
+        if generation != self._deadline_generations.get(phase):
+            return []
+        if self.shutting_down and phase not in {"SIGINT", "SIGTERM", "SIGKILL"}:
+            return []
+        if phase == "RECOVERY":
+            return self._begin_teardown()
+        if phase in {"SIGINT", "SIGTERM", "SIGKILL"}:
+            next_signal = {
+                "SIGINT": (signal.SIGTERM, "SIGTERM", self._SIGTERM_TIMEOUT_S),
+                "SIGTERM": ("SIGKILL", "SIGKILL", self._SIGKILL_TIMEOUT_S),
+            }.get(phase)
+            self._record_failure(
+                component="supervisor",
+                code="OWNED_PROCESS_CLEANUP_TIMEOUT",
+                message=f"owned processes did not exit after {phase}",
+            )
+            if next_signal is not None:
+                signal_number, next_phase, seconds = next_signal
+                return [
+                    *self._signal_actions(signal_number),
+                    self.arm_timeout(next_phase, seconds),
+                ]
+            try:
+                self._write_result(cleanup_complete=False)
+            except OSError:
+                pass
+            return _terminal_launch_actions(
+                "SO-101 E2E owned process cleanup failed", failed=True
+            )
+        self._record_failure(
+            component="supervisor",
+            code="WORKFLOW_TIMEOUT",
+            message=f"{phase} deadline expired",
+        )
+        return self._begin_failure_shutdown()
+
+    def _signal_actions(self, signal_number) -> list[Action]:
+        actions: list[Action] = []
+        for owned in self._owned.values():
+            if not owned.started or owned.exited:
+                continue
+            actions.append(
+                EmitEvent(
+                    event=SignalProcess(
+                        signal_number=signal_number,
+                        process_matcher=lambda candidate, target=owned.action: candidate
+                        is target,
+                    )
+                )
+            )
+        return actions
+
+    def _begin_failure_shutdown(self) -> list[Action]:
+        if self.shutting_down or self._recovery_pending:
+            return []
+        self._recovery_pending = True
+        self.current_phase = "RECOVERY"
+        # The dynamic runtime owns action-level cancellation/recovery. Let its
+        # SIGINT handler finish that bounded recovery before global escalation.
+        text = self._owned[id(self.text_agent_action)]
+        if not text.started or text.exited:
+            return self._begin_teardown()
+        return [
+            EmitEvent(
+                event=SignalProcess(
+                    signal_number=signal.SIGINT,
+                    process_matcher=lambda candidate: candidate
+                    is self.text_agent_action,
+                )
+            ),
+            self.arm_timeout("RECOVERY", self._RECOVERY_TIMEOUT_S),
+        ]
+
+    def _begin_teardown(self) -> list[Action]:
+        self.shutting_down = True
+        self.current_phase = "TEARDOWN"
+        actions = self._signal_actions(signal.SIGINT)
+        for cleanup_action in self.container_cleanup_actions:
+            owned = self._owned[id(cleanup_action)]
+            if not owned.started:
+                owned.started = True
+                actions.append(cleanup_action)
+        if not actions:
+            return self._finish_cleanup()
+        actions.append(self.arm_timeout("SIGINT", self._SIGINT_TIMEOUT_S))
+        return actions
+
+    def _finish_cleanup(self) -> list[Action]:
+        remaining = [
+            item for item in self._owned.values() if item.started and not item.exited
+        ]
+        if remaining:
+            return []
+        try:
+            self._write_result(cleanup_complete=True)
+        except OSError as error:
+            self._record_failure(
+                component="supervisor",
+                code="EVIDENCE_WRITE_FAILED",
+                message=str(error),
+            )
+            return _terminal_launch_actions(
+                "SO-101 E2E result write failed", failed=True
+            )
+        failed = self.primary_failure is not None or not self.accepted
+        reason = "SO-101 E2E failed" if failed else "SO-101 E2E accepted"
+        return _terminal_launch_actions(reason, failed=failed)
+
+    def on_scene_exit(self, returncode: int) -> list[Action]:
+        if returncode != 0:
+            self._record_failure(
+                component="scene_setup",
+                code="SCENE_SETUP_FAILED",
+                message="Planning Scene setup failed",
+                exit_code=returncode,
+            )
+            return self._begin_failure_shutdown()
+        self._cancel_timeout("STACK_READINESS")
+        lines: list[str] = []
+        emitter = EventEmitter(
+            self.workflow_id, "supervisor", lines.append, self._clock_ns
+        )
+        event = emitter.emit("STACK_READY", payload={})
+        self._events.append(event)
+        try:
+            self._persist_trace()
+            self.workflow_state.accept(event)
+        except (OSError, WorkflowProtocolError) as error:
+            self._record_failure(
+                component="supervisor",
+                code=(
+                    "EVIDENCE_WRITE_FAILED"
+                    if isinstance(error, OSError)
+                    else "EVENT_PROTOCOL_INVALID"
+                ),
+                message=str(error),
+            )
+            return self._begin_failure_shutdown()
+        self.current_phase = "AGENT"
+        self._owned[id(self.text_agent_action)].started = True
+        return [self.text_agent_action]
+
+    def _actions_for_event(self, event: WorkflowEvent) -> list[Action]:
+        effect = self.workflow_state.accept(event)
+        self.current_phase = event.event
+        if event.status == "ERROR":
+            self._terminal_children.add(id(self._action_for_component(event.component)))
+        if effect == "FAIL":
+            self._record_failure(
+                component=event.component,
+                code=event.failure_code or "EVENT_PROTOCOL_INVALID",
+                message=f"{event.event} reported failure",
+            )
+            return self._begin_failure_shutdown()
+        if event.event == "RUNTIME_STARTED":
+            return [self.arm_timeout("RUNTIME", self._RUNTIME_TIMEOUT_S)]
+        if effect == "START_PERCEPTION":
+            if self.perception_started:
+                raise WorkflowProtocolError("perception already started")
+            self.perception_started = True
+            self._owned[id(self.perception_action)].started = True
+            return [
+                self.perception_action,
+                self.arm_timeout(
+                    "PERCEPTION_STARTUP", self.perception_startup_timeout_s
+                ),
+            ]
+        if event.event == "PERCEPTION_READY":
+            self._cancel_timeout("PERCEPTION_STARTUP")
+            return [self.arm_timeout("CUP_POSE", self.cup_pose_timeout_s)]
+        if event.event == "CUP_POSE_PUBLISHED":
+            self._cancel_timeout("CUP_POSE")
+            self._terminal_children.add(id(self.perception_action))
+        if effect == "START_ACCEPTANCE":
+            self._cancel_timeout("RUNTIME")
+            if self.validator_started:
+                raise WorkflowProtocolError("validator already started")
+            self.validator_started = True
+            self._terminal_children.add(id(self.text_agent_action))
+            self._owned[id(self.validator_action)].started = True
+            return [
+                self.validator_action,
+                self.arm_timeout("VALIDATOR", self._VALIDATOR_TIMEOUT_S),
+            ]
+        if effect == "ACCEPT":
+            self._cancel_timeout("VALIDATOR")
+            self.accepted = True
+            self._terminal_children.add(id(self.validator_action))
+            return self._begin_teardown()
+        return []
+
+    def _action_for_component(self, component: str) -> ExecuteProcess:
+        if component in {"text_agent", "dynamic_runtime"}:
+            return self.text_agent_action
+        if component == "perception":
+            return self.perception_action
+        return self.validator_action
+
+    def on_stdout(self, child: ExecuteProcess, chunk: bytes) -> list[Action]:
+        decoder = self._decoders.get(id(child))
+        if decoder is None:
+            self._record_failure(
+                component="supervisor",
+                code="EVENT_PROTOCOL_INVALID",
+                message="stdout received from unregistered child",
+            )
+            return self._begin_failure_shutdown()
+        actions: list[Action] = []
+        try:
+            for event in decoder.feed(chunk, now_ns=self._clock_ns()):
+                self._events.append(event)
+                self._persist_trace()
+                actions.extend(self._actions_for_event(event))
+        except (OSError, WorkflowProtocolError) as error:
+            self._record_failure(
+                component="supervisor",
+                code=(
+                    "EVIDENCE_WRITE_FAILED"
+                    if isinstance(error, OSError)
+                    else "EVENT_PROTOCOL_INVALID"
+                ),
+                message=getattr(error, "detail", str(error)),
+            )
+            actions.extend(self._begin_failure_shutdown())
+        return actions
+
+    def on_exit(self, child: ExecuteProcess, returncode: int) -> list[Action]:
+        owned = self._owned.get(id(child))
+        if owned is None:
+            return []
+        owned.exited = True
+        try:
+            decoder = self._decoders.get(id(child))
+            if decoder is not None:
+                decoder.finish(now_ns=self._clock_ns())
+        except WorkflowProtocolError as error:
+            self._record_failure(
+                component=owned.label,
+                code="EVENT_PROTOCOL_INVALID",
+                message=error.detail,
+                exit_code=returncode,
+            )
+        if child is self.text_agent_action:
+            self.runtime_exit_code = returncode
+        if owned.cleanup_only:
+            if returncode != 0:
+                self._record_failure(
+                    component=owned.label,
+                    code="OWNED_CONTAINER_CLEANUP_FAILED",
+                    message="owned container cleanup returned nonzero",
+                    exit_code=returncode,
+                )
+            return self._finish_cleanup() if self.shutting_down else []
+        if self.shutting_down:
+            return self._finish_cleanup()
+        if self._recovery_pending and child is self.text_agent_action:
+            if id(child) not in self._terminal_children and returncode != 0:
+                self._record_failure(
+                    component=owned.label,
+                    code="CHILD_EXITED_WITHOUT_TERMINAL_EVENT",
+                    message="child exited during recovery without a terminal event",
+                    exit_code=returncode,
+                )
+            return self._begin_teardown()
+        if owned.required_long_lived and not self.accepted:
+            self._record_failure(
+                component=owned.label,
+                code="REQUIRED_PROCESS_EXITED",
+                message="required process exited before E2E acceptance",
+                exit_code=returncode,
+            )
+            return self._begin_failure_shutdown()
+        if id(child) not in self._terminal_children and returncode != 0:
+            self._record_failure(
+                component=owned.label,
+                code="CHILD_EXITED_WITHOUT_TERMINAL_EVENT",
+                message="child exited without a valid terminal event",
+                exit_code=returncode,
+            )
+            return self._begin_failure_shutdown()
+        if child is self.text_agent_action and id(child) not in self._terminal_children:
+            self._record_failure(
+                component=owned.label,
+                code="CHILD_EXITED_WITHOUT_TERMINAL_EVENT",
+                message="Text Agent exited before runtime terminal event",
+                exit_code=returncode,
+            )
+            return self._begin_failure_shutdown()
+        return []
 
 
 def _render_mujoco_robot_description(
@@ -1286,6 +1840,364 @@ def build_text_pick_agent_launch_description(
                 function=_configured_text_pick_agent_actions,
                 kwargs={"exit_status": exit_status},
             ),
+        ]
+    )
+
+
+def _prepare_e2e_run_root(evidence_file: Path) -> Path:
+    """Create the exclusive directory that owns the authoritative result."""
+
+    if (
+        not evidence_file.is_absolute()
+        or evidence_file.name in {"", ".", ".."}
+        or os.path.lexists(evidence_file)
+    ):
+        raise RuntimeError(
+            "evidence_file must be a new usable absolute file path"
+        )
+    run_root = evidence_file.parent
+    try:
+        parent = run_root.parent.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise RuntimeError("evidence run-root parent must exist") from error
+    if not parent.is_dir() or run_root.parent.is_symlink():
+        raise RuntimeError("evidence run-root parent must be a non-symlink directory")
+    resolved_root = _exclusive_owned_directory(run_root, "E2E evidence root")
+    if resolved_root.parent != parent:
+        raise RuntimeError("E2E evidence root escapes its declared parent")
+    for name in ("perception", "dynamic", "acceptance"):
+        child = _exclusive_owned_directory(
+            resolved_root / name, f"E2E {name} evidence directory"
+        )
+        if child.parent != resolved_root:
+            raise RuntimeError(f"E2E {name} evidence directory escapes run root")
+    return resolved_root
+
+
+def _e2e_model_provenance(options: PerceptionLaunchOptions) -> dict[str, object]:
+    document: dict[str, object] = {
+        "backend": options.backend,
+        "device": options.device,
+        "runtime": options.runtime,
+        "allow_cpu_fallback": options.allow_cpu_fallback,
+    }
+    if options.weights_path is not None:
+        document.update(
+            {
+                "weights_path": str(options.weights_path),
+                "weights_sha256": options.weights_sha256,
+            }
+        )
+    if options.model_root is not None:
+        document.update(
+            {
+                "model_root": str(options.model_root),
+                "model_manifest_sha256": options.model_manifest_sha256,
+            }
+        )
+    if options.runtime in {"docker", "docker_dev"}:
+        document["container_image"] = options.container_image
+    return document
+
+
+def _e2e_process_handlers(
+    supervisor: E2ESupervisor,
+    *,
+    scene_setup: ExecuteProcess,
+    event_children: tuple[ExecuteProcess, ...],
+    exit_children: tuple[ExecuteProcess, ...],
+) -> list[Action]:
+    handlers: list[Action] = [
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=scene_setup,
+                on_exit=lambda event, _context: supervisor.on_scene_exit(
+                    event.returncode
+                ),
+            )
+        )
+    ]
+    for child in event_children:
+        handlers.append(
+            RegisterEventHandler(
+                OnProcessIO(
+                    target_action=child,
+                    on_stdout=lambda event, target=child: supervisor.on_stdout(
+                        target, event.text
+                    ),
+                )
+            )
+        )
+    for child in exit_children:
+        handlers.append(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=child,
+                    on_exit=lambda event, _context, target=child: supervisor.on_exit(
+                        target, event.returncode
+                    ),
+                )
+            )
+        )
+    return handlers
+
+
+def _configured_text_pick_agent_e2e_actions(context):
+    instruction_value = LaunchConfiguration("instruction").perform(context)
+    try:
+        instruction = validate_instruction(instruction_value)
+    except CommandValidationError as error:
+        raise RuntimeError(f"instruction is invalid: {error.reason}") from error
+    if LaunchConfiguration("run_mode").perform(context) != "execute":
+        raise RuntimeError("E2E launch requires run_mode=execute")
+    if LaunchConfiguration("execute").perform(context) != "true":
+        raise RuntimeError("E2E launch requires execute:=true")
+    if LaunchConfiguration("skip_confirmation").perform(context) != "true":
+        raise RuntimeError("E2E launch requires skip_confirmation:=true")
+    if LaunchConfiguration("sensor_rendering").perform(context) != "true":
+        raise RuntimeError("E2E launch requires sensor_rendering=true")
+    if LaunchConfiguration("headless").perform(context) not in {"true", "false"}:
+        raise RuntimeError("headless must be true or false")
+
+    readiness_timeout = _positive_finite_launch_value(context, "readiness_timeout_s")
+    perception_timeout = _positive_finite_launch_value(
+        context, "perception_startup_timeout_s"
+    )
+    cup_pose_timeout = _positive_finite_launch_value(context, "cup_pose_timeout_s")
+    initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
+    if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
+        raise RuntimeError(f"unsupported MuJoCo initial keyframe: {initial_keyframe}")
+    session_id = LaunchConfiguration("session_id").perform(context)
+    if not _SESSION_ID_PATTERN.fullmatch(session_id):
+        raise RuntimeError("session_id must use safe characters")
+    scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+    if not scene.is_absolute() or scene.is_symlink() or not scene.is_file():
+        raise RuntimeError("mujoco_scene must be an existing absolute non-symlink file")
+
+    # Model and platform checks are deliberately completed before creating the
+    # evidence root or any launch action.
+    perception_options = parse_perception_options(context)
+    evidence_file = Path(LaunchConfiguration("evidence_file").perform(context))
+    if (
+        not evidence_file.is_absolute()
+        or evidence_file.name in {"", ".", ".."}
+        or os.path.lexists(evidence_file)
+    ):
+        raise RuntimeError("evidence_file must be a new usable absolute file path")
+    if os.path.lexists(evidence_file.parent):
+        raise RuntimeError(f"E2E evidence root already exists: {evidence_file.parent}")
+
+    execution_identity = resolve_installed_execution_identity()
+    share = Path(get_package_share_directory("so101_demo_py"))
+    run_root = _prepare_e2e_run_root(evidence_file)
+    workflow_id = f"workflow-{uuid.uuid4().hex}"
+    request_id = f"request-{uuid.uuid4().hex}"
+    stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
+    camera_transforms = tuple(camera_static_transform_nodes())
+
+    executable = (
+        Path(execution_identity.package_prefix)
+        / "lib"
+        / "so101_demo_py"
+        / "text_pick_agent"
+    )
+    text_agent = ExecuteProcess(
+        cmd=[
+            str(executable),
+            "--instruction",
+            instruction,
+            "--request-id",
+            request_id,
+            "--mode",
+            "execute",
+            "--execute",
+            "--skip-confirmation",
+            "--backend",
+            "mujoco",
+            "--cup-pose-timeout-s",
+            cup_pose_timeout,
+            "--session-id",
+            session_id,
+            "--expected-reset-epoch",
+            "0",
+            "--evidence-root",
+            str(run_root / "dynamic"),
+            "--source-commit",
+            execution_identity.source_commit,
+            "--installed-prefix",
+            execution_identity.package_prefix,
+            "--emit-workflow-events",
+            "--workflow-id",
+            workflow_id,
+        ],
+        output="both",
+    )
+    perception = build_perception_action(
+        perception_options,
+        evidence_root=run_root / "perception",
+        request_id=request_id,
+        workflow_id=workflow_id,
+        child_arguments=(
+            ("--once",)
+            if perception_options.backend in {"yolo_seg", "grounded_sam"}
+            else ()
+        ),
+    )
+    container_cleanup_actions: tuple[ExecuteProcess, ...] = ()
+    model_provenance = _e2e_model_provenance(perception_options)
+    if (
+        perception_options.backend == "yolo_seg"
+        and perception_options.runtime in {"docker", "docker_dev"}
+    ):
+        container_name = f"so101-yolo-seg-{request_id}"
+        model_provenance.update(
+            {
+                "owned_container_name": container_name,
+                "owned_container_cid_file": str(
+                    run_root / "perception" / "container.cid"
+                ),
+                "owned_container_label": f"so101.workflow_id={workflow_id}",
+            }
+        )
+        cleanup_code = (
+            "import subprocess,sys; "
+            "name=sys.argv[1]; "
+            "probe=subprocess.run(['docker','container','inspect',name],"
+            "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+            "raise SystemExit(0 if probe.returncode else "
+            "subprocess.run(['docker','rm','-f',name]).returncode)"
+        )
+        container_cleanup_actions = (
+            ExecuteProcess(
+                cmd=[sys.executable, "-c", cleanup_code, container_name],
+                output="both",
+            ),
+        )
+    validator = Node(
+        package="so101_demo_py",
+        executable="e2e_acceptance",
+        arguments=[
+            "--run-root",
+            str(run_root),
+            "--workflow-id",
+            workflow_id,
+            "--request-id",
+            request_id,
+            "--session-id",
+            session_id,
+            "--expected-reset-epoch",
+            "0",
+            "--emit-workflow-events",
+        ],
+        output="both",
+    )
+    supervisor = E2ESupervisor(
+        workflow_id=workflow_id,
+        request_id=request_id,
+        session_id=session_id,
+        backend=perception_options.backend,
+        source_commit=execution_identity.source_commit,
+        installed_prefix=execution_identity.package_prefix,
+        run_root=run_root,
+        result_file=evidence_file,
+        text_agent_action=text_agent,
+        perception_action=perception,
+        validator_action=validator,
+        container_cleanup_actions=container_cleanup_actions,
+        model_provenance=model_provenance,
+        perception_startup_timeout_s=float(perception_timeout),
+        cup_pose_timeout_s=float(cup_pose_timeout),
+    )
+    for label, action in (
+        ("robot_state_publisher", stack.robot_state_publisher),
+        ("MuJoCo runtime", stack.simulator),
+        ("MoveIt move_group", stack.move_group),
+        *(
+            (f"camera static TF {index}", node)
+            for index, node in enumerate(camera_transforms, 1)
+        ),
+    ):
+        supervisor.register_owned(
+            action, label=label, required_long_lived=True, started=True
+        )
+    for index, spawner in enumerate(stack.spawners):
+        supervisor.register_owned(
+            spawner,
+            label=f"controller spawner {_CONTROLLERS[index]}",
+            required_long_lived=False,
+            started=True,
+        )
+
+    event_children = (text_agent, perception, validator)
+    exit_children = (
+        *event_children,
+        *container_cleanup_actions,
+        stack.robot_state_publisher,
+        stack.simulator,
+        *stack.spawners,
+        stack.move_group,
+        *camera_transforms,
+    )
+    handlers = _e2e_process_handlers(
+        supervisor,
+        scene_setup=stack.scene_setup,
+        event_children=event_children,
+        exit_children=exit_children,
+    )
+    # Handlers are returned before every process action. Business children are
+    # only introduced later by supervisor callbacks.
+    return [
+        *handlers,
+        supervisor.arm_timeout("STACK_READINESS", float(readiness_timeout)),
+        *camera_transforms,
+        *stack.actions,
+    ]
+
+
+def build_text_pick_agent_e2e_launch_description() -> LaunchDescription:
+    """Build the supervised multibackend natural-language MuJoCo E2E graph."""
+
+    share = Path(get_package_share_directory("so101_demo_py"))
+    unique = uuid.uuid4().hex
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("instruction"),
+            DeclareLaunchArgument(
+                "run_mode", default_value="dry_run", choices=("dry_run", "execute")
+            ),
+            DeclareLaunchArgument(
+                "execute", default_value="false", choices=("true", "false")
+            ),
+            DeclareLaunchArgument(
+                "skip_confirmation", default_value="false", choices=("true", "false")
+            ),
+            DeclareLaunchArgument(
+                "headless", default_value="false", choices=("true", "false")
+            ),
+            DeclareLaunchArgument(
+                "sensor_rendering", default_value="true", choices=("true",)
+            ),
+            DeclareLaunchArgument("session_id", default_value=unique),
+            DeclareLaunchArgument(
+                "evidence_file",
+                default_value=f"/tmp/so101-text-agent-e2e-{unique}/e2e-result.json",
+            ),
+            DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),
+            DeclareLaunchArgument(
+                "mujoco_scene",
+                default_value=str(
+                    (share / "assets/mujoco/scene.xml").resolve(strict=True)
+                ),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_initial_keyframe",
+                default_value="task_start",
+                choices=MUJOCO_CUP_KEYFRAMES,
+            ),
+            DeclareLaunchArgument("perception_startup_timeout_s", default_value="30.0"),
+            DeclareLaunchArgument("cup_pose_timeout_s", default_value="45.0"),
+            *declare_perception_arguments(default_backend="yolo_seg"),
+            OpaqueFunction(function=_configured_text_pick_agent_e2e_actions),
         ]
     )
 
