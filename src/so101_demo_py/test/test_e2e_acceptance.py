@@ -543,6 +543,7 @@ def test_acceptance_cli_persists_readback_and_emits_terminal_event(
             "--expected-reset-epoch",
             "7",
             "--emit-workflow-events",
+            "--ros-args",
         ],
         _collect=lambda **_kwargs: copy.deepcopy(readback),
     )
