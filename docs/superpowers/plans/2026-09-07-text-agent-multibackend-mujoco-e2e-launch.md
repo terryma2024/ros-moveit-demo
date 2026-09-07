@@ -426,10 +426,10 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 
 **Files:** 修改 `application/e2e_acceptance.py`、`ros/e2e_acceptance_readback.py`、感知事件生产位置及对应普通测试；更新本设计、指南和实验账本。旧 launch wrapper、参数集合、默认值和进程顺序不得改变。
 
-- [ ] RED 证明 model 与颜色感知当前把传感器 frame 错写为发布 frame；修复后 `CUP_POSE_PUBLISHED.frame_id=world`，同时保留原 `source_stamp_ns`。
-- [ ] RED 证明 validator 当前错误比较 `dynamic.input_frame_id` 与 `perception.source_frame_id`；改为校验 dynamic 输入与发布事件的 `world` 语义，传感器 frame 只做非空来源检查。
-- [ ] RED 证明 MuJoCo 仿真时间与 Planning Scene 墙上时间被错误执行 skew；两份读回增加 `clock_domain` 和同域 `readback_monotonic_ns`，来源各自检查 freshness，只在 `host_monotonic` 域比较 skew。
-- [ ] 运行两个旧入口的 exact 参数、默认值、action 参数与顺序测试；运行 installed launch 集合与未启用事件参数时的 stdout/exit contract，任何漂移都先修复。
+- [x] RED 证明 model 与颜色感知当前把传感器 frame 错写为发布 frame；修复后 `CUP_POSE_PUBLISHED.frame_id=world`，同时保留原 `source_stamp_ns`。
+- [x] RED 证明 validator 当前错误比较 `dynamic.input_frame_id` 与 `perception.source_frame_id`；改为校验 dynamic 输入与发布事件的 `world` 语义，传感器 frame 只做非空来源检查。
+- [x] RED 证明 MuJoCo 仿真时间与 Planning Scene 墙上时间被错误执行 skew；两份读回增加 `clock_domain` 和同域 `readback_monotonic_ns`，来源各自检查 freshness，只在 `host_monotonic` 域比较 skew。
+- [x] 运行两个旧入口的 exact 参数、默认值、action 参数与顺序测试；运行 installed launch 集合与未启用事件参数时的 stdout/exit contract，任何漂移都先修复。
 - [ ] 运行 focused tests、完整 `src/so101_demo_py/test/` 普通门、macOS fresh overlay 和 ai-station NVMe scratch gate；不运行 benchmark suite。
 - [ ] 用 exact commit 重建 YOLO inference image，确认新 image 的事件 frame 修复和 digest，旧 image 保留审计。
 - [ ] 每个双平台 × 双模型配置分别执行 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm`、`cup_test_right_5cm` 四个独立 `FULL_RESTART`。每一点都要求 machine accepted、launch 0、实际 MPS/CUDA、完整联合证据和 owned cleanup。

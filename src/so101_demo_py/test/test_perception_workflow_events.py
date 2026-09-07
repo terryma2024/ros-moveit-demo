@@ -128,7 +128,7 @@ def test_color_publishes_one_workflow_event_after_first_successful_pose() -> Non
     assert emitter.events == [
         (
             "CUP_POSE_PUBLISHED",
-            {"source_stamp_ns": 20, "frame_id": "task_camera_frame"},
+            {"source_stamp_ns": 20, "frame_id": "world"},
             None,
         )
     ]
@@ -185,6 +185,10 @@ def test_model_success_orders_ready_selected_pose_and_published(tmp_path: Path) 
     assert emitter.events[1][1] == {
         "target_id": "cup-001",
         "class_name": "plastic_cup",
+    }
+    assert emitter.events[2][1] == {
+        "source_stamp_ns": 20,
+        "frame_id": "world",
     }
     assert timeline.index("publish-pose") < timeline.index(emitter.events[2])
 

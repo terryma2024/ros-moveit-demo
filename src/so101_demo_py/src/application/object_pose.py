@@ -623,7 +623,7 @@ def detect_once(
             "CUP_POSE_PUBLISHED",
             payload={
                 "source_stamp_ns": request.frame.source_stamp_ns,
-                "frame_id": request.frame.source_frame_id,
+                "frame_id": "world",
             },
         )
     return completed
