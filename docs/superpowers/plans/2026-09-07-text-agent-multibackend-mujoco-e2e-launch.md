@@ -77,8 +77,8 @@
 
 **Interfaces:** 产出账本内的 source/install/runtime/model provenance，以及旧入口声明集合和行为断言。后续任务使用该基线，不从历史测试数字推断当前通过。
 
-- [ ] 读取 `AGENTS.md`、父目录 `AGENTS.md`、`so101-dev` 的 access、test-and-acceptance、debug-evidence 和 experiment-ledger references。创建隔离 worktree 时使用 using-git-worktrees；复核 `.git` 指向，若 `core.worktree` 错配，使用显式 `--git-dir` 与 `--work-tree`。
-- [ ] 在 orchestrator 与 ai-station 分别记录以下命令结果；已在 ai-station 上执行的 agent 不再 SSH 自身。
+- [x] 读取 `AGENTS.md`、父目录 `AGENTS.md`、`so101-dev` 的 access、test-and-acceptance、debug-evidence 和 experiment-ledger references。创建隔离 worktree 时使用 using-git-worktrees；复核 `.git` 指向，若 `core.worktree` 错配，使用显式 `--git-dir` 与 `--work-tree`。
+- [x] 在 orchestrator 与 ai-station 分别记录以下命令结果；已在 ai-station 上执行的 agent 不再 SSH 自身。
 
 ```bash
 pwd
@@ -93,10 +93,10 @@ ros2 node list
 tmux list-sessions
 ```
 
-- [ ] 检查已有进程和 ROS domain，记录需保留的 PID、命令与容器。建立 `docs/experiments/text-agent-multibackend-e2e-experiment-ledger.md`。每个平台运行作为单独 task/run 登记唯一 root；一次 task 的日志、build/install/test scratch 都在同一 root 内。
-- [ ] 正式 ai-station task 根使用 `/data/work/so101-evidence/text-agent-e2e/<run-id>/`；macOS 普通调试用 `/tmp/so101-debug-text-agent-e2e-<run-id>/`。每个 `<run-id>` 实际由 UTC 时间和 UUID 生成。长期视频在录制前登记耐久存储；macOS 没有可用耐久根时，在 ai-station 录制。迁移需清单与逐文件 SHA256/大小/数量核验，不制造同一 task 的两个活动根。
-- [ ] 在已正确 source 的 ROS shell 里设 `E2E_ROOT` 为该账本记录的绝对根，`E2E_PYTHON` 为实际 ROS Python；验证 `import rclpy` 与 `so101_demo.__file__`。模型清单记录两平台 `.pt` 路径、同一 SHA256、Grounded SAM bundle/manifest hash、实际设备与 Docker image digest。不要自动换权重或降级 CPU。
-- [ ] 加强旧入口参数默认值与序列测试，复用现有 `_builder`、`_declared`、`_default` 测试 helper。例如在 `test_text_pick_agent_launch.py` 加：
+- [x] 检查已有进程和 ROS domain，记录需保留的 PID、命令与容器。建立 `docs/experiments/text-agent-multibackend-e2e-experiment-ledger.md`。每个平台运行作为单独 task/run 登记唯一 root；一次 task 的日志、build/install/test scratch 都在同一 root 内。
+- [x] 正式 ai-station task 根使用 `/data/work/so101-evidence/text-agent-e2e/<run-id>/`；macOS 普通调试用 `/tmp/so101-debug-text-agent-e2e-<run-id>/`。每个 `<run-id>` 实际由 UTC 时间和 UUID 生成。长期视频在录制前登记耐久存储；macOS 没有可用耐久根时，在 ai-station 录制。迁移需清单与逐文件 SHA256/大小/数量核验，不制造同一 task 的两个活动根。
+- [x] 在已正确 source 的 ROS shell 里设 `E2E_ROOT` 为该账本记录的绝对根，`E2E_PYTHON` 为实际 ROS Python；验证 `import rclpy` 与 `so101_demo.__file__`。模型清单记录两平台 `.pt` 路径、同一 SHA256、Grounded SAM bundle/manifest hash、实际设备与 Docker image digest。不要自动换权重或降级 CPU。
+- [x] 加强旧入口参数默认值与序列测试，复用现有 `_builder`、`_declared`、`_default` 测试 helper。例如在 `test_text_pick_agent_launch.py` 加：
 
 ```python
 def test_legacy_text_entry_stays_color_only():
@@ -109,7 +109,7 @@ def test_legacy_text_entry_stays_color_only():
 
 另外锁定旧 TextAgent 颜色感知与 agent 的现有启动顺序、三个 perception backend 的 argv/env/mount/exit 行为。基线测试此时应为 GREEN；这一步不人为制造失败。
 
-- [ ] 执行定向基线并保存退出码、耗时、非零收集数：
+- [x] 执行定向基线并保存退出码、耗时、非零收集数：
 
 ```bash
 "$E2E_PYTHON" -m pytest -p no:cacheprovider \
@@ -120,7 +120,7 @@ def test_legacy_text_entry_stays_color_only():
 
 ai-station 每次 pytest 前必须执行下文的 NVMe scratch gate。环境失败先记录为 INVALID，不计代码回归。
 
-- [ ] 提交本任务明确列出的测试和账本，message：`test: freeze legacy text and perception launch contracts`；先检查 staged diff，不夹带环境产物。
+- [x] 提交本任务明确列出的测试和账本，message：`test: freeze legacy text and perception launch contracts`；先检查 staged diff，不夹带环境产物。
 
 ## Task 2：抽取共享感知构造，保留旧时序
 
