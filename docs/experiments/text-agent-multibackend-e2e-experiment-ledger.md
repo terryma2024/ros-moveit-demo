@@ -549,3 +549,88 @@ open_risks:
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Commit Task 7, then add Task 8 installed-launch and real LaunchService process-boundary tests.
 ```
+
+```yaml
+experiment_id: EXP-009
+status: VALID
+prior_experiment: EXP-008
+hypothesis: Real LaunchService children and a fresh isolated install can preserve the supervisor contract across stdout chunks, EOF, process exit, shutdown signals, and package discovery.
+prediction: Accepted plus complete cleanup returns zero; child failure, required early exit, truncated event, out-of-order events, evidence failure, or cleanup escalation returns nonzero with the first failure retained.
+single_variable: Replace in-memory launch events with real subprocess and installed-package boundaries without starting the robot stack.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Fake Python children are owned by each test LaunchService and no ROS graph, MuJoCo process, model inference, or Docker container is started.
+  - The candidate overlay is rooted at /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/install.
+  - so101_mujoco_support is built into the same isolated install base; mujoco_vendor remains the previously verified underlay dependency.
+success_criteria:
+  - Seven real LaunchService cases prove zero/nonzero exit behavior, byte-split event delivery, EOF rejection, first-error retention, strict global ordering, and bounded signal escalation.
+  - The installed launcher set adds only so101_mujoco_text_pick_agent_e2e.launch.py and the installed executable set includes text_pick_agent and e2e_acceptance.
+  - ros2 pkg, ros2 launch --show-args, rclpy, and so101_demo resolve through the selected candidate overlay.
+  - The full ordinary test directory passes after the pinned submodule is initialized; benchmark_test is not collected.
+failure_criteria:
+  - LaunchService returns zero on any rejected path, source imports replace installed inspection, or package tests run against an uninitialized submodule and are reported as passing.
+invalid_criteria:
+  - A fake child from another test remains alive or the installed package prefix does not resolve to EXP-009.
+provenance:
+  source_commit: f3ea8023128eb35b1e88c567bb4437bb9ee9128d
+  install_overlay: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  so101_demo_module: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/build/so101_demo_py/so101_demo/__init__.py
+  rclpy_module: /opt/ros/jazzy/rclpy/lib/python3.11/site-packages/rclpy/__init__.py
+  ros_domain_id: not-used-fake-process-tests
+  gz_partition: not-used-fake-process-tests
+commands:
+  - command: python -m pytest -p no:cacheprovider src/so101_demo_py/test/test_text_pick_agent_e2e_process.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/process.xml
+    exit_code: 0
+  - command: colcon --log-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/colcon-log build --build-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/build --install-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/install --packages-select so101_demo_py --symlink-install
+    exit_code: 0
+  - command: colcon --log-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/colcon-log-support build --build-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/build --install-base /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/install --packages-select so101_mujoco_support --symlink-install
+    exit_code: 0
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py --show-args
+    exit_code: 0
+  - command: python -m pytest -p no:cacheprovider src/so101_demo_py/test/test_package_identity.py src/so101_demo_py/test/test_installed_provenance.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/installed-contract.xml
+    exit_code: 0
+  - command: python -m pytest -p no:cacheprovider src/so101_demo_py/test -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/so101-demo-py.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: all seven real LaunchService tests passed in 8.47 seconds, including immediate valid failure plus exit, truncated EOF, required zero exit, accepted cleanup, signal escalation, evidence failure, and cross-child disorder.
+  - OBSERVED 2026-09-08: the first installed contract run had six passes and one provenance failure because so101_mujoco_support still resolved to the old project overlay; building that dependency into EXP-009 made all seven installed tests pass in 3.39 seconds.
+  - OBSERVED 2026-09-08: ros2 pkg prefix resolved to the EXP-009 install, ros2 pkg executables included text_pick_agent and e2e_acceptance, and the new launch --show-args exposed the expected contract.
+  - OBSERVED 2026-09-08: the first package run had 1657 passes and four INVALID environment failures because the isolated worktree submodule was uninitialized. Initializing the pinned local-cache commit 71bc9346cf93d6227a6678fcacf63f3e18acfcba made the rerun pass all 1661 tests in 37.09 seconds.
+  - OBSERVED 2026-09-08: colcon test-result read all recorded XML as 1675 tests, zero errors, zero failures, and zero skips.
+inferred:
+  - The top-level exit code is reliable at the LaunchService boundary, and candidate-package provenance is closed for so101_demo_py plus so101_mujoco_support on macOS.
+conclusion: VALID for macOS Task 8; the ai-station NVMe scratch and installed-package gate remains to be run before the cross-platform acceptance claim.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009
+decision: KEEP
+next_experiment: EXP-010
+```
+
+```yaml
+checkpoint_id: CP-008
+last_valid_experiment: EXP-009
+current_hypothesis: The same commit can pass ai-station installation and NVMe-backed package gates before live YOLO-Seg E2E runs begin.
+working_tree_status: Task 8 changes are limited to installed launcher/executable assertions, real LaunchService process tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - LaunchService drains complete valid failure lines before classifying process exit in the tested immediate-exit case.
+  - A truncated SO101_EVENT prefix is rejected at EOF and cross-child events remain strictly ordered.
+  - Accepted workflow plus cleanup returns zero; cleanup escalation remains a nonzero outcome even after machine acceptance.
+  - EXP-009 established a 1661-test ordinary package pass from the fresh macOS candidate overlay.
+disproven_routes:
+  - Claiming installed provenance while so101_mujoco_support resolves from the previous overlay.
+  - Running source-tree contract tests with an uninitialized pinned submodule.
+open_risks:
+  - ai-station has not yet built or tested this candidate commit in its registered durable evidence root.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009
+archived_runs: []
+deletion_candidates:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/build
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/install
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/colcon-log
+next_command: Commit the macOS Task 8 tests, then transfer the exact commit to a fresh ai-station worktree and run its NVMe scratch gate.
+```

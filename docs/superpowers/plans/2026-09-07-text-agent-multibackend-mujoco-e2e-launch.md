@@ -298,17 +298,17 @@ if effect == 'START_PERCEPTION':
 - [x] Docker 用本轮唯一 name/label/CID 记录 ownership，只清理 registry 内的容器；清理只作用本轮 child。保留 Ollama daemon、DeepSeek 服务、其他 tmux 和未知 PID。信号升级、destroy 异常、容器残留记录 secondary，已有 primary 不被 signal exit 覆盖。
 - [x] `RUNTIME_COMPLETED` 只启动一次 validator，保持 stack。`E2E_ACCEPTED` 后完成 owned cleanup，再原子写最终结果；cleanup 有未解决错误时顶层仍非零。机器验收通过与资源清理成功分开记录。
 - [x] 事件 trace 每次更新通过同 root 临时文件、flush/fsync、`os.replace` 原子替换完整 NDJSON；最终 JSON 同样处理。若 trace/result 写入失败，以证据错误失败并进入 cleanup，不保留 success 字段。原子 writer 放 supervisor 私有 helper，避免给协议模块加文件所有权职责。
-- [ ] 完整保存设计 §10 summary 字段与所有 artifact paths；外部模型路径只作 provenance，不算本轮可清理文件。将 failure 状态连接 `_terminal_launch_actions` 的失败传播机制并做真实进程测试，不能只测内存 returncode。
-- [ ] 运行 Task 7 contract 与 Task 3 协议测试到 GREEN；提交 `feat: compose supervised text agent multibackend e2e launch`。
+- [x] 完整保存设计 §10 summary 字段与所有 artifact paths；外部模型路径只作 provenance，不算本轮可清理文件。将 failure 状态连接 `_terminal_launch_actions` 的失败传播机制并做真实进程测试，不能只测内存 returncode。
+- [x] 运行 Task 7 contract 与 Task 3 协议测试到 GREEN；提交 `feat: compose supervised text agent multibackend e2e launch`。
 
 ## Task 8：验证安装、并发边界与包级回归
 
 **Interfaces:** 安装集合只新增 E2E launch 和 validator CLI；真实 `ros2 launch` 退出码是用户可依赖的 contract。
 
-- [ ] `test_package_identity.py` 比较安装 launch 集合为基线加单个新文件；`test_installed_provenance.py` 验证新 launch/CLI 和 source hash/prefix 对应。不能用 source import 代替安装验证。
-- [ ] 新增 `test_text_pick_agent_e2e_process.py`，使用 Python fake children 与真实 LaunchService：child 通过 stdout 写协议，控制 exit code 和分块延迟，不启动机器人。覆盖业务失败后退出非零、required process exit 0 失败、accepted+cleanup 全通过才 exit 0、错误证据写入非零、首错保持、信号升级与 owned cleanup。
-- [ ] 用可控 fake child 验证 EOF 与 ProcessExited 竞态：在处理 exit 前 drain 该 child 已接收完整行；prefix 半行失败，不能把有效失败误报成无 terminal。对跨 child 的 `CUP_POSE_PUBLISHED/RUNTIME_COMPLETED` 做不同 I/O 调度测试；按设计严格全局阶段接收，乱序明确失败，不重排、不猜测、不静默放宽。真实平台若出现此竞态，记录为阻塞缺陷；先提出与设计一致的生产者同步修正，再跑该复现，不能把它当成偶发成功。
-- [ ] 重新构建到 task 独立 overlay，先 source 正确 underlay，再 source 本 overlay；保留构建命令、退出码、实际 module path：
+- [x] `test_package_identity.py` 比较安装 launch 集合为基线加单个新文件；`test_installed_provenance.py` 验证新 launch/CLI 和 source hash/prefix 对应。不能用 source import 代替安装验证。
+- [x] 新增 `test_text_pick_agent_e2e_process.py`，使用 Python fake children 与真实 LaunchService：child 通过 stdout 写协议，控制 exit code 和分块延迟，不启动机器人。覆盖业务失败后退出非零、required process exit 0 失败、accepted+cleanup 全通过才 exit 0、错误证据写入非零、首错保持、信号升级与 owned cleanup。
+- [x] 用可控 fake child 验证 EOF 与 ProcessExited 竞态：在处理 exit 前 drain 该 child 已接收完整行；prefix 半行失败，不能把有效失败误报成无 terminal。对跨 child 的 `CUP_POSE_PUBLISHED/RUNTIME_COMPLETED` 做不同 I/O 调度测试；按设计严格全局阶段接收，乱序明确失败，不重排、不猜测、不静默放宽。真实平台若出现此竞态，记录为阻塞缺陷；先提出与设计一致的生产者同步修正，再跑该复现，不能把它当成偶发成功。
+- [x] 重新构建到 task 独立 overlay，先 source 正确 underlay，再 source 本 overlay；保留构建命令、退出码、实际 module path：
 
 ```bash
 colcon --log-base "$E2E_ROOT/colcon-log" build \
@@ -340,7 +340,7 @@ colcon test-result --test-result-base "$E2E_ROOT/build" --verbose
 
 实际 colcon runner interpreter 必须与 `E2E_PYTHON` 相同，通过 command.log 核验；不一致先停。scratch 读回后列为删除候选，不删除、不关闭 fsync、不换 tmpfs。macOS 不套用 `/data` 规则。
 
-- [ ] macOS 在当前 zsh 保留 ROS/DYLD 环境，运行包级 pytest：
+- [x] macOS 在当前 zsh 保留 ROS/DYLD 环境，运行包级 pytest：
 
 ```bash
 export ROS_HOME="$E2E_ROOT/ros-home" ROS_LOG_DIR="$E2E_ROOT/ros-home/log"
@@ -352,7 +352,7 @@ colcon test-result --test-result-base "$E2E_ROOT" --verbose
 
 若 rclpy collection 因 dylib 失败，按 so101-dev reference 检查 runner bootstrap，不能报通过；收集数必须大于零。定向测试已通过后只跑一次包级 gate，新增修改或失败才重跑。
 
-- [ ] 运行 `git diff --check` 并检查 staged scope，提交 `test: verify e2e launch process and installed contracts`。
+- [x] 运行 `git diff --check` 并检查 staged scope，提交 `test: verify e2e launch process and installed contracts`。
 
 ## Task 9：双平台现场验收、视频与交接
 
