@@ -329,7 +329,7 @@ class FirstValidEvidencePublisher:
                 "CUP_POSE_PUBLISHED",
                 payload={
                     "source_stamp_ns": frame.stamp_ns,
-                    "frame_id": frame.source_frame_id,
+                    "frame_id": "world",
                 },
             )
 

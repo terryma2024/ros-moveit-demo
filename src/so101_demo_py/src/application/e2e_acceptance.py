@@ -258,7 +258,9 @@ def _validate_dynamic(
         or type(events) is not list
         or release_marker is None
         or dynamic.get("input_source_stamp_ns") != perception.get("source_stamp_ns")
-        or dynamic.get("input_frame_id") != perception.get("source_frame_id")
+        or dynamic.get("input_frame_id") != "world"
+        or type(perception.get("source_frame_id")) is not str
+        or not perception["source_frame_id"].strip()
         or perception.get("status") != "OK"
         or perception.get("failure") is not None
         or perception.get("published_cup_pose") is not True
@@ -372,6 +374,7 @@ def _validate_mujoco(
     marker = _integer(dynamic.get("release_marker_sequence"))
     sequence = _integer(mujoco.get("publisher_sequence"))
     stamp = _integer(mujoco.get("source_timestamp_ns"), minimum=1)
+    readback_stamp = _integer(mujoco.get("readback_monotonic_ns"))
     height = policy["support_height_range_m"]
     stable = bool(
         pose is not None
@@ -381,6 +384,8 @@ def _validate_mujoco(
         and sequence is not None
         and sequence > marker
         and stamp is not None
+        and mujoco.get("clock_domain") == "mujoco_sim"
+        and readback_stamp is not None
         and mujoco.get("paused") is False
         and mujoco.get("table_contact") is True
         and mujoco.get("left_fingertip_contact_count") == 0
@@ -425,6 +430,8 @@ def _validate_scene(
     scene_pose = None if cup is None else _pose(cup.get("pose_xyz_xyzw"))
     scene_stamp = _integer(scene.get("source_timestamp_ns"), minimum=1)
     mujoco_stamp = _integer(mujoco.get("source_timestamp_ns"), minimum=1)
+    scene_readback_stamp = _integer(scene.get("readback_monotonic_ns"))
+    mujoco_readback_stamp = _integer(mujoco.get("readback_monotonic_ns"))
     position_error = (
         None
         if scene_pose is None
@@ -446,7 +453,13 @@ def _validate_scene(
         and scene_pose is not None
         and scene_stamp is not None
         and mujoco_stamp is not None
-        and abs(scene_stamp - mujoco_stamp) <= policy["max_readback_skew_ns"]
+        and scene.get("clock_domain") == "system_wall"
+        and mujoco.get("clock_domain") == "mujoco_sim"
+        and scene_readback_stamp is not None
+        and mujoco_readback_stamp is not None
+        and scene_readback_stamp >= mujoco_readback_stamp
+        and scene_readback_stamp - mujoco_readback_stamp
+        <= policy["max_readback_skew_ns"]
         and position_error is not None
         and position_error <= policy["final_pose_position_tolerance_m"]
         and orientation_error is not None

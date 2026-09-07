@@ -6,6 +6,7 @@ import sys
 
 from launch import LaunchDescription, LaunchService
 from launch.actions import ExecuteProcess
+import pytest
 from so101_demo.runtime.launch_composition import (
     E2ESupervisor,
     _e2e_process_handlers,
@@ -77,12 +78,18 @@ def _run_graph(
     validator: ExecuteProcess,
     required: ExecuteProcess,
     patch_supervisor=None,
+    acceptance_document: dict[str, object] | None = None,
 ) -> tuple[int, E2ESupervisor]:
     workflow_id = "process-workflow"
     run_root = tmp_path / "run"
     run_root.mkdir()
     for name in ("perception", "dynamic", "acceptance"):
         (run_root / name).mkdir()
+    if acceptance_document is not None:
+        (run_root / "acceptance" / "result.json").write_text(
+            json.dumps(acceptance_document),
+            encoding="utf-8",
+        )
     scene = ExecuteProcess(
         cmd=[sys.executable, "-c", "import time;time.sleep(0.03)"],
         output="both",
@@ -344,6 +351,75 @@ def test_real_launch_service_evidence_write_error_is_nonzero(tmp_path: Path) -> 
     )
     assert returncode != 0
     assert supervisor.primary_failure["code"] == "EVIDENCE_WRITE_FAILED"
+
+
+@pytest.mark.parametrize(
+    ("failure_code", "acceptance_document"),
+    (
+        (
+            "E2E_MUJOCO_FINAL_INVALID",
+            {
+                "accepted": False,
+                "failures": ["E2E_MUJOCO_FINAL_INVALID"],
+                "physical_outcome": {"stable": False},
+                "planning_scene_outcome": {},
+            },
+        ),
+        (
+            "E2E_PLANNING_SCENE_INVALID",
+            {
+                "accepted": False,
+                "failures": ["E2E_PLANNING_SCENE_INVALID"],
+                "physical_outcome": {"stable": True},
+                "planning_scene_outcome": {
+                    "attached_object_ids": ["cup"],
+                    "pose_matches_mujoco": True,
+                },
+            },
+        ),
+    ),
+)
+def test_real_launch_service_rejects_invalid_physical_or_scene_evidence(
+    tmp_path: Path,
+    failure_code: str,
+    acceptance_document: dict[str, object],
+) -> None:
+    text, perception, _validator = _success_processes()
+    validator = _event_process(
+        [
+            (
+                0.01,
+                _event(
+                    "process-workflow",
+                    1,
+                    "e2e_validator",
+                    "E2E_REJECTED",
+                    status="ERROR",
+                    failure_code=failure_code,
+                    payload={"result_path": "/tmp/acceptance.json"},
+                ),
+            )
+        ],
+        returncode=1,
+        split=True,
+    )
+    returncode, supervisor = _run_graph(
+        tmp_path,
+        text=text,
+        perception=perception,
+        validator=validator,
+        required=_sleep_process(),
+        acceptance_document=acceptance_document,
+    )
+    assert returncode != 0
+    assert supervisor.primary_failure["code"] == failure_code
+    result = json.loads(supervisor.result_file.read_text(encoding="utf-8"))
+    assert result["runtime_exit_code"] == 0
+    assert result["machine_accepted"] is False
+    assert result["physical_outcome"] == acceptance_document["physical_outcome"]
+    assert result["planning_scene_outcome"] == acceptance_document[
+        "planning_scene_outcome"
+    ]
 
 
 def test_out_of_order_cross_child_event_fails_without_reordering(tmp_path: Path) -> None:

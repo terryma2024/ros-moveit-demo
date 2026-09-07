@@ -212,6 +212,12 @@ def test_decoder_accepts_each_defined_correlated_payload(
             "CUP_POSE_PUBLISHED",
             {"source_stamp_ns": -1, "frame_id": "world"},
         ),
+        (
+            "perception",
+            "CUP_POSE_PUBLISHED",
+            {"source_stamp_ns": 99, "frame_id": "task_camera_frame"},
+        ),
+        ("perception", "CUP_POSE_PUBLISHED", {}),
         ("e2e_validator", "E2E_ACCEPTED", {}),
         (
             "e2e_validator",

@@ -1176,7 +1176,7 @@ next_command: Redesign the published-frame and timestamp-domain schema, add a fo
 
 ```yaml
 experiment_id: EXP-017
-status: PLANNED
+status: VALID_LOCAL
 prior_experiment: EXP-016
 hypothesis: Explicit published-frame evidence plus source-specific clock domains remove EXP-014's two false rejections without changing either legacy launch contract.
 prediction: New tests first reproduce camera/world and simulation/wall mismatches, then pass when publication events report world and final readbacks compare only host-monotonic collection times; both legacy launch contract suites remain byte-for-byte equivalent at their materialized interfaces.
@@ -1201,12 +1201,37 @@ provenance:
   runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
   ros_domain_id: not-used-test-only
   evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017
-commands: []
+commands:
+  - command: PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider test_perception_workflow_events.py test_workflow_events.py test_e2e_acceptance.py -q
+    exit_code: 1
+    result: 8 failed, 103 passed
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017/red/pytest.xml
+  - command: same focused command after production changes
+    exit_code: 0
+    result: 111 passed in 1.05 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017/green/pytest.xml
+  - command: focused legacy launch, protocol, CLI, perception, and acceptance regression
+    exit_code: 0
+    result: 381 passed in 3.44 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017/green-r2/pytest.xml
+  - command: PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_text_pick_agent_e2e_process.py -q
+    exit_code: 0
+    result: 9 passed in 12.16 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017/top-level-rejection/pytest-r2.xml
+  - command: PYTHONNOUSERSITE=1 /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test -q
+    exit_code: 0
+    result: 1675 passed in 43.204 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017/full-local/pytest.xml
 observed:
   - OBSERVED 2026-09-08: user approved the frame/clock-domain redesign and required the four registered cup keyframes to pass acceptance while preserving legacy entry behavior.
+  - OBSERVED 2026-09-08: the RED run produced exactly eight expected failures across color/model publication frame, protocol payload, dynamic frame correlation, cross-domain source time, and readback API behavior; 103 neighboring tests remained green.
+  - OBSERVED 2026-09-08: after the scoped changes, the 111 focused tests passed. Publication events now carry world while perception evidence retains the sensor source frame and timestamp.
+  - OBSERVED 2026-09-08: final readback documents now identify mujoco_sim and system_wall source clock domains and record same-host monotonic readback timestamps; the validator compares only those monotonic timestamps for collection skew.
+  - OBSERVED 2026-09-08: both top-level physical rejection paths returned nonzero even though runtime_exit_code was zero, and preserved their physical and Planning Scene facts in the authoritative result.
+  - OBSERVED 2026-09-08: 381 focused legacy/interface tests and all 1675 ordinary package tests passed from the isolated worktree mapping; the benchmark suite was not collected.
 inferred:
   - Four-point qualification must be added to each platform/model configuration rather than replacing the existing matrix.
-conclusion: pending
-decision: RUN_RED
-next_experiment: EXP-017-RED
+conclusion: VALID_LOCAL; the approved evidence semantics and legacy-entry regression gates pass locally. Exact-commit Linux build, container rebuild, and live four-point qualification remain separate runtime gates.
+decision: COMMIT_AND_PROMOTE_EXACT_SOURCE
+next_experiment: EXP-018
 ```

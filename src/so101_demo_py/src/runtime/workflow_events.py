@@ -166,6 +166,7 @@ _PAYLOAD_FIELDS = {
     "E2E_REJECTED": frozenset({"result_path"}),
 }
 _REQUIRED_PAYLOAD_FIELDS = {
+    "CUP_POSE_PUBLISHED": frozenset({"source_stamp_ns", "frame_id"}),
     "RUNTIME_COMPLETED": frozenset({"manifest_path", "runtime_exit_code"}),
     "E2E_ACCEPTED": frozenset({"result_path"}),
     "E2E_REJECTED": frozenset({"result_path"}),
@@ -250,6 +251,8 @@ def _validate_payload(event: str, payload: object) -> dict[str, object]:
             raise _invalid("payload fallback must be a boolean")
     if event == "RUNTIME_COMPLETED" and payload["runtime_exit_code"] != 0:
         raise _invalid("RUNTIME_COMPLETED requires runtime_exit_code zero")
+    if event == "CUP_POSE_PUBLISHED" and payload["frame_id"] != "world":
+        raise _invalid("CUP_POSE_PUBLISHED requires the world output frame")
     return dict(payload)
 
 
