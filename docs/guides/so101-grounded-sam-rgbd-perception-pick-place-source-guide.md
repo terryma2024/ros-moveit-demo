@@ -734,6 +734,26 @@ SAM 的大部分参数负责通用图像特征和 prompt 编码，当前数据�
 
 不过，历史 COCO100 诊断中，这个冻结模型的 Recall 和 F1 都是 `0.0`。它说明模型对 web 图片的域保持很差，不能宣传成通用杯子检测器。项目后来按用户决策移除了 COCO100 晋级门，只把模型用于近工作区 MuJoCo 抓取；这个决定没有抹掉泛化风险。
 
+### 28.5 性能优化过程中试过什么
+
+这次优化并不是一路调高指标。中间既有真正改变模型权重的训练，也有修正评测方法、清理错误标签和缩短实验时间的工程工作。后两类工作不会让模型“突然变准”，但如果不先做好，后面的分数并不可信。
+
+| 尝试 | 为什么做 | 做法 | 实际效果与取舍 |
+|---|---|---|---|
+| 先调 Grounding DINO 阈值 | 零样本基线在无杯场景把干扰物认成杯子，最直接的想法是提高阈值 | `grounding_box_threshold` 从 `0.35` 提到 `0.70`，模型和 SAM 都不变 | 无杯场景不再误报，但双杯场景只剩一个候选，系统反而把本应判为歧义的画面当成唯一目标并发布 pose。结论是 `MODEL_CAPABILITY_NOT_MET`：只靠一个全局阈值无法同时解决误检和漏检。 |
+| 把校准改成“推理一次，离线扫阈值” | 原校准对 400 条跨平台记录扫描 32,400 个点，重复做候选过滤、mask 解码和文件落盘；运行 49 分钟后仍未完成 | DINO 和 SAM 只在 raw 收集阶段运行一次；校准阶段缓存候选前缀、truth-candidate IoU 和 RLE，使用 8 个进程做独立预计算，并显示 verify、rehome、precompute、grid、finalize 五阶段进度 | 完整扫描降到 `224.9 s`，相对原来超过 `2940 s` 的未完成运行至少快约 13 倍。阈值选择和指标定义没有改变，所以这是评测提速，不是模型精度提升。 |
+| 重写 production 候选对账 | 同一 DINO proposal 在不同 text threshold 下可能分别解码成 `plastic cup.` 和 `plastic cup`，只按字符串匹配会报 `PRODUCTION_CANDIDATE_MAPPING_INVALID` | 候选身份改由受控类别、原始 DINO query/分数和 bbox IoU 共同确认；映射门槛固定为 `0.98`，随后评测 production 实际采用的 SAM mask | 修复了“模型已给出候选，但 benchmark 没对上号”的问题。没有采用“坐标允许差 1 像素”这类特例，也没有提高模型本身的识别率；收益是 production 与 replay 可以可靠对账并在无法一一映射时 fail closed。 |
+| 继续向下调 SAM quality，试 multimask、mask-logit 阈值和 box scale | DINO-only 的小目标、多杯 recall 明显高于完整 DINO→SAM pipeline，怀疑是 SAM 门槛或 prompt 形式丢掉了候选 | 在已保存的 mask 上离线扫描更低的 SAM quality；另外做了多 mask 选择、logit 二值化阈值、放大/缩小 box prompt 等受控诊断 | 降低 quality 会放进更多低 IoU mask；multimask、logit threshold 和 box scale 都没有形成稳定的可用信号。point+box prompt 一度接近门槛，但会引入新的启发式依赖，因此没有进入生产方案。这个阶段说明问题不只是阈值，而是 mask 几何和训练域。 |
+| 修正 truth 与合成场景几何 | 早期标签把可见 mask 压成单个凸多边形；细小或不连通区域会被“补成一大片”。categorical ID 多次采样和杯体互相穿透也会制造假失败 | truth 改用 lossless RLE 和精确 bbox；categorical renderer 单独渲染并逐项回读；生成器增加非穿透检查，重新生成 train/val | 一部分看似严重的 SAM 泄漏被证明是标签或场景问题。修正后仍存在的误差才算模型问题。它没有直接训练模型，却避免了用坏标签选 checkpoint，也解释了为什么需要重新合成数据和重新训练。 |
+| 微调 Grounding DINO Tiny | 修正数据后，零样本 DINO 对当前相机距离、杯子尺寸和遮挡仍不稳定 | 复用 YOLO-Seg 合成数据，类别统一为 `cup`，prompt 固定为 `cup.`；先做小规模 CUDA smoke，再在互不重叠的 train/val 上训练并逐 epoch 冻结评测 | 早期候选中 epoch 7 的 detector-only F1 曾达到 `0.8571`，但进入 SAM 和选择器后仍失败，说明不能只看框指标。最终 nonpenetrating 数据上的 4 个 epoch 都达到 F1 `1.0`，按并列时选更早 epoch 的规则冻结 epoch 1。 |
+| 只训练 SAM mask decoder | 原始 SAM 在当前近工作区的 mask 形状不够贴合；全量微调又容易破坏通用特征 | 冻结 image encoder、prompt encoder 和 memory 相关参数，只更新 `mask_decoder.*`；loss 同时约束像素 BCE、soft Dice 和 predicted IoU | primary near-workspace F1 从 `0.2098` 提升到 epoch 4 的 `0.8640`；epoch 5 回落到 `0.8553`，因此选 epoch 4。最终与 DINO epoch 1 联合后，300 张新 val 和 300 张独立 synthetic test 的 box/mask F1 都达到 `1.0`。 |
+| 加入真实杯图、相似负样本和蒸馏约束 | synthetic-only DINO 在 COCO100 上从官方 pinned base 的 DINO-only F1 `0.7114`、Recall `0.7085`，跌到 epoch 5 的 `0.1194`、`0.0648`；降阈值虽能找回 recall，却带来 1433 个 FP，属于明显的域遗忘 | 构造 `50%` 近工作区合成、`30%` 独立真实杯图、`20%` 通用回放和 hard negatives 的混合集；负样本包含 bottle、wine glass、bowl、vase。冻结 BERT、encoder 和 Swin 主干，先训 decoder/head，再只解冻最后一个 Swin stage；后来又让 teacher distillation 只作用于正样本，避免和负样本的背景监督冲突 | mixed-r4 last-Swin epoch 2 达到 near F1 `0.9210`、独立真实集 F1 `0.6838`、Recall `0.5653`，但在阈值 `0.35` 下仍有 15 个无杯画面被判为唯一目标，找不到兼顾遮挡 recall 和零 unsafe-unique 的统一阈值。positive-only distillation 的 epoch 3 仍只有真实集 F1 `0.6667`、Recall `0.5369`。这条路线改善了域保持，却没有通过机械臂任务的严格选择器门禁，因此没有成为最终生产模型。 |
+| 审计全部历史 checkpoint，再做四点 smoke | 连续训练很容易追着最后一个实验走，也可能不小心用验收点反向选模型 | 在同一冻结 synthetic val 上重新核对 35 个有效 checkpoint，只按 F1、Recall、小目标、多杯 recall、FP 和 epoch 顺序排名；四个预置点单独生成，禁止进入 train、val、sealed test 和阈值校准 | 全局胜者仍是 DINO epoch 1，随后与 SAM decoder epoch 4、`0.50/0.50/0.50` 阈值一起冻结。四点感知和 Linux、两台 Mac 的 MuJoCo PickPlace 都达到 `4/4`。COCO100 仍为 Recall/F1 `0.0`，所以最终结论只能限定在近工作区，不是通用杯子识别。 |
+
+还有一类容易混淆的是运行时性能优化。早期 Mac MPS 的首个正式尺寸请求需要约 `3852 ms`，而同一个 detector 连续运行后稳定在约 `967..1185 ms`。把 warm-up 从 `8x8` 单框改成 `640x480`、16 框的正式 shape 后，一次完整 smoke 的推理降到约 `1506 ms`。这解决的是首次 shape 编译和批次准备问题，不会改变 bbox 或 mask 质量。最终两台 Mac 又把 MuJoCo 的 `maximum_source_age_s` 从 2 秒调整到 5 秒，以适配较慢的 MPS 调度；它只是平台侧新鲜度预算，既不是模型加速，也不能掩盖当前 Mac 仍有 3 次约 `3.2 s` 的延迟例外。
+
+把这些尝试放在一起看，最终方案并不是“把某个阈值调出来的”。真正留下来的模型收益来自修正后的合成数据、DINO 微调和 SAM decoder-only 微调；候选对账、lossless truth 与离线校准让这些收益可以被正确测量；混合真实数据和蒸馏实验则暴露了尚未解决的 web 泛化问题。
+
 ## 29. Grounded SAM 与 YOLO-Seg 怎么选
 
 | 维度 | 当前 Grounded SAM | YOLO-Seg |
