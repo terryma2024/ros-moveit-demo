@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-486
+latest_checkpoint: CP-487
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_F_LINUX_LEFT_THEN_RIGHT_FULL_RESTART_R771_R772
-confirmed: task_start and forward 5 cm both independently validate the complete Grounded-SAM to physical PickPlace path with fresh GUI evidence; r770 exited its evidence wrapper cleanly after ordered shutdown
-open: execute and independently validate left 5 cm then right 5 cm with the exact same runtime and frozen perception identity
-next_action: launch r771-left-5cm under ROS_DOMAIN_ID 190; start r772-right-5cm only if r771 is valid
+active_experiment: STAGE_G_MACOS_IMMUTABLE_BUNDLE_MIGRATION_PREFLIGHT
+confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback
+open: migrate the exact immutable bundle and threshold lock to the registered macOS runtime, read back every member, then execute the same four independent FULL_RESTART points
+next_action: read the existing Mac handoff and platform ledger for the exact host, workspace, overlay and transport contract before copying any bytes
 boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23743,4 +23743,44 @@ stopping_rule: independently validate r771 before r772; stop at the first persis
 retention: all preceding runs and historical evidence retained; no deletion, reset, stash, rebuild or force-push
 boundaries: COCO100 diagnostic only; optimization forbidden; real hardware unauthorized; Microduck paused
 next_action: commit/push/readback CP-486 and execute r771-left-5cm
+```
+
+## Checkpoint CP-487 — ai-station Linux FULL_RESTART passes 4/4
+
+```yaml
+checkpoint: CP-487
+status: LINUX_FULL_RESTART_VALID_4_OF_4_GO_MACOS_MIGRATION
+prior_checkpoint: CP-486
+policy_time: 2026-09-07T08:05:55+08:00
+valid_runs:
+  task_start: {run_id: r769-task-start, summary_sha256: be0fa67334c40e958a1224d7345253fb90278abe8007fe4e224c307bfb17049d, pose_error_m: 0.000482, inference_latency_ms: 282.495, displacement_m: 0.103874, final_xy_error_m: 0.001791}
+  forward_5cm: {run_id: r770-forward-5cm, summary_sha256: 81faf46bae7a6b1030aa3b8876d14c9a8aee0ce135706e8d531781048ba664ac, pose_error_m: 0.000453, inference_latency_ms: 236.859, displacement_m: 0.129248, final_xy_error_m: 0.001194}
+  left_5cm: {run_id: r771-left-5cm, summary_sha256: c03de03d09b76b3144c656cf5c616194823fc44d5b936543f3044668397a799d, pose_error_m: 0.001918, inference_latency_ms: 244.754, displacement_m: 0.056960, final_xy_error_m: 0.003473}
+  right_5cm: {run_id: r772-right-5cm, summary_sha256: 96f9f25adb7d0dba74a3d718d5f879be491672c5c2dcb769c019b57a7ed1568e, pose_error_m: 0.000495, inference_latency_ms: 229.840, displacement_m: 0.151997, final_xy_error_m: 0.001942}
+common_contract:
+  model_bundle_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  each_point: one cup; Grounding DINO and SAM evidence; valid selected depth; task_camera_frame to world TF; fresh /cup_pose; CUDA; 19-state DONE; MoveIt trajectories; controller completion; bilateral grasp; physical lift and displacement; stable table release; clean shutdown; fresh exact-window GUI evidence
+  result: PASS_4_OF_4
+ranges: {dino_confidence: [0.819114, 0.852553], sam_quality: [0.985631, 0.988694], warmed_latency_ms: [229.840, 282.495], pose_error_m: [0.000453, 0.001918], depth_points: [4286, 5082], micro_lift_m: [0.002983, 0.003593], displacement_m: [0.056960, 0.151997], final_xy_error_m: [0.001194, 0.003473], maximum_terminal_position_error_m: [0.000710, 0.001587]}
+frozen_batch:
+  root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/pickplace/linux-four-point-r765
+  aggregate_sha256: 254e23dad2ee2e5f022356910372c10f25f02738d706a04c3212ee79decbdbc3
+  inventory_sha256: 192f1bd03142a36a408d72abac885945d00562e1429eb729e4a4fc175e39ce94
+  manifest_sha256: d49b029d749a0f0268d8572f6fbf93ffbf0e9b882d3eda4a010dbb7379f5f890
+  members: {regular_files: 276, symlinks: 7, total: 283}
+  modes: files 0444, directories 0555
+  readback_status: PASS_INDEPENDENT_BYTE_MODE_AND_CONTRACT_READBACK_4_OF_4
+  readback_sha256: 12b754fc7569f4d0c55a64d32def6109aac1fef6a96d490266e69ac4fe41550f
+freeze_disclosure:
+  invalid_first_attempt: batch-manifest.json claimed FROZEN before chmod traversal stopped at the first ROS-generated latest symlink
+  disposition: preserved unchanged and explicitly superseded by batch-manifest-r2.json; r2 inventories symlink targets and their SHA256 rather than deleting or following them
+historical_invalid_runs: r765-r768 remain retained and are not counted in 4/4
+source_and_remote_before_record: 4d70d6820c29262f80192071ca07ea00259f61ea
+worktree: protected last-Swin diff and three untracked build/install/log directories unchanged; canonical untracked ledger unchanged
+test_policy: no package or benchmark rerun; no product, benchmark, model or threshold source changed
+decision: PASS_GO_MACOS_SAME_IMMUTABLE_BUNDLE
+retention: all Linux product evidence, invalid attempts, scratch deletion candidates and historical evidence retained; nothing deleted, reset, stashed, rebuilt or force-pushed
+boundaries: COCO100 remains historical diagnostic evidence only; model optimization forbidden; real hardware unauthorized; Microduck paused
+next_action: commit/push/readback CP-487, then read Mac handoff and perform read-only Mac preflight before migration
 ```
