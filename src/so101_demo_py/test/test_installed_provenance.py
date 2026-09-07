@@ -14,6 +14,7 @@ from so101_demo.runtime.provenance import installed_bundle
 EXPECTED_EXECUTABLES = {
     "camera_preset",
     "dynamic_cup_pick_place",
+    "e2e_acceptance",
     "fixed_cup_pick_place",
     "gazebo_execute",
     "motion_stack_ready",
@@ -26,6 +27,7 @@ EXPECTED_EXECUTABLES = {
     "teleop_reset",
     "teleop_workflow",
     "task_reachability",
+    "text_pick_agent",
 }
 EXPECTED_LAUNCHERS = {
     "so101_gazebo.launch.py",
@@ -35,6 +37,7 @@ EXPECTED_LAUNCHERS = {
     "so101_mujoco_pick_place.launch.py",
     "so101_mujoco_task_station.launch.py",
     "so101_mujoco_text_pick_agent.launch.py",
+    "so101_mujoco_text_pick_agent_e2e.launch.py",
 }
 
 
