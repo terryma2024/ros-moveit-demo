@@ -56,7 +56,7 @@ def test_mujoco_source_age_budget_covers_synchronized_rgbd_artifacts() -> None:
 
     loaded = load_dynamic_policy_variant(PACKAGE, backend="mujoco")
 
-    assert loaded.template.maximum_source_age_s == pytest.approx(2.0)
+    assert loaded.template.maximum_source_age_s == pytest.approx(5.0)
 
 
 def test_rejects_an_unknown_backend_without_fallback() -> None:
