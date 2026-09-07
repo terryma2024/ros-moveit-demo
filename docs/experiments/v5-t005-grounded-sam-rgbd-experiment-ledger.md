@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-489
+latest_checkpoint: CP-490
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: stage-g-linux-immutable-publication-r774
-confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; user requires every macOS operation to run on the Mac itself
-open: publish a deterministic Linux-side transfer archive with the frozen model bundle, threshold lock and essential four-point acceptance evidence; afterward, a session running locally on the registered Mac must import and validate it before the four independent FULL_RESTART points
-next_action: execute preregistered Linux-only publication stage-g-linux-immutable-publication-r774; do not initiate macOS commands, transfer, SSH or remote control from ai-station
+active_experiment: STAGE_G_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; Linux publication r774 is frozen and independently validates all 20 archive members; user requires every macOS operation to run on the Mac itself
+open: from a session running locally on the registered Mac, import the exact r774 immutable archive, read back every member, verify MPS FP32 without CPU fallback, then execute the same four independent FULL_RESTART points
+next_action: continue Stage G only from a local macOS session using r774 archive SHA256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868; do not initiate macOS commands, transfer, SSH or remote control from ai-station
 boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23818,11 +23818,11 @@ decision: PAUSE_CROSS_PLATFORM_EXECUTION_ON_AI_STATION_ONLY
 next_action: ordinary commit/push/readback CP-488; then continue from a local macOS session with exact bundle member readback, MPS FP32 no-fallback verification and four independent FULL_RESTART runs
 ```
 
-## Experiment stage-g-linux-immutable-publication-r774 — PLANNED
+## Experiment stage-g-linux-immutable-publication-r774 — VALID
 
 ```yaml
 experiment_id: stage-g-linux-immutable-publication-r774
-status: PLANNED
+status: VALID
 prior_experiment: stage-f-linux-four-point-readback-r773
 hypothesis: ai-station can publish the already frozen model and Linux acceptance identities as one deterministic, regular-file-only archive without changing any model, threshold, source or historical evidence
 prediction: the output root is collision-free; all 11 model payload digests and both lock/manifest digests pass before packaging; the archive contains only the 20 preregistered regular files; streaming readback reproduces every member SHA256; no Mac endpoint is contacted
@@ -23859,12 +23859,22 @@ archive_layout:
   - pickplace/linux-four-point-r765/{aggregate-summary-r2.json,batch-inventory-r2.tsv,batch-manifest-r2.json}
   - pickplace/linux-four-point-readback-r773/readback.json
 commands:
-  - {command: create deterministic archive and SHA/inventory receipts locally on ai-station, exit_code: PENDING}
-observed: [PENDING]
-inferred: [NONE]
-conclusion: PENDING
-evidence: [PENDING]
-decision: PENDING
+  - {command: create deterministic GNU tar archive with sorted paths, epoch mtime, numeric root owner and gzip -n -9; verify gzip; generate source inventory; stream each member once through SHA256; freeze publication root; independently repeat inventory and streaming member readback, exit_code: 0}
+observed:
+  - archive size is 755296813 bytes and SHA256 is de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868
+  - all 20 archive members are regular files; path set equals the preregistered source set; all 20 streamed SHA256 and size records match
+  - publication manifest SHA256 is c9aaf15149d2260e67d8f6afd91e42a065f5f8d14d60159089eba9e333b01da5 and publication root inventory SHA256 is f8eeac6c00bdd9bbfb1d0fb91e4b3e7dcc351334ed1c277e3d86691055ff8a3d
+  - independent r775 reverified the 12 publication payload files, archive receipt, manifest receipt and 20 streamed archive members; readback JSON SHA256 is 05d89668403d1d9f5840e7396cff673cd5968536391bf431491e93da7ec0289e
+  - publication files are mode 0444 and root directory is mode 0555
+  - GPU remained unused; no Mac endpoint was contacted and no model, threshold, source, carrier or historical evidence changed
+inferred:
+  - the archive is a complete, cross-platform-readable transport representation of the frozen model/threshold identity plus essential perception and Linux PickPlace acceptance receipts
+conclusion: Linux-side immutable publication is complete and ready for member-by-member import verification by a session running locally on macOS
+evidence:
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/model-bundle/linux-publication-r774/publication-manifest.json sha256=c9aaf15149d2260e67d8f6afd91e42a065f5f8d14d60159089eba9e333b01da5
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/model-bundle/linux-publication-r774/grounded-sam-v5-t005-linux-acceptance-r774.tar.gz sha256=de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868
+  - /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/run-evidence/stage-g-linux-publication-readback-r775/readback.json sha256=05d89668403d1d9f5840e7396cff673cd5968536391bf431491e93da7ec0289e
+decision: KEEP
 next_experiment: NONE_UNTIL_LOCAL_MACOS_SESSION
 ```
 
@@ -23886,4 +23896,32 @@ confirmed_conclusions:
 open_risks:
   - frozen carrier root contains Docker-owned files that are not required by the publication archive; use accessible independent readback r764 instead and do not chmod or copy protected carrier members
 next_command: create publication root exactly once, write publication-metadata.json, make deterministic tar.gz, then stream-read every archive member before recording VALID or failure
+```
+
+## Checkpoint CP-490 — Linux immutable publication is frozen and read back
+
+```yaml
+checkpoint: CP-490
+status: LINUX_PUBLICATION_VALID_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+prior_checkpoint: CP-489
+policy_time: 2026-09-07T08:21:23+08:00
+last_valid_experiment: stage-g-linux-immutable-publication-r774
+current_hypothesis: NONE_LINUX_PUBLICATION_COMPLETE
+working_tree_status: only ledger and current plan status are owned; protected last-Swin two-file diff and three untracked build/install/log directories remain user-owned and unchanged
+owned_processes: NONE
+preserved_processes: codex and historical so101-exp079-linux-r3 tmux sessions; all historical evidence; no Mac endpoint may be contacted
+confirmed_conclusions:
+  - Linux perception acceptance and FULL_RESTART PickPlace remain valid 4/4
+  - exact frozen model bundle, threshold lock and essential acceptance receipts are represented by r774 archive de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868
+  - r775 independently proves publication root modes/hashes and archive member readback 20/20
+disproven_routes:
+  - no new route; COCO100 remains historical diagnostic only and cannot trigger tuning, selection or training
+open_risks:
+  - macOS import, MPS FP32 no-fallback inference, GUI evidence and four FULL_RESTART runs are not executed and cannot be performed from this ai-station session under CP-488
+retention:
+  retained: r774 publication, r775 independent readback, Linux r769-r773, perception r762-r764 and all historical evidence
+  archived: none newly
+  deletion_candidates: existing scratch roots and low-rate helper /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-g-publication-r774; no deletion authorized or performed
+boundaries: Mac work local-to-Mac only; model/threshold optimization forbidden; COCO100 gate remains removed; sealed final test remains unread; real hardware unauthorized; Microduck paused
+next_command: on a Codex session proven local to macOS, read CP-490 and import archive de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868 into a new collision-free model root before any MPS inference
 ```
