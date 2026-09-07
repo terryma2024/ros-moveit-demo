@@ -1,17 +1,17 @@
 # V5-T005 Grounding DINO Tiny + SAM 2.1 RGB-D experiment ledger
 
-## Current Linux-first continuation snapshot
+## Current cross-platform delivery snapshot
 
 ```yaml
-latest_checkpoint: CP-493
-worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
+latest_checkpoint: CP-497
+worktree: /private/tmp/so101-v5-t005-delivery-vMKZvZ/repo
 branch: codex/v5-t004-yolo-seg-rgbd
-source_parent: 7743690b9b8f3730d782d8b5d13b051b0b57f209
-active_experiment: stage-h-local-macos-four-point-migration
-confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch passes byte, mode, contract and visual readback; the exact model bundle and one compressed training-data archive are published to a new private Hugging Face repository and independently downloaded from its remote commit
-open: commit and push the Linux delivery documentation to Gitee; then import the exact Hugging Face revision on the local Mac, prove MPS FP32 without CPU fallback and execute four independent FULL_RESTART points; repeat the same contract on ssh mac-mini
-next_action: publish the documentation-only Gitee commit, then begin collision-free local macOS import and four-point acceptance
-boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
+source_commit: d0eb6a837f1a22f73f912843a8eccb27bcc70f67
+active_experiment: COMPLETE_CROSS_PLATFORM_SIMULATION_DELIVERY
+confirmed: ai-station Linux CUDA, current Mac MPS and ssh mac-mini MPS each pass four independent FULL_RESTART preset-point PickPlace runs with one production candidate, fresh depth pose, DONE/19, physical displacement, stable table release and visual evidence; the pinned private Hugging Face commit contains direct model payloads plus one compressed training-data archive and passes fresh remote readback; cross-platform-r818 packages pass SHA256SUMS readback
+open: current Mac passes functionally but only 1/4 final runs meet the 2000 ms inference budget; COCO100 zero recall remains a disclosed generalization risk; physical SO-101 was not run because no physical-robot command was authorized
+next_action: no further MuJoCo optimization is required by the four-point acceptance contract; any physical-robot qualification or current-Mac latency work requires a separately authorized experiment
+boundaries: COCO100 cannot select a model, tune thresholds, trigger training or block this near-workspace gate; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck remains outside this task
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
 
@@ -24110,4 +24110,151 @@ failure_boundary: stop the current host batch after the first valid product fail
 invalid_boundary: environment contamination, stale frames, CPU fallback, missing GUI evidence or incomplete provenance invalidates the run but does not count as a model failure
 boundaries: MuJoCo only; no physical robot command is authorized; four-point truth is acceptance-only; sealed test remains unread; COCO100 remains diagnostic only
 next_action: run read-only local Mac preflight, import exact bundle, verify MPS inference, then execute four independent FULL_RESTART points
+```
+
+## Experiment stage-h-local-macos-four-point-r812-r816 — VALID_WITH_PERFORMANCE_EXCEPTION
+
+```yaml
+experiment_id: stage-h-local-macos-four-point-r812-r816
+status: VALID_FUNCTIONAL_PERFORMANCE_EXCEPTION
+prior_experiment: stage-g-hf-private-publication-r778
+lifecycle: FOUR_INDEPENDENT_FULL_RESTARTS_WITH_EXACT_WINDOW_CAPTURE
+provenance:
+  host: local-mac
+  source_commit: d0eb6a837f1a22f73f912843a8eccb27bcc70f67
+  device: mps
+  cpu_fallback: false
+  model_bundle_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  policy_sha256: dc17d704ea9a333a387896bf36293a876bedc0be7868bc8b1ea800f4ce19d66d
+  maximum_source_age_s: 5.0
+  thresholds: {box: 0.5, text: 0.5, sam_quality: 0.5, duplicate_iou: 0.85}
+observed:
+  - r812 task_start, r814 forward, r815 left and r816 right each return one candidate, one matching candidate, a fresh pose and DONE with 19 transitions
+  - pose errors are 0.000481333, 0.000452127, 0.001925307 and 0.000496307 m
+  - physical cup displacements are 0.103573, 0.128500, 0.056601 and 0.151910 m; each final sample has table contact and zero fingertip contacts
+  - inference latencies are 1413.445, 3223.791, 3249.773 and 3264.105 ms; functional acceptance is 4/4 but the 2000 ms budget is 1/4
+  - all four exact MuJoCo windows were captured into their own run directories and inspected at original resolution
+  - final isolated symlink overlay ordinary test gate is 1490 passed in 31.01 s
+invalid_runs_retained:
+  - r811 exited before launch because set -u conflicted with ROS setup reading undefined COLCON_TRACE
+  - r813 exited before business logic because ROS_DOMAIN_ID 233 exceeded the Fast DDS port range
+  - two earlier test attempts exposed an uninitialized pinned submodule and an overlay provenance mismatch; a separate build attempt selected Python 3.14 for ROS Jazzy 3.11 and was discarded
+conclusion: current Mac passes the four-point MuJoCo PickPlace contract, but does not pass the four-point latency contract
+evidence:
+  - /private/tmp/so101-debug-v5-t005-local-mac-r782-TwxaqX/delivery-r818/so101-v5-t005-local-mac-four-point-r818.tar.gz sha256=f5457d5c50b406c222c0c2bb721a8af2eaef8c8aee78c38da59243e961429135
+  - /private/tmp/so101-local-mac-four-point-acceptance-r816.json sha256=560a6f0038af36525ec132dd5033adb2441adb72bc5a036bdfd6cc6db01769ce
+decision: KEEP_FUNCTIONAL_PASS_AND_DISCLOSE_PERFORMANCE_EXCEPTION
+```
+
+## Checkpoint CP-494 — local Mac functional acceptance complete
+
+```yaml
+checkpoint: CP-494
+status: LOCAL_MAC_FUNCTIONAL_4_OF_4_PERFORMANCE_1_OF_4
+prior_checkpoint: CP-493
+last_valid_experiment: stage-h-local-macos-four-point-r812-r816
+confirmed_conclusions:
+  - exact frozen model and threshold identities run on MPS FP32 with CPU fallback disabled
+  - four independent preset points pass functionally and have exact-window GUI evidence
+  - ordinary package gate passes 1490/1490 from an isolated symlink overlay containing both so101_mujoco_support and so101_demo_py
+open_risks:
+  - three of four final local-Mac inference measurements exceed 2000 ms
+next_action: reproduce the same four-point functional and visual contract on ssh mac-mini before packaging
+```
+
+## Experiment stage-i-macmini-four-point-r806-r810 — VALID
+
+```yaml
+experiment_id: stage-i-macmini-four-point-r806-r810
+status: VALID
+prior_experiment: stage-h-local-macos-four-point-r812-r816
+lifecycle: ISOLATED_INSTALL_PLUS_FOUR_INDEPENDENT_FULL_RESTARTS
+provenance:
+  host: mac-mini
+  source_commit: d0eb6a837f1a22f73f912843a8eccb27bcc70f67
+  pinned_submodule_commit: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+  vision_msgs: 4.1.0
+  device: mps
+  cpu_fallback: false
+  model_bundle_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  policy_sha256: dc17d704ea9a333a387896bf36293a876bedc0be7868bc8b1ea800f4ce19d66d
+  maximum_source_age_s: 5.0
+observed:
+  - dependency and candidate packages were built in collision-free overlays; the final ordinary test gate is 1490 passed in 60.42 s
+  - r806 task_start, r807 forward, r810 left and r809 right each return one matching candidate, a fresh pose and DONE with 19 transitions
+  - pose errors are 0.000481334, 0.000452062, 0.001925307 and 0.000496307 m
+  - physical cup displacements are 0.103566, 0.128517, 0.056595 and 0.151913 m; each final sample has table contact and zero fingertip contacts
+  - inference latencies are 1529.806, 1503.522, 1493.381 and 1511.853 ms; the 2000 ms budget passes 4/4
+  - each final run has one exact-window GUI capture and manifest inspected at original resolution
+invalid_or_superseded_runs_retained:
+  - non-symlink candidate install, missing submodule, missing vision_msgs and the earlier r801-r804 no-per-point-GUI batch
+conclusion: mac-mini passes functional, visual, provenance, ordinary-test and inference-latency gates for all four preset points
+evidence:
+  - /private/tmp/so101-v5-t005-macmini-r796-GgpqvP/delivery-r818/so101-v5-t005-macmini-four-point-r818.tar.gz sha256=5bae103df2799be5b5f95a2f9f80a61f4d9dd0c53eaa68305e570a00d8113d1c
+  - /private/tmp/so101-macmini-four-point-acceptance-r810.json sha256=2ba1926fd81e2f9524f77a29088a6d56421db72ff475d5fbe9cfc7cb0461784d
+decision: KEEP_PASS_4_OF_4
+```
+
+## Checkpoint CP-495 — ssh mac-mini acceptance complete
+
+```yaml
+checkpoint: CP-495
+status: MACMINI_PASS_4_OF_4
+prior_checkpoint: CP-494
+last_valid_experiment: stage-i-macmini-four-point-r806-r810
+confirmed_conclusions:
+  - mac-mini independently reproduces the MPS FP32 pipeline with no CPU fallback
+  - functional, GUI and inference-latency gates all pass 4/4
+next_action: aggregate Linux, local Mac, mac-mini and Hugging Face remote readback receipts without embedding model weights in Gitee
+```
+
+## Experiment stage-j-cross-platform-delivery-r818 — VALID
+
+```yaml
+experiment_id: stage-j-cross-platform-delivery-r818
+status: VALID
+prior_experiment: stage-i-macmini-four-point-r806-r810
+lifecycle: CROSS_PLATFORM_PACKAGE_AND_READBACK
+delivery_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/delivery/cross-platform-r818
+common_identity:
+  model_bundle_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  thresholds: {box: 0.5, text: 0.5, sam_quality: 0.5, duplicate_iou: 0.85}
+controlled_platform_difference:
+  linux: {source_commit: 7743690b9b8f3730d782d8b5d13b051b0b57f209, policy_sha256: a84180ebda7123f4a2d4899daea8712bdba6db95665601e0b1a96f13aec9a7cd, maximum_source_age_s: 2.0}
+  mac_hosts: {source_commit: d0eb6a837f1a22f73f912843a8eccb27bcc70f67, policy_sha256: dc17d704ea9a333a387896bf36293a876bedc0be7868bc8b1ea800f4ce19d66d, maximum_source_age_s: 5.0}
+packages:
+  linux: {archive: so101-v5-t005-linux-four-point-r806-compact.tar.gz, members: 272, sha256: 13be479971205c218d736e38c221ecad2e98b525bf26cad4e93c3af1693b6deb}
+  local_mac: {archive: so101-v5-t005-local-mac-four-point-r818.tar.gz, members: 159, sha256: f5457d5c50b406c222c0c2bb721a8af2eaef8c8aee78c38da59243e961429135}
+  macmini: {archive: so101-v5-t005-macmini-four-point-r818.tar.gz, members: 158, sha256: 5bae103df2799be5b5f95a2f9f80a61f4d9dd0c53eaa68305e570a00d8113d1c}
+observed:
+  - ai-station sha256sum -c SHA256SUMS passes for all three archives, two Mac summaries and the Hugging Face remote readback receipt
+  - cross-platform manifest records source, model, thresholds, platform policy, metrics, package identities and the physical-robot boundary
+  - cross-platform manifest SHA256 is 8893553d284271f54bf4a48cc2bce15c5454e379e9a0ee93060bf16b9acf36d3
+  - archive listing readback counts are 272, 159 and 158; Linux tar is clean, while GNU tar reports benign LIBARCHIVE.xattr.com.apple.provenance warnings for Mac-created archives
+  - no model weights or training dataset were added to Gitee; they remain at private Hugging Face revision 52b8334358e5ff11f94f10f7c14b1697ef44d964
+conclusion: all three hosts pass four-point MuJoCo PickPlace; local Mac retains an explicit latency exception; physical robot remains untested and unauthorized
+decision: KEEP_FINAL_DELIVERY
+```
+
+## Checkpoint CP-497 — cross-platform MuJoCo delivery complete
+
+```yaml
+checkpoint: CP-497
+status: CROSS_PLATFORM_SIMULATION_DELIVERY_COMPLETE
+prior_checkpoint: CP-495
+last_valid_experiment: stage-j-cross-platform-delivery-r818
+confirmed_conclusions:
+  - Linux, current Mac and ssh mac-mini each pass four preset MuJoCo PickPlace points 4/4
+  - model weights and one compressed training-data archive are pinned in a new private Hugging Face repository and pass fresh remote readback
+  - source, guide, report and ledger are ready for ordinary Gitee publication; no large model or training payload belongs in Git
+remaining_boundaries:
+  - current Mac performance is 1/4 under 2000 ms, although function is 4/4
+  - COCO100 zero recall remains a generalization warning outside this acceptance gate
+  - physical SO-101 is NOT_RUN_NOT_AUTHORIZED
+retention:
+  retained: all final runs, packages, manifests, HF publication/readback and historical evidence
+  archived: none newly
+  deletion_candidates: 836 MiB Linux r805 archive that accidentally included HF snapshot weights; superseded Mac r805 archives; invalid local r811/r813; failed test build caches; HF r779 auth-isolation attempt and fresh-download caches
+  deletion_performed: none
+next_action: commit, fetch/rebase if required, ordinary push to Gitee and remote SHA readback
 ```

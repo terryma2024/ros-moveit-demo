@@ -19,7 +19,32 @@ Linux 端随后用四个预置点各做一次独立 `FULL_RESTART` MuJoCo PickPl
 
 模型和训练数据已经发布到私有 Hugging Face 仓库 [zjumty/so101-grounded-sam-cup-pickplace](https://huggingface.co/zjumty/so101-grounded-sam-cup-pickplace)，固定 revision 为 `52b8334358e5ff11f94f10f7c14b1697ef44d964`。训练数据只以一个 `tar.gz` 上传，SHA-256 为 `c4b9624e9f68a96087f58ff961c67bfa10ceb28f4ea821e501e9fd16a0e00dbe`；远端新目录下载后，22 个 payload 和 9036 个归档成员均已回读通过。
 
-当前跨平台终态仍未完成：本机 macOS 和 `ssh mac-mini` 的四点 PickPlace 尚待执行。本文后面的旧 benchmark `INVALID` 结论仍按原意保留，它描述的是修复前 raw adapter 的实验，不能拿来否定或证明当前冻结 bundle。
+当前 Mac 与 `ssh mac-mini` 也完成了四点 `FULL_RESTART` 验收。三台机器使用同一模型包和同一组 `0.5/0.5/0.5` 感知阈值，功能结果都是 `4/4`，没有 CPU fallback。Linux 验收源码为 `7743690b9b8f3730d782d8b5d13b051b0b57f209`，动态策略 SHA 为 `a84180eb...`；两台 Mac 使用后续提交 `d0eb6a837f1a22f73f912843a8eccb27bcc70f67`，只把 MuJoCo 的 `maximum_source_age_s` 从 2 秒提高到 5 秒，策略 SHA 为 `dc17d704...`。这是为较慢 MPS 推理设置的受控平台差异，不是模型或感知阈值漂移。
+
+| 平台 | device | 四点功能 | 四点 GUI | 推理 `< 2000 ms` | 普通测试 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ai-station Linux | CUDA | 4/4 | 4/4 | 4/4 | 既有 Linux 门禁通过 |
+| 当前 Mac | MPS FP32 | 4/4 | 4/4 | 1/4 | 1490 passed，31.01 s |
+| `ssh mac-mini` | MPS FP32 | 4/4 | 4/4 | 4/4 | 1490 passed，60.42 s |
+
+当前 Mac 的功能验收通过，但不能把性能写成全绿。它在最终 GUI 批次中的四次推理分别为 `1413.45`、`3223.79`、`3249.77` 和 `3264.11 ms`，只有 `task_start` 低于 2 秒。`mac-mini` 分别为 `1529.81`、`1503.52`、`1493.38` 和 `1511.85 ms`，四次都通过性能线。这个差异不影响四点仿真抓放的功能结论，却会影响对当前 Mac 的实时性判断。
+
+两台 Mac 的最终四点结果如下。每一行都有一个候选、有效深度、`DONE/19`、杯体实际位移、最终落桌、零末端接触和单独的精确窗口截图：
+
+| 平台 / 点位 | DINO | SAM quality | `/cup_pose` 误差 | 推理延迟 | 杯子位移 | 最终 XY 误差 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 当前 Mac / `task_start` | 0.8250 | 0.9885 | 0.000481 m | 1413.45 ms | 0.103573 m | 0.002088 m |
+| 当前 Mac / `forward` | 0.8525 | 0.9859 | 0.000452 m | 3223.79 ms | 0.128500 m | 0.001997 m |
+| 当前 Mac / `left` | 0.8564 | 0.9859 | 0.001925 m | 3249.77 ms | 0.056601 m | 0.003851 m |
+| 当前 Mac / `right` | 0.8203 | 0.9868 | 0.000496 m | 3264.11 ms | 0.151910 m | 0.002027 m |
+| `mac-mini` / `task_start` | 0.8244 | 0.9885 | 0.000481 m | 1529.81 ms | 0.103566 m | 0.002094 m |
+| `mac-mini` / `forward` | 0.8499 | 0.9859 | 0.000452 m | 1503.52 ms | 0.128517 m | 0.001970 m |
+| `mac-mini` / `left` | 0.8562 | 0.9858 | 0.001925 m | 1493.38 ms | 0.056595 m | 0.003854 m |
+| `mac-mini` / `right` | 0.8219 | 0.9868 | 0.000496 m | 1511.85 ms | 0.151913 m | 0.002024 m |
+
+最终交付目录是 `/data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/delivery/cross-platform-r818/`。Linux、当前 Mac 和 `mac-mini` 的压缩包 SHA-256 分别为 `13be479971205c218d736e38c221ecad2e98b525bf26cad4e93c3af1693b6deb`、`f5457d5c50b406c222c0c2bb721a8af2eaef8c8aee78c38da59243e961429135` 和 `5bae103df2799be5b5f95a2f9f80a61f4d9dd0c53eaa68305e570a00d8113d1c`。目录中的 `SHA256SUMS` 已在 ai-station 回读为全通过；跨平台清单还单独记录了上述源码与 source-age 策略差异，清单 SHA-256 为 `8893553d284271f54bf4a48cc2bce15c5454e379e9a0ee93060bf16b9acf36d3`。
+
+这里的验收是 MuJoCo 仿真验收，不包含实体 SO-101。本文后面的旧 benchmark `INVALID` 结论仍按原意保留，它描述的是修复前 raw adapter 的实验，不能拿来否定或证明当前冻结 bundle。历史 COCO100 的 zero-recall 也仍是已知泛化风险，只是按既定决策不再作为这次近工作区四点抓放的晋级门。
 
 ## 历史 benchmark 结论（修复前）
 
@@ -120,7 +145,7 @@ Grounded-SAM R9 的冻结点为 `box_threshold=0.05`、`text_threshold=0.05`、`
 
 这套数据是合成 RGB 数据，实例 mask 来自凸包近似，不是像素级人工精标；bottle 没有实例 mask。它适合检验当前四类场景中的 2D 候选、实例数和 fail-closed decision，但不能替代真实相机数据。
 
-本轮也没有输入 depth、camera intrinsics 或 TF，不产生 `/cup_pose`，没有启动 MoveIt 和 Pick & Place。因此，这份 benchmark 报告不能作为 Mac/Linux 四个预置点位成功的证据，更不能外推到真实 SO-101。
+本小节描述的历史离线 benchmark 没有输入 depth、camera intrinsics 或 TF，不产生 `/cup_pose`，也没有启动 MoveIt 和 Pick & Place。它本身不能作为四个预置点位成功的证据；本报告开头的三平台结论来自后来单独执行的在线 MuJoCo 验收。两者都不能外推到真实 SO-101。
 
 ## Task 11 回流说明
 
@@ -176,7 +201,7 @@ benchmark_remediation_proposal:
 
 ## 证据生命周期
 
-- Retained：本轮所有 val/test、threshold-lock、test access、模型/数据资产、source bundle、build/install/log、诊断脚本和失败工件；另保留 Linux 四点 `r769-r773`、不可变发布包 `r774-r775`、HF 发布目录 `r778`、失败的私有仓库无认证回读 `r779` 和成功的远端 commit 回读 `r780`。
-- Archived：none。
-- Deletion candidates：先前 ledger 已列出的失败 checkout、superseded overlay、invalid dry-run、R10/R11/R12 失败目录，以及 HF 回读 cache；全部需要用户明确授权后才能删除。
-- 本报告没有删除、覆盖或重写任何 evidence，也没有修改旧 Task 11 ledger。
+- Retained：本轮所有 val/test、threshold-lock、test access、模型/数据资产、source bundle、build/install/log、诊断脚本和失败工件；Linux 四点 `r769-r773`；不可变发布 `r774-r775`；HF 发布与回读 `r778-r780`；当前 Mac 最终四点 `r812/r814/r815/r816`；`mac-mini` 最终四点 `r806/r807/r810/r809`；以及跨平台交付目录 `cross-platform-r818`。
+- Archived：none newly。
+- Deletion candidates：先前账本列出的失败 checkout、superseded overlay、invalid dry-run、R10/R11/R12 失败目录、HF 回读 cache；Linux 误带模型 snapshot 的 836 MiB `r805` 包；两台 Mac 被最终 GUI 批次替代的 `r805` 包；当前 Mac 无效的 `r811`（shell setup）与 `r813`（ROS domain 233）运行，以及失败的测试 build/cache。全部需要用户明确授权后才能删除。
+- 本报告没有删除、覆盖或重写任何 evidence，也没有修改旧 Task 11 的历史结论。
