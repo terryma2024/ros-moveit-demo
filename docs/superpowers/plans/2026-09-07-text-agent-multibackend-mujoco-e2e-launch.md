@@ -200,9 +200,9 @@ if line.startswith(b'SO101_EVENT '):
 
 **Interfaces:** `TextAgent.__init__` 新增可选 `event_emitter: EventEmitter | None = None`；`DynamicRuntimeContext` 新增 `workflow_id: str | None = None`、`event_emitter: EventEmitter | None = None`；`run_dynamic_execute` 新增可选 keyword `event_emitter: EventEmitter | None = None`。TextAgent 与 dynamic runtime 各有独立 sequence，虽同进程也不能混用 emitter。
 
-- [ ] 在现有 TextAgent fake planner/executor 测试中加记录列表断言：合法 execute 的 `DISPATCH_PREVIEW` 发生在 `executor.dispatch` 前；unsupported、ambiguous、schema 错、backend 错、未授权、digest 错均不 dispatch、不创建 runtime、不发 preview。provider 失败才 fallback，可解析非法命令不得 fallback。
-- [ ] 在 `test_dynamic_execute.py` 的注入 `_runtime` 测试记录 `cup_pose_source/get_one/execution/runner` 顺序，RED 断言订阅创建后、`get_one` 前产生 READY；scene/pose/reachability 拒绝时 runner 创建次数为零。
-- [ ] 给 CLI 加成对参数，workflow ID 使用现有安全字符规则，只有一项时立即拒绝。TextAgent 授权和 request claim 完成后插入：
+- [x] 在现有 TextAgent fake planner/executor 测试中加记录列表断言：合法 execute 的 `DISPATCH_PREVIEW` 发生在 `executor.dispatch` 前；unsupported、ambiguous、schema 错、backend 错、未授权、digest 错均不 dispatch、不创建 runtime、不发 preview。provider 失败才 fallback，可解析非法命令不得 fallback。
+- [x] 在 `test_dynamic_execute.py` 的注入 `_runtime` 测试记录 `cup_pose_source/get_one/execution/runner` 顺序，RED 断言订阅创建后、`get_one` 前产生 READY；scene/pose/reachability 拒绝时 runner 创建次数为零。
+- [x] 给 CLI 加成对参数，workflow ID 使用现有安全字符规则，只有一项时立即拒绝。TextAgent 授权和 request claim 完成后插入：
 
 ```python
 if self._event_emitter is not None:
@@ -212,9 +212,9 @@ result = self._executor.dispatch(dispatch_request)
 
 executor 在真实调用 runtime 前发 `RUNTIME_STARTED`；runtime 在 `cup_pose_source` 成功返回后发 `RUNTIME_READY`。return 0 且 finish/cleanup 成功后才发 `RUNTIME_COMPLETED`；异常、非零、证据写入失败发 `RUNTIME_FAILED`。发终态只允许一个层负责，外层错误只能补 secondary，防止双发。
 
-- [ ] 在 `RosDynamicMujocoExecution` 加可选 `workflow_id/request_id`，从已经校验的 request/context 传入并保存；旧调用默认 None，旧 manifest 读者兼容。新 E2E 验证时缺少关联字段必须拒绝。不要只凭相邻目录推定证据同源。
-- [ ] 保存实际 provider/model/fallback、source commit、installed prefix、request/session/reset、input source stamp/frame 的关联文件；补在原 provenance 写入边界，禁止保存 provider 密钥和原始敏感响应。
-- [ ] enabled 模式普通状态行定向 stderr；disabled 模式 golden stdout 与退出码完全不变。运行上述四个测试文件及现有相关 CLI 测试到 GREEN；提交 `feat: emit agent and dynamic runtime workflow milestones`。
+- [x] 在 `RosDynamicMujocoExecution` 加可选 `workflow_id/request_id`，从已经校验的 request/context 传入并保存；旧调用默认 None，旧 manifest 读者兼容。新 E2E 验证时缺少关联字段必须拒绝。不要只凭相邻目录推定证据同源。
+- [x] 保存实际 provider/model/fallback、source commit、installed prefix、request/session/reset、input source stamp/frame 的关联文件；补在原 provenance 写入边界，禁止保存 provider 密钥和原始敏感响应。
+- [x] enabled 模式普通状态行定向 stderr；disabled 模式 golden stdout 与退出码完全不变。运行上述四个测试文件及现有相关 CLI 测试到 GREEN；提交 `feat: emit agent and dynamic runtime workflow milestones`。
 
 ## Task 5：让感知按真实就绪、选择和发布发事件
 

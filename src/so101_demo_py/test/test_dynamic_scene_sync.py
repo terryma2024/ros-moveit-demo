@@ -18,6 +18,7 @@ from so101_demo.ports.evidence import PoseEvidence
 from so101_demo.ports.planning_scene import SceneCommandReceipt
 from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
 from so101_demo.profiling.session import build_profiler
+from so101_demo.runtime.workflow_events import EventDecoder, EventEmitter
 from test_dynamic_pick import _sample, _template
 
 PACKAGE = Path(__file__).parents[1]
@@ -602,6 +603,131 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
     output = capsys.readouterr().out
     assert "status=READY subscription=/cup_pose" in output
     assert "status=DONE" in output
+
+
+def test_run_dynamic_execute_emits_ready_after_subscription_before_pose_wait(
+    tmp_path,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    lines: list[str] = []
+
+    def write(line: str) -> None:
+        lines.append(line)
+        document = json.loads(line.removeprefix("SO101_EVENT "))
+        events.append(f"workflow.{document['event']}")
+
+    emitter = EventEmitter("w1", "dynamic_runtime", write, lambda: 100)
+    emitter.emit(
+        "RUNTIME_STARTED",
+        payload={"request_id": "r1", "session_id": "task-5", "reset_epoch": 3},
+    )
+    scene = RecordingTaskScenePort()
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=scene,
+    )
+
+    assert run_dynamic_execute(
+        _options(tmp_path), event_emitter=emitter, _runtime=runtime
+    ) == 0
+
+    assert events.index("source.create") < events.index("workflow.RUNTIME_READY")
+    assert events.index("workflow.RUNTIME_READY") < events.index("sample.acquire")
+    assert events.index("ros.shutdown") < events.index("workflow.RUNTIME_COMPLETED")
+    decoded = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in decoded] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_READY",
+        "RUNTIME_COMPLETED",
+    ]
+    assert decoded[-1].payload == {
+        "manifest_path": str(tmp_path / "dynamic-execute-manifest.json"),
+        "runtime_exit_code": 0,
+    }
+
+
+def test_run_dynamic_execute_emits_one_fixed_terminal_failure(
+    tmp_path,
+    capsys,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    lines: list[str] = []
+    emitter = EventEmitter("w1", "dynamic_runtime", lines.append, lambda: 100)
+    emitter.emit(
+        "RUNTIME_STARTED",
+        payload={"request_id": "r1", "session_id": "task-5", "reset_epoch": 3},
+    )
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=RecordingTaskScenePort(),
+        faults=frozenset({"runner.run"}),
+    )
+
+    assert run_dynamic_execute(
+        _options(tmp_path), event_emitter=emitter, _runtime=runtime
+    ) == 1
+
+    decoded = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in decoded] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_READY",
+        "RUNTIME_FAILED",
+    ]
+    assert decoded[-1].failure_code == "DYNAMIC_RUNTIME_INTERNAL_ERROR"
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "failure=PRIMARY_WORKFLOW_FAILED" in captured.err
+
+
+def test_run_dynamic_execute_passes_verified_workflow_and_request_identity(
+    tmp_path,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=RecordingTaskScenePort(),
+    )
+    captured: dict[str, object] = {}
+    original_execution = runtime.execution
+
+    def execution(*args, **kwargs):
+        captured.update(kwargs)
+        return original_execution(*args, **kwargs)
+
+    runtime.execution = execution
+    options = _options(tmp_path)
+    options.workflow_id = "w1"
+    options.request_id = "r1"
+
+    assert run_dynamic_execute(options, _runtime=runtime) == 0
+
+    assert captured["workflow_id"] == "w1"
+    assert captured["request_id"] == "r1"
 
 
 def test_run_dynamic_execute_profiles_setup_state_and_cleanup(tmp_path) -> None:
