@@ -358,7 +358,7 @@ colcon test-result --test-result-base "$E2E_ROOT" --verbose
 
 **Interfaces:** 产出每轮 `workflow-events.ndjson/e2e-result.json/perception/dynamic/acceptance`、数值证据、命令与退出码、fresh screenshot、1 至 2 分钟 demo；工程结果与学习者结果分别记录。
 
-- [ ] 每轮先写 PLANNED 条目：prior experiment、唯一变量、`FULL_RESTART`、固定 commit/policy/model、fresh domain/session/workflow/root、成功/失败/INVALID 判据。取证后才 RUNNING，结束记 VALID 或 INVALID。不同 host/backend 使用独立 task 记录；同一 task 的各次实验在其唯一 root 的子目录。
+- [x] 每轮先写 PLANNED 条目：prior experiment、唯一变量、`FULL_RESTART`、固定 commit/policy/model、fresh domain/session/workflow/root、成功/失败/INVALID 判据。取证后才 RUNNING，结束记 VALID 或 INVALID。不同 host/backend 使用独立 task 记录；同一 task 的各次实验在其唯一 root 的子目录。
 - [ ] 以账本验证的绝对路径设置 `E2E_WEIGHTS`、`E2E_WEIGHTS_SHA256`、`E2E_MODEL_ROOT`、`E2E_MODEL_MANIFEST_SHA256` 和 `E2E_RUNTIME`、`E2E_DEVICE`；Linux image 使用账本已验证的固定值。这些是实际工件输入，不给不存在的示例权重路径。provider 使用现有安全配置，不把 secret 写入命令日志。
 - [ ] 在每个平台执行 YOLO-Seg 唯一杯 headless：
 
@@ -390,14 +390,14 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 
 该参数片段追加到 `ros2 launch` 命令，不能单独执行；同时移除两个 YOLO 专属参数。确认 bundle 与实际 supported device 兼容，失败不切颜色后端抵数。正式矩阵共四格，每格至少一次 headless 唯一杯完整 E2E。
 
-- [ ] 验证每次 actual provider/model/fallback、request/session/reset、RGB/Depth/CameraInfo 与 tf2、本次 `/cup_pose` stamp/frame、完整事件和 state_trace、controller/joint/TCP、MuJoCo 抬升搬运释放稳定支撑、无 fingertip、Planning Scene world/attached、validator 和 launch 双退出码、owned cleanup。
+- [x] 验证每次 actual provider/model/fallback、request/session/reset、RGB/Depth/CameraInfo 与 tf2、本次 `/cup_pose` stamp/frame、完整事件和 state_trace、controller/joint/TCP、MuJoCo 抬升搬运释放稳定支撑、无 fingertip、Planning Scene world/attached、validator 和 launch 双退出码、owned cleanup。
 - [ ] 执行三条 fresh 负向 live run。Planner 拒绝使用 `instruction:='Do not pick anything. Fly the robot to the moon.'`，必须读回真实拒绝；若 provider 仍产生合法命令，则该轮不能算拒绝用例，记录失败并在测试注入的确定性 Planner 边界复现。两杯使用 `mujoco_initial_keyframe:=v5_two_cups`，要求 primary `TARGET_AMBIGUOUS`、无 pose、无 runner。MoveIt 故障在独立 domain 的测试执行服务中返回 action abort，或只中止本轮 owned controller；冻结注入的时点与 PID，确保失败落在 execute 而非 startup，要求 runner recovery、非零退出和可解释副作用。
 - [ ] Task 6/8 自动化还必须证明 runtime 0 但物理不合格、MuJoCo 合格但 Planning Scene attached 两条路径顶层失败，不能用成功视频覆盖这些断言。
 - [ ] 设计要求四格最小运行；so101-dev 的正式物理完成门还要求连续五次有效成功。对完成声明覆盖的每个模型/平台配置，使用固定 commit/参数和 `FULL_RESTART` 单独计数五次，四格首轮可算各自第一次。VALID 失败中断序列；INVALID 中断批次并保留记录。该稳定性 gate 是仿真验证，不运行 perception benchmark suite。
 - [ ] 在已完成 provenance 验证的平台使用 YOLO-Seg、`headless:=false` 和 fresh run 录制 1 至 2 分钟视频，录制前读 `gui-capture` 技能。录制覆盖指令、运动、放置和自动退出，结束后取新的截图并实际打开检查；launch 不为录像暂停成功退出，镜头内容不足则另开 fresh run，不修改超时伪造成功。
-- [ ] 新建 `docs/guides/text-agent-multibackend-mujoco-e2e.md`，写实际可复现命令、三入口用途、事件与失败读法、证据路径和视频链接，使用 humanizer-zh。只写已验证结果，未通过矩阵格明确标为未验收。
+- [x] 新建 `docs/guides/text-agent-multibackend-mujoco-e2e.md`，写实际可复现命令、三入口用途、事件与失败读法、证据路径和视频链接，使用 humanizer-zh。只写已验证结果，未通过矩阵格明确标为未验收。
 - [ ] 学习者验收单独安排：沿事件解释成功路径，以及 Planner 拒绝、歧义、MoveIt 执行失败各在哪一层终止、是否已有物理副作用。只有确认学习者身份并取得实际解释后，才按课程流程更新其个人记录；本计划不代填进度。
-- [ ] 最终账本列 retained runs、archived runs、scratch/临时结果删除候选；不得删除证据。提交指南与账本，message：`docs: record multibackend text agent e2e acceptance`。未完成现场 gate 时只提交真实 checkpoint，不写 acceptance passed。
+- [x] 最终账本列 retained runs、archived runs、scratch/临时结果删除候选；不得删除证据。提交指南与账本，message：`docs: record multibackend text agent e2e acceptance`。未完成现场 gate 时只提交真实 checkpoint，不写 acceptance passed。
 
 ## 逐项覆盖与完成检查
 
@@ -417,7 +417,7 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 | §13 文件边界 | 文件分工表；额外 ROS readback 适配器保持应用层纯逻辑 |
 | §14 工程与学习者验收分离 | Task 9 |
 
-- [ ] 所有代码任务 RED/GREEN 有命令、退出码和非零测试数；两个旧入口回归通过。
+- [x] 所有代码任务 RED/GREEN 有命令、退出码和非零测试数；两个旧入口回归通过。
 - [ ] 新入口真实 `ros2 launch` 失败非零，成功须 acceptance、原子证据和 cleanup 全通过。
 - [ ] 平台矩阵、连续有效运行、三条负向和视频均有当前来源证据；未满足的项不得勾选。
 - [ ] learner 掌握度独立记录，未因代码或计划完成自动更新。
