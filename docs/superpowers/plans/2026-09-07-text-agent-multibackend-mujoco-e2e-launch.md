@@ -323,7 +323,7 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py --show-args
 
 依赖必须已在核验过的 underlay；缺少本次变更依赖时先独立构建所需依赖，不复用来源不明 install。
 
-- [ ] ai-station 每次测试创建全新 NVMe scratch，并用实际测试 Python 验证，随后记录耗时：
+- [x] ai-station 每次测试创建全新 NVMe scratch，并用实际测试 Python 验证，随后记录耗时：
 
 ```bash
 E2E_SCRATCH="$E2E_ROOT/scratch/$(date -u +%Y%m%dT%H%M%S)-$(uuidgen)/tmp"
