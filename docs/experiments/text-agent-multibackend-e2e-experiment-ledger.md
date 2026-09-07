@@ -7,7 +7,7 @@ success_contract: The new launch exits zero only after a valid workflow event tr
 worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
 branch: codex/text-agent-multibackend-e2e
 base_commit: ef9466c602da710ec89d4ca5c36dd0d7596a83c4
-current_commit: 65ae695bef22d18144065dc4bc81c70b3683544b
+current_commit: 8a1cbdeda25f94ed5eef7af999d892536b2e28fa
 evidence_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
 confirmed_conclusions:
   - The macOS source worktree is clean when inspected with its explicit git-dir and work-tree; ordinary Git status is invalid because repository core.worktree points at the shared checkout. OBSERVED before EXP-001.
@@ -17,8 +17,8 @@ disproven_routes:
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
   - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-005
-next_experiment: EXP-007
+latest_checkpoint: CP-006
+next_experiment: EXP-008
 ```
 
 ## Registered model inputs
@@ -413,4 +413,71 @@ open_risks:
   - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Commit Task 5, then add the Task 6 missing-evidence acceptance test and run it to RED.
+```
+
+```yaml
+experiment_id: EXP-007
+status: VALID
+prior_experiment: EXP-006
+hypothesis: A ROS-free acceptance policy and a read-only ROS adapter can reject incomplete, cross-identity, physically invalid, or Planning Scene-invalid evidence after runtime completion.
+prediction: The missing-evidence test first fails because the acceptance module is absent, then complete correlated evidence passes while each individually damaged fact is rejected without an unhandled exception.
+single_variable: Add final E2E validation and readback without changing runtime control flow or publishing synthetic truth.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS graph or MuJoCo process is started; readback conversion and client boundaries use injected immutable fakes.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - Task 5 is committed at 8a1cbdeda25f94ed5eef7af999d892536b2e28fa.
+success_criteria:
+  - Empty and malformed documents return serializable rejection reports.
+  - Workflow/request/session/reset, DONE and exact state trace, controller feedback, lift/transport, release sequence, physical stability, contact, world membership, and pose/time correlation are all required.
+  - CALIBRATION_REQUIRED policies fail, and policy hashes and tolerances are sourced from the same dynamic policy used by execution.
+  - Readback uses only the MuJoCo evidence observer and GetPlanningScene, with finite timeouts and no mutating control interfaces.
+  - Acceptance artifacts are atomically written before E2E_ACCEPTED; invalid readback emits E2E_REJECTED and returns one.
+failure_criteria:
+  - Missing facts raise instead of rejecting, a single final pose can pass without the state trace, or MuJoCo truth is injected into runtime inputs.
+invalid_criteria:
+  - No tests collect or so101_demo resolves outside the isolated worktree mapping.
+provenance:
+  source_commit: 8a1cbdeda25f94ed5eef7af999d892536b2e28fa
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used-injected-tests
+  gz_partition: not-used-injected-tests
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 ROS_HOME=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-home ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-logs /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_e2e_acceptance.py src/so101_demo_py/test/test_dynamic_execute.py src/so101_demo_py/test/test_dynamic_scene_sync.py src/so101_demo_py/test/test_package_identity.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-007/pytest-e2e-acceptance.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: all 14 initial acceptance tests failed at RED because application/e2e_acceptance.py did not exist.
+  - OBSERVED 2026-09-08: the first GREEN run exposed a shared-list alias in the test fixture, not validator behavior; copying the Planning Scene pose made the single-variable pose mismatch test valid.
+  - OBSERVED 2026-09-08: a test run without the final repository install overlay collected an incompatible stale mujoco_ros2_control message package and was INVALID; the recorded final command restored the verified overlay order.
+  - OBSERVED 2026-09-08: the final selected run collected and passed 69 tests in 1.17 seconds and wrote JUnit evidence with zero failures, errors, or skips.
+  - OBSERVED 2026-09-08: Python byte compilation, line-length inspection of changed files, and git diff --check passed.
+inferred:
+  - The validator can now be launched after RUNTIME_COMPLETED while the stack remains alive, and its result depends on both independent truth sources plus the complete dynamic trace.
+conclusion: VALID; Task 6 pure validation, read-only collection, atomic artifacts, event terminal, and console entry point are ready for supervisor integration.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-007
+decision: KEEP
+next_experiment: EXP-008
+```
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-007
+current_hypothesis: A new launch supervisor can enforce the event phase machine, start perception only on RUNTIME_READY, run acceptance only after RUNTIME_COMPLETED, preserve the primary failure, and clean only owned resources.
+working_tree_status: Task 6 changes are limited to the pure validator, readback adapter, validator CLI, shared terminal constants, setup entry point, focused tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - Acceptance rejects malformed evidence without KeyError and serializes every result.
+  - Exact success trace and physical facts are required in addition to DONE.
+  - Planning Scene cup pose is reconstructed from the canonical thirteenth bottom primitive and compared with fresh MuJoCo evidence.
+  - EXP-007 established a 69-test acceptance and dynamic regression pass from the isolated worktree source.
+disproven_routes:
+  - Trusting dynamic runtime success or one final pose as complete E2E acceptance.
+  - Calling mutation services or action clients from the final readback process.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Commit Task 6, then add the Task 7 launch supervisor contract test and run it to RED.
 ```

@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from ..control.gripper.client import GripperClient
+from ..application.e2e_acceptance import (
+    FINAL_MAX_ANGULAR_SPEED_RAD_S,
+    FINAL_MAX_LINEAR_SPEED_M_S,
+    FINAL_MAX_UPRIGHT_TILT_RAD,
+    FINAL_SUPPORT_HEIGHT_RANGE_M,
+    FINAL_XY_TOLERANCE_M,
+)
 from ..control.moveit.planning import JointPlanRequest, MoveItPlanningClient
 from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
 from ..control.planning_scene.cup import make_cup_collision_object
@@ -655,8 +662,8 @@ class RosDynamicMujocoExecution:
                 self._table_contact(value)
                 and not value.left_fingertip_contacts
                 and not value.right_fingertip_contacts
-                and linear <= 0.001
-                and angular <= 0.05
+                and linear <= FINAL_MAX_LINEAR_SPEED_M_S
+                and angular <= FINAL_MAX_ANGULAR_SPEED_RAD_S
             )
 
         after = self._wait_stable(released, 0.20, 4.0)
@@ -674,9 +681,13 @@ class RosDynamicMujocoExecution:
         q = actual.orientation_xyzw
         upright = self._upright_tilt_rad(q)
         if (
-            xy_error > 0.02
-            or not 0.155 <= actual.position_world[2] <= 0.175
-            or upright > 0.15
+            xy_error > FINAL_XY_TOLERANCE_M
+            or not (
+                FINAL_SUPPORT_HEIGHT_RANGE_M[0]
+                <= actual.position_world[2]
+                <= FINAL_SUPPORT_HEIGHT_RANGE_M[1]
+            )
+            or upright > FINAL_MAX_UPRIGHT_TILT_RAD
             or not self._table_contact(before)
             or before.left_fingertip_contacts
             or before.right_fingertip_contacts
