@@ -396,22 +396,36 @@ acceptance; it does not establish a formal Grounded SAM versus YOLO-Seg ranking.
 
 ## Documentation
 
+### Package overview and architecture
+
 - [Unified SO-101 Python package](src/so101_demo_py/README.md)
 - [SO-101 Python architecture](docs/pick-place-python-architecture.md)
+- [Shared C++ pick-place architecture](docs/pick-place-architecture.md)
+- [C++ launch parameters and safety contract](docs/pick-place-launch-parameters.md)
+
+### Perception and task execution
+
 - [Text Pick Agent source guide](docs/guides/so101-text-pick-agent-source-guide.md)
 - [RGB-D perception PickPlace source guide](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
 - [YOLO-Seg RGB-D perception source guide](docs/guides/so101-yolo-seg-rgbd-perception-pick-place-source-guide.md)
 - [Grounded SAM RGB-D perception, training, and delivery guide](docs/guides/so101-grounded-sam-rgbd-perception-pick-place-source-guide.md)
-- [Grounded SAM benchmark and cross-platform acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
 - [Dynamic cup PickPlace source guide](docs/guides/so101-dynamic-cup-pick-place-source-guide.md)
+
+### Profiling and evaluation
+
 - [PickPlace profiling source guide](docs/guides/so101-pick-place-profiling-source-guide.md)
+- [Grounded SAM benchmark and cross-platform acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
+
+### Platform setup and integration
+
 - [Apple Silicon ROS 2 Jazzy and SO-101 MuJoCo guide](docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md)
 - [SO-101 MuJoCo ROS 2 integration guide](docs/guides/so101-mujoco-ros2-integration-guide.md)
 - [`mujoco_ros2_control` 0.1.0 upgrade notes](docs/guides/mujoco-ros2-control-0-1-upgrade-change-notes.md)
-- [Shared C++ pick-place architecture](docs/pick-place-architecture.md)
-- [C++ launch parameters and safety contract](docs/pick-place-launch-parameters.md)
-- [SO-101 Gazebo C++ package](src/so101_gazebo_demo_cpp/README.md)
+
+### Teleop and example packages
+
 - [Teleop Web UI guide](src/so101_teleop/docs/so101-teleop-web-ui.md)
+- [SO-101 Gazebo C++ package](src/so101_gazebo_demo_cpp/README.md)
 - [Panda Gazebo C++ package](src/panda_gazebo_demo_cpp/README.md)
 - [Panda MuJoCo package](src/panda_mujoco_demo/README.md)
 
