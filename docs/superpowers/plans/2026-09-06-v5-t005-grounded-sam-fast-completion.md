@@ -142,7 +142,7 @@
 ## 10. 阶段 G：同一 bundle 迁移 macOS并完成终止目标
 
 - [ ] macOS 的 bundle 导入、MPS 预检、运行时验证、GUI 取证和四点 `FULL_RESTART` 必须由直接运行在 Mac 本机的会话执行；禁止从 ai-station 通过 SSH、远程命令、远程传输或远程 GUI 控制代为执行这些步骤。
-- [ ] 发布 Linux acceptance bundle：DINO、SAM、processor、prompt、threshold lock、代码 commit、模型/配置 SHA 和四点 inventory。
+- [x] 发布 Linux acceptance bundle：DINO、SAM、processor、prompt、threshold lock、代码 commit、模型/配置 SHA 和四点 inventory。冻结归档为 r774，SHA256 `de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868`；r775 已独立逐成员读回 20/20。
 - [ ] 把同一 bundle 复制到 Mac 并逐文件读回 SHA；不在 Mac 重选 checkpoint 或阈值。
 - [ ] 在 Mac 新 overlay 验证 MPS、FP32、无 CPU fallback、逐帧无状态和相同 `/cup_pose` 接口。
 - [ ] Mac 四个预置点位逐点 `FULL_RESTART`，使用与 Linux 相同的端到端成功判据和证据结构。
