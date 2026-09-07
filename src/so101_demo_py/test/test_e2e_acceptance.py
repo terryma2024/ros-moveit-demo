@@ -157,7 +157,7 @@ def accepted_document() -> dict[str, object]:
                     "plastic_cup": 13,
                 },
             },
-            "input_frame_id": "task_camera_frame",
+            "input_frame_id": "world",
             "input_source_stamp_ns": 1_000_000_000,
             "final_samples": [released],
         },
@@ -175,6 +175,8 @@ def accepted_document() -> dict[str, object]:
             "publisher_sequence": 60,
             "simulation_step": 500,
             "source_timestamp_ns": 3_000_000_000,
+            "clock_domain": "mujoco_sim",
+            "readback_monotonic_ns": 40_000_000_000,
             "paused": False,
             "cup_pose_world": final_pose,
             "cup_linear_velocity_world_m_s": [0.0, 0.0, 0.0],
@@ -186,7 +188,9 @@ def accepted_document() -> dict[str, object]:
         "planning_scene_final": {
             "simulation_session_id": "session-001",
             "reset_epoch": 7,
-            "source_timestamp_ns": 3_000_000_100,
+            "source_timestamp_ns": 1_788_810_607_533_085_057,
+            "clock_domain": "system_wall",
+            "readback_monotonic_ns": 40_000_000_100,
             "attached_object_ids": [],
             "world_objects": {
                 "table": {"primitive_count": 1},
@@ -251,6 +255,9 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
         (("dynamic", "status"), "RUNNING", "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("dynamic", "state_trace"), SUCCESS_TRACE[:-1], "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("dynamic", "release_marker_sequence"), 70, "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "input_frame_id"), "task_camera_frame", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "input_source_stamp_ns"), 99, "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("perception", "source_frame_id"), "", "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("mujoco_final", "table_contact"), False, "E2E_MUJOCO_FINAL_INVALID"),
         (
             ("mujoco_final", "left_fingertip_contact_count"),
@@ -304,7 +311,9 @@ def test_controller_feedback_and_micro_lift_are_required(accepted_document) -> N
         assert "E2E_DYNAMIC_EVIDENCE_INVALID" in report.failures
 
 
-def test_final_pose_and_timestamps_must_agree(accepted_document) -> None:
+def test_final_pose_and_same_domain_readback_times_must_agree(
+    accepted_document,
+) -> None:
     from so101_demo.application.e2e_acceptance import validate_e2e_evidence
 
     pose_mismatch = copy.deepcopy(accepted_document)
@@ -315,9 +324,52 @@ def test_final_pose_and_timestamps_must_agree(accepted_document) -> None:
     assert "E2E_PLANNING_SCENE_INVALID" in report.failures
 
     stale = copy.deepcopy(accepted_document)
-    stale["planning_scene_final"]["source_timestamp_ns"] += 2_000_000_000
+    stale["planning_scene_final"]["readback_monotonic_ns"] += 2_000_000_000
     report = validate_e2e_evidence(stale)
     assert "E2E_PLANNING_SCENE_INVALID" in report.failures
+
+
+def test_cross_domain_source_timestamps_are_not_compared(accepted_document) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    report = validate_e2e_evidence(accepted_document)
+
+    assert report.accepted is True
+
+
+def test_readback_monotonic_order_cannot_run_backwards(accepted_document) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    document = copy.deepcopy(accepted_document)
+    document["planning_scene_final"]["readback_monotonic_ns"] = (
+        document["mujoco_final"]["readback_monotonic_ns"] - 1
+    )
+
+    report = validate_e2e_evidence(document)
+
+    assert "E2E_PLANNING_SCENE_INVALID" in report.failures
+
+
+@pytest.mark.parametrize(
+    ("document_name", "field", "replacement", "failure"),
+    [
+        ("mujoco_final", "clock_domain", "system_wall", "E2E_MUJOCO_FINAL_INVALID"),
+        ("planning_scene_final", "clock_domain", "mujoco_sim", "E2E_PLANNING_SCENE_INVALID"),
+        ("mujoco_final", "readback_monotonic_ns", -1, "E2E_MUJOCO_FINAL_INVALID"),
+        ("planning_scene_final", "readback_monotonic_ns", -1, "E2E_PLANNING_SCENE_INVALID"),
+    ],
+)
+def test_final_readback_clock_provenance_is_required(
+    accepted_document, document_name: str, field: str, replacement, failure: str
+) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    document = copy.deepcopy(accepted_document)
+    document[document_name][field] = replacement
+
+    report = validate_e2e_evidence(document)
+
+    assert failure in report.failures
 
 
 def test_readback_documents_preserve_atomic_simulation_and_scene_facts() -> None:
@@ -349,8 +401,13 @@ def test_readback_documents_preserve_atomic_simulation_and_scene_facts() -> None
         left_fingertip_contacts=(),
         right_fingertip_contacts=(),
     )
-    simulation = _simulation_readback_document(evidence)
+    simulation = _simulation_readback_document(
+        evidence,
+        readback_monotonic_ns=40_000_000_000,
+    )
     assert simulation["source_timestamp_ns"] == 3_000_000_000
+    assert simulation["clock_domain"] == "mujoco_sim"
+    assert simulation["readback_monotonic_ns"] == 40_000_000_000
     assert simulation["table_contact"] is True
 
     def pose(z: float):
@@ -378,8 +435,11 @@ def test_readback_documents_preserve_atomic_simulation_and_scene_facts() -> None
         scene,
         session_id="session-001",
         reset_epoch=7,
-        source_timestamp_ns=3_000_000_100,
+        source_timestamp_ns=1_788_810_607_533_085_057,
+        readback_monotonic_ns=40_000_000_100,
     )
+    assert planning["clock_domain"] == "system_wall"
+    assert planning["readback_monotonic_ns"] == 40_000_000_100
     assert planning["attached_object_ids"] == []
     cup_record = planning["world_objects"]["plastic_cup"]
     assert cup_record["primitive_count"] == 13

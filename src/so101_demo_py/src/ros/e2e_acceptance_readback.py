@@ -16,13 +16,19 @@ def _contact_mentions(contact: Any, name: str) -> bool:
     }
 
 
-def _simulation_readback_document(evidence: Any) -> dict[str, object]:
+def _simulation_readback_document(
+    evidence: Any,
+    *,
+    readback_monotonic_ns: int,
+) -> dict[str, object]:
     return {
         "simulation_session_id": evidence.simulation_session_id,
         "reset_epoch": evidence.reset_epoch,
         "publisher_sequence": evidence.publisher_sequence,
         "simulation_step": evidence.simulation_step,
         "source_timestamp_ns": round(evidence.simulation_time_s * 1_000_000_000),
+        "clock_domain": "mujoco_sim",
+        "readback_monotonic_ns": readback_monotonic_ns,
         "paused": evidence.paused,
         "cup_pose_world": [
             *evidence.object_state.position_world,
@@ -96,6 +102,7 @@ def _planning_scene_readback_document(
     session_id: str,
     reset_epoch: int,
     source_timestamp_ns: int,
+    readback_monotonic_ns: int,
 ) -> dict[str, object]:
     attached = [
         item.object.id for item in scene.robot_state.attached_collision_objects
@@ -110,6 +117,8 @@ def _planning_scene_readback_document(
         "simulation_session_id": session_id,
         "reset_epoch": reset_epoch,
         "source_timestamp_ns": source_timestamp_ns,
+        "clock_domain": "system_wall",
+        "readback_monotonic_ns": readback_monotonic_ns,
         "attached_object_ids": attached,
         "world_objects": world_objects,
     }
@@ -141,6 +150,7 @@ def _collect_readback(
             break
     if evidence is None:
         raise TimeoutError("fresh MuJoCo final evidence was not available")
+    mujoco_readback_monotonic_ns = round(monotonic() * 1_000_000_000)
     remaining = deadline - monotonic()
     if remaining <= 0.0 or not scene_client.wait_for_service(timeout_sec=remaining):
         raise TimeoutError("Planning Scene readback service was not available")
@@ -149,14 +159,19 @@ def _collect_readback(
         spin_once(0.05)
     if not future.done() or future.result() is None:
         raise TimeoutError("Planning Scene final readback timed out")
+    planning_scene_readback_monotonic_ns = round(monotonic() * 1_000_000_000)
     source_timestamp_ns = int(node.get_clock().now().nanoseconds)
     return {
-        "mujoco_final": _simulation_readback_document(evidence),
+        "mujoco_final": _simulation_readback_document(
+            evidence,
+            readback_monotonic_ns=mujoco_readback_monotonic_ns,
+        ),
         "planning_scene_final": _planning_scene_readback_document(
             future.result().scene,
             session_id=session_id,
             reset_epoch=reset_epoch,
             source_timestamp_ns=source_timestamp_ns,
+            readback_monotonic_ns=planning_scene_readback_monotonic_ns,
         ),
     }
 
