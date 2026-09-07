@@ -243,7 +243,7 @@ if self.published_count == 1 and self._event_emitter is not None:
 
 `ros/e2e_acceptance_readback.py` 定义 `collect_final_readback(*, session_id: str, reset_epoch: int, timeout_s: float) -> dict[str, object]`，只读 MuJoCo observer 和 `/get_planning_scene`，返回 `mujoco_final/planning_scene_final`。CLI `main(arguments: list[str] | None = None) -> int` 接收 `--run-root --workflow-id --request-id --session-id --expected-reset-epoch --emit-workflow-events`，从 run root 内校验过的清单读取其他路径。
 
-- [ ] RED：空文档不能成功，不得抛出未经处理的 KeyError；缺证据结果可序列化：
+- [x] RED：空文档不能成功，不得抛出未经处理的 KeyError；缺证据结果可序列化：
 
 ```python
 from so101_demo.application.e2e_acceptance import validate_e2e_evidence
@@ -254,13 +254,13 @@ def test_missing_evidence_is_rejected():
     assert report.failures
 ```
 
-- [ ] 从 `test_dynamic_execute.py` 当前有效 manifest fixture 构造完整成功文档，并在 `test_e2e_acceptance.py` 定义本文件自己的 `accepted_document` fixture。逐项损坏 identity、DONE/state_trace、controller feedback、lift/transport、release sequence、support contact、fingertip contact、world/attached、pose/timestamp；每次只改一项，必须拒绝。
-- [ ] 复用当前 dynamic policy 和 `dynamic_mujoco_execution.py` 的判据读取字段：`resolved_targets`、`state_events`、`final_samples`、`release_marker_sequence`、`planning_scene_readback`；位置/姿态/稳定窗口阈值来自同一 policy/hash，不重新猜阈值。controller-level reconciliation 只有满足现有反馈契约才接受。
-- [ ] 验证完整状态轨迹符合当前 runner transition table，包含抬升、搬运、先 `DETACH_MOVEIT` 后开夹爪、当前 release epoch 的 settle/final validation。仅 DONE 或单个 final pose 不足以接受。policy 仍为 `CALIBRATION_REQUIRED` 时拒绝正式 live success。
-- [ ] 采集器在 runtime 已完成且 stack 仍存活时读取新的 MuJoCo session/reset/sequence/pose/contact 和 Planning Scene；最终 attached 集合为空，`plastic_cup` 在 world，位置与四元数角误差符合既有 policy。MuJoCo truth 仅供验证，禁止写 `/cup_pose` 或注入 runtime localization。
-- [ ] mock ROS clients 验证仅调用读取 service/subscription，没有 action 执行、`apply_planning_scene`、reset、attach 或开夹爪。每次读取有限 timeout；缺字段、失联、跨 session、跨 reset、陈旧快照返回 rejected。
-- [ ] 原子写 `acceptance/mujoco-final.json`、`planning-scene-final.json`、`result.json`，成功落盘之后发 `E2E_ACCEPTED`；失败发 `E2E_REJECTED`，CLI 返回 1。失败写盘不能保留旧成功结果。
-- [ ] `setup.py` 新增 `e2e_acceptance = so101_demo.cli.e2e_acceptance:main`。测试到 GREEN，提交 `feat: verify final MuJoCo and planning scene evidence`。
+- [x] 从 `test_dynamic_execute.py` 当前有效 manifest fixture 构造完整成功文档，并在 `test_e2e_acceptance.py` 定义本文件自己的 `accepted_document` fixture。逐项损坏 identity、DONE/state_trace、controller feedback、lift/transport、release sequence、support contact、fingertip contact、world/attached、pose/timestamp；每次只改一项，必须拒绝。
+- [x] 复用当前 dynamic policy 和 `dynamic_mujoco_execution.py` 的判据读取字段：`resolved_targets`、`state_events`、`final_samples`、`release_marker_sequence`、`planning_scene_readback`；位置/姿态/稳定窗口阈值来自同一 policy/hash，不重新猜阈值。controller-level reconciliation 只有满足现有反馈契约才接受。
+- [x] 验证完整状态轨迹符合当前 runner transition table，包含抬升、搬运、先 `DETACH_MOVEIT` 后开夹爪、当前 release epoch 的 settle/final validation。仅 DONE 或单个 final pose 不足以接受。policy 仍为 `CALIBRATION_REQUIRED` 时拒绝正式 live success。
+- [x] 采集器在 runtime 已完成且 stack 仍存活时读取新的 MuJoCo session/reset/sequence/pose/contact 和 Planning Scene；最终 attached 集合为空，`plastic_cup` 在 world，位置与四元数角误差符合既有 policy。MuJoCo truth 仅供验证，禁止写 `/cup_pose` 或注入 runtime localization。
+- [x] mock ROS clients 验证仅调用读取 service/subscription，没有 action 执行、`apply_planning_scene`、reset、attach 或开夹爪。每次读取有限 timeout；缺字段、失联、跨 session、跨 reset、陈旧快照返回 rejected。
+- [x] 原子写 `acceptance/mujoco-final.json`、`planning-scene-final.json`、`result.json`，成功落盘之后发 `E2E_ACCEPTED`；失败发 `E2E_REJECTED`，CLI 返回 1。失败写盘不能保留旧成功结果。
+- [x] `setup.py` 新增 `e2e_acceptance = so101_demo.cli.e2e_acceptance:main`。测试到 GREEN，提交 `feat: verify final MuJoCo and planning scene evidence`。
 
 ## Task 7：组装新 launch、失败传播与清理
 
