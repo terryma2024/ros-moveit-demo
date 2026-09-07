@@ -46,6 +46,7 @@ def test_setup_publishes_unified_runtime_commands(monkeypatch) -> None:
     assert set(captured["entry_points"]["console_scripts"]) >= {
         "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
         "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",
+        "e2e_acceptance = so101_demo.cli.e2e_acceptance:main",
         "so101_mujoco_perception_pick_place = "
         "so101_demo.cli.perception_pick_place_launch:main",
         "run_qualification = so101_demo.cli.qualification:main",
