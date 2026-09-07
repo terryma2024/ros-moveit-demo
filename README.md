@@ -24,6 +24,12 @@ implementation and several Panda examples.
   It runs as `rgbd_object_pose` or as the `yolo_seg` backend of the integrated
   perception launch. The current Text Agent launch still uses
   `rgbd_cup_pose`.
+- A Grounded SAM object-pose backend using Grounding DINO Tiny and SAM 2.1
+  Hiera Tiny, with verified local model bundles, per-instance masks, and the
+  same unique-target and RGB-D localization rules as YOLO-Seg.
+- Synthetic dataset generation, Grounding DINO fine-tuning, SAM decoder-only
+  training, and an offline perception benchmark with sealed datasets, threshold
+  calibration, and production/replay consistency checks.
 - Portable semantic profiling for the full Text Agent workflow. `summary` mode
   writes cross-platform JSON; `trace` adds a Chrome trace and can start
   `ros2_tracing` with LTTng on Linux.
@@ -57,7 +63,8 @@ Optional observation path:
     -> Linux ros2_tracing / LTTng CTF when requested and available
 
 Selectable one-shot perception path:
-  aligned RGB-D -> YOLO-Seg -> exactly-one target selector -> 3D localization
+  aligned RGB-D -> YOLO-Seg or Grounded SAM
+    -> exactly-one target selector -> 3D localization
     -> /cup_pose + detections + overlay + per-request evidence
 ```
 
@@ -124,8 +131,9 @@ Repository-level agent workflows live in `.agents/skills/`:
 - MuJoCo versions, fork commits, and dependencies pinned by
   `dependency-lock.yaml` and the repository installation scripts
 - Bun for the Teleop Web UI
-- Optional Ultralytics and PyTorch runtime from the pinned perception lockfiles
-  when using `rgbd_object_pose`
+- Optional model runtimes from the pinned perception lockfiles: Ultralytics and
+  PyTorch for YOLO-Seg, or the Grounding DINO and SAM 2.1 dependencies and a
+  verified local model bundle for Grounded SAM
 
 ## Build
 
@@ -233,12 +241,37 @@ ros2 run so101_demo_py rgbd_object_pose --help
 ros2 run so101_demo_py cup_pose_subscriber --help
 ```
 
-`rgbd_object_pose` requires a regular weights file, its expected SHA256 digest,
-and a unique absolute evidence root. It rejects zero or multiple matching
-`plastic_cup` candidates instead of selecting one heuristically. The integrated
-perception launch can select the same path with `perception_backend:=yolo_seg`;
-it then requires `perception_weights` and `perception_weights_sha256`. The
-current Text Agent launch does not expose this backend selector.
+The integrated perception launch supports three backends. Its default remains
+`color_geometry`; the Text Agent launch still uses `rgbd_cup_pose` and does not
+expose this selector.
+
+| `perception_backend` | Detector | Required model arguments |
+| --- | --- | --- |
+| `color_geometry` | Color and geometry through `rgbd_cup_pose` | None |
+| `yolo_seg` | YOLO instance segmentation through `rgbd_object_pose` | `perception_weights`, `perception_weights_sha256` |
+| `grounded_sam` | Grounding DINO boxes followed by SAM masks through `rgbd_object_pose` | `perception_model_root`, `perception_model_manifest_sha256` |
+
+YOLO-Seg requires a regular weights file and its expected SHA-256 digest.
+Grounded SAM verifies a local bundle manifest and its files before loading the
+models. Both object-pose backends require a unique evidence root and reject zero
+or multiple matching `plastic_cup` candidates instead of choosing one
+heuristically. Grounded SAM runs both models on the selected device; CPU
+fallback is disabled by default.
+
+Follow the [Grounded SAM source guide](docs/guides/so101-grounded-sam-rgbd-perception-pick-place-source-guide.md)
+for bundle preparation, launch arguments, frozen thresholds, training recipes,
+and delivery artifacts. The accepted adapted bundle uses Grounding DINO Tiny
+epoch 1 and SAM 2.1 Hiera Tiny decoder epoch 4.
+
+The [acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
+records four independent MuJoCo pick-place runs per machine as of September 7,
+2026: Linux CUDA and two Mac MPS hosts each completed all four preset positions.
+Linux and `mac-mini` met the two-second inference target; the other Mac exceeded
+it on three positions. The Mac runs used a five-second source-age budget, while
+the Linux acceptance used two seconds. These are recorded simulation results,
+not fresh validation of another installation. The frozen model also had zero
+recall in the historical COCO100 diagnostic, so its acceptance is limited to
+the tested near-workspace domain.
 
 ### Natural-language RGB-D workflow
 
@@ -328,6 +361,39 @@ ros2 launch panda_mujoco_demo panda_mujoco.launch.py
 ros2 launch fixed_pose_goal fixed_pose_goal.launch.py
 ```
 
+## Tests and perception evaluation
+
+After building and sourcing the workspace, run the ordinary Python package
+suite on Linux with:
+
+```bash
+colcon test --packages-select so101_demo_py --pytest-args test
+colcon test-result --verbose
+```
+
+The package's default pytest collection is restricted to
+`src/so101_demo_py/test/`. Low-frequency model comparison tests live separately
+in `src/so101_demo_py/benchmark_test/`. Run them explicitly when changing the
+benchmark or selecting/comparing perception models:
+
+```bash
+colcon test --packages-select so101_demo_py --pytest-args benchmark_test
+```
+
+On `ai-station`, tests that create fsync-heavy fixtures require a new scratch
+directory under the task's registered `/data/work/so101-evidence/` root. Before
+testing, set `TMPDIR`, `TMP`, and `TEMP` to that directory and verify
+`tempfile.gettempdir()` with the exact test Python. Follow the
+[test and acceptance workflow](.agents/skills/so101-dev/references/test-and-acceptance.md)
+for the macOS runner and environment checks.
+
+The benchmark separates dataset sealing, raw candidate collection, threshold
+calibration, and production/replay verification. Synthetic object IDs and truth
+masks are evaluation labels only. The
+[benchmark and acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
+keeps the earlier invalid comparison separate from the later adapted-model
+acceptance; it does not establish a formal Grounded SAM versus YOLO-Seg ranking.
+
 ## Documentation
 
 - [Unified SO-101 Python package](src/so101_demo_py/README.md)
@@ -335,6 +401,8 @@ ros2 launch fixed_pose_goal fixed_pose_goal.launch.py
 - [Text Pick Agent source guide](docs/guides/so101-text-pick-agent-source-guide.md)
 - [RGB-D perception PickPlace source guide](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
 - [YOLO-Seg RGB-D perception source guide](docs/guides/so101-yolo-seg-rgbd-perception-pick-place-source-guide.md)
+- [Grounded SAM RGB-D perception, training, and delivery guide](docs/guides/so101-grounded-sam-rgbd-perception-pick-place-source-guide.md)
+- [Grounded SAM benchmark and cross-platform acceptance report](docs/reports/grounded-sam-yolo-seg-benchmark-report.md)
 - [Dynamic cup PickPlace source guide](docs/guides/so101-dynamic-cup-pick-place-source-guide.md)
 - [PickPlace profiling source guide](docs/guides/so101-pick-place-profiling-source-guide.md)
 - [Apple Silicon ROS 2 Jazzy and SO-101 MuJoCo guide](docs/guides/macos-apple-silicon-ros2-jazzy-so101-mujoco.md)
