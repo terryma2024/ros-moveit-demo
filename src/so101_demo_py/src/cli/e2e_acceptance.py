@@ -153,6 +153,15 @@ def _failure_report(code: str) -> AcceptanceReport:
     )
 
 
+def _application_arguments(arguments: list[str] | None) -> list[str]:
+    raw_arguments = list(sys.argv[1:] if arguments is None else arguments)
+    if "--ros-args" not in raw_arguments:
+        return raw_arguments
+    from rclpy.utilities import remove_ros_args
+
+    return remove_ros_args(args=["e2e_acceptance", *raw_arguments])[1:]
+
+
 def main(
     arguments: list[str] | None = None,
     *,
@@ -170,7 +179,7 @@ def main(
     )
     parser.add_argument("--timeout-s", type=_positive_finite, default=10.0)
     parser.add_argument("--emit-workflow-events", action="store_true")
-    options = parser.parse_args(arguments)
+    options = parser.parse_args(_application_arguments(arguments))
     identifiers = (options.workflow_id, options.request_id, options.session_id)
     if any(
         re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value) is None
