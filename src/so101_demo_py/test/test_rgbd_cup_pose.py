@@ -1119,6 +1119,41 @@ def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
         runtime.close()
 
 
+def test_workflow_ready_is_emitted_once_after_the_first_fresh_frame_gate() -> None:
+    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+
+    timeline = []
+
+    class Emitter:
+        component = "perception"
+        last_event = None
+
+        def emit(self, event, *, payload, failure_code=None):
+            timeline.append((event, payload, failure_code))
+            self.last_event = SimpleNamespace(event=event)
+
+    api, _rclpy, _node, _listener = _fake_ros_api()
+    runtime = _create_ros_runtime(
+        RgbdCupPoseOptions(),
+        startup_deadline=11.0,
+        monotonic=lambda: 10.0,
+        ros_api=api,
+        event_emitter=Emitter(),
+    )
+    runtime._processor.process = lambda _aligned: timeline.append("process")
+    aligned = (
+        SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(sec=1, nanosec=2))),
+        object(),
+        object(),
+    )
+
+    runtime._process_aligned(aligned)
+    runtime._process_aligned(aligned)
+    runtime.close()
+
+    assert timeline == [("PERCEPTION_READY", {}, None), "process"]
+
+
 def test_profiled_ros_runtime_records_matched_first_callbacks_and_common_stamp(
     tmp_path: Path,
 ) -> None:

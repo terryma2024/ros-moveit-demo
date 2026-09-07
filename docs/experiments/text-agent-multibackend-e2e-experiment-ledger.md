@@ -7,7 +7,7 @@ success_contract: The new launch exits zero only after a valid workflow event tr
 worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
 branch: codex/text-agent-multibackend-e2e
 base_commit: ef9466c602da710ec89d4ca5c36dd0d7596a83c4
-current_commit: ea850f48c13fea0d32b2c44ec1b755c55038386d
+current_commit: 65ae695bef22d18144065dc4bc81c70b3683544b
 evidence_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
 confirmed_conclusions:
   - The macOS source worktree is clean when inspected with its explicit git-dir and work-tree; ordinary Git status is invalid because repository core.worktree points at the shared checkout. OBSERVED before EXP-001.
@@ -17,8 +17,8 @@ disproven_routes:
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
   - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-004
-next_experiment: EXP-006
+latest_checkpoint: CP-005
+next_experiment: EXP-007
 ```
 
 ## Registered model inputs
@@ -347,4 +347,70 @@ open_risks:
   - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
   - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
 next_command: Commit Task 4, then add the Task 5 perception workflow event tests and run them to RED.
+```
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+prior_experiment: EXP-005
+hypothesis: Color and model perception can emit milestones at real readiness, selection, evidence, and publication boundaries without changing disabled-mode behavior.
+prediction: New tests first fail for missing emitter interfaces, paired CLI arguments, and Docker buffering, then the selected perception and legacy launch suites pass.
+single_variable: Add the perception component's workflow-event integration to the existing color and model-backed processes.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No ROS graph, MuJoCo process, Docker container, or model is started; detection, localization, publishers, and ROS boundaries use injected fakes.
+  - PYTHONPATH resolves so101_demo through the isolated worktree package mapping established by EXP-002.
+  - Task 4 is committed at 65ae695bef22d18144065dc4bc81c70b3683544b.
+success_criteria:
+  - Color emits READY only after a fresh aligned frame passes its gate and emits PUBLISHED exactly once after evidence and the first successful pose publication.
+  - Model perception emits READY after output discovery and TF gates, SELECTED after unique TargetSelector success, and PUBLISHED after confirmed pose publication and final evidence.
+  - Zero or multiple targets, TF, depth, model, evidence, output, and cleanup failures use the fixed PERCEPTION_FAILED vocabulary and never falsely publish.
+  - Event arguments are paired and safe, enabled status goes to stderr, and Docker uses the same workflow with unbuffered Python output.
+failure_criteria:
+  - Any event precedes its real gate, a failed request publishes a pose, a second color frame advances the workflow, or legacy launch/CLI contracts regress.
+invalid_criteria:
+  - No tests collect, so101_demo resolves outside the isolated worktree mapping, or ROS logging writes outside the registered evidence root.
+provenance:
+  source_commit: 65ae695bef22d18144065dc4bc81c70b3683544b
+  install_overlay: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used-injected-tests
+  gz_partition: not-used-injected-tests
+commands:
+  - command: PYTHONPATH=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/pythonpath PYTHONNOUSERSITE=1 ROS_HOME=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-home ROS_LOG_DIR=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/ros-logs /Users/matianyi/ros2_jazzy/.venv/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_perception_workflow_events.py src/so101_demo_py/test/test_rgbd_cup_pose.py src/so101_demo_py/test/test_rgbd_object_pose.py src/so101_demo_py/test/test_perception_pick_place_launch.py src/so101_demo_py/test/test_text_pick_agent_launch.py src/so101_demo_py/test/test_workflow_events.py -q --junitxml=/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-006/pytest-perception-events.xml
+    exit_code: 0
+observed:
+  - OBSERVED 2026-09-08: initial RED tests failed because FirstValidEvidencePublisher and detect_once rejected event_emitter, both CLIs rejected the new arguments as unknown, and Docker omitted PYTHONUNBUFFERED.
+  - OBSERVED 2026-09-08: the first combined RED also attempted ROS logging without the registered ROS_HOME and was INVALID for that one launch assertion; all later runs set both ROS_HOME and ROS_LOG_DIR inside the task root.
+  - OBSERVED 2026-09-08: a GREEN test was initially inserted before the prior profiling test's remaining assertions; moving those assertions back to their original test removed the test-only failure.
+  - OBSERVED 2026-09-08: the final selected run collected and passed 344 tests in 3.47 seconds and wrote JUnit evidence with zero failures, errors, or skips.
+  - OBSERVED 2026-09-08: Python byte compilation and git diff --check passed.
+inferred:
+  - Both perception families now expose the strict event stream while retaining the old process outputs and launch composition when workflow events are disabled.
+conclusion: VALID; Task 5 perception readiness, selection, publication, fixed failure, CLI routing, and Docker forwarding are ready for the independent acceptance validator.
+evidence:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-006
+decision: KEEP
+next_experiment: EXP-007
+```
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-006
+current_hypothesis: A pure acceptance policy plus a read-only ROS adapter can reject incomplete, stale, cross-identity, physically invalid, or Planning Scene-invalid evidence before orchestration is added.
+working_tree_status: Task 5 changes are limited to perception application callbacks, two CLIs, two ROS nodes, Docker environment construction, focused tests, plan progress, and this ledger.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - Color emits one workflow publication milestone while retaining later diagnostic topic publication.
+  - Model selection and evidence failures cannot produce a CUP_POSE_PUBLISHED event.
+  - Enabled event transport uses stdout with wall-clock timestamps while ordinary process status moves to stderr.
+  - EXP-006 established a 344-test perception and legacy launch regression pass from the isolated worktree source.
+disproven_routes:
+  - Emitting model readiness before subscriber and TF discovery complete.
+  - Treating a successful topic publish as sufficient before the final result evidence is rewritten.
+open_risks:
+  - The linked worktree has an uninitialized mujoco_ros2_control submodule and must rely on the verified underlay until initialized.
+  - Grounded SAM has no currently registered PickPlace-qualified bundle; Task 9 formal success remains blocked by model qualification.
+next_command: Commit Task 5, then add the Task 6 missing-evidence acceptance test and run it to RED.
 ```

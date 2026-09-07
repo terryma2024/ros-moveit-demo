@@ -661,6 +661,7 @@ def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts
         command.index("--env") : command.index("--env") + 2
     ]
     assert "RMW_IMPLEMENTATION=rmw_fastrtps_cpp" in command
+    assert "PYTHONUNBUFFERED=1" in command
     assert (
         f"type=bind,src={weights},dst=/models/best.pt,readonly" in command
     )
@@ -723,6 +724,48 @@ def test_linux_yolo_profiling_mounts_the_correlated_root_into_the_container(
         "--profiling-session-id",
         "session-123",
     ]
+
+
+def test_yolo_docker_forwards_workflow_and_unbuffered_event_stream(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.perception_launch import (
+        PerceptionLaunchOptions,
+        build_perception_action,
+    )
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights")
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    options = PerceptionLaunchOptions(
+        backend="yolo_seg",
+        startup_timeout_s="15.0",
+        weights_path=weights,
+        weights_sha256="a" * 64,
+        model_root=None,
+        model_manifest_sha256=None,
+        device="cuda",
+        allow_cpu_fallback=False,
+        runtime="docker",
+        container_image="example/yolo:verified",
+        source_root=None,
+        grounded_thresholds=None,
+    )
+
+    action = build_perception_action(
+        options,
+        evidence_root=evidence_root,
+        request_id="req-001",
+        workflow_id="workflow-001",
+    )
+    command = _plain_process_command(action, LaunchContext())
+
+    assert "PYTHONUNBUFFERED=1" in command
+    image_index = command.index("example/yolo:verified")
+    child_command = command[image_index + 1 :]
+    assert child_command[child_command.index("--workflow-id") + 1] == "workflow-001"
+    assert "--emit-workflow-events" in child_command
 
 
 def test_linux_docker_dev_mounts_only_the_explicit_python_source(
