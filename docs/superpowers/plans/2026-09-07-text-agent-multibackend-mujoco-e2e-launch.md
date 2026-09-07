@@ -162,7 +162,7 @@ perception = build_perception_action(
 
 `EventDecoder(workflow_id: str, allowed_components: frozenset[str])` 提供 `feed(chunk: bytes, *, now_ns: int) -> list[WorkflowEvent]` 与 `finish(*, now_ns: int) -> list[WorkflowEvent]`。每个 child 独立实例，内部跟踪该 child 每个 component 的 sequence。`WorkflowState(backend: str)` 提供 `accept(event: WorkflowEvent) -> str | None`，仅返回固定 effect `START_PERCEPTION`、`START_ACCEPTANCE`、`FAIL`、`ACCEPT` 或 `None`；它不创建 ROS action。
 
-- [ ] 写拆包 RED，覆盖 UTF-8 字节中间切分、连续多行、普通日志、末尾半行。测试直接构造九字段 JSON，不依赖未实现测试 fixture：
+- [x] 写拆包 RED，覆盖 UTF-8 字节中间切分、连续多行、普通日志、末尾半行。测试直接构造九字段 JSON，不依赖未实现测试 fixture：
 
 ```python
 import json
@@ -181,7 +181,7 @@ def test_event_can_be_split_at_every_byte():
         assert events[0].event == 'DISPATCH_PREVIEW'
 ```
 
-- [ ] 运行 `test_workflow_events.py` 到预期 RED，之后实现严格 schema 和逐行 parser：
+- [x] 运行 `test_workflow_events.py` 到预期 RED，之后实现严格 schema 和逐行 parser：
 
 ```python
 if line.startswith(b'SO101_EVENT '):
@@ -191,10 +191,10 @@ if line.startswith(b'SO101_EVENT '):
 
 `decode_and_validate(raw: bytes, *, now_ns: int) -> WorkflowEvent` 是 decoder 私有方法，检查字段精确集合、bool 不能冒充 int、schema=1、workflow/component 绑定、sequence、有限值、status/failure 配对。时间要求 `0 <= now_ns - timestamp_ns <= 5_000_000_000`；future timestamp 同样拒绝。EOF 遗留前缀半行必须协议失败；普通尾部日志只记日志。为每条事件固定 payload 字段白名单，未知字段不得透传。
 
-- [ ] payload v1 定义：阶段事件允许 `{}`，关联字段按事件选择：`DISPATCH_PREVIEW` 可含 `request_id/provider/model/fallback`，`RUNTIME_STARTED/READY` 可含 `request_id/session_id/reset_epoch`，`TARGET_SELECTED` 可含 `target_id/class_name`，`CUP_POSE_PUBLISHED` 可含 `source_stamp_ns/frame_id`，`RUNTIME_COMPLETED` 必含 `manifest_path/runtime_exit_code`；验证事件必含 `result_path`。其余字段全部拒绝。标识值与账本/provenance 交叉核对；provider/model 仅作数据，不作状态或 failure code。
-- [ ] 按设计 §7.3 编码完整有向转移：`STACK_READY -> DISPATCH_PREVIEW -> RUNTIME_STARTED -> RUNTIME_READY -> PERCEPTION_READY -> TARGET_SELECTED -> CUP_POSE_PUBLISHED -> RUNTIME_COMPLETED -> E2E_ACCEPTED`。仅颜色后端可跳过 `TARGET_SELECTED`。失败 event 仅在所属活动阶段接受。
-- [ ] 参数化测试每种非法 schema/workflow/component/sequence/timestamp/status/payload、旧 workflow、普通日志伪装状态、跳步和重复 ready。固定 failure code 表合并当前组件已有枚举；未知错误映射固定内部错误，禁止 `str(error)` 直接充当 code。
-- [ ] 运行文件到 GREEN；提交 `feat: add strict workflow event protocol`。
+- [x] payload v1 定义：阶段事件允许 `{}`，关联字段按事件选择：`DISPATCH_PREVIEW` 可含 `request_id/provider/model/fallback`，`RUNTIME_STARTED/READY` 可含 `request_id/session_id/reset_epoch`，`TARGET_SELECTED` 可含 `target_id/class_name`，`CUP_POSE_PUBLISHED` 可含 `source_stamp_ns/frame_id`，`RUNTIME_COMPLETED` 必含 `manifest_path/runtime_exit_code`；验证事件必含 `result_path`。其余字段全部拒绝。标识值与账本/provenance 交叉核对；provider/model 仅作数据，不作状态或 failure code。
+- [x] 按设计 §7.3 编码完整有向转移：`STACK_READY -> DISPATCH_PREVIEW -> RUNTIME_STARTED -> RUNTIME_READY -> PERCEPTION_READY -> TARGET_SELECTED -> CUP_POSE_PUBLISHED -> RUNTIME_COMPLETED -> E2E_ACCEPTED`。仅颜色后端可跳过 `TARGET_SELECTED`。失败 event 仅在所属活动阶段接受。
+- [x] 参数化测试每种非法 schema/workflow/component/sequence/timestamp/status/payload、旧 workflow、普通日志伪装状态、跳步和重复 ready。固定 failure code 表合并当前组件已有枚举；未知错误映射固定内部错误，禁止 `str(error)` 直接充当 code。
+- [x] 运行文件到 GREEN；提交 `feat: add strict workflow event protocol`。
 
 ## Task 4：连接 TextAgent、executor 和 dynamic runtime 的事件
 
