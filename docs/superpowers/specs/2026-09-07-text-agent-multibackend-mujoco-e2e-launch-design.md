@@ -120,6 +120,8 @@ dynamic runtime 仍在 TextAgent 的 executor 边界内运行。它创建 `/cup_
 
 `yolo_seg` 和 `grounded_sam` 必须携带 `--require-output-subscriber`。节点只处理 subscriber ready 和 TF ready 之后的新鲜 RGB-D。0 个杯子返回 `TARGET_NOT_FOUND`，2 个及以上返回 `TARGET_AMBIGUOUS`；这两种情况都不能发布 `/cup_pose`。
 
+感知证据区分输入与发布坐标系。`source_frame_id` 表示 RGB-D 传感器帧；`CUP_POSE_PUBLISHED.payload.frame_id` 表示实际发布的 PoseStamped 坐标系，固定为 `world`。dynamic manifest 的 `input_frame_id` 必须与后者相等，不能再与传感器帧比较。`source_stamp_ns` 继续贯穿 RGB-D、发布事件和 dynamic 输入，以证明执行消费的是同一观测时刻。
+
 ### 4.5 终态证据验证器
 
 `RUNTIME_COMPLETED` 只说明 `run_dynamic_execute()` 返回 0。新入口随后运行一次只读的 E2E 证据验证器，并保持 MuJoCo 与 MoveIt 存活。验证器检查：
@@ -131,6 +133,8 @@ dynamic runtime 仍在 TextAgent 的 executor 边界内运行。它创建 `/cup_
 - 最终有桌面支撑接触，无 fingertip contact；
 - Planning Scene 的 attached 集合为空；
 - `plastic_cup` 已回到 world collision objects，pose 与最终 MuJoCo pose 一致。
+
+MuJoCo 和 Planning Scene 的源时间戳属于不同时间域。`mujoco-final.json` 记录 `clock_domain=mujoco_sim`，`planning-scene-final.json` 记录 `clock_domain=system_wall`；二者的 `source_timestamp_ns` 分别在各自来源内检查为正值，禁止直接相减。采集器还为两份读回记录同一宿主机 `host_monotonic` 域的 `readback_monotonic_ns`。MuJoCo snapshot 必须通过 observer age/session/reset/paused 检查，Planning Scene service 必须在同一个绝对 deadline 内返回；验证器只使用 `readback_monotonic_ns` 执行 `max_readback_skew_ns` 比较。
 
 验证器通过后发出 `E2E_ACCEPTED`。任一事实缺失或矛盾都发出 `E2E_REJECTED`，顶层返回失败。视觉检查和 1 至 2 分钟视频仍是人工验收，不伪装成 launch 内部的自动判断。
 
@@ -384,6 +388,9 @@ ai-station 的正式高频证据放在 `/data/work/so101-evidence/text-agent-e2e
 - 非法前缀事件、重复、乱序、旧 workflow 和阶段跳转都 fail-closed；
 - `RUNTIME_READY` 只能触发一次感知 action；
 - 第一次失败保留为 primary，清理错误进入 secondary。
+- model 和颜色感知的 `CUP_POSE_PUBLISHED.frame_id` 都必须是 `world`；传感器 `source_frame_id` 可以是 `task_camera_frame`；
+- dynamic 输入 frame 只与发布 frame 对齐，传感器 stamp 仍要与 dynamic 输入 stamp 相等；
+- 不同 `clock_domain` 的 source timestamp 禁止比较，只有同为 `host_monotonic` 的 readback timestamp 可以应用 skew 阈值。
 
 ### 11.3 launch contract 测试
 
@@ -422,6 +429,15 @@ ai-station 的正式高频证据放在 `/data/work/so101-evidence/text-agent-e2e
 | ai-station | 同一 `.pt`，`runtime_device=cuda` | 已登记 bundle，实际 CUDA |
 
 每个模型后端在两个平台各完成一次 headless 唯一杯 E2E。正式 1 至 2 分钟视频使用 `yolo_seg`、`headless=false` 和一个 fresh run；视频可在任一已完成运行时 provenance 验证的平台录制。`color_geometry` 的成功只算回归基线。
+
+每个准备声明通过的平台/模型配置还必须完成四个预置点位，各点使用独立 `FULL_RESTART`、workflow、session、ROS domain 和 run root：
+
+1. `task_start`
+2. `cup_test_forward_5cm`
+3. `cup_test_left_5cm`
+4. `cup_test_right_5cm`
+
+四点中的每一点都要满足下面的单次成功条件。任一点 VALID 失败会使该配置的四点批次失败；INVALID 不计入结果，修复污染后用新的身份重跑该点。四点门与原有双平台 × 双模型矩阵同时成立，不能用一个点位的重复成功代替。
 
 单次成功必须同时满足：
 
