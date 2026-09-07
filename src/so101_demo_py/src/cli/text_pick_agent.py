@@ -8,7 +8,9 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
@@ -35,6 +37,7 @@ from ..profiling.wrappers import (
     profile_executor,
     profile_planner,
 )
+from ..runtime.workflow_events import EventEmitter
 
 
 def new_request_id() -> str:
@@ -80,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--profiling-output-root")
     parser.add_argument("--profiling-session-id")
+    parser.add_argument("--emit-workflow-events", action="store_true")
+    parser.add_argument("--workflow-id")
     return parser
 
 
@@ -93,8 +98,12 @@ def _rejection(request_id: str, reason_code: str) -> dict[str, object]:
     }
 
 
-def _write_document(document: dict[str, object]) -> None:
-    print(json.dumps(document, ensure_ascii=False, sort_keys=True), flush=True)
+def _write_document(document: dict[str, object], *, stream=None) -> None:
+    print(
+        json.dumps(document, ensure_ascii=False, sort_keys=True),
+        flush=True,
+        file=stream,
+    )
 
 
 def _valid_execute_context(options) -> tuple[DynamicRuntimeContext | None, str | None]:
@@ -158,6 +167,7 @@ def _persist_execution_provenance(
     confirmation_mode: str,
     *,
     confirmation_validated: bool,
+    planner_metadata=None,
 ) -> None:
     directory = context.evidence_root / "text-agent-provenance"
     directory.mkdir(parents=True, exist_ok=True)
@@ -169,6 +179,14 @@ def _persist_execution_provenance(
         "confirmation_validated": confirmation_validated,
         "execution_provenance": context.execution_provenance.to_dict(),
     }
+    if context.workflow_id is not None:
+        document["workflow_id"] = context.workflow_id
+    if planner_metadata is not None:
+        document["planner"] = {
+            "provider": planner_metadata.provider,
+            "model": planner_metadata.model,
+            "fallback_used": planner_metadata.fallback_used,
+        }
     encoded = (
         json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         + "\n"
@@ -234,6 +252,7 @@ def _compose_agent(
     options,
     context: DynamicRuntimeContext | None,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> TextAgent:
     primary = DeepSeekPlanner(
         os.environ.get("DEEPSEEK_API_KEY", ""),
@@ -256,7 +275,9 @@ def _compose_agent(
         )
     )
     if profiler is None:
-        return TextAgent(planner, executor)
+        if event_emitter is None:
+            return TextAgent(planner, executor)
+        return TextAgent(planner, executor, event_emitter=event_emitter)
     planner = profile_planner(
         planner,
         profiler,
@@ -265,12 +286,10 @@ def _compose_agent(
     )
     executor = profile_executor(executor, profiler)
     dispatcher = profile_dispatcher(TaskDispatcher(), profiler)
-    return TextAgent(
-        planner,
-        executor,
-        dispatcher=dispatcher,
-        profiler=profiler,
-    )
+    arguments = {"dispatcher": dispatcher, "profiler": profiler}
+    if event_emitter is not None:
+        arguments["event_emitter"] = event_emitter
+    return TextAgent(planner, executor, **arguments)
 
 
 def _build_semantic_profiler(
@@ -324,29 +343,62 @@ def _exit_code(status: AgentStatus) -> int:
 def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None) -> int:
     options = build_parser().parse_args(arguments)
     request_id = options.request_id if options.request_id is not None else new_request_id()
+    workflow_enabled = (
+        options.emit_workflow_events
+        and isinstance(options.workflow_id, str)
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", options.workflow_id)
+        is not None
+    )
+    if workflow_enabled != (
+        options.emit_workflow_events or options.workflow_id is not None
+    ):
+        _write_document(
+            _rejection(request_id, "WORKFLOW_EVENT_CONFIGURATION_INVALID")
+        )
+        return 1
+    status_stream = sys.stderr if workflow_enabled else sys.stdout
+
+    def write_document(document: dict[str, object]) -> None:
+        _write_document(document, stream=status_stream)
+
+    text_event_emitter = None
+    runtime_event_emitter = None
+    if workflow_enabled:
+        text_event_emitter = EventEmitter(
+            options.workflow_id,
+            "text_agent",
+            sys.stdout.write,
+            time.time_ns,
+        )
+        runtime_event_emitter = EventEmitter(
+            options.workflow_id,
+            "dynamic_runtime",
+            sys.stdout.write,
+            time.time_ns,
+        )
 
     if options.backend != "mujoco":
-        _write_document(_rejection(request_id, "BACKEND_NOT_QUALIFIED"))
+        write_document(_rejection(request_id, "BACKEND_NOT_QUALIFIED"))
         return 1
     if (options.mode == "execute") != options.execute:
-        _write_document(_rejection(request_id, "PARTIAL_EXECUTE_AUTHORIZATION"))
+        write_document(_rejection(request_id, "PARTIAL_EXECUTE_AUTHORIZATION"))
         return 1
     if options.mode not in {"preview", "execute"}:
-        _write_document(_rejection(request_id, "MODE_INVALID"))
+        write_document(_rejection(request_id, "MODE_INVALID"))
         return 1
     if options.skip_confirmation and options.mode != "execute":
-        _write_document(
+        write_document(
             _rejection(request_id, "CONFIRMATION_BYPASS_REQUIRES_EXECUTE")
         )
         return 1
     if options.skip_confirmation and options.confirmation_digest is not None:
-        _write_document(_rejection(request_id, "CONFIRMATION_MODE_CONFLICT"))
+        write_document(_rejection(request_id, "CONFIRMATION_MODE_CONFLICT"))
         return 1
     if not _valid_cup_pose_timeout(options):
-        _write_document(_rejection(request_id, "CUP_POSE_TIMEOUT_INVALID"))
+        write_document(_rejection(request_id, "CUP_POSE_TIMEOUT_INVALID"))
         return 1
     if not _normalize_provider_options(options):
-        _write_document(_rejection(request_id, "PROVIDER_OPTIONS_INVALID"))
+        write_document(_rejection(request_id, "PROVIDER_OPTIONS_INVALID"))
         return 1
 
     context = None
@@ -355,8 +407,14 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         confirmation_mode = "skipped" if options.skip_confirmation else "digest"
         context, reason_code = _valid_execute_context(options)
         if reason_code is not None:
-            _write_document(_rejection(request_id, reason_code))
+            write_document(_rejection(request_id, reason_code))
             return 1
+        if workflow_enabled:
+            context = replace(
+                context,
+                workflow_id=options.workflow_id,
+                event_emitter=runtime_event_emitter,
+            )
         try:
             _persist_execution_provenance(
                 context,
@@ -365,7 +423,7 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
                 confirmation_validated=False,
             )
         except (OSError, TypeError, ValueError):
-            _write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
+            write_document(_rejection(request_id, "EXECUTION_PROVENANCE_PERSIST_FAILED"))
             return 1
 
     profiler = None
@@ -387,13 +445,18 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
     except (TypeError, ValueError):
         if profiler is not None:
             profiler.close()
-        _write_document(_rejection(request_id, "PROFILING_CONFIGURATION_INVALID"))
+        write_document(_rejection(request_id, "PROFILING_CONFIGURATION_INVALID"))
         return 1
     try:
         agent = (
             _agent
             if _agent is not None
-            else _compose_agent(options, context, profiler=profiler)
+            else _compose_agent(
+                options,
+                context,
+                profiler=profiler,
+                event_emitter=text_event_emitter,
+            )
         )
         request = AgentRequest(
             request_id=request_id,
@@ -410,7 +473,7 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
         try:
             result = agent.handle(request)
         except Exception:
-            _write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
+            write_document(_rejection(request_id, "CLI_AGENT_FAILURE"))
             return 1
         document = result.to_dict()
         provenance_finalize_failed = False
@@ -423,11 +486,12 @@ def main(arguments: list[str] | None = None, *, _agent: TextAgent | None = None)
                         request_id,
                         result.confirmation_mode,
                         confirmation_validated=True,
+                        planner_metadata=result.metadata,
                     )
                 except (OSError, TypeError, ValueError):
                     document["reason_code"] = "EXECUTION_PROVENANCE_FINALIZE_FAILED"
                     provenance_finalize_failed = True
-        _write_document(document)
+        write_document(document)
         if provenance_finalize_failed:
             return 1
         return _exit_code(result.status)

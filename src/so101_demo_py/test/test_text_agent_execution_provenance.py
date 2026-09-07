@@ -10,6 +10,7 @@ import pytest
 from ament_index_python.packages import get_package_prefix
 
 from so101_demo.application.text_agent import AgentResult, AgentStatus
+from so101_demo.ports.task_planner import PlannerMetadata
 
 
 FULL_SHA = re.compile(r"[0-9a-f]{64}")
@@ -170,7 +171,15 @@ class RecordingAgent:
             request_id=request.request_id,
             status=AgentStatus.RUNTIME_COMPLETED,
             reason_code=None,
-            metadata=None,
+            metadata=PlannerMetadata(
+                "deepseek",
+                "deepseek-v4-flash",
+                5,
+                10,
+                4,
+                0,
+                False,
+            ),
             command=None,
             capability="dynamic_cup_pick_place",
             dispatch=True,
@@ -238,6 +247,11 @@ def test_cli_persists_verified_provenance_before_agent_dispatch(tmp_path: Path, 
         "confirmation_mode": "digest",
         "confirmation_validated": True,
         "execution_provenance": request_projection,
+        "planner": {
+            "provider": "deepseek",
+            "model": "deepseek-v4-flash",
+            "fallback_used": False,
+        },
     }
     assert hashlib.sha256(persisted[0].read_bytes()).hexdigest()
     rendered = json.loads(capsys.readouterr().out)

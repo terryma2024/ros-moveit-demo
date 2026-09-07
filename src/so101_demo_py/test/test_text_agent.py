@@ -26,6 +26,7 @@ from so101_demo.ports.task_planner import (
 from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
 from so101_demo.profiling.session import build_profiler
 from so101_demo.profiling.wrappers import profile_executor
+from so101_demo.runtime.workflow_events import EventDecoder, EventEmitter
 
 
 VALID_CANDIDATE = {
@@ -396,6 +397,111 @@ def test_success_dispatches_once_with_exact_runtime_trace() -> None:
             action="pick",
         )
     ]
+
+
+def test_execute_emits_dispatch_preview_before_executor_dispatch() -> None:
+    order: list[tuple[str, object]] = []
+
+    class OrderingExecutor:
+        def dispatch(self, request: DynamicCupPickPlaceRequest) -> RuntimeDispatchResult:
+            order.append(("dispatch", request))
+            return RuntimeDispatchResult(0, "runtime-001")
+
+    planner = StubPlanner(VALID_OUTCOME)
+    emitter = EventEmitter(
+        "w1",
+        "text_agent",
+        lambda line: order.append(("event", line)),
+        lambda: 100,
+    )
+    agent = TextAgent(planner, OrderingExecutor(), event_emitter=emitter)
+
+    result = agent.handle(make_request(mode="execute", execute=True))
+
+    assert result.status is AgentStatus.RUNTIME_COMPLETED
+    assert [kind for kind, _value in order] == ["event", "dispatch"]
+    decoder = EventDecoder("w1", frozenset({"text_agent"}))
+    event = decoder.feed(str(order[0][1]).encode(), now_ns=100)[0]
+    assert event.event == "DISPATCH_PREVIEW"
+    assert event.payload == {
+        "request_id": "req-001",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "fallback": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("planner_value", "request_changes", "expected_event", "expected_code"),
+    [
+        (
+            PlannerProviderError("provider unavailable"),
+            {},
+            "PLANNER_FAILED",
+            "PLANNER_CHAIN_FAILED",
+        ),
+        (
+            {"outcome": "unsupported"},
+            {},
+            "DISPATCH_REJECTED",
+            "PLANNER_OUTCOME_UNSUPPORTED",
+        ),
+        (
+            {"outcome": "ambiguous"},
+            {},
+            "DISPATCH_REJECTED",
+            "PLANNER_OUTCOME_AMBIGUOUS",
+        ),
+        ({"unexpected": "schema"}, {}, "COMMAND_INVALID", "COMMAND_INVALID"),
+        (
+            VALID_OUTCOME,
+            {"mode": "execute", "execute": True, "backend": "gazebo"},
+            "DISPATCH_REJECTED",
+            "BACKEND_NOT_QUALIFIED",
+        ),
+        (
+            VALID_OUTCOME,
+            {"mode": "execute", "execute": False},
+            "DISPATCH_REJECTED",
+            "EXPLICIT_EXECUTE_REQUIRED",
+        ),
+        (
+            VALID_OUTCOME,
+            {
+                "mode": "execute",
+                "execute": True,
+                "confirmation_digest": "sha256:v1:" + "0" * 64,
+            },
+            "DISPATCH_REJECTED",
+            "CONFIRMATION_DIGEST_MISMATCH",
+        ),
+    ],
+)
+def test_rejected_request_emits_failure_without_dispatch_preview_or_runtime(
+    planner_value: object,
+    request_changes: dict[str, object],
+    expected_event: str,
+    expected_code: str,
+) -> None:
+    lines: list[str] = []
+    executor = FakeExecutor()
+    agent = TextAgent(
+        StubPlanner(planner_value),
+        executor,
+        event_emitter=EventEmitter("w1", "text_agent", lines.append, lambda: 100),
+    )
+
+    result = agent.handle(make_request(**request_changes))
+
+    assert result.reason_code == expected_code
+    assert executor.calls == []
+    decoded = EventDecoder("w1", frozenset({"text_agent"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [(event.event, event.failure_code) for event in decoded] == [
+        (expected_event, expected_code)
+    ]
+    assert all(event.event != "DISPATCH_PREVIEW" for event in decoded)
 
 
 def test_duplicate_request_is_rejected_without_second_dispatch() -> None:

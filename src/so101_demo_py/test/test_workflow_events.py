@@ -10,6 +10,7 @@ from so101_demo.runtime.workflow_events import (
     WorkflowEvent,
     WorkflowProtocolError,
     WorkflowState,
+    normalize_failure_code,
 )
 
 
@@ -345,6 +346,17 @@ def test_emitter_rejects_unowned_events_and_unfixed_failure_codes(
     emitter = EventEmitter("w1", "text_agent", lambda _line: None, lambda: 100)
     with pytest.raises(WorkflowProtocolError, match="EVENT_PROTOCOL_INVALID"):
         emitter.emit(event, payload=payload, failure_code=failure_code)
+
+
+def test_unknown_component_error_maps_to_one_fixed_internal_code() -> None:
+    assert (
+        normalize_failure_code("RUNTIME_FAILED", "MODEL_OUTPUT_SAID_THIS")
+        == "DYNAMIC_RUNTIME_INTERNAL_ERROR"
+    )
+    assert (
+        normalize_failure_code("RUNTIME_FAILED", "DYNAMIC_TARGET_UNREACHABLE")
+        == "DYNAMIC_TARGET_UNREACHABLE"
+    )
 
 
 _COMPONENT_BY_EVENT = {

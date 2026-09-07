@@ -17,6 +17,7 @@ from so101_demo.ports.pick_place_executor import (
     ExecutionProvenance,
     ExecutorDispatchError,
 )
+from so101_demo.runtime.workflow_events import EventDecoder, EventEmitter
 
 
 SOURCE_COMMIT = "e58eee1a2ad94c859a6784bb968ca9702ec4031a"
@@ -92,6 +93,81 @@ def test_context_is_frozen_and_adapter_calls_runner_once_with_only_whitelisted_o
         "expected_reset_epoch": 3,
         "evidence_root": tmp_path,
     }
+
+
+def test_executor_emits_runtime_started_before_the_real_runtime_boundary(
+    tmp_path: Path,
+) -> None:
+    order: list[tuple[str, object]] = []
+    lines: list[str] = []
+
+    def write(line: str) -> None:
+        lines.append(line)
+        order.append(("event", line))
+
+    emitter = EventEmitter("w1", "dynamic_runtime", write, lambda: 100)
+    context = replace(
+        _context(tmp_path), workflow_id="w1", event_emitter=emitter
+    )
+    executor = DynamicCupPickPlaceExecutor(
+        context,
+        runner=lambda options: order.append(("runtime", options)) or 0,
+    )
+
+    result = executor.dispatch(_request())
+
+    assert result.exit_code == 0
+    assert [kind for kind, _value in order] == ["event", "runtime", "event"]
+    events = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in events] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_COMPLETED",
+    ]
+    assert events[0].payload == {
+        "request_id": "req-001",
+        "session_id": "text-agent-session",
+        "reset_epoch": 3,
+    }
+    options = order[1][1]
+    assert options.workflow_id == "w1"
+    assert options.request_id == "req-001"
+
+
+@pytest.mark.parametrize(
+    ("workflow_id", "emitter_workflow_id", "component"),
+    [
+        ("w1", None, None),
+        (None, "w1", "dynamic_runtime"),
+        ("w1", "w2", "dynamic_runtime"),
+        ("w1", "w1", "text_agent"),
+    ],
+)
+def test_executor_rejects_unpaired_or_cross_bound_workflow_emitter(
+    tmp_path: Path,
+    workflow_id: str | None,
+    emitter_workflow_id: str | None,
+    component: str | None,
+) -> None:
+    emitter = (
+        None
+        if emitter_workflow_id is None or component is None
+        else EventEmitter(emitter_workflow_id, component, lambda _line: None, lambda: 100)
+    )
+    calls: list[object] = []
+    context = replace(
+        _context(tmp_path), workflow_id=workflow_id, event_emitter=emitter
+    )
+    executor = DynamicCupPickPlaceExecutor(
+        context, runner=lambda options: calls.append(options) or 0
+    )
+
+    with pytest.raises(ExecutorDispatchError) as captured:
+        executor.dispatch(_request())
+
+    assert captured.value.code == "DYNAMIC_RUNTIME_CONTEXT_INVALID"
+    assert calls == []
 
 
 def test_adapter_forwards_explicit_cup_pose_timeout(tmp_path: Path) -> None:
@@ -355,3 +431,49 @@ def test_default_runtime_receives_context_profiler(
     assert result.exit_code == 0
     assert calls[0][1] is profiler
     assert calls[0][0].session_id == "text-agent-session"
+
+
+def test_default_runtime_owns_terminal_event_without_outer_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lines: list[str] = []
+    emitter = EventEmitter("w1", "dynamic_runtime", lines.append, lambda: 100)
+    runtime_module = ModuleType("so101_demo.ros.dynamic_runtime")
+
+    def run_dynamic_execute(options, *, profiler, event_emitter) -> int:
+        assert profiler is None
+        event_emitter.emit(
+            "RUNTIME_READY",
+            payload={
+                "request_id": options.request_id,
+                "session_id": options.session_id,
+                "reset_epoch": options.expected_reset_epoch,
+            },
+        )
+        event_emitter.emit(
+            "RUNTIME_COMPLETED",
+            payload={
+                "manifest_path": str(options.evidence_root / "dynamic-execute-manifest.json"),
+                "runtime_exit_code": 0,
+            },
+        )
+        return 0
+
+    runtime_module.run_dynamic_execute = run_dynamic_execute  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "so101_demo.ros.dynamic_runtime", runtime_module)
+    context = replace(
+        _context(tmp_path), workflow_id="w1", event_emitter=emitter
+    )
+
+    result = DynamicCupPickPlaceExecutor(context).dispatch(_request())
+
+    assert result.exit_code == 0
+    decoded = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
+        "".join(lines).encode(), now_ns=100
+    )
+    assert [event.event for event in decoded] == [
+        "RUNTIME_STARTED",
+        "RUNTIME_READY",
+        "RUNTIME_COMPLETED",
+    ]
