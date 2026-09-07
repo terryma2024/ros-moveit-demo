@@ -1173,3 +1173,40 @@ deletion_candidates:
 deletion_performed: false
 next_command: Redesign the published-frame and timestamp-domain schema, add a focused startup-order reproduction for EXP-016, then rerun the required fresh acceptance matrix.
 ```
+
+```yaml
+experiment_id: EXP-017
+status: PLANNED
+prior_experiment: EXP-016
+hypothesis: Explicit published-frame evidence plus source-specific clock domains remove EXP-014's two false rejections without changing either legacy launch contract.
+prediction: New tests first reproduce camera/world and simulation/wall mismatches, then pass when publication events report world and final readbacks compare only host-monotonic collection times; both legacy launch contract suites remain byte-for-byte equivalent at their materialized interfaces.
+single_variable: Revise only E2E evidence semantics approved by the user; retain motion policy thresholds, model inputs, launch authorization, and legacy entry surfaces.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Source starts at ae62b686474b845dbaefc87415941f06183a396e with a clean worktree.
+  - EXP-014 retained evidence proves geometry, motion, physical stability, and cleanup; only frame and clock comparisons are targeted.
+  - The registered local evidence root remains /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f.
+  - No ROS graph, MuJoCo process, Docker inference container, or provider tunnel is started during RED/GREEN unit work.
+success_criteria:
+  - Model and color perception emit the actual published world frame while retaining the sensor-source timestamp.
+  - Dynamic input frame validates against world publication semantics; camera source frame remains separately present.
+  - Both final documents carry fixed source clock domains and same-domain host-monotonic readback timestamps; cross-domain source timestamps are never subtracted.
+  - Existing legacy Text Agent and perception launch argument, default, action, process-order, stdout, and exit contracts pass unchanged.
+failure_criteria:
+  - A test passes before the intended production change, any old entry contract changes, source timestamp correlation is weakened, or geometric thresholds change.
+invalid_criteria:
+  - Tests do not collect, resolve outside the isolated worktree mapping, or run without the required ROS/dependency overlay.
+provenance:
+  source_commit: ae62b686474b845dbaefc87415941f06183a396e
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python3
+  ros_domain_id: not-used-test-only
+  evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-017
+commands: []
+observed:
+  - OBSERVED 2026-09-08: user approved the frame/clock-domain redesign and required the four registered cup keyframes to pass acceptance while preserving legacy entry behavior.
+inferred:
+  - Four-point qualification must be added to each platform/model configuration rather than replacing the existing matrix.
+conclusion: pending
+decision: RUN_RED
+next_experiment: EXP-017-RED
+```
