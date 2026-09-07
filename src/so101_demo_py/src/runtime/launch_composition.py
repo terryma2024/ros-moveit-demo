@@ -363,11 +363,20 @@ def perception_pick_place_exit_handlers(
     successful_one_shots: tuple[tuple[str, object], ...],
     exit_status: PerceptionLaunchExitStatus,
     workflow_label: str = "Dynamic perception workflow",
+    perception_start_delay_s: float = 0.0,
 ):
     """Create the shared fail-closed process policy for production and tests."""
 
     def on_scene_exit(event, _context):
         if event.returncode == 0:
+            if perception_start_delay_s > 0.0:
+                return [
+                    workflow,
+                    TimerAction(
+                        period=perception_start_delay_s,
+                        actions=[perception],
+                    ),
+                ]
             return [perception, workflow]
         exit_status.record(event.returncode)
         reason = f"SO-101 Planning Scene setup failed with exit code {event.returncode}"
@@ -449,9 +458,15 @@ def _mujoco_perception_execute_actions(
     perception_source_root: Path | None,
     grounded_thresholds: tuple[str, ...] | None,
     exit_status: PerceptionLaunchExitStatus,
+    profiling_session: LaunchProfilingSession | None = None,
 ):
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     camera_transforms = tuple(camera_static_transform_nodes())
+    profiling_arguments = (
+        list(profiling_session.child_arguments)
+        if profiling_session is not None
+        else []
+    )
     if perception_backend == "color_geometry":
         perception = Node(
             package="so101_demo_py",
@@ -465,6 +480,7 @@ def _mujoco_perception_execute_actions(
                 str(evidence_paths.perception / "cup.ply"),
                 "--evidence-json",
                 str(evidence_paths.perception / "summary.json"),
+                *profiling_arguments,
             ],
             parameters=[{"use_sim_time": True}],
             output="both",
@@ -491,6 +507,8 @@ def _mujoco_perception_execute_actions(
             session_id,
             "--evidence-root",
             str(evidence_paths.perception),
+            "--require-output-subscriber",
+            *profiling_arguments,
         ]
         if perception_allow_cpu_fallback:
             arguments.append("--allow-cpu-fallback")
@@ -502,6 +520,10 @@ def _mujoco_perception_execute_actions(
             container_arguments[
                 container_arguments.index(str(evidence_paths.perception))
             ] = "/evidence"
+            if profiling_session is not None:
+                container_arguments[
+                    container_arguments.index(str(profiling_session.profiling_root))
+                ] = "/profiling"
             device_index = container_arguments.index("--device") + 1
             container_arguments[device_index] = "cuda"
             container_command = [
@@ -549,6 +571,16 @@ def _mujoco_perception_execute_actions(
                     f"type=bind,src={perception_weights},dst=/models/best.pt,readonly",
                     "--mount",
                     f"type=bind,src={evidence_paths.perception},dst=/evidence",
+                    *(
+                        [
+                            "--mount",
+                            "type=bind,"
+                            f"src={profiling_session.profiling_root},"
+                            "dst=/profiling",
+                        ]
+                        if profiling_session is not None
+                        else []
+                    ),
                     perception_container_image,
                     *container_arguments,
                 ]
@@ -607,6 +639,8 @@ def _mujoco_perception_execute_actions(
             session_id,
             "--evidence-root",
             str(evidence_paths.perception),
+            "--require-output-subscriber",
+            *profiling_arguments,
         ]
         if perception_allow_cpu_fallback:
             arguments.append("--allow-cpu-fallback")
@@ -636,6 +670,7 @@ def _mujoco_perception_execute_actions(
             "0",
             "--evidence-root",
             str(evidence_paths.dynamic),
+            *profiling_arguments,
         ],
         output="both",
     )
@@ -658,9 +693,23 @@ def _mujoco_perception_execute_actions(
             for index, node in enumerate(stack.spawners)
         ),
         exit_status=exit_status,
+        perception_start_delay_s=(
+            1.0 if perception_backend in {"yolo_seg", "grounded_sam"} else 0.0
+        ),
+    )
+    profiling_handlers = (
+        profiling_event_handlers(
+            profiling_session,
+            scene_setup=stack.scene_setup,
+            perception=perception,
+            workflow=workflow,
+        )
+        if profiling_session is not None
+        else ()
     )
     return [
         *handlers,
+        *profiling_handlers,
         *camera_transforms,
         *stack.actions,
     ]
@@ -1145,12 +1194,22 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
     run_mode = LaunchConfiguration("run_mode").perform(context)
     execute = LaunchConfiguration("execute").perform(context)
     headless = LaunchConfiguration("headless").perform(context)
+    profiling_mode = LaunchConfiguration("profiling").perform(context)
+    profiling_output_root = LaunchConfiguration("profiling_output_root").perform(context)
+    profiling_require_system_trace = LaunchConfiguration(
+        "profiling_require_system_trace"
+    ).perform(context)
     if run_mode != "execute":
         raise RuntimeError("perception pick-place requires run_mode=execute")
     if execute != "true":
         raise RuntimeError("perception pick-place requires execute:=true")
     if headless not in {"true", "false"}:
         raise RuntimeError("headless must be true or false")
+    validate_launch_profiling_values(
+        mode_value=profiling_mode,
+        output_root_value=profiling_output_root,
+        require_system_trace_value=profiling_require_system_trace,
+    )
 
     initial_keyframe = LaunchConfiguration("mujoco_initial_keyframe").perform(context)
     if initial_keyframe not in MUJOCO_CUP_KEYFRAMES:
@@ -1309,8 +1368,18 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         raise RuntimeError(f"mujoco_scene does not exist: {scene}")
 
     share = Path(get_package_share_directory("so101_demo_py"))
-    evidence_paths = _prepare_perception_evidence_root(evidence_file, session_id)
-    return _mujoco_perception_execute_actions(
+    run_root = _prepare_perception_run_root(evidence_file, session_id)
+    profiling_session = resolve_launch_profiling(
+        mode_value=profiling_mode,
+        output_root_value=profiling_output_root,
+        require_system_trace_value=profiling_require_system_trace,
+        run_root=run_root,
+        session_id=session_id,
+        source_commit=None,
+        installed_prefix=None,
+    )
+    evidence_paths = _prepare_perception_evidence_directories(run_root)
+    application_actions = _mujoco_perception_execute_actions(
         context,
         share,
         session_id,
@@ -1329,7 +1398,11 @@ def _configured_perception_pick_place_actions(context, *, exit_status: Perceptio
         perception_source_root=perception_source_root,
         grounded_thresholds=grounded_thresholds,
         exit_status=exit_status,
+        profiling_session=profiling_session,
     )
+    if profiling_session is None:
+        return application_actions
+    return [*profiling_session.prefix_actions, *application_actions]
 
 
 def _configured_text_pick_agent_actions(context, *, exit_status: PerceptionLaunchExitStatus):
@@ -1537,6 +1610,17 @@ def build_perception_pick_place_launch_description(
             *(
                 DeclareLaunchArgument(name, default_value=default)
                 for name, default in _GROUNDED_SAM_THRESHOLD_DEFAULTS
+            ),
+            DeclareLaunchArgument(
+                "profiling",
+                default_value="off",
+                choices=("off", "summary", "trace"),
+            ),
+            DeclareLaunchArgument("profiling_output_root", default_value=""),
+            DeclareLaunchArgument(
+                "profiling_require_system_trace",
+                default_value="false",
+                choices=("true", "false"),
             ),
             OpaqueFunction(
                 function=_configured_perception_pick_place_actions,
