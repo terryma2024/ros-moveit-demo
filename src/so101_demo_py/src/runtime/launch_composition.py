@@ -2037,11 +2037,10 @@ def _configured_text_pick_agent_e2e_actions(context):
         evidence_root=run_root / "perception",
         request_id=request_id,
         workflow_id=workflow_id,
-        child_arguments=(
-            ("--once",)
-            if perception_options.backend in {"yolo_seg", "grounded_sam"}
-            else ()
-        ),
+        # Keep the one-inference publisher alive until the supervisor tears the
+        # stack down. A one-shot process can exit before a best-effort subscriber
+        # receives the published pose on slower DDS hosts.
+        child_arguments=(),
     )
     container_cleanup_actions: tuple[ExecuteProcess, ...] = ()
     model_provenance = _e2e_model_provenance(perception_options)

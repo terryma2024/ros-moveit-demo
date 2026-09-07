@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -147,6 +148,29 @@ def test_valid_preflight_builds_stack_only_and_exclusive_layout(monkeypatch, tmp
         for action in actions
     )
     assert any(type(action).__name__ == "RegisterEventHandler" for action in actions)
+
+
+def test_model_perception_stays_alive_after_one_inference(monkeypatch, tmp_path):
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights")
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    captured = []
+
+    def build_perception_action(_options, **kwargs):
+        captured.append(kwargs)
+        return ExecuteProcess(cmd=["perception"])
+
+    monkeypatch.setattr(
+        launch_composition, "build_perception_action", build_perception_action
+    )
+    _materialize(
+        monkeypatch,
+        tmp_path,
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=digest,
+    )
+    assert "--once" not in captured[0]["child_arguments"]
 
 
 def _supervisor(tmp_path: Path, backend="yolo_seg"):
