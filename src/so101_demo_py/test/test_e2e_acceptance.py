@@ -520,6 +520,25 @@ variants:
     )
 
 
+def test_policy_document_accepts_colcon_symlink_install(
+    tmp_path, accepted_document
+) -> None:
+    from so101_demo.cli import e2e_acceptance
+
+    _write_cli_inputs(tmp_path, accepted_document)
+    policy_path = tmp_path / "policy" / "mujoco.yaml"
+    source_path = policy_path.with_name("mujoco-source.yaml")
+    policy_path.rename(source_path)
+    policy_path.symlink_to(source_path)
+    dynamic = e2e_acceptance._read_document(
+        tmp_path / "run" / "dynamic" / "dynamic-execute-manifest.json"
+    )
+
+    policy = e2e_acceptance._policy_document(dynamic)
+
+    assert policy["sha256"] == hashlib.sha256(source_path.read_bytes()).hexdigest()
+
+
 def test_acceptance_cli_persists_readback_and_emits_terminal_event(
     tmp_path, accepted_document, capsys
 ) -> None:

@@ -881,3 +881,91 @@ archived_runs: []
 deletion_candidates: []
 next_command: Run the full ordinary macOS package gate, commit the one-boundary fix, transfer the exact commit, run its ai-station NVMe package gate, then preregister and execute EXP-013.
 ```
+
+```yaml
+experiment_id: EXP-013
+status: VALID
+prior_experiment: EXP-012
+hypothesis: The exact validator argument fix lets the independent readback process consume ROS launch arguments and decide the already-qualified Linux YOLO-Seg workflow from fresh MuJoCo and Planning Scene state.
+prediction: The workflow reaches E2E_ACCEPTED after RUNTIME_COMPLETED, writes physical and Planning Scene outcomes, completes cleanup, and exits zero.
+single_variable: Add only commit 1b78c45ce0eb71fb10812343255cdf24da3cf5dd, which strips ROS arguments before e2e_acceptance application parsing; all runtime inputs remain fixed from EXP-012.
+lifecycle: FULL_RESTART
+preconditions:
+  - The exact commit passed 1661 ordinary tests on macOS in 38.70 seconds.
+  - The exact commit passed 1661 ordinary tests on ai-station in 33.39 seconds using /usr/bin/python3 and fresh verified scratch /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T035100Z-b62451d9/tmp.
+  - The preceding scratch /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T034900Z-ff561f4a/tmp is retained as INVALID because colcon ran outside the candidate workspace, selected zero packages, and read stale results.
+  - The fixed YOLO weights, candidate image digest, Ollama provider/model, task scene, execution policy, and explicit authorization are unchanged from EXP-012.
+  - ROS_DOMAIN_ID 220, session text-e2e-linux-yolo-013, and run root /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01 are fresh.
+success_criteria:
+  - The strict event trace reaches E2E_ACCEPTED in order after the complete planner, perception, and runtime sequence.
+  - Independent readback proves a stable final cup in MuJoCo, zero attached plastic_cup, a world plastic_cup, and a Planning Scene pose matching MuJoCo within policy tolerances.
+  - e2e-result.json records machine_accepted true, runtime exit code zero, cleanup complete with no remainder, and the launch exits zero.
+failure_criteria:
+  - Any workflow, final physics, Planning Scene, evidence, cleanup, or launch exit gate fails.
+invalid_criteria:
+  - The exact source, image, model, provider, run identity, or input policy drifts; a prior root is reused; or an unrelated process is altered.
+provenance:
+  source_commit: 1b78c45ce0eb71fb10812343255cdf24da3cf5dd
+  transfer_bundle_sha256: fbad0bccba05d5c51b460fa062fd9902e27dd3d3145b3b836a395bc46661f377
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  yolo_weights: /data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  perception_runtime: docker
+  perception_device: cuda
+  perception_allow_cpu_fallback: false
+  container_image: so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+  container_image_digest: sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7
+  planner_provider: ollama-fallback
+  planner_model: qwen3.5:4b
+  ros_domain_id: 220
+  session_id: text-e2e-linux-yolo-013
+  run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01
+commands:
+  - command: ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py instruction:='Pick the plastic cup. Apply no constraints.' run_mode:=execute execute:=true skip_confirmation:=true headless:=true sensor_rendering:=true session_id:=text-e2e-linux-yolo-013 evidence_file:=<run-root>/e2e-result.json perception_backend:=yolo_seg perception_runtime:=docker perception_device:=cuda perception_allow_cpu_fallback:=false perception_weights:=<registered-best.pt> perception_weights_sha256:=f281d252... perception_container_image:=so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+    exit_code: 1
+observed:
+  - OBSERVED 2026-09-08: exact source, image digest, empty ROS domain, empty workflow-container set, and Ollama model availability passed the scripted preflight before the run root was created.
+  - OBSERVED 2026-09-08: the planner, candidate YOLO CUDA perception, and 19-state dynamic runtime completed again; the validator accepted --ros-args and emitted a schema-valid E2E_REJECTED event instead of exiting in argparse.
+  - OBSERVED 2026-09-08: the validator rejected before creating fresh readback files. Layered offline diagnosis loaded dynamic and perception documents successfully and failed only at _policy_document with `dynamic policy path is invalid`.
+  - OBSERVED 2026-09-08: the recorded policy is a colcon --symlink-install link whose readlink -f target is the exact candidate source policy; the file SHA is dc17d704ea9a333a387896bf36293a876bedc0be7868bc8b1ea800f4ce19d66d.
+  - OBSERVED 2026-09-08: machine_accepted remained false, runtime_exit_code was zero, the final failure was E2E_EVIDENCE_REJECTED, and owned cleanup completed without a remainder.
+  - OBSERVED 2026-09-08: a dedicated red test reproduced the policy-link rejection. Strictly resolving the absolute path to its real regular file before the existing digest and manifest checks made the focused acceptance/launch/process suite pass 45 tests and the full macOS ordinary suite pass 1662 tests in 38.69 seconds.
+inferred:
+  - The validator's no-symlink rule conflicts with the implementation plan's explicit --symlink-install overlay; resolving first retains content and manifest validation while admitting the planned install topology.
+conclusion: VALID failure reproduction; the argument fix worked, and the remaining failure is the validator's incompatible treatment of a hash-bound colcon policy link.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01.console.log
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-preflight.txt
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-013-policy-symlink-fix.xml
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-013-full-macos.xml
+decision: FIX_AND_REPEAT
+next_experiment: EXP-014
+```
+
+```yaml
+checkpoint_id: CP-011
+last_valid_experiment: EXP-013
+current_hypothesis: A validator that resolves the planned colcon policy link before the existing digest and manifest checks can complete independent final readback and acceptance.
+working_tree_status: The policy-link fix, its red-then-green test, EXP-013 outcome, and this checkpoint are uncommitted after a 1662-test macOS pass.
+owned_processes:
+  - local reverse SSH tunnel session 62665 exposing task-owned Ollama localhost to ai-station
+preserved_processes:
+  - ai-station /data/work/microduck_rl/.venv/bin/python3 GPU process
+confirmed_conclusions:
+  - The argv fix is proven live: the validator now parses and emits a terminal workflow event.
+  - Both candidate-image live repetitions completed planner, perception, and all 19 runtime transitions with zero runtime error.
+  - The second validator failure is reproducible from retained evidence without restarting ROS.
+disproven_routes:
+  - Rejecting every policy symlink while also qualifying a --symlink-install deployment.
+open_risks:
+  - Fresh final MuJoCo and Planning Scene readback has still not been recorded by a live accepted run.
+  - Consecutive-run, Mac, Grounded SAM, negative-path, GUI, and learner-evidence gates remain incomplete.
+retained_runs:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-013-linux-yolo-run-01
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T034900Z-ff561f4a
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T035100Z-b62451d9
+next_command: Commit the policy-link fix and EXP-013 record, transfer the exact commit, pass a fresh ai-station NVMe package gate, preregister EXP-014, and run one fresh Linux YOLO E2E.
+```
