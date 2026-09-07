@@ -634,3 +634,107 @@ deletion_candidates:
   - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009/colcon-log
 next_command: Commit the macOS Task 8 tests, then transfer the exact commit to a fresh ai-station worktree and run its NVMe scratch gate.
 ```
+
+```yaml
+experiment_id: EXP-010
+status: VALID
+prior_experiment: EXP-009
+hypothesis: The exact candidate commit can be rebuilt in an isolated ai-station overlay and pass the ordinary package gate with every temporary file rooted on the registered NVMe evidence volume.
+prediction: Candidate package prefixes and Python source provenance resolve to the transferred worktree, the ordinary suite collects 1661 tests, and JUnit reports zero errors or failures.
+single_variable: Move the Task 8 installed-package gate from macOS to ai-station while keeping commit e6057016a0b42644349c3d381d6252261f4566d7 fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - The transferred worktree is /data/work/ws_moveit/.worktrees/text-agent-e2e-e6057016 at exact commit e6057016a0b42644349c3d381d6252261f4566d7 with submodule commit 71bc9346cf93d6227a6678fcacf63f3e18acfcba.
+  - The registered durable evidence root is /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad.
+  - No ROS graph, MuJoCo process, model inference, or Docker container is started by the package gate.
+success_criteria:
+  - so101_demo_py, so101_mujoco_support, mujoco_ros2_control, its messages and plugins, mujoco_3d_lidar, and so101_teleop resolve from the candidate overlay where applicable.
+  - The installed text_pick_agent and e2e_acceptance entry points resolve candidate source and the E2E launch exposes its installed argument contract.
+  - TMPDIR, TMP, and TEMP resolve to a previously nonexistent scratch directory under the registered durable root using the exact test interpreter.
+  - colcon test-result reports 1661 tests, zero errors, zero failures, and zero skips.
+failure_criteria:
+  - A required workspace dependency resolves to /opt/ros/jazzy, source provenance cannot reach the exact Git commit, test collection is zero, or JUnit contains any failure.
+invalid_criteria:
+  - The selected Python cannot import the locked test dependencies, the build reuses an incompatible setuptools installation mode, or the scratch path is outside the registered root.
+provenance:
+  source_commit: e6057016a0b42644349c3d381d6252261f4566d7
+  transfer_bundle_sha256: 23bf79cca3434eded157c49778a8fe350882f32ab30d7d4f9a51e946577f17fc
+  worktree: /data/work/ws_moveit/.worktrees/text-agent-e2e-e6057016
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  runtime_executable: /usr/bin/python3
+  dependency_pythonpath: /usr/lib/python3/dist-packages:/data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages
+  torch: 2.13.0+cu130
+  pillow: 10.2.0
+  rclpy: /opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py
+  gpu: NVIDIA GeForce RTX 5080
+  driver: 595.84
+  inference_image_digest: sha256:fafdb147fab33758b45f8edb39d6ddb231b38ebe59b99dce17f01a0bf35d3a3e
+  ros_domain_id: not-used-package-tests
+  gz_partition: not-used-package-tests
+commands:
+  - command: GIT_LFS_SKIP_SMUDGE=1 git worktree add --detach /data/work/ws_moveit/.worktrees/text-agent-e2e-e6057016 refs/codex-transfer/text-agent-e2e-e6057016
+    exit_code: 0
+  - command: colcon build --packages-select mujoco_3d_lidar mujoco_ros2_control_msgs mujoco_ros2_control_plugins so101_mujoco_support so101_teleop so101_demo_py --symlink-install
+    exit_code: 0_AFTER_DEPENDENCY_RETRY
+  - command: colcon build --packages-select mujoco_ros2_control --symlink-install
+    exit_code: 0
+  - command: PYTHONNOUSERSITE=1 PYTHONPATH=<system-dist:locked-venv:ros:candidate-overlay> /usr/bin/colcon test --packages-select so101_demo_py --pytest-args test
+    exit_code: 0
+  - command: PYTHONNOUSERSITE=1 PYTHONPATH=<system-dist:locked-venv:ros:candidate-overlay> /usr/bin/colcon test-result --test-result-base <registered-root>/build --verbose
+    exit_code: 0
+invalid_attempts:
+  - attempt: dependency-incomplete-build
+    result: so101_demo_py was not started because mujoco_3d_lidar was absent from the fresh install base.
+  - attempt: teleop-incomplete-build
+    result: so101_demo_py was not started because so101_teleop was absent from the fresh install base.
+  - attempt: system-python-without-locked-dependencies
+    scratch: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T032450Z-6a0a7e72/tmp
+    result: zero tests executed; collection stopped because torch was unavailable.
+  - attempt: locked-venv-copy-install
+    scratch: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033050Z-9163c7af/tmp
+    result: 1650 passed and 11 failed because setuptools 84 produced a copied install with unavailable Git source provenance and mujoco_ros2_control still resolved from /opt/ros/jazzy.
+observed:
+  - OBSERVED 2026-09-08: the first worktree checkout failed while Gitee LFS tried to fetch an unrelated dataset without permission; GIT_LFS_SKIP_SMUDGE=1 created the exact detached worktree without changing the candidate files used by this task.
+  - OBSERVED 2026-09-08: system setuptools 68.1.2 preserved editable source identity, while locked-venv setuptools 84.0.0 produced a copied install that correctly failed the execution-source gate.
+  - OBSERVED 2026-09-08: after building mujoco_ros2_control in the same overlay, its package prefix moved from /opt/ros/jazzy to the registered candidate install.
+  - OBSERVED 2026-09-08: the final scratch was /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033920Z-39d0f6c1/tmp, and /usr/bin/python3 resolved tempfile.gettempdir() to that exact path before pytest started.
+  - OBSERVED 2026-09-08: the ordinary suite passed all 1661 tests in 30.97 seconds; the recorded end-to-end test command elapsed 33 seconds and colcon test-result reported zero errors, failures, and skips.
+inferred:
+  - The exact candidate is qualified for Task 8 installed-package behavior on both macOS and ai-station; live perception and MuJoCo acceptance remain separate Task 9 gates.
+conclusion: VALID; Task 8 cross-platform installation, process-boundary, ordinary regression, and ai-station NVMe scratch gates are complete.
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+decision: KEEP
+next_experiment: EXP-011
+```
+
+```yaml
+checkpoint_id: CP-009
+last_valid_experiment: EXP-010
+current_hypothesis: The candidate can now enter Task 9 live YOLO-Seg acceptance without changing source, model, policy, provider, or failure semantics.
+working_tree_status: Task 8 code and tests are committed; only the plan checkbox and this ai-station evidence checkpoint are pending commit.
+owned_processes: NONE
+preserved_processes: ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3; all unknown or unrelated processes.
+confirmed_conclusions:
+  - The exact candidate commit passes 1661 ordinary package tests on both macOS and ai-station.
+  - ai-station package provenance includes candidate mujoco_ros2_control rather than the ROS underlay copy.
+  - The final ai-station test used a verified NVMe scratch and preserved all attempts for audit.
+disproven_routes:
+  - Running the ai-station package gate with /usr/bin/python3 and no locked dependency path.
+  - Using the locked venv setuptools 84 copy install for a runtime that must prove its source Git commit.
+open_risks:
+  - Task 9 live YOLO-Seg has not yet run against this top-level supervisor.
+  - Grounded SAM has no registered PickPlace-qualified bundle, so both formal Grounded SAM matrix cells remain blocked.
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-009
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/build
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/install
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-venv-r1
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T032450Z-6a0a7e72
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033050Z-9163c7af
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/20260908T033920Z-39d0f6c1
+next_command: Commit the Task 8 ai-station checkpoint, then preregister EXP-011 and run one fresh headless Linux YOLO-Seg E2E.
+```
