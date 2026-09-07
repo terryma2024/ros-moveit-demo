@@ -57,6 +57,7 @@ setup(
             "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main",
             "rgbd_cup_pose = so101_demo.cli.rgbd_cup_pose:main",
             "rgbd_object_pose = so101_demo.cli.rgbd_object_pose:main",
+            "e2e_acceptance = so101_demo.cli.e2e_acceptance:main",
             "generate_yolo_seg_dataset = "
             "so101_demo.cli.generate_yolo_seg_dataset:main",
             "prepare_grounding_dino_dataset = "
