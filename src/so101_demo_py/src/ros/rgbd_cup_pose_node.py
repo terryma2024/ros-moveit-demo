@@ -23,6 +23,7 @@ from so101_demo.cli.rgbd_point_cloud import (
 from so101_demo.ros.rgbd_snapshot import write_full_point_cloud, write_rgb_png
 from so101_demo.profiling.session import SemanticProfiler
 from so101_demo.runtime.point_cloud_preview import render_point_cloud_preview
+from so101_demo.runtime.workflow_events import EventEmitter, normalize_failure_code
 
 WORLD_FRAME = "world"
 
@@ -298,6 +299,7 @@ class FirstValidEvidencePublisher:
         write_rgb: Callable[[CupPoseFrame], None] | None = None,
         write_full_ply: Callable[[CupPoseFrame], None] | None = None,
         write_preview: Callable[[CupPoseFrame], None] | None = None,
+        event_emitter: EventEmitter | None = None,
     ) -> None:
         self._write_ply = write_ply
         self._write_json = write_json
@@ -305,6 +307,7 @@ class FirstValidEvidencePublisher:
         self._write_rgb = write_rgb
         self._write_full_ply = write_full_ply
         self._write_preview = write_preview
+        self._event_emitter = event_emitter
         self._evidence_written = False
         self.published_count = 0
 
@@ -321,6 +324,14 @@ class FirstValidEvidencePublisher:
             self._evidence_written = True
         self._publish(frame)
         self.published_count += 1
+        if self.published_count == 1 and self._event_emitter is not None:
+            self._event_emitter.emit(
+                "CUP_POSE_PUBLISHED",
+                payload={
+                    "source_stamp_ns": frame.stamp_ns,
+                    "frame_id": frame.source_frame_id,
+                },
+            )
 
 
 class _Runtime(Protocol):
@@ -653,6 +664,7 @@ def _create_ros_runtime(
     *,
     ros_api: Any | None = None,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> _Runtime:
     if startup_deadline - monotonic() <= 0.0:
         raise TimeoutError("startup deadline expired before ROS runtime construction")
@@ -715,6 +727,7 @@ def _create_ros_runtime(
                 self._fresh_frames = FreshFrameGate()
                 self._subscriptions = subscriptions
                 self._inputs_released = False
+                self._ready_emitted = False
                 self._evidence_publisher = FirstValidEvidencePublisher(
                     write_ply=lambda frame: write_cup_point_cloud(
                         frame.cloud, options.output_ply
@@ -744,6 +757,7 @@ def _create_ros_runtime(
                             options.output_preview,
                         )
                     ),
+                    event_emitter=event_emitter,
                 )
                 self._processor = CupPoseFrameProcessor(
                     estimate=self._estimate_frame,
@@ -929,6 +943,9 @@ def _create_ros_runtime(
                         )
                     )
                     return
+                if not self._ready_emitted and event_emitter is not None:
+                    event_emitter.emit("PERCEPTION_READY", payload={})
+                    self._ready_emitted = True
                 self._processor.process(aligned)
 
             def _on_camera_info(self, message: Any) -> None:
@@ -1020,12 +1037,14 @@ def _run_rgbd_cup_pose(
     monotonic: Callable[[], float] = time.monotonic,
     open3d_preflight: Callable[[float], None] = _require_open3d,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> int:
     """Run until orderly shutdown, failing if startup never publishes a valid frame."""
     deadline = monotonic() + options.startup_timeout_s
     runtime: _Runtime | None = None
     setup_failed = False
     setup_wait_outcome = "error"
+    failure_code: str | None = None
     try:
         remaining_startup_s = deadline - monotonic()
         if remaining_startup_s <= 0.0:
@@ -1039,12 +1058,14 @@ def _run_rgbd_cup_pose(
                 deadline,
                 monotonic,
                 profiler=profiler,
+                event_emitter=event_emitter,
             )
         else:
             runtime = runtime_factory(options, deadline, monotonic)
         if not runtime.first_valid_published and deadline - monotonic() <= 0.0:
             raise TimeoutError("startup deadline expired during ROS runtime construction")
     except TimeoutError as error:
+        failure_code = "RGBD_CUP_POSE_TIMEOUT"
         setup_wait_outcome = "timeout"
         print(
             _status_line(
@@ -1054,6 +1075,7 @@ def _run_rgbd_cup_pose(
         )
         setup_failed = True
     except KeyboardInterrupt:
+        failure_code = "RGBD_CUP_POSE_FATAL"
         setup_wait_outcome = "interrupted"
         print(
             _status_line(
@@ -1065,6 +1087,7 @@ def _run_rgbd_cup_pose(
         )
         setup_failed = True
     except ResourceConstructionError as error:
+        failure_code = "RGBD_CUP_POSE_CLEANUP_FAILED"
         print(
             _status_line(
                 "ERROR",
@@ -1075,6 +1098,7 @@ def _run_rgbd_cup_pose(
         )
         setup_failed = True
     except (OSError, RuntimeError, ValueError) as error:
+        failure_code = "RGBD_CUP_POSE_PREFLIGHT_FAILED"
         print(
             _status_line(
                 "ERROR", failure="RGBD_CUP_POSE_PREFLIGHT_FAILED", message=str(error)
@@ -1097,6 +1121,14 @@ def _run_rgbd_cup_pose(
                     ),
                     flush=True,
                 )
+        if event_emitter is not None:
+            event_emitter.emit(
+                "PERCEPTION_FAILED",
+                payload={},
+                failure_code=normalize_failure_code(
+                    "PERCEPTION_FAILED", failure_code
+                ),
+            )
         return 1
 
     result = 1
@@ -1105,6 +1137,7 @@ def _run_rgbd_cup_pose(
         while runtime.ok():
             now = monotonic()
             if not runtime.first_valid_published and now >= deadline:
+                failure_code = "RGBD_CUP_POSE_TIMEOUT"
                 wait_outcome = "timeout"
                 print(
                     _status_line(
@@ -1128,6 +1161,7 @@ def _run_rgbd_cup_pose(
                 result = 0
             else:
                 wait_outcome = "interrupted"
+                failure_code = "RGBD_CUP_POSE_FATAL"
                 print(
                     _status_line(
                         "ERROR",
@@ -1145,6 +1179,7 @@ def _run_rgbd_cup_pose(
             print(_status_line("STOPPED", reason="SIGINT"), flush=True)
             result = 0
         else:
+            failure_code = "RGBD_CUP_POSE_FATAL"
             print(
                 _status_line(
                     "ERROR",
@@ -1162,6 +1197,7 @@ def _run_rgbd_cup_pose(
             )
             result = 0
         else:
+            failure_code = "RGBD_CUP_POSE_FATAL"
             print(
                 _status_line(
                     "ERROR", failure="RGBD_CUP_POSE_FATAL", message=str(error)
@@ -1170,6 +1206,7 @@ def _run_rgbd_cup_pose(
             )
             result = 1
     except (OSError, TimeoutError, ValueError) as error:
+        failure_code = "RGBD_CUP_POSE_FATAL"
         wait_outcome = "timeout" if isinstance(error, TimeoutError) else "error"
         print(
             _status_line(
@@ -1183,6 +1220,7 @@ def _run_rgbd_cup_pose(
         try:
             runtime.close()
         except BaseException as cleanup_error:
+            failure_code = "RGBD_CUP_POSE_CLEANUP_FAILED"
             print(
                 _status_line(
                     "ERROR",
@@ -1192,6 +1230,19 @@ def _run_rgbd_cup_pose(
                 flush=True,
             )
             result = 1
+    if result != 0 and event_emitter is not None:
+        last_event = event_emitter.last_event
+        if last_event is None or last_event.event not in {
+            "PERCEPTION_FAILED",
+            "CUP_POSE_PUBLISHED",
+        }:
+            event_emitter.emit(
+                "PERCEPTION_FAILED",
+                payload={},
+                failure_code=normalize_failure_code(
+                    "PERCEPTION_FAILED", failure_code
+                ),
+            )
     return result
 
 
@@ -1204,6 +1255,7 @@ def run_rgbd_cup_pose(
     monotonic: Callable[[], float] = time.monotonic,
     open3d_preflight: Callable[[float], None] = _require_open3d,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> int:
     """Run the RGB-D process and optionally record its total lifetime."""
 
@@ -1213,6 +1265,7 @@ def run_rgbd_cup_pose(
             runtime_factory=runtime_factory,
             monotonic=monotonic,
             open3d_preflight=open3d_preflight,
+            event_emitter=event_emitter,
         )
     token = profiler.start_span("perception.total")
     try:
@@ -1222,6 +1275,7 @@ def run_rgbd_cup_pose(
             monotonic=monotonic,
             open3d_preflight=open3d_preflight,
             profiler=profiler,
+            event_emitter=event_emitter,
         )
     except Exception as error:
         profiler.finish_span(

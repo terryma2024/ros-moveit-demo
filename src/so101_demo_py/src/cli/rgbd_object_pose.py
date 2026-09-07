@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 import math
+import re
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -115,12 +118,50 @@ def main(arguments: list[str] | None = None) -> int:
     )
     parser.add_argument("--profiling-output-root", type=_absolute_path)
     parser.add_argument("--profiling-session-id")
+    parser.add_argument("--emit-workflow-events", action="store_true")
+    parser.add_argument("--workflow-id")
     parsed = parser.parse_args(_application_arguments(arguments))
+
+    workflow_enabled = (
+        parsed.emit_workflow_events
+        and isinstance(parsed.workflow_id, str)
+        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", parsed.workflow_id)
+        is not None
+    )
+    if workflow_enabled != (
+        parsed.emit_workflow_events or parsed.workflow_id is not None
+    ):
+        parser.error(
+            "--emit-workflow-events and a safe --workflow-id must be provided together"
+        )
 
     from so101_demo.ros.rgbd_object_pose_node import (
         RgbdObjectPoseOptions,
         run_rgbd_object_pose,
     )
+    from so101_demo.runtime.workflow_events import EventEmitter
+
+    event_emitter = (
+        EventEmitter(
+            parsed.workflow_id,
+            "perception",
+            sys.stdout.write,
+            time.time_ns,
+        )
+        if workflow_enabled
+        else None
+    )
+
+    def run(*, profiler=None) -> int:
+        keyword_arguments = {}
+        if profiler is not None:
+            keyword_arguments["profiler"] = profiler
+        if event_emitter is not None:
+            keyword_arguments["event_emitter"] = event_emitter
+        if event_emitter is None:
+            return run_rgbd_object_pose(options, **keyword_arguments)
+        with redirect_stdout(sys.stderr):
+            return run_rgbd_object_pose(options, **keyword_arguments)
 
     try:
         options = RgbdObjectPoseOptions(
@@ -165,7 +206,7 @@ def main(arguments: list[str] | None = None) -> int:
     except ValueError as error:
         parser.error(str(error))
     if parsed.profiling == "off":
-        return run_rgbd_object_pose(options)
+        return run()
 
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
@@ -185,10 +226,10 @@ def main(arguments: list[str] | None = None) -> int:
             )
         )
     except OSError:
-        return run_rgbd_object_pose(options)
+        return run()
     assert profiler is not None
     try:
-        return run_rgbd_object_pose(options, profiler=profiler)
+        return run(profiler=profiler)
     finally:
         profiler.close()
 

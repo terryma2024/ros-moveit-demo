@@ -433,6 +433,8 @@ def build_perception_action(
         "YOLO_CONFIG_DIR=/opt/ultralytics",
         "--env",
         "TORCH_HOME=/opt/torch-cache",
+        "--env",
+        "PYTHONUNBUFFERED=1",
     ]
     if options.runtime == "docker_dev":
         container_command.extend(

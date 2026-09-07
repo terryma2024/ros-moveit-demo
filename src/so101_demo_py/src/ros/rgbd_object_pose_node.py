@@ -38,6 +38,7 @@ from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamT
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.profiling.session import SemanticProfiler
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
+from so101_demo.runtime.workflow_events import EventEmitter, normalize_failure_code
 from so101_demo.ros.rgbd_cup_pose_node import (
     RgbdSubscriptionMilestones,
     _load_subscription_event_callbacks,
@@ -456,10 +457,30 @@ def _spin_after_success_until_shutdown(rclpy_module: Any, node: Any) -> None:
             raise
 
 
+def _emit_perception_failure(
+    event_emitter: EventEmitter | None,
+    failure_code: object,
+) -> None:
+    if event_emitter is None:
+        return
+    last_event = event_emitter.last_event
+    if last_event is not None and last_event.event in {
+        "PERCEPTION_FAILED",
+        "CUP_POSE_PUBLISHED",
+    }:
+        return
+    event_emitter.emit(
+        "PERCEPTION_FAILED",
+        payload={},
+        failure_code=normalize_failure_code("PERCEPTION_FAILED", failure_code),
+    )
+
+
 def _run_rgbd_object_pose(
     options: RgbdObjectPoseOptions,
     *,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> int:
     try:
         built = build_detector(options.to_detector_factory_options())
@@ -481,6 +502,7 @@ def _run_rgbd_object_pose(
         )
     except (ImportError, ModelSetupError, RuntimeError, ValueError, OSError) as error:
         print(json.dumps({"status": "ERROR", "failure": str(error)}, sort_keys=True))
+        _emit_perception_failure(event_emitter, str(error))
         return 1
 
     import rclpy
@@ -522,6 +544,7 @@ def _run_rgbd_object_pose(
                     sort_keys=True,
                 )
             )
+            _emit_perception_failure(event_emitter, "SIM_CLOCK_UNAVAILABLE")
             return 1
         detections_publisher = node.create_publisher(
             Detection2DArray, options.detections_topic, 10
@@ -545,6 +568,9 @@ def _run_rgbd_object_pose(
                     {"status": "ERROR", "failure": "OUTPUT_SUBSCRIBER_UNAVAILABLE"},
                     sort_keys=True,
                 )
+            )
+            _emit_perception_failure(
+                event_emitter, "OUTPUT_SUBSCRIBER_UNAVAILABLE"
             )
             return 1
         tf_buffer = Buffer()
@@ -574,6 +600,7 @@ def _run_rgbd_object_pose(
                     sort_keys=True,
                 )
             )
+            _emit_perception_failure(event_emitter, "TF_UNAVAILABLE")
             return 1
         buffer = AlignedRgbdBuffer()
         gate = FreshFrameGate(source_watermark_ns)
@@ -649,6 +676,8 @@ def _run_rgbd_object_pose(
                 **event_callbacks(options.depth_topic),
             ),
         ]
+        if event_emitter is not None:
+            event_emitter.emit("PERCEPTION_READY", payload={})
         node.get_logger().info(
             f"status=READY request_id={options.request_id} "
             f"runtime_device={detector.runtime_device}"
@@ -663,6 +692,7 @@ def _run_rgbd_object_pose(
                 profiler.finish_span(wait_token, outcome="timeout")
                 wait_token = None
             print(json.dumps({"status": "ERROR", "failure": "RGBD_TIMEOUT"}, sort_keys=True))
+            _emit_perception_failure(event_emitter, "RGBD_TIMEOUT")
             return 1
         if wait_token is not None:
             profiler.finish_span(wait_token, outcome="available")
@@ -696,6 +726,7 @@ def _run_rgbd_object_pose(
                     sort_keys=True,
                 )
             )
+            _emit_perception_failure(event_emitter, "TF_UNAVAILABLE")
             return 1
 
         def lookup(target: str, source: str, stamp_ns: int) -> Any:
@@ -777,6 +808,7 @@ def _run_rgbd_object_pose(
                 ),
                 detection_publisher=publish_detections,
                 lookup_transform=lookup,
+                event_emitter=event_emitter,
             )
         except Exception as error:
             if estimate_token is not None:
@@ -803,6 +835,7 @@ def _run_rgbd_object_pose(
                 sort_keys=True,
             )
         )
+        _emit_perception_failure(event_emitter, "INFERENCE_FAILED")
         result_code = 1
     finally:
         if wait_token is not None:
@@ -838,6 +871,7 @@ def _run_rgbd_object_pose(
                 cleanup_failed = True
     if cleanup_failed:
         print(json.dumps({"status": "ERROR", "failure": "CLEANUP_FAILED"}, sort_keys=True))
+        _emit_perception_failure(event_emitter, "CLEANUP_FAILED")
         return 1
     return result_code
 
@@ -846,17 +880,22 @@ def run_rgbd_object_pose(
     options: RgbdObjectPoseOptions,
     *,
     profiler: SemanticProfiler | None = None,
+    event_emitter: EventEmitter | None = None,
 ) -> int:
     """Run model-backed RGB-D perception with optional semantic profiling."""
 
     if profiler is None:
-        return _run_rgbd_object_pose(options)
+        return _run_rgbd_object_pose(options, event_emitter=event_emitter)
     token = profiler.start_span(
         "perception.total",
         {"backend": options.backend},
     )
     try:
-        result = _run_rgbd_object_pose(options, profiler=profiler)
+        result = _run_rgbd_object_pose(
+            options,
+            profiler=profiler,
+            event_emitter=event_emitter,
+        )
     except KeyboardInterrupt as error:
         profiler.finish_span(
             token,
