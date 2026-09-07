@@ -36,7 +36,12 @@ from so101_demo.adapters.perception.detector_factory import (
 )
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
+from so101_demo.profiling.session import SemanticProfiler
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
+from so101_demo.ros.rgbd_cup_pose_node import (
+    RgbdSubscriptionMilestones,
+    _load_subscription_event_callbacks,
+)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -87,6 +92,7 @@ class RgbdObjectPoseOptions:
     detections_topic: str = "/perception/detections"
     overlay_topic: str = "/perception/overlay"
     output_topic: str = "/cup_pose"
+    require_output_subscriber: bool = False
 
     def __post_init__(self) -> None:
         if self.backend not in {"yolo_seg", "grounded_sam"}:
@@ -337,16 +343,19 @@ def _output_discovery_watermark(
     now_ns: Callable[[], int],
     spin_once: Callable[[float], None],
     timeout_s: float,
+    require_subscriber: bool = False,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> int | None:
     """Sample the source watermark after optional output discovery has settled."""
 
-    _wait_for_output_subscribers(
+    discovered = _wait_for_output_subscribers(
         publishers,
         spin_once=spin_once,
         timeout_s=timeout_s,
         monotonic=monotonic,
     )
+    if require_subscriber and not discovered:
+        return None
     current_ns = int(now_ns())
     return current_ns if current_ns > 0 else None
 
@@ -433,7 +442,25 @@ def _publish_and_confirm(publisher: Any, message: Any, *, ack_timeout: Any) -> N
         raise RuntimeError("perception output publication was not acknowledged")
 
 
-def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
+def _spin_after_success_until_shutdown(rclpy_module: Any, node: Any) -> None:
+    """Keep published output alive until the launch orchestrator shuts it down."""
+
+    while rclpy_module.ok():
+        try:
+            rclpy_module.spin_once(node, timeout_sec=0.2)
+        except KeyboardInterrupt:
+            return
+        except Exception:
+            if not rclpy_module.ok():
+                return
+            raise
+
+
+def _run_rgbd_object_pose(
+    options: RgbdObjectPoseOptions,
+    *,
+    profiler: SemanticProfiler | None = None,
+) -> int:
     try:
         built = build_detector(options.to_detector_factory_options())
         detector = built.detector
@@ -472,6 +499,8 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
     publishers: list[Any] = []
     result_code = 1
     cleanup_failed = False
+    wait_token = None
+    subscription_milestones: RgbdSubscriptionMilestones | None = None
     if initialized_here:
         rclpy.init()
     try:
@@ -500,18 +529,20 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         overlay_publisher = node.create_publisher(Image, options.overlay_topic, 10)
         pose_publisher = node.create_publisher(PoseStamped, options.output_topic, 10)
         publishers = [detections_publisher, overlay_publisher, pose_publisher]
+        required_output = options.require_output_subscriber
         discovery_watermark_ns = _output_discovery_watermark(
-            tuple(publishers),
+            (pose_publisher,) if required_output else tuple(publishers),
             now_ns=lambda: int(node.get_clock().now().nanoseconds),
             spin_once=lambda timeout_s: rclpy.spin_once(
                 node, timeout_sec=timeout_s
             ),
-            timeout_s=1.0,
+            timeout_s=options.startup_timeout_s if required_output else 1.0,
+            require_subscriber=required_output,
         )
         if discovery_watermark_ns is None:
             print(
                 json.dumps(
-                    {"status": "ERROR", "failure": "SIM_CLOCK_UNAVAILABLE"},
+                    {"status": "ERROR", "failure": "OUTPUT_SUBSCRIBER_UNAVAILABLE"},
                     sort_keys=True,
                 )
             )
@@ -548,41 +579,94 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         gate = FreshFrameGate(source_watermark_ns)
         aligned: tuple[Any, Any, Any] | None = None
 
-        def accept(value: tuple[Any, Any, Any] | None) -> None:
+        def accept(
+            topic: str,
+            message: Any,
+            value: tuple[Any, Any, Any] | None,
+        ) -> None:
             nonlocal aligned
+            if subscription_milestones is not None:
+                subscription_milestones.first_callback(topic, message)
+                if value is not None:
+                    subscription_milestones.common_stamp(message_stamp_ns(value[0]))
             if value is not None:
                 aligned = gate.accept(value) or aligned
+
+        topics = (
+            options.camera_info_topic,
+            options.color_topic,
+            options.depth_topic,
+        )
+        if profiler is not None:
+            subscription_milestones = RgbdSubscriptionMilestones(profiler, topics)
+            event_callbacks_type = _load_subscription_event_callbacks()
+        else:
+            event_callbacks_type = None
+
+        def event_callbacks(topic: str) -> dict[str, Any]:
+            if event_callbacks_type is None or subscription_milestones is None:
+                return {}
+            return {
+                "event_callbacks": event_callbacks_type(
+                    matched=lambda status: subscription_milestones.subscription_matched(
+                        topic, status
+                    )
+                )
+            }
 
         subscriptions = [
             node.create_subscription(
                 CameraInfo,
                 options.camera_info_topic,
-                lambda message: accept(buffer.add_camera_info(message)),
+                lambda message: accept(
+                    options.camera_info_topic,
+                    message,
+                    buffer.add_camera_info(message),
+                ),
                 10,
+                **event_callbacks(options.camera_info_topic),
             ),
             node.create_subscription(
                 Image,
                 options.color_topic,
-                lambda message: accept(buffer.add_color(message)),
+                lambda message: accept(
+                    options.color_topic,
+                    message,
+                    buffer.add_color(message),
+                ),
                 10,
+                **event_callbacks(options.color_topic),
             ),
             node.create_subscription(
                 Image,
                 options.depth_topic,
-                lambda message: accept(buffer.add_depth(message)),
+                lambda message: accept(
+                    options.depth_topic,
+                    message,
+                    buffer.add_depth(message),
+                ),
                 10,
+                **event_callbacks(options.depth_topic),
             ),
         ]
         node.get_logger().info(
             f"status=READY request_id={options.request_id} "
             f"runtime_device={detector.runtime_device}"
         )
+        if profiler is not None:
+            wait_token = profiler.start_span("perception.wait_synchronized_frame")
         deadline = time.monotonic() + options.startup_timeout_s
         while aligned is None and time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.05)
         if aligned is None:
+            if wait_token is not None:
+                profiler.finish_span(wait_token, outcome="timeout")
+                wait_token = None
             print(json.dumps({"status": "ERROR", "failure": "RGBD_TIMEOUT"}, sort_keys=True))
             return 1
+        if wait_token is not None:
+            profiler.finish_span(wait_token, outcome="available")
+            wait_token = None
         camera_info, color_message, depth_message = aligned
         frame = DetectionFrame(
             _decode_rgb(color_message),
@@ -615,15 +699,29 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
             return 1
 
         def lookup(target: str, source: str, stamp_ns: int) -> Any:
+            transform_token = (
+                profiler.start_span("perception.transform_world")
+                if profiler is not None
+                else None
+            )
             try:
-                return tf_buffer.lookup_transform(
+                transform = tf_buffer.lookup_transform(
                     target,
                     source,
                     Time(nanoseconds=stamp_ns),
                     timeout=Duration(seconds=options.tf_timeout_s),
                 )
             except TransformException as error:
+                if transform_token is not None:
+                    profiler.finish_span(
+                        transform_token,
+                        outcome="error",
+                        attributes={"error_class": type(error).__name__},
+                    )
                 raise RuntimeError(str(error)) from error
+            if transform_token is not None:
+                profiler.finish_span(transform_token, outcome="accepted")
+            return transform
 
         def publish_detections(batch: DetectionBatch, overlay: np.ndarray) -> None:
             ack_timeout = Duration(seconds=0.5)
@@ -644,38 +742,60 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
                 ack_timeout=ack_timeout,
             )
 
-        result = detect_once(
-            request=ObjectPoseRequest(
-                request_id=options.request_id,
-                frame=frame,
-                camera_info=camera_info,
-                depth_message=depth_message,
-                query=DetectionQuery(
-                    getattr(detector, "target_class_id", "plastic_cup")
-                ),
-                confidence_threshold=options.confidence_threshold,
-                run_directory=options.evidence_root,
-                cold_start_latency_ms=(
-                    built.cold_start_latency_ms + localization_warm_up_ms
-                ),
-            ),
-            detector=detector,
-            selector=TargetSelector(),
-            localizer=localizer,
-            evidence_writer=evidence_writer,
-            pose_publisher=lambda localized: _publish_and_confirm(
-                pose_publisher,
-                _pose_message(localized, PoseStamped),
-                ack_timeout=Duration(seconds=0.5),
-            ),
-            detection_publisher=publish_detections,
-            lookup_transform=lookup,
+        estimate_token = (
+            profiler.start_span(
+                "perception.estimate_cup_pose",
+                {"backend": options.backend},
+            )
+            if profiler is not None
+            else None
         )
+        try:
+            result = detect_once(
+                request=ObjectPoseRequest(
+                    request_id=options.request_id,
+                    frame=frame,
+                    camera_info=camera_info,
+                    depth_message=depth_message,
+                    query=DetectionQuery(
+                        getattr(detector, "target_class_id", "plastic_cup")
+                    ),
+                    confidence_threshold=options.confidence_threshold,
+                    run_directory=options.evidence_root,
+                    cold_start_latency_ms=(
+                        built.cold_start_latency_ms + localization_warm_up_ms
+                    ),
+                ),
+                detector=detector,
+                selector=TargetSelector(),
+                localizer=localizer,
+                evidence_writer=evidence_writer,
+                pose_publisher=lambda localized: _publish_and_confirm(
+                    pose_publisher,
+                    _pose_message(localized, PoseStamped),
+                    ack_timeout=Duration(seconds=0.5),
+                ),
+                detection_publisher=publish_detections,
+                lookup_transform=lookup,
+            )
+        except Exception as error:
+            if estimate_token is not None:
+                profiler.finish_span(
+                    estimate_token,
+                    outcome="error",
+                    attributes={"error_class": type(error).__name__},
+                )
+            raise
+        if estimate_token is not None:
+            profiler.finish_span(
+                estimate_token,
+                outcome="accepted" if result.status == "OK" else "rejected",
+                attributes={"status": result.status, "backend": options.backend},
+            )
         print(json.dumps(result.to_document(), sort_keys=True))
         result_code = 0 if result.status == "OK" else 1
         if result_code == 0 and not options.once:
-            while rclpy.ok():
-                rclpy.spin_once(node, timeout_sec=0.2)
+            _spin_after_success_until_shutdown(rclpy, node)
     except Exception as error:
         print(
             json.dumps(
@@ -685,6 +805,12 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         )
         result_code = 1
     finally:
+        if wait_token is not None:
+            profiler.finish_span(wait_token, outcome="interrupted")
+        if subscription_milestones is not None:
+            subscription_milestones.finish_pending(
+                "completed" if result_code == 0 else "error"
+            )
         if node is not None:
             for subscription in subscriptions:
                 try:
@@ -714,3 +840,40 @@ def run_rgbd_object_pose(options: RgbdObjectPoseOptions) -> int:
         print(json.dumps({"status": "ERROR", "failure": "CLEANUP_FAILED"}, sort_keys=True))
         return 1
     return result_code
+
+
+def run_rgbd_object_pose(
+    options: RgbdObjectPoseOptions,
+    *,
+    profiler: SemanticProfiler | None = None,
+) -> int:
+    """Run model-backed RGB-D perception with optional semantic profiling."""
+
+    if profiler is None:
+        return _run_rgbd_object_pose(options)
+    token = profiler.start_span(
+        "perception.total",
+        {"backend": options.backend},
+    )
+    try:
+        result = _run_rgbd_object_pose(options, profiler=profiler)
+    except KeyboardInterrupt as error:
+        profiler.finish_span(
+            token,
+            outcome="interrupted",
+            attributes={"error_class": type(error).__name__, "backend": options.backend},
+        )
+        raise
+    except Exception as error:
+        profiler.finish_span(
+            token,
+            outcome="error",
+            attributes={"error_class": type(error).__name__, "backend": options.backend},
+        )
+        raise
+    profiler.finish_span(
+        token,
+        outcome="published" if result == 0 else "error",
+        attributes={"exit_code": result, "backend": options.backend},
+    )
+    return result
