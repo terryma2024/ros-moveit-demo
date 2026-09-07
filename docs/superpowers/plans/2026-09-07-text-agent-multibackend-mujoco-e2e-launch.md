@@ -220,10 +220,10 @@ executor 在真实调用 runtime 前发 `RUNTIME_STARTED`；runtime 在 `cup_pos
 
 **Interfaces:** 两个 perception CLI 支持成对 `--emit-workflow-events/--workflow-id`；两个 ROS run 函数增加可选 `event_emitter: EventEmitter | None = None`。节点内部使用同一个 `perception` emitter，CLI 不再次生成终态。
 
-- [ ] 在新增 `test_perception_workflow_events.py` 用 fake publisher、TF、subscriber gate 记录调用：subscriber 或 TF 未 ready 时既无 `PERCEPTION_READY` 也不处理旧帧；ready 后仅消费新 RGB/Depth/CameraInfo。各 gate 保留当前超时。
-- [ ] RED 断言唯一实例时顺序为 READY、SELECTED、PUBLISHED；0/2+ 杯子各发失败，publisher 调用为零；证据写入失败也不得发布。模型测试使用 fake detector，不装载真实模型，不改变测试 suite 分区。
-- [ ] 在已通过 ready gate 处发 `PERCEPTION_READY`，`TargetSelector` 成功之后发 `TARGET_SELECTED`，现有证据写入和 `_publish_and_confirm` 成功之后发 `CUP_POSE_PUBLISHED`。Depth、TF、模型和证据异常映射现有固定 code。
-- [ ] 颜色节点在 `FirstValidEvidencePublisher` 的首次成功发布边界加一次事件标记，保留后续 topic 发布：
+- [x] 在新增 `test_perception_workflow_events.py` 用 fake publisher、TF、subscriber gate 记录调用：subscriber 或 TF 未 ready 时既无 `PERCEPTION_READY` 也不处理旧帧；ready 后仅消费新 RGB/Depth/CameraInfo。各 gate 保留当前超时。
+- [x] RED 断言唯一实例时顺序为 READY、SELECTED、PUBLISHED；0/2+ 杯子各发失败，publisher 调用为零；证据写入失败也不得发布。模型测试使用 fake detector，不装载真实模型，不改变测试 suite 分区。
+- [x] 在已通过 ready gate 处发 `PERCEPTION_READY`，`TargetSelector` 成功之后发 `TARGET_SELECTED`，现有证据写入和 `_publish_and_confirm` 成功之后发 `CUP_POSE_PUBLISHED`。Depth、TF、模型和证据异常映射现有固定 code。
+- [x] 颜色节点在 `FirstValidEvidencePublisher` 的首次成功发布边界加一次事件标记，保留后续 topic 发布：
 
 ```python
 self._publish(frame)
@@ -234,8 +234,8 @@ if self.published_count == 1 and self._event_emitter is not None:
 
 构造函数增加可选 emitter 并存入 `_event_emitter`；颜色节点在首帧 gate 开放时发一次 `PERCEPTION_READY`，无需伪造 `TARGET_SELECTED`。测试连续两帧 publisher=2、PUBLISHED event=1。
 
-- [ ] Docker 环境转发事件参数、同一 workflow、证据挂载路径并保持 unbuffered stdout；容器里的 `timestamp_ns` 使用宿主共享 wall clock，不能改成仿真时间。
-- [ ] 运行 `test_rgbd_cup_pose.py`、`test_perception_workflow_events.py` 和两个旧 launch 文件的测试到 GREEN，提交 `feat: emit perception readiness and publication events`。
+- [x] Docker 环境转发事件参数、同一 workflow、证据挂载路径并保持 unbuffered stdout；容器里的 `timestamp_ns` 使用宿主共享 wall clock，不能改成仿真时间。
+- [x] 运行 `test_rgbd_cup_pose.py`、`test_perception_workflow_events.py` 和两个旧 launch 文件的测试到 GREEN，提交 `feat: emit perception readiness and publication events`。
 
 ## Task 6：实现独立只读 E2E 验证器
 
