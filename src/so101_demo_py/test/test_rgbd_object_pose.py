@@ -160,6 +160,30 @@ def test_output_discovery_watermark_is_sampled_after_the_wait() -> None:
     assert watermark == 20
 
 
+def test_output_discovery_watermark_fails_closed_without_a_subscriber() -> None:
+    from so101_demo.ros import rgbd_object_pose_node
+
+    monotonic_clock = [0.0]
+
+    class Publisher:
+        def get_subscription_count(self) -> int:
+            return 0
+
+    def spin_once(duration: float) -> None:
+        monotonic_clock[0] += duration
+
+    watermark = rgbd_object_pose_node._output_discovery_watermark(
+        (Publisher(),),
+        now_ns=lambda: 20,
+        spin_once=spin_once,
+        timeout_s=0.1,
+        require_subscriber=True,
+        monotonic=lambda: monotonic_clock[0],
+    )
+
+    assert watermark is None
+
+
 def test_one_shot_waits_for_exact_source_transform_before_request() -> None:
     clock = [0.0]
     calls: list[tuple[str, str, int]] = []
@@ -663,6 +687,224 @@ def test_rgbd_object_pose_cli_constructs_explicit_once_request(
     assert len(calls) == 1
     assert calls[0].device == "mps"
     assert calls[0].once
+
+
+def test_rgbd_object_pose_cli_enabled_profiling_passes_and_closes_profiler(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.cli import rgbd_object_pose
+    from so101_demo.ros import rgbd_object_pose_node
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    digest = hashlib.sha256(b"weights-v1").hexdigest()
+    calls = []
+
+    def run(options, *, profiler) -> int:
+        calls.append((options, profiler))
+        return 0
+
+    monkeypatch.setattr(rgbd_object_pose_node, "run_rgbd_object_pose", run)
+    profiling_root = tmp_path / "profiling"
+
+    assert rgbd_object_pose.main(
+        [
+            "--weights",
+            str(weights),
+            "--weights-sha256",
+            digest,
+            "--request-id",
+            "req-profile",
+            "--evidence-root",
+            str(tmp_path / "evidence"),
+            "--profiling",
+            "trace",
+            "--profiling-output-root",
+            str(profiling_root),
+            "--profiling-session-id",
+            "session-1",
+        ]
+    ) == 0
+
+    assert len(calls) == 1
+    assert calls[0][1].config.process_role == "perception"
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/perception.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    assert events[-1]["event_type"] == "process_close"
+
+
+def test_rgbd_object_pose_cli_rejects_incomplete_profiling_before_runtime(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.cli import rgbd_object_pose
+    from so101_demo.ros import rgbd_object_pose_node
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    calls = []
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "run_rgbd_object_pose",
+        lambda options, **kwargs: calls.append((options, kwargs)) or 0,
+    )
+
+    with pytest.raises(SystemExit) as error:
+        rgbd_object_pose.main(
+            [
+                "--weights",
+                str(weights),
+                "--weights-sha256",
+                hashlib.sha256(b"weights-v1").hexdigest(),
+                "--request-id",
+                "req-profile",
+                "--evidence-root",
+                str(tmp_path / "evidence"),
+                "--profiling",
+                "summary",
+            ]
+        )
+
+    assert error.value.code == 2
+    assert calls == []
+
+
+def test_profiled_object_pose_records_backend_total_span(tmp_path: Path, monkeypatch) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros import rgbd_object_pose_node
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    options = RgbdObjectPoseOptions(
+        weights_path=weights,
+        weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        request_id="req-profile",
+        evidence_root=tmp_path / "evidence",
+    )
+    profiling_root = tmp_path / "profiling"
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=profiling_root,
+            session_id="session-1",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "_run_rgbd_object_pose",
+        lambda _options, **_kwargs: 0,
+    )
+
+    assert rgbd_object_pose_node.run_rgbd_object_pose(options, profiler=profiler) == 0
+    profiler.close()
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/perception.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    total = [
+        event
+        for event in events
+        if event["event_type"] == "span_complete"
+        and event["name"] == "perception.total"
+    ]
+    assert total[-1]["outcome"] == "published"
+    assert total[-1]["attributes"]["backend"] == "yolo_seg"
+
+
+def test_profiled_object_pose_completes_total_span_on_launch_interrupt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
+    from so101_demo.profiling.session import build_profiler
+    from so101_demo.ros import rgbd_object_pose_node
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    options = RgbdObjectPoseOptions(
+        weights_path=weights,
+        weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        request_id="req-interrupted",
+        evidence_root=tmp_path / "evidence",
+    )
+    profiling_root = tmp_path / "profiling"
+    profiler = build_profiler(
+        ProfilingConfig(
+            mode=ProfilingMode.TRACE,
+            output_root=profiling_root,
+            session_id="session-interrupted",
+            process_role="perception",
+        )
+    )
+    assert profiler is not None
+    monkeypatch.setattr(
+        rgbd_object_pose_node,
+        "_run_rgbd_object_pose",
+        lambda _options, **_kwargs: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        rgbd_object_pose_node.run_rgbd_object_pose(options, profiler=profiler)
+    profiler.close()
+
+    events = [
+        json.loads(line)
+        for line in (
+            profiling_root / "processes/perception.events.jsonl"
+        ).read_text().splitlines()
+    ]
+    total = [
+        event
+        for event in events
+        if event["event_type"] == "span_complete"
+        and event["name"] == "perception.total"
+    ]
+    assert total[-1]["outcome"] == "interrupted"
+    assert total[-1]["attributes"] == {
+        "backend": "yolo_seg",
+        "error_class": "KeyboardInterrupt",
+    }
+
+
+def test_post_publish_spin_treats_orchestrated_shutdown_as_success() -> None:
+    from so101_demo.ros import rgbd_object_pose_node
+
+    class ShutdownDuringSpin:
+        stopped = False
+
+        def ok(self) -> bool:
+            return not self.stopped
+
+        def spin_once(self, _node: object, *, timeout_sec: float) -> None:
+            assert timeout_sec == 0.2
+            self.stopped = True
+            raise RuntimeError("context was shut down")
+
+    runtime = ShutdownDuringSpin()
+    rgbd_object_pose_node._spin_after_success_until_shutdown(runtime, object())
+
+
+def test_post_publish_spin_preserves_runtime_failures() -> None:
+    from so101_demo.ros import rgbd_object_pose_node
+
+    class FailedDuringSpin:
+        def ok(self) -> bool:
+            return True
+
+        def spin_once(self, _node: object, *, timeout_sec: float) -> None:
+            raise RuntimeError("executor failed")
+
+    with pytest.raises(RuntimeError, match="executor failed"):
+        rgbd_object_pose_node._spin_after_success_until_shutdown(
+            FailedDuringSpin(), object()
+        )
 
 
 def test_grounded_sam_cli_constructs_backend_specific_options(

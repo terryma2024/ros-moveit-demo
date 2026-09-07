@@ -13,6 +13,7 @@ from launch.actions import (
     ExecuteProcess,
     OpaqueFunction,
     RegisterEventHandler,
+    TimerAction,
 )
 from launch.events import Shutdown as ShutdownEvent
 from launch.events.process import ProcessExited
@@ -74,6 +75,18 @@ def _materialize(*, evidence_file=None, **overrides):
 
 def _nodes(actions) -> list[Node]:
     return [action for action in actions if isinstance(action, Node)]
+
+
+def _eventual_actions(actions) -> list[object]:
+    return [
+        *actions,
+        *(
+            nested
+            for action in actions
+            if isinstance(action, TimerAction)
+            for nested in action.actions
+        ),
+    ]
 
 
 def _node(actions, executable: str) -> Node:
@@ -169,6 +182,9 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
         "sam_mask_quality_threshold",
         "sam_min_mask_pixels",
         "sam_max_mask_area_ratio",
+        "profiling",
+        "profiling_output_root",
+        "profiling_require_system_trace",
     } <= declared.keys()
     assert _default(declared["headless"]) == "false"
     assert _default(declared["mujoco_initial_keyframe"]) == "task_start"
@@ -177,6 +193,9 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
     assert _default(declared["perception_backend"]) == "color_geometry"
     assert _default(declared["perception_runtime"]) == "auto"
     assert _default(declared["perception_source_root"]) == ""
+    assert _default(declared["profiling"]) == "off"
+    assert _default(declared["profiling_output_root"]) == ""
+    assert _default(declared["profiling_require_system_trace"]) == "false"
     assert (
         _default(declared["perception_container_image"])
         == "so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
@@ -208,6 +227,12 @@ def test_public_launch_is_thin_and_declares_the_execute_contract() -> None:
         ({"evidence_file": "/tmp"}, "evidence_file"),
         ({"mujoco_scene": "relative.xml"}, "mujoco_scene"),
         ({"mujoco_scene": "/tmp/task-6-scene-does-not-exist.xml"}, "mujoco_scene"),
+        ({"profiling": "enabled"}, "profiling"),
+        ({"profiling": "trace", "profiling_output_root": "relative"}, "absolute"),
+        (
+            {"profiling": "trace", "profiling_require_system_trace": "yes"},
+            "profiling_require_system_trace",
+        ),
     ),
 )
 def test_invalid_execute_inputs_fail_before_actions_are_materialized(overrides, message) -> None:
@@ -277,6 +302,32 @@ def test_scene_success_starts_only_perception_and_dynamic_workflow_with_exact_ar
     assert "mujoco_cup_pose_bridge" not in all_executables
 
 
+def test_model_backend_starts_after_dynamic_subscription_discovery(
+    tmp_path: Path,
+) -> None:
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_runtime="host",
+        perception_weights=weights,
+        perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+    )
+
+    scene_setup = _node(actions, "scene_setup")
+    started = _dispatch_process_exit(actions, scene_setup, 0, context)
+
+    assert [node.node_executable for node in _nodes(started)] == [
+        "dynamic_cup_pick_place"
+    ]
+    timers = [action for action in started if isinstance(action, TimerAction)]
+    assert len(timers) == 1
+    assert timers[0].period == 1.0
+    assert [node.node_executable for node in _nodes(timers[0].actions)] == [
+        "rgbd_object_pose"
+    ]
+
 def test_perception_launch_caps_simulation_at_realtime_for_fresh_source_stamps(
     tmp_path: Path,
 ) -> None:
@@ -310,11 +361,12 @@ def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
 
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
 
-    assert [node.node_executable for node in _nodes(started)] == [
-        "rgbd_object_pose",
+    eventual = _eventual_actions(started)
+    assert [node.node_executable for node in _nodes(eventual)] == [
         "dynamic_cup_pick_place",
+        "rgbd_object_pose",
     ]
-    perception = _node(started, "rgbd_object_pose")
+    perception = _node(eventual, "rgbd_object_pose")
     assert perception._Node__arguments == [
         "--startup-timeout-s",
         "30.0",
@@ -334,8 +386,63 @@ def test_yolo_backend_starts_one_object_pose_publisher_with_explicit_model_args(
         "session-123",
         "--evidence-root",
         str(tmp_path / "launch-run.d/session-123/perception"),
+        "--require-output-subscriber",
     ]
     assert all(node.node_executable != "rgbd_cup_pose" for node in _nodes(started))
+
+
+@pytest.mark.parametrize("backend", ("color_geometry", "yolo_seg", "grounded_sam"))
+def test_enabled_trace_profiles_perception_and_dynamic_runtime_with_one_session(
+    tmp_path: Path,
+    backend: str,
+) -> None:
+    overrides: dict[str, object] = {
+        "perception_backend": backend,
+        "perception_runtime": "host",
+        "profiling": "trace",
+    }
+    if backend == "yolo_seg":
+        weights = tmp_path / "best.pt"
+        weights.write_bytes(b"weights-v1")
+        overrides.update(
+            perception_weights=weights,
+            perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+            perception_device="mps",
+        )
+    elif backend == "grounded_sam":
+        overrides.update(
+            perception_model_root=_grounded_bundle(tmp_path),
+            perception_model_manifest_sha256="a" * 64,
+            perception_device="mps",
+        )
+
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / f"{backend}.json",
+        **overrides,
+    )
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    perception_executable = "rgbd_cup_pose" if backend == "color_geometry" else "rgbd_object_pose"
+    eventual = _eventual_actions(started)
+    perception = _node(eventual, perception_executable)
+    workflow = _node(eventual, "dynamic_cup_pick_place")
+    profiling_root = tmp_path / f"{backend}.d/session-123/profiling"
+    common = [
+        "--profiling",
+        "trace",
+        "--profiling-output-root",
+        str(profiling_root),
+        "--profiling-session-id",
+        "session-123",
+    ]
+
+    assert perception._Node__arguments[-6:] == common
+    assert workflow._Node__arguments[-6:] == common
+
+    _dispatch_process_exit(actions, workflow, 0, context)
+    _dispatch_process_exit(actions, perception, -15, context)
+    assert (profiling_root / "manifest.json").is_file()
+    assert (profiling_root / "summary.json").is_file()
+    assert (profiling_root / "trace.json").is_file()
 
 
 def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts(
@@ -362,7 +469,7 @@ def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts
     assert [node.node_executable for node in _nodes(started)] == [
         "dynamic_cup_pick_place"
     ]
-    command = _plain_process_command(_plain_process(started), context)
+    command = _plain_process_command(_plain_process(_eventual_actions(started)), context)
     assert command[:13] == [
         "docker",
         "run",
@@ -410,6 +517,39 @@ def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts
         "session-123",
         "--evidence-root",
         "/evidence",
+        "--require-output-subscriber",
+    ]
+
+
+def test_linux_yolo_profiling_mounts_the_correlated_root_into_the_container(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"weights-v1")
+    context, actions, _exit_status = _materialize(
+        evidence_file=tmp_path / "launch-run.json",
+        perception_backend="yolo_seg",
+        perception_weights=weights,
+        perception_weights_sha256=hashlib.sha256(b"weights-v1").hexdigest(),
+        perception_runtime="docker",
+        profiling="summary",
+    )
+
+    started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
+    command = _plain_process_command(_plain_process(_eventual_actions(started)), context)
+    profiling_root = tmp_path / "launch-run.d/session-123/profiling"
+    assert f"type=bind,src={profiling_root},dst=/profiling" in command
+    image_index = command.index(
+        "so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115"
+    )
+    assert command[image_index + 1 :][-6:] == [
+        "--profiling",
+        "summary",
+        "--profiling-output-root",
+        "/profiling",
+        "--profiling-session-id",
+        "session-123",
     ]
 
 
@@ -434,7 +574,7 @@ def test_linux_docker_dev_mounts_only_the_explicit_python_source(
 
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
 
-    command = _plain_process_command(_plain_process(started), context)
+    command = _plain_process_command(_plain_process(_eventual_actions(started)), context)
     assert "PYTHONPATH=/workspace/so101-source" in command
     assert (
         f"type=bind,src={source_root},"
@@ -481,9 +621,9 @@ def test_macos_auto_yolo_backend_keeps_host_process_and_resolves_mps(
 
     assert [
         action.node_executable
-        for action in _nodes(started)
-    ] == ["rgbd_object_pose", "dynamic_cup_pick_place"]
-    perception = _node(started, "rgbd_object_pose")
+        for action in _nodes(_eventual_actions(started))
+    ] == ["dynamic_cup_pick_place", "rgbd_object_pose"]
+    perception = _node(_eventual_actions(started), "rgbd_object_pose")
     device_index = perception._Node__arguments.index("--device") + 1
     assert perception._Node__arguments[device_index] == "mps"
     assert not [
@@ -527,11 +667,12 @@ def test_grounded_sam_backend_starts_the_object_pose_cli_with_default_thresholds
 
     started = _dispatch_process_exit(actions, _node(actions, "scene_setup"), 0, context)
 
-    assert [node.node_executable for node in _nodes(started)] == [
-        "rgbd_object_pose",
+    eventual = _eventual_actions(started)
+    assert [node.node_executable for node in _nodes(eventual)] == [
         "dynamic_cup_pick_place",
+        "rgbd_object_pose",
     ]
-    perception = _node(started, "rgbd_object_pose")
+    perception = _node(eventual, "rgbd_object_pose")
     assert perception._Node__arguments == [
         "--startup-timeout-s",
         "30.0",
@@ -567,6 +708,7 @@ def test_grounded_sam_backend_starts_the_object_pose_cli_with_default_thresholds
         "session-123",
         "--evidence-root",
         str(tmp_path / "launch-run.d/session-123/perception"),
+        "--require-output-subscriber",
     ]
     assert "--allow-cpu-fallback" not in perception._Node__arguments
 
