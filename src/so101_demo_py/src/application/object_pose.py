@@ -18,6 +18,7 @@ from so101_demo.core.detection import (
     DetectionQuery,
     LocalizedObject,
 )
+from so101_demo.runtime.workflow_events import EventEmitter, normalize_failure_code
 
 
 class TargetSelectionError(ValueError):
@@ -478,6 +479,7 @@ def detect_once(
     pose_publisher: Callable[[LocalizedObject], None],
     lookup_transform: Callable[[str, str, int], Any],
     detection_publisher: Callable[[DetectionBatch, np.ndarray], None] | None = None,
+    event_emitter: EventEmitter | None = None,
     monotonic_ns: Callable[[], int] = time.monotonic_ns,
 ) -> ObjectPoseResult:
     start_ns = monotonic_ns()
@@ -506,9 +508,20 @@ def detect_once(
             result_path = evidence_writer.write_result(request, result)
         except (OSError, ValueError):
             if failure == "EVIDENCE_WRITE_FAILED":
-                return result
-            return replace(result, failure="EVIDENCE_WRITE_FAILED")
-        return replace(result, artifact_paths=(*artifacts, result_path))
+                completed = result
+            else:
+                completed = replace(result, failure="EVIDENCE_WRITE_FAILED")
+        else:
+            completed = replace(result, artifact_paths=(*artifacts, result_path))
+        if event_emitter is not None:
+            event_emitter.emit(
+                "PERCEPTION_FAILED",
+                payload={},
+                failure_code=normalize_failure_code(
+                    "PERCEPTION_FAILED", completed.failure
+                ),
+            )
+        return completed
 
     try:
         batch = detector.detect(request.frame, request.query)
@@ -541,6 +554,14 @@ def detect_once(
         )
     except TargetSelectionError as error:
         return finish(error.code)
+    if event_emitter is not None:
+        event_emitter.emit(
+            "TARGET_SELECTED",
+            payload={
+                "target_id": selected.instance_id,
+                "class_name": selected.class_id,
+            },
+        )
     try:
         selected_path = evidence_writer.write_selected(request, selected)
     except (OSError, ValueError):
@@ -589,5 +610,20 @@ def detect_once(
     try:
         evidence_writer.write_result(request, completed)
     except (OSError, ValueError):
-        return replace(completed, status="ERROR", failure="EVIDENCE_WRITE_FAILED")
+        failed = replace(completed, status="ERROR", failure="EVIDENCE_WRITE_FAILED")
+        if event_emitter is not None:
+            event_emitter.emit(
+                "PERCEPTION_FAILED",
+                payload={},
+                failure_code="EVIDENCE_WRITE_FAILED",
+            )
+        return failed
+    if event_emitter is not None:
+        event_emitter.emit(
+            "CUP_POSE_PUBLISHED",
+            payload={
+                "source_stamp_ns": request.frame.source_stamp_ns,
+                "frame_id": request.frame.source_frame_id,
+            },
+        )
     return completed
