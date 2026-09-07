@@ -22,7 +22,7 @@ MuJoCo RGB
   -> MoveIt -> controller -> MuJoCo
 ```
 
-本文沿用 [`so101-rgbd-perception-pick-place-source-guide.md`](so101-rgbd-perception-pick-place-source-guide.md) 的讲解方式。原导读从颜色和点云聚类讲起；[`so101-yolo-seg-rgbd-perception-pick-place-source-guide.md`](so101-yolo-seg-rgbd-perception-pick-place-source-guide.md) 进一步介绍了合成数据、YOLO-Seg 微调和本地权重部署。这里换一条路线：不先训练项目专用分类器，而是让 Grounding DINO 理解受控文本，再用 SAM 2.1 从框中切出实例。
+本文沿用 [`so101-rgbd-perception-pick-place-source-guide.md`](so101-rgbd-perception-pick-place-source-guide.md) 的讲解方式。原导读从颜色和点云聚类讲起；[`so101-yolo-seg-rgbd-perception-pick-place-source-guide.md`](so101-yolo-seg-rgbd-perception-pick-place-source-guide.md) 进一步介绍了合成数据、YOLO-Seg 微调和本地权重部署。这里换一条路线：先用 Grounding DINO 的开放词汇能力建立基线，再根据失败样本微调 DINO，并只训练 SAM 2.1 的 mask decoder。运行时仍然是 DINO 找框、SAM 按框切实例。
 
 `/cup_pose` 之后的动态目标、5-DoF IK、MoveIt 规划和抓放状态机，可配合 [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md) 阅读。
 
@@ -349,12 +349,14 @@ ROS executable
 
 ## 15. 不可变双模型包解决什么问题
 
-模型来源固定为：
+基础模型来源固定为：
 
 | 角色 | model ID | revision |
 |---|---|---|
 | detector | `IDEA-Research/grounding-dino-tiny` | `a2bb814dd30d776dcf7e30523b00659f4f141c71` |
 | segmenter | `facebook/sam2.1-hiera-tiny` | `de431c4043854a71d8101e17995dfe596bf101a5` |
+
+生产 bundle 不是这两个官方 snapshot 的原样拼接。detector 使用项目微调后的 epoch 1，segmenter 使用 decoder-only 微调后的 epoch 4；官方 ID 和 revision 用来证明各自从哪里开始训练。最终 bundle manifest SHA-256 是 `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05`。
 
 prepare CLI 下载这两个 revision，把普通文件复制到一个新目录，并生成 canonical `manifest.json`。manifest 记录：
 
@@ -415,7 +417,25 @@ MODEL_MANIFEST_SHA256="$(python3 -c 'import json,sys; print(json.load(open(sys.a
 printf '%s\n' "$MODEL_MANIFEST_SHA256"
 ```
 
-本任务的 Task 10 才会执行真实下载、构建和双平台 smoke。代码和包级测试通过，不代表模型包已经构建。
+当前已经有一份冻结生产包，不必再次从官方仓库拼装。它发布在私有 Hugging Face 仓库 [zjumty/so101-grounded-sam-cup-pickplace](https://huggingface.co/zjumty/so101-grounded-sam-cup-pickplace)，固定 revision 为：
+
+```text
+52b8334358e5ff11f94f10f7c14b1697ef44d964
+```
+
+有访问权限的机器可以下载到新目录：
+
+```bash
+hf download zjumty/so101-grounded-sam-cup-pickplace \
+  --repo-type model \
+  --revision 52b8334358e5ff11f94f10f7c14b1697ef44d964 \
+  --local-dir /absolute/new/path/so101-grounded-sam-cup-pickplace
+
+cd /absolute/new/path/so101-grounded-sam-cup-pickplace
+sha256sum -c SHA256SUMS
+```
+
+运行时的模型根目录是下载结果里的 `bundle/`，manifest digest 仍使用上面的 `b55bb601...`。`threshold-lock.json` 要和它一起读回，不能自行换阈值。
 
 ## 18. 如何离线复制并复核 bundle
 
@@ -643,9 +663,9 @@ unique-cup world position error < 0.01 m
 
 truth mask、MuJoCo object ID 和 truth pose 只用于验收计算，不能送进 detector 或 `TargetSelector`。
 
-## 27. 连续 5/5 抓放怎样计数
+## 27. 四个预置点抓放怎样计数
 
-Mac 和 Linux 分开统计，每次使用 `FULL_RESTART`。五次必须固定：
+Mac 和 Linux 分开统计，四个预置点分别是 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm` 和 `cup_test_right_5cm`。每个点位都使用 `FULL_RESTART`，并固定：
 
 - source commit；
 - bundle manifest SHA；
@@ -653,35 +673,59 @@ Mac 和 Linux 分开统计，每次使用 `FULL_RESTART`。五次必须固定：
 - device；
 - 场景和成功契约。
 
-一次有效失败会中断连续序列。环境污染导致的 `INVALID` 运行不算产品失败，但当前批次也要停止，修复后换新 experiment ID 重开五次。
+一次有效失败会终止当前四点批次。环境污染导致的 `INVALID` 运行不算产品失败，但也不能原目录续跑；修复后要换新 experiment ID 和 evidence root。
 
 每次成功不能只看 `DONE`。还要有 controller/joint/TF 变化、Gazebo 杯子 pose/contact、MoveIt attached/world scene 收敛，以及动作后的新截图。
 
-截至本文对应的 Task 9，真实模型下载、MPS/CUDA 推理、四场景质量矩阵和两个平台的连续 5/5 仍未执行。它们属于后续 Task 10/11，不能由 fake-backed 单元测试代替。
+截至 2026-09-07，ai-station Linux CUDA 已完成四点 `4/4`。四次 `/cup_pose` 误差为 `0.000453..0.001918 m`，最终落点 XY 误差为 `0.001194..0.003473 m`，且都有物理抬升、位移、稳定桌面释放和新鲜截图。当前本机 macOS 与 `ssh mac-mini` 尚未完成同样的四点验收，不能从 Linux 结果直接推断它们已经通过。
 
-## 28. 为什么 V1 不需要 YOLO 式微调和合成数据
+## 28. 为什么后来仍然需要合成数据和微调
 
-Grounded SAM V1 是开放词汇零样本基线。代码直接使用固定 revision 的预训练 Grounding DINO Tiny 和 SAM 2.1 Hiera Tiny，没有训练 loop、dataset YAML 或项目专用 checkpoint。因此，运行本版本不需要先生成 MuJoCo 合成训练集。
+Grounded SAM V1 确实从开放词汇零样本基线开始，但基线在当前相机视角、杯子大小和遮挡条件下不够稳定。后续训练没有把两套模型一起全部解冻，而是分成两步：
 
-这不表示数据永远没用。四场景 RGB、truth mask、候选和误差证据仍要保存，用来回答两个问题：
+1. 微调 Grounding DINO Tiny，让 `cup.` 在当前 MuJoCo 工作区里给出稳定的杯子框；
+2. 冻结 SAM 的 image encoder、prompt encoder 和 memory 相关参数，只训练 mask decoder，让 box prompt 对应的可见杯子 mask 更贴近 categorical truth。
 
-1. 零样本模型在当前相机、材质和遮挡下是否够用；
-2. 若不够用，失败集中在检测、文字匹配还是 mask 边界。
+### 28.1 数据从哪里来
 
-如果零样本质量或延迟达不到门槛，再决定走哪条路：调整受控 prompt/阈值、换模型，或回到 YOLO-Seg 微调。合成数据、object-ID 标签、数据集打包和 YOLO 微调流程见 [`SO-101 YOLO-Seg RGB-D 多实例感知 PickPlace 教学与源码导读`](so101-yolo-seg-rgbd-perception-pick-place-source-guide.md)。不要在没有失败分布的情况下先做一轮大规模微调。
+训练数据仍由 MuJoCo 生成，但不把 object ID 当作生产输入。object ID 只在离线生成阶段转成 categorical visible mask、bbox 和 RLE truth。DINO 使用 `yolo-seg-nonpenetrating-train-val-v1` 的 1200 张 train 和 300 张 val；SAM decoder 使用 `yolo-seg-small-occlusion-r4-train-val-lossless` 的对应 train/val。两套转换后的 inventory 分别把类别规范为 `cup`，prompt 固定为 `cup.`。
+
+数据按六种场景平衡：无杯、一个杯子加干扰、两个杯子、杯子贴近瓶子、小而远的杯子、部分遮挡杯。训练和 val 使用互不重叠的 seed。四个 PickPlace 预置点、sealed test 和 COCO100 都不进入训练包，也不能用于选 epoch 或调阈值。
+
+HF 仓库里的 `datasets/so101-v5-t005-grounded-sam-training-data-r777.tar.gz` 收纳了两次训练真正依赖的源数据和转换 inventory，没有把 9000 多个小文件逐个上传。归档 SHA-256 是 `c4b9624e9f68a96087f58ff961c67bfa10ceb28f4ea821e501e9fd16a0e00dbe`。
+
+### 28.2 Grounding DINO 怎样训练
+
+正式训练从已经验证过的 DINO checkpoint warm-start，使用 1200 张 train、300 张 val、batch size 1、gradient accumulation 4、学习率 `1e-5`，共跑 4 个 epoch。训练前先用 6 train + 6 val 做 CUDA smoke，确认前向、反向、保存和重新加载都正常。
+
+每个 epoch 都在固定 synthetic val 上比较 box 指标，排序规则先看 F1、Recall、small-target Recall 和 multi-cup Recall，再在完全并列时选更早的 epoch。四个 epoch 的 F1 都达到 `1.0`，因此选 epoch 1，而不是默认拿最后一个 checkpoint。选中的 DINO 权重 SHA-256 是 `bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b`。
+
+训练入口由 [`train_grounding_dino.py`](../../src/so101_demo_py/src/cli/train_grounding_dino.py) 负责 CLI 与配置读取，训练循环和 checkpoint 完整性检查位于 `src/so101_demo_py/src/training/`。容器入口 [`grounding-dino-training-container.sh`](../../scripts/grounding-dino-training-container.sh) 把数据、基础模型和输出目录分开挂载，并在 CUDA 不可用或发生 CPU fallback 时失败退出。
+
+### 28.3 SAM 2.1 为什么只训练 decoder
+
+SAM 的大部分参数负责通用图像特征和 prompt 编码，当前数据量不足以安全地把整套网络都重新训练。decoder-only 方案只允许 `mask_decoder.*` 参数更新，其余参数逐项冻结。loss 由 BCE、soft Dice 和 predicted-quality 对真实 mask IoU 的回归项组成；logits 会还原到原图尺寸后再和可见 mask 比较。
+
+固定 recipe 跑 5 个 epoch，val 只在训练结束后统一比较。primary near-workspace F1 从原始 SAM replay 的 `0.2098` 提升到 epoch 4 的 `0.8640`，epoch 5 反而回落到 `0.8553`，所以冻结 epoch 4。选中权重 SHA-256 是 `0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893`。这也说明不能凭“epoch 越大越好”来选模型。
+
+### 28.4 联合评测与泛化边界
+
+把 DINO epoch 1 与 SAM decoder epoch 4 组合后，又在新的 nonpenetrating val 上完整执行一次 production pipeline。300 张图的 DINO box 和 SAM mask F1 都是 `1.0`，最低 mask IoU 为 `0.9258`，0/1/2+ 选择结果分别是 50 个 `TARGET_NOT_FOUND`、200 个唯一目标和 50 个 `TARGET_AMBIGUOUS`。
+
+不过，历史 COCO100 诊断中，这个冻结模型的 Recall 和 F1 都是 `0.0`。它说明模型对 web 图片的域保持很差，不能宣传成通用杯子检测器。项目后来按用户决策移除了 COCO100 晋级门，只把模型用于近工作区 MuJoCo 抓取；这个决定没有抹掉泛化风险。
 
 ## 29. Grounded SAM 与 YOLO-Seg 怎么选
 
-| 维度 | Grounded SAM V1 | YOLO-Seg |
+| 维度 | 当前 Grounded SAM | YOLO-Seg |
 |---|---|---|
-| 类别来源 | 受控文本 + 预训练开放词汇 | 项目训练数据中的固定类别 |
-| 首次准备 | 下载两个固定 snapshot | 合成/采集、标注、训练和权重验收 |
+| 类别来源 | 受控文本 + 项目微调 | 项目训练数据中的固定类别 |
+| 首次准备 | 两个基础 snapshot、DINO 微调、SAM decoder 微调 | 合成/采集、标注、训练和权重验收 |
 | 推理链 | DINO 框 + SAM mask | 单模型直接给 bbox/class/mask |
 | 延迟与显存 | 通常更高 | 通常更低 |
 | 新类别试验 | 改受控映射后重新验收 | 通常需要补数据并训练 |
-| 项目内 V1 状态 | 零样本，真实验收待完成 | 已有合成数据与微调教学链 |
+| 当前项目状态 | Linux MuJoCo 四点 4/4；web 泛化弱；两台 Mac 待验 | 已有合成数据与微调教学链 |
 
-工程上常见做法是先用开放词汇模型验证任务可行性、积累失败样本，再决定是否训练更轻的专用模型。
+开放词汇模型适合快速建立基线和定位失败边界。进入固定机械臂任务后，仍要根据速度、显存、泛化和维护成本决定保留 Grounded SAM，还是蒸馏/替换成更轻的专用模型。
 
 ## 30. 建议的源码阅读顺序
 
@@ -739,7 +783,7 @@ result.json
 11. mask 为什么比 bbox 更适合深度反投影？
 12. exact-stamp tf2 失败时为什么不能用 latest transform？
 13. `/perception/detections`、`/perception/overlay` 和 `/cup_pose` 分别服务谁？
-14. 为什么 V1 不需要 YOLO 式合成训练集？
+14. DINO 与 SAM decoder 分别使用哪套训练数据，为什么四点 smoke 不能混进去？
 15. 哪些证据才能证明一次 pick&place 真正成功？
 
 如果答案还停留在“DINO 找框，SAM 分割，最后发布 Pose”，建议回到组件图，对着一次真实证据目录把 source stamp、candidate、mask、点云、TF 和物理结果串起来。
