@@ -3,14 +3,14 @@
 ## Current Linux-first continuation snapshot
 
 ```yaml
-latest_checkpoint: CP-490
+latest_checkpoint: CP-491
 worktree: /data/work/so101-grounded-sam-yolo-benchmark-ab-v1-task14-runner-access-r11
 branch: codex/v5-t004-yolo-seg-rgbd
 source_parent: 5cd64f4d018e4a01b2d90fb3d142c8cca8becdbd
-active_experiment: STAGE_G_WAIT_FOR_LOCAL_MACOS_CONTINUATION
+active_experiment: stage-g-gitee-lfs-model-publication-r776
 confirmed: all four ai-station Linux points independently validate the frozen Grounded-SAM to physical PickPlace path; the 283-member batch is frozen and passes independent byte, mode and contract readback; Linux publication r774 is frozen and independently validates all 20 archive members; user requires every macOS operation to run on the Mac itself
-open: from a session running locally on the registered Mac, import the exact r774 immutable archive, read back every member, verify MPS FP32 without CPU fallback, then execute the same four independent FULL_RESTART points
-next_action: continue Stage G only from a local macOS session using r774 archive SHA256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868; do not initiate macOS commands, transfer, SSH or remote control from ai-station
+open: publish the exact r774 archive and receipts through Gitee Git LFS so a session running locally on the registered Mac can retrieve it without ai-station initiating Mac operations; afterward perform local Mac import/readback, MPS and four independent FULL_RESTART points
+next_action: execute preregistered Gitee LFS publication r776 for exact archive SHA256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868; do not initiate macOS commands, transfer, SSH or remote control from ai-station
 boundaries: macOS work is local-to-Mac only; COCO100 cannot select a model, tune thresholds, trigger training or block later gates; four-point truth is acceptance-only; sealed final test remains unread; real hardware is unauthorized; Microduck paused
 evidence_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079
 ```
@@ -23924,4 +23924,68 @@ retention:
   deletion_candidates: existing scratch roots and low-rate helper /tmp/so101-debug-v5-t005-grounded-sam-20260901/remediation/exp-079/stage-g-publication-r774; no deletion authorized or performed
 boundaries: Mac work local-to-Mac only; model/threshold optimization forbidden; COCO100 gate remains removed; sealed final test remains unread; real hardware unauthorized; Microduck paused
 next_command: on a Codex session proven local to macOS, read CP-490 and import archive de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868 into a new collision-free model root before any MPS inference
+```
+
+## Experiment stage-g-gitee-lfs-model-publication-r776 — PLANNED
+
+```yaml
+experiment_id: stage-g-gitee-lfs-model-publication-r776
+status: PLANNED
+prior_experiment: stage-g-linux-immutable-publication-r774
+hypothesis: the exact frozen r774 transport archive can be published as a Git LFS object on the existing Gitee branch without embedding 755 MB in ordinary Git history or changing its bytes
+prediction: repository model path is collision-free; Git index stores an LFS pointer with oid sha256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868 and size 755296813; ordinary push succeeds; Gitee branch SHA matches local; a fresh isolated LFS storage can fetch and hash the remote object identically
+single_variable: publish the already frozen r774 archive through the repository's existing Gitee Git LFS transport
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Gitee branch and local HEAD are both 868ceac6c1ab5b79e6d297227c16e83e2b74fd99
+  - r774 publication manifest SHA256 is c9aaf15149d2260e67d8f6afd91e42a065f5f8d14d60159089eba9e333b01da5
+  - r775 independent readback status is PASS and archive SHA256 is de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868
+  - models/v5-t005 does not exist and no existing tracked path will be overwritten
+success_criteria:
+  - .gitattributes tracks models/**/*.tar.gz with LFS and the committed model entry is a valid three-line LFS pointer
+  - Gitee receives the ordinary commit and exact LFS object; branch SHA readback matches local
+  - fresh isolated remote LFS fetch produces a 755296813-byte object with SHA256 de4fcacb808f14363e185303edce18d959642cccb08688e76f8c1f8d6eb31868
+  - publication manifest and SHA receipt are ordinary Git files and agree with the pointer
+failure_criteria:
+  - Gitee rejects the object/commit, pointer oid or size differs, remote readback differs, or any required receipt is absent
+invalid_criteria:
+  - source archive changes; existing repository/user paths are overwritten; any Mac endpoint is contacted
+provenance:
+  source_commit: 868ceac6c1ab5b79e6d297227c16e83e2b74fd99
+  install_overlay: NOT_USED_PUBLICATION_ONLY
+  runtime_executable: git-2.43.0_and_git-lfs-3.4.1
+  ros_domain_id: NOT_USED
+  gz_partition: NOT_USED
+repository_paths:
+  archive: models/v5-t005/grounded-sam-v5-t005-linux-acceptance-r774.tar.gz
+  archive_receipt: models/v5-t005/grounded-sam-v5-t005-linux-acceptance-r774.tar.gz.sha256
+  publication_manifest: models/v5-t005/publication-manifest-r774.json
+commands:
+  - {command: copy exact archive and receipts into collision-free repository paths, LFS-stage, verify pointer, commit, ordinary push to Gitee, branch SHA readback and isolated LFS object fetch/readback, exit_code: PENDING}
+observed: [PENDING]
+inferred: [NONE]
+conclusion: PENDING
+evidence: [PENDING]
+decision: PENDING
+next_experiment: NONE_UNTIL_LOCAL_MACOS_SESSION
+```
+
+## Checkpoint CP-491 — pre-register Gitee LFS model publication
+
+```yaml
+checkpoint: CP-491
+status: GO_GITEE_LFS_EXACT_R774_PUBLICATION_R776
+prior_checkpoint: CP-490
+policy_time: 2026-09-07T08:23:44+08:00
+last_valid_experiment: stage-g-linux-immutable-publication-r774
+current_hypothesis: Gitee Git LFS can transport the frozen 755296813-byte r774 archive without changing its SHA256
+working_tree_status: only ledger is owned; protected last-Swin two-file diff and three untracked build/install/log directories remain user-owned and unchanged
+owned_processes: NONE
+preserved_processes: all existing tmux/process/evidence; no Mac endpoint may be contacted
+confirmed_conclusions:
+  - r774/r775 prove the exact local publication archive and member-level readback
+  - repository already uses Git LFS for a large dataset and Gitee exposes the configured LFS endpoint
+open_risks:
+  - Gitee LFS quota or upload policy is not yet proven for this new 755296813-byte object; any rejection is retained as the first external boundary and must not cause a model rebuild or byte change
+next_command: verify models/v5-t005 collision absence, add one models/**/*.tar.gz LFS rule, copy exact r774 archive plus receipts, stage and inspect the pointer before commit
 ```
