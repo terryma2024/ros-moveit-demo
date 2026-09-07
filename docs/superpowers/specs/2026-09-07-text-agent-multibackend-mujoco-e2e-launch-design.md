@@ -1,10 +1,8 @@
-# V5-T005 Text Agent 多后端 MuJoCo E2E Launch 设计
+# Text Agent 多后端 MuJoCo E2E Launch 设计
 
 **日期：** 2026-09-07
 
 **状态：** 已确认设计，等待评审
-
-**任务：** `V5-T005`
 
 **代码范围：** `src/so101_demo_py`
 
@@ -14,21 +12,20 @@
 
 - `2026-08-31-text-agent-rgbd-e2e-launch-design.md`
 - `2026-08-31-v5-t004-yolo-seg-rgbd-perception-design.md`
-- `2026-09-01-v5-t005-grounded-dino-sam2-rgbd-perception-design.md`
 
 ## 1. 决策摘要
 
-本设计保留现有两个公开入口，另建 V5-T005 专用入口：
+本设计保留现有两个公开入口，另建自然语言多后端闭环专用入口：
 
 | 入口 | 保留用途 | 本次是否改变行为 |
 |---|---|---|
 | `so101_mujoco_text_pick_agent.launch.py` | 对应此前 Text Agent 课程，继续使用现有颜色几何感知链路 | 否 |
 | `so101_mujoco_perception_pick_place.launch.py` | 不经过自然语言 Planner，直接验证多后端感知到动态抓取 | 否；允许内部改为调用等价的共享构造函数 |
-| `so101_mujoco_text_pick_agent_e2e.launch.py` | V5-T005 的自然语言、多后端感知、MoveIt 与 MuJoCo 完整闭环 | 新增 |
+| `so101_mujoco_text_pick_agent_e2e.launch.py` | 自然语言、多后端感知、MoveIt 与 MuJoCo 完整闭环 | 新增 |
 
 新入口不是旧入口的别名，也不替换它们。旧命令、默认值、参数集合、进程顺序和退出语义都要通过回归测试锁定。
 
-2026-08-31 的 Text Agent RGB-D E2E 设计仍是旧 `so101_mujoco_text_pick_agent.launch.py` 的历史依据。本设计只改变 V5-T005 的规范入口：后续完整闭环验收使用新 E2E launch。
+2026-08-31 的 Text Agent RGB-D E2E 设计仍是旧 `so101_mujoco_text_pick_agent.launch.py` 的历史依据。本设计把新 E2E launch 定义为完整闭环的规范入口。
 
 ## 2. 目标和范围
 
@@ -53,7 +50,7 @@ instruction
 1. Planner 拒绝时，不启动动态 runtime，不触发感知，也不发布本次请求的 `/cup_pose`。
 2. dynamic runtime 的 subscriber ready 后才触发一次性感知，避免丢失 `/cup_pose`。
 3. 顶层 launch 统一拥有进程、传播首个失败，并记录清理阶段的二次错误。
-4. `RUNTIME_COMPLETED` 不能单独代表 V5-T005 成功；机器证据和视觉证据分别验收。
+4. `RUNTIME_COMPLETED` 不能单独代表完整闭环成功；机器证据和视觉证据分别验收。
 
 本次不修改检测模型、点云定位算法、动态抓取策略或 Planner provider 的 fallback 规则，也不扩展到 Gazebo、真实机械臂、多轮对话、复合任务和自动物理重试。
 
@@ -61,7 +58,7 @@ instruction
 
 ### 3.1 修改旧 Text Agent launch
 
-直接把 `perception_backend` 加进 `so101_mujoco_text_pick_agent.launch.py`，文件最少，但会改变此前课程入口的参数和时序。历史实验难以复现，也容易把旧颜色几何链路与 V5-T005 的模型感知验收混在一起，因此不采用。
+直接把 `perception_backend` 加进 `so101_mujoco_text_pick_agent.launch.py`，文件最少，但会改变此前课程入口的参数和时序。历史实验难以复现，也容易把旧颜色几何链路与新入口的模型感知验收混在一起，因此不采用。
 
 ### 3.2 给 perception launch 增加 workflow 开关
 
@@ -69,7 +66,7 @@ instruction
 
 ### 3.3 新增专用 E2E launch
 
-新增 `so101_mujoco_text_pick_agent_e2e.launch.py`，旧入口保持稳定，新入口显式承担 V5-T005。它复用感知进程的构造逻辑，不 include 或嵌套另一个业务 launch。顶层直接拥有 MuJoCo、MoveIt、controllers、TF、TextAgent、感知和终态验证进程。
+新增 `so101_mujoco_text_pick_agent_e2e.launch.py`，旧入口保持稳定，新入口显式承担自然语言驱动的完整闭环。它复用感知进程的构造逻辑，不 include 或嵌套另一个业务 launch。顶层直接拥有 MuJoCo、MoveIt、controllers、TF、TextAgent、感知和终态验证进程。
 
 这是本次采用的方案。
 
@@ -150,7 +147,7 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py
 | 参数 | 默认值 | 规则 |
 |---|---|---|
 | `instruction` | 无 | 必填，先经过现有 instruction validator |
-| `run_mode` | `dry_run` | V5-T005 执行必须显式传 `run_mode:=execute` |
+| `run_mode` | `dry_run` | 完整闭环执行必须显式传 `run_mode:=execute` |
 | `execute` | `false` | 必须显式传 `true` |
 | `skip_confirmation` | `false` | 一次性 E2E 必须显式传 `true` |
 | `headless` | `false` | 自动测试可传 `true`；视频验收使用 `false` |
@@ -179,7 +176,7 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py
 | Grounding DINO | `grounding_box_threshold`、`grounding_text_threshold`、`grounding_duplicate_iou`、`grounding_max_candidates` |
 | SAM | `sam_mask_quality_threshold`、`sam_min_mask_pixels`、`sam_max_mask_area_ratio` |
 
-`perception_backend` 默认使用 `yolo_seg`，因为新入口是 V5-T005 的模型感知闭环。`color_geometry` 只用于诊断和与旧课程结果对照，不能作为 V5-T005 的正式感知验收。`grounded_sam` 是同一入口下的可替换模型后端。
+`perception_backend` 默认使用 `yolo_seg`，因为新入口承担模型感知闭环。`color_geometry` 只用于诊断和与旧课程结果对照，不能作为该入口的正式感知验收。`grounded_sam` 是同一入口下的可替换模型后端。
 
 backend 专属参数继续 fail-closed：YOLO-Seg 必须给出绝对权重路径和小写 SHA256；Grounded SAM 必须给出绝对 bundle 目录和 manifest SHA256；为错误 backend 提供专属参数时直接拒绝。
 
@@ -237,7 +234,7 @@ MuJoCo、MoveIt 和 TF 可以在 Planner 前启动，因为它们只是基础设
 ```json
 {
   "schema_version": 1,
-  "workflow_id": "v5t005-7d3a9f",
+  "workflow_id": "text-e2e-7d3a9f",
   "sequence": 1,
   "component": "text_agent",
   "event": "DISPATCH_PREVIEW",
@@ -365,7 +362,7 @@ artifact_paths
 
 写入失败不能留下成功终态。事件文件和结果文件使用原子替换，任何临时文件都留在当前 run root，不写入源码目录。
 
-ai-station 的正式高频证据放在 `/data/work/so101-evidence/v5-t005/<run-id>/`。macOS 的普通调试日志使用唯一 `/tmp/so101-debug-v5-t005-<run-id>/`；需要长期保留的视频和最终证据另行登记，不能只依赖 `/tmp`。
+ai-station 的正式高频证据放在 `/data/work/so101-evidence/text-agent-e2e/<run-id>/`。macOS 的普通调试日志使用唯一 `/tmp/so101-debug-text-agent-e2e-<run-id>/`；需要长期保留的视频和最终证据另行登记，不能只依赖 `/tmp`。
 
 ## 11. 自动化测试
 
@@ -475,7 +472,7 @@ src/so101_demo_py/test/test_installed_provenance.py
 
 ## 14. 完成条件
 
-设计实现完成不等于 V5-T005 mastered。只有同时具备以下结果，才能进入课程验收：
+设计实现完成不等于学习任务已掌握。只有同时具备以下结果，才能进入课程验收：
 
 1. 新 E2E launch 已安装，两个旧 launch 行为不变；
 2. 结构化事件、阶段门、失败传播和 cleanup 测试通过；
