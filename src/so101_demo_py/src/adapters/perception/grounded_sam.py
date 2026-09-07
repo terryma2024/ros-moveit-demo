@@ -188,20 +188,21 @@ class GroundedSamDetector:
             text_threshold=self._thresholds.text_threshold,
             target_sizes=[(_WARMUP_RGB.shape[0], _WARMUP_RGB.shape[1])],
         )
-        sam_inputs = _move_inputs(
-            self._sam_processor(
-                images=_WARMUP_RGB,
-                input_boxes=_WARMUP_BOXES,
-                return_tensors="pt",
-            ),
-            self.runtime_device,
-        )
-        with self._torch.inference_mode():
-            sam_outputs = self._sam_model(**sam_inputs, multimask_output=True)
-        self._sam_processor.post_process_masks(
-            sam_outputs.pred_masks,
-            sam_inputs["original_sizes"],
-        )
+        for input_boxes in (_WARMUP_BOXES, _WARMUP_BOXES[:, :1, :]):
+            sam_inputs = _move_inputs(
+                self._sam_processor(
+                    images=_WARMUP_RGB,
+                    input_boxes=input_boxes,
+                    return_tensors="pt",
+                ),
+                self.runtime_device,
+            )
+            with self._torch.inference_mode():
+                sam_outputs = self._sam_model(**sam_inputs, multimask_output=True)
+            self._sam_processor.post_process_masks(
+                sam_outputs.pred_masks,
+                sam_inputs["original_sizes"],
+            )
 
     def _grounding_proposals(
         self, frame: DetectionFrame, query: DetectionQuery
