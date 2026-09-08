@@ -1,6 +1,6 @@
 # Text Agent 多后端 MuJoCo E2E 使用与验收指南
 
-本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。当前提交 `1614eb84ef73ad36f050368a65ef40ddae3ea78f` 已在 macOS/MPS 和 ai-station/CUDA 上通过 YOLO-Seg 四点位验收，两个平台的普通测试也全部通过。Grounded SAM 已在旧感知入口完成三台机器的四点位 PickPlace 验收，但尚未在这个新入口上复验。连续五次、其余现场负例、GUI 视频和学习者验收也未完成，因此不能把当前结果写成整个双模型矩阵已经验收。
+本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。运行代码提交 `1614eb84ef73ad36f050368a65ef40ddae3ea78f` 已在 macOS/MPS 和 ai-station/CUDA 上完成 YOLO-Seg 与 Grounded SAM 四点位验收。macOS 的 Grounded SAM 运行记录在只增加文档的分支提交 `f2ad62c0fabd510a861a93e18e898962273555f2`，它与 `1614eb84` 的 `src/` 内容一致。两个平台的普通测试也全部通过。连续五次、其余现场负例、GUI 视频和学习者验收仍未完成，因此不能把当前结果写成整套发布验收已经结束。
 
 ## 三个入口分别做什么
 
@@ -123,8 +123,8 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 |---|---|---|
 | ai-station + YOLO-Seg + CUDA 四点位 | 通过 | EXP-037 至 EXP-040；位姿误差为 1.157、1.161、1.130、1.177 mm |
 | macOS + YOLO-Seg + MPS 四点位 | 通过 | EXP-025、EXP-026、EXP-027b、EXP-028；位姿误差为 1.175、1.146、1.120、1.172 mm |
-| ai-station + Grounded SAM | 新入口未运行 | 既有感知入口 CUDA 四点位 4/4；需在当前 Text-Agent E2E 提交上复验 |
-| macOS + Grounded SAM | 新入口未运行 | 既有感知入口 MPS 四点位 4/4；当前 Mac 有明确的推理延迟例外，需在新入口上复验 |
+| ai-station + Grounded SAM + CUDA 四点位 | 通过 | EXP-068 至 EXP-071；位姿误差为 1.159、1.147、1.126、1.175 mm |
+| macOS + Grounded SAM + MPS 四点位 | 通过 | EXP-076 至 EXP-079；位姿误差为 1.170、1.156、1.117、1.172 mm |
 | Planner 拒绝负例 | 通过 | EXP-015 实际 `qwen3.5:4b` 返回 unsupported；没有感知或运动副作用 |
 | 双杯歧义负例 | 无效 | EXP-016 卡在 robot_description/正仿真时钟启动边界，没有进入推理 |
 | MoveIt action abort 负例 | 未运行 | 没有现场注入证据 |
@@ -134,7 +134,9 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 
 当前证据明确区分两个坐标系：感知输入来源仍是 `task_camera_frame`，`CUP_POSE_PUBLISHED.frame_id` 和 dynamic 输入都是 `world`。终态文件也分别标记 `mujoco_sim` 与 `system_wall`，不再直接相减这两个来源时间；采集先后只比较同一宿主机的 `readback_monotonic_ns`。这次修改没有放宽几何、稳定性或接触阈值。
 
-八次有效 YOLO 四点运行都满足相同条件：launch 返回 0、`machine_accepted=true`、实际设备为 MPS 或 CUDA、杯体稳定且受支撑、无 fingertip contact、Planning Scene 的 attached 集合为空、最终位姿匹配，owned process/container 清理完整。Grounded SAM 当前缺的是新入口复验，不是模型资格。旧入口证据已经覆盖 Linux CUDA、当前 Mac MPS 和 `mac-mini` MPS；当前 Mac 的功能结果为 4/4，但四次推理只有一次低于 2000 ms。
+十六次有效四点运行都满足相同条件：launch 返回 0、`machine_accepted=true`、感知只选择一个目标，动态执行达到 `DONE/19`，杯体稳定且受支撑、无 fingertip contact，Planning Scene 的 attached 集合为空、最终位姿匹配，owned process/container 清理完整。YOLO-Seg 与 Grounded SAM 都使用实际 MPS 或 CUDA，并关闭 CPU fallback。
+
+新入口的 Grounded SAM 推理耗时在 ai-station 上为 `225.94` 至 `287.97 ms`，当前 Mac 上为 `1248.43` 至 `1300.67 ms`；冷启动分别约 `5.03` 至 `5.11 s` 和 `7.41` 至 `9.52 s`。旧 GUI 验收中的 Mac 延迟例外仍是有效历史记录，但不能替代或否定这次 headless 新入口的计时。EXP-042、EXP-050、EXP-058 和 EXP-072 分别因证据根预创建、来源映射缺失、验证脚本状态传播错误和 MuJoCo 动态库路径缺失记为 `INVALID`，均未计入 4/4。
 
 ## 已保留证据
 
@@ -144,7 +146,14 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
 ```
 
-ai-station 当前提交的四点运行位于 `live/exp-037-*` 到 `live/exp-040-*`；macOS 四点运行位于本地登记根的 `live/exp-025-*`、`exp-026-*`、`exp-027b-*` 和 `exp-028-*`。账本记录了固定 commit、模型、镜像、domain、session、命令、退出码和结论：
+ai-station 的 YOLO-Seg 四点运行位于 `live/exp-037-*` 到 `live/exp-040-*`，Grounded SAM 位于 `live/exp-068-*` 到 `live/exp-071-*`。macOS 的 YOLO-Seg 四点运行位于本地登记根的 `live/exp-025-*`、`exp-026-*`、`exp-027b-*` 和 `exp-028-*`，Grounded SAM 位于 `live/exp-076-*` 到 `live/exp-079-*`。统一机器校验摘要分别保存在：
+
+```text
+/data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/grounded-sam-linux-four-point-summary.json
+/tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-macos-four-point-summary.json
+```
+
+账本记录了固定 commit、模型、domain、session、命令、退出码、无效运行和最终结论：
 
 ```text
 docs/experiments/text-agent-multibackend-e2e-experiment-ledger.md

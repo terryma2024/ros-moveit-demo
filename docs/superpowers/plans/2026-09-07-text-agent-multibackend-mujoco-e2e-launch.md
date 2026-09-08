@@ -359,7 +359,7 @@ colcon test-result --test-result-base "$E2E_ROOT" --verbose
 **Interfaces:** 产出每轮 `workflow-events.ndjson/e2e-result.json/perception/dynamic/acceptance`、数值证据、命令与退出码、fresh screenshot、1 至 2 分钟 demo；工程结果与学习者结果分别记录。
 
 - [x] 每轮先写 PLANNED 条目：prior experiment、唯一变量、`FULL_RESTART`、固定 commit/policy/model、fresh domain/session/workflow/root、成功/失败/INVALID 判据。取证后才 RUNNING，结束记 VALID 或 INVALID。不同 host/backend 使用独立 task 记录；同一 task 的各次实验在其唯一 root 的子目录。
-- [ ] 以账本验证的绝对路径设置 `E2E_WEIGHTS`、`E2E_WEIGHTS_SHA256`、`E2E_MODEL_ROOT`、`E2E_MODEL_MANIFEST_SHA256` 和 `E2E_RUNTIME`、`E2E_DEVICE`；Linux image 使用账本已验证的固定值。这些是实际工件输入，不给不存在的示例权重路径。provider 使用现有安全配置，不把 secret 写入命令日志。
+- [x] 以账本验证的绝对路径设置 `E2E_WEIGHTS`、`E2E_WEIGHTS_SHA256`、`E2E_MODEL_ROOT`、`E2E_MODEL_MANIFEST_SHA256` 和 `E2E_RUNTIME`、`E2E_DEVICE`；Linux image 使用账本已验证的固定值。这些是实际工件输入，不给不存在的示例权重路径。provider 使用现有安全配置，不把 secret 写入命令日志。
 - [x] 在每个平台执行 YOLO-Seg 唯一杯 headless：
 
 ```bash
@@ -378,7 +378,7 @@ print -r -- "$E2E_RC" > "$E2E_ROOT/launch-exit-code.txt"
 
 Linux 若登记 image 与默认不同，显式加 `perception_container_image`；macOS 要读回实际 MPS，Linux 要读回实际 CUDA，不只看传入参数。每个示例命令只运行在尚无 result 的 fresh run root，不能原地重复覆盖。
 
-- [ ] 两平台各另开 fresh task/run 执行 Grounded SAM。命令沿用上面的公共参数，完整替换 backend 部分为：
+- [x] 两平台各另开 fresh task/run 执行 Grounded SAM。命令沿用上面的公共参数，完整替换 backend 部分为：
 
 ```bash
 perception_backend:=grounded_sam \
@@ -434,7 +434,7 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 - [x] 运行两个旧入口的 exact 参数、默认值、action 参数与顺序测试；运行 installed launch 集合与未启用事件参数时的 stdout/exit contract，任何漂移都先修复。
 - [x] 运行 focused tests、完整 `src/so101_demo_py/test/` 普通门、macOS fresh overlay 和 ai-station NVMe scratch gate；不运行 benchmark suite。
 - [x] 用 exact commit 重建 YOLO inference image，确认新 image 的事件 frame 修复和 digest，旧 image 保留审计。
-- [ ] 每个双平台 × 双模型配置分别执行 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm`、`cup_test_right_5cm` 四个独立 `FULL_RESTART`。每一点都要求 machine accepted、launch 0、实际 MPS/CUDA、完整联合证据和 owned cleanup。
+- [x] 每个双平台 × 双模型配置分别执行 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm`、`cup_test_right_5cm` 四个独立 `FULL_RESTART`。每一点都要求 machine accepted、launch 0、实际 MPS/CUDA、完整联合证据和 owned cleanup。
 - [ ] 原有三条负例、每配置连续五次、GUI 视频与学习者验收继续生效；未完成项不得因四点通过而自动勾选。
 
 执行可使用 executing-plans 在当前会话逐项推进；选择子代理执行时再使用 subagent-driven-development。计划编写阶段不创建子代理或实现分支。
