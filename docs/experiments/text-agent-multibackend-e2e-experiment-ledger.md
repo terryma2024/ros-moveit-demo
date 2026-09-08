@@ -16,9 +16,9 @@ disproven_routes:
   - Treating unqualified git status in the linked worktree as a trustworthy source-state check; it reports the shared Git directory as the work tree.
 open_hypotheses:
   - The ai-station installed so101_demo_py overlay is stale and must not be used as implementation acceptance evidence.
-  - The Grounded SAM base v2 scipy-lock bundle can exercise the backend contract, but no currently registered Grounded SAM bundle has PickPlace qualification evidence.
-latest_checkpoint: CP-006
-next_experiment: EXP-008
+  - The previously PickPlace-qualified Grounded SAM production bundle must be replayed through the new Text-Agent E2E entry before its two current matrix cells can pass.
+latest_checkpoint: CP-014
+next_experiment: Register fresh current-host paths for the pinned Grounded SAM production bundle, then run the new E2E four-point batches.
 ```
 
 ## Registered model inputs
@@ -43,6 +43,17 @@ grounded_sam_latest_trained_candidate:
   linux_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-pinned-base-epoch5-sam-decoder-epoch4-r1
   macos_root: unavailable
   qualification_boundary: PickPlace NO_GO because the frozen COCO100 gate failed; it cannot count toward Task 9 success.
+grounded_sam_pickplace_qualified:
+  model_id: grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  dino_weight_sha256: bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b
+  sam_weight_sha256: 0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893
+  private_hugging_face_repository: zjumty/so101-grounded-sam-cup-pickplace
+  pinned_revision: 52b8334358e5ff11f94f10f7c14b1697ef44d964
+  linux_source_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  prior_qualification: Linux CUDA, current Mac MPS, and mac-mini MPS each passed four preset MuJoCo PickPlace points 4/4 through the existing perception entry.
+  current_e2e_boundary: The new Text-Agent E2E entry has not run this bundle; fresh current-host roots and manifest readback are still required before those matrix cells can pass.
 linux_container:
   reference: so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115
   image_id: sha256:fafdb147fab33758b45f8edb39d6ddb231b38ebe59b99dce17f01a0bf35d3a3e
@@ -1371,4 +1382,41 @@ deletion_candidates:
 deletion_performed: false
 conclusion: The exact current commit qualifies YOLO-Seg on both required platforms at all four registered points and preserves the legacy entry behavior. The full dual-model release matrix is still incomplete because the Grounded SAM artifact and the remaining stability, negative, video, and learner gates are not qualified.
 next_experiment: Register a PickPlace-qualified Grounded SAM bundle before opening either Grounded SAM four-point batch.
+```
+
+## Checkpoint CP-014 — Correct Grounded SAM qualification inventory
+
+```yaml
+checkpoint_id: CP-014
+status: DOCUMENTATION_CORRECTION_VALID
+prior_checkpoint: CP-013
+source_commit_under_review: 1c7ff19116d7ffe056938513d61b803c4db615c0
+trigger: User reported that Grounded SAM had already completed PickPlace testing.
+observed:
+  - docs/reports/grounded-sam-yolo-seg-benchmark-report.md records the frozen DINO epoch 1 plus SAM decoder epoch 4 bundle with manifest SHA256 b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05 and threshold-lock SHA256 b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278.
+  - The V5-T005 ledger records Linux CUDA, current Mac MPS, and mac-mini MPS four-point MuJoCo PickPlace acceptance at 4/4 for that common bundle identity.
+  - The bundle is pinned in private Hugging Face repository zjumty/so101-grounded-sam-cup-pickplace at revision 52b8334358e5ff11f94f10f7c14b1697ef44d964 and passed fresh remote payload readback.
+root_cause:
+  - This task inventoried the base v2 scipy-lock bundle and an earlier epoch5 candidate that retained a historical COCO100 NO_GO result.
+  - It omitted the later selected epoch1 plus epoch4 production bundle and the decision that COCO100 remained a disclosed generalization risk rather than this near-workspace promotion gate.
+correction:
+  - Grounded SAM has a registered PickPlace-qualified production bundle.
+  - The open requirement is to stage and verify the pinned bundle on each current host, then run it through so101_mujoco_text_pick_agent_e2e.launch.py at the current source commit.
+  - Prior Grounded SAM four-point results qualify the model and existing perception entry; they do not by themselves qualify the new Text-Agent event, acceptance, and cleanup path.
+supersedes:
+  - CP-013 open_gates statement that no PickPlace-qualified Grounded SAM bundle is registered.
+  - CP-013 conclusion that the Grounded SAM artifact is not qualified.
+  - CP-013 next_experiment instruction to create or register a new qualified bundle.
+disproven_routes:
+  - Treating the epoch5 COCO100-NO_GO candidate as the latest selected production bundle.
+  - Treating absence from this task's initial model inventory as absence from the repository's existing qualification ledger.
+current_open_gates:
+  - Grounded SAM macOS/MPS and ai-station/CUDA runs through the new Text-Agent E2E entry remain NOT_RUN.
+  - Five-consecutive-success, valid two-cup ambiguity, live MoveIt abort, GUI video, and learner explanation gates remain incomplete.
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+archived_runs: []
+deletion_performed: false
+next_experiment: Verify fresh local and ai-station checkouts of Hugging Face revision 52b8334358e5ff11f94f10f7c14b1697ef44d964, register absolute model roots, and run the two current Grounded SAM E2E four-point batches.
 ```

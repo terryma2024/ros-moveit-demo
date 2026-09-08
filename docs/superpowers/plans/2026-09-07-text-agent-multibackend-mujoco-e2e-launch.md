@@ -390,6 +390,8 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 
 该参数片段追加到 `ros2 launch` 命令，不能单独执行；同时移除两个 YOLO 专属参数。确认 bundle 与实际 supported device 兼容，失败不切颜色后端抵数。正式矩阵共四格，每格至少一次 headless 唯一杯完整 E2E。
 
+已有 PickPlace-qualified 输入为 `Grounding DINO Tiny epoch 1 + SAM 2.1 Hiera Tiny decoder epoch 4`：bundle manifest SHA-256 `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05`，阈值锁 SHA-256 `b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278`，私有 Hugging Face revision `52b8334358e5ff11f94f10f7c14b1697ef44d964`。它已经通过旧感知入口的 Linux、当前 Mac 和 `mac-mini` 四点位验收。本任务仍须在 fresh 目录回读固定 revision、校验清单并登记两平台当前绝对路径，再用新 Text-Agent E2E 入口复验；旧入口结果不能直接替代新入口矩阵。
+
 - [x] 验证每次 actual provider/model/fallback、request/session/reset、RGB/Depth/CameraInfo 与 tf2、本次 `/cup_pose` stamp/frame、完整事件和 state_trace、controller/joint/TCP、MuJoCo 抬升搬运释放稳定支撑、无 fingertip、Planning Scene world/attached、validator 和 launch 双退出码、owned cleanup。
 - [ ] 执行三条 fresh 负向 live run。Planner 拒绝使用 `instruction:='Do not pick anything. Fly the robot to the moon.'`，必须读回真实拒绝；若 provider 仍产生合法命令，则该轮不能算拒绝用例，记录失败并在测试注入的确定性 Planner 边界复现。两杯使用 `mujoco_initial_keyframe:=v5_two_cups`，要求 primary `TARGET_AMBIGUOUS`、无 pose、无 runner。MoveIt 故障在独立 domain 的测试执行服务中返回 action abort，或只中止本轮 owned controller；冻结注入的时点与 PID，确保失败落在 execute 而非 startup，要求 runner recovery、非零退出和可解释副作用。
 - [x] Task 6/8 自动化还必须证明 runtime 0 但物理不合格、MuJoCo 合格但 Planning Scene attached 两条路径顶层失败，不能用成功视频覆盖这些断言。
