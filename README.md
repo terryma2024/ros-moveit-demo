@@ -19,11 +19,13 @@ implementation and several Panda examples.
 - A Text Pick Agent that lets DeepSeek or local Ollama propose a closed
   `TaskCommand`. Deterministic Python code keeps validation, confirmation,
   request claiming, dispatch, and execution authority.
+- A full MuJoCo Text Agent E2E entry point that can run YOLO-Seg or Grounded
+  SAM before the existing dynamic pick-place workflow. The original Text Agent
+  and perception launchers remain available for focused checks and compatibility.
 - A YOLO-Seg object-pose path for one-shot multi-instance detection, fail-closed
   target selection, aligned RGB-D localization, and atomic evidence artifacts.
   It runs as `rgbd_object_pose` or as the `yolo_seg` backend of the integrated
-  perception launch. The current Text Agent launch still uses
-  `rgbd_cup_pose`.
+  perception and Text Agent E2E launches.
 - A Grounded SAM object-pose backend using Grounding DINO Tiny and SAM 2.1
   Hiera Tiny, with verified local model bundles, per-instance masks, and the
   same unique-target and RGB-D localization rules as YOLO-Seg.
@@ -48,10 +50,12 @@ Natural-language instruction
   -> DeepSeek or Ollama planner
   -> closed TaskCommand validation
   -> confirmation + request claim + allowlisted dispatch
+  -> select MuJoCo perception backend
                                       |
 MuJoCo task_camera                    |
   -> exact-stamp RGB-D                |
-  -> rgbd_cup_pose                    |
+  -> color_geometry, YOLO-Seg,        |
+     or Grounded SAM                  |
   -> source-stamped /cup_pose --------+-> dynamic_cup_pick_place
                                              |
 Fixed policy ------------------------------->+-> MoveIt 2 + ros2_control
@@ -62,7 +66,7 @@ Optional observation path:
     -> JSONL events -> summary.json -> trace.json
     -> Linux ros2_tracing / LTTng CTF when requested and available
 
-Selectable one-shot perception path:
+Model perception path:
   aligned RGB-D -> YOLO-Seg or Grounded SAM
     -> exactly-one target selector -> 3D localization
     -> /cup_pose + detections + overlay + per-request evidence
@@ -241,9 +245,12 @@ ros2 run so101_demo_py rgbd_object_pose --help
 ros2 run so101_demo_py cup_pose_subscriber --help
 ```
 
-The integrated perception launch supports three backends. Its default remains
-`color_geometry`; the Text Agent launch still uses `rgbd_cup_pose` and does not
-expose this selector.
+The integrated perception launch and the full Text Agent E2E launch support
+three backends. The perception-only launch defaults to `color_geometry`. The
+full E2E launch defaults to `yolo_seg` and accepts `color_geometry` as a
+diagnostic compatibility path. The original
+`so101_mujoco_text_pick_agent.launch.py` entry point still uses
+`rgbd_cup_pose` and keeps its existing arguments and behavior.
 
 | `perception_backend` | Detector | Required model arguments |
 | --- | --- | --- |
@@ -273,11 +280,12 @@ not fresh validation of another installation. The frozen model also had zero
 recall in the historical COCO100 diagnostic, so its acceptance is limited to
 the tested near-workspace domain.
 
-### Natural-language RGB-D workflow
+### Natural-language RGB-D workflows
 
 Set `DEEPSEEK_API_KEY` in the current process environment, or provide the local
-Ollama model `qwen3.5:4b`. The integrated launch requires all three execution
-controls and owns the ROS and MuJoCo stack for the request:
+Ollama model `qwen3.5:4b`. The original launch keeps the color and geometry
+perception path. It requires all three execution controls and owns the ROS and
+MuJoCo stack for the request:
 
 ```bash
 mkdir -p /tmp/so101-debug-text-agent-readme
@@ -290,11 +298,49 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent.launch.py \
   evidence_file:=/tmp/so101-debug-text-agent-readme/result.json
 ```
 
+Use `so101_mujoco_text_pick_agent_e2e.launch.py` when the request must pass
+through YOLO-Seg or Grounded SAM before dynamic pick-place. This Ubuntu example
+uses a registered local Grounded SAM bundle and CUDA:
+
+```bash
+export E2E_MODEL_ROOT=/data/work/models/grounded-sam-bundle
+export E2E_MODEL_MANIFEST_SHA256=<manifest-sha256>
+export E2E_ROOT=/data/work/so101-evidence/text-agent-e2e/<fresh-run-id>
+
+ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py \
+  instruction:='Pick the plastic cup. Apply no constraints.' \
+  run_mode:=execute execute:=true skip_confirmation:=true \
+  headless:=true sensor_rendering:=true \
+  mujoco_initial_keyframe:=task_start \
+  session_id:=text-agent-e2e-readme-001 \
+  evidence_file:="$E2E_ROOT/e2e-result.json" \
+  perception_backend:=grounded_sam \
+  perception_runtime:=host perception_device:=cuda \
+  perception_allow_cpu_fallback:=false \
+  perception_model_root:="$E2E_MODEL_ROOT" \
+  perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
+```
+
+The paths above show one Ubuntu layout. They are not fixed installation paths.
+Create a new run root and session for each attempt, verify the installed overlay
+and model digest first, and use the frozen thresholds from the
+[multi-backend Text Agent E2E guide](docs/guides/text-agent-multibackend-mujoco-e2e.md)
+for qualification runs.
+
 Use the standalone `text_pick_agent` preview and digest flow when an operator
 must inspect the proposed command before dispatch. `skip_confirmation` bypasses
 that human review only. It does not bypass schema validation, the capability
 allowlist, request claiming, runtime provenance, or downstream motion and
 evidence checks.
+
+The recorded Text Agent E2E qualification covers both model backends on two
+platforms. YOLO-Seg and Grounded SAM each completed the four registered MuJoCo
+cup positions on Ubuntu/CUDA and macOS/MPS, for `16/16` accepted runs. Every
+accepted run reached `E2E_ACCEPTED` and `DONE/19`, used the requested GPU device
+with CPU fallback disabled, left no attached Planning Scene object, and matched
+the final Planning Scene and MuJoCo poses. These results apply to the registered
+simulation environments and model artifacts. They do not qualify a physical
+SO-101 or replace fresh provenance and run evidence on another installation.
 
 ### Cross-platform profiling
 
@@ -406,6 +452,7 @@ acceptance; it does not establish a formal Grounded SAM versus YOLO-Seg ranking.
 ### Perception and task execution
 
 - [Text Pick Agent source guide](docs/guides/so101-text-pick-agent-source-guide.md)
+- [Multi-backend MuJoCo Text Agent E2E guide](docs/guides/text-agent-multibackend-mujoco-e2e.md)
 - [RGB-D perception PickPlace source guide](docs/guides/so101-rgbd-perception-pick-place-source-guide.md)
 - [YOLO-Seg RGB-D perception source guide](docs/guides/so101-yolo-seg-rgbd-perception-pick-place-source-guide.md)
 - [Grounded SAM RGB-D perception, training, and delivery guide](docs/guides/so101-grounded-sam-rgbd-perception-pick-place-source-guide.md)
