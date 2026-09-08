@@ -1,6 +1,6 @@
 # Text Agent 多后端 MuJoCo E2E 使用与验收指南
 
-本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。代码路径已经通过 macOS 与 ai-station 的普通测试门，但完整现场验收尚未通过。不要把下面的失败运行当成可发布的成功证据。
+本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。当前提交 `1614eb84ef73ad36f050368a65ef40ddae3ea78f` 已在 macOS/MPS 和 ai-station/CUDA 上通过 YOLO-Seg 四点位验收，两个平台的普通测试也全部通过。Grounded SAM、连续五次、其余现场负例、GUI 视频和学习者验收仍未完成，因此不能把 YOLO 两格通过写成整个双模型矩阵已经验收。
 
 ## 三个入口分别做什么
 
@@ -21,12 +21,12 @@
 ```bash
 export E2E_WEIGHTS=/data/work/so101-evidence/v5-t004-yolo-seg-rgbd/20260831-f09cf88/training/full-exp-012/best.pt
 export E2E_WEIGHTS_SHA256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
-export E2E_IMAGE=so101-yolo11n-seg-inference:text-agent-e2e-09b8bc0c
+export E2E_IMAGE=so101-yolo11n-seg-inference:text-agent-e2e-1614eb84
 export E2E_DEVICE=cuda
 export E2E_RUNTIME=docker
 ```
 
-镜像 digest 是 `sha256:bed9bda05f455d3732d3c5b854744b3097b92e7e84375ff0c3305cb1b17f77c7`。旧镜像 `sha256:fafdb147fab33758b45f8edb39d6ddb231b38ebe59b99dce17f01a0bf35d3a3e` 没有 `--require-output-subscriber`、`--emit-workflow-events` 和 `--workflow-id`，不能用于这个入口。
+镜像 ID 和本地 repo digest 都是 `sha256:56f88257d1124cd02121d99f422c4f98aec198ea7873fa4ccf9a5407dd4093e0`。旧镜像继续保留审计，不用于当前提交的资格运行。
 
 先从当前 overlay 读出参数，避免凭记忆拼命令：
 
@@ -39,9 +39,9 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py --show-args
 下面是唯一杯执行模板。`E2E_ROOT` 每次都要换成新目录；不要在已有 `e2e-result.json` 的目录重跑。
 
 ```bash
-export ROS_DOMAIN_ID=224
-export E2E_SESSION=text-e2e-linux-yolo-017
-export E2E_ROOT=/data/work/so101-evidence/text-agent-e2e/<run-id>/live/exp-017-linux-yolo-run-01
+export ROS_DOMAIN_ID=<fresh-valid-domain>
+export E2E_SESSION=text-e2e-linux-yolo-$(uuidgen)
+export E2E_ROOT=/data/work/so101-evidence/text-agent-e2e/<run-id>/live/<fresh-run-id>
 
 ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py \
   instruction:='Pick the plastic cup. Apply no constraints.' \
@@ -57,7 +57,7 @@ ros2 launch so101_demo_py so101_mujoco_text_pick_agent_e2e.launch.py \
 print -r -- "$?" > "$E2E_ROOT/launch-exit-code.txt"
 ```
 
-macOS 的正式 YOLO 格应使用同一个 `.pt` 和 SHA256，host runtime 与实际 `mps`，同时保持 CPU fallback 关闭。当前没有 macOS 现场运行证据，所以不能照此指南宣称 MPS 已验收。
+macOS 的 YOLO 格使用同一个 `.pt` 和 SHA256、host runtime 与实际 `mps`，并关闭 CPU fallback。当前提交的四次有效运行是 EXP-025、EXP-026、EXP-027b 和 EXP-028；EXP-027 因 `ROS_DOMAIN_ID=233` 超出 Fast DDS 合法端口范围而记为 INVALID，没有计入四点结果。
 
 Grounded SAM 需要已登记且支持目标设备的 PickPlace-qualified bundle：
 
@@ -121,20 +121,20 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 
 | 验收项 | 结果 | 证据或原因 |
 |---|---|---|
-| ai-station + YOLO-Seg + CUDA 唯一杯 | 未验收 | EXP-014 完成 Planner、感知、19 个 runtime 状态和稳定放置，但 validator 拒绝 |
-| macOS + YOLO-Seg + MPS 唯一杯 | 未运行 | 成功路径协议先行阻塞 |
+| ai-station + YOLO-Seg + CUDA 四点位 | 通过 | EXP-037 至 EXP-040；位姿误差为 1.157、1.161、1.130、1.177 mm |
+| macOS + YOLO-Seg + MPS 四点位 | 通过 | EXP-025、EXP-026、EXP-027b、EXP-028；位姿误差为 1.175、1.146、1.120、1.172 mm |
 | ai-station + Grounded SAM | 未运行 | 没有已登记的 PickPlace-qualified bundle |
 | macOS + Grounded SAM | 未运行 | 同上 |
 | Planner 拒绝负例 | 通过 | EXP-015 实际 `qwen3.5:4b` 返回 unsupported；没有感知或运动副作用 |
 | 双杯歧义负例 | 无效 | EXP-016 卡在 robot_description/正仿真时钟启动边界，没有进入推理 |
 | MoveIt action abort 负例 | 未运行 | 没有现场注入证据 |
-| 连续五次成功 | 未开始 | 没有任何 machine-accepted 首次运行 |
+| 连续五次成功 | 未完成 | 当前四点位按位置验收，不能替代每配置连续五次门禁 |
 | GUI 视频与新截图 | 未录制 | 不能用视频代替尚未通过的自动验收 |
 | 学习者解释与掌握度 | 未记录 | 没有已确认身份的学习者现场回答 |
 
-EXP-014 的物理结果不是失败根因。杯子在 MuJoCo 中稳定、受桌面支撑、没有 fingertip contact；Planning Scene 与 MuJoCo 的位置差为 `0.0011658013223472305 m`，姿态差为 `0.000009062552536113162 rad`，都在策略阈值内。
+当前证据明确区分两个坐标系：感知输入来源仍是 `task_camera_frame`，`CUP_POSE_PUBLISHED.frame_id` 和 dynamic 输入都是 `world`。终态文件也分别标记 `mujoco_sim` 与 `system_wall`，不再直接相减这两个来源时间；采集先后只比较同一宿主机的 `readback_monotonic_ns`。这次修改没有放宽几何、稳定性或接触阈值。
 
-当前阻塞来自证据语义：dynamic 的 `input_frame_id` 是发布后的 `world`，perception 的 `source_frame_id` 是传感器输入 `task_camera_frame`，validator 却要求二者相等。MuJoCo 终态时间戳使用仿真时钟 `58704000000`，Planning Scene 读回使用墙上时钟 `1788810607533085057`，现有 5 秒 skew 检查无法成立。下一轮代码变更应先明确 published frame provenance 和 timestamp domain，再重跑 fresh matrix；不要放宽几何阈值来掩盖这个问题。
+八次有效 YOLO 四点运行都满足相同条件：launch 返回 0、`machine_accepted=true`、实际设备为 MPS 或 CUDA、杯体稳定且受支撑、无 fingertip contact、Planning Scene 的 attached 集合为空、最终位姿匹配，owned process/container 清理完整。当前矩阵的主要工件阻塞是两平台都没有登记可用于 PickPlace 资格运行的 Grounded SAM bundle。
 
 ## 已保留证据
 
@@ -144,10 +144,10 @@ EXP-014 的物理结果不是失败根因。杯子在 MuJoCo 中稳定、受桌�
 /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
 ```
 
-现场运行位于 `live/exp-011-*` 到 `live/exp-016-*`。账本记录了每轮的固定 commit、模型、镜像、domain、session、命令、退出码和结论：
+ai-station 当前提交的四点运行位于 `live/exp-037-*` 到 `live/exp-040-*`；macOS 四点运行位于本地登记根的 `live/exp-025-*`、`exp-026-*`、`exp-027b-*` 和 `exp-028-*`。账本记录了固定 commit、模型、镜像、domain、session、命令、退出码和结论：
 
 ```text
 docs/experiments/text-agent-multibackend-e2e-experiment-ledger.md
 ```
 
-本轮没有删除证据。`build/`、`install/`、候选 venv 和所有测试 scratch 仅列为 deletion candidates，删除前必须另行取得授权。
+本轮没有删除证据。无效候选、无效运行和测试 scratch 只列为 deletion candidates，删除前必须另行取得授权。

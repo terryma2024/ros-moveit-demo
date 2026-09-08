@@ -360,7 +360,7 @@ colcon test-result --test-result-base "$E2E_ROOT" --verbose
 
 - [x] 每轮先写 PLANNED 条目：prior experiment、唯一变量、`FULL_RESTART`、固定 commit/policy/model、fresh domain/session/workflow/root、成功/失败/INVALID 判据。取证后才 RUNNING，结束记 VALID 或 INVALID。不同 host/backend 使用独立 task 记录；同一 task 的各次实验在其唯一 root 的子目录。
 - [ ] 以账本验证的绝对路径设置 `E2E_WEIGHTS`、`E2E_WEIGHTS_SHA256`、`E2E_MODEL_ROOT`、`E2E_MODEL_MANIFEST_SHA256` 和 `E2E_RUNTIME`、`E2E_DEVICE`；Linux image 使用账本已验证的固定值。这些是实际工件输入，不给不存在的示例权重路径。provider 使用现有安全配置，不把 secret 写入命令日志。
-- [ ] 在每个平台执行 YOLO-Seg 唯一杯 headless：
+- [x] 在每个平台执行 YOLO-Seg 唯一杯 headless：
 
 ```bash
 E2E_SESSION="text-e2e-$(uuidgen)"
@@ -392,7 +392,7 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 
 - [x] 验证每次 actual provider/model/fallback、request/session/reset、RGB/Depth/CameraInfo 与 tf2、本次 `/cup_pose` stamp/frame、完整事件和 state_trace、controller/joint/TCP、MuJoCo 抬升搬运释放稳定支撑、无 fingertip、Planning Scene world/attached、validator 和 launch 双退出码、owned cleanup。
 - [ ] 执行三条 fresh 负向 live run。Planner 拒绝使用 `instruction:='Do not pick anything. Fly the robot to the moon.'`，必须读回真实拒绝；若 provider 仍产生合法命令，则该轮不能算拒绝用例，记录失败并在测试注入的确定性 Planner 边界复现。两杯使用 `mujoco_initial_keyframe:=v5_two_cups`，要求 primary `TARGET_AMBIGUOUS`、无 pose、无 runner。MoveIt 故障在独立 domain 的测试执行服务中返回 action abort，或只中止本轮 owned controller；冻结注入的时点与 PID，确保失败落在 execute 而非 startup，要求 runner recovery、非零退出和可解释副作用。
-- [ ] Task 6/8 自动化还必须证明 runtime 0 但物理不合格、MuJoCo 合格但 Planning Scene attached 两条路径顶层失败，不能用成功视频覆盖这些断言。
+- [x] Task 6/8 自动化还必须证明 runtime 0 但物理不合格、MuJoCo 合格但 Planning Scene attached 两条路径顶层失败，不能用成功视频覆盖这些断言。
 - [ ] 设计要求四格最小运行；so101-dev 的正式物理完成门还要求连续五次有效成功。对完成声明覆盖的每个模型/平台配置，使用固定 commit/参数和 `FULL_RESTART` 单独计数五次，四格首轮可算各自第一次。VALID 失败中断序列；INVALID 中断批次并保留记录。该稳定性 gate 是仿真验证，不运行 perception benchmark suite。
 - [ ] 在已完成 provenance 验证的平台使用 YOLO-Seg、`headless:=false` 和 fresh run 录制 1 至 2 分钟视频，录制前读 `gui-capture` 技能。录制覆盖指令、运动、放置和自动退出，结束后取新的截图并实际打开检查；launch 不为录像暂停成功退出，镜头内容不足则另开 fresh run，不修改超时伪造成功。
 - [x] 新建 `docs/guides/text-agent-multibackend-mujoco-e2e.md`，写实际可复现命令、三入口用途、事件与失败读法、证据路径和视频链接，使用 humanizer-zh。只写已验证结果，未通过矩阵格明确标为未验收。
@@ -418,7 +418,7 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 | §14 工程与学习者验收分离 | Task 9 |
 
 - [x] 所有代码任务 RED/GREEN 有命令、退出码和非零测试数；两个旧入口回归通过。
-- [ ] 新入口真实 `ros2 launch` 失败非零，成功须 acceptance、原子证据和 cleanup 全通过。
+- [x] 新入口真实 `ros2 launch` 失败非零，成功须 acceptance、原子证据和 cleanup 全通过。
 - [ ] 平台矩阵、连续有效运行、三条负向和视频均有当前来源证据；未满足的项不得勾选。
 - [ ] learner 掌握度独立记录，未因代码或计划完成自动更新。
 
@@ -430,8 +430,8 @@ perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 - [x] RED 证明 validator 当前错误比较 `dynamic.input_frame_id` 与 `perception.source_frame_id`；改为校验 dynamic 输入与发布事件的 `world` 语义，传感器 frame 只做非空来源检查。
 - [x] RED 证明 MuJoCo 仿真时间与 Planning Scene 墙上时间被错误执行 skew；两份读回增加 `clock_domain` 和同域 `readback_monotonic_ns`，来源各自检查 freshness，只在 `host_monotonic` 域比较 skew。
 - [x] 运行两个旧入口的 exact 参数、默认值、action 参数与顺序测试；运行 installed launch 集合与未启用事件参数时的 stdout/exit contract，任何漂移都先修复。
-- [ ] 运行 focused tests、完整 `src/so101_demo_py/test/` 普通门、macOS fresh overlay 和 ai-station NVMe scratch gate；不运行 benchmark suite。
-- [ ] 用 exact commit 重建 YOLO inference image，确认新 image 的事件 frame 修复和 digest，旧 image 保留审计。
+- [x] 运行 focused tests、完整 `src/so101_demo_py/test/` 普通门、macOS fresh overlay 和 ai-station NVMe scratch gate；不运行 benchmark suite。
+- [x] 用 exact commit 重建 YOLO inference image，确认新 image 的事件 frame 修复和 digest，旧 image 保留审计。
 - [ ] 每个双平台 × 双模型配置分别执行 `task_start`、`cup_test_forward_5cm`、`cup_test_left_5cm`、`cup_test_right_5cm` 四个独立 `FULL_RESTART`。每一点都要求 machine accepted、launch 0、实际 MPS/CUDA、完整联合证据和 owned cleanup。
 - [ ] 原有三条负例、每配置连续五次、GUI 视频与学习者验收继续生效；未完成项不得因四点通过而自动勾选。
 
