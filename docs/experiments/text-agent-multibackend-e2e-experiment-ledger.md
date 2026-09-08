@@ -1235,3 +1235,140 @@ conclusion: VALID_LOCAL; the approved evidence semantics and legacy-entry regres
 decision: COMMIT_AND_PROMOTE_EXACT_SOURCE
 next_experiment: EXP-018
 ```
+
+```yaml
+checkpoint_id: CP-013
+status: VALID_YOLO_TWO_PLATFORM_FOUR_POINT
+prior_checkpoint: CP-012
+scope: Complete the user-approved frame/clock repair, preserve both legacy entry contracts, and qualify the four registered cup positions on macOS/MPS and ai-station/CUDA with exact source commit 1614eb84ef73ad36f050368a65ef40ddae3ea78f.
+source_provenance:
+  branch: codex/text-agent-multibackend-e2e
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  source_bundle: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-029-1614eb84.bundle
+  source_bundle_sha256: 3d02e154070f3f687bc0f4c7f30d8fb2d24c0484f2b52c78cd54ee767567546e
+  macos_candidate: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos
+  linux_candidate: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-r4
+model_provenance:
+  backend: yolo_seg
+  weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  macos_runtime: host
+  macos_device: mps
+  linux_runtime: docker
+  linux_device: cuda
+  allow_cpu_fallback: false
+  linux_image: so101-yolo11n-seg-inference:text-agent-e2e-1614eb84
+  linux_image_id: sha256:56f88257d1124cd02121d99f422c4f98aec198ea7873fa4ccf9a5407dd4093e0
+verification:
+  - gate: focused pose-delivery regression after keeping the E2E perception publisher alive
+    result: 159 passed in 13.99 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-024-macos-pose-delivery-green.xml
+  - gate: macOS complete ordinary suite from fresh current overlay
+    result: 1676 passed in 43.74 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/exp-024-full-macos.xml
+  - gate: ai-station complete ordinary suite with candidate source and support prefixes
+    result: 1676 passed in 29.67 seconds
+    scratch: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-035-pytest-current/tmp
+    evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/tests/exp-035-current
+legacy_contract:
+  result: PASS
+  evidence:
+    - 381 focused legacy, interface, protocol, CLI, perception, and acceptance tests passed before the final publisher-lifetime fix.
+    - The final macOS and ai-station ordinary suites each passed all 1676 tests, including legacy launch defaults, exact arguments, process ordering, stdout, exit behavior, installed launch inventory, and package provenance.
+    - The final change is confined to the new E2E launch perception child lifetime; the two existing launch wrappers and their defaults were not changed.
+macos_four_point:
+  lifecycle: FULL_RESTART
+  results:
+    - experiment: EXP-025
+      keyframe: task_start
+      ros_domain_id: 231
+      accepted: true
+      position_error_mm: 1.175
+      monotonic_readback_skew_ms: 4.265
+      evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-025-macos-yolo-task-start-run-01
+    - experiment: EXP-026
+      keyframe: cup_test_forward_5cm
+      ros_domain_id: 232
+      accepted: true
+      position_error_mm: 1.146
+      monotonic_readback_skew_ms: 5.941
+      evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-026-macos-yolo-cup-test-forward-5cm-run-01
+    - experiment: EXP-027b
+      keyframe: cup_test_left_5cm
+      ros_domain_id: 180
+      accepted: true
+      position_error_mm: 1.120
+      monotonic_readback_skew_ms: 6.462
+      evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-027b-macos-yolo-cup-test-left-5cm-run-01
+    - experiment: EXP-028
+      keyframe: cup_test_right_5cm
+      ros_domain_id: 181
+      accepted: true
+      position_error_mm: 1.172
+      monotonic_readback_skew_ms: 11.077
+      evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-028-macos-yolo-cup-test-right-5cm-run-01
+linux_four_point:
+  lifecycle: FULL_RESTART
+  results:
+    - experiment: EXP-037
+      keyframe: task_start
+      ros_domain_id: 182
+      accepted: true
+      position_error_mm: 1.157
+      monotonic_readback_skew_ms: 1501.980
+      evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-037-linux-yolo-task-start-run-01
+    - experiment: EXP-038
+      keyframe: cup_test_forward_5cm
+      ros_domain_id: 183
+      accepted: true
+      position_error_mm: 1.161
+      monotonic_readback_skew_ms: 0.978
+      evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-038-linux-yolo-cup-test-forward-5cm-run-01
+    - experiment: EXP-039
+      keyframe: cup_test_left_5cm
+      ros_domain_id: 184
+      accepted: true
+      position_error_mm: 1.130
+      monotonic_readback_skew_ms: 0.956
+      evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-039-linux-yolo-cup-test-left-5cm-run-01
+    - experiment: EXP-040
+      keyframe: cup_test_right_5cm
+      ros_domain_id: 185
+      accepted: true
+      position_error_mm: 1.177
+      monotonic_readback_skew_ms: 2002.239
+      evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-040-linux-yolo-cup-test-right-5cm-run-01
+common_four_point_outcome:
+  - All eight valid runs recorded machine_accepted true and runtime_exit_code zero.
+  - Actual devices were MPS on macOS and CUDA in Docker on ai-station; CPU fallback remained disabled.
+  - Perception retained source_frame_id task_camera_frame while CUP_POSE_PUBLISHED and dynamic input used world.
+  - MuJoCo readback used clock_domain mujoco_sim and Planning Scene used system_wall; collection skew used only host-monotonic timestamps.
+  - Every final cup state was stable, supported by the table, free of fingertip contact, and matched the Planning Scene with an empty attached-object set.
+  - Owned cleanup completed with no remaining process, ROS node, or workflow-labelled container.
+invalid_and_diagnostic_records:
+  - Parent commit d7d155b7 passed the ai-station YOLO four-point batch in EXP-018 through EXP-021 with 1.125 to 1.173 mm final position error. Those results remain historical and were rerun as EXP-037 through EXP-040 after the final publisher-lifetime fix.
+  - EXP-022 is INVALID because the macOS dynamic loader environment omitted libmujoco; it did not enter qualification.
+  - EXP-023 passed macOS task_start on parent commit d7d155b7. EXP-024 is a VALID macOS/MPS failure on that commit: perception published once and exited before the dynamic best-effort subscriber received the pose. The final commit removes --once only from the new E2E launch and keeps the publisher alive until supervisor teardown.
+  - EXP-027 is INVALID because ROS_DOMAIN_ID 233 exceeds the Fast DDS port range. EXP-027b used a fresh root and legal domain 180.
+  - candidate-1614eb84-r1 and r2 are retained invalid build attempts; candidate r3 built but its test environment exposed old support-package provenance, yielding 1675 passed and one provenance failure. Candidate r4 rebuilt both source and support packages and passed.
+  - ai-station scratch exp-032 stopped at collection because the script replaced overlay PYTHONPATH; exp-033 ran 1676 tests with one provenance failure. Neither is counted as a passing gate.
+open_gates:
+  - No PickPlace-qualified Grounded SAM bundle is registered for macOS or ai-station, so the two Grounded SAM four-point cells remain blocked.
+  - The two-cup TARGET_AMBIGUOUS and live MoveIt abort cases remain unproven; the actual Planner rejection case remains valid from EXP-015.
+  - Per-configuration five-consecutive-success, GUI video, and learner explanation gates remain incomplete.
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-r1
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-r2
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-r3
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-030-pytest-current
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-031-pytest-current
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-032-pytest-current
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-033-pytest-current
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/scratch/exp-035-pytest-current
+deletion_performed: false
+conclusion: The exact current commit qualifies YOLO-Seg on both required platforms at all four registered points and preserves the legacy entry behavior. The full dual-model release matrix is still incomplete because the Grounded SAM artifact and the remaining stability, negative, video, and learner gates are not qualified.
+next_experiment: Register a PickPlace-qualified Grounded SAM bundle before opening either Grounded SAM four-point batch.
+```
