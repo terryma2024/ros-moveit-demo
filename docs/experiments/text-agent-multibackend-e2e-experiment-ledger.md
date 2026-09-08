@@ -1420,3 +1420,135 @@ archived_runs: []
 deletion_performed: false
 next_experiment: Verify fresh local and ai-station checkouts of Hugging Face revision 52b8334358e5ff11f94f10f7c14b1697ef44d964, register absolute model roots, and run the two current Grounded SAM E2E four-point batches.
 ```
+
+## Checkpoint CP-015 — Grounded SAM E2E preflight complete
+
+```yaml
+checkpoint_id: CP-015
+status: GO_GROUNDED_SAM_E2E
+prior_checkpoint: CP-014
+source:
+  worktree: /private/tmp/so101-text-agent-multibackend-e2e-01a07c7f
+  branch: codex/text-agent-multibackend-e2e
+  head: 7cfc5f7b39637147647c385705f34b16a75c0918
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  submodule: 71bc9346cf93d6227a6678fcacf63f3e18acfcba
+model:
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  local_root: /private/tmp/so101-debug-v5-t005-local-mac-r782-TwxaqX/model/bundle
+  linux_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  payload_readback: PASS_11_OF_11_BOTH_HOSTS
+platforms:
+  macos: {runtime: host, device: mps, fallback: false, locked_dependencies: PASS}
+  linux: {runtime: host, device: cuda, fallback: false, locked_dependencies: PASS}
+observed:
+  - The local Ollama endpoint lists qwen3.5:4b.
+  - Sandboxed MPS discovery is false, while the required unsandboxed probe reports torch 2.13.0, MPS built true and MPS available true.
+  - The existing Linux candidate rgbd_object_pose shebang is /usr/bin/python3, which lacks torch and transformers.
+  - The locked Linux Grounded SAM Python has torch 2.13.0+cu130, transformers 4.56.2, CUDA true, and NVIDIA GeForce RTX 5080; it requires ROS Python paths from the sourced Jazzy environment.
+  - No pre-existing Grounded SAM E2E result roots selected below exist.
+preserved_processes:
+  - ai-station tmux sessions codex, microduck-policy-queue, and so101-exp079-linux-r3
+  - unrelated ai-station Microduck GPU process if still present at each run preflight
+local_process_probe: unavailable in the managed sandbox; each unsandboxed run must perform a scoped preflight and postflight.
+next_experiment: EXP-041
+```
+
+## Experiment EXP-041 — Linux locked-Python E2E overlay
+
+```yaml
+experiment_id: EXP-041
+status: PLANNED
+prior_experiment: EXP-040
+hypothesis: Rebuilding only so101_demo_py from exact runtime commit 1614eb84 with the existing locked Grounded SAM Python produces an isolated E2E prefix that can import both ROS Jazzy and the frozen ML dependency set without changing product source.
+prediction: The installed rgbd_object_pose shebang names /data/work/venvs/so101-grounded-sam/bin/python, source and support provenance remain exact, and host CUDA/model preflight passes.
+single_variable: Python interpreter used to install so101_demo_py; product source, support underlay, model and policy remain unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - /data/work/ws_moveit/.worktrees/text-agent-e2e-e6057016 is exact 1614eb84 and clean.
+  - Existing candidate-1614eb84-r4 provides the already tested exact so101_mujoco_support underlay.
+success_criteria:
+  - Build exits zero into a previously nonexistent candidate-1614eb84-grounded-sam prefix.
+  - Installed entrypoint uses the locked Python and imports rclpy, torch and transformers with CUDA available.
+failure_criteria:
+  - Build or import fails, source provenance drifts, or the installed entrypoint uses system Python.
+invalid_criteria:
+  - Existing install directories are overwritten or an unrelated process is changed.
+provenance:
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install
+  runtime_executable: /data/work/venvs/so101-grounded-sam/bin/python /usr/bin/colcon
+  ros_domain_id: NOT_USED_BUILD_ONLY
+  gz_partition: NOT_USED_BUILD_ONLY
+commands:
+  - command: Source ROS Jazzy and candidate-1614eb84-r4, then drive /usr/bin/colcon with /data/work/venvs/so101-grounded-sam/bin/python to build only so101_demo_py into candidate-1614eb84-grounded-sam.
+    exit_code: PENDING
+observed: []
+inferred: []
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam
+decision: PENDING
+next_experiment: EXP-042
+```
+
+## Experiments EXP-042 through EXP-045 — Linux Grounded SAM E2E four-point batch
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-041
+common:
+  lifecycle: FULL_RESTART
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install
+  runtime_executable: installed so101_mujoco_text_pick_agent_e2e plus locked-Python rgbd_object_pose
+  model_root: /data/work/so101-evidence/v5-t005-grounded-sam-rgbd/20260901-b55c869/remediation/exp-079/models/grounded-sam-dino-nonpenetrating-epoch1-sam-decoder-epoch4-r1
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  device: cuda
+  allow_cpu_fallback: false
+  perception_runtime: host
+  planner: {provider: ollama, model: qwen3.5:4b, transport: task-owned reverse tunnel}
+  success_criteria:
+    - Strict workflow reaches E2E_ACCEPTED, machine_accepted is true, runtime and launch exit zero, and owned cleanup is complete.
+    - One Grounded SAM target, fresh world cup pose, DONE/19, physical lift/transport/release, stable table support, no final fingertip contact, empty attached set, matching Planning Scene world pose, actual CUDA, and no fallback.
+  failure_criteria: Any model, event, runtime, physical, Planning Scene, evidence, cleanup, or exit-code gate fails.
+  invalid_criteria: Source/model/interpreter/provider identity drifts, run root or domain is not fresh, or unrelated state contaminates the run.
+  command: Run the registered Linux Grounded SAM evidence wrapper with experiment id, keyframe and ROS domain shown below.
+runs:
+  - {experiment_id: EXP-042, keyframe: task_start, ros_domain_id: 186, gz_partition: text-e2e-linux-gsam-042, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-042-linux-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-043, keyframe: cup_test_forward_5cm, ros_domain_id: 187, gz_partition: text-e2e-linux-gsam-043, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-043-linux-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-044, keyframe: cup_test_left_5cm, ros_domain_id: 188, gz_partition: text-e2e-linux-gsam-044, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-044-linux-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-045, keyframe: cup_test_right_5cm, ros_domain_id: 189, gz_partition: text-e2e-linux-gsam-045, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-045-linux-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Experiments EXP-046 through EXP-049 — macOS Grounded SAM E2E four-point batch
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-045
+common:
+  lifecycle: FULL_RESTART
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  install_overlay: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos/install
+  runtime_executable: /Users/matianyi/ros2_jazzy/.venv/bin/python
+  model_root: /private/tmp/so101-debug-v5-t005-local-mac-r782-TwxaqX/model/bundle
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  device: mps
+  allow_cpu_fallback: false
+  perception_runtime: host
+  planner: {provider: ollama, model: qwen3.5:4b, transport: localhost}
+  success_criteria:
+    - Strict workflow reaches E2E_ACCEPTED, machine_accepted is true, runtime and launch exit zero, and owned cleanup is complete.
+    - One Grounded SAM target, fresh world cup pose, DONE/19, physical lift/transport/release, stable table support, no final fingertip contact, empty attached set, matching Planning Scene world pose, actual MPS, and no fallback.
+  failure_criteria: Any model, event, runtime, physical, Planning Scene, evidence, cleanup, or exit-code gate fails.
+  invalid_criteria: Source/model/interpreter/provider identity drifts, run root or domain is not fresh, MPS is unavailable outside the sandbox, or unrelated state contaminates the run.
+  command: Run the registered macOS Grounded SAM evidence wrapper with experiment id, keyframe and ROS domain shown below.
+runs:
+  - {experiment_id: EXP-046, keyframe: task_start, ros_domain_id: 190, gz_partition: text-e2e-macos-gsam-046, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-046-macos-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-047, keyframe: cup_test_forward_5cm, ros_domain_id: 191, gz_partition: text-e2e-macos-gsam-047, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-047-macos-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-048, keyframe: cup_test_left_5cm, ros_domain_id: 192, gz_partition: text-e2e-macos-gsam-048, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-048-macos-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-049, keyframe: cup_test_right_5cm, ros_domain_id: 193, gz_partition: text-e2e-macos-gsam-049, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-049-macos-grounded-sam-right-run-01, status: PLANNED}
+```
