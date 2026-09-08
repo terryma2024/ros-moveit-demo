@@ -1,6 +1,6 @@
 # Text Agent 多后端 MuJoCo E2E 使用与验收指南
 
-本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。当前提交 `1614eb84ef73ad36f050368a65ef40ddae3ea78f` 已在 macOS/MPS 和 ai-station/CUDA 上通过 YOLO-Seg 四点位验收，两个平台的普通测试也全部通过。Grounded SAM、连续五次、其余现场负例、GUI 视频和学习者验收仍未完成，因此不能把 YOLO 两格通过写成整个双模型矩阵已经验收。
+本指南记录 `so101_mujoco_text_pick_agent_e2e.launch.py` 的当前用法和 2026-09-08 的现场结果。当前提交 `1614eb84ef73ad36f050368a65ef40ddae3ea78f` 已在 macOS/MPS 和 ai-station/CUDA 上通过 YOLO-Seg 四点位验收，两个平台的普通测试也全部通过。Grounded SAM 已在旧感知入口完成三台机器的四点位 PickPlace 验收，但尚未在这个新入口上复验。连续五次、其余现场负例、GUI 视频和学习者验收也未完成，因此不能把当前结果写成整个双模型矩阵已经验收。
 
 ## 三个入口分别做什么
 
@@ -70,7 +70,7 @@ perception_model_root:="$E2E_MODEL_ROOT" \
 perception_model_manifest_sha256:="$E2E_MODEL_MANIFEST_SHA256"
 ```
 
-这段参数要替换 YOLO 参数并追加到完整 `ros2 launch` 命令。当前没有合格 bundle，macOS 和 ai-station 两格均未运行。
+这段参数要替换 YOLO 参数并追加到完整 `ros2 launch` 命令。已有合格 bundle 是 `Grounding DINO Tiny epoch 1 + SAM 2.1 Hiera Tiny decoder epoch 4`，manifest SHA-256 为 `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05`，阈值锁 SHA-256 为 `b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278`。模型固定在私有 Hugging Face 仓库 `zjumty/so101-grounded-sam-cup-pickplace` 的 revision `52b8334358e5ff11f94f10f7c14b1697ef44d964`。运行新入口前仍须下载到 fresh 目录、校验 bundle 和阈值锁，并登记本轮两台机器的实际路径。
 
 ## 怎样读事件和最终结果
 
@@ -123,8 +123,8 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 |---|---|---|
 | ai-station + YOLO-Seg + CUDA 四点位 | 通过 | EXP-037 至 EXP-040；位姿误差为 1.157、1.161、1.130、1.177 mm |
 | macOS + YOLO-Seg + MPS 四点位 | 通过 | EXP-025、EXP-026、EXP-027b、EXP-028；位姿误差为 1.175、1.146、1.120、1.172 mm |
-| ai-station + Grounded SAM | 未运行 | 没有已登记的 PickPlace-qualified bundle |
-| macOS + Grounded SAM | 未运行 | 同上 |
+| ai-station + Grounded SAM | 新入口未运行 | 既有感知入口 CUDA 四点位 4/4；需在当前 Text-Agent E2E 提交上复验 |
+| macOS + Grounded SAM | 新入口未运行 | 既有感知入口 MPS 四点位 4/4；当前 Mac 有明确的推理延迟例外，需在新入口上复验 |
 | Planner 拒绝负例 | 通过 | EXP-015 实际 `qwen3.5:4b` 返回 unsupported；没有感知或运动副作用 |
 | 双杯歧义负例 | 无效 | EXP-016 卡在 robot_description/正仿真时钟启动边界，没有进入推理 |
 | MoveIt action abort 负例 | 未运行 | 没有现场注入证据 |
@@ -134,7 +134,7 @@ jq '{machine_accepted,primary_failure,secondary_failures,runtime_exit_code,
 
 当前证据明确区分两个坐标系：感知输入来源仍是 `task_camera_frame`，`CUP_POSE_PUBLISHED.frame_id` 和 dynamic 输入都是 `world`。终态文件也分别标记 `mujoco_sim` 与 `system_wall`，不再直接相减这两个来源时间；采集先后只比较同一宿主机的 `readback_monotonic_ns`。这次修改没有放宽几何、稳定性或接触阈值。
 
-八次有效 YOLO 四点运行都满足相同条件：launch 返回 0、`machine_accepted=true`、实际设备为 MPS 或 CUDA、杯体稳定且受支撑、无 fingertip contact、Planning Scene 的 attached 集合为空、最终位姿匹配，owned process/container 清理完整。当前矩阵的主要工件阻塞是两平台都没有登记可用于 PickPlace 资格运行的 Grounded SAM bundle。
+八次有效 YOLO 四点运行都满足相同条件：launch 返回 0、`machine_accepted=true`、实际设备为 MPS 或 CUDA、杯体稳定且受支撑、无 fingertip contact、Planning Scene 的 attached 集合为空、最终位姿匹配，owned process/container 清理完整。Grounded SAM 当前缺的是新入口复验，不是模型资格。旧入口证据已经覆盖 Linux CUDA、当前 Mac MPS 和 `mac-mini` MPS；当前 Mac 的功能结果为 4/4，但四次推理只有一次低于 2000 ms。
 
 ## 已保留证据
 
