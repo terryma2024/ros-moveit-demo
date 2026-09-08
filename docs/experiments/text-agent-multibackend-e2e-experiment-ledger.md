@@ -1657,3 +1657,357 @@ runs:
   - {experiment_id: EXP-056, keyframe: cup_test_left_5cm, ros_domain_id: 200, gz_partition: text-e2e-macos-gsam-exp-056, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-056-macos-grounded-sam-left-run-01, status: PLANNED}
   - {experiment_id: EXP-057, keyframe: cup_test_right_5cm, ros_domain_id: 201, gz_partition: text-e2e-macos-gsam-exp-057, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-057-macos-grounded-sam-right-run-01, status: PLANNED}
 ```
+
+## Checkpoint CP-017 — Installed-source provenance adapter required
+
+```yaml
+checkpoint_id: CP-017
+status: REREGISTERED_AFTER_PRESTACK_INVALID
+prior_checkpoint: CP-016
+trigger: EXP-050 exited before evidence-root allocation or stack creation.
+observed:
+  - EXP-050 again verified exact source checkout, model manifest, locked Grounded SAM entrypoint, CUDA device, and planner availability.
+  - The E2E launch rejected with EXECUTION_SOURCE_PROVENANCE_UNAVAILABLE before creating its run root.
+  - The installed Grounded SAM module was a copied file below the install prefix, so git discovery from the module path could not reach a repository.
+  - The already-qualified Linux YOLO candidate uses candidate-1614eb84-r4/pythonpath/so101_demo as a link to the exact source checkout and prepends that directory to PYTHONPATH; its live provenance record resolves the module to the exact worktree and source commit 1614eb84.
+root_cause: The locked-Python build in EXP-041 changed the installed interpreter but omitted the source-module mapping required by the existing execution-provenance contract.
+classification:
+  EXP-050: INVALID_MISSING_INSTALLED_SOURCE_PROVENANCE_MAPPING
+  EXP-051: CANCELLED_BEFORE_RUN
+  EXP-052: CANCELLED_BEFORE_RUN
+  EXP-053: CANCELLED_BEFORE_RUN
+  EXP-054: CANCELLED_BEFORE_RUN
+  EXP-055: CANCELLED_BEFORE_RUN
+  EXP-056: CANCELLED_BEFORE_RUN
+  EXP-057: CANCELLED_BEFORE_RUN
+correction:
+  - Create an isolated candidate-1614eb84-grounded-sam/pythonpath/so101_demo link to the exact Linux source tree, matching the proven candidate-r4 deployment pattern.
+  - Prepend that mapping after sourcing the Grounded SAM install and fail closed unless resolve_installed_execution_identity returns commit 1614eb84 and the Grounded SAM installed prefix.
+  - Preserve EXP-050 controller evidence and do not reuse any cancelled identity.
+linux_wrapper_sha256: 0208a6fe89afca56bbfa04ff5e36f8a1b17414af727a9e765807241293d07101
+local_source:
+  branch_head: f2ad62c0fabd510a861a93e18e898962273555f2
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  runtime_tree_diff: EMPTY_UNDER_SRC
+decision: REGISTER_PROVENANCE_MAPPING_THEN_RETRY_NEW_IDENTITIES
+next_experiment: EXP-058
+```
+
+## Experiment EXP-058 — Linux Grounded SAM source-module mapping
+
+```yaml
+experiment_id: EXP-058
+status: PLANNED
+prior_experiment: EXP-050_INVALID
+hypothesis: Adding only the proven source-module mapping to the isolated Grounded SAM candidate makes the locked Python resolve both exact Git provenance and the Grounded SAM package prefix.
+prediction: The locked Python resolves text_agent.py inside the exact 1614eb84 worktree, resolve_installed_execution_identity returns source commit 1614eb84 and the candidate-1614eb84-grounded-sam install prefix, and CUDA/model imports remain unchanged.
+single_variable: Add candidate-1614eb84-grounded-sam/pythonpath/so101_demo and prepend it to PYTHONPATH; do not rebuild or change product source, model, dependency environment, or support underlay.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - The mapping path is absent.
+  - The exact source checkout remains clean at 1614eb84.
+  - The copied installed module remains retained and unmodified.
+success_criteria:
+  - Link target and resolved module path name the exact source checkout.
+  - InstalledExecutionIdentity reports commit 1614eb84 and the Grounded SAM candidate prefix.
+  - The entrypoint still names the locked Python, which reports CUDA true on NVIDIA GeForce RTX 5080.
+failure_criteria: Any identity, prefix, interpreter, source, or device check differs.
+invalid_criteria: An existing path is overwritten or product/model files are changed.
+provenance:
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  source_root: /data/work/ws_moveit/.worktrees/text-agent-e2e-e6057016
+  mapping_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/pythonpath
+  installed_prefix: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install/so101_demo_py
+command: Create the fresh mapping, source ROS/support/Grounded SAM overlays, prepend the mapping, and read back module, execution identity, entrypoint and CUDA identity with the locked Python.
+decision: PENDING
+next_experiment: EXP-059
+```
+
+## Experiments EXP-059 through EXP-062 — Linux Grounded SAM E2E four-point final retry
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-058
+common:
+  lifecycle: FULL_RESTART
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install
+  source_mapping: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/pythonpath
+  wrapper_sha256: 0208a6fe89afca56bbfa04ff5e36f8a1b17414af727a9e765807241293d07101
+  model_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  runtime: {perception: host, device: cuda, allow_cpu_fallback: false, planner: qwen3.5:4b}
+  success_criteria:
+    - Strict workflow reaches E2E_ACCEPTED, machine_accepted is true, runtime and launch exit zero, and owned cleanup is complete.
+    - Exactly one Grounded SAM target produces a fresh world cup pose; dynamic execution reaches DONE/19; lift, transport, release, final table support, no fingertip contact, empty attachment, and matching Planning Scene pose all pass; actual device is CUDA with no fallback.
+  failure_criteria: Any strict event, identity, inference, pose, motion, physics, Planning Scene, cleanup, or exit gate fails.
+  invalid_criteria: Source/model/provider/mapping identity drifts, either evidence directory is pre-existing, or unrelated state contaminates the run.
+runs:
+  - {experiment_id: EXP-059, keyframe: task_start, ros_domain_id: 202, gz_partition: text-e2e-linux-gsam-exp-059, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-059-linux-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-060, keyframe: cup_test_forward_5cm, ros_domain_id: 203, gz_partition: text-e2e-linux-gsam-exp-060, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-060-linux-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-061, keyframe: cup_test_left_5cm, ros_domain_id: 204, gz_partition: text-e2e-linux-gsam-exp-061, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-061-linux-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-062, keyframe: cup_test_right_5cm, ros_domain_id: 205, gz_partition: text-e2e-linux-gsam-exp-062, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-062-linux-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Experiments EXP-063 through EXP-066 — macOS Grounded SAM E2E four-point final retry
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-062
+common:
+  lifecycle: FULL_RESTART
+  branch_head: f2ad62c0fabd510a861a93e18e898962273555f2
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  runtime_tree_diff_from_1614eb84: EMPTY_UNDER_SRC
+  install_overlay: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos/install
+  wrapper_sha256: 4a223c58928902a290817311a9ad96f094fc4f1870e801c2bdcbcd6062c8cf98
+  model_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  runtime: {perception: host, device: mps, allow_cpu_fallback: false, planner: qwen3.5:4b}
+  success_criteria:
+    - Strict workflow reaches E2E_ACCEPTED, machine_accepted is true, runtime and launch exit zero, and owned cleanup is complete.
+    - Exactly one Grounded SAM target produces a fresh world cup pose; dynamic execution reaches DONE/19; lift, transport, release, final table support, no fingertip contact, empty attachment, and matching Planning Scene pose all pass; actual device is MPS with no fallback.
+  failure_criteria: Any strict event, identity, inference, pose, motion, physics, Planning Scene, cleanup, or exit gate fails.
+  invalid_criteria: Source/model/provider identity drifts, either evidence directory is pre-existing, MPS is unavailable outside the sandbox, or unrelated state contaminates the run.
+runs:
+  - {experiment_id: EXP-063, keyframe: task_start, ros_domain_id: 206, gz_partition: text-e2e-macos-gsam-exp-063, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-063-macos-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-064, keyframe: cup_test_forward_5cm, ros_domain_id: 207, gz_partition: text-e2e-macos-gsam-exp-064, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-064-macos-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-065, keyframe: cup_test_left_5cm, ros_domain_id: 208, gz_partition: text-e2e-macos-gsam-exp-065, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-065-macos-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-066, keyframe: cup_test_right_5cm, ros_domain_id: 209, gz_partition: text-e2e-macos-gsam-exp-066, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-066-macos-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Checkpoint CP-018 — Source-mapping verification harness invalid
+
+```yaml
+checkpoint_id: CP-018
+status: INVALID_HARNESS_REREGISTERED
+prior_checkpoint: CP-017
+observed:
+  - EXP-058 created the previously absent candidate-1614eb84-grounded-sam/pythonpath/so101_demo link to the exact source checkout.
+  - Its validation shell enabled nounset before sourcing ROS, causing setup-variable errors and leaving ament_index_python unavailable to the locked Python.
+  - The validation pipeline omitted pipefail, so tee masked the Python failure and the trailing shell printed EXP_058_PASS incorrectly.
+classification:
+  EXP-058: INVALID_VALIDATION_HARNESS
+  EXP-059: CANCELLED_BEFORE_RUN
+  EXP-060: CANCELLED_BEFORE_RUN
+  EXP-061: CANCELLED_BEFORE_RUN
+  EXP-062: CANCELLED_BEFORE_RUN
+  EXP-063: CANCELLED_BEFORE_RUN
+  EXP-064: CANCELLED_BEFORE_RUN
+  EXP-065: CANCELLED_BEFORE_RUN
+  EXP-066: CANCELLED_BEFORE_RUN
+retained_state:
+  - The newly created source mapping is retained because its link target is exact and no pre-existing path was overwritten.
+  - The invalid provenance-preflight.txt is retained and must not be cited as passing evidence.
+correction: Source ROS and overlays before enabling nounset, enable pipefail before tee, and use a new read-only experiment identity to verify the retained mapping.
+next_experiment: EXP-067
+```
+
+## Experiment EXP-067 — Read-only verification of retained Linux source mapping
+
+```yaml
+experiment_id: EXP-067
+status: VALID
+prior_experiment: EXP-058_INVALID
+hypothesis: The retained mapping itself is correct; only the EXP-058 validation harness was invalid.
+prediction: With ROS and both overlays sourced before strict shell options, the locked Python imports ROS and Grounded SAM dependencies, resolves text_agent.py to the exact source checkout, and reports source commit 1614eb84 plus the Grounded SAM install prefix.
+single_variable: Correct validation shell ordering and pipeline status propagation; make no filesystem or product change.
+lifecycle: READ_ONLY_PREFLIGHT
+success_criteria:
+  - Link, module, source commit, installed prefix, entrypoint interpreter, CUDA device, and model manifest all match the registered identities.
+  - The Python assertion exit reaches the shell through pipefail.
+failure_criteria: Any assertion or source step fails.
+invalid_criteria: Any file other than the dedicated EXP-067 evidence output is created or changed.
+observed:
+  - The retained link resolves to the exact 1614eb84 source checkout.
+  - The locked Python resolves text_agent.py from that checkout and InstalledExecutionIdentity reports commit 1614eb84 plus the isolated Grounded SAM installed prefix.
+  - The installed rgbd_object_pose shebang remains the locked Python. rclpy resolves from ROS Jazzy; transformers is 4.56.2; torch is 2.13.0+cu130 with CUDA true on NVIDIA GeForce RTX 5080.
+  - With pipefail enabled, all Python assertions propagated exit zero and the shell reached EXP_067_PASS.
+conclusion: PASS_RETAINED_SOURCE_MAPPING
+evidence: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/exp-067-provenance-readback.txt
+decision: KEEP
+next_experiment: EXP-068
+```
+
+## Experiments EXP-068 through EXP-071 — Linux Grounded SAM E2E four-point qualified retry
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-067
+common:
+  lifecycle: FULL_RESTART
+  source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  install_overlay: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install
+  source_mapping: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/pythonpath
+  wrapper_sha256: 0208a6fe89afca56bbfa04ff5e36f8a1b17414af727a9e765807241293d07101
+  model_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  runtime: {perception: host, device: cuda, allow_cpu_fallback: false, planner: qwen3.5:4b}
+  success_criteria: Strict E2E acceptance plus one target, fresh world pose, DONE/19, physical lift/transport/release, final stability, table support, no fingertip contact, empty attachment, matching Planning Scene pose, CUDA with no fallback, zero exits, and complete owned cleanup.
+  failure_criteria: Any identity, event, inference, pose, motion, physics, Planning Scene, cleanup, or exit gate fails.
+  invalid_criteria: Source/model/provider/mapping identity drifts, either evidence directory is pre-existing, or unrelated state contaminates the run.
+runs:
+  - {experiment_id: EXP-068, keyframe: task_start, ros_domain_id: 210, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-068-linux-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-069, keyframe: cup_test_forward_5cm, ros_domain_id: 211, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-069-linux-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-070, keyframe: cup_test_left_5cm, ros_domain_id: 212, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-070-linux-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-071, keyframe: cup_test_right_5cm, ros_domain_id: 213, run_root: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-071-linux-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Experiments EXP-072 through EXP-075 — macOS Grounded SAM E2E four-point qualified retry
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-071
+common:
+  lifecycle: FULL_RESTART
+  branch_head: f2ad62c0fabd510a861a93e18e898962273555f2
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  runtime_tree_diff_from_1614eb84: EMPTY_UNDER_SRC
+  install_overlay: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos/install
+  wrapper_sha256: 4a223c58928902a290817311a9ad96f094fc4f1870e801c2bdcbcd6062c8cf98
+  model_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  runtime: {perception: host, device: mps, allow_cpu_fallback: false, planner: qwen3.5:4b}
+  success_criteria: Strict E2E acceptance plus one target, fresh world pose, DONE/19, physical lift/transport/release, final stability, table support, no fingertip contact, empty attachment, matching Planning Scene pose, MPS with no fallback, zero exits, and complete owned cleanup.
+  failure_criteria: Any identity, event, inference, pose, motion, physics, Planning Scene, cleanup, or exit gate fails.
+  invalid_criteria: Source/model/provider identity drifts, either evidence directory is pre-existing, MPS is unavailable outside the sandbox, or unrelated state contaminates the run.
+runs:
+  - {experiment_id: EXP-072, keyframe: task_start, ros_domain_id: 214, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-072-macos-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-073, keyframe: cup_test_forward_5cm, ros_domain_id: 215, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-073-macos-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-074, keyframe: cup_test_left_5cm, ros_domain_id: 216, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-074-macos-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-075, keyframe: cup_test_right_5cm, ros_domain_id: 217, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-075-macos-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Checkpoint CP-019 — macOS MuJoCo loader environment restored
+
+```yaml
+checkpoint_id: CP-019
+status: KNOWN_INVALID_ENVIRONMENT_REREGISTERED
+prior_checkpoint: CP-018
+observed:
+  - EXP-072 passed model manifest, package prefix, branch head, MPS availability, and planner preflight.
+  - The macOS MuJoCo hardware plugin then failed to load @rpath/libmujoco.3.4.0.dylib because the wrapper environment omitted the installed mujoco_vendor library directory.
+  - No simulation clock was produced. Grounded SAM waited for a positive clock and never entered inference; dynamic runtime ended with CUP_POSE_TIMEOUT.
+  - Cleanup completed with no owned remainder. This reproduces the already documented EXP-022 invalid environment class rather than a backend result.
+classification:
+  EXP-072: INVALID_MISSING_MUJOCO_DYLD_PATH
+  EXP-073: CANCELLED_BEFORE_RUN
+  EXP-074: CANCELLED_BEFORE_RUN
+  EXP-075: CANCELLED_BEFORE_RUN
+root_cause: The fresh wrapper sourced the candidate overlay but did not restore the explicit mujoco_vendor path used by the preceding successful macOS E2E runs.
+correction:
+  - Prepend the exact installed mujoco_vendor library directory to DYLD_LIBRARY_PATH after sourcing the candidate overlay.
+  - Fail closed on the registered library SHA256 and verify that directory is first in DYLD_LIBRARY_PATH before launch.
+  - Keep source, model, thresholds, MPS policy, launch and product code unchanged.
+mujoco_library:
+  path: /Users/matianyi/Projects/robot_demo_001/moveit-demo/install/mujoco_vendor/opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib
+  sha256: fefba57cf2d7342e686addbf0a3a84822fee8c9c086fef161611c87cec751e34
+macos_wrapper_sha256: 319549ce9ebf4e54cb33731c44d29f5a7dbc022a66a721dba3b51550b64692a6
+decision: RETRY_WITH_NEW_IDENTITIES
+next_experiment: EXP-076
+```
+
+## Experiments EXP-076 through EXP-079 — macOS Grounded SAM E2E four-point loader-corrected batch
+
+```yaml
+batch_status: PLANNED
+prior_experiment: EXP-072_INVALID
+common:
+  lifecycle: FULL_RESTART
+  branch_head: f2ad62c0fabd510a861a93e18e898962273555f2
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  runtime_tree_diff_from_1614eb84: EMPTY_UNDER_SRC
+  install_overlay: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos/install
+  wrapper_sha256: 319549ce9ebf4e54cb33731c44d29f5a7dbc022a66a721dba3b51550b64692a6
+  model_manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  mujoco_library_sha256: fefba57cf2d7342e686addbf0a3a84822fee8c9c086fef161611c87cec751e34
+  runtime: {perception: host, device: mps, allow_cpu_fallback: false, planner: qwen3.5:4b}
+  success_criteria: Strict E2E acceptance plus one target, fresh world pose, DONE/19, physical lift/transport/release, final stability, table support, no fingertip contact, empty attachment, matching Planning Scene pose, MPS with no fallback, zero exits, and complete owned cleanup.
+  failure_criteria: Any identity, event, inference, pose, motion, physics, Planning Scene, cleanup, or exit gate fails.
+  invalid_criteria: Source/model/provider/library identity drifts, either evidence directory is pre-existing, MPS is unavailable outside the sandbox, or unrelated state contaminates the run.
+runs:
+  - {experiment_id: EXP-076, keyframe: task_start, ros_domain_id: 224, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-076-macos-grounded-sam-task-start-run-01, status: PLANNED}
+  - {experiment_id: EXP-077, keyframe: cup_test_forward_5cm, ros_domain_id: 225, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-077-macos-grounded-sam-forward-run-01, status: PLANNED}
+  - {experiment_id: EXP-078, keyframe: cup_test_left_5cm, ros_domain_id: 226, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-078-macos-grounded-sam-left-run-01, status: PLANNED}
+  - {experiment_id: EXP-079, keyframe: cup_test_right_5cm, ros_domain_id: 227, run_root: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-079-macos-grounded-sam-right-run-01, status: PLANNED}
+```
+
+## Checkpoint CP-020 — Grounded SAM new-entry dual-platform four-point acceptance
+
+```yaml
+checkpoint_id: CP-020
+status: VALID_GROUNDED_SAM_TWO_PLATFORM_FOUR_POINT
+prior_checkpoint: CP-019
+scope: Qualify the frozen Grounded SAM production bundle through so101_mujoco_text_pick_agent_e2e.launch.py on current ai-station CUDA and macOS MPS without changing product source or the legacy entry points.
+model:
+  pipeline: Grounding DINO Tiny epoch 1 plus SAM 2.1 Hiera Tiny decoder epoch 4
+  manifest_sha256: b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
+  threshold_lock_sha256: b02e3be2814d03b954bdcb73b2f79f8b91d1227c6476fcc82695cabb91f50278
+  thresholds: {box: 0.5, text: 0.5, duplicate_iou: 0.85, max_candidates: 16, sam_quality: 0.5, min_mask_pixels: 64, max_mask_area_ratio: 0.50}
+  runtime: host
+  cpu_fallback: false
+source:
+  runtime_code_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  linux_source_commit: 1614eb84ef73ad36f050368a65ef40ddae3ea78f
+  macos_branch_head: f2ad62c0fabd510a861a93e18e898962273555f2
+  macos_src_diff_from_runtime_code_commit: EMPTY
+linux_four_point:
+  device: cuda
+  installed_prefix: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/candidate-1614eb84-grounded-sam/install/so101_demo_py
+  results:
+    - {experiment: EXP-068, keyframe: task_start, accepted: true, candidates: 1, transitions: 19, inference_ms: 243.762, cold_start_ms: 5105.006, position_error_mm: 1.159}
+    - {experiment: EXP-069, keyframe: cup_test_forward_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 225.936, cold_start_ms: 5065.109, position_error_mm: 1.147}
+    - {experiment: EXP-070, keyframe: cup_test_left_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 287.965, cold_start_ms: 5028.713, position_error_mm: 1.126}
+    - {experiment: EXP-071, keyframe: cup_test_right_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 241.002, cold_start_ms: 5040.852, position_error_mm: 1.175}
+macos_four_point:
+  device: mps
+  installed_prefix: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/candidate-1614eb84-macos/install/so101_demo_py
+  results:
+    - {experiment: EXP-076, keyframe: task_start, accepted: true, candidates: 1, transitions: 19, inference_ms: 1278.785, cold_start_ms: 9521.116, position_error_mm: 1.170}
+    - {experiment: EXP-077, keyframe: cup_test_forward_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 1248.431, cold_start_ms: 7776.030, position_error_mm: 1.156}
+    - {experiment: EXP-078, keyframe: cup_test_left_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 1266.683, cold_start_ms: 7478.558, position_error_mm: 1.117}
+    - {experiment: EXP-079, keyframe: cup_test_right_5cm, accepted: true, candidates: 1, transitions: 19, inference_ms: 1300.673, cold_start_ms: 7408.396, position_error_mm: 1.172}
+common_outcome:
+  - All eight runs reached the exact strict event sequence ending in E2E_ACCEPTED, recorded machine_accepted true and runtime_exit_code zero, and returned wrapper/launch exit zero.
+  - Each perception result recorded one candidate and one matching candidate, published a fresh world cup pose, used the requested actual device, and retained the frozen manifest identity.
+  - Each dynamic manifest recorded DONE, transition_count 19, the full IDLE-to-DONE state trace, physical lift/transport/release, and no failure.
+  - Each final cup state was stable, supported by the table and free of fingertip contact. Planning Scene pose matched MuJoCo and the attached-object set was empty.
+  - Each authoritative cleanup record was complete with an empty remainder; postflight ROS node output was empty and the extra process audit found no owned process.
+  - The task-owned reverse planner tunnel was closed after the Linux batch. The pre-existing ai-station tmux sessions and Microduck training process remained present.
+legacy_entry_behavior:
+  status: PRESERVED_BY_UNCHANGED_RUNTIME_TREE_AND_EXISTING_REGRESSION_GATES
+  evidence:
+    - No product source changed after runtime commit 1614eb84; this continuation changes only documentation and task-local evidence wrappers.
+    - The exact runtime code already passed 381 focused legacy/interface tests and the complete 1676-test ordinary package suite on both macOS and ai-station, including both existing launch entry contracts.
+    - A fresh focused rerun of test_text_pick_agent_launch.py and test_perception_pick_place_launch.py passed 173 tests in 3.32 seconds after assigning ROS_HOME and ROS_LOG_DIR inside the registered local evidence root.
+    - The new Grounded SAM runs invoke only so101_mujoco_text_pick_agent_e2e.launch.py and do not modify either legacy wrapper or its defaults.
+  focused_rerun:
+    command: pytest test_text_pick_agent_launch.py test_perception_pick_place_launch.py
+    result: 173 passed in 3.32 seconds
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-final-legacy-entry-regression-r2.xml
+  invalid_test_attempt:
+    classification: INVALID_SANDBOX_ROS_LOG_PATH
+    observed: The first identical test selection failed all 173 cases before business assertions because launch attempted to create /Users/matianyi/.ros/log outside the writable sandbox.
+    evidence: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-final-legacy-entry-regression.xml
+machine_validation:
+  validator_sha256: b10c7ad4da808f5f72600723706d326481089466b37c033d74c013a71436da85
+  linux_summary: {path: /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/grounded-sam-linux-four-point-summary.json, sha256: 3ae25a9f640b801782836769e0a8f9c8b80a9f9a6695b8f8457cc64310253f51, result: 4/4}
+  macos_summary: {path: /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-macos-four-point-summary.json, sha256: d5afd85cd61f857dd1185e1c50a82015bfd047d712990b89a818aef32f0774b5, result: 4/4}
+invalid_runs:
+  - {experiment: EXP-042, classification: INVALID_WRAPPER_PRECREATED_EVIDENCE_ROOT}
+  - {experiment: EXP-050, classification: INVALID_MISSING_INSTALLED_SOURCE_PROVENANCE_MAPPING}
+  - {experiment: EXP-058, classification: INVALID_VALIDATION_HARNESS}
+  - {experiment: EXP-072, classification: INVALID_MISSING_MUJOCO_DYLD_PATH}
+retained_runs:
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad
+archived_runs: []
+deletion_candidates:
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/live/exp-042-linux-grounded-sam-task-start-run-01
+  - /data/work/so101-evidence/text-agent-e2e/20260907T185218Z-197fa789-046f-4bd6-b029-641673ac17ad/controller/exp-050-linux-grounded-sam-task-start-run-01
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/live/exp-072-macos-grounded-sam-task-start-run-01
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/controller/exp-072-macos-grounded-sam-task-start-run-01
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-final-legacy-entry-regression.xml
+  - /tmp/so101-debug-text-agent-e2e-impl-20260907-01a07c7f/grounded-sam-final-legacy-ros-home
+deletion_performed: false
+conclusion: The Grounded SAM backend passes the new Text-Agent E2E entry at all four registered points on both required current platforms. Together with CP-013, the dual-platform by dual-model four-point matrix is 16/16. Remaining release gates are the registered consecutive-success, live negative, GUI video and learner-evidence items.
+next_experiment: Complete the remaining Task 9 gates without relabeling this four-point result as full release completion.
+```
