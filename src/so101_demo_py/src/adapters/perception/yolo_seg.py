@@ -12,6 +12,10 @@ from typing import Any, cast
 
 import numpy as np
 
+from so101_demo.adapters.perception.errors import (
+    DeterministicModelResultError, ModelRuntimeInfrastructureError,
+)
+
 from so101_demo.core.detection import (
     DetectionBatch,
     DetectionCandidate,
@@ -26,7 +30,7 @@ from so101_demo.adapters.perception.model_runtime import (
 )
 
 
-class YoloResultError(ValueError):
+class YoloResultError(DeterministicModelResultError):
     pass
 
 
@@ -127,6 +131,8 @@ def convert_yolo_result(
             raise YoloResultError("masks are required for detected instances") from error
     if masks.ndim != 3:
         raise YoloResultError("mask dimensions are invalid")
+    if not np.isfinite(masks).all():
+        raise YoloResultError("mask values must be finite")
     if not (len(classes) == len(confidences) == len(masks) == count):
         raise YoloResultError("YOLO output counts differ")
 
@@ -222,9 +228,9 @@ class YoloSegDetector:
                 verbose=False,
             )
         except Exception as error:
-            raise YoloResultError(f"INFERENCE_FAILED: {error}") from error
+            raise ModelRuntimeInfrastructureError(f"INFERENCE_FAILED: {error}") from error
         if not isinstance(results, (list, tuple)) or len(results) != 1:
-            raise YoloResultError("INFERENCE_FAILED: expected exactly one YOLO result")
+            raise YoloResultError("RESULT_CONTRACT_INVALID: expected exactly one YOLO result")
         return list(results)
 
     def detect(
