@@ -481,3 +481,104 @@ def test_unreadable_artifact_fails_with_the_result_port_contract(tmp_path, monke
     monkeypatch.setattr(Path, 'read_bytes', unreadable)
     with pytest.raises(api.ArtifactError):
         sealed.verify()
+
+
+@pytest.mark.parametrize('mode', [RunMode.EXECUTE, RunMode.PLAN_ONLY, RunMode.DRY_RUN])
+@pytest.mark.parametrize('access', ['discover', 'verify', 'commit'])
+def test_adapter_requires_parent_durability_after_rename_failure(
+        tmp_path, monkeypatch, mode, access):
+    """Visible evidence cannot be accepted until publication-parent fsync succeeds."""
+    root = tmp_path / 'workers/w1'
+    adapter = api.SealedResultAdapter({'w1': root}, mode)
+    journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
+    try:
+        request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
+        config = load_parallel_runtime_config(
+            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        coordinator = BatchCoordinator(journal, request, config=config,
+                                       clock=lambda: 0.0, result_port=adapter)
+        coordinator.register_worker('w1', generation=1)
+        granted = coordinator.grant_lease('w1', generation=1)
+        coordinator.ack_lease(granted, request_key='ack')
+        validation = mode is not RunMode.EXECUTE
+        start = (coordinator.ack_validation_started if validation
+                 else coordinator.ack_attempt_started)
+        start(granted, request_key='start')
+        fields = asdict(granted)
+        del fields['lease_issued_monotonic_s'], fields['lease_deadline_monotonic_s']
+        if validation:
+            fields['validation_id'] = fields.pop('attempt_id')
+        cls = ValidationIdentity if validation else AttemptIdentity
+        work = populated(root, validation=validation, mode=mode, who=cls(**fields))
+        parent = work.path.parent
+        location = parent / 'sealed'
+        fail_parent = True
+        synced = []
+        real_fsync = os.fsync
+
+        def sync(fd):
+            path = Path(os.readlink(f'/proc/self/fd/{fd}'))
+            if path == parent and location.exists():
+                if fail_parent:
+                    raise OSError('injected publication-parent failure')
+                synced.append(path)
+            return real_fsync(fd)
+
+        monkeypatch.setattr(os, 'fsync', sync)
+        with pytest.raises(OSError, match='publication-parent failure'):
+            work.seal()
+        assert location.is_dir()
+        assert not work.path.exists()
+        before = digest_tree(location)
+        history = journal.replay().events
+
+        def accept():
+            if access == 'discover':
+                return adapter.discover(granted, parent)
+            if access == 'verify':
+                return adapter.verify(granted, str(location), mode)
+            commit = coordinator.commit_validation if validation else coordinator.commit_result
+            return commit(granted, location, request_key='result')
+
+        if access == 'discover':
+            assert accept() is None
+        else:
+            with pytest.raises(api.ArtifactError):
+                accept()
+        assert journal.replay().events == history
+        assert coordinator.snapshot().points['point-1'].status is PointStatus.UNRUN
+        assert digest_tree(location) == before
+        fail_parent = False
+        # No in-memory durable flag is retained: a new adapter must sync again.
+        adapter = api.SealedResultAdapter({'w1': root}, mode)
+        coordinator.result_port = adapter
+        result = accept()
+        assert result is not None
+        assert parent in synced
+        assert digest_tree(location) == before
+        if access == 'commit':
+            kinds = [event.type for event in journal.replay().events]
+            assert ('VALIDATION_COMMITTED' if validation else 'RESULT_COMMITTED') in kinds
+    finally:
+        journal.close()
+
+
+@pytest.mark.parametrize('error_type', [OSError, PermissionError])
+def test_adapter_manifest_digest_read_failure_obeys_result_port_contract(
+        tmp_path, monkeypatch, error_type):
+    """Final digest reads must fail as ArtifactError, even after inventory verification."""
+    root = tmp_path / 'workers/w1'
+    work = populated(root)
+    sealed = work.seal()
+    adapter = api.SealedResultAdapter({'w1': root}, RunMode.EXECUTE)
+    real_read = Path.read_bytes
+
+    def unreadable(path):
+        if path == sealed.path / 'attempt_result_manifest.json':
+            raise error_type('injected manifest digest read failure')
+        return real_read(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', unreadable)
+    with pytest.raises(api.ArtifactError):
+        adapter.verify(lease(), str(sealed.path), RunMode.EXECUTE)
+    assert adapter.discover(lease(), work.path.parent) is None
