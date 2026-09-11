@@ -263,9 +263,10 @@ class BatchCoordinator:
         if (worker['state'] != 'AVAILABLE'
                 or worker['lease_count'] >= self.request.max_points_per_worker):
             return None
-        point_id = next((p for p, value in self._state['points'].items()
-                         if not value['terminal'] and not value['active_attempt']
-                         and not value['blocked_by']), None)
+        point_id = next((p for p in self.request.selected_point_ids
+                         if not self._state['points'][p]['terminal']
+                         and not self._state['points'][p]['active_attempt']
+                         and not self._state['points'][p]['blocked_by']), None)
         if point_id is None:
             return None
         point = deepcopy(self._state['points'][point_id])
@@ -498,6 +499,9 @@ class BatchCoordinator:
                         owned_processes_stopped=False, controllers_stopped=False,
                         readmitted=False):
         """Re-admit capacity; INVALID needs all four explicit fencing/stop gates."""
+        if any(type(value) is not bool for value in (
+                succeeded, fenced, owned_processes_stopped, controllers_stopped, readmitted)):
+            raise ValueError('BOOLEAN_RECOVERY_CONFIRMATIONS')
         self._tick()
         worker = self._worker(worker_id, generation)
         if worker['lease']:
@@ -530,6 +534,9 @@ class BatchCoordinator:
     @_locked
     def complete_cleanup(self, *, owned_processes_stopped, controllers_stopped):
         """Finalize unstarted selections only after owned processes/controllers stop."""
+        if any(type(value) is not bool for value in (
+                owned_processes_stopped, controllers_stopped)):
+            raise ValueError('BOOLEAN_CLEANUP_CONFIRMATIONS')
         self._tick()
         if not self._state['terminal_reason'] or not all((
                 owned_processes_stopped, controllers_stopped)):
@@ -567,7 +574,7 @@ class BatchCoordinator:
             points[point_id] = PointProjection(**point)
         summary = BatchSummary(
             self.request.run_mode, {p: v.status for p, v in points.items()},
-            batch_terminal=value['batch_cleanup_complete'],
+            batch_terminal=all(point.terminal for point in points.values()),
             validation_statuses={p: v.validation_status for p, v in points.items()
                                  if v.validation_status is not None},
             batch_cleanup_complete=value['batch_cleanup_complete'])

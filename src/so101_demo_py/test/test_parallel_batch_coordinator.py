@@ -548,3 +548,87 @@ def test_batch_deadline_requests_stop_from_idle_workers_too(make):
     clock.now = 5400
     c.tick()
     assert all(w.stop_requested for w in c.snapshot().workers.values())
+
+
+@pytest.mark.parametrize('field', [
+    'succeeded', 'fenced', 'owned_processes_stopped', 'controllers_stopped', 'readmitted'])
+@pytest.mark.parametrize('malformed', ['false', 1, 0, None])
+@pytest.mark.parametrize('succeeded', [False, True])
+def test_recovery_rejects_nonboolean_confirmations_without_mutation(
+        make, field, malformed, succeeded):
+    """Malformed confirmation fields must never release a blocked INVALID point."""
+    c, _, results, journal, _ = make()
+    finish(c, results, start(c), 'INVALID')
+    before, events = c.snapshot(), journal.replay().events
+    confirmations = {'succeeded': succeeded, 'fenced': True, 'owned_processes_stopped': True,
+                     'controllers_stopped': True, 'readmitted': True}
+    confirmations[field] = malformed
+    with pytest.raises(ValueError):
+        c.record_recovery('w1', generation=1, **confirmations)
+    assert c.snapshot() == before
+    assert journal.replay().events == events
+
+
+@pytest.mark.parametrize('field', ['owned_processes_stopped', 'controllers_stopped'])
+@pytest.mark.parametrize('malformed', ['false', 1, 0, None])
+def test_cleanup_rejects_nonboolean_confirmations_without_mutation(make, field, malformed):
+    """A truthy string must not qualify a batch through fake cleanup evidence."""
+    c, _, results, journal, _ = make(points=('p1',))
+    finish(c, results, start(c), 'PASSED')
+    before, events = c.snapshot(), journal.replay().events
+    confirmations = {'owned_processes_stopped': True, 'controllers_stopped': True}
+    confirmations[field] = malformed
+    with pytest.raises(ValueError):
+        c.complete_cleanup(**confirmations)
+    assert c.snapshot() == before
+    assert journal.replay().events == events
+
+
+@pytest.mark.parametrize('status,coverage', [('PASSED', True), ('INDETERMINATE', False)])
+def test_point_completion_is_independent_of_cleanup(make, status, coverage):
+    """Terminal results complete point accounting before cleanup can qualify them."""
+    c, _, results, *_ = make(points=('p1',))
+    finish(c, results, start(c), status)
+    before = c.snapshot().summary
+    assert before.execution_complete
+    assert before.coverage_complete is coverage
+    assert not before.batch_cleanup_complete
+    assert not before.qualification_passed
+    c.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
+    after = c.snapshot().summary
+    assert after.execution_complete
+    assert after.coverage_complete is coverage
+    assert after.qualification_passed is (status == 'PASSED')
+
+
+def test_pending_unrun_stays_incomplete_until_cleanup(make):
+    """Stopping the batch does not terminalize a selection that never started."""
+    c, clock, *_ = make(points=('p1',))
+    clock.now = 5400
+    c.tick()
+    assert not c.snapshot().points['p1'].terminal
+    assert not c.snapshot().summary.execution_complete
+    c.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
+    assert c.snapshot().points['p1'].terminal
+    assert c.snapshot().summary.execution_complete
+    assert not c.snapshot().summary.coverage_complete
+
+
+@pytest.mark.parametrize('restart', [False, True])
+def test_frozen_nonalphabetical_selection_order_survives_replay(make, restart):
+    """Canonical JSON key sorting must not replace the selected scheduling order."""
+    c, clock, results, journal, request = make(points=('zeta', 'mu', 'alpha'))
+    replay_journal = None
+    if restart:
+        journal.close()
+        replay_journal = CoordinatorJournal.create(journal.root, request.batch_id)
+        c = type(c)(replay_journal, request, config=c.config, clock=clock, result_port=results)
+    try:
+        for point_id in ('zeta', 'mu', 'alpha'):
+            lease = start(c)
+            assert lease.point_id == point_id
+            finish(c, results, lease, 'PASSED')
+            c.record_recovery('w1', generation=1, succeeded=True)
+    finally:
+        if replay_journal is not None:
+            replay_journal.close()
