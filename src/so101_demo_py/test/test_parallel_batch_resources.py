@@ -232,7 +232,7 @@ def live_evidence(tmp_path, config, **changes):
     return path
 
 
-def accepted_live_evidence(tmp_path, config, **changes):
+def shallow_accepted_live_evidence(tmp_path, config, **changes):
     evidence = live_evidence(tmp_path, config, **changes)
     sealed = evidence.parent
     artifacts_root = sealed / 'artifacts'
@@ -304,7 +304,10 @@ def accepted_live_evidence(tmp_path, config, **changes):
     provenance_probe = resources_api.CurrentRuntimeProvenanceProbe(
         current_paths=current_paths
     )
-    provenance = provenance_probe.snapshot(config)
+    provenance = {
+        name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for name, path in current_paths.items()
+    }
     if 'source_runtime_config_sha256' in changes:
         provenance['runtime_config_sha256'] = changes[
             'source_runtime_config_sha256'
@@ -337,6 +340,173 @@ def accepted_live_evidence(tmp_path, config, **changes):
         encoding='utf-8',
     )
     acceptance_path.chmod(0o600)
+    return evidence, acceptance_path, provenance_probe
+
+
+def accepted_live_evidence(tmp_path, config, **changes):
+    evidence, acceptance_path, provenance_probe = shallow_accepted_live_evidence(
+        tmp_path, config, **changes
+    )
+    sealed = evidence.parent
+    artifacts_root = sealed / 'artifacts'
+    content_root = tmp_path / 'current-runtime-content'
+    content_root.mkdir(mode=0o700)
+    source_root = content_root / 'source'
+    install_root = content_root / 'install'
+    source_script = source_root / 'scripts/runner.py'
+    dirty_patch = source_root / '.dirty.patch'
+    install_library = install_root / 'lib/libparallel_runtime.so'
+    install_script = install_root / 'libexec/parallel-worker'
+    policy = source_root / 'config/policy.yaml'
+    scene = source_root / 'config/scene.sdf'
+    model_weights = source_root / 'models/detector.weights'
+    catalog_coordinates = source_root / 'config/validation-points.json'
+    content_payloads = {
+        source_script: b'#!/usr/bin/python3\nprint("parallel worker")\n',
+        dirty_patch: b'diff --git a/runtime.py b/runtime.py\n+DIRTY = True\n',
+        install_library: b'ELF-parallel-runtime-content-v1',
+        install_script: b'#!/bin/sh\nexec parallel-worker-bin "$@"\n',
+        policy: b'max_velocity: 0.2\ncollision_margin: 0.01\n',
+        scene: b'<sdf version="1.10"><world name="task"/></sdf>\n',
+        model_weights: b'actual-model-weight-bytes-v1',
+        catalog_coordinates: (
+            b'{"points":[{"id":"p01","x":0.30,"y":0.00,"z":0.12}]}'
+        ),
+    }
+    for path, payload in content_payloads.items():
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        path.chmod(0o400)
+
+    def content_sha256(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    source_entries = [
+        {
+            'path': 'scripts/runner.py',
+            'kind': 'file',
+            'mode': '100755',
+            'sha256': content_sha256(source_script),
+        },
+        {
+            'path': 'vendor/runtime-support',
+            'kind': 'gitlink',
+            'mode': '160000',
+            'commit': '1' * 40,
+        },
+    ]
+    install_entries = [
+        {
+            'path': 'lib/libparallel_runtime.so',
+            'mode': '100644',
+            'sha256': content_sha256(install_library),
+        },
+        {
+            'path': 'libexec/parallel-worker',
+            'mode': '100755',
+            'sha256': content_sha256(install_script),
+        },
+    ]
+    artifact_documents = {
+        'source_manifest': {
+            'schema_version': 1,
+            'source_commit': '59e8b9323eb5ad61542e0a1b6d4e918568d7ca8d',
+            'source_root': str(source_root),
+            'tree_sha256': hashlib.sha256(
+                json.dumps(
+                    source_entries, sort_keys=True, separators=(',', ':')
+                ).encode()
+            ).hexdigest(),
+            'dirty_patch_sha256': content_sha256(dirty_patch),
+            'entries': source_entries,
+        },
+        'install_manifest': {
+            'schema_version': 1,
+            'install_prefix': str(install_root),
+            'tree_sha256': hashlib.sha256(
+                json.dumps(
+                    install_entries, sort_keys=True, separators=(',', ':')
+                ).encode()
+            ).hexdigest(),
+            'entries': install_entries,
+        },
+        'container_identity': {
+            'schema_version': 1,
+            'image_id': 'sha256:'
+            + hashlib.sha256(b'immutable-container-image-v1').hexdigest(),
+        },
+        'model_manifest': {
+            'schema_version': 1,
+            'model_path': 'models/detector.weights',
+            'weights_sha256': content_sha256(model_weights),
+        },
+        'catalog': {
+            'schema_version': 1,
+            'catalog_path': 'config/validation-points.json',
+            'coordinates_sha256': content_sha256(catalog_coordinates),
+        },
+        'policy_manifest': {
+            'schema_version': 1,
+            'policy_path': 'config/policy.yaml',
+            'content_sha256': content_sha256(policy),
+        },
+        'scene_manifest': {
+            'schema_version': 1,
+            'scene_path': 'config/scene.sdf',
+            'content_sha256': content_sha256(scene),
+        },
+    }
+    sealed.chmod(0o755)
+    artifacts_root.chmod(0o755)
+    manifest = json.loads(evidence.read_text(encoding='utf-8'))
+    evidence.chmod(0o600)
+    for artifact_name, artifact_document in artifact_documents.items():
+        payload = json.dumps(
+            artifact_document, sort_keys=True, separators=(',', ':')
+        ).encode()
+        artifact_path = artifacts_root / f'{artifact_name}.json'
+        artifact_path.chmod(0o600)
+        artifact_path.write_bytes(payload)
+        artifact_path.chmod(0o444)
+        manifest['artifacts'][artifact_name]['sha256'] = hashlib.sha256(
+            payload
+        ).hexdigest()
+        current_path = provenance_probe.current_paths[
+            {
+                'source_manifest': 'source_tree_sha256',
+                'install_manifest': 'install_tree_sha256',
+                'container_identity': 'container_sha256',
+                'model_manifest': 'models_sha256',
+                'catalog': 'catalog_sha256',
+                'policy_manifest': 'policy_sha256',
+                'scene_manifest': 'scene_sha256',
+            }[artifact_name]
+        ]
+        current_path.chmod(0o600)
+        current_path.write_bytes(payload)
+        current_path.chmod(0o400)
+    provenance = provenance_probe.snapshot(config)
+    if 'source_runtime_config_sha256' in changes:
+        provenance['runtime_config_sha256'] = changes[
+            'source_runtime_config_sha256'
+        ]
+    manifest['source_identity'] = provenance
+    manifest_payload = json.dumps(
+        manifest, sort_keys=True, separators=(',', ':')
+    ).encode()
+    evidence.write_bytes(manifest_payload)
+    evidence.chmod(0o444)
+    artifacts_root.chmod(0o555)
+    sealed.chmod(0o555)
+    acceptance = json.loads(acceptance_path.read_text(encoding='utf-8'))
+    acceptance['candidate_manifest_sha256'] = hashlib.sha256(
+        manifest_payload
+    ).hexdigest()
+    acceptance['provenance'] = provenance
+    acceptance_path.write_text(
+        json.dumps(acceptance, sort_keys=True, separators=(',', ':')),
+        encoding='utf-8',
+    )
     return evidence, acceptance_path, provenance_probe
 
 
@@ -376,6 +546,69 @@ def rewrite_accepted_artifact(evidence, acceptance_path, name, **changes):
         manifest_payload
     ).hexdigest()
     acceptance_path.write_text(json.dumps(acceptance), encoding='utf-8')
+
+
+def drift_current_content_inventory(tmp_path, provenance_probe, identity_name):
+    content_root = tmp_path / 'current-runtime-content'
+    cases = {
+        'install_tree_sha256': (
+            content_root / 'install/lib/libparallel_runtime.so',
+            b'v1',
+            b'v2',
+            'install_entry',
+        ),
+        'models_sha256': (
+            content_root / 'source/models/detector.weights',
+            b'v1',
+            b'v2',
+            'weights_sha256',
+        ),
+        'catalog_sha256': (
+            content_root / 'source/config/validation-points.json',
+            b'0.30',
+            b'0.31',
+            'coordinates_sha256',
+        ),
+        'policy_sha256': (
+            content_root / 'source/config/policy.yaml',
+            b'0.2',
+            b'0.3',
+            'content_sha256',
+        ),
+        'scene_sha256': (
+            content_root / 'source/config/scene.sdf',
+            b'task',
+            b'task-drift',
+            'content_sha256',
+        ),
+    }
+    content_path, before, after, binding = cases[identity_name]
+    content_path.chmod(0o600)
+    original = content_path.read_bytes()
+    replacement = original.replace(before, after, 1)
+    assert replacement != original
+    content_path.write_bytes(replacement)
+    content_path.chmod(0o400)
+    content_sha256 = hashlib.sha256(replacement).hexdigest()
+    inventory_path = provenance_probe.current_paths[identity_name]
+    inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
+    if binding == 'install_entry':
+        original_count = len(inventory['entries'])
+        inventory['entries'][0]['sha256'] = content_sha256
+        inventory['tree_sha256'] = hashlib.sha256(
+            json.dumps(
+                inventory['entries'], sort_keys=True, separators=(',', ':')
+            ).encode()
+        ).hexdigest()
+        assert len(inventory['entries']) == original_count
+    else:
+        inventory[binding] = content_sha256
+    inventory_path.chmod(0o600)
+    inventory_path.write_text(
+        json.dumps(inventory, sort_keys=True, separators=(',', ':')),
+        encoding='utf-8',
+    )
+    inventory_path.chmod(0o400)
 
 
 def proc_process(proc_root, pid, *, comm, argv, starttime=424242, state='S'):
@@ -717,6 +950,31 @@ def test_default_three_workers_reject_caller_fabricated_live_headroom_evidence(
     assert str(caught.value.__cause__) == 'TASK14_ACCEPTANCE_UNAVAILABLE'
 
 
+def test_independent_acceptance_rejects_shallow_label_only_provenance(
+    tmp_path, config
+):
+    evidence, acceptance_path, provenance_probe = shallow_accepted_live_evidence(
+        tmp_path, config
+    )
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-shallow-identities'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+
+
 def test_invalid_candidate_path_does_not_query_acceptance_or_provenance(
     tmp_path, config
 ):
@@ -892,6 +1150,240 @@ def test_three_worker_acceptance_rejects_current_provenance_drift(tmp_path, conf
             live_headroom_evidence=evidence,
             live_headroom_verifier=verifier,
         ).allocate(worker_count=3)
+
+
+@pytest.mark.parametrize(
+    'identity_name',
+    [
+        'install_tree_sha256',
+        'models_sha256',
+        'catalog_sha256',
+        'policy_sha256',
+        'scene_sha256',
+    ],
+)
+def test_three_worker_rejects_real_current_content_drift(
+    tmp_path, config, identity_name
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    drift_current_content_inventory(tmp_path, provenance_probe, identity_name)
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, f'three-content-drift-{identity_name}'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+
+
+@pytest.mark.parametrize('source_change', ['script', 'gitlink', 'dirty_patch'])
+def test_three_worker_source_inventory_binds_full_tree_and_dirty_state(
+    tmp_path, config, source_change
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    inventory_path = provenance_probe.current_paths['source_tree_sha256']
+    inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
+    content_root = tmp_path / 'current-runtime-content/source'
+    if source_change == 'script':
+        script = content_root / 'scripts/runner.py'
+        script.chmod(0o600)
+        script.write_bytes(script.read_bytes().replace(b'worker', b'changed-worker'))
+        script.chmod(0o400)
+        inventory['entries'][0]['sha256'] = hashlib.sha256(
+            script.read_bytes()
+        ).hexdigest()
+    elif source_change == 'gitlink':
+        inventory['entries'][1]['commit'] = '2' * 40
+    else:
+        dirty_patch = content_root / '.dirty.patch'
+        dirty_patch.chmod(0o600)
+        dirty_patch.write_bytes(dirty_patch.read_bytes() + b'+MORE_DIRTY = True\n')
+        dirty_patch.chmod(0o400)
+        inventory['dirty_patch_sha256'] = hashlib.sha256(
+            dirty_patch.read_bytes()
+        ).hexdigest()
+    if source_change != 'dirty_patch':
+        inventory['tree_sha256'] = hashlib.sha256(
+            json.dumps(
+                inventory['entries'], sort_keys=True, separators=(',', ':')
+            ).encode()
+        ).hexdigest()
+    inventory_path.chmod(0o600)
+    inventory_path.write_text(
+        json.dumps(inventory, sort_keys=True, separators=(',', ':')),
+        encoding='utf-8',
+    )
+    inventory_path.chmod(0o400)
+
+    with pytest.raises(
+        ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+    ):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, f'three-source-drift-{source_change}'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
+        ).allocate(worker_count=3)
+
+
+def test_current_provenance_snapshot_rejects_cross_input_mixed_epoch(
+    tmp_path, config, monkeypatch
+):
+    _evidence, _acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    target = provenance_probe.current_paths['policy_sha256']
+    trigger = provenance_probe.current_paths['source_tree_sha256']
+    target_stat = target.stat()
+    original = resources_api._read_fd
+    changed = False
+
+    def mutate_prior_input_when_last_input_is_read(descriptor, limit):
+        nonlocal changed
+        payload = original(descriptor, limit)
+        descriptor_path = Path(os.readlink(f'/proc/self/fd/{descriptor}'))
+        if descriptor_path == trigger and not changed:
+            changed = True
+            original_bytes = target.read_bytes()
+            replacement = original_bytes.replace(b'1', b'2', 1)
+            assert len(replacement) == len(original_bytes)
+            target.chmod(0o600)
+            target.write_bytes(replacement)
+            target.chmod(0o400)
+            os.utime(
+                target,
+                ns=(target_stat.st_atime_ns, target_stat.st_mtime_ns),
+            )
+        return payload
+
+    monkeypatch.setattr(resources_api, '_read_fd', mutate_prior_input_when_last_input_is_read)
+    with pytest.raises(ResourceAllocationError):
+        provenance_probe.snapshot(config)
+    assert changed is True
+
+
+@pytest.mark.parametrize('mutation', ['chmod', 'rewrite'])
+def test_three_worker_rechecks_late_current_provenance_mutation(
+    tmp_path, config, mutation
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    target = provenance_probe.current_paths['policy_sha256']
+    original_probe = provenance_probe.snapshot
+    calls = 0
+
+    def mutate_after_first_snapshot(runtime_config):
+        nonlocal calls
+        calls += 1
+        result = original_probe(runtime_config)
+        if calls == 1:
+            if mutation == 'chmod':
+                target.chmod(0o600)
+            else:
+                target_stat = target.stat()
+                original_bytes = target.read_bytes()
+                replacement = original_bytes.replace(b'1', b'2', 1)
+                assert len(replacement) == len(original_bytes)
+                target.chmod(0o600)
+                target.write_bytes(replacement)
+                target.chmod(0o400)
+                os.utime(
+                    target,
+                    ns=(target_stat.st_atime_ns, target_stat.st_mtime_ns),
+                )
+        return result
+
+    provenance_probe.snapshot = mutate_after_first_snapshot
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, f'three-late-current-{mutation}'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+    assert calls == 2
+
+
+@pytest.mark.parametrize('mutation', ['chmod', 'rewrite'])
+def test_three_worker_rechecks_late_acceptance_mutation(tmp_path, config, mutation):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    provider = resources_api.Task14AcceptanceProvider(
+        acceptance_path=acceptance_path
+    )
+    original_provider = provider.accepted_identity
+    calls = 0
+
+    def mutate_after_first_read(candidate_path):
+        nonlocal calls
+        calls += 1
+        result = original_provider(candidate_path)
+        if calls == 1:
+            if mutation == 'chmod':
+                acceptance_path.chmod(0o400)
+            else:
+                acceptance_stat = acceptance_path.stat()
+                original_bytes = acceptance_path.read_bytes()
+                replacement = original_bytes.replace(b'VALID', b'INVAL', 1)
+                assert len(replacement) == len(original_bytes)
+                acceptance_path.write_bytes(replacement)
+                os.utime(
+                    acceptance_path,
+                    ns=(acceptance_stat.st_atime_ns, acceptance_stat.st_mtime_ns),
+                )
+        return result
+
+    provider.accepted_identity = mutate_after_first_read
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=provider,
+        provenance_probe=provenance_probe,
+    )
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, f'three-late-acceptance-{mutation}'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=verifier,
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+    assert calls == 2
 
 
 def test_acceptance_provider_rejects_identity_inside_candidate_tree(tmp_path, config):

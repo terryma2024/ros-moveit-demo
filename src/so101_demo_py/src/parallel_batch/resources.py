@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import stat
 import subprocess
@@ -424,10 +424,12 @@ class CurrentRuntimeProvenanceProbe:
             raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_UNAVAILABLE')
         if set(self.current_paths) != _PROVENANCE_NAMES:
             raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_SCHEMA')
-        observed = {
-            name: _read_current_input_sha256(self.current_paths[name])
-            for name in sorted(_PROVENANCE_NAMES)
-        }
+        payloads, observed = _read_current_inputs(self.current_paths)
+        for name in sorted(_PROVENANCE_NAMES - {'runtime_config_sha256'}):
+            _verify_provenance_inventory(name, _strict_json_object(payloads[name]))
+        expected_config = _json_bytes(asdict(config))
+        if payloads['runtime_config_sha256'] != expected_config:
+            raise ResourceAllocationError('CURRENT_RUNTIME_CONFIG_DRIFT')
         if observed['runtime_config_sha256'] != _runtime_config_sha256(config):
             raise ResourceAllocationError('CURRENT_RUNTIME_CONFIG_DRIFT')
         return observed
@@ -501,6 +503,9 @@ class Task14LiveHeadroomVerifier:
                 manifest_sha256=manifest_sha256,
                 verified=result,
             )
+            final_current_provenance = self._provenance_probe.snapshot(config)
+            if dict(final_current_provenance) != dict(current_provenance):
+                raise ResourceAllocationError('CURRENT_PROVENANCE_CHANGED')
             for directory_fd, name, snapshot, is_directory, expected_hash in snapshots:
                 _verify_stable_snapshot_at(
                     directory_fd,
@@ -509,12 +514,21 @@ class Task14LiveHeadroomVerifier:
                     is_directory=is_directory,
                     expected_sha256=expected_hash,
                 )
+            final_acceptance = self._acceptance_provider.accepted_identity(path)
+            if final_acceptance != acceptance:
+                raise ResourceAllocationError('TASK14_ACCEPTANCE_CHANGED')
+            self._verify_acceptance(
+                final_acceptance,
+                final_current_provenance,
+                manifest_sha256=manifest_sha256,
+                verified=result,
+            )
             return {
                 'sealed_batch_root': str(batch_root),
                 'manifest_path': str(path),
                 'manifest_sha256': manifest_sha256,
-                'acceptance_identity': dict(acceptance),
-                'current_provenance': dict(current_provenance),
+                'acceptance_identity': dict(final_acceptance),
+                'current_provenance': dict(final_current_provenance),
                 **result,
             }
         finally:
@@ -594,50 +608,19 @@ class Task14LiveHeadroomVerifier:
         source = document['source_identity']
         if not isinstance(source, dict) or set(source) != _PROVENANCE_NAMES:
             raise ValueError('Task14 source identity schema')
-        source_manifest = artifact_documents['source_manifest']
-        install_manifest = artifact_documents['install_manifest']
-        container_identity = artifact_documents['container_identity']
-        model_manifest = artifact_documents['model_manifest']
-        catalog = artifact_documents['catalog']
-        policy_manifest = artifact_documents['policy_manifest']
-        scene_manifest = artifact_documents['scene_manifest']
-        if (
-            set(source_manifest) != {'source_commit', 'tree'}
-            or type(source_manifest['source_commit']) is not str
-            or _SHA1.fullmatch(source_manifest['source_commit']) is None
-            or type(source_manifest['tree']) is not str
-            or not source_manifest['tree']
-            or set(install_manifest) != {'install_prefix', 'files'}
-            or type(install_manifest['install_prefix']) is not str
-            or not Path(install_manifest['install_prefix']).is_absolute()
-            or type(install_manifest['files']) is not int
-            or install_manifest['files'] <= 0
-            or set(container_identity) != {'image_id'}
-            or type(container_identity['image_id']) is not str
-            or not container_identity['image_id'].startswith('sha256:')
-            or _SHA256.fullmatch(container_identity['image_id'][7:]) is None
-            or set(model_manifest) != {'model', 'revision'}
-            or type(model_manifest['model']) is not str
-            or not model_manifest['model']
-            or type(model_manifest['revision']) is not int
-            or model_manifest['revision'] < 0
-            or set(catalog) != {'catalog_id', 'points'}
-            or type(catalog['catalog_id']) is not str
-            or not catalog['catalog_id']
-            or type(catalog['points']) is not int
-            or catalog['points'] <= 0
-            or set(policy_manifest) != {'policy_id', 'policy_revision'}
-            or type(policy_manifest['policy_id']) is not str
-            or not policy_manifest['policy_id']
-            or type(policy_manifest['policy_revision']) is not int
-            or policy_manifest['policy_revision'] <= 0
-            or set(scene_manifest) != {'scene_id', 'scene_revision'}
-            or type(scene_manifest['scene_id']) is not str
-            or not scene_manifest['scene_id']
-            or type(scene_manifest['scene_revision']) is not int
-            or scene_manifest['scene_revision'] <= 0
-        ):
-            raise ValueError('Task14 identity artifact schema')
+        provenance_artifacts = {
+            'source_tree_sha256': 'source_manifest',
+            'install_tree_sha256': 'install_manifest',
+            'policy_sha256': 'policy_manifest',
+            'scene_sha256': 'scene_manifest',
+            'models_sha256': 'model_manifest',
+            'container_sha256': 'container_identity',
+            'catalog_sha256': 'catalog',
+        }
+        for identity_name, artifact_name in provenance_artifacts.items():
+            _verify_provenance_inventory(
+                identity_name, artifact_documents[artifact_name]
+            )
         expected_identity_values = {
             'source_tree_sha256': artifact_hashes['source_manifest'],
             'install_tree_sha256': artifact_hashes['install_manifest'],
@@ -1467,6 +1450,141 @@ def _runtime_config_sha256(config: ParallelRuntimeConfig) -> str:
     return hashlib.sha256(_json_bytes(asdict(config))).hexdigest()
 
 
+def _verify_content_hash(value, label: str) -> None:
+    if type(value) is not str or _SHA256.fullmatch(value) is None:
+        raise ValueError(f'invalid content hash: {label}')
+
+
+def _verify_inventory_path(value, label: str) -> None:
+    if (
+        type(value) is not str
+        or not value
+        or '\\' in value
+        or PurePosixPath(value).is_absolute()
+        or any(part in {'', '.', '..'} for part in value.split('/'))
+    ):
+        raise ValueError(f'invalid inventory path: {label}')
+
+
+def _verify_inventory_entries(entries, *, source: bool) -> None:
+    if not isinstance(entries, list) or not entries:
+        raise ValueError('content inventory entries')
+    paths = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError('content inventory entry')
+        if source and entry.get('kind') == 'gitlink':
+            if (
+                set(entry) != {'path', 'kind', 'mode', 'commit'}
+                or entry['mode'] != '160000'
+                or type(entry['commit']) is not str
+                or _SHA1.fullmatch(entry['commit']) is None
+            ):
+                raise ValueError('source gitlink inventory entry')
+        elif (
+            set(entry)
+            != (
+                {'path', 'kind', 'mode', 'sha256'}
+                if source
+                else {'path', 'mode', 'sha256'}
+            )
+            or (source and entry['kind'] != 'file')
+            or entry['mode'] not in {'100644', '100755'}
+        ):
+            raise ValueError('file content inventory entry')
+        else:
+            _verify_content_hash(entry['sha256'], 'inventory entry')
+        _verify_inventory_path(entry['path'], 'inventory entry')
+        paths.append(entry['path'])
+    if paths != sorted(paths) or len(paths) != len(set(paths)):
+        raise ValueError('content inventory path order')
+
+
+def _verify_provenance_inventory(name: str, document: dict[str, object]) -> None:
+    if name == 'source_tree_sha256':
+        if set(document) != {
+            'schema_version',
+            'source_commit',
+            'source_root',
+            'tree_sha256',
+            'dirty_patch_sha256',
+            'entries',
+        }:
+            raise ValueError('source content inventory schema')
+        source_root = document['source_root']
+        if (
+            document['schema_version'] != 1
+            or type(document['schema_version']) is not int
+            or type(document['source_commit']) is not str
+            or _SHA1.fullmatch(document['source_commit']) is None
+            or type(source_root) is not str
+            or not Path(source_root).is_absolute()
+            or any(part in {'.', '..'} for part in source_root.split('/'))
+        ):
+            raise ValueError('source content inventory identity')
+        _verify_inventory_entries(document['entries'], source=True)
+        _verify_content_hash(document['tree_sha256'], 'source tree')
+        _verify_content_hash(document['dirty_patch_sha256'], 'dirty patch')
+        if document['tree_sha256'] != hashlib.sha256(
+            _json_bytes(document['entries'])
+        ).hexdigest():
+            raise ValueError('source tree inventory hash')
+        return
+    if name == 'install_tree_sha256':
+        if set(document) != {
+            'schema_version',
+            'install_prefix',
+            'tree_sha256',
+            'entries',
+        }:
+            raise ValueError('install content inventory schema')
+        prefix = document['install_prefix']
+        if (
+            document['schema_version'] != 1
+            or type(document['schema_version']) is not int
+            or type(prefix) is not str
+            or not Path(prefix).is_absolute()
+            or any(part in {'.', '..'} for part in prefix.split('/'))
+        ):
+            raise ValueError('install content inventory identity')
+        _verify_inventory_entries(document['entries'], source=False)
+        _verify_content_hash(document['tree_sha256'], 'install tree')
+        if document['tree_sha256'] != hashlib.sha256(
+            _json_bytes(document['entries'])
+        ).hexdigest():
+            raise ValueError('install tree inventory hash')
+        return
+    simple_schemas = {
+        'policy_sha256': ('policy_path', 'content_sha256'),
+        'scene_sha256': ('scene_path', 'content_sha256'),
+        'models_sha256': ('model_path', 'weights_sha256'),
+        'catalog_sha256': ('catalog_path', 'coordinates_sha256'),
+    }
+    if name in simple_schemas:
+        path_name, hash_name = simple_schemas[name]
+        if set(document) != {'schema_version', path_name, hash_name}:
+            raise ValueError(f'{name} content inventory schema')
+        if document['schema_version'] != 1 or type(document['schema_version']) is not int:
+            raise ValueError(f'{name} content inventory identity')
+        _verify_inventory_path(document[path_name], path_name)
+        _verify_content_hash(document[hash_name], hash_name)
+        return
+    if name == 'container_sha256':
+        if set(document) != {'schema_version', 'image_id'}:
+            raise ValueError('container identity schema')
+        image_id = document['image_id']
+        if (
+            document['schema_version'] != 1
+            or type(document['schema_version']) is not int
+            or type(image_id) is not str
+            or not image_id.startswith('sha256:')
+            or _SHA256.fullmatch(image_id[7:]) is None
+        ):
+            raise ValueError('container image identity')
+        return
+    raise ValueError(f'unknown provenance inventory: {name}')
+
+
 def _default_process_scan_report() -> dict[str, object]:
     return {
         'scope': _DOMAIN_CLAIM_SCOPE,
@@ -1743,69 +1861,114 @@ def _read_secure_json(path: Path) -> tuple[dict[str, object], str]:
     return document, hashlib.sha256(payload).hexdigest()
 
 
-def _read_current_input_sha256(path: Path) -> str:
-    if (
-        not path.is_absolute()
-        or not path.name
-        or any(part in {'.', '..'} for part in str(path).split('/'))
-    ):
-        raise ResourceAllocationError('CURRENT_RUNTIME_PATH_INVALID')
-    parent_fd = _open_trusted_parent(path)
-    descriptor = second_descriptor = None
+def _read_current_inputs(
+    paths: Mapping[str, Path],
+) -> tuple[dict[str, bytes], dict[str, str]]:
+    states = []
     try:
-        descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
-        value = os.fstat(descriptor)
-        if not stat.S_ISREG(value.st_mode):
-            raise ResourceAllocationError(f'NOT_REGULAR_FILE: {path.name}')
-        if value.st_uid != os.getuid():
-            raise ResourceAllocationError(f'UNSAFE_FILE_OWNER: {path.name}')
-        if stat.S_IMODE(value.st_mode) != 0o400:
-            raise ResourceAllocationError(f'UNSAFE_FILE_MODE: {path.name}')
-        snapshot = _fd_snapshot(descriptor)
-        payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
-        if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
-            raise ResourceAllocationError('CURRENT_RUNTIME_INPUT_TOO_LARGE')
-        if _fd_snapshot(descriptor) != snapshot:
-            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        if _read_fd(descriptor, len(payload) + 1) != payload:
-            raise ResourceAllocationError(f'CONTENT_CHANGED: {path.name}')
-        visible = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
-        if (
-            (
-                visible.st_dev,
-                visible.st_ino,
-                visible.st_uid,
-                stat.S_IMODE(visible.st_mode),
-                visible.st_size,
-                visible.st_mtime_ns,
-                visible.st_ctime_ns,
+        for name in sorted(_PROVENANCE_NAMES):
+            path = paths[name]
+            if (
+                not path.is_absolute()
+                or not path.name
+                or any(part in {'.', '..'} for part in str(path).split('/'))
+            ):
+                raise ResourceAllocationError('CURRENT_RUNTIME_PATH_INVALID')
+            parent_fd = _open_trusted_parent(path)
+            state = {
+                'name': name,
+                'path': path,
+                'parent_fd': parent_fd,
+                'descriptor': None,
+            }
+            states.append(state)
+            descriptor = os.open(
+                path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
             )
-            != snapshot
-            or not stat.S_ISREG(visible.st_mode)
-        ):
-            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
-        second_descriptor = os.open(
-            path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
-        )
-        if _fd_snapshot(second_descriptor) != snapshot:
-            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
-        second_payload = _read_fd(
-            second_descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1
-        )
-        if second_payload != payload or _fd_snapshot(second_descriptor) != snapshot:
-            raise ResourceAllocationError(f'CONTENT_CHANGED: {path.name}')
-        return hashlib.sha256(payload).hexdigest()
+            state['descriptor'] = descriptor
+            value = os.fstat(descriptor)
+            if not stat.S_ISREG(value.st_mode):
+                raise ResourceAllocationError(f'NOT_REGULAR_FILE: {path.name}')
+            if value.st_uid != os.getuid():
+                raise ResourceAllocationError(f'UNSAFE_FILE_OWNER: {path.name}')
+            if stat.S_IMODE(value.st_mode) != 0o400:
+                raise ResourceAllocationError(f'UNSAFE_FILE_MODE: {path.name}')
+            snapshot = _fd_snapshot(descriptor)
+            payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
+            if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
+                raise ResourceAllocationError('CURRENT_RUNTIME_INPUT_TOO_LARGE')
+            if _fd_snapshot(descriptor) != snapshot:
+                raise ResourceAllocationError(
+                    f'PATH_IDENTITY_CHANGED: {path.name}'
+                )
+            state['snapshot'] = snapshot
+            state['payload'] = payload
+
+        for state in states:
+            path = state['path']
+            parent_fd = state['parent_fd']
+            descriptor = state['descriptor']
+            snapshot = state['snapshot']
+            payload = state['payload']
+            visible = os.stat(
+                path.name, dir_fd=parent_fd, follow_symlinks=False
+            )
+            if (
+                (
+                    visible.st_dev,
+                    visible.st_ino,
+                    visible.st_uid,
+                    stat.S_IMODE(visible.st_mode),
+                    visible.st_size,
+                    visible.st_mtime_ns,
+                    visible.st_ctime_ns,
+                )
+                != snapshot
+                or not stat.S_ISREG(visible.st_mode)
+            ):
+                raise ResourceAllocationError(
+                    f'PATH_IDENTITY_CHANGED: {path.name}'
+                )
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            if (
+                _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1) != payload
+                or _fd_snapshot(descriptor) != snapshot
+            ):
+                raise ResourceAllocationError(f'CONTENT_CHANGED: {path.name}')
+            second_descriptor = os.open(
+                path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+            )
+            try:
+                if _fd_snapshot(second_descriptor) != snapshot:
+                    raise ResourceAllocationError(
+                        f'PATH_IDENTITY_CHANGED: {path.name}'
+                    )
+                if (
+                    _read_fd(
+                        second_descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1
+                    )
+                    != payload
+                    or _fd_snapshot(second_descriptor) != snapshot
+                ):
+                    raise ResourceAllocationError(
+                        f'CONTENT_CHANGED: {path.name}'
+                    )
+            finally:
+                os.close(second_descriptor)
+        payloads = {state['name']: state['payload'] for state in states}
+        hashes = {
+            name: hashlib.sha256(payload).hexdigest()
+            for name, payload in payloads.items()
+        }
+        return payloads, hashes
     except OSError as error:
-        raise ResourceAllocationError(
-            f'CURRENT_RUNTIME_INPUT_UNAVAILABLE: {path}'
-        ) from error
+        raise ResourceAllocationError('CURRENT_RUNTIME_INPUT_UNAVAILABLE') from error
     finally:
-        if second_descriptor is not None:
-            os.close(second_descriptor)
-        if descriptor is not None:
-            os.close(descriptor)
-        os.close(parent_fd)
+        for state in reversed(states):
+            descriptor = state['descriptor']
+            if descriptor is not None:
+                os.close(descriptor)
+            os.close(state['parent_fd'])
 
 
 def _write_manifest_at(
