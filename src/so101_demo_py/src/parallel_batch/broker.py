@@ -158,19 +158,27 @@ class PerceptionBroker:
         return (entry.generation != self._generation or
                 (request.worker_id, request.worker_generation) in self._fenced_generations)
 
-    def _finish(self, entry, outcome, reason=None, candidate=None, *, completed=None):
+    def _finish(self, entry, outcome, reason=None, candidate=None, *, completed=None,
+                model_result=False):
+        original_response = entry.response
         copied_candidate = None
         if outcome is ModelOutcome.QUALIFIED:
             try:
                 copied_candidate = deepcopy(candidate)
             except Exception:
+                if entry.response is not original_response:
+                    return entry.response
                 return self._copy_failure(entry)
-        now = self._now() if completed is None else completed
-        if outcome is ModelOutcome.QUALIFIED:
-            # Copying and the clock port may reenter cancellation/health paths.
-            # Preserve their terminal record before touching the reservation.
-            if entry.response is not None and entry.response.outcome is not ModelOutcome.QUALIFIED:
+            if entry.response is not original_response:
                 return entry.response
+        now = self._now() if completed is None else completed
+        # Any callback may publish a result, not just a cancellation. The first
+        # publication owns this completion; never replace it with an outer call.
+        if entry.response is not original_response:
+            return entry.response
+        if model_result:
+            # All model outcomes must survive the same final boundary. Broker
+            # invalidations use their own explicit terminal reason instead.
             if self._fenced(entry):
                 outcome, reason = ModelOutcome.CANCELLED, 'GENERATION_FENCED'
             elif not self.healthy:
@@ -337,8 +345,8 @@ class PerceptionBroker:
                     (result.candidate is not None)):
                 self.set_model_ready(request.model_id, False)
                 return self._copy_response(entry)
-            self._finish(entry, result.outcome, result.reason, result.candidate)
-            if result.outcome is ModelOutcome.INFRA_ERROR:
+            self._finish(entry, result.outcome, result.reason, result.candidate, model_result=True)
+            if entry.response.outcome is ModelOutcome.INFRA_ERROR:
                 self.set_model_ready(request.model_id, False)
             # Copying a candidate can take time. Recheck the completion boundary
             # after ownership transfer, just as after the authorization callback.
