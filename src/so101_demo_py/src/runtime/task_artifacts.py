@@ -40,6 +40,15 @@ def _validate_id(label: str, value: str) -> str:
     return value
 
 
+def fsync_directory(path: Path) -> None:
+    """Persist directory entries without following a substituted symlink."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def atomic_json(path: Path, document: Mapping[str, object]) -> None:
     """Fsync a complete JSON document before atomically replacing ``path``."""
 
@@ -52,11 +61,7 @@ def atomic_json(path: Path, document: Mapping[str, object]) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
-        directory_descriptor = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_descriptor)
-        finally:
-            os.close(directory_descriptor)
+        fsync_directory(path.parent)
     finally:
         try:
             temporary.unlink()
