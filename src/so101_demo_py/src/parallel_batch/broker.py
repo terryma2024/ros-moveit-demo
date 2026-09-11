@@ -256,10 +256,16 @@ class PerceptionBroker:
         except Exception:
             return self._copy_failure(entry)
         # No candidate copying or callback follows this final return guard.
-        # Any invalidation replaces the immutable response with a candidate-free
-        # terminal record, which is safe to return directly.
         self._guard(entry)
-        return copied if entry.response is original else entry.response
+        if entry.response is original:
+            return copied
+        if entry.response.outcome is ModelOutcome.QUALIFIED:
+            # A pending poll/submit can reenter complete through authorization.
+            # Preserve that first result, but defer delivery to the next read
+            # rather than expose its cache or loop through more callbacks here.
+            return None
+        # A candidate-free invalidation record is immutable and safe to expose.
+        return entry.response
 
     def submit(self, request):
         """Accept once or return the first rejection; never evict queued work."""

@@ -605,3 +605,35 @@ def test_reentrant_read_during_candidate_copy_does_not_release_or_duplicate_requ
     assert response.outcome == ModelOutcome.QUALIFIED
     assert broker.next_ready_request() is None
     assert broker.complete(request, model_result()) == response
+
+
+@pytest.mark.parametrize('operation', ['poll', 'submit'])
+@pytest.mark.parametrize('outcome', [
+    ModelOutcome.QUALIFIED, ModelOutcome.NORMAL_REJECTION,
+    ModelOutcome.INFRA_ERROR, ModelOutcome.CANCELLED,
+])
+def test_guard_reentrant_publication_never_exposes_cached_candidate(operation, outcome):
+    broker, _ = harness()
+    request = start(broker, req())
+    authorization = SimpleNamespace(calls=0)
+
+    def authorize(value):
+        authorization.calls += 1
+        if authorization.calls == 2:
+            broker.complete(request, model_result(outcome))
+        return True
+
+    broker._authorize = authorize
+    response = (broker.poll_response(request) if operation == 'poll'
+                else broker.submit(request).response)
+    # A poll/submit may defer a candidate published during its last guard until
+    # the next read. Either way, a returned candidate must have caller ownership.
+    if response is None:
+        response = broker.poll_response(request)
+    assert response.outcome == outcome
+    if outcome is ModelOutcome.QUALIFIED:
+        response.candidate['mask'].append('caller-mutation')
+        assert broker.poll_response(request).candidate == {'mask': [1, 2]}
+    else:
+        assert response.candidate is None
+        assert broker.poll_response(request) == response
