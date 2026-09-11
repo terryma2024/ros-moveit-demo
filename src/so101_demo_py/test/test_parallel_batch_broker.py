@@ -513,3 +513,95 @@ def test_dispatch_clock_callback_cancellation_cannot_start_request():
     response = broker.poll_response(request)
     assert response.outcome == ModelOutcome.CANCELLED
     assert response.started_monotonic_s is None
+
+
+@pytest.mark.parametrize('outcome', [ModelOutcome.NORMAL_REJECTION, ModelOutcome.MODEL_ERROR])
+@pytest.mark.parametrize(('event', 'expected'), [
+    ('deadline', ModelOutcome.INFERENCE_TIMEOUT),
+    ('cancel', ModelOutcome.CANCELLED),
+    ('restart', ModelOutcome.CANCELLED),
+    ('unhealthy', ModelOutcome.INFRA_ERROR),
+])
+def test_nonqualified_completion_rechecks_finish_boundary(outcome, event, expected):
+    broker, _ = harness()
+    request = start(broker, req())
+    samples = SimpleNamespace(count=0)
+
+    def clock():
+        samples.count += 1
+        if samples.count == 2:
+            if event == 'deadline':
+                return 120.0
+            if event == 'cancel':
+                broker.cancel_generation('worker-01', 1)
+            elif event == 'restart':
+                broker.restart()
+            else:
+                broker.set_model_ready(YOLO, False)
+        return 119.0 if event != 'deadline' or samples.count < 2 else 120.0
+
+    broker._clock = clock
+    response = broker.complete(request, model_result(outcome))
+    assert response.outcome == expected
+    assert response.candidate is None
+    assert broker.poll_response(request).outcome == expected
+
+
+@pytest.mark.parametrize('inner_outcome', [
+    ModelOutcome.QUALIFIED, ModelOutcome.NORMAL_REJECTION, ModelOutcome.MODEL_ERROR,
+])
+def test_reentrant_completion_during_copy_preserves_first_published_result(inner_outcome):
+    from so101_demo.parallel_batch.broker import ModelResult
+    broker, _ = harness()
+    request = start(broker, req())
+    inner = []
+
+    class ReentrantCandidate(dict):
+        def __deepcopy__(self, memo):
+            inner.append(broker.complete(request, model_result(inner_outcome)))
+            return {'outer': 'must-not-overwrite-inner'}
+
+    response = broker.complete(request, ModelResult(ModelOutcome.QUALIFIED, ReentrantCandidate()))
+    assert response == inner[0]
+    assert broker.poll_response(request) == inner[0]
+
+
+@pytest.mark.parametrize('outer_outcome', list(ModelOutcome))
+def test_reentrant_completion_during_finish_clock_preserves_first_result(outer_outcome):
+    broker, _ = harness()
+    request = start(broker, req())
+    samples, inner = SimpleNamespace(count=0), []
+
+    def clock():
+        samples.count += 1
+        if samples.count == 2:
+            inner.append(broker.complete(request, model_result(ModelOutcome.QUALIFIED)))
+        return 119.0
+
+    broker._clock = clock
+    response = broker.complete(request, model_result(outer_outcome))
+    assert response == inner[0]
+    assert broker.poll_response(request) == inner[0]
+
+
+@pytest.mark.parametrize('operation', ['submit', 'poll'])
+def test_reentrant_read_during_candidate_copy_does_not_release_or_duplicate_request(operation):
+    from so101_demo.parallel_batch.broker import ModelResult
+    broker, _ = harness()
+    request = start(broker, req())
+
+    class ReentrantCandidate(dict):
+        def __deepcopy__(self, memo):
+            if operation == 'submit':
+                receipt = broker.submit(request)
+                assert receipt.accepted is True
+                assert receipt.response is None
+            else:
+                assert broker.poll_response(request) is None
+            assert broker.submit(req(request_id='competing')).accepted is False
+            return {'mask': [1, 2]}
+
+    response = broker.complete(request, ModelResult(ModelOutcome.QUALIFIED, ReentrantCandidate()))
+    assert response.outcome == ModelOutcome.QUALIFIED
+    assert broker.next_ready_request() is None
+    assert broker.complete(request, model_result()) == response
