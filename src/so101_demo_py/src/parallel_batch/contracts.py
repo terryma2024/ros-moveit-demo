@@ -9,7 +9,7 @@ from enum import StrEnum
 from numbers import Real
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Mapping
+from typing import ClassVar, Mapping
 
 import yaml
 
@@ -72,11 +72,23 @@ class ModelOutcome(StrEnum):
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+_FROZEN_MAX_WORKER_COUNT = 3
+_FROZEN_MAX_POINTS_PER_WORKER = 20
+_FROZEN_YOLO_WEIGHTS_SHA256 = (
+    "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
+)
+_FROZEN_GROUNDED_SAM_MANIFEST_SHA256 = (
+    "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
+)
 
 
 def _require_id(name: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(f"EMPTY_ID: {name}")
+    if _IDENTIFIER.fullmatch(value) is None:
+        raise ContractError(f"INVALID_IDENTIFIER: {name}")
     return value
 
 
@@ -109,7 +121,15 @@ def _require_sha256(name: str, value: object) -> str:
 
 
 def _require_safe_relative_path(name: str, value: object) -> str:
-    if not isinstance(value, str) or not value or "\\" in value:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value in {".", ".."}
+        or "\\" in value
+        or "\x00" in value
+        or value.startswith("./")
+        or value.endswith("/")
+    ):
         raise ContractError(f"SAFE_RELATIVE_PATH: {name}")
     path = PurePosixPath(value)
     if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
@@ -118,8 +138,16 @@ def _require_safe_relative_path(name: str, value: object) -> str:
 
 
 def _require_absolute_path(name: str, value: object) -> Path:
-    path = Path(value) if isinstance(value, (str, Path)) else None
-    if path is None or not path.is_absolute() or ".." in path.parts:
+    if not isinstance(value, (str, Path)):
+        raise ContractError(f"ABSOLUTE_EVIDENCE_ROOT: {name}")
+    raw_path = str(value)
+    path = Path(value)
+    if (
+        not path.is_absolute()
+        or raw_path in {".", ".."}
+        or "\x00" in raw_path
+        or any(part in {".", ".."} for part in raw_path.split("/"))
+    ):
         raise ContractError(f"ABSOLUTE_EVIDENCE_ROOT: {name}")
     return path
 
@@ -250,9 +278,19 @@ class InferenceRequest:
         )
         object.__setattr__(self, "attempt_id", attempt_id)
         object.__setattr__(self, "validation_id", validation_id)
-        object.__setattr__(self, "image_timestamp_s", _require_finite("image_timestamp_s", self.image_timestamp_s))
-        object.__setattr__(self, "input_relative_path", _require_safe_relative_path("input_relative_path", self.input_relative_path))
-        object.__setattr__(self, "input_sha256", _require_sha256("input_sha256", self.input_sha256))
+        object.__setattr__(
+            self,
+            "image_timestamp_s",
+            _require_finite("image_timestamp_s", self.image_timestamp_s),
+        )
+        object.__setattr__(
+            self,
+            "input_relative_path",
+            _require_safe_relative_path("input_relative_path", self.input_relative_path),
+        )
+        object.__setattr__(
+            self, "input_sha256", _require_sha256("input_sha256", self.input_sha256)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,37 +380,63 @@ class ParallelRuntimeConfig:
     min_available_gpu_gib: int
     required_live_headroom_ratio: float
 
+    FROZEN_YOLO_WEIGHTS_SHA256: ClassVar[str] = _FROZEN_YOLO_WEIGHTS_SHA256
+    FROZEN_GROUNDED_SAM_MANIFEST_SHA256: ClassVar[str] = (
+        _FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+    )
+
     def __post_init__(self) -> None:
-        if self.schema_version != 1 or isinstance(self.schema_version, bool):
+        if type(self.schema_version) is not int or self.schema_version != 1:
             raise ContractError("SCHEMA_VERSION")
         if self.backend != "mujoco":
             raise ContractError("BACKEND")
         positive_ints = (
-            "max_worker_count", "max_points_per_worker_upper_bound", "broker_max_frame_bytes",
-            "broker_queue_capacity_per_model", "broker_inflight_per_worker_per_model", "yolo_imgsz",
+            "max_worker_count",
+            "max_points_per_worker_upper_bound",
+            "broker_max_frame_bytes",
+            "broker_queue_capacity_per_model",
+            "broker_inflight_per_worker_per_model",
+            "yolo_imgsz",
             "grounding_max_candidates", "sam_min_mask_pixels", "min_logical_cpu_per_worker",
             "available_ram_base_gib", "available_ram_per_worker_gib", "min_available_gpu_gib",
         )
         for name in positive_ints:
             object.__setattr__(self, name, _require_positive_int(name, getattr(self, name)))
-        domains = tuple(self.ros_domain_ids)
-        if len(domains) != self.max_worker_count or len(set(domains)) != len(domains):
+        if not isinstance(self.ros_domain_ids, (list, tuple)):
             raise ContractError("ROS_DOMAIN_IDS")
+        domains = tuple(self.ros_domain_ids)
         for domain_id in domains:
             _require_positive_int("ros_domain_id", domain_id)
         object.__setattr__(self, "ros_domain_ids", domains)
         timeouts = (
-            "heartbeat_interval_s", "heartbeat_timeout_s", "lease_duration_s", "lease_ack_timeout_s",
-            "attempt_start_ack_timeout_s", "result_ack_timeout_s", "initializing_hard_timeout_s",
-            "executing_hard_timeout_s", "finalizing_hard_timeout_s", "batch_hard_timeout_s",
-            "worker_recovery_timeout_s", "broker_recovery_timeout_s", "yolo_queue_timeout_s",
-            "yolo_inference_timeout_s", "grounded_sam_queue_timeout_s", "grounded_sam_inference_timeout_s",
+            "heartbeat_interval_s",
+            "heartbeat_timeout_s",
+            "lease_duration_s",
+            "lease_ack_timeout_s",
+            "attempt_start_ack_timeout_s",
+            "result_ack_timeout_s",
+            "initializing_hard_timeout_s",
+            "executing_hard_timeout_s",
+            "finalizing_hard_timeout_s",
+            "batch_hard_timeout_s",
+            "worker_recovery_timeout_s",
+            "broker_recovery_timeout_s",
+            "yolo_queue_timeout_s",
+            "yolo_inference_timeout_s",
+            "grounded_sam_queue_timeout_s",
+            "grounded_sam_inference_timeout_s",
         )
         for name in timeouts:
-            object.__setattr__(self, name, _require_finite(name, getattr(self, name), minimum=0.000001))
+            object.__setattr__(
+                self, name, _require_finite(name, getattr(self, name), minimum=0.000001)
+            )
         for name in (
-            "grounding_box_threshold", "grounding_text_threshold", "grounding_duplicate_iou",
-            "sam_mask_quality_threshold", "sam_max_mask_area_ratio", "required_live_headroom_ratio",
+            "grounding_box_threshold",
+            "grounding_text_threshold",
+            "grounding_duplicate_iou",
+            "sam_mask_quality_threshold",
+            "sam_max_mask_area_ratio",
+            "required_live_headroom_ratio",
         ):
             object.__setattr__(self, name, _require_probability(name, getattr(self, name)))
         object.__setattr__(self, "yolo_model_id", _require_id("yolo_model_id", self.yolo_model_id))
@@ -380,6 +444,67 @@ class ParallelRuntimeConfig:
             raise ContractError("REQUESTED_DEVICE")
         if not isinstance(self.allow_cpu_fallback, bool) or self.allow_cpu_fallback:
             raise ContractError("ALLOW_CPU_FALLBACK")
+        for name, expected in _FROZEN_RUNTIME_VALUES.items():
+            if getattr(self, name) != expected:
+                raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
+        if len(domains) != self.max_worker_count or len(set(domains)) != len(domains):
+            raise ContractError("ROS_DOMAIN_IDS")
+
+    @property
+    def yolo_weights_sha256(self) -> str:
+        """Return the reviewed YOLO artifact identity bound to v1."""
+
+        return self.FROZEN_YOLO_WEIGHTS_SHA256
+
+    @property
+    def grounded_sam_manifest_sha256(self) -> str:
+        """Return the reviewed Grounded-SAM bundle identity bound to v1."""
+
+        return self.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+
+
+_FROZEN_RUNTIME_VALUES = {
+    "schema_version": 1,
+    "backend": "mujoco",
+    "max_worker_count": _FROZEN_MAX_WORKER_COUNT,
+    "max_points_per_worker_upper_bound": _FROZEN_MAX_POINTS_PER_WORKER,
+    "ros_domain_ids": (181, 182, 183),
+    "heartbeat_interval_s": 1.0,
+    "heartbeat_timeout_s": 5.0,
+    "lease_duration_s": 300.0,
+    "lease_ack_timeout_s": 5.0,
+    "attempt_start_ack_timeout_s": 5.0,
+    "result_ack_timeout_s": 10.0,
+    "initializing_hard_timeout_s": 180.0,
+    "executing_hard_timeout_s": 240.0,
+    "finalizing_hard_timeout_s": 120.0,
+    "batch_hard_timeout_s": 5400.0,
+    "worker_recovery_timeout_s": 120.0,
+    "broker_recovery_timeout_s": 90.0,
+    "broker_max_frame_bytes": 8388608,
+    "broker_queue_capacity_per_model": 3,
+    "broker_inflight_per_worker_per_model": 1,
+    "yolo_queue_timeout_s": 10.0,
+    "yolo_inference_timeout_s": 20.0,
+    "grounded_sam_queue_timeout_s": 10.0,
+    "grounded_sam_inference_timeout_s": 60.0,
+    "yolo_model_id": "plastic-cup-yolo11n-seg-v1",
+    "yolo_imgsz": 640,
+    "requested_device": "cuda",
+    "allow_cpu_fallback": False,
+    "grounding_box_threshold": 0.35,
+    "grounding_text_threshold": 0.25,
+    "grounding_duplicate_iou": 0.85,
+    "grounding_max_candidates": 16,
+    "sam_mask_quality_threshold": 0.75,
+    "sam_min_mask_pixels": 64,
+    "sam_max_mask_area_ratio": 0.50,
+    "min_logical_cpu_per_worker": 4,
+    "available_ram_base_gib": 6,
+    "available_ram_per_worker_gib": 4,
+    "min_available_gpu_gib": 8,
+    "required_live_headroom_ratio": 0.20,
+}
 
 
 def load_parallel_runtime_config(path: Path) -> ParallelRuntimeConfig:
@@ -416,13 +541,31 @@ class BatchRequest:
     def __post_init__(self) -> None:
         object.__setattr__(self, "batch_id", _require_id("batch_id", self.batch_id))
         _require_enum("run_mode", self.run_mode, RunMode)
-        point_ids = tuple(_require_id("point_id", point_id) for point_id in self.selected_point_ids)
+        if not isinstance(self.selected_point_ids, (list, tuple)):
+            raise ContractError("POINT_ID_SEQUENCE")
+        point_ids = tuple(
+            _require_id("point_id", point_id) for point_id in self.selected_point_ids
+        )
         if not point_ids or len(point_ids) != len(set(point_ids)):
             raise ContractError("UNIQUE_POINT_IDS")
         object.__setattr__(self, "selected_point_ids", point_ids)
-        object.__setattr__(self, "worker_count", _require_positive_int("worker_count", self.worker_count))
-        object.__setattr__(self, "max_points_per_worker", _require_positive_int("max_points_per_worker", self.max_points_per_worker))
-        object.__setattr__(self, "evidence_root", _require_absolute_path("evidence_root", self.evidence_root))
+        object.__setattr__(
+            self, "worker_count", _require_positive_int("worker_count", self.worker_count)
+        )
+        object.__setattr__(
+            self,
+            "max_points_per_worker",
+            _require_positive_int("max_points_per_worker", self.max_points_per_worker),
+        )
+        if self.worker_count > _FROZEN_MAX_WORKER_COUNT:
+            raise ContractError("MAX_WORKER_COUNT")
+        if self.max_points_per_worker > _FROZEN_MAX_POINTS_PER_WORKER:
+            raise ContractError("MAX_POINTS_PER_WORKER")
+        object.__setattr__(
+            self,
+            "evidence_root",
+            _require_absolute_path("evidence_root", self.evidence_root),
+        )
         validate_capacity(self.worker_count, self.max_points_per_worker, len(point_ids))
 
 
@@ -430,13 +573,20 @@ class BatchRequest:
 class BatchSummary:
     run_mode: RunMode
     point_statuses: Mapping[str, PointStatus]
+    batch_terminal: bool = False
     validation_statuses: Mapping[str, ValidationStatus] = field(default_factory=dict)
     batch_cleanup_complete: bool = False
 
     def __post_init__(self) -> None:
         _require_enum("run_mode", self.run_mode, RunMode)
+        if not isinstance(self.batch_terminal, bool):
+            raise ContractError("BOOLEAN: batch_terminal")
         if not isinstance(self.batch_cleanup_complete, bool):
             raise ContractError("BOOLEAN: batch_cleanup_complete")
+        if not isinstance(self.point_statuses, Mapping):
+            raise ContractError("POINT_STATUSES")
+        if not isinstance(self.validation_statuses, Mapping):
+            raise ContractError("VALIDATION_STATUSES")
         points = dict(self.point_statuses)
         validations = dict(self.validation_statuses)
         if not points:
@@ -451,27 +601,31 @@ class BatchSummary:
             if validations:
                 raise ContractError("EXECUTE_VALIDATION_MIX")
         else:
-            if set(validations) != set(points) or any(status is not PointStatus.UNRUN for status in points.values()):
+            if not set(validations).issubset(points) or any(
+                status is not PointStatus.UNRUN for status in points.values()
+            ):
                 raise ContractError("VALIDATION_PHYSICAL_UNRUN")
         object.__setattr__(self, "point_statuses", MappingProxyType(points))
         object.__setattr__(self, "validation_statuses", MappingProxyType(validations))
 
     @property
     def coverage_complete(self) -> bool:
-        return self.run_mode is RunMode.EXECUTE and all(
+        return self.batch_terminal and self.run_mode is RunMode.EXECUTE and all(
             status in {PointStatus.PASSED, PointStatus.FAILED}
             for status in self.point_statuses.values()
         )
 
     @property
     def execution_complete(self) -> bool:
-        return self.run_mode is RunMode.EXECUTE and all(
-            status is not PointStatus.UNRUN for status in self.point_statuses.values()
-        )
+        return self.batch_terminal and self.run_mode is RunMode.EXECUTE
 
     @property
     def validation_complete(self) -> bool:
-        return self.run_mode is not RunMode.EXECUTE and len(self.validation_statuses) == len(self.point_statuses)
+        return (
+            self.batch_terminal
+            and self.run_mode is not RunMode.EXECUTE
+            and set(self.validation_statuses) == set(self.point_statuses)
+        )
 
     @property
     def validation_passed(self) -> bool:
@@ -486,6 +640,6 @@ class BatchSummary:
 
     @property
     def qualification_passed(self) -> bool:
-        return self.qualification_applicable and self.batch_cleanup_complete and all(
+        return self.coverage_complete and self.batch_cleanup_complete and all(
             status is PointStatus.PASSED for status in self.point_statuses.values()
         )
