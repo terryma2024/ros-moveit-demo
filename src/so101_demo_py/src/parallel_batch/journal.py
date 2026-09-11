@@ -21,7 +21,19 @@ _ZERO_HASH = '0' * 64
 _MAX_PAYLOAD = 64 * 1024 * 1024
 
 
+def _validate_object_keys(value):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                raise ValueError('JSON object keys must be strings')
+            _validate_object_keys(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _validate_object_keys(child)
+
+
 def _canonical(value):
+    _validate_object_keys(value)
     return json.dumps(value, sort_keys=True, separators=(',', ':'),
                       ensure_ascii=False, allow_nan=False).encode('utf-8')
 
@@ -214,6 +226,9 @@ class CoordinatorJournal:
             while offset < len(data):
                 remaining = data[offset:]
                 if len(remaining) < 8:
+                    minimum_size = int.from_bytes(remaining.ljust(8, b'\x00'), 'big')
+                    if minimum_size > _MAX_PAYLOAD:
+                        raise JournalCorruption('impossible partial frame length')
                     break
                 size = struct.unpack('>Q', remaining[:8])[0]
                 if size == 0 or size > _MAX_PAYLOAD:
@@ -224,6 +239,11 @@ class CoordinatorJournal:
                 if len(remaining) < 72:
                     break
                 if len(remaining) < 72 + size:
+                    # Canonical JSON escapes all embedded newlines. A literal
+                    # newline here proves a delimiter or invalid payload exists
+                    # before the claimed end: this cannot be an EOF-only tear.
+                    if b'\n' in remaining[72:]:
+                        raise JournalCorruption('frame length crosses a payload delimiter')
                     break
                 payload = remaining[72:72 + size]
                 if checksum != _digest(payload).encode('ascii'):
