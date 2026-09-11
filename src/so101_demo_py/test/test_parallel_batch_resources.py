@@ -232,6 +232,152 @@ def live_evidence(tmp_path, config, **changes):
     return path
 
 
+def accepted_live_evidence(tmp_path, config, **changes):
+    evidence = live_evidence(tmp_path, config, **changes)
+    sealed = evidence.parent
+    artifacts_root = sealed / 'artifacts'
+    sealed.chmod(0o755)
+    artifacts_root.chmod(0o755)
+    document = json.loads(evidence.read_text(encoding='utf-8'))
+    artifact_documents = {
+        'policy_manifest': {
+            'policy_id': 'frozen-mujoco-pick-policy',
+            'policy_revision': 1,
+        },
+        'scene_manifest': {
+            'scene_id': 'frozen-mujoco-task-scene',
+            'scene_revision': 1,
+        },
+        'aggregate': {
+            'batch_id': document['batch_id'],
+            'worker_count': 2,
+            'run_mode': 'execute',
+            'lifecycle': 'ISOLATED_STACK',
+            'batch_terminal': True,
+            'coverage_complete': True,
+            'execution_complete': True,
+            'qualification_applicable': True,
+            'qualification_passed': True,
+            'batch_cleanup_complete': True,
+        },
+        'cleanup': {
+            'batch_id': document['batch_id'],
+            'cleanup_complete': True,
+            'active_owned_processes': 0,
+        },
+    }
+    for name, artifact_document in artifact_documents.items():
+        artifact = artifacts_root / f'{name}.json'
+        payload = json.dumps(
+            artifact_document, sort_keys=True, separators=(',', ':')
+        ).encode()
+        artifact.write_bytes(payload)
+        artifact.chmod(0o444)
+        document['artifacts'][name] = {
+            'path': f'artifacts/{name}.json',
+            'sha256': hashlib.sha256(payload).hexdigest(),
+        }
+
+    current_root = tmp_path / 'current-runtime-inputs'
+    current_root.mkdir(mode=0o700)
+    provenance_artifacts = {
+        'source_tree_sha256': 'source_manifest',
+        'install_tree_sha256': 'install_manifest',
+        'policy_sha256': 'policy_manifest',
+        'scene_sha256': 'scene_manifest',
+        'models_sha256': 'model_manifest',
+        'container_sha256': 'container_identity',
+        'catalog_sha256': 'catalog',
+    }
+    current_paths = {}
+    for identity_name, artifact_name in provenance_artifacts.items():
+        current = current_root / f'{identity_name}.json'
+        current.write_bytes((artifacts_root / f'{artifact_name}.json').read_bytes())
+        current.chmod(0o400)
+        current_paths[identity_name] = current
+    runtime_config = current_root / 'runtime_config.json'
+    runtime_config.write_bytes(
+        json.dumps(asdict(config), sort_keys=True, separators=(',', ':')).encode()
+    )
+    runtime_config.chmod(0o400)
+    current_paths['runtime_config_sha256'] = runtime_config
+    provenance_probe = resources_api.CurrentRuntimeProvenanceProbe(
+        current_paths=current_paths
+    )
+    provenance = provenance_probe.snapshot(config)
+    if 'source_runtime_config_sha256' in changes:
+        provenance['runtime_config_sha256'] = changes[
+            'source_runtime_config_sha256'
+        ]
+    document['source_identity'] = provenance
+    evidence.chmod(0o600)
+    evidence.write_text(
+        json.dumps(document, sort_keys=True, separators=(',', ':')),
+        encoding='utf-8',
+    )
+    evidence.chmod(0o444)
+    artifacts_root.chmod(0o555)
+    sealed.chmod(0o555)
+
+    acceptance_root = tmp_path / 'controller-acceptance'
+    acceptance_root.mkdir(mode=0o700)
+    acceptance_path = acceptance_root / 'task14-accepted-identity.json'
+    acceptance = {
+        'schema_version': 1,
+        'authority': 'task14_controller_acceptance_v1',
+        'status': 'VALID',
+        'accepted_batch_id': document['batch_id'],
+        'candidate_manifest_sha256': hashlib.sha256(evidence.read_bytes()).hexdigest(),
+        'aggregate_sha256': document['artifacts']['aggregate']['sha256'],
+        'cleanup_sha256': document['artifacts']['cleanup']['sha256'],
+        'provenance': provenance,
+    }
+    acceptance_path.write_text(
+        json.dumps(acceptance, sort_keys=True, separators=(',', ':')),
+        encoding='utf-8',
+    )
+    acceptance_path.chmod(0o600)
+    return evidence, acceptance_path, provenance_probe
+
+
+def accepted_task14_verifier(acceptance_path, provenance_probe):
+    return resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=acceptance_path
+        ),
+        provenance_probe=provenance_probe,
+    )
+
+
+def rewrite_accepted_artifact(evidence, acceptance_path, name, **changes):
+    sealed = evidence.parent
+    artifacts_root = sealed / 'artifacts'
+    artifact = artifacts_root / f'{name}.json'
+    document = json.loads(artifact.read_text(encoding='utf-8'))
+    document.update(changes)
+    payload = json.dumps(document, sort_keys=True, separators=(',', ':')).encode()
+    artifacts_root.chmod(0o755)
+    artifact.chmod(0o600)
+    artifact.write_bytes(payload)
+    artifact.chmod(0o444)
+    artifacts_root.chmod(0o555)
+    manifest = json.loads(evidence.read_text(encoding='utf-8'))
+    artifact_sha256 = hashlib.sha256(payload).hexdigest()
+    manifest['artifacts'][name]['sha256'] = artifact_sha256
+    manifest_payload = json.dumps(
+        manifest, sort_keys=True, separators=(',', ':')
+    ).encode()
+    evidence.chmod(0o600)
+    evidence.write_bytes(manifest_payload)
+    evidence.chmod(0o444)
+    acceptance = json.loads(acceptance_path.read_text(encoding='utf-8'))
+    acceptance[f'{name}_sha256'] = artifact_sha256
+    acceptance['candidate_manifest_sha256'] = hashlib.sha256(
+        manifest_payload
+    ).hexdigest()
+    acceptance_path.write_text(json.dumps(acceptance), encoding='utf-8')
+
+
 def proc_process(proc_root, pid, *, comm, argv, starttime=424242, state='S'):
     process = proc_root / str(pid)
     process.mkdir(parents=True)
@@ -550,7 +696,9 @@ def test_three_workers_require_prior_two_worker_live_headroom_evidence(tmp_path,
         allocator(tmp_path, config).allocate(worker_count=3)
 
 
-def test_three_workers_accept_strict_hashed_live_headroom_evidence(tmp_path, config):
+def test_default_three_workers_reject_caller_fabricated_live_headroom_evidence(
+    tmp_path, config
+):
     evidence = live_evidence(tmp_path, config)
     resource_allocator = WorkerResourceAllocator(
         config,
@@ -559,14 +707,219 @@ def test_three_workers_accept_strict_hashed_live_headroom_evidence(tmp_path, con
         claim_root=claim_root(),
         live_headroom_evidence=evidence,
     )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ) as caught:
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+    assert str(caught.value.__cause__) == 'TASK14_ACCEPTANCE_UNAVAILABLE'
+
+
+def test_invalid_candidate_path_does_not_query_acceptance_or_provenance(
+    tmp_path, config
+):
+    calls = []
+
+    class ExplodingAcceptance:
+        def accepted_identity(self, path):
+            calls.append(('acceptance', path))
+            raise AssertionError('invalid path reached acceptance provider')
+
+    class ExplodingProvenance:
+        def snapshot(self, config):
+            calls.append(('provenance', config))
+            raise AssertionError('invalid path reached provenance probe')
+
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=ExplodingAcceptance(),
+        provenance_probe=ExplodingProvenance(),
+    )
+    invalid = tmp_path / 'not-sealed/not-the-task14-manifest.json'
+
+    with pytest.raises(ResourceAllocationError, match='TASK14_SEALED_PATH_INVALID'):
+        verifier.verify(invalid, config=config)
+    assert calls == []
+
+
+def test_three_workers_require_independent_acceptance_and_current_provenance(
+    tmp_path, config
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=acceptance_path
+        ),
+        provenance_probe=provenance_probe,
+    )
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-independently-accepted'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=verifier,
+    )
     manifest = resource_allocator.allocate(worker_count=3)
 
+    accepted = manifest.live_headroom_evidence['acceptance_identity']
     assert manifest.worker_count == 3
-    assert manifest.live_headroom_evidence['manifest_sha256']
-    assert manifest.live_headroom_evidence['sealed_batch_root'] == str(
-        evidence.parent.parent
+    assert accepted['authority'] == 'task14_controller_acceptance_v1'
+    assert accepted['candidate_manifest_sha256'] == (
+        manifest.live_headroom_evidence['manifest_sha256']
+    )
+    assert manifest.live_headroom_evidence['current_provenance'] == (
+        accepted['provenance']
     )
     resource_allocator.close()
+
+
+def test_independent_acceptance_without_current_provenance_stays_fail_closed(
+    tmp_path, config
+):
+    evidence, acceptance_path, _provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=acceptance_path
+        )
+    )
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-no-current-provenance'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=verifier,
+    )
+    with pytest.raises(
+        ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+    ) as caught:
+        resource_allocator.allocate(worker_count=3)
+
+    assert str(caught.value.__cause__) == 'CURRENT_RUNTIME_PROVENANCE_UNAVAILABLE'
+
+
+@pytest.mark.parametrize(
+    'field',
+    ['candidate_manifest_sha256', 'aggregate_sha256', 'cleanup_sha256'],
+)
+def test_three_worker_acceptance_identity_hashes_must_match_candidate(
+    tmp_path, config, field
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    acceptance = json.loads(acceptance_path.read_text(encoding='utf-8'))
+    acceptance[field] = hashlib.sha256(f'wrong-{field}'.encode()).hexdigest()
+    acceptance_path.write_text(json.dumps(acceptance), encoding='utf-8')
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=acceptance_path
+        ),
+        provenance_probe=provenance_probe,
+    )
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, f'three-acceptance-{field}'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+            live_headroom_verifier=verifier,
+        ).allocate(worker_count=3)
+
+
+@pytest.mark.parametrize(
+    ('artifact_name', 'changes'),
+    [
+        ('aggregate', {'batch_terminal': False}),
+        ('aggregate', {'qualification_applicable': False}),
+        ('aggregate', {'batch_cleanup_complete': False}),
+        ('cleanup', {'cleanup_complete': False}),
+        ('cleanup', {'active_owned_processes': 1}),
+    ],
+)
+def test_independently_accepted_aggregate_and_cleanup_semantics_are_mandatory(
+    tmp_path, config, artifact_name, changes
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    rewrite_accepted_artifact(
+        evidence, acceptance_path, artifact_name, **changes
+    )
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, f'three-{artifact_name}-semantics'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_acceptance_rejects_current_provenance_drift(tmp_path, config):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    provenance_probe.current_paths['scene_sha256'].chmod(0o600)
+    provenance_probe.current_paths['scene_sha256'].write_text(
+        '{"scene_id":"drifted-after-task14"}', encoding='utf-8'
+    )
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=acceptance_path
+        ),
+        provenance_probe=provenance_probe,
+    )
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-current-provenance-drift'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+            live_headroom_verifier=verifier,
+        ).allocate(worker_count=3)
+
+
+def test_acceptance_provider_rejects_identity_inside_candidate_tree(tmp_path, config):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    sealed = evidence.parent
+    sealed.chmod(0o755)
+    in_tree = sealed / 'acceptance.json'
+    in_tree.write_bytes(acceptance_path.read_bytes())
+    in_tree.chmod(0o600)
+    sealed.chmod(0o555)
+    verifier = resources_api.Task14LiveHeadroomVerifier(
+        acceptance_provider=resources_api.Task14AcceptanceProvider(
+            acceptance_path=in_tree
+        ),
+        provenance_probe=provenance_probe,
+    )
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-in-tree-acceptance'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+            live_headroom_verifier=verifier,
+        ).allocate(worker_count=3)
 
 
 @pytest.mark.parametrize(
@@ -587,7 +940,9 @@ def test_three_workers_accept_strict_hashed_live_headroom_evidence(tmp_path, con
 def test_three_worker_live_evidence_fails_closed_on_schema_identity_or_headroom(
     tmp_path, config, change, value
 ):
-    evidence = live_evidence(tmp_path, config, **{change: value})
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config, **{change: value}
+    )
 
     with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
         WorkerResourceAllocator(
@@ -596,11 +951,16 @@ def test_three_worker_live_evidence_fails_closed_on_schema_identity_or_headroom(
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_rejects_artifact_hash_mismatch(tmp_path, config):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     document = json.loads(evidence.read_text())
     document['artifacts']['resource_metrics']['sha256'] = '0' * 64
     evidence.chmod(0o600)
@@ -614,6 +974,9 @@ def test_three_worker_live_evidence_rejects_artifact_hash_mismatch(tmp_path, con
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
@@ -633,7 +996,9 @@ def test_three_worker_live_evidence_rejects_missing_sealed_manifest(tmp_path, co
 def test_three_worker_live_evidence_rejects_tampered_hashed_artifact(
     tmp_path, config
 ):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     artifact = evidence.parent / 'artifacts/resource_metrics.json'
     artifact.chmod(0o600)
     artifact.write_text('{"tampered":true}', encoding='utf-8')
@@ -646,11 +1011,16 @@ def test_three_worker_live_evidence_rejects_tampered_hashed_artifact(
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_rejects_symlinked_artifact(tmp_path, config):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     artifacts = evidence.parent / 'artifacts'
     artifact = artifacts / 'resource_metrics.json'
     target = evidence.parent.parent / 'unsealed-resource-metrics.json'
@@ -668,11 +1038,16 @@ def test_three_worker_live_evidence_rejects_symlinked_artifact(tmp_path, config)
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_rejects_unsealed_file_mode(tmp_path, config):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     artifact = evidence.parent / 'artifacts/resource_metrics.json'
     artifact.chmod(0o600)
 
@@ -683,11 +1058,16 @@ def test_three_worker_live_evidence_rejects_unsealed_file_mode(tmp_path, config)
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_rejects_duplicate_json_key(tmp_path, config):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     payload = evidence.read_text(encoding='utf-8')
     evidence.chmod(0o600)
     evidence.write_text(payload[:-1] + ',"status":"VALID"}', encoding='utf-8')
@@ -700,13 +1080,18 @@ def test_three_worker_live_evidence_rejects_duplicate_json_key(tmp_path, config)
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_detects_artifact_directory_swap(
     tmp_path, config, monkeypatch
 ):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     sealed = evidence.parent
     artifacts = sealed / 'artifacts'
     original = resources_api._read_sealed_json_at
@@ -715,7 +1100,7 @@ def test_three_worker_live_evidence_detects_artifact_directory_swap(
     def swap_after_last_read(parent_fd, name):
         nonlocal swapped
         result = original(parent_fd, name)
-        if name == 'render_metrics.json' and not swapped:
+        if name == 'cleanup.json' and not swapped:
             swapped = True
             sealed.chmod(0o755)
             artifacts.rename(sealed / 'artifacts-displaced')
@@ -731,7 +1116,98 @@ def test_three_worker_live_evidence_detects_artifact_directory_swap(
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_late_same_inode_chmod(
+    tmp_path, config, monkeypatch
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    artifact = evidence.parent / 'artifacts/resource_metrics.json'
+    original = resources_api._read_sealed_json_at
+    changed = False
+
+    def chmod_after_last_read(parent_fd, name):
+        nonlocal changed
+        result = original(parent_fd, name)
+        if name == 'cleanup.json' and not changed:
+            changed = True
+            artifact.chmod(0o600)
+        return result
+
+    monkeypatch.setattr(resources_api, '_read_sealed_json_at', chmod_after_last_read)
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-late-chmod'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+    assert changed is True
+
+
+def test_three_worker_live_evidence_rejects_late_same_inode_rewrite(
+    tmp_path, config, monkeypatch
+):
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    artifact = evidence.parent / 'artifacts/resource_metrics.json'
+    original_bytes = artifact.read_bytes()
+    original_stat = artifact.stat()
+    replacement = original_bytes.replace(b'0.3', b'0.4', 1)
+    assert len(replacement) == len(original_bytes)
+    original = resources_api._read_sealed_json_at
+    changed = False
+
+    def rewrite_after_last_read(parent_fd, name):
+        nonlocal changed
+        result = original(parent_fd, name)
+        if name == 'cleanup.json' and not changed:
+            changed = True
+            artifact.chmod(0o600)
+            artifact.write_bytes(replacement)
+            artifact.chmod(0o444)
+            os.utime(
+                artifact,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
+        return result
+
+    monkeypatch.setattr(resources_api, '_read_sealed_json_at', rewrite_after_last_read)
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-late-rewrite'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
+    )
+    try:
+        with pytest.raises(
+            ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'
+        ):
+            resource_allocator.allocate(worker_count=3)
+    finally:
+        resource_allocator.close()
+    assert changed is True
 
 
 @pytest.mark.parametrize(
@@ -747,7 +1223,9 @@ def test_three_worker_live_evidence_detects_artifact_directory_swap(
 def test_three_worker_live_evidence_rejects_unaccepted_or_extra_claims(
     tmp_path, config, change, value
 ):
-    evidence = live_evidence(tmp_path, config, **{change: value})
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config, **{change: value}
+    )
 
     with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
         WorkerResourceAllocator(
@@ -756,13 +1234,18 @@ def test_three_worker_live_evidence_rejects_unaccepted_or_extra_claims(
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
 def test_three_worker_live_evidence_rejects_artifact_path_redirection(
     tmp_path, config
 ):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     document = json.loads(evidence.read_text())
     document['artifacts']['resource_metrics']['path'] = '../outside.json'
     evidence.chmod(0o600)
@@ -776,6 +1259,9 @@ def test_three_worker_live_evidence_rejects_artifact_path_redirection(
             probe=FakeProbe(),
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
+            live_headroom_verifier=accepted_task14_verifier(
+                acceptance_path, provenance_probe
+            ),
         ).allocate(worker_count=3)
 
 
@@ -798,13 +1284,16 @@ def test_two_workers_do_not_consult_live_headroom_verifier(tmp_path, config):
 def test_internal_live_headroom_verifier_port_preserves_real_verification(
     tmp_path, config
 ):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
+    delegate = accepted_task14_verifier(acceptance_path, provenance_probe)
     calls = []
 
     class RecordingVerifier:
         def verify(self, path, *, config):
             calls.append((path, config))
-            return resources_api.Task14LiveHeadroomVerifier().verify(path, config=config)
+            return delegate.verify(path, config=config)
 
     resource_allocator = WorkerResourceAllocator(
         config,
@@ -1182,13 +1671,18 @@ def test_manifest_and_nested_resources_are_immutable(tmp_path, config):
 
 
 def test_resources_use_frozen_domain_sequence_and_private_worker_layout(tmp_path, config):
-    evidence = live_evidence(tmp_path, config)
+    evidence, acceptance_path, provenance_probe = accepted_live_evidence(
+        tmp_path, config
+    )
     resource_allocator = WorkerResourceAllocator(
         config,
         resource_root(tmp_path, 'three-layout'),
         probe=FakeProbe(),
         claim_root=claim_root(),
         live_headroom_evidence=evidence,
+        live_headroom_verifier=accepted_task14_verifier(
+            acceptance_path, provenance_probe
+        ),
     )
     manifest = resource_allocator.allocate(worker_count=3)
 
@@ -1495,7 +1989,7 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     assert [worker['ros_domain_id'] for worker in document['workers']] == [181, 182]
 
 
-def test_three_worker_cli_requires_and_consumes_live_headroom_evidence(
+def test_default_three_worker_cli_rejects_self_signed_live_headroom_evidence(
     tmp_path, config, monkeypatch
 ):
     root = resource_root(tmp_path, 'dry-three')
@@ -1524,10 +2018,8 @@ def test_three_worker_cli_requires_and_consumes_live_headroom_evidence(
         claim_root=claim_root(),
     )
 
-    document = json.loads((root / 'resource_manifest.json').read_text(encoding='utf-8'))
-    assert exit_code == 0
-    assert document['worker_count'] == 3
-    assert document['live_headroom_evidence']['manifest_sha256']
+    assert exit_code == 2
+    assert not (root / 'resource_manifest.json').exists()
 
 
 def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
