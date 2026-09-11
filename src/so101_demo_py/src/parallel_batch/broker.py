@@ -124,12 +124,24 @@ class PerceptionBroker:
             return all(self._ready.values())
 
     def _now(self):
-        now = _require_finite('monotonic_clock', self._clock())
+        try:
+            now = _require_finite('monotonic_clock', self._clock())
+        except Exception as error:
+            self._clock_fault('MONOTONIC_CLOCK_INVALID')
+            raise BrokerError('MONOTONIC_CLOCK_INVALID') from error
         if self._last_clock is not None and now < self._last_clock:
-            self._ready = dict.fromkeys(self._models, False)
+            self._clock_fault('MONOTONIC_CLOCK_REGRESSION')
             raise BrokerError('MONOTONIC_CLOCK_REGRESSION')
         self._last_clock = now
         return now
+
+    def _clock_fault(self, reason):
+        self._ready = dict.fromkeys(self._models, False)
+        for entry in self._entries.values():
+            if entry.response is None or entry.response.outcome is ModelOutcome.QUALIFIED:
+                # The failed clock must not be sampled while invalidating work.
+                self._finish(entry, ModelOutcome.INFRA_ERROR, reason,
+                             completed=self._last_clock)
 
     def _lookup(self, request):
         if type(request) is not InferenceRequest:
@@ -146,8 +158,32 @@ class PerceptionBroker:
         return (entry.generation != self._generation or
                 (request.worker_id, request.worker_generation) in self._fenced_generations)
 
-    def _finish(self, entry, outcome, reason=None, candidate=None):
+    def _finish(self, entry, outcome, reason=None, candidate=None, *, completed=None):
+        copied_candidate = None
+        if outcome is ModelOutcome.QUALIFIED:
+            try:
+                copied_candidate = deepcopy(candidate)
+            except Exception:
+                return self._copy_failure(entry)
+        now = self._now() if completed is None else completed
+        if outcome is ModelOutcome.QUALIFIED:
+            # Copying and the clock port may reenter cancellation/health paths.
+            # Preserve their terminal record before touching the reservation.
+            if entry.response is not None and entry.response.outcome is not ModelOutcome.QUALIFIED:
+                return entry.response
+            if self._fenced(entry):
+                outcome, reason = ModelOutcome.CANCELLED, 'GENERATION_FENCED'
+            elif not self.healthy:
+                outcome, reason = ModelOutcome.INFRA_ERROR, 'BROKER_NOT_READY'
+            elif now >= entry.inference_deadline:
+                outcome, reason = ModelOutcome.INFERENCE_TIMEOUT, 'INFERENCE_DEADLINE_EXCEEDED'
         request = entry.request
+        response = BrokerResponse(
+            request, entry.generation, outcome,
+            copied_candidate if outcome is ModelOutcome.QUALIFIED else None, reason,
+            entry.queued, entry.queue_deadline, entry.started, entry.inference_deadline, now)
+        # All fallible/callback work precedes this atomic terminal publication
+        # and reservation release under the state lock.
         queue = self._queues[request.model_id]
         if request.worker_id in queue and request.request_id in queue[request.worker_id]:
             queue[request.worker_id].remove(request.request_id)
@@ -157,11 +193,13 @@ class PerceptionBroker:
         key = (request.worker_id, request.model_id)
         if self._inflight.get(key) == request.request_id:
             del self._inflight[key]
-        entry.response = BrokerResponse(
-            request, entry.generation, outcome,
-            deepcopy(candidate) if outcome is ModelOutcome.QUALIFIED else None, reason,
-            entry.queued, entry.queue_deadline, entry.started, entry.inference_deadline,
-            self._now())
+        entry.response = response
+        return entry.response
+
+    def _copy_failure(self, entry):
+        if entry.response is None or entry.response.outcome is ModelOutcome.QUALIFIED:
+            self._finish(entry, ModelOutcome.INFRA_ERROR, 'RESULT_COPY_FAILED')
+        self.set_model_ready(entry.request.model_id, False)
         return entry.response
 
     def _guard(self, entry):
@@ -203,6 +241,18 @@ class PerceptionBroker:
                             entry.response.outcome is ModelOutcome.QUALIFIED):
                         self._finish(entry, ModelOutcome.INFRA_ERROR, 'BROKER_NOT_READY')
 
+    def _copy_response(self, entry):
+        original = entry.response
+        try:
+            copied = deepcopy(original)
+        except Exception:
+            return self._copy_failure(entry)
+        # No candidate copying or callback follows this final return guard.
+        # Any invalidation replaces the immutable response with a candidate-free
+        # terminal record, which is safe to return directly.
+        self._guard(entry)
+        return copied if entry.response is original else entry.response
+
     def submit(self, request):
         """Accept once or return the first rejection; never evict queued work."""
         with self._lock:
@@ -233,7 +283,7 @@ class PerceptionBroker:
                     entry.admission = BrokerSubmission(False, entry.response.reason)
             else:
                 self._guard(entry)
-            response = deepcopy(entry.response)
+            response = self._copy_response(entry)
             if response is not None and response.outcome is ModelOutcome.CANCELLED:
                 return BrokerSubmission(False, response.reason, response)
             return BrokerSubmission(entry.admission.accepted, entry.admission.reason, response)
@@ -256,10 +306,17 @@ class PerceptionBroker:
                     self._guard(entry)
                     if entry.response is not None:
                         continue
+                    started = self._now()
+                    if entry.response is not None:
+                        continue
+                    if started >= entry.queue_deadline:
+                        self._finish(entry, ModelOutcome.QUEUE_TIMEOUT,
+                                     'QUEUE_DEADLINE_EXCEEDED', completed=started)
+                        continue
                     workers.popleft()
                     self._queues[model][worker].popleft()
                     del self._queues[model][worker]
-                    entry.started = self._now()
+                    entry.started = started
                     entry.inference_deadline = entry.started + self._inference_timeout[model]
                     return entry.request
             return None
@@ -272,21 +329,21 @@ class PerceptionBroker:
                 raise BrokerError('UNKNOWN_REQUEST')
             self._guard(entry)
             if entry.response is not None:
-                return deepcopy(entry.response)
+                return self._copy_response(entry)
             if entry.started is None:
                 raise BrokerError('REQUEST_NOT_RUNNING')
             if (type(result) is not ModelResult or not isinstance(result.outcome, ModelOutcome)
                     or (result.outcome is ModelOutcome.QUALIFIED) !=
                     (result.candidate is not None)):
                 self.set_model_ready(request.model_id, False)
-                return deepcopy(entry.response)
+                return self._copy_response(entry)
             self._finish(entry, result.outcome, result.reason, result.candidate)
             if result.outcome is ModelOutcome.INFRA_ERROR:
                 self.set_model_ready(request.model_id, False)
             # Copying a candidate can take time. Recheck the completion boundary
             # after ownership transfer, just as after the authorization callback.
             self._guard(entry)
-            return deepcopy(entry.response)
+            return self._copy_response(entry)
 
     def cancel_generation(self, worker_id, generation):
         """Permanently fence this Worker generation, including unseen request IDs."""
@@ -315,7 +372,7 @@ class PerceptionBroker:
             if entry is None:
                 raise BrokerError('UNKNOWN_REQUEST')
             self._guard(entry)
-            return deepcopy(entry.response)
+            return self._copy_response(entry)
 
     def run_next(self):
         """Run one injected detector outside the state lock; watchdogs stay responsive."""
