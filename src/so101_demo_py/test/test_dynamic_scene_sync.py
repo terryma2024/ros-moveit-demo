@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -602,6 +602,7 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
     assert scene.calls[:2] == ["apply", "observe"]
     output = capsys.readouterr().out
     assert "status=READY subscription=/cup_pose" in output
+    assert "status=POSE_ACCEPTED source_stamp_ns=1000000000" in output
     assert "status=DONE" in output
 
 

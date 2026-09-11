@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import pytest
-
 from so101_demo.application.dynamic_execute import build_dynamic_actions
 from so101_demo.core.domain import (
     ActionResult,
@@ -34,7 +33,9 @@ class Targets:
     def __init__(self) -> None:
         self.values = {
             state: PoseEvidence((float(index), 0.0, 0.2), (0.0, 0.0, 0.0, 1.0))
-            for index, state in enumerate(sorted(DYNAMIC_MOTION_STATES, key=lambda item: item.value))
+            for index, state in enumerate(
+                sorted(DYNAMIC_MOTION_STATES, key=lambda item: item.value)
+            )
         }
 
     def target_for(self, state: State) -> PoseEvidence:
@@ -223,7 +224,13 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
     terminal_joints = (0.0199, -0.3131, 0.2035, 0.0011, 0.0021)
     joint_states = iter((start_joints, terminal_joints, terminal_joints))
     trajectory = SimpleNamespace(
-        joint_trajectory=SimpleNamespace(points=(object(), object()))
+        joint_trajectory=SimpleNamespace(
+            joint_names=list(RosDynamicMujocoExecution._ARM_JOINTS),
+            points=(
+                SimpleNamespace(positions=start_joints),
+                SimpleNamespace(positions=_DiagnosticIk.target_joints),
+            ),
+        )
     )
     adapter._snapshot = lambda: next(snapshots)
     adapter._joint_state_generation = 4
@@ -261,7 +268,11 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
     adapter._initial = before
     adapter._before_micro_lift = None
     adapter._state_events = []
-    adapter._document = {"state_events": adapter._state_events}
+    adapter._planning_attempts = []
+    adapter._document = {
+        "state_events": adapter._state_events,
+        "planning_attempts": adapter._planning_attempts,
+    }
     adapter._evidence_file = tmp_path / "failed-micro-lift.json"
     target = PoseEvidence((0.0200, -0.3130, 0.2040), (0.0, 0.0, 0.0, 1.0))
 
@@ -273,9 +284,7 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
     assert event["state"] == State.MICRO_LIFT.value
     assert event["validation_failure"] == "DYNAMIC_MICRO_LIFT_NOT_PROVED"
     assert event["terminal_joint_positions_rad"] == list(terminal_joints)
-    assert event["terminal_fk_pose"] == pytest.approx(
-        [*terminal_joints[:3], 0.0, 0.0, 0.0, 1.0]
-    )
+    assert event["terminal_fk_pose"] == pytest.approx([*terminal_joints[:3], 0.0, 0.0, 0.0, 1.0])
     assert event["terminal_position_error_m"] == pytest.approx(
         math.dist(terminal_joints[:3], target.position_m)
     )
@@ -285,8 +294,161 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
     assert event["physical_cup_lift_m"] == pytest.approx(0.0007)
     assert event["physical_bilateral_contact"] is True
     assert event["physical_table_contact"] is False
+    assert event["cartesian_corridor_receipts"][0]["accepted"] is True
+    assert adapter._planning_attempts[-1]["kind"] == "actual_moveit_cartesian_corridor"
     persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
     assert persisted["state_events"] == adapter._state_events
+
+
+def test_dynamic_motion_rejects_sampled_tcp_detour_before_execution(tmp_path) -> None:
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    start = (0.0, 0.0, 0.20, 0.0, 0.0)
+    target = PoseEvidence((0.0, 0.0, 0.26), (0.0, 0.0, 0.0, 1.0))
+    trajectory = SimpleNamespace(
+        joint_trajectory=SimpleNamespace(
+            joint_names=list(RosDynamicMujocoExecution._ARM_JOINTS),
+            points=(
+                SimpleNamespace(positions=start),
+                SimpleNamespace(positions=(0.02, 0.0, 0.23, 0.0, 0.0)),
+                SimpleNamespace(positions=(0.0, 0.0, 0.26, 0.0, 0.0)),
+            ),
+        )
+    )
+    adapter._snapshot = lambda: _mujoco_sample(
+        sequence=100, step=1000, cup_z_m=0.165, table_contact=False
+    )
+    adapter._joint_state = lambda *_args, **_kwargs: start
+    adapter._joint_state_generation = 4
+    adapter._joint_state_source_stamp_ns = 1
+    adapter._joint_state_received_monotonic_s = 1.0
+    adapter._ik = _DiagnosticIk()
+    adapter._ik.target_joints = (0.0, 0.0, 0.26, 0.0, 0.0)
+    adapter._planning = SimpleNamespace(
+        plan_joint_path=lambda *_args, **_kwargs: SimpleNamespace(
+            failure=None, trajectory=trajectory
+        )
+    )
+    executed = []
+    adapter._trajectory = SimpleNamespace(execute=lambda *_args, **_kwargs: executed.append(True))
+    adapter._template = SimpleNamespace(
+        position_tolerance_m=0.002,
+        orientation_tolerance_rad=(0.10, 0.10, 0.10),
+        velocity_scaling=0.03,
+        acceleration_scaling=0.03,
+        planning_timeout_s=8.0,
+        planning_group="arm",
+        tcp_link="so101_tcp",
+    )
+    adapter._initial = adapter._snapshot()
+    adapter._before_micro_lift = None
+    adapter._state_events = []
+    adapter._planning_attempts = []
+    adapter._document = {
+        "state_events": adapter._state_events,
+        "planning_attempts": adapter._planning_attempts,
+    }
+    adapter._evidence_file = tmp_path / "corridor-rejection.json"
+
+    with pytest.raises(RuntimeError, match="CARTESIAN_CORRIDOR_DEVIATION"):
+        adapter._motion(State.LIFT, target)
+
+    assert executed == []
+    assert adapter._planning_attempts[-1]["accepted"] is False
+    assert adapter._planning_attempts[-1]["failure_code"] == ("CARTESIAN_CORRIDOR_DEVIATION")
+
+
+def test_dynamic_motion_scores_bounded_moveit_candidates_and_executes_one(
+    tmp_path,
+) -> None:
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    start = (0.0, 0.0, 0.20, 0.0, 0.0)
+    target_joints = (0.0, 0.0, 0.26, 0.0, 0.0)
+    target = PoseEvidence((0.0, 0.0, 0.26), (0.0, 0.0, 0.0, 1.0))
+
+    def trajectory(midpoint):
+        return SimpleNamespace(
+            joint_trajectory=SimpleNamespace(
+                joint_names=list(RosDynamicMujocoExecution._ARM_JOINTS),
+                points=(
+                    SimpleNamespace(positions=start),
+                    SimpleNamespace(positions=midpoint),
+                    SimpleNamespace(positions=target_joints),
+                ),
+            )
+        )
+
+    unsafe = trajectory((0.10, 0.0, 0.23, 0.0, 0.0))
+    safe = trajectory((0.0, 0.0, 0.23, 0.0, 0.0))
+    planned = iter((unsafe, safe, safe, safe))
+    planning_calls = []
+
+    def plan(*_args, **_kwargs):
+        planning_calls.append(True)
+        return SimpleNamespace(failure=None, trajectory=next(planned))
+
+    snapshots = iter(
+        (
+            _mujoco_sample(sequence=100, step=1000, cup_z_m=0.165, table_contact=False),
+            _mujoco_sample(sequence=110, step=1100, cup_z_m=0.225, table_contact=False),
+        )
+    )
+    joint_states = iter((start, target_joints, target_joints))
+    adapter._snapshot = lambda: next(snapshots)
+    adapter._joint_state_generation = 4
+    adapter._joint_state_source_stamp_ns = 1_000_000_100
+    adapter._joint_state_received_monotonic_s = 2.0
+
+    def joint_state(*_args, after_generation=None, **_kwargs):
+        value = next(joint_states)
+        if after_generation is not None:
+            adapter._joint_state_generation = after_generation + 1
+        return value
+
+    adapter._joint_state = joint_state
+    adapter._ik = _DiagnosticIk()
+    adapter._ik.target_joints = target_joints
+    adapter._planning = SimpleNamespace(plan_joint_path=plan)
+    executed = []
+    adapter._trajectory = SimpleNamespace(
+        execute=lambda candidate, *_args, **_kwargs: (
+            executed.append(candidate) or ActionResult(ActionStatus.SUCCEEDED)
+        )
+    )
+    adapter._template = SimpleNamespace(
+        position_tolerance_m=0.002,
+        orientation_tolerance_rad=(0.10, 0.10, 0.10),
+        velocity_scaling=0.03,
+        acceleration_scaling=0.03,
+        planning_timeout_s=8.0,
+        planning_group="arm",
+        tcp_link="so101_tcp",
+    )
+    adapter._initial = next(
+        iter((_mujoco_sample(sequence=90, step=900, cup_z_m=0.165, table_contact=True),))
+    )
+    adapter._before_micro_lift = None
+    adapter._state_events = []
+    adapter._planning_attempts = []
+    adapter._document = {
+        "state_events": adapter._state_events,
+        "planning_attempts": adapter._planning_attempts,
+    }
+    adapter._evidence_file = tmp_path / "candidate-selection.json"
+
+    adapter._motion(State.MOVE_ABOVE_OBJECT, target)
+
+    assert len(planning_calls) == 4
+    assert executed == [safe]
+    candidates = [
+        item
+        for item in adapter._planning_attempts
+        if item.get("kind") == "moveit_plan_candidate"
+    ]
+    assert [item["candidate_index"] for item in candidates] == [0, 1, 2, 3]
+    assert candidates[0]["accepted"] is False
+    assert candidates[1]["accepted"] is True
+    assert adapter._planning_attempts[-1]["kind"] == "moveit_plan_selection"
+    assert adapter._planning_attempts[-1]["candidate_index"] == 1
 
 
 def test_pose_interpolation_reaches_target_and_normalizes_quaternion() -> None:

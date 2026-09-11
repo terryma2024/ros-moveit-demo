@@ -7,6 +7,7 @@ import os
 import signal
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -22,8 +23,123 @@ from ..application.task_batch import (
 from ..application.task_reachability import ReachabilityReport, ReachabilityStatus
 from ..core.task_points import TaskPoint
 
-
 _CONSUMER_READY_TOKEN = "status=READY subscription=/cup_pose"
+_ALLOWED_YOLO_FALLBACK_FAILURES = frozenset(
+    {
+        "TARGET_NOT_FOUND",
+        "TARGET_AMBIGUOUS",
+        "RGBD_INVALID",
+        "DEPTH_INVALID",
+        "GEOMETRY_REJECTED",
+        "INFERENCE_FAILED",
+        "RGBD_TIMEOUT",
+        "OUTPUT_PUBLICATION_FAILED",
+        "OUTPUT_ACK_TIMEOUT",
+        "YOLO_ACCEPTANCE_TIMEOUT",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PerceptionChainDecision:
+    action: str
+    accepted_backend: str | None
+    fallback_invoked: bool
+    fallback_reason: str | None
+    motion_authorized: bool
+    failure_code: str | None
+
+
+def _valid_perception_attempt(
+    attempt: Mapping[str, object],
+    *,
+    backend: str,
+    expected_session_id: str,
+    expected_reset_epoch: int,
+) -> bool:
+    if (
+        attempt.get("backend") != backend
+        or not isinstance(attempt.get("attempt_id"), str)
+        or not str(attempt["attempt_id"]).strip()
+        or attempt.get("simulation_session_id") != expected_session_id
+        or attempt.get("reset_epoch") != expected_reset_epoch
+    ):
+        return False
+    published = attempt.get("published_cup_pose") is True
+    acknowledged = attempt.get("output_acknowledged") is True
+    accepted = attempt.get("pose_accepted") is True
+    if published and not acknowledged:
+        return False
+    if accepted and not (published and acknowledged):
+        return False
+    source_stamp = attempt.get("source_stamp_ns")
+    if (published or accepted) and (
+        not isinstance(source_stamp, int) or isinstance(source_stamp, bool) or source_stamp <= 0
+    ):
+        return False
+    return True
+
+
+def evaluate_perception_chain(
+    yolo_attempt: Mapping[str, object],
+    fallback_attempt: Mapping[str, object] | None = None,
+    *,
+    expected_session_id: str,
+    expected_reset_epoch: int,
+) -> PerceptionChainDecision:
+    """Authorize motion only from a fresh accepted YOLO-first perception chain."""
+
+    def fail(code: str, *, invoked: bool, reason: str | None):
+        return PerceptionChainDecision(
+            "FAIL_CLOSED", None, invoked, reason, False, code
+        )
+
+    if not _valid_perception_attempt(
+        yolo_attempt,
+        backend="yolo_seg",
+        expected_session_id=expected_session_id,
+        expected_reset_epoch=expected_reset_epoch,
+    ):
+        return fail("YOLO_ATTEMPT_INVALID", invoked=False, reason=None)
+    if yolo_attempt.get("pose_accepted") is True:
+        if fallback_attempt is not None:
+            return fail("FALLBACK_AFTER_ACCEPTED_YOLO", invoked=True, reason=None)
+        return PerceptionChainDecision(
+            "ACCEPT", "yolo_seg", False, None, True, None
+        )
+
+    failure_code = yolo_attempt.get("failure_code")
+    if not isinstance(failure_code, str) or failure_code not in _ALLOWED_YOLO_FALLBACK_FAILURES:
+        return fail("YOLO_FALLBACK_NOT_ALLOWED", invoked=False, reason=None)
+    if fallback_attempt is None:
+        return PerceptionChainDecision(
+            "INVOKE_FALLBACK", None, True, failure_code, False, None
+        )
+    if not _valid_perception_attempt(
+        fallback_attempt,
+        backend="grounded_sam",
+        expected_session_id=expected_session_id,
+        expected_reset_epoch=expected_reset_epoch,
+    ):
+        return fail(
+            "GROUNDED_SAM_ATTEMPT_INVALID", invoked=True, reason=failure_code
+        )
+    if fallback_attempt.get("attempt_id") == yolo_attempt.get("attempt_id"):
+        return fail("PERCEPTION_ATTEMPT_REUSED", invoked=True, reason=failure_code)
+    yolo_stamp = yolo_attempt.get("source_stamp_ns")
+    fallback_stamp = fallback_attempt.get("source_stamp_ns")
+    if (
+        isinstance(yolo_stamp, int)
+        and yolo_stamp > 0
+        and isinstance(fallback_stamp, int)
+        and fallback_stamp <= yolo_stamp
+    ):
+        return fail("GROUNDED_SAM_SOURCE_STALE", invoked=True, reason=failure_code)
+    if fallback_attempt.get("pose_accepted") is not True:
+        return fail("GROUNDED_SAM_FALLBACK_FAILED", invoked=True, reason=failure_code)
+    return PerceptionChainDecision(
+        "ACCEPT", "grounded_sam", True, failure_code, True, None
+    )
 
 
 class OwnedPointProcesses:
@@ -80,22 +196,33 @@ class OwnedPointProcesses:
     def poll(self, role: str):
         return self._children[role].poll()
 
-    def stop_all(self) -> None:
-        failures = []
-        for role, child in reversed(tuple(self._children.items())):
-            if child.poll() is not None:
-                continue
-            try:
-                self._killpg(int(child.pid), signal.SIGINT)
-                child.wait(timeout=10.0)
-            except subprocess.TimeoutExpired:
+    def stop(self, role: str) -> None:
+        child = self._children.pop(role)
+        output = self._output_streams.pop(role, None)
+        failure = None
+        try:
+            if child.poll() is None:
                 try:
+                    self._killpg(int(child.pid), signal.SIGINT)
+                    child.wait(timeout=10.0)
+                except subprocess.TimeoutExpired:
                     self._killpg(int(child.pid), signal.SIGTERM)
                     child.wait(timeout=3.0)
-                except BaseException as error:
-                    failures.append((role, error))
-            except ProcessLookupError:
-                continue
+                except ProcessLookupError:
+                    pass
+        except BaseException as error:
+            failure = error
+        finally:
+            if output is not None:
+                output.close()
+        if failure is not None:
+            raise RuntimeError(f"{role}: {failure}") from failure
+
+    def stop_all(self) -> None:
+        failures = []
+        for role in reversed(tuple(self._children)):
+            try:
+                self.stop(role)
             except BaseException as error:
                 failures.append((role, error))
         self._children.clear()

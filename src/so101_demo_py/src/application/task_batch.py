@@ -15,7 +15,6 @@ from ..runtime.task_artifacts import (
     atomic_json,
 )
 
-
 _REQUIRED_TERMINAL_FILES = frozenset(
     {
         "rgb.png",
@@ -239,6 +238,7 @@ def run_task_batch(
     *,
     events: list[BatchProgressEvent] | None = None,
     cancel_requested: Callable[[], bool] = lambda: False,
+    stop_on_point_failure: bool = False,
 ) -> BatchResult:
     if registry.root != request.evidence_root.resolve(strict=True):
         raise ValueError("batch request and artifact registry evidence roots differ")
@@ -481,6 +481,8 @@ def run_task_batch(
         if fatal_kind == "held":
             batch_status = BatchStatus.NEEDS_OPERATOR_RECOVERY
         elif fatal_kind == "shared":
+            batch_status = BatchStatus.FAILED
+        elif stop_on_point_failure and point_status is not PointStatus.SUCCEEDED:
             batch_status = BatchStatus.FAILED
         elif cancel_requested():
             batch_status = BatchStatus.CANCELLED

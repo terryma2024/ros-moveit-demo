@@ -10,7 +10,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..control.gripper.client import GripperClient
 from ..application.e2e_acceptance import (
     FINAL_MAX_ANGULAR_SPEED_RAD_S,
     FINAL_MAX_LINEAR_SPEED_M_S,
@@ -18,10 +17,20 @@ from ..application.e2e_acceptance import (
     FINAL_SUPPORT_HEIGHT_RANGE_M,
     FINAL_XY_TOLERANCE_M,
 )
+from ..control.gripper.client import GripperClient
+from ..control.moveit.deterministic_horizon import (
+    MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
+    HorizonStep,
+    HorizonWaypoint,
+    cartesian_candidate_score,
+    interpolated_move_above_waypoints,
+    solve_horizon,
+    validate_cartesian_corridor,
+)
 from ..control.moveit.planning import JointPlanRequest, MoveItPlanningClient
 from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
-from ..control.planning_scene.cup import make_cup_collision_object
 from ..control.planning_scene.acm import set_collision_allowed
+from ..control.planning_scene.cup import make_cup_collision_object
 from ..control.trajectory.executor import (
     MoveItExecutionClient,
     SustainedConditionGuard,
@@ -105,6 +114,8 @@ class RosDynamicMujocoExecution:
         self._joint_state_source_stamp_ns: int | None = None
         self._joint_state_received_monotonic_s: float | None = None
         self._state_events: list[dict[str, object]] = []
+        self._planning_attempts: list[dict[str, object]] = []
+        self._pick_horizon_steps: dict[State, tuple[HorizonStep, ...]] = {}
         self._final_samples: list[dict[str, object]] = []
         self._release_marker_sequence: int | None = None
         self._attached = False
@@ -153,6 +164,7 @@ class RosDynamicMujocoExecution:
                 for state, pose in sorted(targets.targets.items(), key=lambda item: item[0].value)
             },
             "state_events": self._state_events,
+            "planning_attempts": self._planning_attempts,
             "final_samples": self._final_samples,
         }
         self._document.update(workflow_identity)
@@ -164,9 +176,7 @@ class RosDynamicMujocoExecution:
 
     def _write(self) -> None:
         self._evidence_file.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self._evidence_file.with_name(
-            f".{self._evidence_file.name}.{os.getpid()}.tmp"
-        )
+        temporary = self._evidence_file.with_name(f".{self._evidence_file.name}.{os.getpid()}.tmp")
         temporary.write_text(
             json.dumps(self._document, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -202,9 +212,7 @@ class RosDynamicMujocoExecution:
             if all(name in positions for name in self._ARM_JOINTS):
                 stamp = getattr(getattr(message, "header", None), "stamp", None)
                 self._joint_state_source_stamp_ns = (
-                    None
-                    if stamp is None
-                    else int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
+                    None if stamp is None else int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
                 )
                 self._joint_state_received_monotonic_s = time.monotonic()
                 self._joint_state_generation += 1
@@ -217,8 +225,7 @@ class RosDynamicMujocoExecution:
     ) -> tuple[float, ...]:
         deadline = time.monotonic() + timeout_s
         while any(name not in self._positions for name in self._ARM_JOINTS) or (
-            after_generation is not None
-            and self._joint_state_generation <= after_generation
+            after_generation is not None and self._joint_state_generation <= after_generation
         ):
             if time.monotonic() >= deadline:
                 raise RuntimeError("JOINT_STATE_TIMEOUT")
@@ -299,8 +306,7 @@ class RosDynamicMujocoExecution:
         if sum(a * b for a, b in zip(start_q, target_q, strict=True)) < 0.0:
             target_q = tuple(-value for value in target_q)
         quaternion = tuple(
-            start_q[index] + fraction * (target_q[index] - start_q[index])
-            for index in range(4)
+            start_q[index] + fraction * (target_q[index] - start_q[index]) for index in range(4)
         )
         norm = math.sqrt(sum(value * value for value in quaternion))
         return PoseEvidence(position, tuple(value / norm for value in quaternion))
@@ -335,10 +341,7 @@ class RosDynamicMujocoExecution:
 
         position_error_m = math.dist(actual.position_m, target.position_m)
         orientation_error = orientation_error_rad(actual, target)
-        if (
-            position_error_m > position_tolerance_m
-            or orientation_error > orientation_tolerance_rad
-        ):
+        if position_error_m > position_tolerance_m or orientation_error > orientation_tolerance_rad:
             return None
         return {
             "moveit_error_code": -6,
@@ -364,6 +367,231 @@ class RosDynamicMujocoExecution:
                 return latest
         raise RuntimeError("DYNAMIC_STABLE_STATE_TIMEOUT")
 
+    def _record_planning_attempt(self, document: dict[str, object]) -> None:
+        attempts = getattr(self, "_planning_attempts", None)
+        if attempts is None:
+            attempts = []
+            self._planning_attempts = attempts
+            self._document["planning_attempts"] = attempts
+        attempts.append(document)
+        self._write()
+
+    def _motion_horizon(
+        self,
+        state: State,
+        motion_targets: list[PoseEvidence],
+        current: tuple[float, ...],
+    ) -> tuple[HorizonStep, ...]:
+        pick_prefix = {
+            State.MOVE_ABOVE_OBJECT,
+            State.DESCEND,
+            State.MICRO_LIFT,
+            State.LIFT,
+        }
+        cached = getattr(self, "_pick_horizon_steps", {}).get(state)
+        if cached:
+            return cached
+
+        has_full_target_set = hasattr(self, "_targets")
+        if state in pick_prefix and has_full_target_set:
+            above = self._targets.for_state(State.MOVE_ABOVE_OBJECT)
+            descend = self._targets.for_state(State.DESCEND)
+            waypoints = list(
+                interpolated_move_above_waypoints(
+                    self._ik,
+                    current,
+                    above,
+                )
+            )
+            waypoints.extend(
+                HorizonWaypoint(
+                    State.DESCEND,
+                    index,
+                    self._interpolate_pose(above, descend, index / 6.0),
+                )
+                for index in range(1, 7)
+            )
+            waypoints.extend(
+                (
+                    HorizonWaypoint(
+                        State.MICRO_LIFT,
+                        0,
+                        self._targets.for_state(State.MICRO_LIFT),
+                    ),
+                    HorizonWaypoint(State.LIFT, 0, self._targets.for_state(State.LIFT)),
+                )
+            )
+        else:
+            waypoints = [
+                HorizonWaypoint(state, index, target) for index, target in enumerate(motion_targets)
+            ]
+
+        result = solve_horizon(
+            self._ik,
+            tuple(waypoints),
+            current,
+            position_tolerance_m=self._template.position_tolerance_m,
+            orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
+            beam_width=3,
+        )
+        if state in pick_prefix and has_full_target_set:
+            horizon_document = result.to_document()
+            horizon_document.update(
+                selection_reason=(
+                    "minimum deterministic cumulative score among complete beam paths"
+                ),
+                admitted=bool(result.paths),
+            )
+            self._document["pick_prefix_horizon"] = horizon_document
+            self._write()
+        if not result.paths:
+            raise RuntimeError("DYNAMIC_IK_HORIZON_FAILED")
+        selected = result.paths[0].steps
+        if state in pick_prefix and has_full_target_set:
+            grouped: dict[State, tuple[HorizonStep, ...]] = {}
+            for step in selected:
+                grouped.setdefault(step.waypoint.state, ())
+                grouped[step.waypoint.state] += (step,)
+            self._pick_horizon_steps = grouped
+            return grouped[state]
+        return selected
+
+    def _plan_candidate_set(
+        self,
+        *,
+        state: State,
+        step: HorizonStep,
+        current: tuple[float, ...],
+        joint_target: tuple[float, ...],
+    ):
+        candidate_count = (
+            MOVE_ABOVE_PLAN_CANDIDATE_COUNT
+            if state is State.MOVE_ABOVE_OBJECT
+            else 1
+        )
+        candidates = []
+        corridor_receipts: list[dict[str, object]] = []
+        last_failure = "CUP_POSE_PLAN_FAILED"
+        for candidate_index in range(candidate_count):
+            planned = self._planning.plan_joint_path(
+                JointPlanRequest(
+                    joint_names=self._ARM_JOINTS,
+                    current_positions=current,
+                    target_positions=joint_target,
+                    velocity_scaling=self._template.velocity_scaling,
+                    acceleration_scaling=self._template.acceleration_scaling,
+                    planning_time_s=self._template.planning_timeout_s,
+                    planning_group=self._template.planning_group,
+                    tcp_link=self._template.tcp_link,
+                ),
+                timeout_s=self._template.planning_timeout_s + 5.0,
+            )
+            if planned.failure is not None or planned.trajectory is None:
+                last_failure = (
+                    "CUP_POSE_PLAN_FAILED"
+                    if planned.failure is None
+                    else planned.failure.code
+                )
+                self._record_planning_attempt(
+                    {
+                        "kind": "moveit_joint_plan",
+                        "state": state.value,
+                        "segment_index": step.waypoint.segment_index,
+                        "candidate_index": candidate_index,
+                        "candidate_count": candidate_count,
+                        "accepted": False,
+                        "failure_code": last_failure,
+                        "joint_target_rad": list(joint_target),
+                    }
+                )
+                continue
+            self._record_planning_attempt(
+                {
+                    "kind": "moveit_joint_plan",
+                    "state": state.value,
+                    "segment_index": step.waypoint.segment_index,
+                    "candidate_index": candidate_index,
+                    "candidate_count": candidate_count,
+                    "accepted": True,
+                    "failure_code": None,
+                    "joint_target_rad": list(joint_target),
+                    "trajectory_sample_count": len(
+                        planned.trajectory.joint_trajectory.points
+                    ),
+                }
+            )
+            corridor = validate_cartesian_corridor(
+                self._ik,
+                planned.trajectory,
+                self._ARM_JOINTS,
+                current,
+                step.waypoint.target,
+                maximum_deviation_m=(
+                    0.008
+                    if state
+                    in {
+                        State.DESCEND,
+                        State.MICRO_LIFT,
+                        State.LIFT,
+                        State.DESCEND_TO_PLACE,
+                    }
+                    else 0.050
+                ),
+                orientation_tolerance_rad=max(
+                    self._template.orientation_tolerance_rad
+                ),
+                minimum_clearance_z_m=(
+                    0.145
+                    if state in {State.DESCEND, State.MICRO_LIFT, State.LIFT}
+                    else -math.inf
+                ),
+            )
+            corridor_document = corridor.to_document()
+            corridor_document.update(
+                kind=(
+                    "moveit_plan_candidate"
+                    if candidate_count > 1
+                    else "actual_moveit_cartesian_corridor"
+                ),
+                validation_kind="actual_moveit_cartesian_corridor",
+                state=state.value,
+                segment_index=step.waypoint.segment_index,
+                candidate_index=candidate_index,
+                candidate_count=candidate_count,
+            )
+            corridor_receipts.append(corridor_document)
+            self._record_planning_attempt(corridor_document)
+            last_failure = corridor.failure_code or "CARTESIAN_CORRIDOR_FAILED"
+            if corridor.accepted:
+                candidates.append(
+                    (
+                        cartesian_candidate_score(
+                            corridor, candidate_index=candidate_index
+                        ),
+                        candidate_index,
+                        planned,
+                    )
+                )
+        if not candidates:
+            raise RuntimeError(last_failure)
+        _, selected_index, selected = min(candidates, key=lambda item: item[0])
+        if candidate_count > 1:
+            self._record_planning_attempt(
+                {
+                    "kind": "moveit_plan_selection",
+                    "state": state.value,
+                    "segment_index": step.waypoint.segment_index,
+                    "candidate_index": selected_index,
+                    "candidate_count": candidate_count,
+                    "accepted_candidate_count": len(candidates),
+                    "selection_reason": (
+                        "minimum orientation error, Cartesian deviation, "
+                        "sample count, then candidate index"
+                    ),
+                }
+            )
+        return selected, corridor_receipts
+
     def _motion(self, state: State, target: PoseEvidence) -> None:
         before = self._snapshot()
         current = self._joint_state()
@@ -371,8 +599,7 @@ class RosDynamicMujocoExecution:
         if state in {State.DESCEND, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE}:
             start_pose = self._ik.forward(current)
             motion_targets = [
-                self._interpolate_pose(start_pose, target, step / 6.0)
-                for step in range(1, 7)
+                self._interpolate_pose(start_pose, target, step / 6.0) for step in range(1, 7)
             ]
 
         carried = state in {
@@ -405,32 +632,29 @@ class RosDynamicMujocoExecution:
         trajectory_points = 0
         segment_joint_targets: list[list[float]] = []
         execution_reconciliations: list[dict[str, float]] = []
+        cartesian_corridor_receipts: list[dict[str, object]] = []
         joint_target = current
         resolved_pose = self._ik.forward(current)
-        for segment_index, motion_target in enumerate(motion_targets):
-            joint_target = self._ik.solve(
-                motion_target,
-                current,
-                position_tolerance_m=self._template.position_tolerance_m,
-                orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
-            )
+        horizon_steps = self._motion_horizon(state, motion_targets, current)
+        for segment_index, step in enumerate(horizon_steps):
+            motion_target = step.waypoint.target
+            joint_target = step.receipt.joint_positions_rad
+            if joint_target is None:
+                raise RuntimeError("DYNAMIC_IK_HORIZON_FAILED")
             resolved_pose = self._ik.forward(joint_target)
-            planned = self._planning.plan_joint_path(
-                JointPlanRequest(
-                    joint_names=self._ARM_JOINTS,
-                    current_positions=current,
-                    target_positions=joint_target,
-                    velocity_scaling=self._template.velocity_scaling,
-                    acceleration_scaling=self._template.acceleration_scaling,
-                    planning_time_s=self._template.planning_timeout_s,
-                    planning_group=self._template.planning_group,
-                    tcp_link=self._template.tcp_link,
-                ),
-                timeout_s=self._template.planning_timeout_s + 5.0,
+            selection_document = step.receipt.to_document()
+            selection_document.update(
+                kind="deterministic_ik_selection",
+                selection_reason="selected complete-path minimum cumulative score",
             )
-            if planned.failure is not None or planned.trajectory is None:
-                code = "CUP_POSE_PLAN_FAILED" if planned.failure is None else planned.failure.code
-                raise RuntimeError(code)
+            self._record_planning_attempt(selection_document)
+            planned, candidate_corridors = self._plan_candidate_set(
+                state=state,
+                step=step,
+                current=current,
+                joint_target=joint_target,
+            )
+            cartesian_corridor_receipts.extend(candidate_corridors)
             execution_generation = self._joint_state_generation
             executed = self._trajectory.execute(
                 planned.trajectory,
@@ -444,17 +668,13 @@ class RosDynamicMujocoExecution:
                         self._ik.forward(current),
                         motion_target,
                         position_tolerance_m=self._template.position_tolerance_m,
-                        orientation_tolerance_rad=max(
-                            self._template.orientation_tolerance_rad
-                        ),
+                        orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
                         orientation_error_rad=self._ik.orientation_error_rad,
                     )
                     if reconciliation is not None:
                         reconciliation["segment_index"] = float(segment_index)
                         execution_reconciliations.append(reconciliation)
-                        trajectory_points += len(
-                            planned.trajectory.joint_trajectory.points
-                        )
+                        trajectory_points += len(planned.trajectory.joint_trajectory.points)
                         segment_joint_targets.append(list(joint_target))
                         continue
                 code = (
@@ -479,30 +699,21 @@ class RosDynamicMujocoExecution:
                 *resolved_pose.position_m,
                 *resolved_pose.orientation_xyzw,
             ],
-            "resolved_position_error_m": math.dist(
-                resolved_pose.position_m, target.position_m
-            ),
-            "resolved_orientation_error_rad": self._ik.orientation_error_rad(
-                resolved_pose, target
-            ),
+            "resolved_position_error_m": math.dist(resolved_pose.position_m, target.position_m),
+            "resolved_orientation_error_rad": self._ik.orientation_error_rad(resolved_pose, target),
             "terminal_joint_positions_rad": list(current),
             "terminal_fk_pose": [
                 *terminal_pose.position_m,
                 *terminal_pose.orientation_xyzw,
             ],
-            "terminal_position_error_m": math.dist(
-                terminal_pose.position_m, target.position_m
-            ),
-            "terminal_orientation_error_rad": self._ik.orientation_error_rad(
-                terminal_pose, target
-            ),
+            "terminal_position_error_m": math.dist(terminal_pose.position_m, target.position_m),
+            "terminal_orientation_error_rad": self._ik.orientation_error_rad(terminal_pose, target),
             "terminal_joint_state_generation": self._joint_state_generation,
             "terminal_joint_state_source_stamp_ns": self._joint_state_source_stamp_ns,
-            "terminal_joint_state_received_monotonic_s": (
-                self._joint_state_received_monotonic_s
-            ),
+            "terminal_joint_state_received_monotonic_s": (self._joint_state_received_monotonic_s),
             "trajectory_points": trajectory_points,
             "execution_reconciliations": execution_reconciliations,
+            "cartesian_corridor_receipts": cartesian_corridor_receipts,
         }
         validation_failure = None
         if state is State.MICRO_LIFT:

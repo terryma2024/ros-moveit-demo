@@ -202,7 +202,9 @@ class UnderactuatedPoseIk:
         for joint in self._chain:
             result = result @ joint.origin
             if joint.kind != "fixed":
-                result = result @ _transform(_rotation_axis(joint.axis, values[joint.name]), (0, 0, 0))
+                result = result @ _transform(
+                    _rotation_axis(joint.axis, values[joint.name]), (0, 0, 0)
+                )
         return result
 
     def forward(self, positions: tuple[float, ...] | np.ndarray) -> PoseEvidence:
@@ -210,6 +212,15 @@ class UnderactuatedPoseIk:
         return PoseEvidence(
             tuple(float(item) for item in matrix[:3, 3]),
             _matrix_quaternion(matrix[:3, :3]),
+        )
+
+    @property
+    def joint_limits(self) -> tuple[tuple[float, float], ...]:
+        """Return immutable limits in the configured planning-joint order."""
+
+        return tuple(
+            (float(lower), float(upper))
+            for lower, upper in zip(self._lower, self._upper, strict=True)
         )
 
     @staticmethod
@@ -220,7 +231,9 @@ class UnderactuatedPoseIk:
     def _residual(self, positions: np.ndarray, target: PoseEvidence) -> np.ndarray:
         matrix = self._matrix(positions)
         position = np.asarray(target.position_m) - matrix[:3, 3]
-        orientation = _rotation_vector(_quaternion_matrix(target.orientation_xyzw) @ matrix[:3, :3].T)
+        orientation = _rotation_vector(
+            _quaternion_matrix(target.orientation_xyzw) @ matrix[:3, :3].T
+        )
         return np.concatenate((position, 0.08 * orientation))
 
     def solve(
