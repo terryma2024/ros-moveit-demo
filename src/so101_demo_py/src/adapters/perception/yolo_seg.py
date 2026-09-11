@@ -48,13 +48,19 @@ def verify_weights(path: Path, expected_sha256: str) -> str:
 
 def _to_numpy(value: Any) -> np.ndarray:
     current = value
-    if hasattr(current, "detach"):
-        current = current.detach()
-    if hasattr(current, "cpu"):
-        current = current.cpu()
-    if hasattr(current, "numpy"):
-        current = current.numpy()
-    return np.asarray(current)
+    try:
+        if hasattr(current, "detach"):
+            current = current.detach()
+        if hasattr(current, "cpu"):
+            current = current.cpu()
+        if hasattr(current, "numpy"):
+            current = current.numpy()
+    except Exception as error:
+        raise ModelRuntimeInfrastructureError(f"TENSOR_TRANSFER_FAILED: {error}") from error
+    try:
+        return np.asarray(current)
+    except (TypeError, ValueError) as error:
+        raise YoloResultError(f"invalid output array: {error}") from error
 
 
 def _resize_mask_nearest(mask: np.ndarray, height: int, width: int) -> np.ndarray:
@@ -96,7 +102,7 @@ def _class_name(class_names: Mapping[int, str] | list[str], index: int) -> str:
         if isinstance(class_names, Mapping):
             return class_names[index]
         return class_names[index]
-    except (IndexError, KeyError) as error:
+    except (IndexError, KeyError, TypeError) as error:
         raise YoloResultError(f"class index {index} is not mapped") from error
 
 
@@ -111,27 +117,34 @@ def convert_yolo_result(
     class_names: Mapping[int, str] | list[str],
 ) -> DetectionBatch:
     try:
-        boxes = _to_numpy(result.boxes.xyxy)
-        classes = _to_numpy(result.boxes.cls)
-        confidences = _to_numpy(result.boxes.conf)
+        raw_boxes = result.boxes.xyxy
+        raw_classes = result.boxes.cls
+        raw_confidences = result.boxes.conf
+        raw_masks = result.masks
     except AttributeError as error:
-        raise YoloResultError("boxes, classes, and confidence are required") from error
+        raise YoloResultError("boxes, classes, confidence, and masks are required") from error
+    boxes = _to_numpy(raw_boxes)
+    classes = _to_numpy(raw_classes)
+    confidences = _to_numpy(raw_confidences)
+    if any(array.dtype.kind not in 'iuf' for array in (boxes, classes, confidences)):
+        raise YoloResultError("boxes, classes and confidence must be numeric")
 
     if boxes.ndim != 2 or boxes.shape[1:] != (4,):
         raise YoloResultError("bbox array must have shape (count, 4)")
     if classes.ndim != 1 or confidences.ndim != 1:
         raise YoloResultError("classes or confidence dimensions are invalid")
     count = len(boxes)
-    if result.masks is None and count == 0:
+    if raw_masks is None and count == 0:
         masks = np.empty((0, frame.image_height, frame.image_width), dtype=bool)
     else:
         try:
-            masks = _to_numpy(result.masks.data)
+            mask_data = raw_masks.data
         except AttributeError as error:
             raise YoloResultError("masks are required for detected instances") from error
+        masks = _to_numpy(mask_data)
     if masks.ndim != 3:
         raise YoloResultError("mask dimensions are invalid")
-    if not np.isfinite(masks).all():
+    if masks.dtype.kind not in 'biuf' or not np.isfinite(masks).all():
         raise YoloResultError("mask values must be finite")
     if not (len(classes) == len(confidences) == len(masks) == count):
         raise YoloResultError("YOLO output counts differ")

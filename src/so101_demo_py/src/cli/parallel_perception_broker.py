@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import importlib.metadata
+import io
 import json
 import math
 import os
@@ -11,6 +12,7 @@ import re
 import stat
 import subprocess
 import sys
+import tarfile
 import time
 
 from so101_demo.adapters.perception.errors import (
@@ -84,6 +86,11 @@ def gpu_groups():
 
 
 def source_hash(package):
+    """Hash sorted relative POSIX path + NUL + bytes, excluding Python artifacts.
+
+    This exact function runs on the host and copied image tree before install.
+    Installation uses a separate temporary copy, leaving this tree unchanged.
+    """
     digest = hashlib.sha256()
     for path in sorted(package.rglob('*')):
         if path.is_file() and '__pycache__' not in path.parts and not any(
@@ -93,14 +100,46 @@ def source_hash(package):
     return digest.hexdigest()
 
 
+def verify_source(package, expected):
+    actual = {'source_sha256': source_hash(package),
+              'dockerfile_sha256': hashlib.sha256(
+                  (package / 'docker/parallel-perception/Dockerfile').read_bytes()).hexdigest(),
+              'lock_sha256': hashlib.sha256(('\n'.join(PINS) + '\n').encode()).hexdigest()}
+    if any(expected.get(name) != value for name, value in actual.items()):
+        raise ValueError('SOURCE_PROVENANCE_MISMATCH')
+    return {**actual, 'verified_source_sha256': actual['source_sha256']}
+
+
 def image_record(image):
     record = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image], text=True))[0]
     image_id = record['Id']
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
         raise ValueError('IMAGE_ID')
     labels = record['Config']['Labels']
-    return {'image_id': image_id, **{name: labels['so101.parallel.' + name]
-            for name in ('dockerfile_sha256', 'lock_sha256', 'source_sha256')}}
+    expected = {name: labels['so101.parallel.' + name]
+                for name in ('dockerfile_sha256', 'lock_sha256', 'source_sha256')}
+    # Read a build-verified file from the immutable image, never execute it.
+    container_id = subprocess.check_output(
+        ['docker', 'create', '--read-only', '--network', 'none', '--entrypoint', '/bin/true',
+         image_id], text=True).strip()
+    if not re.fullmatch(r'[0-9a-f]{64}', container_id):
+        raise ValueError('IMAGE_READBACK_CONTAINER_ID')
+    try:
+        archive = subprocess.check_output(
+            ['docker', 'cp', container_id + ':/opt/parallel-provenance.json', '-'])
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            entries = tar.getmembers()
+            if (len(entries) != 1 or entries[0].name != 'parallel-provenance.json'
+                    or not entries[0].isfile() or entries[0].size > 4096):
+                raise ValueError('IMAGE_VERIFIED_PROVENANCE_ARCHIVE')
+            payload = tar.extractfile(entries[0]).read()
+        verified = json.loads(payload)
+        if (canonical_json(verified) != payload or verified != {
+                **expected, 'verified_source_sha256': expected['source_sha256']}):
+            raise ValueError('IMAGE_VERIFIED_PROVENANCE_MISMATCH')
+        return {'image_id': image_id, **verified}
+    finally:
+        subprocess.run(['docker', 'rm', container_id], check=True, capture_output=True)
 
 
 def container_main(argv):
@@ -251,6 +290,8 @@ def main(argv=None, *, transport=None, authorize=None):
         if versions[name] != expected:
             raise ValueError('RUNTIME_VERSION_DRIFT: ' + name)
     provenance = json.loads(Path('/opt/parallel-provenance.json').read_bytes())
+    if verify_source(Path('/opt/so101_demo_py'), provenance) != provenance:
+        raise ValueError('RUNTIME_SOURCE_PROVENANCE_MISMATCH')
     provenance['image_id'] = os.environ['PARALLEL_IMAGE_ID']
     provenance['versions'] = versions
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', provenance['image_id']):

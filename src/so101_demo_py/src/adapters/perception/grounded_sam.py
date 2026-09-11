@@ -222,7 +222,9 @@ class GroundedSamDetector:
         try:
             input_ids = grounding_inputs["input_ids"]
         except (KeyError, TypeError) as error:
-            raise _contract_error("grounding processor inputs must include input_ids") from error
+            raise ModelRuntimeInfrastructureError(
+                "INPUT_PREPARATION_FAILED: grounding processor must supply input_ids"
+            ) from error
         with self._torch.inference_mode():
             grounding_outputs = self._grounding_model(**grounding_inputs)
         results = self._grounding_processor.post_process_grounded_object_detection(
@@ -274,7 +276,9 @@ class GroundedSamDetector:
         try:
             original_sizes = sam_inputs["original_sizes"]
         except (KeyError, TypeError) as error:
-            raise _contract_error("SAM processor inputs must include original_sizes") from error
+            raise ModelRuntimeInfrastructureError(
+                "INPUT_PREPARATION_FAILED: SAM processor must supply original_sizes"
+            ) from error
         with self._torch.inference_mode():
             sam_outputs = self._sam_model(**sam_inputs, multimask_output=True)
         try:

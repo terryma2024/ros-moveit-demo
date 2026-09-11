@@ -71,6 +71,10 @@ class Snapshot:
     query_class_id: str = 'plastic_cup'
 
 
+class StartAuthorizationRejected(ValueError):
+    """A verified negative authorization or mismatched execution identity."""
+
+
 def checked_path(path, *, owner=None, mode=None, directory=False):
     path = Path(path)
     if not path.is_absolute() or path.resolve(strict=True) != path:
@@ -198,9 +202,13 @@ class ParallelPerceptionRuntime:
         expected = ('ATTEMPT_STARTED' if request.execution_kind is ExecutionKind.ATTEMPT
                     else 'VALIDATION_STARTED')
         if (snapshot.start_event_type != expected or not snapshot.start_event_id
-                or snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(request)
-                or self.authorize(request, snapshot) is not True):
-            raise ValueError('START_ACK_IDENTITY')
+                or snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(request)):
+            raise StartAuthorizationRejected('START_ACK_IDENTITY')
+        authorized = self.authorize(request, snapshot)
+        if authorized is False:
+            raise StartAuthorizationRejected('START_ACK_REJECTED')
+        if authorized is not True:
+            raise ModelRuntimeInfrastructureError('INVALID_AUTHORITY_RESPONSE')
 
     def _frame(self, request, snapshot):
         self._authorized(request, snapshot)
@@ -223,9 +231,12 @@ class ParallelPerceptionRuntime:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, 'rb') as stream:
             before = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode) or stat.S_IMODE(before.st_mode) != 0o400
+                    or (before.st_uid, before.st_gid) != (os.getuid(), os.getgid())):
+                raise ValueError('INPUT_OPENED_OWNER_MODE')
             data = stream.read()
             after = os.fstat(stream.fileno())
-        if (before != after or before.st_ino != path.stat().st_ino
+        if (before != after or after != path.stat()
                 or hashlib.sha256(data).hexdigest() != request.input_sha256):
             raise ValueError('INPUT_HASH_CHANGED')
         rgb = np.load(io.BytesIO(data), allow_pickle=False)
@@ -272,6 +283,7 @@ class PerceptionService:
     def __init__(self, runtime, config, *, generation, clock=None):
         self.runtime = runtime
         self._snapshots = {}
+        self._requests = {}
         self._lock = threading.RLock()
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
@@ -292,7 +304,7 @@ class PerceptionService:
         try:
             self.runtime._authorized(request, snapshot)
             return True
-        except Exception:
+        except StartAuthorizationRejected:
             return False
 
     def _detect(self, request):
@@ -304,21 +316,39 @@ class PerceptionService:
         self.runtime.start()
 
     def submit(self, request, snapshot):
+        self._sync_health()
         with self._lock:
             previous = self._snapshots.get(request.request_id)
             if previous is not None and previous != snapshot:
                 return BrokerSubmission(False, reason='SNAPSHOT_IDENTITY_CHANGED')
             self._snapshots[request.request_id] = snapshot
-        return self.broker.submit(request)
+        submission = self.broker.submit(request)
+        with self._lock:
+            self._requests.setdefault(request.request_id, request)
+        self._response_health(submission.response)
+        return submission
 
     def run_next(self):
-        return self._response_health(self.broker.run_next())
+        self._sync_health()
+        response = self.broker.run_next()
+        self._sync_health()
+        return self._response_health(self.broker.poll_response(response.request)
+                                     if response is not None else None)
 
     def poll_response(self, request):
+        self._sync_health()
         return self._response_health(self.broker.poll_response(request))
 
+    def _sync_health(self):
+        # Dispatch scans can finish an expired request without returning it.
+        # Poll only the public Broker API; no second deadline/state machine.
+        with self._lock:
+            requests = tuple(self._requests.values())
+        for request in requests:
+            self._response_health(self.broker.poll_response(request))
+
     def _response_health(self, response):
-        if response is not None and response.outcome in {
-                ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT, ModelOutcome.INFERENCE_TIMEOUT}:
+        if not self.broker.healthy or (response is not None and response.outcome in {
+                ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT, ModelOutcome.INFERENCE_TIMEOUT}):
             self.runtime._unhealthy()
         return response

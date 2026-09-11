@@ -165,6 +165,72 @@ def test_warmup_failure_never_publishes_ready(tmp_path, monkeypatch):
     assert not f.runtime.healthy
 
 
+@pytest.mark.parametrize('failure', ['load', 'warmup'])
+def test_second_model_setup_failure_never_publishes_partial_ready(tmp_path, monkeypatch, failure):
+    from so101_demo.adapters.perception import detector_factory
+    from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
+    f = fixture_runtime(tmp_path, monkeypatch)
+    build = detector_factory.build_detector
+    calls = []
+    def build_second(options):
+        calls.append(options.backend)
+        if len(calls) == 2:
+            raise RuntimeError('second model ' + failure + ' failed')
+        return build(options)
+    monkeypatch.setattr(detector_factory, 'build_detector', build_second)
+    with pytest.raises(ModelRuntimeInfrastructureError, match='second model'):
+        f.runtime.start()
+    assert calls == ['yolo_seg', 'grounded_sam']
+    assert not f.receipt.exists()
+    assert not f.runtime.healthy
+
+
+@pytest.mark.parametrize('phase', ['file_fsync', 'directory_fsync', 'readback'])
+def test_ready_receipt_io_failure_is_unhealthy_and_retained(tmp_path, monkeypatch, phase):
+    from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
+    f = fixture_runtime(tmp_path, monkeypatch)
+    fsync = os.fsync
+    calls = []
+    def fail_fsync(fd):
+        calls.append(fd)
+        if len(calls) == (1 if phase == 'file_fsync' else 2):
+            raise OSError('receipt fsync failure')
+        return fsync(fd)
+    if phase == 'readback':
+        monkeypatch.setattr(Path, 'read_bytes', lambda path: b'corrupt')
+    else:
+        monkeypatch.setattr(os, 'fsync', fail_fsync)
+    with pytest.raises(ModelRuntimeInfrastructureError):
+        f.runtime.start()
+    assert not f.runtime.healthy
+    assert f.receipt.exists()  # An uncertain receipt remains auditable.
+    assert f.receipt.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize('mutation', ['bytes', 'mode'])
+def test_actual_input_change_between_path_check_and_open_never_reaches_model(
+        tmp_path, monkeypatch, mutation):
+    from so101_demo.parallel_batch.contracts import ModelOutcome
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    original_open = os.open
+    changed = []
+    def racing_open(path, flags, *args, **kwargs):
+        if Path(path) == f.file and not changed:
+            changed.append(True)
+            f.file.chmod(0o600)
+            if mutation == 'bytes':
+                data = bytearray(f.file.read_bytes())
+                data[-1] ^= 1
+                f.file.write_bytes(data)
+                f.file.chmod(0o400)
+        return original_open(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, 'open', racing_open)
+    assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.INFRA_ERROR
+    assert not f.runtime.healthy
+    assert not any(call[0] == 'detect' for call in f.calls)
+
+
 def test_yolo_predict_oom_has_infrastructure_type():
     from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
     from so101_demo.adapters.perception.yolo_seg import YoloSegDetector
@@ -345,3 +411,175 @@ def test_smoke_exceptions_are_attributed_with_latency(tmp_path, monkeypatch, kin
     assert f.runtime.healthy is (kind == 'deterministic')
     assert sum(c[0] == 'detect' for c in f.calls) == (2 if kind == 'deterministic' else 1)
     json.dumps(results, allow_nan=False)
+
+
+def test_second_smoke_model_infra_does_not_hide_behind_first_success(tmp_path, monkeypatch):
+    from so101_demo.cli.parallel_perception_broker import smoke_models
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID
+    from so101_demo.core.detection import DetectionFrame
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    def fail(frame, query):
+        raise RuntimeError('second model CUDA OOM')
+    f.runtime.detectors[GROUNDED_ID].detector.detect = fail
+    frame = DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera')
+    results = smoke_models(f.runtime, frame, clock=iter([1., 2., 2., 3.]).__next__)
+    assert results[f.req.model_id]['outcome'] == 'QUALIFIED'
+    assert results[GROUNDED_ID]['outcome'] == 'INFRA_ERROR'
+    assert all(item['executed'] and item['latency_ms'] == 1000. for item in results.values())
+    assert not f.runtime.healthy
+
+
+def test_transport_serve_failure_poison_runtime(tmp_path, monkeypatch):
+    from so101_demo.cli import parallel_perception_broker as cli
+    f = fixture_runtime(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, 'ParallelPerceptionRuntime', lambda **kwargs: f.runtime)
+    pins = dict(pin.split('==') for pin in cli.PINS)
+    monkeypatch.setattr(cli.importlib.metadata, 'version', pins.__getitem__)
+    monkeypatch.setenv('PARALLEL_IMAGE_ID', 'sha256:' + 'b' * 64)
+    read_bytes = Path.read_bytes
+    provenance = {'source_sha256': 'c' * 64, 'verified_source_sha256': 'c' * 64}
+    monkeypatch.setattr(Path, 'read_bytes', lambda path: cli.canonical_json(provenance)
+                        if str(path) == '/opt/parallel-provenance.json' else read_bytes(path))
+    monkeypatch.setattr(cli, 'verify_source', lambda package, expected: expected)
+    def serve(runtime, *, endpoint):
+        assert runtime.healthy and endpoint == Path('/runtime/perception.sock')
+        raise ConnectionError('transport closed')
+    with pytest.raises(ConnectionError, match='transport closed'):
+        cli.main(cli.broker_argv(), transport=SimpleNamespace(serve=serve), authorize=lambda *args: True)
+    assert not f.runtime.healthy
+
+
+@pytest.mark.parametrize('phase', ['submit', 'dispatch', 'completion'])
+@pytest.mark.parametrize('error_type', [ConnectionError, TimeoutError])
+def test_authority_failure_is_infrastructure_at_every_boundary(tmp_path, monkeypatch, phase, error_type):
+    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
+    f = fixture_runtime(tmp_path, monkeypatch)
+    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    service = PerceptionService(f.runtime, config, generation=1)
+    service.start()
+    failed = [phase == 'submit']
+    def authorize(request, snapshot):
+        if failed[0]:
+            raise error_type('authority unavailable')
+        return True
+    f.runtime.authorize = authorize
+    submission = service.submit(f.req, f.snapshot)
+    if phase == 'dispatch':
+        failed[0] = True
+    elif phase == 'completion':
+        detector = f.runtime.detectors[f.req.model_id].detector
+        detect = detector.detect
+        def complete(frame, query):
+            batch = detect(frame, query)
+            failed[0] = True
+            return batch
+        detector.detect = complete
+    if submission.accepted:
+        service.run_next()
+    response = service.broker.poll_response(f.req)
+    assert response.outcome is ModelOutcome.INFRA_ERROR
+    assert not service.broker.healthy
+    assert not f.runtime.healthy
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_path, monkeypatch, running):
+    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
+    f = fixture_runtime(tmp_path, monkeypatch)
+    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    now = [1.]
+    service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    if running:
+        assert service.broker.next_ready_request() == f.req
+    now[0] = 22.
+    assert service.run_next() is None
+    assert service.broker.poll_response(f.req).outcome is (
+        ModelOutcome.INFERENCE_TIMEOUT if running else ModelOutcome.QUEUE_TIMEOUT)
+    assert not f.runtime.healthy
+    assert not service.broker.healthy
+    assert not service.submit(replace(f.req, request_id='next'), f.snapshot).accepted
+
+
+@pytest.mark.parametrize('bad', ['missing_masks', 'string_mask', 'string_box', 'string_class',
+                               'string_conf', 'ragged_box', 'missing_boxes', 'class_mapping',
+                               'transfer_oom', 'transfer_type_error'])
+def test_yolo_completed_schema_vs_tensor_transfer_boundary(tmp_path, monkeypatch, bad):
+    from so101_demo.adapters.perception.yolo_seg import YoloSegDetector
+    from so101_demo.parallel_batch.contracts import ModelOutcome
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    result = SimpleNamespace(boxes=SimpleNamespace(xyxy=np.array([[0., 0., 3., 2.]]),
+                                                  cls=np.array([0.]), conf=np.array([.9])),
+                             masks=SimpleNamespace(data=np.ones((1, 2, 3))))
+    if bad == 'missing_masks': del result.masks
+    if bad == 'missing_boxes': del result.boxes
+    if bad == 'string_mask': result.masks.data = np.array([[['x'] * 3] * 2])
+    if bad == 'string_box': result.boxes.xyxy = np.array([['x', '0', '3', '2']])
+    if bad == 'string_class': result.boxes.cls = np.array(['x'])
+    if bad == 'string_conf': result.boxes.conf = np.array(['x'])
+    if bad == 'ragged_box': result.boxes.xyxy = [[0, 0, 3, 2], [0, 1]]
+    if bad.startswith('transfer_'):
+        class Transfer:
+            def cpu(self):
+                if bad == 'transfer_oom': raise RuntimeError('CUDA OOM')
+                raise TypeError('tensor transfer failed')
+        result.boxes.xyxy = Transfer()
+    detector = object.__new__(YoloSegDetector)
+    detector._model = SimpleNamespace(predict=lambda **kwargs: [result])
+    detector._imgsz, detector.runtime_device = 640, 'cuda'
+    detector._monotonic_ns = lambda: 1
+    detector._model_id, detector._weights_sha256 = 'yolo', 'a' * 64
+    detector._class_names = None if bad == 'class_mapping' else {0: 'plastic_cup'}
+    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    expected = ModelOutcome.INFRA_ERROR if bad.startswith('transfer_') else ModelOutcome.MODEL_ERROR
+    assert f.runtime.infer(f.req, f.snapshot).outcome is expected
+    assert f.runtime.healthy is (expected is ModelOutcome.MODEL_ERROR)
+
+
+@pytest.mark.parametrize('phase,expected,calls_expected', [
+    ('grounding_pre', 'INFRA_ERROR', {'grounding': 0, 'sam': 0}),
+    ('grounding_post', 'MODEL_ERROR', {'grounding': 1, 'sam': 0}),
+    ('sam_pre', 'INFRA_ERROR', {'grounding': 1, 'sam': 0}),
+    ('sam_post', 'MODEL_ERROR', {'grounding': 1, 'sam': 1}),
+])
+def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypatch, phase, expected, calls_expected):
+    from contextlib import nullcontext
+    from so101_demo.adapters.perception.grounded_sam import GroundedSamDetector
+    from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    calls = {'grounding': 0, 'sam': 0}
+    class GroundingProcessor:
+        def __call__(self, **kwargs):
+            return {} if phase == 'grounding_pre' else {'input_ids': np.array([[1]])}
+        def post_process_grounded_object_detection(self, *args, **kwargs):
+            return [{}] if phase == 'grounding_post' else [{
+                'boxes': np.array([[0., 0., 3., 2.]]), 'scores': np.array([.9]),
+                'text_labels': ['plastic cup']}]
+    class SamProcessor:
+        def __call__(self, **kwargs):
+            return {} if phase == 'sam_pre' else {'original_sizes': np.array([[2, 3]])}
+        def post_process_masks(self, *args, **kwargs):
+            return []
+    def grounding_model(**kwargs):
+        calls['grounding'] += 1
+        return SimpleNamespace()
+    def sam_model(**kwargs):
+        calls['sam'] += 1
+        return SimpleNamespace()
+    detector = object.__new__(GroundedSamDetector)
+    detector._monotonic_ns = lambda: 1
+    detector._torch = SimpleNamespace(inference_mode=nullcontext)
+    detector._prompt_profile = {'plastic_cup': 'plastic cup.'}
+    detector._thresholds = GroundedSamThresholds.defaults()
+    detector._grounding_processor, detector._sam_processor = GroundingProcessor(), SamProcessor()
+    detector._grounding_model, detector._sam_model = grounding_model, sam_model
+    detector.runtime_device, detector.target_class_id = 'cuda', 'plastic_cup'
+    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    assert f.runtime.infer(f.req, f.snapshot).outcome.value == expected
+    assert calls == calls_expected
