@@ -38,10 +38,24 @@ _TASK14_ARTIFACT_NAMES = (
     'container_identity',
     'model_manifest',
     'catalog',
+    'policy_manifest',
+    'scene_manifest',
     'resource_metrics',
     'simulation_metrics',
     'render_metrics',
+    'aggregate',
+    'cleanup',
 )
+_PROVENANCE_NAMES = {
+    'source_tree_sha256',
+    'install_tree_sha256',
+    'runtime_config_sha256',
+    'policy_sha256',
+    'scene_sha256',
+    'models_sha256',
+    'container_sha256',
+    'catalog_sha256',
+}
 _BASE_ENVIRONMENT_ALLOWLIST = (
     'PATH',
     'AMENT_PREFIX_PATH',
@@ -369,8 +383,70 @@ class SystemResourceProbe:
         return os.path.lexists(path)
 
 
+class Task14AcceptanceProvider:
+    """Future Task 11 port for a controller-owned Task 14 acceptance identity."""
+
+    def __init__(self, *, acceptance_path: Path | None = None) -> None:
+        self._acceptance_path = (
+            None if acceptance_path is None else Path(acceptance_path)
+        )
+
+    def accepted_identity(self, candidate_path: Path) -> Mapping[str, object]:
+        """Read an identity outside the candidate tree or fail closed when unwired."""
+        if self._acceptance_path is None:
+            raise ResourceAllocationError('TASK14_ACCEPTANCE_UNAVAILABLE')
+        candidate_root = Path(candidate_path).parent.parent
+        acceptance_path = self._acceptance_path
+        if (
+            not acceptance_path.is_absolute()
+            or any(part in {'.', '..'} for part in str(acceptance_path).split('/'))
+            or acceptance_path == candidate_root
+            or acceptance_path.is_relative_to(candidate_root)
+        ):
+            raise ResourceAllocationError('TASK14_ACCEPTANCE_NOT_INDEPENDENT')
+        document, _file_sha256 = _read_secure_json(acceptance_path)
+        return document
+
+
+class CurrentRuntimeProvenanceProbe:
+    """Future Task 11 port for all current runtime provenance identities."""
+
+    def __init__(self, *, current_paths: Mapping[str, Path] | None = None) -> None:
+        self.current_paths = (
+            None
+            if current_paths is None
+            else {name: Path(path) for name, path in current_paths.items()}
+        )
+
+    def snapshot(self, config: ParallelRuntimeConfig) -> Mapping[str, str]:
+        """Hash every current runtime input or fail closed when the port is unwired."""
+        if self.current_paths is None:
+            raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_UNAVAILABLE')
+        if set(self.current_paths) != _PROVENANCE_NAMES:
+            raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_SCHEMA')
+        observed = {
+            name: _read_current_input_sha256(self.current_paths[name])
+            for name in sorted(_PROVENANCE_NAMES)
+        }
+        if observed['runtime_config_sha256'] != _runtime_config_sha256(config):
+            raise ResourceAllocationError('CURRENT_RUNTIME_CONFIG_DRIFT')
+        return observed
+
+
 class Task14LiveHeadroomVerifier:
     """Verify a sealed Task 14 two-Worker execution and every bound artifact."""
+
+    def __init__(self, *, acceptance_provider=None, provenance_probe=None) -> None:
+        self._acceptance_provider = (
+            Task14AcceptanceProvider()
+            if acceptance_provider is None
+            else acceptance_provider
+        )
+        self._provenance_probe = (
+            CurrentRuntimeProvenanceProbe()
+            if provenance_probe is None
+            else provenance_probe
+        )
 
     def verify(
         self, manifest_path: Path, *, config: ParallelRuntimeConfig
@@ -385,42 +461,60 @@ class Task14LiveHeadroomVerifier:
             or any(part in {'.', '..'} for part in str(path).split('/'))
         ):
             raise ResourceAllocationError('TASK14_SEALED_PATH_INVALID')
+        acceptance = self._acceptance_provider.accepted_identity(path)
+        current_provenance = self._provenance_probe.snapshot(config)
         batch_root = path.parent.parent
         parent_fd = batch_fd = sealed_fd = artifacts_fd = None
-        identities: list[tuple[int, str, tuple[int, int], bool]] = []
+        snapshots = []
         try:
             parent_fd = _open_trusted_parent(batch_root)
             batch_fd = _open_directory_at(parent_fd, batch_root.name)
             _verify_trusted_directory(batch_fd, str(batch_root), final_parent=True)
-            identities.append(
-                (parent_fd, batch_root.name, _fd_identity(batch_fd), True)
+            snapshots.append(
+                (parent_fd, batch_root.name, _fd_snapshot(batch_fd), True, None)
             )
             sealed_fd = _open_directory_at(batch_fd, 'sealed')
             _verify_sealed_directory(sealed_fd, 'sealed')
-            identities.append((batch_fd, 'sealed', _fd_identity(sealed_fd), True))
+            snapshots.append(
+                (batch_fd, 'sealed', _fd_snapshot(sealed_fd), True, None)
+            )
             artifacts_fd = _open_directory_at(sealed_fd, 'artifacts')
             _verify_sealed_directory(artifacts_fd, 'artifacts')
-            identities.append(
-                (sealed_fd, 'artifacts', _fd_identity(artifacts_fd), True)
+            snapshots.append(
+                (sealed_fd, 'artifacts', _fd_snapshot(artifacts_fd), True, None)
             )
             document, manifest_sha256, manifest_identity = _read_sealed_json_at(
                 sealed_fd, path.name
             )
-            identities.append((sealed_fd, path.name, manifest_identity, False))
+            snapshots.append(
+                (sealed_fd, path.name, manifest_identity, False, manifest_sha256)
+            )
             result = self._verify_document(
                 document,
                 config=config,
                 artifacts_fd=artifacts_fd,
-                identities=identities,
+                snapshots=snapshots,
             )
-            for directory_fd, name, identity, is_directory in identities:
-                _verify_visible_identity_at(
-                    directory_fd, name, identity, is_directory=is_directory
+            self._verify_acceptance(
+                acceptance,
+                current_provenance,
+                manifest_sha256=manifest_sha256,
+                verified=result,
+            )
+            for directory_fd, name, snapshot, is_directory, expected_hash in snapshots:
+                _verify_stable_snapshot_at(
+                    directory_fd,
+                    name,
+                    snapshot,
+                    is_directory=is_directory,
+                    expected_sha256=expected_hash,
                 )
             return {
                 'sealed_batch_root': str(batch_root),
                 'manifest_path': str(path),
                 'manifest_sha256': manifest_sha256,
+                'acceptance_identity': dict(acceptance),
+                'current_provenance': dict(current_provenance),
                 **result,
             }
         finally:
@@ -434,7 +528,7 @@ class Task14LiveHeadroomVerifier:
         *,
         config: ParallelRuntimeConfig,
         artifacts_fd: int,
-        identities: list[tuple[int, str, tuple[int, int], bool]],
+        snapshots: list,
     ) -> dict[str, object]:
         expected_document = {
             'schema_version',
@@ -491,29 +585,22 @@ class Task14LiveHeadroomVerifier:
             )
             if observed_hash != entry['sha256']:
                 raise ValueError(f'Task14 artifact hash: {name}')
-            identities.append((artifacts_fd, f'{name}.json', identity, False))
+            snapshots.append(
+                (artifacts_fd, f'{name}.json', identity, False, observed_hash)
+            )
             artifact_documents[name] = artifact_document
             artifact_hashes[name] = observed_hash
 
         source = document['source_identity']
-        expected_source = {
-            'source_commit',
-            'source_manifest_sha256',
-            'runtime_config_sha256',
-            'resources_module_sha256',
-            'install_manifest_sha256',
-            'container_image_id',
-            'container_identity_sha256',
-            'model_manifest_sha256',
-            'catalog_sha256',
-        }
-        if not isinstance(source, dict) or set(source) != expected_source:
+        if not isinstance(source, dict) or set(source) != _PROVENANCE_NAMES:
             raise ValueError('Task14 source identity schema')
         source_manifest = artifact_documents['source_manifest']
         install_manifest = artifact_documents['install_manifest']
         container_identity = artifact_documents['container_identity']
         model_manifest = artifact_documents['model_manifest']
         catalog = artifact_documents['catalog']
+        policy_manifest = artifact_documents['policy_manifest']
+        scene_manifest = artifact_documents['scene_manifest']
         if (
             set(source_manifest) != {'source_commit', 'tree'}
             or type(source_manifest['source_commit']) is not str
@@ -539,19 +626,26 @@ class Task14LiveHeadroomVerifier:
             or not catalog['catalog_id']
             or type(catalog['points']) is not int
             or catalog['points'] <= 0
+            or set(policy_manifest) != {'policy_id', 'policy_revision'}
+            or type(policy_manifest['policy_id']) is not str
+            or not policy_manifest['policy_id']
+            or type(policy_manifest['policy_revision']) is not int
+            or policy_manifest['policy_revision'] <= 0
+            or set(scene_manifest) != {'scene_id', 'scene_revision'}
+            or type(scene_manifest['scene_id']) is not str
+            or not scene_manifest['scene_id']
+            or type(scene_manifest['scene_revision']) is not int
+            or scene_manifest['scene_revision'] <= 0
         ):
             raise ValueError('Task14 identity artifact schema')
         expected_identity_values = {
-            'source_commit': source_manifest['source_commit'],
-            'source_manifest_sha256': artifact_hashes['source_manifest'],
+            'source_tree_sha256': artifact_hashes['source_manifest'],
+            'install_tree_sha256': artifact_hashes['install_manifest'],
             'runtime_config_sha256': _runtime_config_sha256(config),
-            'resources_module_sha256': hashlib.sha256(
-                Path(__file__).read_bytes()
-            ).hexdigest(),
-            'install_manifest_sha256': artifact_hashes['install_manifest'],
-            'container_image_id': container_identity['image_id'],
-            'container_identity_sha256': artifact_hashes['container_identity'],
-            'model_manifest_sha256': artifact_hashes['model_manifest'],
+            'policy_sha256': artifact_hashes['policy_manifest'],
+            'scene_sha256': artifact_hashes['scene_manifest'],
+            'models_sha256': artifact_hashes['model_manifest'],
+            'container_sha256': artifact_hashes['container_identity'],
             'catalog_sha256': artifact_hashes['catalog'],
         }
         if source != expected_identity_values:
@@ -633,6 +727,29 @@ class Task14LiveHeadroomVerifier:
             != headroom['render_frame_ratio']
         ):
             raise ValueError('Task14 render metrics binding')
+        aggregate = artifact_documents['aggregate']
+        if aggregate != {
+            'batch_id': batch_id,
+            'worker_count': 2,
+            'run_mode': 'execute',
+            'lifecycle': 'ISOLATED_STACK',
+            'batch_terminal': True,
+            'coverage_complete': True,
+            'execution_complete': True,
+            'qualification_applicable': True,
+            'qualification_passed': True,
+            'batch_cleanup_complete': True,
+        }:
+            raise ValueError('Task14 accepted aggregate')
+        cleanup = artifact_documents['cleanup']
+        if cleanup != {
+            'batch_id': batch_id,
+            'cleanup_complete': True,
+            'active_owned_processes': 0,
+        }:
+            raise ValueError('Task14 cleanup evidence')
+        if aggregate['batch_cleanup_complete'] is not cleanup['cleanup_complete']:
+            raise ValueError('Task14 aggregate cleanup mismatch')
         return {
             'accepted_batch_id': batch_id,
             'source_identity': dict(source),
@@ -641,6 +758,64 @@ class Task14LiveHeadroomVerifier:
             'simulation': dict(simulation),
             'rendering': dict(rendering),
         }
+
+    def _verify_acceptance(
+        self,
+        acceptance,
+        current_provenance,
+        *,
+        manifest_sha256: str,
+        verified: Mapping[str, object],
+    ) -> None:
+        expected_acceptance = {
+            'schema_version',
+            'authority',
+            'status',
+            'accepted_batch_id',
+            'candidate_manifest_sha256',
+            'aggregate_sha256',
+            'cleanup_sha256',
+            'provenance',
+        }
+        if not isinstance(acceptance, dict) or set(acceptance) != expected_acceptance:
+            raise ValueError('Task14 acceptance identity schema')
+        if (
+            type(acceptance['schema_version']) is not int
+            or acceptance['schema_version'] != 1
+            or acceptance['authority'] != 'task14_controller_acceptance_v1'
+            or acceptance['status'] != 'VALID'
+            or acceptance['accepted_batch_id'] != verified['accepted_batch_id']
+            or acceptance['candidate_manifest_sha256'] != manifest_sha256
+            or acceptance['aggregate_sha256']
+            != verified['artifact_sha256']['aggregate']
+            or acceptance['cleanup_sha256']
+            != verified['artifact_sha256']['cleanup']
+        ):
+            raise ValueError('Task14 acceptance identity mismatch')
+        for name in (
+            'candidate_manifest_sha256',
+            'aggregate_sha256',
+            'cleanup_sha256',
+        ):
+            if (
+                type(acceptance[name]) is not str
+                or _SHA256.fullmatch(acceptance[name]) is None
+            ):
+                raise ValueError('Task14 acceptance hash')
+        provenance = acceptance['provenance']
+        if (
+            not isinstance(provenance, dict)
+            or set(provenance) != _PROVENANCE_NAMES
+            or not isinstance(current_provenance, Mapping)
+            or set(current_provenance) != _PROVENANCE_NAMES
+            or any(
+                type(value) is not str or _SHA256.fullmatch(value) is None
+                for value in (*provenance.values(), *current_provenance.values())
+            )
+            or provenance != verified['source_identity']
+            or dict(current_provenance) != provenance
+        ):
+            raise ValueError('Task14 current provenance mismatch')
 
 
 class WorkerResourceAllocator:
@@ -1381,9 +1556,17 @@ def _is_high_recall_ros_candidate(comm: str, argv: tuple[str, ...]) -> bool:
     )
 
 
-def _fd_identity(descriptor: int) -> tuple[int, int]:
+def _fd_snapshot(descriptor: int) -> tuple[int, ...]:
     value = os.fstat(descriptor)
-    return value.st_dev, value.st_ino
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_uid,
+        stat.S_IMODE(value.st_mode),
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
 
 
 def _open_directory_at(parent_fd: int, name: str) -> int:
@@ -1445,7 +1628,7 @@ def _strict_json_object(payload: bytes) -> dict[str, object]:
 
 def _read_sealed_json_at(
     parent_fd: int, name: str
-) -> tuple[dict[str, object], str, tuple[int, int]]:
+) -> tuple[dict[str, object], str, tuple[int, ...]]:
     descriptor = None
     try:
         descriptor = os.open(
@@ -1455,36 +1638,75 @@ def _read_sealed_json_at(
         payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
         if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
             raise ResourceAllocationError('LIVE_EVIDENCE_TOO_LARGE')
-        after = os.fstat(descriptor)
-        if (value.st_dev, value.st_ino) != (after.st_dev, after.st_ino):
+        if _fd_snapshot(descriptor) != (
+            value.st_dev,
+            value.st_ino,
+            value.st_uid,
+            stat.S_IMODE(value.st_mode),
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_ctime_ns,
+        ):
             raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}')
         return (
             _strict_json_object(payload),
             hashlib.sha256(payload).hexdigest(),
-            (value.st_dev, value.st_ino),
+            _fd_snapshot(descriptor),
         )
     finally:
         if descriptor is not None:
             os.close(descriptor)
 
 
-def _verify_visible_identity_at(
+def _verify_stable_snapshot_at(
     parent_fd: int,
     name: str,
-    identity: tuple[int, int],
+    snapshot: tuple[int, ...],
     *,
     is_directory: bool,
+    expected_sha256: str | None,
+    private: bool = False,
 ) -> None:
     try:
         visible = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except OSError as error:
         raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}') from error
     if (
-        (visible.st_dev, visible.st_ino) != identity
+        (
+            visible.st_dev,
+            visible.st_ino,
+            visible.st_uid,
+            stat.S_IMODE(visible.st_mode),
+            visible.st_size,
+            visible.st_mtime_ns,
+            visible.st_ctime_ns,
+        )
+        != snapshot
         or (is_directory and not stat.S_ISDIR(visible.st_mode))
         or (not is_directory and not stat.S_ISREG(visible.st_mode))
     ):
         raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}')
+    if is_directory:
+        return
+    descriptor = None
+    try:
+        descriptor = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+        )
+        if private:
+            _verify_private_regular(descriptor, name)
+        else:
+            _verify_sealed_regular(descriptor, name)
+        payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
+        if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
+            raise ResourceAllocationError('LIVE_EVIDENCE_TOO_LARGE')
+        if _fd_snapshot(descriptor) != snapshot:
+            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}')
+        if hashlib.sha256(payload).hexdigest() != expected_sha256:
+            raise ResourceAllocationError(f'CONTENT_CHANGED: {name}')
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def _read_secure_json(path: Path) -> tuple[dict[str, object], str]:
@@ -1495,21 +1717,95 @@ def _read_secure_json(path: Path) -> tuple[dict[str, object], str]:
     try:
         descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
         _verify_private_regular(descriptor, path.name)
+        snapshot = _fd_snapshot(descriptor)
         payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
         if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
             raise ResourceAllocationError('LIVE_EVIDENCE_TOO_LARGE')
+        if _fd_snapshot(descriptor) != snapshot:
+            raise ResourceAllocationError('ACCEPTANCE_IDENTITY_CHANGED')
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        if _read_fd(descriptor, len(payload) + 1) != payload:
+            raise ResourceAllocationError('ACCEPTANCE_CONTENT_CHANGED')
+        _verify_stable_snapshot_at(
+            parent_fd,
+            path.name,
+            snapshot,
+            is_directory=False,
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+            private=True,
+        )
     finally:
         if descriptor is not None:
             os.close(descriptor)
         os.close(parent_fd)
 
-    def reject_constant(value):
-        raise ValueError(f'non-finite value: {value}')
-
-    document = json.loads(payload.decode('utf-8'), parse_constant=reject_constant)
-    if not isinstance(document, dict):
-        raise ValueError('JSON object required')
+    document = _strict_json_object(payload)
     return document, hashlib.sha256(payload).hexdigest()
+
+
+def _read_current_input_sha256(path: Path) -> str:
+    if (
+        not path.is_absolute()
+        or not path.name
+        or any(part in {'.', '..'} for part in str(path).split('/'))
+    ):
+        raise ResourceAllocationError('CURRENT_RUNTIME_PATH_INVALID')
+    parent_fd = _open_trusted_parent(path)
+    descriptor = second_descriptor = None
+    try:
+        descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        value = os.fstat(descriptor)
+        if not stat.S_ISREG(value.st_mode):
+            raise ResourceAllocationError(f'NOT_REGULAR_FILE: {path.name}')
+        if value.st_uid != os.getuid():
+            raise ResourceAllocationError(f'UNSAFE_FILE_OWNER: {path.name}')
+        if stat.S_IMODE(value.st_mode) != 0o400:
+            raise ResourceAllocationError(f'UNSAFE_FILE_MODE: {path.name}')
+        snapshot = _fd_snapshot(descriptor)
+        payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
+        if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
+            raise ResourceAllocationError('CURRENT_RUNTIME_INPUT_TOO_LARGE')
+        if _fd_snapshot(descriptor) != snapshot:
+            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        if _read_fd(descriptor, len(payload) + 1) != payload:
+            raise ResourceAllocationError(f'CONTENT_CHANGED: {path.name}')
+        visible = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            (
+                visible.st_dev,
+                visible.st_ino,
+                visible.st_uid,
+                stat.S_IMODE(visible.st_mode),
+                visible.st_size,
+                visible.st_mtime_ns,
+                visible.st_ctime_ns,
+            )
+            != snapshot
+            or not stat.S_ISREG(visible.st_mode)
+        ):
+            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
+        second_descriptor = os.open(
+            path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+        )
+        if _fd_snapshot(second_descriptor) != snapshot:
+            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {path.name}')
+        second_payload = _read_fd(
+            second_descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1
+        )
+        if second_payload != payload or _fd_snapshot(second_descriptor) != snapshot:
+            raise ResourceAllocationError(f'CONTENT_CHANGED: {path.name}')
+        return hashlib.sha256(payload).hexdigest()
+    except OSError as error:
+        raise ResourceAllocationError(
+            f'CURRENT_RUNTIME_INPUT_UNAVAILABLE: {path}'
+        ) from error
+    finally:
+        if second_descriptor is not None:
+            os.close(second_descriptor)
+        if descriptor is not None:
+            os.close(descriptor)
+        os.close(parent_fd)
 
 
 def _write_manifest_at(
