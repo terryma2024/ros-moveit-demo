@@ -13,6 +13,9 @@ import math
 import os
 from pathlib import Path
 from queue import Queue
+import signal
+import subprocess
+import sys
 from threading import Barrier, Event
 from types import SimpleNamespace
 
@@ -71,6 +74,31 @@ def config():
     return load_parallel_runtime_config(CONFIG_PATH)
 
 
+@pytest.fixture(autouse=True)
+def production_claim_records_are_never_mutated_by_unit_tests():
+    paths = tuple(
+        Path(f'/run/user/{os.getuid()}/so101-parallel-domain-claims/domain-{domain}.lock')
+        for domain in (181, 182, 183)
+    )
+
+    def snapshot(path):
+        if not os.path.lexists(path):
+            return {'exists': False}
+        value = path.stat()
+        content = path.read_bytes()
+        return {
+            'exists': True,
+            'content': content,
+            'sha256': hashlib.sha256(content).hexdigest(),
+            'mtime_ns': value.st_mtime_ns,
+        }
+
+    before = {path: snapshot(path) for path in paths}
+    yield
+    after = {path: snapshot(path) for path in paths}
+    assert after == before
+
+
 def allocator(tmp_path, config, probe=None, environment=None, suffix='batch'):
     return WorkerResourceAllocator(
         config,
@@ -94,17 +122,76 @@ def claim_root():
 
 
 def live_evidence(tmp_path, config, **changes):
-    payload = {
-        'worker_count': 2,
+    sealed = tmp_path / 'task14-live-batch' / 'sealed'
+    artifacts_root = sealed / 'artifacts'
+    artifacts_root.mkdir(parents=True)
+    batch_id = 'accepted-two-worker-live-001'
+    source_commit = hashlib.sha1(b'task14-real-source-identity').hexdigest()
+    container_image_id = 'sha256:' + hashlib.sha256(
+        b'task14-real-container-image'
+    ).hexdigest()
+    artifact_documents = {
+        'source_manifest': {'source_commit': source_commit, 'tree': 'verified-source-tree'},
+        'install_manifest': {'install_prefix': '/verified/install', 'files': 17},
+        'container_identity': {'image_id': container_image_id},
+        'model_manifest': {'model': 'verified-yolo-first', 'revision': 3},
+        'catalog': {'catalog_id': 'verified-twenty-point-catalog', 'points': 20},
+        'resource_metrics': {
+            'batch_id': batch_id,
+            'worker_count': 2,
+            'cpu_headroom_ratio': 0.30,
+            'ram_headroom_ratio': 0.30,
+            'gpu_headroom_ratio': 0.30,
+        },
+        'simulation_metrics': {
+            'batch_id': batch_id,
+            'backend': 'mujoco',
+            'stable': True,
+            'realtime_headroom_ratio': 0.25,
+        },
+        'render_metrics': {
+            'batch_id': batch_id,
+            'backend': 'headless_egl',
+            'stable': True,
+            'frame_headroom_ratio': 0.21,
+        },
+    }
+    artifacts = {}
+    for name, document in artifact_documents.items():
+        path = artifacts_root / f'{name}.json'
+        payload = json.dumps(document, sort_keys=True, separators=(',', ':')).encode()
+        path.write_bytes(payload)
+        path.chmod(0o444)
+        artifacts[name] = {
+            'path': f'artifacts/{name}.json',
+            'sha256': hashlib.sha256(payload).hexdigest(),
+        }
+    source_identity = {
+        'source_commit': source_commit,
+        'source_manifest_sha256': artifacts['source_manifest']['sha256'],
         'runtime_config_sha256': hashlib.sha256(
             json.dumps(asdict(config), sort_keys=True, separators=(',', ':')).encode()
         ).hexdigest(),
-        'source_identity': {
-            'batch_id': 'accepted-two-worker-live-001',
-            'code_sha256': 'a' * 64,
-            'simulation_metrics_sha256': 'b' * 64,
-            'render_metrics_sha256': 'c' * 64,
-        },
+        'resources_module_sha256': hashlib.sha256(
+            Path(resources_api.__file__).read_bytes()
+        ).hexdigest(),
+        'install_manifest_sha256': artifacts['install_manifest']['sha256'],
+        'container_image_id': container_image_id,
+        'container_identity_sha256': artifacts['container_identity']['sha256'],
+        'model_manifest_sha256': artifacts['model_manifest']['sha256'],
+        'catalog_sha256': artifacts['catalog']['sha256'],
+    }
+    document = {
+        'schema_version': 1,
+        'kind': 'task14_two_worker_live_headroom',
+        'status': 'VALID',
+        'batch_id': batch_id,
+        'worker_count': 2,
+        'run_mode': 'execute',
+        'lifecycle': 'ISOLATED_STACK',
+        'cleanup_complete': True,
+        'source_identity': source_identity,
+        'artifacts': artifacts,
         'headroom': {
             'cpu_ratio': 0.30,
             'ram_ratio': 0.30,
@@ -112,26 +199,36 @@ def live_evidence(tmp_path, config, **changes):
             'simulation_realtime_ratio': 0.25,
             'render_frame_ratio': 0.21,
         },
-        'simulation': {'backend': 'mujoco', 'stable': True},
-        'rendering': {'backend': 'headless_egl', 'stable': True},
+        'simulation': {
+            'backend': 'mujoco',
+            'stable': True,
+            'metrics_artifact': 'simulation_metrics',
+        },
+        'rendering': {
+            'backend': 'headless_egl',
+            'stable': True,
+            'metrics_artifact': 'render_metrics',
+        },
     }
     for key, value in changes.items():
         if key.startswith('headroom_'):
-            payload['headroom'][key.removeprefix('headroom_')] = value
+            document['headroom'][key.removeprefix('headroom_')] = value
         elif key.startswith('source_'):
-            payload['source_identity'][key.removeprefix('source_')] = value
+            source_key = key.removeprefix('source_')
+            if source_key in document['source_identity']:
+                document['source_identity'][source_key] = value
+            elif source_key.endswith('_sha256'):
+                artifact_name = source_key.removesuffix('_sha256')
+                document['artifacts'][artifact_name]['sha256'] = value
+            else:
+                raise AssertionError(f'unknown live evidence source change: {key}')
         else:
-            payload[key] = value
-    document = {
-        'schema_version': 1,
-        'payload': payload,
-        'payload_sha256': hashlib.sha256(
-            json.dumps(payload, sort_keys=True, separators=(',', ':'), allow_nan=True).encode()
-        ).hexdigest(),
-    }
-    path = tmp_path / 'two-worker-live-headroom.json'
+            document[key] = value
+    path = sealed / 'task14_headroom_manifest.json'
     path.write_text(json.dumps(document), encoding='utf-8')
-    path.chmod(0o600)
+    path.chmod(0o444)
+    artifacts_root.chmod(0o555)
+    sealed.chmod(0o555)
     return path
 
 
@@ -465,7 +562,10 @@ def test_three_workers_accept_strict_hashed_live_headroom_evidence(tmp_path, con
     manifest = resource_allocator.allocate(worker_count=3)
 
     assert manifest.worker_count == 3
-    assert manifest.live_headroom_evidence['payload_sha256']
+    assert manifest.live_headroom_evidence['manifest_sha256']
+    assert manifest.live_headroom_evidence['sealed_batch_root'] == str(
+        evidence.parent.parent
+    )
     resource_allocator.close()
 
 
@@ -478,7 +578,7 @@ def test_three_workers_accept_strict_hashed_live_headroom_evidence(tmp_path, con
         ('headroom_simulation_realtime_ratio', -0.1),
         ('headroom_render_frame_ratio', 0.0),
         ('worker_count', 3),
-        ('runtime_config_sha256', '0' * 64),
+        ('source_runtime_config_sha256', '0' * 64),
         ('simulation', {'backend': 'gazebo', 'stable': True}),
         ('rendering', {'backend': 'headless_egl', 'stable': False}),
         ('source_simulation_metrics_sha256', 'not-a-hash'),
@@ -499,11 +599,13 @@ def test_three_worker_live_evidence_fails_closed_on_schema_identity_or_headroom(
         ).allocate(worker_count=3)
 
 
-def test_three_worker_live_evidence_rejects_payload_hash_mismatch(tmp_path, config):
+def test_three_worker_live_evidence_rejects_artifact_hash_mismatch(tmp_path, config):
     evidence = live_evidence(tmp_path, config)
     document = json.loads(evidence.read_text())
-    document['payload_sha256'] = '0' * 64
+    document['artifacts']['resource_metrics']['sha256'] = '0' * 64
+    evidence.chmod(0o600)
     evidence.write_text(json.dumps(document))
+    evidence.chmod(0o444)
 
     with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
         WorkerResourceAllocator(
@@ -513,6 +615,212 @@ def test_three_worker_live_evidence_rejects_payload_hash_mismatch(tmp_path, conf
             claim_root=claim_root(),
             live_headroom_evidence=evidence,
         ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_missing_sealed_manifest(tmp_path, config):
+    missing = tmp_path / 'missing-task14' / 'sealed/task14_headroom_manifest.json'
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-missing-seal'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=missing,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_tampered_hashed_artifact(
+    tmp_path, config
+):
+    evidence = live_evidence(tmp_path, config)
+    artifact = evidence.parent / 'artifacts/resource_metrics.json'
+    artifact.chmod(0o600)
+    artifact.write_text('{"tampered":true}', encoding='utf-8')
+    artifact.chmod(0o444)
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-tampered-artifact'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_symlinked_artifact(tmp_path, config):
+    evidence = live_evidence(tmp_path, config)
+    artifacts = evidence.parent / 'artifacts'
+    artifact = artifacts / 'resource_metrics.json'
+    target = evidence.parent.parent / 'unsealed-resource-metrics.json'
+    target.write_bytes(artifact.read_bytes())
+    target.chmod(0o444)
+    artifacts.chmod(0o755)
+    artifact.unlink()
+    artifact.symlink_to(target)
+    artifacts.chmod(0o555)
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-symlink-artifact'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_unsealed_file_mode(tmp_path, config):
+    evidence = live_evidence(tmp_path, config)
+    artifact = evidence.parent / 'artifacts/resource_metrics.json'
+    artifact.chmod(0o600)
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-unsealed-mode'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_duplicate_json_key(tmp_path, config):
+    evidence = live_evidence(tmp_path, config)
+    payload = evidence.read_text(encoding='utf-8')
+    evidence.chmod(0o600)
+    evidence.write_text(payload[:-1] + ',"status":"VALID"}', encoding='utf-8')
+    evidence.chmod(0o444)
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-duplicate-key'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_detects_artifact_directory_swap(
+    tmp_path, config, monkeypatch
+):
+    evidence = live_evidence(tmp_path, config)
+    sealed = evidence.parent
+    artifacts = sealed / 'artifacts'
+    original = resources_api._read_sealed_json_at
+    swapped = False
+
+    def swap_after_last_read(parent_fd, name):
+        nonlocal swapped
+        result = original(parent_fd, name)
+        if name == 'render_metrics.json' and not swapped:
+            swapped = True
+            sealed.chmod(0o755)
+            artifacts.rename(sealed / 'artifacts-displaced')
+            artifacts.mkdir(mode=0o555)
+            sealed.chmod(0o555)
+        return result
+
+    monkeypatch.setattr(resources_api, '_read_sealed_json_at', swap_after_last_read)
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-artifact-swap'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+@pytest.mark.parametrize(
+    ('change', 'value'),
+    [
+        ('status', 'UNKNOWN'),
+        ('run_mode', 'dry_run'),
+        ('lifecycle', 'SHARED_STACK'),
+        ('cleanup_complete', False),
+        ('unexpected_self_attestation', True),
+    ],
+)
+def test_three_worker_live_evidence_rejects_unaccepted_or_extra_claims(
+    tmp_path, config, change, value
+):
+    evidence = live_evidence(tmp_path, config, **{change: value})
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, f'three-unaccepted-{change}'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_three_worker_live_evidence_rejects_artifact_path_redirection(
+    tmp_path, config
+):
+    evidence = live_evidence(tmp_path, config)
+    document = json.loads(evidence.read_text())
+    document['artifacts']['resource_metrics']['path'] = '../outside.json'
+    evidence.chmod(0o600)
+    evidence.write_text(json.dumps(document), encoding='utf-8')
+    evidence.chmod(0o444)
+
+    with pytest.raises(ResourceAllocationError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        WorkerResourceAllocator(
+            config,
+            resource_root(tmp_path, 'three-path-redirect'),
+            probe=FakeProbe(),
+            claim_root=claim_root(),
+            live_headroom_evidence=evidence,
+        ).allocate(worker_count=3)
+
+
+def test_two_workers_do_not_consult_live_headroom_verifier(tmp_path, config):
+    class ExplodingVerifier:
+        def verify(self, _path, *, config):
+            raise AssertionError(f'unexpected verifier call for {config}')
+
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'two-no-live-verifier'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_verifier=ExplodingVerifier(),
+    )
+    assert resource_allocator.allocate(worker_count=2).live_headroom_evidence is None
+    resource_allocator.close()
+
+
+def test_internal_live_headroom_verifier_port_preserves_real_verification(
+    tmp_path, config
+):
+    evidence = live_evidence(tmp_path, config)
+    calls = []
+
+    class RecordingVerifier:
+        def verify(self, path, *, config):
+            calls.append((path, config))
+            return resources_api.Task14LiveHeadroomVerifier().verify(path, config=config)
+
+    resource_allocator = WorkerResourceAllocator(
+        config,
+        resource_root(tmp_path, 'three-recording-verifier'),
+        probe=FakeProbe(),
+        claim_root=claim_root(),
+        live_headroom_evidence=evidence,
+        live_headroom_verifier=RecordingVerifier(),
+    )
+    manifest = resource_allocator.allocate(worker_count=3)
+
+    assert calls == [(evidence, config)]
+    assert manifest.live_headroom_evidence['accepted_batch_id'] == (
+        'accepted-two-worker-live-001'
+    )
+    resource_allocator.close()
 
 
 def test_worker_slots_have_unique_headless_egl_context_resources(tmp_path, config):
@@ -535,7 +843,9 @@ def test_evidence_root_rejects_symlink_ancestor(tmp_path, config):
     link.symlink_to(real, target_is_directory=True)
 
     with pytest.raises(ResourceAllocationError, match='SYMLINK_PATH'):
-        WorkerResourceAllocator(config, link / 'batch', probe=FakeProbe()).allocate()
+        WorkerResourceAllocator(
+            config, link / 'batch', probe=FakeProbe(), claim_root=claim_root()
+        ).allocate()
 
 
 def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
@@ -544,7 +854,9 @@ def test_evidence_root_rejects_unsafe_parent_mode(tmp_path, config):
     unsafe.chmod(0o777)
 
     with pytest.raises(ResourceAllocationError, match='UNSAFE_DIRECTORY_MODE'):
-        WorkerResourceAllocator(config, unsafe / 'batch', probe=FakeProbe()).allocate()
+        WorkerResourceAllocator(
+            config, unsafe / 'batch', probe=FakeProbe(), claim_root=claim_root()
+        ).allocate()
 
 
 def test_evidence_root_rejects_wrong_parent_owner(tmp_path, config, monkeypatch):
@@ -645,8 +957,126 @@ def test_partial_manifest_write_is_not_published_and_releases_claims(
     with pytest.raises(ResourceAllocationError, match='MANIFEST_WRITE_FAILED'):
         resource_allocator.write_manifest()
     assert not (resource_allocator.evidence_root / 'resource_manifest.json').exists()
+    assert list(resource_allocator.evidence_root.glob('.resource_manifest.*.tmp')) == []
 
     retry = allocator(tmp_path, config, suffix='manifest-partial-retry')
+    assert retry.allocate().worker_count == 2
+    retry.close()
+
+
+def test_concurrent_reader_never_observes_partial_manifest(tmp_path, config, monkeypatch):
+    resource_allocator = allocator(tmp_path, config, suffix='manifest-visible')
+    resource_allocator.allocate()
+    root = resource_allocator.evidence_root
+    final = root / 'resource_manifest.json'
+    write_started = Event()
+    finish_write = Event()
+    original_write = os.write
+
+    def paused_write(descriptor, payload):
+        target = Path(os.readlink(f'/proc/self/fd/{descriptor}'))
+        if target.name.startswith('.resource_manifest.') and not write_started.is_set():
+            written = original_write(descriptor, payload[:32])
+            write_started.set()
+            assert finish_write.wait(timeout=5)
+            return written
+        return original_write(descriptor, payload)
+
+    monkeypatch.setattr(os, 'write', paused_write)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(resource_allocator.write_manifest)
+            assert write_started.wait(timeout=5)
+            assert not final.exists()
+            assert len(list(root.glob('.resource_manifest.*.tmp'))) == 1
+            finish_write.set()
+            assert future.result(timeout=5) == final
+
+        assert json.loads(final.read_text())['worker_count'] == 2
+        assert list(root.glob('.resource_manifest.*.tmp')) == []
+    finally:
+        finish_write.set()
+        resource_allocator.close()
+
+
+def test_process_death_before_publish_leaves_only_non_authoritative_temp(tmp_path):
+    root = tmp_path / 'death-before-publish'
+    root.mkdir(mode=0o700)
+    script = """
+import json
+import os
+import signal
+import sys
+from so101_demo.parallel_batch import resources
+root = sys.argv[1]
+descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+resources.os.link = lambda *args, **kwargs: os.kill(os.getpid(), signal.SIGKILL)
+resources._write_manifest_at(descriptor, 'resource_manifest.json', {'complete': True})
+"""
+    result = subprocess.run([sys.executable, '-c', script, str(root)], check=False)
+
+    assert result.returncode == -signal.SIGKILL
+    assert not (root / 'resource_manifest.json').exists()
+    temporary = list(root.glob('.resource_manifest.*.tmp'))
+    assert len(temporary) == 1
+    assert json.loads(temporary[0].read_text()) == {'complete': True}
+
+
+def test_directory_fsync_failure_after_publish_is_explicitly_uncertain(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / 'publication-uncertain'
+    root.mkdir(mode=0o700)
+    root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    final = root / 'resource_manifest.json'
+    original_fsync = os.fsync
+
+    def fail_published_directory_sync(descriptor):
+        if descriptor == root_fd and final.exists():
+            raise OSError('synthetic published-directory fsync failure')
+        return original_fsync(descriptor)
+
+    monkeypatch.setattr(os, 'fsync', fail_published_directory_sync)
+    try:
+        with pytest.raises(ResourceAllocationError, match='PUBLICATION_UNCERTAIN'):
+            resources_api._write_manifest_at(
+                root_fd, final.name, {'complete': True}
+            )
+    finally:
+        os.close(root_fd)
+
+    temporary = list(root.glob('.resource_manifest.*.tmp'))
+    assert json.loads(final.read_text()) == {'complete': True}
+    assert len(temporary) == 1
+    assert temporary[0].read_bytes() == final.read_bytes()
+
+
+def test_manifest_publish_is_no_replace_and_cleans_temporary(tmp_path):
+    root = tmp_path / 'manifest-no-replace'
+    root.mkdir(mode=0o700)
+    final = root / 'resource_manifest.json'
+    final.write_bytes(b'prior-authoritative-manifest\n')
+    final.chmod(0o600)
+    root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        with pytest.raises(ResourceAllocationError, match='MANIFEST_CONFLICT'):
+            resources_api._write_manifest_at(root_fd, final.name, {'replacement': True})
+    finally:
+        os.close(root_fd)
+    assert final.read_bytes() == b'prior-authoritative-manifest\n'
+    assert list(root.glob('.resource_manifest.*.tmp')) == []
+
+
+def test_successful_publish_holds_claims_until_explicit_close(tmp_path, config):
+    first = allocator(tmp_path, config, suffix='manifest-claim-owner')
+    first.allocate()
+    first.write_manifest()
+    second = allocator(tmp_path, config, suffix='manifest-claim-contender')
+    with pytest.raises(ResourceAllocationError, match='ROS_DOMAIN_CLAIMED'):
+        second.allocate()
+    first.close()
+
+    retry = allocator(tmp_path, config, suffix='manifest-claim-retry')
     assert retry.allocate().worker_count == 2
     retry.close()
 
@@ -943,23 +1373,31 @@ def test_existing_evidence_or_worker_directory_fails_closed(tmp_path, config):
     root.mkdir()
 
     with pytest.raises(ResourceAllocationError, match='DIRECTORY_CONFLICT'):
-        WorkerResourceAllocator(config, root, probe=FakeProbe()).allocate()
+        WorkerResourceAllocator(
+            config, root, probe=FakeProbe(), claim_root=claim_root()
+        ).allocate()
 
 
 def test_existing_socket_reservation_fails_before_directory_creation(tmp_path, config):
     root = resource_root(tmp_path)
-    resource_allocator = WorkerResourceAllocator(config, root, probe=FakeProbe())
+    resource_allocator = WorkerResourceAllocator(
+        config, root, probe=FakeProbe(), claim_root=claim_root()
+    )
     socket_path = resource_allocator._paths(2)['socket_path']
     probe = FakeProbe(sockets=(socket_path,))
 
     with pytest.raises(ResourceAllocationError, match='SOCKET_CONFLICT'):
-        WorkerResourceAllocator(config, root, probe=probe).allocate()
+        WorkerResourceAllocator(
+            config, root, probe=probe, claim_root=claim_root()
+        ).allocate()
     assert not root.exists()
 
 
 def test_socket_path_must_fit_linux_unix_domain_limit(tmp_path, config, monkeypatch):
     root = resource_root(tmp_path)
-    resource_allocator = WorkerResourceAllocator(config, root, probe=FakeProbe())
+    resource_allocator = WorkerResourceAllocator(
+        config, root, probe=FakeProbe(), claim_root=claim_root()
+    )
     original_paths = resource_allocator._paths
 
     def paths_with_long_socket(slot_index):
@@ -1043,7 +1481,8 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
             '--evidence-root',
             str(root),
             '--dry-run',
-        ]
+        ],
+        claim_root=claim_root(),
     )
 
     manifest_path = root / 'resource_manifest.json'
@@ -1081,13 +1520,14 @@ def test_three_worker_cli_requires_and_consumes_live_headroom_evidence(
             '--evidence-root',
             str(root),
             '--dry-run',
-        ]
+        ],
+        claim_root=claim_root(),
     )
 
     document = json.loads((root / 'resource_manifest.json').read_text(encoding='utf-8'))
     assert exit_code == 0
     assert document['worker_count'] == 3
-    assert document['live_headroom_evidence']['file_sha256']
+    assert document['live_headroom_evidence']['manifest_sha256']
 
 
 def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
@@ -1100,6 +1540,7 @@ def test_cli_requires_dry_run_and_does_not_create_output(tmp_path):
                 str(CONFIG_PATH),
                 '--evidence-root',
                 str(root),
-            ]
+            ],
+            claim_root=claim_root(),
         )
     assert not root.exists()
