@@ -12,6 +12,10 @@ from typing import Any
 
 import numpy as np
 
+from so101_demo.adapters.perception.errors import (
+    DeterministicModelResultError, ModelRuntimeInfrastructureError,
+)
+
 from so101_demo.adapters.perception.grounded_sam_postprocess import (
     GroundedSamResultError,
     GroundedSamThresholds,
@@ -330,10 +334,12 @@ class GroundedSamDetector:
                     self.target_class_id,
                 )
                 self._log_mask_rejections(proposals, candidates, quality_scores)
-        except GroundedSamResultError:
-            raise
+        except GroundedSamResultError as error:
+            if error.code in {"RESULT_CONTRACT_INVALID", "CANDIDATE_LIMIT_EXCEEDED"}:
+                raise DeterministicModelResultError(str(error)) from error
+            raise ModelRuntimeInfrastructureError(str(error)) from error
         except Exception as error:
-            raise GroundedSamResultError("INFERENCE_FAILED", str(error)) from error
+            raise ModelRuntimeInfrastructureError(f"INFERENCE_FAILED: {error}") from error
         return DetectionBatch(
             model_id=self.model_id,
             weights_sha256=self._bundle.manifest_sha256,
