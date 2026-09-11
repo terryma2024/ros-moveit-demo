@@ -441,7 +441,7 @@ class SealedResultAdapter:
         return identity, parent
 
     def verify(self, lease, location, run_mode):
-        """Verify lease, registered location, mode, status, and complete tree hash."""
+        """Verify the result and complete publication durability before accepting it."""
         if run_mode is not self.run_mode:
             raise ArtifactError('WRONG_RUN_MODE')
         identity, parent = self._expected(lease)
@@ -453,8 +453,16 @@ class SealedResultAdapter:
         manifest = _read_json(manifest_path)
         if manifest['run_mode'] != run_mode.value:
             raise ArtifactError('WRONG_RUN_MODE')
-        return {'status': manifest['status'],
-                'sha256': hashlib.sha256(manifest_path.read_bytes()).hexdigest()}
+        try:
+            digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            # A producer may have died after rename but before parent fsync.
+            # Visibility alone cannot prove durability. Repeating this sync on
+            # every acceptance also works after adapter/coordinator restart and
+            # requires neither a mutable seal nor an in-memory completion flag.
+            fsync_directory(parent)
+        except OSError as error:
+            raise ArtifactError('SEALED_RESULT_IO_FAILED') from error
+        return {'status': manifest['status'], 'sha256': digest}
 
     def discover(self, lease, workspace):
         """Return a fully verified seal only at the journal-reserved location."""
