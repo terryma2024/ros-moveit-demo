@@ -166,18 +166,39 @@ def test_projection_is_not_recovery_authority(tmp_path):
 def test_file_and_directory_fsync_precede_return(tmp_path, monkeypatch):
     """File data and new directory entries must be durable before success returns."""
     real = os.fsync
+    replace = os.replace
     synced = []
 
     def fsync(fd):
-        synced.append(stat.S_ISDIR(os.fstat(fd).st_mode))
+        info = os.fstat(fd)
+        synced.append(('sync', stat.S_ISDIR(info.st_mode), info.st_dev, info.st_ino))
         real(fd)
 
+    def publish(source, target):
+        info = os.stat(source)
+        synced.append(('publish', target, info.st_dev, info.st_ino))
+        replace(source, target)
+
+    def directory_sync(path):
+        info = path.stat()
+        return ('sync', True, info.st_dev, info.st_ino)
+
     monkeypatch.setattr(os, 'fsync', fsync)
-    with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
-        assert True in synced
+    monkeypatch.setattr(os, 'replace', publish)
+    root = tmp_path / 'batch'
+    with CoordinatorJournal.create(root, 'batch-a') as journal:
+        assert directory_sync(tmp_path) in synced
+        publications = [item for item in synced if item[0] == 'publish']
+        assert [item[1] for item in publications] == [
+            root / 'coordinator_epoch.json', journal.segment_path]
+        for publication in publications:
+            position = synced.index(publication)
+            assert ('sync', False, *publication[2:]) in synced[:position]
+            assert synced[position + 1] == directory_sync(publication[1].parent)
         synced.clear()
         journal.append('LEASE_GRANTED', 'lease-1', {})
-        assert False in synced
+        info = journal.segment_path.stat()
+        assert synced == [('sync', False, info.st_dev, info.st_ino)]
 
 
 def test_failed_fsync_stops_further_authorization(tmp_path, monkeypatch):
@@ -315,3 +336,63 @@ def test_concurrent_duplicate_append_debits_once(tmp_path):
                 range(20)))
         assert results == [results[0]] * 20
         assert len(journal.replay().events) == 1
+
+
+def test_inflated_final_length_is_corruption_without_authority(tmp_path):
+    """A committed payload and delimiter cannot become a tear by changing length."""
+    path, _, _ = seed(tmp_path)
+    raw = bytearray(path.read_bytes())
+    offset = len(frames(path)[0][0])
+    raw[offset:offset + 8] = struct.pack('>Q', 10000)
+    path.write_bytes(raw)
+    before = {p.relative_to(tmp_path): p.read_bytes()
+              for p in tmp_path.rglob('*') if p.is_file()}
+    owner = CoordinatorJournal(tmp_path, 'batch-a')
+    try:
+        with pytest.raises(JournalCorruption):
+            owner.acquire()
+        with pytest.raises(RuntimeError):
+            owner.append('LEASE_GRANTED', 'lease-2', {})
+        after = {p.relative_to(tmp_path): p.read_bytes()
+                 for p in tmp_path.rglob('*') if p.is_file()}
+        assert after == before
+    finally:
+        owner.close()
+
+
+@pytest.mark.parametrize('prefix', [b'\xff\xff\xff', b'\x00\x00\x00\x00\x05'])
+def test_impossible_partial_length_prefix_fails_closed(tmp_path, prefix):
+    """A length prefix with no legal completion cannot authorize tail rotation."""
+    path, _, _ = seed(tmp_path)
+    path.write_bytes(path.read_bytes() + prefix)
+    before = {p.relative_to(tmp_path): p.read_bytes()
+              for p in tmp_path.rglob('*') if p.is_file()}
+    owner = CoordinatorJournal(tmp_path, 'batch-a')
+    try:
+        with pytest.raises(JournalCorruption):
+            owner.acquire()
+        with pytest.raises(RuntimeError):
+            owner.append('LEASE_GRANTED', 'lease-2', {})
+        after = {p.relative_to(tmp_path): p.read_bytes()
+                 for p in tmp_path.rglob('*') if p.is_file()}
+        assert after == before
+    finally:
+        owner.close()
+
+
+@pytest.mark.parametrize('payload', [
+    {2: 'two', 10: 'ten'},
+    {'nested': {2: 'two', 10: 'ten'}},
+    {'nested': [{2: 'two', 10: 'ten'}]},
+    {'nested': ({2: 'two', 10: 'ten'},)},
+])
+def test_nonstring_json_keys_rejected_before_commit(tmp_path, payload):
+    """Mapping key coercion must not publish bytes that canonical replay rejects."""
+    with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
+        before = journal.segment_path.read_bytes()
+        with pytest.raises(ValueError):
+            journal.append('LEASE_GRANTED', 'bad-key', payload)
+        assert journal.segment_path.read_bytes() == before
+        journal.append('LEASE_GRANTED', 'valid-key', {'nested': [{'10': 'ten', '2': 'two'}]})
+    with CoordinatorJournal.create(tmp_path, 'batch-a') as journal:
+        assert [event.idempotency_key for event in journal.replay().events] == ['valid-key']
