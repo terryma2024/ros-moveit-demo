@@ -27,6 +27,10 @@ class PerceptionError(ValueError):
     """A perception sequencing or admission contract was violated."""
 
 
+class PoseAdmissionCommitError(PerceptionError):
+    """Visible acceptance evidence needs recovery adjudication, not motion."""
+
+
 def _frame(name, value):
     if not isinstance(value, str) or not value.strip() or any(c.isspace() for c in value):
         raise PerceptionError(f'FRAME_ID: {name}')
@@ -120,6 +124,8 @@ class PoseAdmissionLatch:
         self._lock = threading.RLock()
         self._expected = None
         self._accepted_document = None
+        self._adjudication_required = False
+        self._last_source_clock = None
         self._cancelled = set()
         self._fenced = False
         self.rejection_reason = None
@@ -133,17 +139,29 @@ class PoseAdmissionLatch:
             return self._accepted_document is not None
 
     def _current(self, request):
-        return (not self._fenced and request.request_id not in self._cancelled
-                and self._authorize(request) is True)
+        authorized = self._authorize(request)
+        return (authorized is True and not self._fenced
+                and request.request_id not in self._cancelled)
+
+    @property
+    def requires_adjudication(self):
+        """Report whether a visible but unadmitted event blocks this latch."""
+        with self._lock:
+            return self._adjudication_required
 
     def check_result(self, request, broker_generation):
         """Check all echoed fields before interpreting even a MODEL_ERROR."""
         with self._lock:
             if type(request) is not InferenceRequest or request != self._expected:
                 raise PerceptionError('REQUEST_IDENTITY_MISMATCH')
+            current = self._current(request)
+            # Authorization can block or observe a new Broker/request epoch.
+            # Compare the complete identity again after the callback returns.
+            if request != self._expected:
+                raise PerceptionError('REQUEST_IDENTITY_MISMATCH')
             if (type(broker_generation) is not int
                     or broker_generation != self.broker_generation
-                    or not self._current(request)):
+                    or not current):
                 self._cancelled.add(request.request_id)
                 return False
             return True
@@ -176,6 +194,10 @@ class PoseAdmissionLatch:
     def _fresh(self, rgb_stamp, depth_stamp, tf_stamp=None):
         context = self.context
         now = _require_finite('source_clock', self._clock())
+        if self._last_source_clock is not None and now < self._last_source_clock:
+            self._fenced = True
+            return False
+        self._last_source_clock = now
         stamps = (rgb_stamp, depth_stamp)
         if (any(stamp <= context.reset_completed_timestamp_s or stamp > now
                 or now - stamp > context.max_frame_age_s for stamp in stamps)
@@ -185,17 +207,50 @@ class PoseAdmissionLatch:
             context.reset_completed_timestamp_s < tf_stamp <= now
             and all(abs(tf_stamp - stamp) <= context.max_tf_skew_s for stamp in stamps)))
 
+    def _candidate_current(self, request, value, context):
+        if not self.check_result(request, value.broker_generation):
+            return self._reject('REQUEST_CANCELLED_OR_FENCED')
+        fresh = self._fresh(request.image_timestamp_s, value.depth_timestamp_s,
+                            value.tf_timestamp_s)
+        identity = asdict(self.workspace.identity)
+        kind = (ExecutionKind.ATTEMPT if type(self.workspace) is AttemptWorkspace
+                else ExecutionKind.VALIDATION)
+        # Read identity/context after both callbacks, including the source clock.
+        if (request != self._expected or value.request != request
+                or request.execution_kind is not kind
+                or any(getattr(request, key) != item for key, item in identity.items())
+                or request.reset_epoch != self.workspace._metadata['reset_epoch']
+                or value.broker_generation != self.broker_generation
+                or self._fenced or request.request_id in self._cancelled):
+            return self._reject('REQUEST_CANCELLED_OR_FENCED')
+        if (self.context != context or value.session_id != context.session_id
+                or value.depth_timestamp_s != self._depth_timestamp_s
+                or value.depth_sha256 != self._depth_sha256
+                or value.source_frame != context.source_frame
+                or value.target_frame != context.target_frame):
+            return self._reject('SOURCE_OR_TF_IDENTITY_MISMATCH')
+        return fresh or self._reject('STALE_RGBD_OR_TF')
+
+    def _require_adjudication(self):
+        self._adjudication_required = True
+        self._fenced = True
+        return PoseAdmissionCommitError('POSE_ACCEPTED_REQUIRES_ADJUDICATION')
+
     def accept(self, request, localized_pose):
         """
         Validate a candidate, persist POSE_ACCEPTED, then open the latch once.
 
         Filesystem or validator exceptions propagate without opening the latch;
         the Worker must stop and classify infrastructure failures separately.
+        If an event is visible when commit verification fails, this latch is
+        permanently fenced and the event requires recovery adjudication.
         A False return is an ordinary admission rejection. The immutable event
         is stored directly in working/ so its directory entry is synced by the
         artifact writer without introducing unsynced intermediate directories.
         """
         with self._lock:
+            if self.requires_adjudication:
+                raise self._require_adjudication()
             self.rejection_reason = None
             if (type(localized_pose) is not LocalizedPose
                     or type(request) is not InferenceRequest
@@ -209,32 +264,32 @@ class PoseAdmissionLatch:
             if self.accepted:
                 return document == self._accepted_document
             context, value = self.context, localized_pose
-            if (value.session_id != context.session_id
-                    or value.depth_timestamp_s != self._depth_timestamp_s
-                    or value.depth_sha256 != self._depth_sha256
-                    or value.source_frame != context.source_frame
-                    or value.target_frame != context.target_frame):
-                return self._reject('SOURCE_OR_TF_IDENTITY_MISMATCH')
-            if not self._fresh(request.image_timestamp_s, value.depth_timestamp_s,
-                               value.tf_timestamp_s):
-                return self._reject('STALE_RGBD_OR_TF')
+            if not self._candidate_current(request, value, context):
+                return False
             if (self._geometry_gate(request, value) is not True
                     or self._quality_gate(request, value) is not True):
                 return self._reject('GEOMETRY_OR_QUALITY_REJECTED')
-            # Validators can block. Recheck current authorization immediately
-            # before committing local acceptance; motion still checks its lease.
-            if not self._current(request):
-                return self._reject('REQUEST_CANCELLED_OR_FENCED')
-            if not self._fresh(request.image_timestamp_s, value.depth_timestamp_s,
-                               value.tf_timestamp_s):
-                return self._reject('STALE_RGBD_OR_TF')
+            # Validators, file writes and readback can all block. The same full
+            # guard runs on both sides of the durable write. Motion separately
+            # checks its current lease after successful admission.
+            if not self._candidate_current(request, value, context):
+                return False
             path = self.workspace.path / 'pose_accepted.json'
-            if path.exists() and json.loads(path.read_text()) != json.loads(json.dumps(document)):
-                raise PerceptionError('POSE_ACCEPTED_CONFLICT')
-            self.workspace.write_json('pose_accepted.json', document)
-            observed = json.loads(path.read_text())
-            if observed != json.loads(json.dumps(document)):
-                raise PerceptionError('POSE_ACCEPTED_READBACK_MISMATCH')
+            if path.exists():
+                raise self._require_adjudication()
+            try:
+                self.workspace.write_json('pose_accepted.json', document)
+            except Exception:
+                if path.exists():
+                    self._require_adjudication()
+                raise
+            try:
+                observed = json.loads(path.read_text())
+                if (observed != json.loads(json.dumps(document))
+                        or not self._candidate_current(request, value, context)):
+                    raise self._require_adjudication()
+            except Exception as error:
+                raise self._require_adjudication() from error
             self._accepted_document = document
             return True
 
@@ -318,16 +373,27 @@ class PerceptionPolicy:
     def admit_pose(self, request, localized_pose):
         """Treat local admission rejection as this model's NORMAL_REJECTION."""
         with self._lock:
+            if self.latch.requires_adjudication:
+                raise PoseAdmissionCommitError('POSE_ACCEPTED_REQUIRES_ADJUDICATION')
             if request != self._pending or not self._awaiting_admission:
                 raise PerceptionError('POSE_ADMISSION_SEQUENCE')
             if not self.latch.check_result(request, localized_pose.broker_generation):
                 outcome = ModelOutcome.CANCELLED
-            elif self.latch.accept(request, localized_pose):
-                outcome = ModelOutcome.QUALIFIED
-            elif not self.latch.check_result(request, localized_pose.broker_generation):
-                outcome = ModelOutcome.CANCELLED
             else:
-                outcome = ModelOutcome.NORMAL_REJECTION
+                try:
+                    accepted = self.latch.accept(request, localized_pose)
+                except Exception:
+                    if self.latch.requires_adjudication:
+                        self._outcomes[self._stage(request)] = ModelOutcome.INFRA_ERROR
+                        self._pending = None
+                        self._awaiting_admission = False
+                    raise
+                if accepted:
+                    outcome = ModelOutcome.QUALIFIED
+                elif not self.latch.check_result(request, localized_pose.broker_generation):
+                    outcome = ModelOutcome.CANCELLED
+                else:
+                    outcome = ModelOutcome.NORMAL_REJECTION
             self._outcomes[self._stage(request)] = outcome
             self._pending = None
             self._awaiting_admission = False
@@ -341,6 +407,9 @@ def decide(yolo=None, grounded=None, *, latch):
     for outcome in (yolo, grounded):
         if outcome is not None and not isinstance(outcome, ModelOutcome):
             raise PerceptionError('MODEL_OUTCOME_REQUIRED')
+    if latch.requires_adjudication:
+        return PerceptionDecision('INVALID', reason='PERCEPTION_INFRA_ERROR',
+                                  attempt_status=AttemptStatus.INVALID)
     if latch.accepted:
         return PerceptionDecision('CONTINUE')
     for outcome in (yolo, grounded):

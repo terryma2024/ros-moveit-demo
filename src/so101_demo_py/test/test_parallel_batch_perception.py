@@ -406,7 +406,9 @@ def test_visible_event_after_directory_fsync_failure_cannot_be_overwritten(tmp_p
         h.policy.admit_pose(h.req, pose(h.req, position_xyz=(0.3, 0.0, 0.05)))
     assert event_path.read_bytes() == prior
     assert not h.latch.accepted
-    assert h.policy.admit_pose(h.req, pose(h.req)).disposition == 'CONTINUE'
+    with pytest.raises(ValueError, match='ADJUDICATION'):
+        h.policy.admit_pose(h.req, pose(h.req))
+    assert not h.latch.accepted
 
 
 def test_two_workers_never_cross_admit_or_write_each_others_event(tmp_path):
@@ -439,3 +441,98 @@ def test_latch_restart_does_not_reauthorize_existing_acceptance(tmp_path):
                            clock=lambda: 101.1, authorize=lambda req: True,
                            geometry_gate=lambda req, value: True,
                            quality_gate=lambda req, value: True)
+
+
+@pytest.mark.parametrize('window', ['write', 'readback'])
+@pytest.mark.parametrize('change', ['authorization', 'source_age', 'broker_generation',
+                                    'request', 'session', 'tf_frame', 'clock_reset',
+                                    'clock_rewind', 'invalid_clock', 'authorization_error'])
+def test_commit_window_invalidation_requires_adjudication(tmp_path, monkeypatch, window, change):
+    from pathlib import Path
+    import so101_demo.runtime.task_artifacts as artifacts
+    from so101_demo.parallel_batch.perception import decide, PerceptionError
+    h = harness(tmp_path)
+    start(h)
+    event_path = h.workspace.path / 'pose_accepted.json'
+
+    def invalidate():
+        if change == 'authorization':
+            h.control.authorized = False
+        elif change == 'source_age':
+            h.control.now = 103.0
+        elif change == 'broker_generation':
+            h.latch.broker_generation = 2
+        elif change == 'request':
+            h.latch._expected = replace(h.req, request_id='new-request')
+        elif change == 'session':
+            h.latch.context = replace(h.context, session_id='new-session')
+        elif change == 'tf_frame':
+            h.latch.context = replace(h.context, target_frame='new-base')
+        elif change == 'clock_rewind':
+            h.control.now = 101.05
+        elif change == 'invalid_clock':
+            h.control.now = float('nan')
+        elif change == 'authorization_error':
+            def unavailable(req):
+                raise OSError('authorization endpoint unavailable')
+            h.latch._authorize = unavailable
+        else:
+            h.control.now = 100.5
+
+    if window == 'write':
+        real_sync = artifacts.fsync_directory
+
+        def persist_then_invalidate(path):
+            real_sync(path)
+            invalidate()
+
+        monkeypatch.setattr(artifacts, 'fsync_directory', persist_then_invalidate)
+    else:
+        real_read = Path.read_text
+
+        def read_then_invalidate(path, *args, **kwargs):
+            text = real_read(path, *args, **kwargs)
+            if path == event_path:
+                invalidate()
+            return text
+
+        monkeypatch.setattr(Path, 'read_text', read_then_invalidate)
+
+    with pytest.raises(PerceptionError, match='ADJUDICATION'):
+        result(h, h.req, 'POSE')
+    assert event_path.exists()
+    assert not h.latch.accepted
+    assert h.policy.decision.disposition == 'INVALID'
+    assert h.policy.decision.next_model is None
+    assert h.policy.decision.reason == 'PERCEPTION_INFRA_ERROR'
+    assert decide(ModelOutcome.NORMAL_REJECTION, latch=h.latch).disposition == 'INVALID'
+    # Even restoring every external input cannot convert the visible event
+    # into permission for this latch. Recovery must adjudicate the evidence.
+    h.control.authorized, h.control.now = True, 101.1
+    h.latch.broker_generation, h.latch.context, h.latch._expected = 1, h.context, h.req
+    with pytest.raises(PerceptionError, match='ADJUDICATION'):
+        h.latch.accept(h.req, pose(h.req))
+    assert not h.latch.accepted
+
+
+@pytest.mark.parametrize('callback', ['geometry', 'quality', 'authorization'])
+def test_broker_generation_change_inside_validator_never_persists(tmp_path, callback):
+    h = harness(tmp_path)
+    start(h)
+
+    def rotate_generation(*args):
+        h.latch.broker_generation = 2
+        return True
+
+    if callback == 'authorization':
+        def install_authorization_change(*args):
+            h.latch._authorize = rotate_generation
+            return True
+        h.latch._geometry_gate = install_authorization_change
+    else:
+        setattr(h.latch, f'_{callback}_gate', rotate_generation)
+    decision = result(h, h.req, 'POSE')
+    assert decision.disposition == 'CANCELLED'
+    assert decision.next_model is None
+    assert not h.latch.accepted
+    assert not (h.workspace.path / 'pose_accepted.json').exists()
