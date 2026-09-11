@@ -27,10 +27,21 @@ _NOT_APPLICABLE = 'not_applicable'
 _UNIX_SOCKET_PATH_MAX_BYTES = 107
 _MEM_AVAILABLE = re.compile(r'^MemAvailable:[ \t]+([0-9]+)[ \t]+kB$')
 _SHA256 = re.compile(r'^[0-9a-f]{64}$')
+_SHA1 = re.compile(r'^[0-9a-f]{40}$')
 _BATCH_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 _DOMAIN_CLAIM_SCOPE = 'cooperating_same_uid_processes'
 _DOMAIN_CLAIM_PROTOCOL = 'uid_flock_v1'
 _MAX_LIVE_EVIDENCE_BYTES = 1024 * 1024
+_TASK14_ARTIFACT_NAMES = (
+    'source_manifest',
+    'install_manifest',
+    'container_identity',
+    'model_manifest',
+    'catalog',
+    'resource_metrics',
+    'simulation_metrics',
+    'render_metrics',
+)
 _BASE_ENVIRONMENT_ALLOWLIST = (
     'PATH',
     'AMENT_PREFIX_PATH',
@@ -358,6 +369,280 @@ class SystemResourceProbe:
         return os.path.lexists(path)
 
 
+class Task14LiveHeadroomVerifier:
+    """Verify a sealed Task 14 two-Worker execution and every bound artifact."""
+
+    def verify(
+        self, manifest_path: Path, *, config: ParallelRuntimeConfig
+    ) -> Mapping[str, object]:
+        """Return a compact verified record or fail closed on any uncertainty."""
+        path = Path(manifest_path)
+        if (
+            not path.is_absolute()
+            or path.name != 'task14_headroom_manifest.json'
+            or path.parent.name != 'sealed'
+            or not path.parent.parent.name
+            or any(part in {'.', '..'} for part in str(path).split('/'))
+        ):
+            raise ResourceAllocationError('TASK14_SEALED_PATH_INVALID')
+        batch_root = path.parent.parent
+        parent_fd = batch_fd = sealed_fd = artifacts_fd = None
+        identities: list[tuple[int, str, tuple[int, int], bool]] = []
+        try:
+            parent_fd = _open_trusted_parent(batch_root)
+            batch_fd = _open_directory_at(parent_fd, batch_root.name)
+            _verify_trusted_directory(batch_fd, str(batch_root), final_parent=True)
+            identities.append(
+                (parent_fd, batch_root.name, _fd_identity(batch_fd), True)
+            )
+            sealed_fd = _open_directory_at(batch_fd, 'sealed')
+            _verify_sealed_directory(sealed_fd, 'sealed')
+            identities.append((batch_fd, 'sealed', _fd_identity(sealed_fd), True))
+            artifacts_fd = _open_directory_at(sealed_fd, 'artifacts')
+            _verify_sealed_directory(artifacts_fd, 'artifacts')
+            identities.append(
+                (sealed_fd, 'artifacts', _fd_identity(artifacts_fd), True)
+            )
+            document, manifest_sha256, manifest_identity = _read_sealed_json_at(
+                sealed_fd, path.name
+            )
+            identities.append((sealed_fd, path.name, manifest_identity, False))
+            result = self._verify_document(
+                document,
+                config=config,
+                artifacts_fd=artifacts_fd,
+                identities=identities,
+            )
+            for directory_fd, name, identity, is_directory in identities:
+                _verify_visible_identity_at(
+                    directory_fd, name, identity, is_directory=is_directory
+                )
+            return {
+                'sealed_batch_root': str(batch_root),
+                'manifest_path': str(path),
+                'manifest_sha256': manifest_sha256,
+                **result,
+            }
+        finally:
+            for descriptor in (artifacts_fd, sealed_fd, batch_fd, parent_fd):
+                if descriptor is not None:
+                    os.close(descriptor)
+
+    def _verify_document(
+        self,
+        document: dict[str, object],
+        *,
+        config: ParallelRuntimeConfig,
+        artifacts_fd: int,
+        identities: list[tuple[int, str, tuple[int, int], bool]],
+    ) -> dict[str, object]:
+        expected_document = {
+            'schema_version',
+            'kind',
+            'status',
+            'batch_id',
+            'worker_count',
+            'run_mode',
+            'lifecycle',
+            'cleanup_complete',
+            'source_identity',
+            'artifacts',
+            'headroom',
+            'simulation',
+            'rendering',
+        }
+        if set(document) != expected_document:
+            raise ValueError('Task14 manifest schema')
+        if (
+            type(document['schema_version']) is not int
+            or document['schema_version'] != 1
+            or document['kind'] != 'task14_two_worker_live_headroom'
+            or document['status'] != 'VALID'
+            or type(document['batch_id']) is not str
+            or _BATCH_ID.fullmatch(document['batch_id']) is None
+            or type(document['worker_count']) is not int
+            or document['worker_count'] != 2
+            or document['run_mode'] != 'execute'
+            or document['lifecycle'] != 'ISOLATED_STACK'
+            or document['cleanup_complete'] is not True
+        ):
+            raise ValueError('Task14 execution was not accepted')
+        batch_id = document['batch_id']
+        artifacts = document['artifacts']
+        if not isinstance(artifacts, dict) or set(artifacts) != set(
+            _TASK14_ARTIFACT_NAMES
+        ):
+            raise ValueError('Task14 artifact schema')
+        artifact_documents = {}
+        artifact_hashes = {}
+        for name in _TASK14_ARTIFACT_NAMES:
+            entry = artifacts[name]
+            expected_path = f'artifacts/{name}.json'
+            if (
+                not isinstance(entry, dict)
+                or set(entry) != {'path', 'sha256'}
+                or entry['path'] != expected_path
+                or type(entry['sha256']) is not str
+                or _SHA256.fullmatch(entry['sha256']) is None
+            ):
+                raise ValueError(f'Task14 artifact binding: {name}')
+            artifact_document, observed_hash, identity = _read_sealed_json_at(
+                artifacts_fd, f'{name}.json'
+            )
+            if observed_hash != entry['sha256']:
+                raise ValueError(f'Task14 artifact hash: {name}')
+            identities.append((artifacts_fd, f'{name}.json', identity, False))
+            artifact_documents[name] = artifact_document
+            artifact_hashes[name] = observed_hash
+
+        source = document['source_identity']
+        expected_source = {
+            'source_commit',
+            'source_manifest_sha256',
+            'runtime_config_sha256',
+            'resources_module_sha256',
+            'install_manifest_sha256',
+            'container_image_id',
+            'container_identity_sha256',
+            'model_manifest_sha256',
+            'catalog_sha256',
+        }
+        if not isinstance(source, dict) or set(source) != expected_source:
+            raise ValueError('Task14 source identity schema')
+        source_manifest = artifact_documents['source_manifest']
+        install_manifest = artifact_documents['install_manifest']
+        container_identity = artifact_documents['container_identity']
+        model_manifest = artifact_documents['model_manifest']
+        catalog = artifact_documents['catalog']
+        if (
+            set(source_manifest) != {'source_commit', 'tree'}
+            or type(source_manifest['source_commit']) is not str
+            or _SHA1.fullmatch(source_manifest['source_commit']) is None
+            or type(source_manifest['tree']) is not str
+            or not source_manifest['tree']
+            or set(install_manifest) != {'install_prefix', 'files'}
+            or type(install_manifest['install_prefix']) is not str
+            or not Path(install_manifest['install_prefix']).is_absolute()
+            or type(install_manifest['files']) is not int
+            or install_manifest['files'] <= 0
+            or set(container_identity) != {'image_id'}
+            or type(container_identity['image_id']) is not str
+            or not container_identity['image_id'].startswith('sha256:')
+            or _SHA256.fullmatch(container_identity['image_id'][7:]) is None
+            or set(model_manifest) != {'model', 'revision'}
+            or type(model_manifest['model']) is not str
+            or not model_manifest['model']
+            or type(model_manifest['revision']) is not int
+            or model_manifest['revision'] < 0
+            or set(catalog) != {'catalog_id', 'points'}
+            or type(catalog['catalog_id']) is not str
+            or not catalog['catalog_id']
+            or type(catalog['points']) is not int
+            or catalog['points'] <= 0
+        ):
+            raise ValueError('Task14 identity artifact schema')
+        expected_identity_values = {
+            'source_commit': source_manifest['source_commit'],
+            'source_manifest_sha256': artifact_hashes['source_manifest'],
+            'runtime_config_sha256': _runtime_config_sha256(config),
+            'resources_module_sha256': hashlib.sha256(
+                Path(__file__).read_bytes()
+            ).hexdigest(),
+            'install_manifest_sha256': artifact_hashes['install_manifest'],
+            'container_image_id': container_identity['image_id'],
+            'container_identity_sha256': artifact_hashes['container_identity'],
+            'model_manifest_sha256': artifact_hashes['model_manifest'],
+            'catalog_sha256': artifact_hashes['catalog'],
+        }
+        if source != expected_identity_values:
+            raise ValueError('Task14 source identity mismatch')
+
+        headroom = document['headroom']
+        expected_ratios = {
+            'cpu_ratio',
+            'ram_ratio',
+            'gpu_ratio',
+            'simulation_realtime_ratio',
+            'render_frame_ratio',
+        }
+        if not isinstance(headroom, dict) or set(headroom) != expected_ratios:
+            raise ValueError('Task14 headroom schema')
+        for value in headroom.values():
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or float(value) < config.required_live_headroom_ratio
+            ):
+                raise ValueError('Task14 headroom threshold')
+        resource_metrics = artifact_documents['resource_metrics']
+        if (
+            set(resource_metrics)
+            != {
+                'batch_id',
+                'worker_count',
+                'cpu_headroom_ratio',
+                'ram_headroom_ratio',
+                'gpu_headroom_ratio',
+            }
+            or resource_metrics['batch_id'] != batch_id
+            or resource_metrics['worker_count'] != 2
+            or resource_metrics['cpu_headroom_ratio'] != headroom['cpu_ratio']
+            or resource_metrics['ram_headroom_ratio'] != headroom['ram_ratio']
+            or resource_metrics['gpu_headroom_ratio'] != headroom['gpu_ratio']
+        ):
+            raise ValueError('Task14 resource metrics binding')
+        simulation = document['simulation']
+        simulation_metrics = artifact_documents['simulation_metrics']
+        if (
+            simulation
+            != {
+                'backend': 'mujoco',
+                'stable': True,
+                'metrics_artifact': 'simulation_metrics',
+            }
+            or set(simulation_metrics)
+            != {
+                'batch_id',
+                'backend',
+                'stable',
+                'realtime_headroom_ratio',
+            }
+            or simulation_metrics['batch_id'] != batch_id
+            or simulation_metrics['backend'] != 'mujoco'
+            or simulation_metrics['stable'] is not True
+            or simulation_metrics['realtime_headroom_ratio']
+            != headroom['simulation_realtime_ratio']
+        ):
+            raise ValueError('Task14 simulation metrics binding')
+        rendering = document['rendering']
+        render_metrics = artifact_documents['render_metrics']
+        if (
+            rendering
+            != {
+                'backend': 'headless_egl',
+                'stable': True,
+                'metrics_artifact': 'render_metrics',
+            }
+            or set(render_metrics)
+            != {'batch_id', 'backend', 'stable', 'frame_headroom_ratio'}
+            or render_metrics['batch_id'] != batch_id
+            or render_metrics['backend'] != 'headless_egl'
+            or render_metrics['stable'] is not True
+            or render_metrics['frame_headroom_ratio']
+            != headroom['render_frame_ratio']
+        ):
+            raise ValueError('Task14 render metrics binding')
+        return {
+            'accepted_batch_id': batch_id,
+            'source_identity': dict(source),
+            'artifact_sha256': artifact_hashes,
+            'headroom': dict(headroom),
+            'simulation': dict(simulation),
+            'rendering': dict(rendering),
+        }
+
+
 class WorkerResourceAllocator:
     """Allocate one private resource set for every requested stable slot."""
 
@@ -370,6 +655,7 @@ class WorkerResourceAllocator:
         base_environment: Mapping[str, str] | None = None,
         claim_root: Path | None = None,
         live_headroom_evidence: Path | None = None,
+        live_headroom_verifier=None,
         batch_id: str | None = None,
     ) -> None:
         if not isinstance(config, ParallelRuntimeConfig):
@@ -402,6 +688,11 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('CLAIM_ROOT')
         self.live_headroom_evidence = (
             None if live_headroom_evidence is None else Path(live_headroom_evidence)
+        )
+        self._live_headroom_verifier = (
+            Task14LiveHeadroomVerifier()
+            if live_headroom_verifier is None
+            else live_headroom_verifier
         )
         self._manifest: ResourceManifest | None = None
         self._workers: dict[str, WorkerResources] = {}
@@ -571,93 +862,14 @@ class WorkerResourceAllocator:
         if self.live_headroom_evidence is None:
             raise ResourceAllocationError('THREE_WORKER_LIVE_EVIDENCE_REQUIRED')
         try:
-            document, file_sha256 = _read_secure_json(self.live_headroom_evidence)
-            if set(document) != {'schema_version', 'payload', 'payload_sha256'}:
-                raise ValueError('outer schema')
-            if type(document['schema_version']) is not int or document['schema_version'] != 1:
-                raise ValueError('schema version')
-            payload = document['payload']
-            if not isinstance(payload, dict) or set(payload) != {
-                'worker_count',
-                'runtime_config_sha256',
-                'source_identity',
-                'headroom',
-                'simulation',
-                'rendering',
-            }:
-                raise ValueError('payload schema')
-            canonical = _json_bytes(payload)
-            if (
-                not isinstance(document['payload_sha256'], str)
-                or hashlib.sha256(canonical).hexdigest() != document['payload_sha256']
-            ):
-                raise ValueError('payload hash')
-            if type(payload['worker_count']) is not int or payload['worker_count'] != 2:
-                raise ValueError('worker count')
-            if payload['runtime_config_sha256'] != _runtime_config_sha256(self.config):
-                raise ValueError('runtime config identity')
-            source = payload['source_identity']
-            if not isinstance(source, dict) or set(source) != {
-                'batch_id',
-                'code_sha256',
-                'simulation_metrics_sha256',
-                'render_metrics_sha256',
-            }:
-                raise ValueError('source identity schema')
-            if (
-                not isinstance(source['batch_id'], str)
-                or _BATCH_ID.fullmatch(source['batch_id']) is None
-                or any(
-                    not isinstance(source[name], str)
-                    or _SHA256.fullmatch(source[name]) is None
-                    for name in (
-                        'code_sha256',
-                        'simulation_metrics_sha256',
-                        'render_metrics_sha256',
-                    )
-                )
-            ):
-                raise ValueError('source identity')
-            headroom = payload['headroom']
-            ratio_names = {
-                'cpu_ratio',
-                'ram_ratio',
-                'gpu_ratio',
-                'simulation_realtime_ratio',
-                'render_frame_ratio',
-            }
-            if not isinstance(headroom, dict) or set(headroom) != ratio_names:
-                raise ValueError('headroom schema')
-            for value in headroom.values():
-                if (
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(float(value))
-                    or float(value) < self.config.required_live_headroom_ratio
-                ):
-                    raise ValueError('headroom value')
-            if payload['simulation'] != {'backend': 'mujoco', 'stable': True}:
-                raise ValueError('simulation stability')
-            if payload['rendering'] != {'backend': 'headless_egl', 'stable': True}:
-                raise ValueError('render stability')
-        except (
-            OSError,
-            UnicodeError,
-            ValueError,
-            KeyError,
-            TypeError,
-            ResourceAllocationError,
-        ) as error:
+            verified = self._live_headroom_verifier.verify(
+                self.live_headroom_evidence, config=self.config
+            )
+            if not isinstance(verified, Mapping):
+                raise TypeError('verifier result')
+            return dict(verified)
+        except Exception as error:
             raise ResourceAllocationError('THREE_WORKER_LIVE_EVIDENCE_INVALID') from error
-        return {
-            'path': str(self.live_headroom_evidence),
-            'file_sha256': file_sha256,
-            'payload_sha256': document['payload_sha256'],
-            'source_identity': source,
-            'headroom': headroom,
-            'simulation': payload['simulation'],
-            'rendering': payload['rendering'],
-        }
 
     def _claim_domains(self, domains: tuple[int, ...]) -> None:
         claim_parent_fd = _open_trusted_parent(self.claim_root)
@@ -1169,6 +1381,112 @@ def _is_high_recall_ros_candidate(comm: str, argv: tuple[str, ...]) -> bool:
     )
 
 
+def _fd_identity(descriptor: int) -> tuple[int, int]:
+    value = os.fstat(descriptor)
+    return value.st_dev, value.st_ino
+
+
+def _open_directory_at(parent_fd: int, name: str) -> int:
+    try:
+        return os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=parent_fd,
+        )
+    except OSError as error:
+        if error.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ResourceAllocationError(f'SYMLINK_PATH: {name}') from error
+        raise ResourceAllocationError(f'DIRECTORY_OPEN_FAILED: {name}') from error
+
+
+def _verify_sealed_directory(descriptor: int, name: str) -> os.stat_result:
+    value = os.fstat(descriptor)
+    if not stat.S_ISDIR(value.st_mode):
+        raise ResourceAllocationError(f'NOT_DIRECTORY: {name}')
+    if value.st_uid != os.getuid():
+        raise ResourceAllocationError(f'UNSAFE_DIRECTORY_OWNER: {name}')
+    if stat.S_IMODE(value.st_mode) != 0o555:
+        raise ResourceAllocationError(f'UNSEALED_DIRECTORY_MODE: {name}')
+    return value
+
+
+def _verify_sealed_regular(descriptor: int, name: str) -> os.stat_result:
+    value = os.fstat(descriptor)
+    if not stat.S_ISREG(value.st_mode):
+        raise ResourceAllocationError(f'NOT_REGULAR_FILE: {name}')
+    if value.st_uid != os.getuid():
+        raise ResourceAllocationError(f'UNSAFE_FILE_OWNER: {name}')
+    if stat.S_IMODE(value.st_mode) != 0o444:
+        raise ResourceAllocationError(f'UNSEALED_FILE_MODE: {name}')
+    return value
+
+
+def _strict_json_object(payload: bytes) -> dict[str, object]:
+    def reject_constant(value):
+        raise ValueError(f'non-finite value: {value}')
+
+    def reject_duplicate_keys(pairs):
+        document = {}
+        for key, value in pairs:
+            if key in document:
+                raise ValueError(f'duplicate JSON key: {key}')
+            document[key] = value
+        return document
+
+    document = json.loads(
+        payload.decode('utf-8'),
+        parse_constant=reject_constant,
+        object_pairs_hook=reject_duplicate_keys,
+    )
+    if not isinstance(document, dict):
+        raise ValueError('JSON object required')
+    return document
+
+
+def _read_sealed_json_at(
+    parent_fd: int, name: str
+) -> tuple[dict[str, object], str, tuple[int, int]]:
+    descriptor = None
+    try:
+        descriptor = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd
+        )
+        value = _verify_sealed_regular(descriptor, name)
+        payload = _read_fd(descriptor, _MAX_LIVE_EVIDENCE_BYTES + 1)
+        if len(payload) > _MAX_LIVE_EVIDENCE_BYTES:
+            raise ResourceAllocationError('LIVE_EVIDENCE_TOO_LARGE')
+        after = os.fstat(descriptor)
+        if (value.st_dev, value.st_ino) != (after.st_dev, after.st_ino):
+            raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}')
+        return (
+            _strict_json_object(payload),
+            hashlib.sha256(payload).hexdigest(),
+            (value.st_dev, value.st_ino),
+        )
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _verify_visible_identity_at(
+    parent_fd: int,
+    name: str,
+    identity: tuple[int, int],
+    *,
+    is_directory: bool,
+) -> None:
+    try:
+        visible = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as error:
+        raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}') from error
+    if (
+        (visible.st_dev, visible.st_ino) != identity
+        or (is_directory and not stat.S_ISDIR(visible.st_mode))
+        or (not is_directory and not stat.S_ISREG(visible.st_mode))
+    ):
+        raise ResourceAllocationError(f'PATH_IDENTITY_CHANGED: {name}')
+
+
 def _read_secure_json(path: Path) -> tuple[dict[str, object], str]:
     if not path.is_absolute():
         raise ResourceAllocationError('ABSOLUTE_PATH_REQUIRED')
@@ -1200,27 +1518,26 @@ def _write_manifest_at(
     payload = (
         json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + '\n'
     ).encode('utf-8')
+    temporary = f'.{name}.{os.getpid()}.{uuid.uuid4().hex}.tmp'
     descriptor = None
     created = False
     try:
         descriptor = os.open(
-            name,
+            temporary,
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
             dir_fd=root_fd,
         )
         created = True
-        _verify_private_regular(descriptor, name)
+        _verify_private_regular(descriptor, temporary)
         _replace_fd_contents(descriptor, payload)
-    except FileExistsError as error:
-        raise ResourceAllocationError(f'MANIFEST_CONFLICT: {name}') from error
     except Exception as error:
         if descriptor is not None:
             os.close(descriptor)
             descriptor = None
         if created:
             try:
-                os.unlink(name, dir_fd=root_fd)
+                os.unlink(temporary, dir_fd=root_fd)
                 os.fsync(root_fd)
             except OSError as cleanup_error:
                 raise ResourceAllocationError('MANIFEST_CLEANUP_FAILED') from cleanup_error
@@ -1230,10 +1547,40 @@ def _write_manifest_at(
     finally:
         if descriptor is not None:
             os.close(descriptor)
+
+    try:
+        os.link(
+            temporary,
+            name,
+            src_dir_fd=root_fd,
+            dst_dir_fd=root_fd,
+            follow_symlinks=False,
+        )
+    except FileExistsError as error:
+        try:
+            os.unlink(temporary, dir_fd=root_fd)
+            os.fsync(root_fd)
+        except OSError as cleanup_error:
+            raise ResourceAllocationError('MANIFEST_CLEANUP_FAILED') from cleanup_error
+        raise ResourceAllocationError(f'MANIFEST_CONFLICT: {name}') from error
+    except OSError as error:
+        try:
+            os.unlink(temporary, dir_fd=root_fd)
+            os.fsync(root_fd)
+        except OSError as cleanup_error:
+            raise ResourceAllocationError('MANIFEST_CLEANUP_FAILED') from cleanup_error
+        raise ResourceAllocationError('MANIFEST_PUBLISH_FAILED') from error
+
     try:
         os.fsync(root_fd)
     except OSError as error:
-        raise ResourceAllocationError('MANIFEST_DIRECTORY_FSYNC_FAILED') from error
+        raise ResourceAllocationError('PUBLICATION_UNCERTAIN') from error
+
+    try:
+        os.unlink(temporary, dir_fd=root_fd)
+        os.fsync(root_fd)
+    except OSError as error:
+        raise ResourceAllocationError('TEMP_CLEANUP_UNCERTAIN') from error
 
 
 def _process_starttime_ticks() -> int:
@@ -1276,7 +1623,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv=None) -> int:
+def main(argv=None, *, claim_root: Path | None = None) -> int:
     """Write a resource manifest without starting ROS, MuJoCo or Broker."""
     arguments = _parser().parse_args(argv)
     allocator = None
@@ -1285,6 +1632,7 @@ def main(argv=None) -> int:
         allocator = WorkerResourceAllocator(
             config,
             arguments.evidence_root,
+            claim_root=claim_root,
             live_headroom_evidence=arguments.live_headroom_evidence,
         )
         manifest = allocator.allocate(arguments.worker_count)
