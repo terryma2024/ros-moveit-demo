@@ -398,3 +398,118 @@ def test_completion_crossing_deadline_during_result_copy_has_no_candidate():
     response = broker.complete(request, ModelResult(ModelOutcome.QUALIFIED, SlowCandidate()))
     assert response.outcome == ModelOutcome.INFERENCE_TIMEOUT
     assert response.candidate is None
+
+
+@pytest.mark.parametrize('exit_path', ['complete', 'duplicate_complete', 'submit', 'poll'])
+@pytest.mark.parametrize('event', ['timeout', 'cancel'])
+def test_final_response_copy_is_guarded_on_every_candidate_exit(exit_path, event):
+    from so101_demo.parallel_batch.broker import ModelResult
+    broker, clock = harness()
+    request = start(broker, req())
+    copying = SimpleNamespace(count=0, trigger=2 if exit_path == 'complete' else 3)
+
+    class CopyCandidate(dict):
+        def __deepcopy__(self, memo):
+            copying.count += 1
+            if copying.count == copying.trigger:
+                if event == 'timeout':
+                    clock.now = 120.0
+                else:
+                    broker.cancel_generation('worker-01', 1)
+            return CopyCandidate(mask=[1, 2])
+
+    response = broker.complete(request, ModelResult(ModelOutcome.QUALIFIED, CopyCandidate()))
+    if exit_path == 'duplicate_complete':
+        response = broker.complete(request, model_result())
+    elif exit_path == 'submit':
+        response = broker.submit(request).response
+    elif exit_path == 'poll':
+        response = broker.poll_response(request)
+    expected = ModelOutcome.INFERENCE_TIMEOUT if event == 'timeout' else ModelOutcome.CANCELLED
+    assert response.outcome == expected
+    assert response.candidate is None
+
+
+@pytest.mark.parametrize('bad_time', [99.0, float('nan'), float('inf')])
+def test_clock_fault_permanently_invalidates_cached_running_and_queued_work(bad_time):
+    broker, clock = harness()
+    cached = start(broker, req())
+    assert broker.complete(cached, model_result(ModelOutcome.QUALIFIED)).candidate
+    running = start(broker, req('worker-02', 'running'))
+    queued = enqueue(broker, req('worker-03', 'queued'))
+    clock.now = bad_time
+    with pytest.raises(ValueError):
+        broker.poll_response(cached)
+    clock.now = 101.0
+    broker.set_model_ready(YOLO, True)
+    broker.set_model_ready(GROUNDED, True)
+    for request in (cached, running, queued):
+        response = broker.poll_response(request)
+        assert response.outcome == ModelOutcome.INFRA_ERROR
+        assert response.candidate is None
+        assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate is None
+    assert broker.next_ready_request() is None
+
+
+@pytest.mark.parametrize('copy_stage', ['store', 'return'])
+def test_candidate_copy_exception_terminates_work_atomically_and_marks_unhealthy(copy_stage):
+    from so101_demo.parallel_batch.broker import ModelResult
+    broker, _ = harness()
+    request = start(broker, req())
+    copying = SimpleNamespace(count=0, competing=None)
+
+    class FailingCandidate(dict):
+        def __deepcopy__(self, memo):
+            copying.count += 1
+            if copying.count == (1 if copy_stage == 'store' else 2):
+                if copy_stage == 'store':
+                    copying.competing = broker.submit(req(request_id='during-copy'))
+                raise RuntimeError('candidate copy failed')
+            return FailingCandidate(mask=[1, 2])
+
+    try:
+        response = broker.complete(
+            request, ModelResult(ModelOutcome.QUALIFIED, FailingCandidate()))
+    except RuntimeError:
+        response = None
+    assert response is not None, 'copy failure must produce a terminal infrastructure response'
+    assert response.outcome == ModelOutcome.INFRA_ERROR
+    assert response.candidate is None
+    assert broker.healthy is False
+    if copy_stage == 'store':
+        assert copying.competing.accepted is False
+        assert copying.competing.reason == 'WORKER_MODEL_INFLIGHT'
+    broker.set_model_ready(YOLO, True)
+    broker.set_model_ready(GROUNDED, True)
+    assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate is None
+    assert broker.submit(req(request_id='after-recovery')).accepted is True
+
+
+def test_dispatch_time_sample_at_queue_deadline_never_starts_inference():
+    broker, _ = harness()
+    request = enqueue(broker, req())
+    ticks = iter([109.0, 109.0, 110.0])
+    broker._clock = lambda: next(ticks, 110.0)
+    assert broker.next_ready_request() is None
+    response = broker.poll_response(request)
+    assert response.outcome == ModelOutcome.QUEUE_TIMEOUT
+    assert response.started_monotonic_s is None
+    assert response.inference_deadline_monotonic_s is None
+
+
+def test_dispatch_clock_callback_cancellation_cannot_start_request():
+    broker, _ = harness()
+    request = enqueue(broker, req())
+    ticks = SimpleNamespace(count=0)
+
+    def clock():
+        ticks.count += 1
+        if ticks.count == 3:
+            broker.cancel_generation('worker-01', 1)
+        return 109.0
+
+    broker._clock = clock
+    assert broker.next_ready_request() is None
+    response = broker.poll_response(request)
+    assert response.outcome == ModelOutcome.CANCELLED
+    assert response.started_monotonic_s is None
