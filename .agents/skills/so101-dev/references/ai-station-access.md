@@ -4,6 +4,7 @@
 
 - [事实与可变项](#事实与可变项)
 - [先判定当前执行主机](#先判定当前执行主机)
+- [向 tmux 中的 Codex 投递任务](#向-tmux-中的-codex-投递任务)
 - [shell 与 overlay](#shell-与-overlay)
 - [GUI 进程](#gui-进程)
 - [RViz 与 Gazebo 左右 50% 分屏](#rviz-与-gazebo-左右-50-分屏)
@@ -49,6 +50,134 @@ ssh ai-station 'pgrep -af "gz sim|move_group|rviz2|pick_place_state_machine" || 
 ```
 
 不要在输出中暴露 SSH 配置、token、proxy 凭据或完整私有环境变量。
+
+## 向 tmux 中的 Codex 投递任务
+
+先区分 tmux pane 当前是普通 shell，还是已经运行 Codex TUI。长任务先保存到该任务已登记
+的 evidence root，回读绝对路径、大小和 SHA256；投递时只发送一条让 Codex 完整读取该
+文件的短指令。tmux session 名与 Codex session UUID/任务名是两套标识，不得混用。下面
+的命令在 ai-station 本机 zsh 中执行；Mac/orchestrator 需先通过 SSH 进入目标主机。
+
+新任务从普通 shell pane 启动 Codex，并把首条指令作为启动参数传入；此时
+`tmux send-keys ... Enter` 的接收者是 shell：
+
+```bash
+task_id=moveit-expert-baseline
+read -r dispatch_id < /proc/sys/kernel/random/uuid
+tmux_session=codex-task-${task_id}
+target_worktree=/data/work/ws_moveit
+evidence_root=/tmp/so101-debug-${task_id}
+handoff_path=${evidence_root}/handoff.md
+receipt_path=${evidence_root}/dispatch-${dispatch_id}.receipt
+codex_bin=/home/lenovo/.local/bin/codex
+dispatch_sent=false
+
+if [[ -z "$dispatch_id" || ! -x "$codex_bin" || ! -d "$target_worktree" || ! -d "$evidence_root" \
+      || ! -r "$handoff_path" || -e "$receipt_path" ]]; then
+  printf 'STOP: dispatch preflight failed\n' >&2
+elif ! codex_version=$("$codex_bin" --version) \
+    || ! handoff_bytes=$(wc -c < "$handoff_path") \
+    || ! handoff_sha=$(sha256sum "$handoff_path"); then
+  printf 'STOP: version or handoff read-back failed\n' >&2
+elif tmux has-session -t "$tmux_session" 2>/dev/null; then
+  printf 'STOP: tmux session already exists: %s\n' "$tmux_session" >&2
+elif pane_id=$(tmux new-session -d -P -F '#{pane_id}' -s "$tmux_session" -c "$target_worktree") \
+    && [[ "$pane_id" =~ '^%[0-9]+$' ]] \
+    && tmux capture-pane -p -J -t "$pane_id" -S -120 > "$evidence_root/dispatch-before.txt"; then
+  printf 'CODEX_VERSION=%s\nHANDOFF_BYTES=%s\nHANDOFF_SHA256=%s\n' \
+    "$codex_version" "$handoff_bytes" "$handoff_sha"
+  if ! tmux send-keys -t "$pane_id" \
+      "$codex_bin -C $target_worktree 'Dispatch $dispatch_id. Read $handoff_path completely and execute that task autonomously. The file is the authoritative handoff. Before other task actions, use a shell command to write exactly $dispatch_id to $receipt_path; start now.'" Enter; then
+    printf 'STOP: failed to send Codex startup command to %s\n' "$pane_id" >&2
+  else
+    dispatch_sent=true
+  fi
+else
+  printf 'STOP: failed to create and identify a new tmux pane\n' >&2
+fi
+```
+
+`/home/lenovo/.local/bin/codex` 是当前 ai-station 的用户级安装约定，使用前必须现场验证；
+非交互 zsh 的 PATH 可能找不到裸 `codex`。模型、sandbox 和 approval 参数按任务授权显式
+添加，不能从示例中推断权限。
+
+向已有 Codex 任务追加指令时，从另一个 shell 使用 CLI 队列，不向其 TUI composer 注入
+按键。优先使用启动时记录或从 Codex 元数据回读的 session UUID；无法确认 UUID 与目标
+worktree/任务一致时停止，不凭 tmux 名或相似标题猜测：
+
+```bash
+task_id=moveit-expert-baseline
+read -r dispatch_id < /proc/sys/kernel/random/uuid
+codex_thread=REPLACE_WITH_VERIFIED_CODEX_SESSION_UUID
+pane_id=REPLACE_WITH_VERIFIED_TMUX_PANE_ID
+evidence_root=/tmp/so101-debug-${task_id}
+handoff_path=${evidence_root}/handoff.md
+receipt_path=${evidence_root}/dispatch-${dispatch_id}.receipt
+codex_bin=/home/lenovo/.local/bin/codex
+dispatch_sent=false
+
+if [[ -z "$dispatch_id" || ! -x "$codex_bin" || ! -d "$evidence_root" || ! -r "$handoff_path" \
+      || -e "$receipt_path" ]]; then
+  printf 'STOP: dispatch preflight failed\n' >&2
+elif ! codex_version=$("$codex_bin" --version) \
+    || ! handoff_bytes=$(wc -c < "$handoff_path") \
+    || ! handoff_sha=$(sha256sum "$handoff_path") \
+    || ! "$codex_bin" queue --help >/dev/null \
+    || ! tmux capture-pane -p -J -t "$pane_id" -S -120 > "$evidence_root/dispatch-before.txt"; then
+  printf 'STOP: version, handoff, queue, or pane read-back failed\n' >&2
+else
+  printf 'CODEX_VERSION=%s\nHANDOFF_BYTES=%s\nHANDOFF_SHA256=%s\n' \
+    "$codex_version" "$handoff_bytes" "$handoff_sha"
+  if ! "$codex_bin" queue --thread "$codex_thread" \
+      --message "Dispatch $dispatch_id. Read $handoff_path completely and execute that task autonomously. Before other task actions, use a shell command to write exactly $dispatch_id to $receipt_path."; then
+    printf 'STOP: codex queue failed for %s\n' "$codex_thread" >&2
+  else
+    dispatch_sent=true
+  fi
+fi
+```
+
+只有已确认目标 Codex 任务与本次工作一致时才可 queue；不要把 tmux session 名直接当作
+`--thread`。若现场 CLI 没有 `queue`，创建新 tmux shell 并使用启动参数，不退回 TUI
+按键模拟。若旧任务仍在运行或所有权不明确，不自动创建第二个执行者；停止并报告冲突。
+
+不要用 `tmux load-buffer/paste-buffer` 粘贴正文后再以 `tmux send-keys Enter` 或 `C-m`
+提交 Codex TUI。已在 ai-station Codex CLI 0.154.0 验证：tmux 的合成 `Enter` 可作为
+LF (`0x0a`) 到达 PTY，被 composer 识别为 `Ctrl-J`/换行；`C-m` 也属于 editor newline
+绑定，不是修复。长粘贴还会显示为 `[Pasted Content N chars]`，粘贴突发保护期间紧随的
+Enter 可能继续被吸收为换行。tmux 命令退出码为 `0` 只证明字节已发送，不证明任务已提交。
+
+投递后必须 bounded read-back：
+
+```bash
+if [[ "$dispatch_sent" != true ]]; then
+  printf 'STOP: dispatch command was not accepted by its transport\n' >&2
+else
+  tmux capture-pane -p -J -t "$pane_id" -S -120 > "$evidence_root/dispatch-after.txt"
+  for attempt in {1..10}; do
+    test -r "$receipt_path" && break
+    sleep 1
+  done
+  if [[ ! -r "$receipt_path" ]]; then
+    printf 'STOP: dispatch receipt was not created\n' >&2
+  elif ! receipt_value=$(tr -d '\r\n' < "$receipt_path"); then
+    printf 'STOP: dispatch receipt could not be read\n' >&2
+  elif [[ "$receipt_value" != "$dispatch_id" ]]; then
+    printf 'STOP: dispatch receipt does not match\n' >&2
+  else
+    printf 'DISPATCH_RECEIPT_OK=%s\n' "$dispatch_id"
+  fi
+fi
+```
+
+在限定时间内取少量 fresh capture；只有本次随机 `dispatch_id` 对应的 receipt 原先不存在、
+投递后由 Codex 工具执行创建且内容精确匹配，并看到 handoff 要求的首个探测结果，才记录
+`HANDOFF_SUBMITTED`。提示词回显或普通 `Working` 可能属于输入区/上一轮，不能证明接收。
+仅看到正文或
+`[Pasted Content N chars]` 仍停在输入区不算投递成功；不要连续盲发回车。
+
+上面的 `codex-task-*` 仅是普通 coding session 示例。任务需要 GUI/CUA 时，按下文
+`codex-cua` 会话规则复用或创建唯一标准会话，不为同一用途另建第二个 CUA session。
 
 ## shell 与 overlay
 
