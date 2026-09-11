@@ -201,6 +201,33 @@ def test_validation_summary_cannot_claim_execute_qualification():
     assert summary.qualification_passed is False
 
 
+def test_all_passing_dry_run_validations_never_qualify_execute_coverage():
+    """A complete dry-run projection must not become a physical 20/20 result."""
+
+    from so101_demo.parallel_batch.contracts import (
+        BatchSummary,
+        PointStatus,
+        RunMode,
+        ValidationStatus,
+    )
+
+    point_ids = tuple(f"point-{index:02d}" for index in range(20))
+    summary = BatchSummary(
+        run_mode=RunMode.DRY_RUN,
+        point_statuses={point_id: PointStatus.UNRUN for point_id in point_ids},
+        validation_statuses={
+            point_id: ValidationStatus.VALIDATION_PASSED for point_id in point_ids
+        },
+        batch_terminal=True,
+    )
+
+    assert summary.validation_complete is True
+    assert summary.validation_passed is True
+    assert set(summary.point_statuses.values()) == {PointStatus.UNRUN}
+    assert summary.qualification_applicable is False
+    assert summary.qualification_passed is False
+
+
 @pytest.mark.parametrize("identifier", ["../escape", "/absolute", ".", "..", "worker/01"])
 def test_path_bearing_identifiers_reject_traversal_and_separators(identifier):
     """Path-like identities must not escape their coordinator-owned workspace."""
