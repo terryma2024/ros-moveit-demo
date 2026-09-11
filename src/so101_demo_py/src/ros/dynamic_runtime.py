@@ -414,6 +414,12 @@ def run_dynamic_execute(
             file=status_stream,
         )
         sample = source.get_one(options.cup_pose_timeout_s)
+        print(
+            f"status=POSE_ACCEPTED source_stamp_ns={sample.source_stamp_ns} "
+            f"session_id={options.session_id} reset_epoch={options.expected_reset_epoch}",
+            flush=True,
+            file=status_stream,
+        )
         truth_observer = runtime.cup_scene_observer(
             node,
             options.session_id,

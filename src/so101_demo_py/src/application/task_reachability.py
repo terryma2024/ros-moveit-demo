@@ -19,7 +19,6 @@ from ..core.task_points import TaskPoint
 from ..ports.evidence import PoseEvidence
 from ..ports.robot_control import JointStateEvidence
 
-
 _UNKNOWN_FAILURE_CODES = frozenset(
     {
         "SCENE_STALE",
@@ -48,6 +47,7 @@ class SegmentPlanReceipt:
     moveit_error_code: int | None
     failure_code: str | None
     collision_pairs: tuple[tuple[str, str], ...] = ()
+    planning_receipts: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +58,7 @@ class ReachabilitySegment:
     moveit_error_code: int | None
     failure_code: str | None
     collision_pairs: tuple[tuple[str, str], ...]
+    planning_receipts: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +155,18 @@ def check_task_reachability(
 
     segments: list[ReachabilitySegment] = []
     current_start = start_state
+    prepare_horizon = getattr(planner, "prepare_horizon", None)
+    if callable(prepare_horizon):
+        try:
+            prepare_horizon(targets, current_start)
+        except Exception:
+            return _report(
+                point,
+                ReachabilityStatus.UNKNOWN,
+                [],
+                "PLANNER_UNAVAILABLE",
+                scene_revision,
+            )
     for state in DYNAMIC_REACHABILITY_STATES:
         target = targets.for_state(state)
         try:
@@ -196,6 +209,7 @@ def check_task_reachability(
                 moveit_error_code=receipt.moveit_error_code,
                 failure_code=failure_code,
                 collision_pairs=receipt.collision_pairs,
+                planning_receipts=receipt.planning_receipts,
             )
         )
         if not accepted:

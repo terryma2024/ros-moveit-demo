@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 class _Processes:
     def __init__(self) -> None:
@@ -144,6 +146,42 @@ def test_owned_process_stdout_is_retained_and_closed(tmp_path: Path) -> None:
     assert captured["stderr"] is __import__("subprocess").STDOUT
     processes.stop_all()
     assert captured["stdout"].closed is True
+
+
+def test_owned_process_can_stop_one_role_and_start_its_fallback(tmp_path: Path) -> None:
+    from so101_demo.runtime.task_batch_runtime import OwnedPointProcesses
+
+    signals = []
+
+    class Child:
+        def __init__(self, pid):
+            self.pid = pid
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout):
+            assert timeout == 10.0
+            self.returncode = 0
+            return 0
+
+    children = iter((Child(123), Child(124)))
+    processes = OwnedPointProcesses(
+        popen=lambda _argv, **_kwargs: next(children),
+        killpg=lambda pid, signal_number: signals.append((pid, signal_number)),
+    )
+    first_log = tmp_path / "yolo.log"
+    fallback_log = tmp_path / "grounded.log"
+    processes.start("yolo-perception", ["example"], stdout_path=first_log)
+
+    processes.stop("yolo-perception")
+    processes.start("grounded-perception", ["fallback"], stdout_path=fallback_log)
+
+    assert signals == [(123, __import__("signal").SIGINT)]
+    assert first_log.is_file()
+    assert processes.poll("grounded-perception") is None
+    processes.stop_all()
 
 
 def test_perception_cannot_start_before_subscription_handshake(tmp_path: Path) -> None:
@@ -400,3 +438,165 @@ def test_final_pause_reuses_safe_to_continue_paused_snapshot(
 
     assert safety.safe_to_reset is True
     assert calls == ["pause"]
+
+
+def _perception_attempt(**changes):
+    document = {
+        "backend": "yolo_seg",
+        "attempt_id": "yolo-1",
+        "simulation_session_id": "session-1",
+        "reset_epoch": 7,
+        "process_exit_code": 0,
+        "failure_code": None,
+        "published_cup_pose": True,
+        "output_acknowledged": True,
+        "pose_accepted": True,
+        "source_stamp_ns": 101,
+    }
+    document.update(changes)
+    return document
+
+
+def _evaluate_perception_chain(*args, **kwargs):
+    from so101_demo.runtime import task_batch_runtime
+
+    evaluate = getattr(task_batch_runtime, "evaluate_perception_chain", None)
+    assert callable(evaluate), "the YOLO-first fallback contract is not implemented"
+    return evaluate(*args, **kwargs)
+
+
+def test_accepted_yolo_pose_suppresses_fallback_even_after_downstream_failure() -> None:
+    result = _evaluate_perception_chain(
+        _perception_attempt(downstream_failure="CARTESIAN_CORRIDOR_ORIENTATION"),
+        expected_session_id="session-1",
+        expected_reset_epoch=7,
+    )
+
+    assert result.action == "ACCEPT"
+    assert result.accepted_backend == "yolo_seg"
+    assert result.fallback_invoked is False
+    assert result.fallback_reason is None
+
+
+@pytest.mark.parametrize(
+    "failure_code",
+    (
+        "TARGET_NOT_FOUND",
+        "TARGET_AMBIGUOUS",
+        "RGBD_INVALID",
+        "DEPTH_INVALID",
+        "GEOMETRY_REJECTED",
+        "INFERENCE_FAILED",
+        "RGBD_TIMEOUT",
+        "OUTPUT_PUBLICATION_FAILED",
+        "OUTPUT_ACK_TIMEOUT",
+        "YOLO_ACCEPTANCE_TIMEOUT",
+    ),
+)
+def test_only_allowed_preacceptance_yolo_failures_invoke_fallback(
+    failure_code: str,
+) -> None:
+    result = _evaluate_perception_chain(
+        _perception_attempt(
+            process_exit_code=1,
+            failure_code=failure_code,
+            published_cup_pose=False,
+            output_acknowledged=False,
+            pose_accepted=False,
+        ),
+        expected_session_id="session-1",
+        expected_reset_epoch=7,
+    )
+
+    assert result.action == "INVOKE_FALLBACK"
+    assert result.accepted_backend is None
+    assert result.fallback_invoked is True
+    assert result.fallback_reason == failure_code
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"failure_code": "MODEL_UNAVAILABLE", "process_exit_code": 1},
+        {"simulation_session_id": "stale-session"},
+        {"reset_epoch": 6},
+        {"attempt_id": ""},
+        {"published_cup_pose": True, "output_acknowledged": False},
+        {"pose_accepted": True, "source_stamp_ns": 0},
+    ),
+)
+def test_invalid_yolo_provenance_or_disallowed_failure_fails_closed(changes) -> None:
+    base = {
+        "process_exit_code": 1,
+        "failure_code": "TARGET_NOT_FOUND",
+        "published_cup_pose": False,
+        "output_acknowledged": False,
+        "pose_accepted": False,
+    }
+    base.update(changes)
+    result = _evaluate_perception_chain(
+        _perception_attempt(**base),
+        expected_session_id="session-1",
+        expected_reset_epoch=7,
+    )
+
+    assert result.action == "FAIL_CLOSED"
+    assert result.accepted_backend is None
+
+
+def test_fresh_acknowledged_grounded_sam_fallback_can_be_accepted() -> None:
+    yolo = _perception_attempt(
+        process_exit_code=1,
+        failure_code="TARGET_NOT_FOUND",
+        published_cup_pose=False,
+        output_acknowledged=False,
+        pose_accepted=False,
+    )
+    fallback = _perception_attempt(
+        backend="grounded_sam",
+        attempt_id="grounded-1",
+        source_stamp_ns=102,
+    )
+
+    result = _evaluate_perception_chain(
+        yolo,
+        fallback,
+        expected_session_id="session-1",
+        expected_reset_epoch=7,
+    )
+
+    assert result.action == "ACCEPT"
+    assert result.accepted_backend == "grounded_sam"
+    assert result.fallback_invoked is True
+    assert result.fallback_reason == "TARGET_NOT_FOUND"
+
+
+def test_failed_or_stale_grounded_sam_fallback_fails_closed_without_motion() -> None:
+    yolo = _perception_attempt(
+        process_exit_code=1,
+        failure_code="GEOMETRY_REJECTED",
+        published_cup_pose=False,
+        output_acknowledged=False,
+        pose_accepted=False,
+    )
+    fallback = _perception_attempt(
+        backend="grounded_sam",
+        attempt_id="grounded-1",
+        process_exit_code=1,
+        failure_code="TARGET_NOT_FOUND",
+        published_cup_pose=False,
+        output_acknowledged=False,
+        pose_accepted=False,
+        source_stamp_ns=101,
+    )
+
+    result = _evaluate_perception_chain(
+        yolo,
+        fallback,
+        expected_session_id="session-1",
+        expected_reset_epoch=7,
+    )
+
+    assert result.action == "FAIL_CLOSED"
+    assert result.accepted_backend is None
+    assert result.motion_authorized is False

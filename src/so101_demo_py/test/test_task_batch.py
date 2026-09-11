@@ -157,6 +157,35 @@ def test_point_failure_is_finalized_and_later_point_runs(tmp_path: Path) -> None
     assert runtime.events.index("children-stop") < runtime.events.index("reset:second")
 
 
+def test_stop_on_point_failure_finalizes_first_point_and_aborts_batch(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.application.task_batch import (
+        BatchStatus,
+        LocalPointFailure,
+        PointStatus,
+        run_task_batch,
+    )
+
+    registry = TaskArtifactRegistry(tmp_path)
+    runtime = FakeRuntime(
+        tmp_path, outcomes={"first": LocalPointFailure("PERCEPTION_TIMEOUT")}
+    )
+
+    result = run_task_batch(
+        _request(tmp_path, "first", "second"),
+        runtime,
+        registry,
+        stop_on_point_failure=True,
+    )
+
+    assert result.status is BatchStatus.FAILED
+    assert [point.status for point in result.points] == [PointStatus.FAILED]
+    assert runtime.started_points == ["first"]
+    assert (tmp_path / "batches/batch-1/points/01-first/point-result.json").is_file()
+    assert runtime.events[-1] == "world-pause"
+
+
 def test_shared_failure_aborts_remaining_points(tmp_path: Path) -> None:
     from so101_demo.application.task_batch import (
         BatchStatus,
