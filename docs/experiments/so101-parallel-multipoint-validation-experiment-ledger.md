@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 9998277763bfe78b77d3fa798909111ad576f135
+current_commit: 8b2ae006aee61ef9602d92a66c08e103f56bfe86
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -25,12 +25,13 @@ confirmed_conclusions:
   - F37 retains exactly the latest authoritative atomic MuJoCo evidence with matching reliable transient-local QoS, so a strict late observer receives the paused reset watermark; affected-package gates and the rebuilt immutable image passed (CP-017).
   - F38 uses the authoritative ROS action-status QoS for the point-initial no-active-goal observations; its complete ordinary gate and rebuilt immutable image passed (CP-018).
   - F39 preserves the point-initial conjunction while emitting bounded missing-class diagnostics; its complete ordinary gate and rebuilt immutable image passed (CP-019).
+  - F40 carries the reset transaction's already-validated six-joint sample across the reset boundary and uses completed all-goal CancelGoal responses as positive no-active-goal evidence; its complete ordinary gate and rebuilt immutable image passed (CP-020).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-019
-next_experiment: EXP-035
+latest_checkpoint: CP-020
+next_experiment: EXP-035 is RUNNING
 ```
 
 Frozen provenance:
@@ -1664,6 +1665,80 @@ archived: none
 deletion_candidates: p48 and direct-pytest scratch are candidates after readback; nothing was deleted
 decision: REPEAT after F40 RED/GREEN, package gates, installed provenance, image rebuild, and dual-model smoke
 next_experiment: EXP-035 is reserved for the F40-corrected execute repeat; controlled plan-only fault advances to EXP-036
+```
+
+```yaml
+checkpoint_id: CP-020
+last_valid_experiment: EXP-022
+current_hypothesis: F40 makes the point-initial boundary observable without weakening its authorization conjunction, so the unchanged four-point execute can enter countable attempts.
+working_tree_status: clean at source commit 8b2ae006aee61ef9602d92a66c08e103f56bfe86 before this ledger-only pre-run commit
+owned_processes: NONE
+preserved_processes: NONE; the F40 smoke container exited and fresh process, container, GPU, and domain probes found no related owner.
+confirmed_conclusions:
+  - F40 direct RED pytest-kzXoPL06 failed because the old reset boundary could not carry six joint values; focused GREEN pytest-wX9aUmmy passed after adding the bound field.
+  - Adjacent pytest-HlkAsQmG exposed an injected legacy reset stub without joint evidence; the final implementation preserves missing evidence as missing, and the production initial gate fails closed on it instead of fabricating canonical values.
+  - Final focused pytest-ul6mlZNW passed 17 tests and adjacent pytest-8svtg05h passed 181 tests. The environment-only pytest-6IazLzg8 collection failure is retained; explicitly sourcing the worktree message package produced passing pytest-bHW8brCZ with 175 tests.
+  - Fresh p49 build passed in 1.54 seconds. The complete ordinary so101_demo_py gate passed 2768 tests with zero errors, failures, or skips in 83.64 seconds; benchmark_test was not collected.
+  - Source and installed module trees both hash 574d0bbb1b6bd5f0a4f94975fdc453ce0daeed404f5366e014c7b10b5cafaec0; the complete package source tree hashes 22f51331ec58d0e811ea1a2637158a08a48f01f60bbb5de9c48a71bcc9d20d3b.
+  - Rebuilt image sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a binds the same source tree and passed fresh dual-model CUDA smoke with one QUALIFIED candidate from each model.
+  - Fresh EXP-035 preflight found no related process, container, GPU task, or ROS domain 181-183 owner; 24 CPUs, 25.707 GiB MemAvailable, and 14.911 GiB free GPU exceed admission.
+disproven_routes:
+  - A subscriber created only after the qualified paused reset cannot prove a joint callback or a never-used action status event; EXP-034's identical dual-Worker missing set was structural, not a timeout tuning problem.
+open_risks:
+  - F40 has not yet crossed the live ATTEMPT_STARTED boundary.
+  - Execute planning, motion, per-point visual/numeric sealing, cleanup, controlled fault, and 20-point qualification remain unaccepted.
+retained: all F40 RED/GREEN and adjacent pytest scratch, p49 build/test scratch, installed provenance, immutable image build, dual-model smoke, and EXP-035 preflight reports
+archived: none
+deletion_candidates: direct pytest scratch and p49 are recorded candidates after readback; nothing was deleted
+decision: RUN EXP-035 with the unchanged four-point execute selection and thresholds
+next_command: Execute the clean pre-registered EXP-035 batch using image sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a.
+```
+
+## EXP-035 — Task 14 reset-boundary two-Worker execute
+
+```yaml
+experiment_id: EXP-035
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T18:31:13+08:00
+  - status: RUNNING
+    at: 2026-09-12T18:31:13+08:00
+prior_experiment: EXP-034
+hypothesis: F40's reset-bound joint evidence and completed all-goal queries allow both Workers to satisfy the unchanged strict point-initial gate and execute the four selected points.
+prediction: Four unique points pass physically with qualification_passed=true and clean shutdown; otherwise any failure remains bounded, attributable, and cannot qualify the batch.
+single_variable: F40 replaces only the two observation sources proved impossible by EXP-034. Selection, configuration, models, N=2, K=2, timeout, remaining gate conjunction, and physical criteria are frozen; source/install/image and batch/root identities advance because code changed and prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f40
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40
+preconditions:
+  - F40 direct and adjacent gates passed, including 181 final adjacent tests; p49 complete ordinary demo gate passed 2768 tests with no error/failure/skip and no benchmark collection.
+  - Installed and source module trees both hash SHA256 574d0bbb1b6bd5f0a4f94975fdc453ce0daeed404f5366e014c7b10b5cafaec0.
+  - Immutable image sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a binds equal source/verified SHA256 22f51331ec58d0e811ea1a2637158a08a48f01f60bbb5de9c48a71bcc9d20d3b and passed fresh dual-model smoke.
+  - Fresh inventory and production probe found no related stack process, container, GPU task, or domain 181-183 owner; live-small-f40 is absent.
+success_criteria:
+  - Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete physical/visual/numeric evidence, and clean shutdown.
+failure_criteria:
+  - Any gate, planning, execution, evidence, isolation, or cleanup failure is attributed exactly and cannot produce qualification_passed=true.
+provenance:
+  executable_source_commit: 8b2ae006aee61ef9602d92a66c08e103f56bfe86
+  executable_source_tree: 22f51331ec58d0e811ea1a2637158a08a48f01f60bbb5de9c48a71bcc9d20d3b
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point; no Gazebo client/window is part of this headless backend.
+evidence_planned:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-035.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-035.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-035.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40
+retained: F40 test/build/provenance/image/smoke/preflight evidence and the complete live batch tree will be retained
+archived: none
+deletion_candidates: p49 and direct pytest scratch after readback; nothing will be deleted without user authorization
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
