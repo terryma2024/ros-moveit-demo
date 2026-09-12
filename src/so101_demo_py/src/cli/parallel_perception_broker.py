@@ -69,7 +69,7 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
             raise ValueError('EXISTING_RUNTIME_ENDPOINT')
     yolo_weights = path_checker(yolo_weights)
     grounded_root = path_checker(grounded_root, directory=True)
-    argv = ['docker', 'run', '--rm', '--cidfile', str(ipc / 'container.cid'),
+    argv = ['docker', 'run', '--rm', '--init', '--cidfile', str(ipc / 'container.cid'),
             '--label', f'com.so101.batch-id={batch_id}',
             '--label', f'com.so101.broker-generation={broker_generation}',
             '--gpus', 'all', '--network', 'none', '--ipc', 'private',
