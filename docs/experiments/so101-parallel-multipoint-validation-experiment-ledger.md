@@ -5314,12 +5314,14 @@ deletion_candidates: registered pytest/build scratch and prior diagnosis runtime
 
 ```yaml
 experiment_id: EXP-079
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:54:00+08:00
   - status: RUNNING
     at: 2026-09-13T04:55:16+08:00
+  - status: INVALID
+    at: 2026-09-13T04:58:01+08:00
 prior_experiment: EXP-078
 hypothesis: The F72 request-local executor boundary prevents the observed recovery-generation controller abort, allowing three complete execute/recovery cycles per Worker while leaving all unrelated controller exceptions fail-fast.
 mode: execute; simulation only
@@ -5339,6 +5341,72 @@ provenance:
 success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; no residual owned state remains.
 failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before any full-catalog run.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: >-
+  The batch exited 1 after 141.62 seconds with cup_test_forward_5cm PASSED and the other
+  five points UNRUN. Both Workers consumed exactly K=3 leases; five attempts stopped at the
+  dynamic consumer's five-second CUP_POSE_TIMEOUT with physical action proven absent. All six
+  recovery receipts succeeded, no ros2_control_node aborted, and Broker health remained true,
+  confirming F72 fixed the EXP-078 controller failure. The coordinator truthfully terminated
+  CAPACITY_EXHAUSTED; execution_complete and batch_cleanup_complete are true while coverage_complete
+  and qualification_passed are false. No related process, container, GPU application, or owned
+  manifest entry remained.
+diagnosis: >-
+  The publisher observed exactly one matched dynamic consumer before each one-shot /cup_pose
+  publication, but RosCupPoseSource requested BEST_EFFORT while the default publisher offered
+  RELIABLE. The one successful point establishes intermittent one-shot loss, not deterministic pose
+  rejection. The control message must use RELIABLE while retaining VOLATILE durability so stale poses
+  cannot cross recovery generations.
+result_report: reports/result-EXP079.json
+root_cause_report: reports/root-cause-EXP079.json
+cleanup_audit: reports/post-079-cleanup-audit.json
+retained: complete live-diagnostic-execute-f72 tree, command and MuJoCo logs, result, root-cause and cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-079
+last_valid_experiment: EXP-075
+current_hypothesis: RELIABLE plus VOLATILE subscriber QoS will make every matched one-shot /cup_pose control publication deterministic across fresh Worker recovery generations without admitting stale poses.
+working_tree_status: clean at F73 source commit 8d2a3f367119936f88b551dfd96462c2423bcaad
+owned_processes: NONE
+confirmed_conclusions:
+  - F72 is live-validated at its target boundary: all six recoveries succeeded and no controller process crashed.
+  - EXP-079 is non-qualifying at one PASSED point, five UNRUN points, five validation-invalid attempts, and exact K=3 per Worker.
+  - Every invalid attempt stopped before physical action; Broker, teardown, and residual-state gates passed.
+ruling: Require RELIABLE and VOLATILE QoS for RosCupPoseSource, rerun focused/adjacent/full package gates, rebuild the overlay and immutable image, then rerun the six-point execute regression before the small, synchronized-fault, and full-catalog gates.
+retained: EXP-079, F73 test/build evidence, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and invalid diagnostic evidence; no deletion authorized
+decision: BUILD AND QUALIFY F73 IMMUTABLE IMAGE
+```
+
+```yaml
+fix_id: F73
+status: VALIDATED_STATIC
+source_commit: 8d2a3f367119936f88b551dfd96462c2423bcaad
+submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+change: Use RELIABLE and VOLATILE QoS for the one-shot dynamic cup-pose control message and update both dependency locks to the F72 mujoco_ros2_control revision.
+formal_red: pytest-RHtn57Jm, 1 failed because RosCupPoseSource requested BEST_EFFORT
+focused_green: pytest-DEH5493v, 4 passed
+adjacent_green: pytest-qUDLr2fW, 78 passed
+parallel_suite: pytest-CwyYVdSd, 1047 passed in 41.94 seconds
+invalid_ordinary_harness: pytest-Wigg3yCC omitted the test-only locked ML path and is retained but excluded from product judgment
+pre_lock_ordinary_gate: pytest-KfVH56pT, 2798 passed and 1 lock-revision failure that directly prompted the lock update
+lock_gate: pytest-Oi9Vj0Qf, 18 passed
+ordinary_package_gate: pytest-5EalFt4b, 2799 passed and 4 warnings in 81.56 seconds
+build: p110 passed in 1.53 seconds; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p110-ZnYCgLla/tmp
+backend_integration: passed
+source_tree_sha256: 4d68c3518a542ab3353981d89e92c077be9ec512cde60f58323f78938f2480f1
+module_tree_sha256: 819a372e4b280fdc0e12756ba0fe49a3b1310afc522f25b2cd4ce162dd59be25
+dependency_lock_sha256: 84557a10b2d42141ba8875921f4ca7ab1926efeab1a0adb3e85c1ffe5966a5a4
+mujoco_dependency_lock_sha256: 80cb5d2641a95619da6d6fbdf993e973c02914c9bb9213620ef0abc07d4a39ca
+installed_controller_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+static_report: reports/f73-static-gates.json
+installed_provenance: reports/installed-provenance-f73.json
+retained: source/tests, all RED/GREEN/package/build/integration evidence, invalid harness evidence, EXP-079, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch and prior diagnosis runtime copies; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
