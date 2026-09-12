@@ -722,6 +722,23 @@ class ParallelWorker:
                         start_event_type=start_event_type,
                         reset_epoch=reset_epoch,
                     ))
+                terminal_failure = None
+                if getattr(chain, "perception_terminal", False) is True:
+                    failure_type = getattr(chain, "failure_type", None)
+                    failure_message = getattr(chain, "failure_message", None)
+                    if (
+                        isinstance(failure_type, str)
+                        and failure_type
+                        and isinstance(failure_message, str)
+                        and failure_message
+                    ):
+                        terminal_failure = {
+                            "failure_boundary": "request_model",
+                            "failure_type": failure_type[:128],
+                            "failure_message": _bounded_failure_message(
+                                RuntimeError(failure_message)
+                            ),
+                        }
                 failure_boundary = "admit_pose"
                 admitted = self._boundary(
                     lambda current: self._runtime.admit_pose(current, chain))
@@ -734,7 +751,9 @@ class ParallelWorker:
                     failure_boundary = "plan_expert"
                     decision = self._boundary(
                         lambda current: self._runtime.plan_expert(current, admitted))
-            return decision, action_may_have_started, None
+            return decision, action_may_have_started, (
+                None if self._mode is RunMode.DRY_RUN else terminal_failure
+            )
         except Exception as error:
             decision, _, _, _ = self._safe_stop(
                 lease, action_may_have_started=action_may_have_started)
