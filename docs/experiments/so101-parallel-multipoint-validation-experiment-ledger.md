@@ -5417,12 +5417,14 @@ deletion_candidates: registered pytest/build scratch and prior diagnosis runtime
 
 ```yaml
 experiment_id: EXP-080
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:12:26+08:00
   - status: RUNNING
     at: 2026-09-13T05:13:08+08:00
+  - status: INVALID
+    at: 2026-09-13T05:16:51+08:00
 prior_experiment: EXP-079
 hypothesis: RELIABLE plus VOLATILE subscriber QoS delivers every matched one-shot /cup_pose message across three fresh execute/recovery cycles per Worker while F72 keeps each controller generation healthy.
 mode: execute; simulation only
@@ -5448,6 +5450,46 @@ provenance:
 success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; no CUP_POSE_TIMEOUT or controller abort occurs; execution_complete, batch_cleanup_complete, coverage_complete, validation_complete, validation_passed, and qualification_passed are true; no residual owned state remains.
 failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before the small, synchronized-fault, or full-catalog gates.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: >-
+  The batch exited 1 after 162.76 seconds with cup_test_forward_5cm PASSED and five
+  points UNRUN. Both Workers consumed exactly K=3 leases, all six recoveries succeeded, Broker
+  process health remained true, and no controller aborted. The initiating task_start attempt failed
+  before physical action because its exact-stamp lookup allowed only 0.2 seconds and the fresh TF
+  listener had not yet discovered the world frame. Cancellation conservatively made the internal
+  Broker unavailable, so four subsequent attempts returned BROKER_NOT_READY; their five child-side
+  CUP_POSE_TIMEOUT messages are downstream because no admitted pose was published. execution_complete
+  and batch_cleanup_complete are true while coverage_complete and qualification_passed are false.
+  No related process, container, GPU application, or owned manifest entry remained.
+diagnosis: >-
+  The F73 control-message path completed successfully for cup_test_forward_5cm. EXP-080 instead
+  exposed a distinct fresh-stack TF discovery race: RGB-D capture can precede availability of the
+  exact world-to-camera transform, and the hard-coded 0.2-second lookup window is shorter than the
+  existing point-stage budget. F74 must add a bounded exact-transform readiness window while
+  preserving exact timestamp lookup and fail-closed behavior.
+result_report: reports/result-EXP080.json
+root_cause_report: reports/root-cause-EXP080.json
+cleanup_audit: reports/post-080-cleanup-audit.json
+retained: complete live-diagnostic-execute-f73 tree, command log, result, root-cause and cleanup reports, F73 image/smoke evidence, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke command evidence, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-080
+last_valid_experiment: EXP-075
+current_hypothesis: A bounded exact-transform readiness window within the existing point-stage deadline will absorb fresh TF discovery latency without relaxing exact-stamp or provenance checks.
+working_tree_status: clean at EXP-080 running commit 9f5ed99def0d17dfe7ef7c45d7dd6b2c5091e8e6; this closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - F73 delivered one admitted pose through the live RELIABLE/VOLATILE path and that point PASSED; no F73 delivery failure initiated this batch.
+  - The exact initiating error was TF_UNAVAILABLE because the fresh listener did not yet know target frame world within 0.2 seconds.
+  - Four BROKER_NOT_READY results and five child CUP_POSE_TIMEOUT messages were downstream of that initiating failure, not independent causes.
+  - All invalid attempts stopped before physical action; all six recovery and final residual-state gates passed.
+ruling: Add a focused RED contract for a bounded longer exact-transform lookup, replace the hard-coded 0.2-second window with the smallest safe constant under the existing stage deadline, rerun static gates/build/image/smoke, then repeat the six-point regression under a new immutable batch identity.
+retained: EXP-080 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke command evidence, diagnosis runtime copies, and invalid diagnostic evidence; no deletion authorized
+decision: IMPLEMENT F74 EXACT-TF READINESS WINDOW
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
