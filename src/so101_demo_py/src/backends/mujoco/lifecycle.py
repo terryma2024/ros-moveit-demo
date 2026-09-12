@@ -74,22 +74,21 @@ class MujocoLifecycleAdapter:
         return ShutdownResult(bool(accepted), None if accepted else "SHUTDOWN_FAILED")
 
 
-def set_physics_paused(paused: bool) -> bool:
-    """Set one qualified MuJoCo stack's paused state through its ROS domain."""
+def resume_physics(config: Any) -> bool:
+    """Resume a qualified MuJoCo stack; application code receives this as a callback."""
 
-    if type(paused) is not bool:
-        return False
+    del config
     import rclpy
     from mujoco_ros2_control_msgs.srv import SetPause
 
     rclpy.init()
-    node = rclpy.create_node("so101_live_runtime_pause_control")
+    node = rclpy.create_node("so101_live_runtime_resume")
     try:
         client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
         if not client.wait_for_service(timeout_sec=5.0):
             return False
         request = SetPause.Request()
-        request.paused = paused
+        request.paused = False
         future = client.call_async(request)
         deadline = time.monotonic() + 5.0
         while not future.done() and time.monotonic() < deadline:
@@ -99,10 +98,3 @@ def set_physics_paused(paused: bool) -> bool:
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
-
-def resume_physics(config: Any) -> bool:
-    """Resume a qualified MuJoCo stack; application code receives this as a callback."""
-
-    del config
-    return set_physics_paused(False)
