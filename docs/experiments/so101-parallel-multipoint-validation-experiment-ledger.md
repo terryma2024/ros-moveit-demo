@@ -3226,6 +3226,8 @@ status_history:
     at: 2026-09-12T22:53:48+08:00
   - status: RUNNING
     at: 2026-09-12T22:53:48+08:00
+  - status: INVALID
+    at: 2026-09-12T23:01:51+08:00
 prior_experiment: EXP-050
 hypothesis: F53 will wait for each isolated publisher's simulation clock to reach the admitted source stamp, preventing the startup-only future-stamp rejection while retaining exact one-shot and consumer freshness semantics.
 prediction: Four unique points finish PASSED with qualification_passed=true, or any failure is bounded, attributable, safely stopped, and physically evidenced.
@@ -3249,10 +3251,60 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   PATH=/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py:$PATH; source install/setup.zsh; ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f53 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f53 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
-result: PENDING
-retained: all preflight and prior evidence; runtime evidence pending
+result: >-
+  Command exited 1 after 114.51 seconds. F53 closed the source-clock race: Worker-01
+  cup_test_forward_5cm and Worker-02 task_start each completed the 19-transition dynamic
+  execution and sealed PASSED/OK. Both Workers then entered mandatory post-point recovery,
+  started a replacement physical stack, and produced motion_stack_ready ready=true, but each
+  recovery receipt recorded succeeded=false. Both slots were therefore correctly quarantined;
+  sample_05_near_center and sample_14_far_right remained UNRUN and the coordinator stopped with
+  CAPACITY_EXHAUSTED. The point results remain PASSED, but batch cleanup and qualification are false.
+visual_observation: >-
+  All four immutable 640x480 RGB files were inspected at original resolution. Both initial frames
+  show the expected distinct cup positions with canonical initial arm and no contact. Both terminal
+  frames show the cup upright inside the target ring with the arm retreated, consistent with the two
+  sealed PASSED results. No visual evidence exists for the two unrun points.
+visual_sha256:
+  cup_test_forward_5cm_initial: 6184c514feb5dd77da3c8cac67d81810330891dc2de61756a081a2249ef9c281
+  cup_test_forward_5cm_terminal: c64e23fba2b041ca3e60353eec83c7d2de02e609d5bf9167f4d5ed593082ddb5
+  task_start_initial: b2870627e9c2fe521bb8e8204c323dc9e10e7aed8e9919ffaba7bb28946ba05f
+  task_start_terminal: 3e5d6e88fbd01470f55d1113c165c0b827e70222edc17aa055399ee9668ff467
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 224f2973bfea9d0d5fc1ece63770b412f403d2c6134dc2ca0c25a58c7f7317ea
+command_time_sha256: a122208c6019edf8fb6f5c7e20cff1fc22e73d88006cbb53e5a02280f56912bd
+aggregate_sha256: 52526f8693432b7e631b363b36ea18725eeba689895f3337dadcc13df2384051
+coordinator_aggregate_sha256: 5195c78922998f49558b7e9a891dfe09a66d08439baedcf9dee4bdd57ce4f43f
+worker_01_result_sha256: 93a9612d09eece6442d347c532b7b20b28485f42d7d50427a76abb5af96a4511
+worker_02_result_sha256: 1771b4ac42a322fc8291710868e048e6f5cf5286d9808ecab788da52e7ab0e48
+mujoco_log_sha256: 91914ae4aa11da10c1ecdf8fa5324bbae2e9c4039a0eb0a0a0c140c25a741704
+cleanup: >-
+  Exact CID fa1e2911b7c31edb367ad9bfbc85a97faa93cbc927be7bbdb7cf8fea03c85429
+  was verified against the immutable F53 image, exact batch/generation labels, and registered
+  mounts, then stopped and removed. Final audit found no related process, container, or GPU task;
+  domains 181-183 were independently lockable and the MuJoCo log was moved without deletion.
+post_cleanup_sha256: 880fcee1b7f6f5bfbab2a88e18bc5ec4eeaa8f2ca3d3fdd47561acc90482aa1e
+conclusion: INVALID recovery-gate false-negative after two valid physical PASSED results. Add bounded per-gate recovery diagnostics before changing any gate semantics.
+retained: complete EXP-051 batch/reports, four visually inspected RGB files, both dynamic manifests and PASSED seals, both failed recovery receipts, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: no new scratch; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-041
+last_valid_experiment: EXP-022
+current_hypothesis: One of the existing generation fence, cancellation acknowledgement, independent no-goal confirmation, old-stack shutdown, or replacement-ready gates is returning a false negative after a physically successful point; the current boolean-only receipt cannot distinguish them.
+working_tree_status: ledger-only EXP-051 result after clean executable source 1842d241ec7c639f515f7ece26866f7a0bc5a44c
+owned_processes: NONE
+confirmed_conclusions:
+  - Both F53 pose publications and physical executions passed, so the prior source-clock defect is closed.
+  - Each Worker started a replacement stack and motion_stack_ready reported ready=true before quarantine, proving recovery progressed beyond old-stack shutdown and replacement startup.
+  - Each immutable recovery receipt records only succeeded=false; it does not identify the failing sub-gate.
+  - Exact cleanup completed and no unrun point was treated as qualified.
+ruling: Add one bounded, deterministic RECOVERY_GATES diagnostic containing only the five existing boolean sub-gates before the immutable receipt is written. Do not relax, skip, reorder, or reinterpret any recovery gate. Prove the diagnostic with formal RED/GREEN, then rebuild and repeat the same four-point gate under a new batch ID.
+retained: complete EXP-051 and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p70 after readback; no deletion authorized
+decision: IMPLEMENT F54 RECOVERY-GATE DIAGNOSTIC
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
