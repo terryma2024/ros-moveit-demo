@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 from types import SimpleNamespace
@@ -676,6 +677,44 @@ class ParallelRosRuntimePorts:
             "/so101_camera_link_to_task_camera_frame",
         )
 
+    @classmethod
+    def worker_node_inventory_matches(cls, nodes):
+        if (
+            type(nodes) is not tuple
+            or any(not isinstance(node, str) for node in nodes)
+            or tuple(sorted(nodes)) != nodes
+            or len(set(nodes)) != len(nodes)
+        ):
+            return False
+        required = set(cls.expected_worker_nodes())
+        fixed_internal = {
+            "/controller_manager",
+            "/move_group/moveit",
+            "/moveit_simple_controller_manager",
+            "/robotsystem",
+        }
+        generated = (
+            re.compile(r"/move_group_private_[0-9]+"),
+            re.compile(r"/moveit_[0-9]+"),
+            re.compile(r"/transform_listener_impl_[0-9a-f]+"),
+        )
+        category_counts = [0] * len(generated)
+        for node in nodes:
+            if node in required or node in fixed_internal:
+                continue
+            matches = [
+                index for index, pattern in enumerate(generated)
+                if pattern.fullmatch(node)
+            ]
+            if len(matches) != 1:
+                return False
+            category_counts[matches[0]] += 1
+        return (
+            required.issubset(nodes)
+            and fixed_internal.issubset(nodes)
+            and category_counts == [1, 1, 1]
+        )
+
     def rebind_resources(self, resources):
         if (
             getattr(resources, "worker_id", None) != getattr(self.resources, "worker_id", None)
@@ -807,7 +846,7 @@ class ParallelRosRuntimePorts:
                 ("stable_graph", value.node_graph_stable is True),
                 (
                     "worker_nodes",
-                    value.worker_node_fqns == self.expected_worker_nodes(),
+                    self.worker_node_inventory_matches(value.worker_node_fqns),
                 ),
             )
             failures = [name for name, accepted in predicates if not accepted]
