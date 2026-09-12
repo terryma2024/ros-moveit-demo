@@ -104,6 +104,7 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
                         ('--security-opt', 'no-new-privileges'), ('--gpus', 'all')]:
         assert argv[argv.index(flag) + 1] == value
     assert '--read-only' in argv
+    assert '--init' in argv
     assert argv[argv.index('--cidfile') + 1] == str(root / 'ipc/container.cid')
     assert 'com.so101.batch-id=batch-1' in argv
     assert 'com.so101.broker-generation=1' in argv
