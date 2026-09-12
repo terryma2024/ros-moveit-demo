@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e94143e015370cfc2f53c70ec552bbede4fbf825
+current_commit: 87e1f97e58bbe3e45e0a058f219f44f4e8513629
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -22,12 +22,13 @@ confirmed_conclusions:
   - The fresh three-package overlay, complete ordinary package gate, installed provenance, and immutable dual-model Broker image are qualified for live validation (CP-014, EXP-022).
   - F35 preserves bounded Worker initialization diagnostics and closes the supervised-exit observation race without weakening absent-process or PID-reuse rejection; the complete ordinary gate and rebuilt immutable image passed (CP-015).
   - F36 retries idempotent paused snapshots for volatile subscribers, serializes Worker cleanup publication, and boundedly observes an exiting exact child; the complete ordinary gate and rebuilt immutable image passed (CP-016).
+  - F37 retains exactly the latest authoritative atomic MuJoCo evidence with matching reliable transient-local QoS, so a strict late observer receives the paused reset watermark; affected-package gates and the rebuilt immutable image passed (CP-017).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-016
-next_experiment: EXP-032
+latest_checkpoint: CP-017
+next_experiment: EXP-033
 ```
 
 Frozen provenance:
@@ -104,7 +105,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F34: Task 14 returns narrowly to the Task 11/12 Broker lifecycle seams and their direct tests. Initial model-backed Broker readiness must use the frozen 90-second Broker recovery/startup budget instead of the 5-second steady-state heartbeat-loss budget. The Docker launch must publish a private batch/generation-specific cidfile, and cleanup/recovery must verify that exact container's immutable image, labels, and batch-specific mounts before stopping it; aggregate cleanup cannot pass while that container remains. Cost if wrong: an unrelated container could be stopped, or a detached Broker/GPU process could survive while the batch falsely reports cleanup complete; retaining the current behavior guarantees cold-start timeout and already produced both defects in EXP-028.
 - Ruling F35: Task 14 returns narrowly to the Task 9 Worker failure-reporting seam and Task 11 process supervisor, with direct tests only. A Worker that catches a reset or initial-gate exception must emit a bounded, structured local result identifying the failed boundary without changing its conservative `INITIAL_GATE_FAILED` outcome. If a supervised process exits between a first `poll()==None` observation and `/proc` identity readback, the supervisor must re-poll once: a now-terminal exact child follows the existing exit/group-survivor path, while a still-running absent identity remains `OWNED_PROCESS_ABSENT`; PID mismatch remains fatal. Cost if wrong: exception text could leak unbounded data or PID reuse could be accepted; retaining current behavior makes live failures unauditable and replaces the original Worker result with a supervisor traceback, as EXP-029 demonstrated.
 - Ruling F36: Task 14 returns narrowly to the existing MuJoCo paused-evidence acquisition and Worker-owned process-tree seams, with direct tests. A newly joined volatile sensor-data subscriber must retry the already-authorized idempotent `pause(True)` snapshot request within the existing timeout until it receives a fresh authoritative paused frame; it may not unpause or advance physics. Worker child-list mutation and manifest publication must be serialized across the main and authenticated control threads so cleanup cannot collide on or reorder one PID-named temporary publication. The supervisor may boundedly yield and re-poll only while the exact owned child has become absent between observations; a still-nonterminal result remains fatal and PID mismatch remains fatal. Cost if wrong: retry could mask a failed pause or concurrent cleanup could republish stale ownership; retaining current behavior makes every post-reset watermark read fail and produced manifest/temp plus exit-observation races in EXP-030.
-- Ruling F37: Task 14 returns narrowly to the repository-owned atomic MuJoCo evidence publisher and Python observer QoS seams, with their direct tests. The 100 Hz atomic evidence topic must retain exactly its newest sample with best-effort transient-local durability, and the strict observer must request matching depth-1 transient-local durability. This gives a late-joining post-reset observer the already-published authoritative paused frame without unpausing, stepping, weakening freshness/session/sequence checks, or changing the pinned third-party MuJoCo service implementation. Existing volatile sensor-data consumers remain compatible with the stronger publisher offer. Cost if wrong: stale history could be mistaken for current evidence, which the existing max-age/session/epoch checks must reject; retaining volatile/volatile QoS makes the documented current_evidence late-join contract impossible, as EXP-031 proved.
+- Ruling F37: Task 14 returns narrowly to the repository-owned atomic MuJoCo evidence publisher and Python observer QoS seams, with their direct tests. The 100 Hz atomic evidence topic must retain exactly its newest sample with reliable transient-local durability, and the strict observer must request matching depth-1 reliable transient-local durability. This gives a late-joining post-reset observer the already-published authoritative paused frame without unpausing, stepping, weakening freshness/session/sequence checks, or changing the pinned third-party MuJoCo service implementation. Existing volatile sensor-data consumers remain compatible with the stronger publisher offer. Cost if wrong: stale history could be mistaken for current evidence, which the existing max-age/session/epoch checks must reject; retaining volatile/volatile QoS makes the documented current_evidence late-join contract impossible, as EXP-031 proved.
 
 ```yaml
 checkpoint_id: CP-002
@@ -424,6 +425,29 @@ disproven_routes:
 open_risks:
   - No four-point execute has yet reached ATTEMPT_STARTED, so controlled fault and 20-point admission remain closed.
 next_command: Execute the clean pre-registered EXP-031 two-Worker four-point batch using image sha256:9a436646a124d4164ed560882f0ec7c3776380733065b10fcb3ca84b13cac34c.
+```
+
+```yaml
+checkpoint_id: CP-017
+last_valid_experiment: EXP-022
+current_hypothesis: The F37-matched reliable transient-local evidence channel lets each post-reset strict observer receive the already-published authoritative paused watermark without advancing physics.
+working_tree_status: clean at source commit 87e1f97e58bbe3e45e0a058f219f44f4e8513629 before the EXP-032 ledger-only pre-run commit
+owned_processes: NONE; the F37 smoke container exited and no task container or NVIDIA compute application remains
+preserved_processes: Existing unrelated processes outside this task were not touched.
+confirmed_conclusions:
+  - Python RED pytest-eb6fdBjp failed the new late-observer contract at depth 5 versus required depth 1; focused GREEN pytest-5UxN4rlU and repeat pytest-04Q9pjMe each passed 3/3.
+  - Formal C++ RED p41 failed the late-join test with exact DURABILITY_QOS_POLICY incompatibility and zero retained messages; focused GREEN p43 passed 1/1 and full support p44 passed 21/21.
+  - The publisher and strict observer now both use depth-1 reliable transient-local QoS. Existing freshness, source-session, reset-epoch, simulation-time, and sequence checks remain unchanged.
+  - Fresh p45 rebuilt so101_mujoco_support, so101_teleop, and so101_demo_py in 1.97 s. Its combined test command retained an unrelated so101_teleop collection failure because the system interpreter lacks pydantic v2 field_validator; affected support and demo packages passed. Fresh p46 then passed the complete affected-package gates in 84.44 s: support 21 tests and demo 2766 tests, with 0 errors, 0 failures, and 0 skipped; benchmark_test was not collected.
+  - Installed source/build module trees are equal at SHA256 6042870147e0f3e5dd9e10c6133966e4cf8e7e3224916a6e4cd583942d02a3ee; the complete demo source tree is SHA256 42f3e2f0f8359c7dcc1d9cef723ee26ae93c03e9f9482a25dcc492872d4a6af2.
+  - Rebuilt immutable image sha256:21287879104568e1ce1877eff4d8b5ca07bc6943fdf8f1e4eea838e9307eab52 binds equal source/verified SHA256 42f3e2f0f8359c7dcc1d9cef723ee26ae93c03e9f9482a25dcc492872d4a6af2. Fresh smoke returned one QUALIFIED CUDA candidate from each frozen model and left no container/GPU process.
+  - Fresh EXP-032 preflight found no related process, container, GPU task, or ROS domain 181-183 owner; 24 CPUs, 25.858 GiB MemAvailable, and 14.914 GiB free GPU exceed admission.
+disproven_routes:
+  - Best-effort transient-local did not deliver historical Fast DDS data to a reliable late subscriber; the repository-owned publisher must offer reliable durability matching the strict observer.
+  - Retrying an already-paused SetPause request cannot trigger the pinned third-party snapshot hook, because that implementation returns before dispatch on an idempotent request.
+open_risks:
+  - No four-point execute has yet reached ATTEMPT_STARTED, so controlled fault and 20-point admission remain closed until EXP-032 is accepted.
+next_command: Execute the clean pre-registered EXP-032 two-Worker four-point batch using image sha256:21287879104568e1ce1877eff4d8b5ca07bc6943fdf8f1e4eea838e9307eab52.
 ```
 
 ## EXP-001 — Task 7 fresh runtime overlay build
@@ -1322,6 +1346,79 @@ archived: none
 deletion_candidates: scratch p38/p39 and direct-pytest scratch remain candidates; nothing was deleted
 decision: REPEAT after F37 RED/GREEN, fresh three-package and ordinary package gates, installed provenance, image rebuild, and dual-model smoke
 next_experiment: EXP-032 is reserved for the F37-corrected execute repeat; controlled plan-only fault advances to EXP-033 and remains blocked until execute acceptance
+```
+
+## EXP-032 — Task 14 retained-evidence two-Worker execute
+
+```yaml
+experiment_id: EXP-032
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T17:48:00+08:00
+  - status: RUNNING
+    at: 2026-09-12T17:48:00+08:00
+prior_experiment: EXP-031
+hypothesis: F37 delivers the authoritative paused reset watermark to every new strict observer, allowing the otherwise unchanged four-point execute to cross durable point authorization and complete physical evaluation.
+prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
+single_variable: F37 changes only the repository-owned atomic evidence publisher and observer to matching depth-1 reliable transient-local QoS. Selection, configuration, models, N=2, K=2, and physical criteria remain frozen; source/install/image and batch/root identities advance because code changed and prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f37
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f37
+preconditions:
+  - F37 Python and C++ behavioral RED/GREEN passed; p44 passed all 21 support tests and p46 passed support 21 plus demo 2766 with no error/failure/skip and no benchmark collection.
+  - Installed source/build module trees both hash SHA256 6042870147e0f3e5dd9e10c6133966e4cf8e7e3224916a6e4cd583942d02a3ee.
+  - Immutable image sha256:21287879104568e1ce1877eff4d8b5ca07bc6943fdf8f1e4eea838e9307eab52 binds equal source/verified SHA256 42f3e2f0f8359c7dcc1d9cef723ee26ae93c03e9f9482a25dcc492872d4a6af2 and passed fresh dual-model smoke.
+  - Fresh inventory and production probe found no related stack process, container, GPU task, or domain 181-183 owner; live-small-f37 is absent.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete per-point evidence, and clean shutdown.
+  - Reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt trajectory/controller, final cup support/contact/detachment, retreat, and original-resolution offscreen visual evidence pass readback.
+  - Exact labeled Broker cid is absent after shutdown and aggregate cleanup is true only with no process/container/GPU residue.
+failure_criteria:
+  - Trustworthy initialized product behavior fails a physical/evidence gate; retain as VALID failed behavior and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, evidence pollution, or an initial boundary failure before ATTEMPT_STARTED prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: 87e1f97e58bbe3e45e0a058f219f44f4e8513629
+  executable_source_tree: 42f3e2f0f8359c7dcc1d9cef723ee26ae93c03e9f9482a25dcc492872d4a6af2
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:21287879104568e1ce1877eff4d8b5ca07bc6943fdf8f1e4eea838e9307eab52
+  image_source_sha256: 42f3e2f0f8359c7dcc1d9cef723ee26ae93c03e9f9482a25dcc492872d4a6af2
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point, inspected fresh and aligned to sealed runtime evidence; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-032.json and reports/domain-preflight-before-032.json
+    exit_code: 0
+  - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with fresh EXP-032 batch/root and reports/live-small-command-032 log/exit/time evidence
+    exit_code: pending
+observed: pending
+inferred: pending
+conclusion: pending
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p41
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p43
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p44
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p46
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-eb6fdBjp.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-5UxN4rlU.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f37.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f37.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f37-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-032.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-032.json
+retained: all F37 test, build, provenance, image, smoke, and preflight evidence; live-small-f37 will be retained after execution
+archived: none
+deletion_candidates: p40 through p46 and direct-pytest scratch are candidates after readback; nothing was deleted
+decision: pending
+next_experiment: EXP-033 is reserved for the controlled plan-only fault and remains blocked until EXP-032 execute acceptance
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
