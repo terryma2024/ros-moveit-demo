@@ -25,7 +25,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-014
-next_experiment: EXP-028
+next_experiment: EXP-029
 ```
 
 Frozen provenance:
@@ -98,6 +98,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F30: Live commands prepend the verified worktree package libexec directory `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py` to PATH before invoking `ros2 run`. ROS 2 can locate a libexec without PATH, but the reviewed independent provenance verifier requires `shutil.which("so101_parallel_batch")` to bind the exact installed wrapper. Cost if wrong: admission fails before side effects as EXP-024 did; invoking an unverified wrapper would violate installed-byte admission.
 - Ruling F31: Task 14 returns to the Task 11 provenance owner for a scoped TDD fix in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must derive the actual repository package_dir layout `src/so101_demo_py/src/cli/...`; it may not weaken console/config/catalog checkout fencing. Cost if wrong: mixed overlays could be accepted; retaining the impossible extra `so101_demo` segment makes every real live run fail before side effects.
 - Ruling F32: Task 14 may make the matching scoped TDD correction to the installed-editable-tree identity in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must bind `build/so101_demo_py/so101_demo` to this repository's actual `package_dir={"so101_demo": "src"}` source root `src/so101_demo_py/src`, while retaining exact module, console, egg-link, entry-point, wrapper-byte, and tree-byte checks. Cost if wrong: a stale or foreign editable tree could be accepted; retaining the impossible nested source target makes every real live run fail before resource or process side effects.
+- Ruling F33: Domain-pool preflight and cleanup must stop controller-created ROS 2 discovery daemons for domains 181-183 and verify those domains with `--no-daemon` or the production same-UID `/proc` probe before a live run. The three daemons found by EXP-027 were created at the Task 14 preflight timestamp and are task-owned diagnostic residue, not Worker processes or external users. Cost if wrong: stopping a foreign daemon would disturb unrelated discovery; retaining our own daemons makes every resource admission fail before batch-root creation.
 
 ```yaml
 checkpoint_id: CP-002
@@ -850,12 +851,14 @@ next_experiment: EXP-027 is reserved for the corrected fresh execute batch after
 
 ```yaml
 experiment_id: EXP-027
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:37:19+08:00
   - status: RUNNING
     at: 2026-09-12T16:37:19+08:00
+  - status: INVALID
+    at: 2026-09-12T16:38:44+08:00
 prior_experiment: EXP-026
 hypothesis: The source-module and installed-editable-tree checks now bind the repository's real package_dir layout, permitting the frozen four-point execute while retaining every provenance, isolation, physical, visual, and cleanup fence.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
@@ -892,6 +895,74 @@ commands:
   - command: inventory the pre-run stack to reports/process-inventory-before-027.json
     exit_code: 0
   - command: prepend the verified worktree libexec to PATH, then run the frozen four-point ros2 execute command with reports/live-small-command-027 log/exit/time evidence
+    exit_code: 1
+observed:
+  - Both source and installed-tree provenance checks passed, then resource admission exited 1 in 0.66 s with ROS_DOMAIN_IN_USE for 181 and 182 before batch-root creation.
+  - Readback found controller-created ros2cli discovery daemons for domains 181, 182, and 183, all launched at 16:13 during Task 14 preflight; there were no domain claim locks, Worker/Broker processes, containers, or GPU compute applications.
+  - `ROS_DOMAIN_ID=<domain> ros2 daemon stop` cleanly stopped all three exact task-owned daemons; daemon status and `ros2 node list --no-daemon` then found no nodes, and the production same-UID probe reported all three domains unused.
+inferred:
+  - The earlier domain inventory polluted the live namespace by leaving discovery daemons behind; this is a pre-admission harness cleanup defect, not product behavior or an external domain owner.
+conclusion: INVALID before directory, process, simulation, plan, or motion side effects; no physical behavior can be counted.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p34
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f32.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f32.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f32-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-027.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-027.log; sha256 b5493b490ba65da85229951e9839a4780b92fc220aabc3a208cd0b75d28d5753
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-027.time; sha256 ca2e23d01722694d675d0db5ca7bd2032015ff3b253f90d175d1e3684e364123
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-027.exit; sha256 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028b.json; sha256 b9558cb18d3e833693da291aa92a305aa32bded6ee05650b4d9f6999d9311d4b
+decision: REPEAT after stopping only the exact controller-created daemons and proving all three domains unused with the production probe
+next_experiment: EXP-028 repeats the otherwise identical frozen execute from clean domain state
+```
+
+## EXP-028 — Task 14 clean-domain two-Worker execute
+
+```yaml
+experiment_id: EXP-028
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:39:46+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:39:46+08:00
+prior_experiment: EXP-027
+hypothesis: Removing only task-owned ROS discovery daemons permits the fully provenance-qualified four-point execute to enter resource allocation and run with isolated domains 181 and 182.
+prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
+single_variable: Domains 181-183 no longer contain controller-created discovery daemons; source, install, image, selection, config, models, N=2, K=2, batch ID, and absent live-small root remain identical to EXP-027.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-027 passed provenance and stopped before batch-root or process side effects only because task-owned ROS discovery daemons occupied the domain pool.
+  - All three daemon APIs report stopped; no-daemon node discovery is empty; the production same-UID probe reports domains 181-183 unused with 24 CPUs, 26.022 GiB MemAvailable, and 14.914 GiB GPU free.
+  - The ledger-only RUNNING record is committed and clean; live-small remains absent and no related container or GPU task exists.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete per-point evidence, and clean shutdown.
+  - Reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt trajectory/controller, final cup support/contact/detachment, retreat, and original-resolution offscreen visual evidence pass readback.
+failure_criteria:
+  - Trustworthy initialized product behavior fails any physical/evidence gate; retain as VALID failed behavior and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, or evidence pollution prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: d7919dca912f1ec3f97009e697f3724fb9610f11
+  executable_source_tree: 757f3e9017d978ee5457f39d1528d9e4ba7b5a737510b49cea5961d1b43eae4e
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:5922d725fac1d64267ccfcdbbc45887775d87678da0397d3e6594e3469eefc9a
+  image_source_sha256: 1d06060e76044f2be69b13eaaaf68c52ac582cc2351f35d201f404148172e79d
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point, inspected fresh and aligned to sealed runtime evidence; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: stop exact task-owned domain 181-183 ROS discovery daemons, verify no-daemon node lists, and run production same-UID domain/resource probe to reports/domain-preflight-before-028b.json
+    exit_code: 0
+  - command: prepend the verified worktree libexec to PATH, then run the frozen four-point ros2 execute command with reports/live-small-command-028 log/exit/time evidence
     exit_code: PENDING
 observed:
   - PENDING
@@ -899,13 +970,10 @@ inferred:
   - PENDING
 conclusion: PENDING
 evidence:
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p34
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f32.json
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f32.json
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f32-smoke
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-027.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028.json (empty rejected diagnostic from an incorrect probe class name; retained, not authoritative)
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028b.json
 decision: PENDING
-next_experiment: EXP-028 controlled plan-only fault only after this execute run is accepted
+next_experiment: EXP-029 controlled plan-only fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
