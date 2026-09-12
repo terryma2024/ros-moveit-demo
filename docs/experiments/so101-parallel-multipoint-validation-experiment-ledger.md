@@ -99,6 +99,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F31: Task 14 returns to the Task 11 provenance owner for a scoped TDD fix in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must derive the actual repository package_dir layout `src/so101_demo_py/src/cli/...`; it may not weaken console/config/catalog checkout fencing. Cost if wrong: mixed overlays could be accepted; retaining the impossible extra `so101_demo` segment makes every real live run fail before side effects.
 - Ruling F32: Task 14 may make the matching scoped TDD correction to the installed-editable-tree identity in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must bind `build/so101_demo_py/so101_demo` to this repository's actual `package_dir={"so101_demo": "src"}` source root `src/so101_demo_py/src`, while retaining exact module, console, egg-link, entry-point, wrapper-byte, and tree-byte checks. Cost if wrong: a stale or foreign editable tree could be accepted; retaining the impossible nested source target makes every real live run fail before resource or process side effects.
 - Ruling F33: Domain-pool preflight and cleanup must stop controller-created ROS 2 discovery daemons for domains 181-183 and verify those domains with `--no-daemon` or the production same-UID `/proc` probe before a live run. The three daemons found by EXP-027 were created at the Task 14 preflight timestamp and are task-owned diagnostic residue, not Worker processes or external users. Cost if wrong: stopping a foreign daemon would disturb unrelated discovery; retaining our own daemons makes every resource admission fail before batch-root creation.
+- Ruling F34: Task 14 returns narrowly to the Task 11/12 Broker lifecycle seams and their direct tests. Initial model-backed Broker readiness must use the frozen 90-second Broker recovery/startup budget instead of the 5-second steady-state heartbeat-loss budget. The Docker launch must publish a private batch/generation-specific cidfile, and cleanup/recovery must verify that exact container's immutable image, labels, and batch-specific mounts before stopping it; aggregate cleanup cannot pass while that container remains. Cost if wrong: an unrelated container could be stopped, or a detached Broker/GPU process could survive while the batch falsely reports cleanup complete; retaining the current behavior guarantees cold-start timeout and already produced both defects in EXP-028.
 
 ```yaml
 checkpoint_id: CP-002
@@ -921,12 +922,14 @@ next_experiment: EXP-028 repeats the otherwise identical frozen execute from cle
 
 ```yaml
 experiment_id: EXP-028
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:39:46+08:00
   - status: RUNNING
     at: 2026-09-12T16:39:46+08:00
+  - status: INVALID
+    at: 2026-09-12T16:45:03+08:00
 prior_experiment: EXP-027
 hypothesis: Removing only task-owned ROS discovery daemons permits the fully provenance-qualified four-point execute to enter resource allocation and run with isolated domains 181 and 182.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
@@ -963,17 +966,30 @@ commands:
   - command: stop exact task-owned domain 181-183 ROS discovery daemons, verify no-daemon node lists, and run production same-UID domain/resource probe to reports/domain-preflight-before-028b.json
     exit_code: 0
   - command: prepend the verified worktree libexec to PATH, then run the frozen four-point ros2 execute command with reports/live-small-command-028 log/exit/time evidence
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Provenance and two-Worker resource allocation succeeded. The immutable Broker container started, loaded both models, and published a valid ready receipt plus socket after about 7.69 seconds.
+  - The coordinator used the 5-second heartbeat-loss interval as the initial cold-start deadline, emitted BROKER_READY_TIMEOUT, and never launched either Worker or granted any point lease; all four points remained UNRUN with zero attempts.
+  - Host-process cleanup removed the attached docker client but left its exact container and 2636 MiB Broker GPU process running while aggregate_results.json incorrectly recorded batch_cleanup_complete=true.
+  - Inspect readback bound orphan container 6679c21fea256732ab2f821733b7d5aeb7e3b224ecef78bffa12544af2d44977 to immutable image sha256:5922d725..., the exact live-small /runtime and /inputs mounts, and this start time. `docker stop --time 10` stopped that exact task-owned container; `--rm` removed it, and final process/container/GPU/domain readback is empty.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - Initial cold start and steady-state heartbeat loss are distinct frozen budgets. The current lifecycle also supervises only the attached Docker client PID, not the actual container identity, so process-group absence alone cannot prove cleanup.
+conclusion: INVALID infrastructure bootstrap with zero counted point attempts; it exposed two concrete Broker lifecycle defects requiring F34 TDD repair before another execute run.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028.json (empty rejected diagnostic from an incorrect probe class name; retained, not authoritative)
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028b.json
-decision: PENDING
-next_experiment: EXP-029 controlled plan-only fault only after this execute run is accepted
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small; batch manifest sha256 07958e981e5b46e34ab46a1d598a74c47a85904e0829d0ec49319ce60bae3b9e; resource manifest sha256 3ebf24bd0c652b0db2bb3f6f68923f4d9da7230d463514a1039b356329582c4a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small/ipc/broker/ready.json; sha256 e5b20960c303df0c6861bf7e9086d900f672868497f612f106b05243e9108536
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small/coordinator/aggregate_results.json; sha256 d5cc1e18292aad61b40089142a6836011b75ac3fa3a2a42a866cdc6ae7d7365d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-028.log; sha256 7f1c70a59275f6994e8f298eb97efda2501867c05c0d457159f951ca0be7b2c4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-028.time; sha256 edf8df73142e64a16fa41df1f8c766ca0bef454ebdb00b1bc3d9fc7c311a25fa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/orphan-container-028-inspect.json; sha256 1e6ac7fa81a620107706d77f881263cac1830cf0e85a496eb91917ca624cadb2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/orphan-container-028-stop.txt; sha256 84a5b7d46a7488cabb7ca7c24d31f9d4570a6251a7a3fc96f10213ec0afb731e
+retained: complete live-small batch tree, outer reports, orphan ownership/cleanup readback, and all earlier package/image/smoke evidence
+archived: none
+deletion_candidates: empty rejected domain-preflight-before-028.json and scratch p32/p33/p34 plus direct pytest scratch; nothing will be deleted without explicit user authorization
+decision: REPEAT only after F34 RED/GREEN, full ordinary gate, image rebuild, dual-model smoke, and a fresh immutable batch root
+next_experiment: EXP-029 is reserved for the Broker-lifecycle-corrected execute run
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
