@@ -4461,6 +4461,63 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F66 READINESS REQUEST ORDERING WITH TDD
 ```
 
+```yaml
+checkpoint_id: CP-064
+last_valid_experiment: EXP-022
+current_hypothesis: Gating ListControllers on the complete required service/action graph and retaining at most one pending controller query will avoid overlapping controller-manager startup traffic and eliminate the observed service-response abort.
+working_tree_status: clean executable source at 51baa98b6256c05c69c82208d926dfcce115f6b3; F66 build, complete package, immutable-image, and dual-model CUDA smoke gates pass
+owned_processes: NONE
+confirmed_conclusions:
+  - F66 RED pytest-IvhtUDE5 failed at both intended interfaces; focused GREEN pytest-bdw9muzs passed all six readiness tests.
+  - The readiness/Worker adjacent gate passed 80 tests, the parallel suite passed 1044 tests, and the complete ordinary package gate passed 2795 tests with no errors, failures, or skips.
+  - The complete source hash is e202be7120f08db46f1421ff5db1716d8a853dc3b9fdffa9017a0d1a9ab9f0ad and source/install module hashes both equal b37a945cc9b0020a3ca990ea27e4754e7865fe281bcfd23b82c237863778d955.
+  - Immutable image sha256:cbaea887a917f23cbdf2aea4a8ad1486eb3763ea0c1d341ffc6f30d693790490 independently reports the exact F66 source hash.
+  - The isolated F66 smoke executed both YOLO and Grounded-SAM on CUDA with QUALIFIED outcomes; no related container, process, or GPU task remained.
+ruling: Repeat the exact frozen four-point two-Worker gate with F66 as the sole executable variable. Preserve every prior scheduling, perception, physical, recovery, visual, cleanup, model, image, config, and catalog criterion.
+retained: all F66 build, test, scratch, provenance, image, smoke, and prior experiment evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+decision: RUN EXP-067 UNCHANGED FOUR-POINT GATE
+```
+
+## EXP-067 — F66 ordered readiness-request four-point gate
+
+```yaml
+experiment_id: EXP-067
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T02:43:29+08:00
+  - status: RUNNING
+    at: 2026-09-13T02:43:29+08:00
+prior_experiment: EXP-066
+hypothesis: Deferring ListControllers until all required service/action endpoints exist and retaining only one pending request will prevent the controller-manager service-response abort during parallel startup and recovery.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: motion_stack_ready controller-state request ordering and single-pending-request discipline. All scheduling, worker identity, consumer readiness, perception, pose, motion, recovery, timeout, source/config/model/catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f66
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f66
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: 51baa98b6256c05c69c82208d926dfcce115f6b3
+  executable_source_tree: e202be7120f08db46f1421ff5db1716d8a853dc3b9fdffa9017a0d1a9ab9f0ad
+  installed_module_tree: b37a945cc9b0020a3ca990ea27e4754e7865fe281bcfd23b82c237863778d955
+  image_id: sha256:cbaea887a917f23cbdf2aea4a8ad1486eb3763ea0c1d341ffc6f30d693790490
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp067.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f66 and root live-small-f66.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+result: PENDING
+retained: PENDING
+archived: none
+deletion_candidates: none from this experiment unless separately classified after readback
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
