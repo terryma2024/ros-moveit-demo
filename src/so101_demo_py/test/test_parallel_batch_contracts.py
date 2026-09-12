@@ -193,6 +193,7 @@ def test_validation_summary_cannot_claim_execute_qualification():
         },
         batch_cleanup_complete=True,
         batch_terminal=True,
+        terminal_reason="POINTS_COMPLETE",
     )
 
     assert summary.validation_complete is True
@@ -219,6 +220,7 @@ def test_all_passing_dry_run_validations_never_qualify_execute_coverage():
             point_id: ValidationStatus.VALIDATION_PASSED for point_id in point_ids
         },
         batch_terminal=True,
+        terminal_reason="POINTS_COMPLETE",
     )
 
     assert summary.validation_complete is True
@@ -495,3 +497,28 @@ def test_execute_qualification_requires_normal_points_complete_terminal_reason()
     assert dependency_failed.point_statuses == statuses
     assert dependency_failed.coverage_complete is True
     assert dependency_failed.qualification_passed is False
+
+
+@pytest.mark.parametrize("run_mode", ["DRY_RUN", "PLAN_ONLY"])
+def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mode):
+    """A dependency failure preserves validation history without reporting pass."""
+
+    from so101_demo.parallel_batch.contracts import (
+        BatchSummary,
+        PointStatus,
+        RunMode,
+        ValidationStatus,
+    )
+
+    summary = BatchSummary(
+        run_mode=RunMode[run_mode],
+        point_statuses={"task_start": PointStatus.UNRUN},
+        validation_statuses={"task_start": ValidationStatus.VALIDATION_PASSED},
+        batch_terminal=True,
+        batch_cleanup_complete=True,
+        terminal_reason="SHARED_DEPENDENCY_UNAVAILABLE",
+    )
+
+    assert summary.validation_statuses["task_start"] is ValidationStatus.VALIDATION_PASSED
+    assert summary.validation_complete is True
+    assert summary.validation_passed is False
