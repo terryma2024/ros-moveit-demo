@@ -4284,6 +4284,63 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F64 CONSUMER READINESS WITH TDD
 ```
 
+```yaml
+checkpoint_id: CP-060
+last_valid_experiment: EXP-022
+current_hypothesis: F64's worker-local graph observation will deliver the pose to every already-ready dynamic consumer while preserving exact identity, DDS matching, simulation-clock, recovery, and cleanup gates.
+working_tree_status: clean at 3a5669fd66009521ba1d99bef586b7df9dc2d0a7; ledger-only EXP-065 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - F64 commit 3a5669fd66009521ba1d99bef586b7df9dc2d0a7 primes the isolated publisher before readiness polling, requires exactly one /so101_dynamic_cup_pick_place identity in its local rclpy graph, exactly one DDS subscription match, and a nonzero simulation clock; failure and timeout still close the publisher and fail closed.
+  - Formal RED pytest-nDnveglx failed on the old shell probe. Focused GREEN pytest-wI6E4zJg passed; corrected full-overlay file gate pytest-tyjwt3cX passed 23 tests, adjacent gate pytest-uteanrIG passed 1043 tests, and ordinary package gate pytest-UNRf28de passed 2792 tests with zero errors, failures, or skips. pytest-a7ya6NDw is retained as an invalid partial-overlay harness.
+  - p96 built so101_demo_py in 1.51 seconds using scratch/p96-nYIUzWEx/tmp. Source/install module hashes both equal 02c4eed8ea007e60d69eca62518c81d6f82ab11bd7470cbce78df80a20f4c79c; complete package source hash is fbe58f395a974775fba5faba44e1de16f0d9d87a883219640172580b8b5265a5.
+  - The immutable F64 Broker image is sha256:941c3cff66abce090120a45d2f95c4a3a99c9095f114963b2adab59e2cb30f3f with matching internal source hash. Offline smoke returned QUALIFIED CUDA outcomes for YOLO at 34.0182 ms and Grounded-SAM at 191.692336 ms inference latency; evidence modes were private and no container or GPU task remained.
+  - Fresh preflight capacity is 24 CPUs, 24.597 GiB MemAvailable, and 15269 MiB free GPU, with no related process/container/GPU application and no extant domain claim.
+ruling: Repeat the unchanged four-point two-Worker execute gate with only the F64 readiness observation changed. Treat any dynamic, recovery, physical, visual, cleanup, or residual failure as INVALID; do not mask the separately retained recovery-start issue.
+retained: F64 RED/GREEN/invalid-harness/full-overlay/adjacent/build/package/provenance/image/smoke/preflight evidence, EXP-064 complete evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-nDnveglx, pytest-wI6E4zJg, pytest-a7ya6NDw, pytest-tyjwt3cX, pytest-uteanrIG, pytest-UNRf28de, and p96 scratch trees after readback; no deletion authorized
+decision: RUN EXP-065
+```
+
+## EXP-065 — Task 14 worker-local consumer readiness F64 two-Worker execute
+
+```yaml
+experiment_id: EXP-065
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T02:07:47+08:00
+  - status: RUNNING
+    at: 2026-09-13T02:07:47+08:00
+prior_experiment: EXP-064
+hypothesis: Worker-local rclpy graph identity plus exact retained-publisher DDS matching and a nonzero simulation clock will eliminate the external graph-probe false negative without weakening consumer readiness.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: consumer_ready no longer shells out to ros2 node info; the retained publisher's isolated rclpy node observes exact consumer identity, exact DDS matching, and simulation clock. All scheduling, perception, pose, motion, recovery, timeout, source/config/model/catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f64
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f64
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: 3a5669fd66009521ba1d99bef586b7df9dc2d0a7
+  executable_source_tree: fbe58f395a974775fba5faba44e1de16f0d9d87a883219640172580b8b5265a5
+  installed_module_tree: 02c4eed8ea007e60d69eca62518c81d6f82ab11bd7470cbce78df80a20f4c79c
+  image_id: sha256:941c3cff66abce090120a45d2f95c4a3a99c9095f114963b2adab59e2cb30f3f
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp065.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f64 and root live-small-f64.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+result: PENDING
+retained: all prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
