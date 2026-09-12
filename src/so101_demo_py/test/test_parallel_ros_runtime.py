@@ -214,7 +214,6 @@ def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
     assert rejection == expected
     assert json.loads(node_payload) == {
         "duplicates": [],
-        "expected": list(ParallelRosRuntimePorts.expected_worker_nodes()),
         "missing": [
             node for node in ParallelRosRuntimePorts.expected_worker_nodes()
             if node != "/move_group"
@@ -573,6 +572,7 @@ def test_initial_gate_requires_exact_worker_node_inventory():
 
 
 def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
+    from so101_demo.parallel_batch.worker import _bounded_failure_message
     from so101_demo.runtime.parallel_ros_runtime import (
         InitialGateObservation, ParallelRosRuntimePorts, ResetBoundaryReceipt,
     )
@@ -599,14 +599,17 @@ def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
     rejection, node_payload = str(rejected_error.value).split(";worker_nodes=", 1)
     assert rejection == "POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes"
     diagnostic = json.loads(node_payload)
-    assert diagnostic["expected"] == list(expected)
     assert diagnostic["missing"] == [expected[-1]]
     assert diagnostic["duplicates"] == ["/alpha"]
-    assert diagnostic["unexpected"] == [
-        node[:96] for node in sorted(set(observed) - set(expected))[:16]
+    ordered_unexpected = [
+        node[:96] for node in sorted(set(observed) - set(expected))
     ]
+    assert diagnostic["unexpected"]
+    assert diagnostic["unexpected"] == ordered_unexpected[:len(diagnostic["unexpected"])]
+    assert len(diagnostic["unexpected"]) <= 16
     assert diagnostic["truncated"] is True
-    assert len(node_payload) <= 2300
+    assert len(node_payload.encode()) <= 320
+    assert _bounded_failure_message(rejected_error.value) == str(rejected_error.value)
 
 
 def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):

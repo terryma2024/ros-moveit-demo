@@ -57,7 +57,6 @@ def _worker_node_diagnostic(observed, expected):
         counts[node] = counts.get(node, 0) + 1
     observed_set = set(normalized)
     groups = {
-        "expected": sorted(expected),
         "missing": sorted(set(expected) - observed_set),
         "unexpected": sorted(observed_set - set(expected)),
         "duplicates": sorted(node for node, count in counts.items() if count > 1),
@@ -75,7 +74,17 @@ def _worker_node_diagnostic(observed, expected):
         for name, values in groups.items()
     }
     bounded["truncated"] = truncated
-    return json.dumps(bounded, sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(bounded, sort_keys=True, separators=(",", ":"))
+    while len(payload.encode()) > 320:
+        for name in ("unexpected", "duplicates", "missing"):
+            if bounded[name]:
+                bounded[name].pop()
+                bounded["truncated"] = True
+                break
+        else:  # pragma: no cover - fixed JSON keys alone are well below the cap
+            raise RuntimeError("NODE_DIAGNOSTIC_BOUND")
+        payload = json.dumps(bounded, sort_keys=True, separators=(",", ":"))
+    return payload
 
 
 class _IsolatedRosNode:
