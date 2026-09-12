@@ -3307,6 +3307,63 @@ deletion_candidates: direct pytest scratch and p51-p70 after readback; no deleti
 decision: IMPLEMENT F54 RECOVERY-GATE DIAGNOSTIC
 ```
 
+```yaml
+checkpoint_id: CP-042
+last_valid_experiment: EXP-022
+current_hypothesis: F54's bounded RECOVERY_GATES line will identify the existing false-negative sub-gate without changing physical or recovery behavior.
+working_tree_status: clean executable source at fa8d1d810c69495280c0ed6810b10bb9c05cc933; ledger-only EXP-052 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - Formal RED pytest-XJOkTMY8 failed because the gate diagnostic was absent; focused GREEN pytest-She3hQtZ passed after adding it.
+  - Adjacent pytest-KFDvwL7g passed 119 Worker/ROS runtime tests.
+  - p71 build passed in 1.42 seconds; p72 passed 2785 tests with zero errors, failures, or skips in 83.97 seconds.
+  - Installed source/build module tree hash is 5ac2888fdecc6de75ea771f54cc955f7845709c79037bdf3bfb8ce79b86c2ccc and complete source hash is 06b7de0b38c26fe620ef98e68d4e6354d838ddd99e73b0e81629c86f3d1927e0.
+  - Immutable F54 image sha256:351f01a6ff5609508a9b06c75a6479b673b32aaf0b1665192457dac168ca7fcd passed exact provenance readback and both CUDA model smoke paths returned QUALIFIED.
+  - Fresh EXP-052 preflight found 24 CPUs, 25.166 GiB MemAvailable, 15269 MiB free GPU, no related process/container/GPU task, exact console resolution, and all domains lockable.
+ruling: Repeat the unchanged two-Worker four-point execute gate solely to collect the new diagnostic. Do not treat the two already-passing physical points as qualification if recovery or remaining points fail.
+retained: F54 RED/GREEN/adjacent/p71/p72/provenance/image/smoke/preflight evidence and all prior evidence
+archived: none
+deletion_candidates: pytest-XJOkTMY8, pytest-She3hQtZ, pytest-KFDvwL7g, p71, and p72 after readback; no deletion authorized
+decision: RUN EXP-052
+```
+
+## EXP-052 — Task 14 F54 recovery-gate diagnostic execute
+
+```yaml
+experiment_id: EXP-052
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T23:08:10+08:00
+  - status: RUNNING
+    at: 2026-09-12T23:08:10+08:00
+prior_experiment: EXP-051
+hypothesis: The unchanged recovery outcome plus F54 diagnostic will identify exactly which of fenced/stopped/confirmed/recovered/ready is false after a passing point.
+prediction: Either four points pass, or both recovery paths emit bounded deterministic gate diagnostics that permit one evidence-backed fix.
+single_variable: One RECOVERY_GATES stdout JSON line before each recovery receipt. No gate, order, threshold, physical behavior, models, N=2, K=2, points, or timeout changed.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f54
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f54
+success_criteria: Complete diagnostic for each recovery; physical qualification still requires exit 0, POINTS_COMPLETE, four PASSED points, qualification_passed=true, complete cleanup and visual evidence.
+provenance:
+  executable_source_commit: fa8d1d810c69495280c0ed6810b10bb9c05cc933
+  executable_source_tree: 06b7de0b38c26fe620ef98e68d4e6354d838ddd99e73b0e81629c86f3d1927e0
+  installed_module_tree: 5ac2888fdecc6de75ea771f54cc955f7845709c79037bdf3bfb8ce79b86c2ccc
+  image_id: sha256:351f01a6ff5609508a9b06c75a6479b673b32aaf0b1665192457dac168ca7fcd
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: reports/preflight-exp052.json; sha256 8d594f6df84d1af4ef230c9c41b0056bac50b86d08b51cadc51a1e08f4edadce
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact EXP-051 command under the verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f54 and root live-small-f54.
+acceptance: The complete frozen Task 14 live-small gate plus exact bounded RECOVERY_GATES diagnostic readback.
+result: PENDING
+retained: preflight and prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
