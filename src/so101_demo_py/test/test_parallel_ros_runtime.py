@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -207,8 +208,20 @@ def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
         "POINT_INITIAL_GATE_OBSERVATION_REJECTED:reset_epoch,simulation_session,"
         "freshness,joints,goals,attachment,contact,stable_graph,worker_nodes"
     )
-    with pytest.raises(RuntimeError, match=f"^{expected}$"):
+    with pytest.raises(RuntimeError) as rejected_error:
         ports.initial_gate(_lease(), reset)
+    rejection, node_payload = str(rejected_error.value).split(";worker_nodes=", 1)
+    assert rejection == expected
+    assert json.loads(node_payload) == {
+        "duplicates": [],
+        "expected": list(ParallelRosRuntimePorts.expected_worker_nodes()),
+        "missing": [
+            node for node in ParallelRosRuntimePorts.expected_worker_nodes()
+            if node != "/move_group"
+        ],
+        "truncated": False,
+        "unexpected": [],
+    }
 
     ports.dependencies["observe_initial"] = lambda _boundary: object()
     with pytest.raises(
@@ -557,6 +570,43 @@ def test_initial_gate_requires_exact_worker_node_inventory():
         )
         with pytest.raises(RuntimeError, match="POINT_INITIAL_GATE"):
             ports.initial_gate(_lease(), reset)
+
+
+def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
+    from so101_demo.runtime.parallel_ros_runtime import (
+        InitialGateObservation, ParallelRosRuntimePorts, ResetBoundaryReceipt,
+    )
+
+    expected = ParallelRosRuntimePorts.expected_worker_nodes()
+    observed = (*expected[:-1], "/zeta", "/alpha", "/alpha", *(
+        f"/unknown_{index:02d}_" + "x" * 180 for index in range(24)
+    ))
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
+    observation = InitialGateObservation(
+        reset_epoch="reset-2", simulation_session_id="session-1",
+        source_frame_monotonic_s=11.0, joint_positions=(0.0,) * 6,
+        active_controller_goal_ids=(), moveit_attached_object_ids=(),
+        has_contact=False, worker_node_fqns=observed,
+    )
+    ports = ParallelRosRuntimePorts.for_test(
+        resources=SimpleNamespace(session_id="session-1"),
+        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
+        observe_initial=lambda _boundary: observation,
+    )
+
+    with pytest.raises(RuntimeError) as rejected_error:
+        ports.initial_gate(_lease(), reset)
+    rejection, node_payload = str(rejected_error.value).split(";worker_nodes=", 1)
+    assert rejection == "POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes"
+    diagnostic = json.loads(node_payload)
+    assert diagnostic["expected"] == list(expected)
+    assert diagnostic["missing"] == [expected[-1]]
+    assert diagnostic["duplicates"] == ["/alpha"]
+    assert diagnostic["unexpected"] == [
+        node[:96] for node in sorted(set(observed) - set(expected))[:16]
+    ]
+    assert diagnostic["truncated"] is True
+    assert len(node_payload) <= 2300
 
 
 def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
