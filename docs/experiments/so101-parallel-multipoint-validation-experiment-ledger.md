@@ -5838,12 +5838,14 @@ decision: RERUN IDENTICAL PERSISTENT-OBSERVER FAULT GATE WITH CORRECT FROZEN HAS
 
 ```yaml
 experiment_id: EXP-087
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:57:40+08:00
   - status: RUNNING
     at: 2026-09-13T05:58:04+08:00
+  - status: INVALID
+    at: 2026-09-13T06:01:55+08:00
 prior_experiment: EXP-086
 hypothesis: The correctly transcribed immutable invocation plus persistent observer will complete the approved synchronized Worker/Broker TERM sequence and demonstrate F74 fault isolation and recovery.
 single_variable: Correct only the duplicated YOLO expected-hash literal; product inputs and EXP-086 fault procedure/acceptance remain fixed.
@@ -5871,6 +5873,16 @@ provenance:
 success_criteria: Both exact injectors exit 0; all physical statuses remain UNRUN; worker-01 fault is fenced with physical action proven absent and a new Worker generation admitted; Broker g1 remains healthy across Worker disconnect; exact g1 TERM yields a journal unhealthy/healthy pair and ready model-loaded g2; no lease grant occurs during the unhealthy window; each stable slot receives exactly two unique leases; cleanup and residual audit pass.
 failure_rule: Any missing or wrong target, identity drift, injector failure, physical action, Worker-induced Broker death, missing ready g2 or health transition, lease during pause, duplicate point, K over-debit, cleanup failure, or residual owned state makes this run INVALID and blocks full-20 admission.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: The exact worker-01 TERM injector again exited 0 with physical action absent, and the product completed all four plan-only points as UNRUN with K=2 per slot and complete cleanup in 84.56 seconds. The persistent observer was retained correctly but its simultaneous replacement-PID manifest predicate was not a valid durable recovery predicate; it did not advance to Broker TERM although the coordinator journal later recorded worker-01 generation recovery. The observer was explicitly stopped after batch exit. This is INVALID observer-authoring evidence, not a product failure.
+aggregate_results_sha256: 89bd2987a86678d2d9e45ba5052dba5e1838631be09ab5b874cd636a71509d5c
+command_log_sha256: 5c9e87a9810e0560f8c7a98d3b44598241b60c408aa488f0a89a1d7aadde47aa
+root_cause_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/root-cause-EXP087.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-087-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP087.txt
+retained: complete live-fault-f74-v3 tree, command/Worker-injector/MuJoCo/root-cause/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke/command/diagnostic evidence, and incomplete fault batches; no deletion authorized
+decision: RERUN WITH DURABLE COORDINATOR WORKER_RECOVERED EVENT AS THE POST-WORKER SYNCHRONIZATION PREDICATE
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
