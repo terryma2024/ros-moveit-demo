@@ -1,10 +1,29 @@
 from types import SimpleNamespace
 
 import pytest
+from rclpy.qos import DurabilityPolicy, ReliabilityPolicy
 
 
 def _message(frame_id: str = "world"):
     return SimpleNamespace(header=SimpleNamespace(frame_id=frame_id))
+
+
+def test_ros_cup_pose_source_uses_reliable_volatile_control_qos() -> None:
+    from so101_demo.ros.cup_pose_source import RosCupPoseSource
+
+    captured = {}
+
+    class Node:
+        def create_subscription(self, message, topic, callback, qos):
+            captured.update(message=message, topic=topic, callback=callback, qos=qos)
+            return object()
+
+    RosCupPoseSource(Node(), SimpleNamespace())
+
+    assert captured["topic"] == "/cup_pose"
+    assert captured["qos"].depth == 10
+    assert captured["qos"].reliability == ReliabilityPolicy.RELIABLE
+    assert captured["qos"].durability == DurabilityPolicy.VOLATILE
 
 
 def test_invalid_messages_do_not_extend_absolute_acquisition_deadline() -> None:
