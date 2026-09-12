@@ -1006,6 +1006,12 @@ def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch)
         def __init__(self):
             self.node = Node()
 
+        def spin_once(self, *, timeout_sec):
+            assert timeout_sec > 0.0
+            message = SimpleNamespace(status_list=[])
+            for callback in self.node.callbacks:
+                callback(message)
+
         @staticmethod
         def close():
             return None
@@ -1014,20 +1020,13 @@ def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch)
         ros_runtime, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner()
     )
 
-    def spin_once(node, *, timeout_sec):
-        assert timeout_sec > 0.0
-        message = SimpleNamespace(status_list=[])
-        for callback in node.callbacks:
-            callback(message)
-
-    monkeypatch.setattr(rclpy, "spin_once", spin_once)
-
     assert ros_runtime.cancel_and_confirm_parallel_goals(timeout_s=1.0) is True
     assert ros_runtime.observe_no_parallel_goals(timeout_s=1.0) is True
     assert captured_qos == [qos_profile_action_status_default] * 6
 
 
-def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context():
+def test_isolated_ros_node_owns_executor_for_its_private_context(monkeypatch):
+    import rclpy.executors
     from so101_demo.runtime.parallel_ros_runtime import _open_isolated_ros_node
 
     events = []
@@ -1037,6 +1036,24 @@ def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context(
             events.append("private-shutdown")
 
     node = SimpleNamespace(destroy_node=lambda: events.append("node-destroy"))
+
+    class Executor:
+        def __init__(self, *, context):
+            events.append(("executor", context))
+
+        def add_node(self, value):
+            events.append(("add", value))
+
+        def spin_once(self, *, timeout_sec):
+            events.append(("spin", timeout_sec))
+
+        def remove_node(self, value):
+            events.append(("remove", value))
+
+        def shutdown(self):
+            events.append("executor-shutdown")
+
+    monkeypatch.setattr(rclpy.executors, "SingleThreadedExecutor", Executor)
 
     class Rclpy:
         context = SimpleNamespace(Context=Context)
@@ -1059,9 +1076,15 @@ def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context(
     assert events[0][0] == "init"
     assert events[1][0:2] == ("create", "isolated")
     assert events[0][1] is events[1][2]
+    assert events[2] == ("executor", events[0][1])
+    assert events[3] == ("add", node)
+    owner.spin_once(timeout_sec=0.25)
+    assert events[4] == ("spin", 0.25)
     owner.close()
     owner.close()
-    assert events[-2:] == ["node-destroy", "private-shutdown"]
+    assert events[-4:] == [
+        ("remove", node), "executor-shutdown", "node-destroy", "private-shutdown"
+    ]
 
 
 def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkeypatch):

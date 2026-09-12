@@ -118,23 +118,37 @@ def _worker_node_diagnostic(observed, expected):
 
 
 class _IsolatedRosNode:
-    def __init__(self, node, context):
+    def __init__(self, node, context, executor):
         self.node = node
         self.context = context
+        self.executor = executor
         self._closed = False
+
+    def spin_once(self, *, timeout_sec):
+        if self._closed:
+            raise RuntimeError("ISOLATED_ROS_NODE_CLOSED")
+        self.executor.spin_once(timeout_sec=timeout_sec)
 
     def close(self):
         if self._closed:
             return
         self._closed = True
         try:
-            self.node.destroy_node()
+            self.executor.remove_node(self.node)
         finally:
-            self.context.shutdown()
+            try:
+                self.executor.shutdown()
+            finally:
+                try:
+                    self.node.destroy_node()
+                finally:
+                    self.context.shutdown()
 
 
 def _open_isolated_ros_node(rclpy, name, **node_options):
     """Create a node whose init/shutdown cannot touch another runtime context."""
+
+    from rclpy.executors import SingleThreadedExecutor
 
     context = rclpy.context.Context()
     rclpy.init(context=context)
@@ -143,7 +157,14 @@ def _open_isolated_ros_node(rclpy, name, **node_options):
     except Exception:
         context.shutdown()
         raise
-    return _IsolatedRosNode(node, context)
+    try:
+        executor = SingleThreadedExecutor(context=context)
+        executor.add_node(node)
+    except Exception:
+        node.destroy_node()
+        context.shutdown()
+        raise
+    return _IsolatedRosNode(node, context, executor)
 
 
 @dataclass(frozen=True)
@@ -323,7 +344,7 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
                 return False
             futures.append(client.call_async(CancelGoal.Request()))
         while time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
+            owner.spin_once(timeout_sec=0.01)
             if (
                 all(future.done() and future.result() is not None for future in futures)
                 and all(value is not None for value in statuses.values())
@@ -369,7 +390,7 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
     try:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
+            owner.spin_once(timeout_sec=0.01)
             if all(value is not None for value in statuses.values()):
                 return all(
                     status not in _ACTIVE_GOAL_STATES
