@@ -421,6 +421,7 @@ def observe_parallel_initial_gate(
         raise RuntimeError("POINT_INITIAL_GATE_RESET_EPOCH")
 
     import rclpy
+    from rclpy.qos import qos_profile_action_status_default
     from action_msgs.msg import GoalStatusArray
     from moveit_msgs.msg import PlanningSceneComponents
     from moveit_msgs.srv import GetPlanningScene
@@ -452,7 +453,7 @@ def observe_parallel_initial_gate(
             GoalStatusArray,
             topic,
             lambda message, name=topic: goal_callback(name, message),
-            10,
+            qos_profile_action_status_default,
         )
         for topic in topics
     ]
