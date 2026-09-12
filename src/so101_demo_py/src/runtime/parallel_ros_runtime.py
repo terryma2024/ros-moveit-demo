@@ -1373,30 +1373,34 @@ class ParallelRosRuntimePorts:
         call = self.dependencies.get("consumer_ready")
         if call is not None:
             return call(child)
-        from .task_batch_runtime import RosGraphProbe
 
         deadline = time.monotonic() + 20.0
+        try:
+            owner, publisher = self._prime_pose_publisher()
+        except Exception:
+            self._close_pose_publisher()
+            return False
         while time.monotonic() < deadline:
             if not Path(f"/proc/{child.pid}").exists():
-                return False
-            if RosGraphProbe().subscription_count(
-                "/so101_dynamic_cup_pick_place", "/cup_pose"
-            ) == 1:
-                try:
-                    owner, publisher = self._prime_pose_publisher()
-                    while time.monotonic() < deadline:
-                        if (
-                            publisher.get_subscription_count() == 1
-                            and owner.node.get_clock().now().nanoseconds > 0
-                        ):
-                            return True
-                        owner.spin_once(timeout_sec=0.02)
-                except Exception:
-                    self._close_pose_publisher()
-                    return False
                 self._close_pose_publisher()
                 return False
-            time.sleep(0.05)
+            try:
+                owner.spin_once(timeout_sec=0.02)
+                consumer_nodes = tuple(
+                    f"{namespace.rstrip('/')}/{name}"
+                    for name, namespace in owner.node.get_node_names_and_namespaces()
+                    if name == "so101_dynamic_cup_pick_place"
+                )
+                if (
+                    consumer_nodes == ("/so101_dynamic_cup_pick_place",)
+                    and publisher.get_subscription_count() == 1
+                    and owner.node.get_clock().now().nanoseconds > 0
+                ):
+                    return True
+            except Exception:
+                self._close_pose_publisher()
+                return False
+        self._close_pose_publisher()
         return False
 
     def execute_result(self, lease, admitted, child):

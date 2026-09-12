@@ -4218,12 +4218,14 @@ decision: RUN EXP-064
 
 ```yaml
 experiment_id: EXP-064
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T01:48:43+08:00
   - status: RUNNING
     at: 2026-09-13T01:48:43+08:00
+  - status: INVALID
+    at: 2026-09-13T01:58:41+08:00
 prior_experiment: EXP-063
 hypothesis: Private per-component cleanup evidence will either prove every strict cleanup sub-gate and permit qualification or identify the exact remaining failure without ambiguity.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4246,10 +4248,40 @@ preflight: reports/preflight-exp064.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f63 and root live-small-f63.
 acceptance: The complete frozen Task 14 live-small gate plus the F63 cleanup receipt; any diagnostic, physical, recovery, visual, or residual failure remains INVALID.
-result: PENDING
-retained: all prior evidence; runtime evidence pending
+result: >-
+  INVALID — exit 1 after 256.16 seconds. task_start passed on worker-01. The first
+  cup_test_forward_5cm attempt failed closed before physical action because the dynamic consumer
+  printed READY for /cup_pose but the shell-based ROS graph probe did not observe its subscription;
+  worker-02 recovery then succeeded and the point passed on worker-01 lease 2. That final point's
+  recovery failed when the replacement ros2_control_node exited -6 and joint_state_broadcaster was
+  not active, leaving sample_05_near_center and sample_14_far_right UNRUN. All five available
+  original-resolution RGB frames passed visual inspection. F63 conclusively separated cleanup:
+  all four actions, process cleanup, and exact Broker-container cleanup succeeded; coordinator
+  completion was correctly not attempted because the batch was nonterminal. Post-run readback found
+  no related process, container, GPU task, or domain claim.
+retained: complete live-small-f63 tree, command-064 log/time/exit, visual report, root-cause report, cleanup audit, MuJoCo log, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-059
+last_valid_experiment: EXP-022
+current_hypothesis: Worker-local rclpy graph identity plus exact retained-publisher DDS matching and a nonzero simulation clock will eliminate the external ros2 node info false negative without weakening consumer readiness.
+working_tree_status: clean executable source at 09d334fa97d5220c6061779f251d368ec875afaf; ledger-only EXP-064 closure is pending before bounded F64 TDD
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-064 produced two PASSED physical points, one fail-closed pre-action INVALID attempt, and two UNRUN points; all five available original-resolution RGB frames passed.
+  - The failed dynamic consumer itself printed READY for /cup_pose, but consumer_ready did not see the subscription through repeated shell ros2 node info probes and the child later timed out without a pose.
+  - F63 cleanup diagnostics are conclusive: every named action, process cleanup, and exact container cleanup succeeded. batch_cleanup_complete is false only because coordinator completion was inapplicable to a nonterminal batch.
+  - The final worker-01 recovery independently failed after ros2_control_node exited -6 and joint_state_broadcaster remained inactive. Preserve this as a separate diagnosis; do not mix a recovery retry change into F64.
+  - Post-run evidence proves an empty owned-process manifest, absent exact Broker container, no related process or GPU application, and absent domain claims 181/182/183.
+  - F64 formal RED pytest-nDnveglx failed because the old implementation instantiated the forbidden shell graph probe. Focused GREEN pytest-wI6E4zJg passed; the first full-file run pytest-a7ya6NDw is retained as an invalid partial-overlay harness, while corrected full-overlay pytest-tyjwt3cX passed all 23 tests and adjacent parallel suite pytest-uteanrIG passed all 1043 tests in 41.99 seconds.
+ruling: TDD one bounded F64 change to consumer readiness only. Prime and retain the isolated publisher, use its worker-local rclpy graph to require the exact dynamic consumer identity, require exactly one DDS subscription match and nonzero simulation clock, and remove the shell graph probe from this gate. Repeat the unchanged four-point gate before addressing any recurring recovery-start defect.
+retained: EXP-064 complete runtime, visual, root-cause, cleanup, MuJoCo, and command evidence plus all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F64 CONSUMER READINESS WITH TDD
 ```
 
 ## EXP-002 — Task 7 isolated detector package build

@@ -1189,6 +1189,13 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
             return Publisher()
 
         @staticmethod
+        def get_node_names_and_namespaces():
+            return [
+                ("so101_parallel_pose_publisher", "/"),
+                ("so101_dynamic_cup_pick_place", "/"),
+            ]
+
+        @staticmethod
         def get_clock():
             return SimpleNamespace(
                 now=lambda: SimpleNamespace(nanoseconds=200_000_000)
@@ -1209,13 +1216,8 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
     owner = Owner()
 
     class GraphProbe:
-        @staticmethod
-        def subscription_count(node_name, topic):
-            assert (node_name, topic) == (
-                "/so101_dynamic_cup_pick_place",
-                "/cup_pose",
-            )
-            return 1
+        def __init__(self):
+            raise AssertionError("consumer readiness must not shell out to ros2")
 
     monkeypatch.setattr(task_batch_runtime, "RosGraphProbe", GraphProbe)
     monkeypatch.setattr(
