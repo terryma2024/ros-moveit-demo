@@ -363,6 +363,7 @@ class ParallelWorkerRuntime:
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
+        replace_resources: Callable[..., WorkerResources] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
@@ -390,9 +391,11 @@ class ParallelWorkerRuntime:
             lambda _lease: True
         )
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
+        self._replace_resources = replace_resources or _required("replace_resources")
         self._monotonic = monotonic
         self._physical_started = False
         self._captured: list[Path] = []
+        self._used_session_ids = {resources.session_id}
         self._batch_id: str | None = None
         self._reset_boundaries: dict[tuple[object, ...], float] = {}
         self._numeric_receipts: dict[
@@ -705,7 +708,59 @@ class ParallelWorkerRuntime:
     def confirm_no_controller_goal(self, lease: Any) -> bool:
         return self._confirm_no_controller_goal(lease) is True
 
+    def _valid_replacement(
+        self, replacement: object, *, expected_generation: int
+    ) -> bool:
+        if type(replacement) is not WorkerResources:
+            return False
+        current = self.resources
+        if replacement.generation != expected_generation + 1:
+            return False
+        invariant_fields = (
+            "worker_id",
+            "slot_index",
+            "ros_domain_id",
+            "simulation_port",
+            "bridge_port",
+            "gz_partition",
+            "controller_namespace",
+            "render_backend",
+            "render_context_id",
+            "render_context_namespace",
+            "virtual_display",
+            "ros_home",
+            "ros_log_dir",
+            "temp_dir",
+            "socket_namespace",
+            "socket_path",
+            "worker_root",
+        )
+        if any(
+            getattr(replacement, name) != getattr(current, name)
+            for name in invariant_fields
+        ):
+            return False
+        if (
+            not isinstance(replacement.session_id, str)
+            or not replacement.session_id
+            or replacement.session_id in self._used_session_ids
+        ):
+            return False
+        expected_environment = dict(current.environment)
+        expected_environment["SO101_WORKER_GENERATION"] = str(
+            replacement.generation
+        )
+        expected_environment["SO101_SESSION_ID"] = replacement.session_id
+        return dict(replacement.environment) == expected_environment
+
     def recover(self, worker_id: str, generation: int, deadline_monotonic_s: float) -> bool:
+        if (
+            not isinstance(worker_id, str)
+            or worker_id != self.resources.worker_id
+            or type(generation) is not int
+            or generation != self.resources.generation
+        ):
+            return False
         try:
             deadline = _finite_timestamp("recovery deadline", deadline_monotonic_s)
         except ValueError:
@@ -718,11 +773,33 @@ class ParallelWorkerRuntime:
         recovered = self._recovery(worker_id, generation, deadline) is True
         if not recovered or self._monotonic() >= deadline:
             return False
+        try:
+            replacement = self._replace_resources(
+                worker_id, expected_generation=generation
+            )
+        except Exception:
+            return False
         if self._monotonic() >= deadline:
             return False
-        self.start_physical_runtime()
+        if not self._valid_replacement(
+            replacement, expected_generation=generation
+        ):
+            return False
         if self._monotonic() >= deadline:
-            self.shutdown_owned()
+            return False
+        self.resources = replacement
+        self._used_session_ids.add(replacement.session_id)
+        if self._monotonic() >= deadline:
+            return False
+        try:
+            self.start_physical_runtime()
+        except Exception:
+            return False
+        if self._monotonic() >= deadline:
+            try:
+                self.shutdown_owned()
+            except Exception:
+                pass
             return False
         return True
 

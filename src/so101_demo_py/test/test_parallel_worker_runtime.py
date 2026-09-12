@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -93,12 +94,14 @@ class _ProcessGroup:
             self.on_shutdown()
 
 
-def _lease(worker="worker-1", *, point="P01", attempt="attempt-1"):
+def _lease(
+    worker="worker-1", *, generation=1, point="P01", attempt="attempt-1"
+):
     return SimpleNamespace(
         batch_id="batch-1",
         coordinator_epoch=1,
         worker_id=worker,
-        worker_generation=1,
+        worker_generation=generation,
         point_id=point,
         attempt_id=attempt,
         lease_generation=1,
@@ -143,6 +146,20 @@ def _plan_receipt(states, completion=25.0):
             for index, state in enumerate(states)
         ),
         completion,
+    )
+
+
+def _replacement(resources: WorkerResources) -> WorkerResources:
+    generation = resources.generation + 1
+    session_id = f"session-{resources.worker_id}-generation-{generation}"
+    environment = dict(resources.environment)
+    environment["SO101_WORKER_GENERATION"] = str(generation)
+    environment["SO101_SESSION_ID"] = session_id
+    return replace(
+        resources,
+        generation=generation,
+        session_id=session_id,
+        environment=environment,
     )
 
 
@@ -822,27 +839,203 @@ def test_recover_and_shutdown_use_only_the_runtime_owned_group(tmp_path: Path) -
 
     processes = _ProcessGroup()
     recoveries = []
+    resources = _resources(tmp_path, "worker-1", 0, 181)
     runtime = build_worker_runtime(
-        _resources(tmp_path, "worker-1", 0, 181),
+        resources,
         RunMode.PLAN_ONLY,
         process_group=processes,
         recovery=lambda worker, generation, deadline: recoveries.append(
             (worker, generation, deadline)
         )
         or True,
+        replace_resources=lambda _worker, *, expected_generation: (
+            _replacement(resources)
+            if expected_generation == resources.generation
+            else None
+        ),
         monotonic=lambda: 1.0,
     )
     runtime.start_physical_runtime()
 
-    assert runtime.recover("worker-1", 3, 120.0) is True
+    assert runtime.recover("worker-1", 1, 120.0) is True
     runtime.shutdown_owned()
 
-    assert recoveries == [("worker-1", 3, 120.0)]
+    assert recoveries == [("worker-1", 1, 120.0)]
     assert processes.shutdown_calls == 2
     assert [spec.role for spec in processes.specs] == [
         "task-station",
         "task-station",
     ]
+
+
+def test_recover_rejects_stale_generation_before_shutdown_or_replacement(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    resources = _replacement(_resources(tmp_path, "worker-1", 0, 181))
+    processes = _ProcessGroup()
+    recoveries = []
+    replacements = []
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda *args: recoveries.append(args) or True,
+        replace_resources=lambda *args, **kwargs: replacements.append(
+            (args, kwargs)
+        )
+        or _replacement(resources),
+        monotonic=lambda: 1.0,
+    )
+    runtime.start_physical_runtime()
+
+    assert resources.generation == 2
+    assert runtime.recover("worker-1", 1, 120.0) is False
+    assert processes.shutdown_calls == 0
+    assert recoveries == []
+    assert replacements == []
+    assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_recover_replaces_resources_and_accepts_only_the_next_generation(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    original = _resources(tmp_path, "worker-1", 0, 181)
+    replacement = _replacement(original)
+    calls = []
+    processes = _ProcessGroup()
+
+    def replace_resources(worker_id, *, expected_generation):
+        calls.append((worker_id, expected_generation))
+        return replacement
+
+    runtime = build_worker_runtime(
+        original,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda worker, generation, deadline: calls.append(
+            (worker, generation, deadline)
+        )
+        or True,
+        replace_resources=replace_resources,
+        monotonic=lambda: 1.0,
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 1, 120.0) is True
+    assert runtime.resources is replacement
+    assert calls == [("worker-1", 1, 120.0), ("worker-1", 1)]
+    assert replacement.generation == 2
+    assert replacement.worker_id == original.worker_id
+    assert replacement.slot_index == original.slot_index
+    assert replacement.ros_domain_id == original.ros_domain_id
+    assert replacement.worker_root == original.worker_root
+    assert replacement.session_id != original.session_id
+    assert processes.environments[-1] == dict(replacement.environment)
+    assert f"session_id:={replacement.session_id}" in processes.specs[-1].argv
+    runtime.reset_point(
+        _lease(generation=2, point="P02", attempt="attempt-2")
+    )
+
+
+@pytest.mark.parametrize(
+    "replacement_mutation",
+    (
+        lambda current: replace(_replacement(current), generation=current.generation),
+        lambda current: replace(_replacement(current), session_id=current.session_id),
+        lambda current: replace(_replacement(current), worker_id="worker-2"),
+        lambda current: replace(_replacement(current), slot_index=2),
+        lambda current: replace(_replacement(current), ros_domain_id=182),
+        lambda current: replace(
+            _replacement(current), worker_root=current.worker_root / "escaped"
+        ),
+        lambda current: replace(
+            _replacement(current),
+            environment={
+                **dict(_replacement(current).environment),
+                "ROS_DOMAIN_ID": "999",
+            },
+        ),
+        lambda _current: object(),
+    ),
+)
+def test_recover_rejects_malformed_replacement_without_starting_new_stack(
+    tmp_path: Path, replacement_mutation
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    processes = _ProcessGroup()
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda *_args: True,
+        replace_resources=lambda *_args, **_kwargs: replacement_mutation(resources),
+        monotonic=lambda: 1.0,
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 1, 120.0) is False
+    assert runtime.resources is resources
+    assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_recover_does_not_restart_when_resource_replacement_crosses_deadline(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    now = [9.0]
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    processes = _ProcessGroup()
+
+    def replace_resources(*_args, **_kwargs):
+        now[0] = 10.0
+        return _replacement(resources)
+
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda *_args: True,
+        replace_resources=replace_resources,
+        monotonic=lambda: now[0],
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 1, 10.0) is False
+    assert runtime.resources is resources
+    assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_recover_checks_deadline_immediately_before_replacement_restart(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    times = iter((9.0, 9.0, 9.0, 9.0, 9.0, 10.0))
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    processes = _ProcessGroup()
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda *_args: True,
+        replace_resources=lambda *_args, **_kwargs: _replacement(resources),
+        monotonic=lambda: next(times),
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 1, 10.0) is False
+    assert [spec.role for spec in processes.specs] == ["task-station"]
 
 
 def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Path) -> None:
@@ -860,7 +1053,7 @@ def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Pat
     )
     runtime.start_physical_runtime()
 
-    assert runtime.recover("worker-1", 3, 10.0) is False
+    assert runtime.recover("worker-1", 1, 10.0) is False
     assert recovery_calls == []
     assert [spec.role for spec in processes.specs] == ["task-station"]
 
@@ -870,19 +1063,21 @@ def test_recover_does_not_restart_when_recovery_crosses_deadline(tmp_path: Path)
 
     now = [9.0]
     processes = _ProcessGroup()
+    resources = _resources(tmp_path, "worker-1", 0, 181)
 
     def recovery(*_args):
         now[0] = 10.0
         return True
 
     runtime = build_worker_runtime(
-        _resources(tmp_path, "worker-1", 0, 181),
+        resources,
         RunMode.PLAN_ONLY,
         process_group=processes,
         recovery=recovery,
+        replace_resources=lambda *_args, **_kwargs: _replacement(resources),
         monotonic=lambda: now[0],
     )
     runtime.start_physical_runtime()
 
-    assert runtime.recover("worker-1", 3, 10.0) is False
+    assert runtime.recover("worker-1", 1, 10.0) is False
     assert [spec.role for spec in processes.specs] == ["task-station"]
