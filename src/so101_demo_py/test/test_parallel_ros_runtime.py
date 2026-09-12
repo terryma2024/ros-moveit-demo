@@ -922,6 +922,10 @@ def test_resource_rebind_closes_generation_state_and_uses_new_session():
     new = SimpleNamespace(worker_id="worker-01", generation=2, session_id="session-g2")
     ports = ParallelRosRuntimePorts(old, catalog={})
     ports._rgbd[1] = (SimpleNamespace(close=lambda: closed.append("rgbd")), None, None, None)
+    ports._pose_publisher_owner = SimpleNamespace(
+        close=lambda: closed.append("pose-publisher")
+    )
+    ports._pose_publisher = object()
     ports._reset_receipts["a"] = object()
     ports._localized["a"] = object()
     ports.rebind_resources(new)
@@ -929,7 +933,9 @@ def test_resource_rebind_closes_generation_state_and_uses_new_session():
     assert ports._rgbd == {}
     assert ports._reset_receipts == {}
     assert ports._localized == {}
-    assert closed == ["rgbd"]
+    assert closed == ["rgbd", "pose-publisher"]
+    assert ports._pose_publisher_owner is None
+    assert ports._pose_publisher is None
 
 
 def test_shutdown_cancels_and_independently_confirms_goals_without_reset(monkeypatch):
@@ -1156,6 +1162,81 @@ def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkey
         message.pose.orientation.z,
         message.pose.orientation.w,
     ) == admitted.pose_world.values
+
+
+def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime import task_batch_runtime
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    events = []
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            events.append("publisher-created")
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=200_000_000)
+            )
+
+    class Owner:
+        node = Node()
+        closed = False
+
+        @staticmethod
+        def spin_once(*, timeout_sec):
+            events.append(("spin", timeout_sec))
+
+        def close(self):
+            self.closed = True
+            events.append("closed")
+
+    owner = Owner()
+
+    class GraphProbe:
+        @staticmethod
+        def subscription_count(node_name, topic):
+            assert (node_name, topic) == (
+                "/so101_dynamic_cup_pick_place",
+                "/cup_pose",
+            )
+            return 1
+
+    monkeypatch.setattr(task_batch_runtime, "RosGraphProbe", GraphProbe)
+    monkeypatch.setattr(
+        runtime_module,
+        "_open_isolated_ros_node",
+        lambda *_args, **_kwargs: owner,
+    )
+    ports = ParallelRosRuntimePorts(SimpleNamespace(), catalog={})
+
+    assert ports.consumer_ready(SimpleNamespace(pid=os.getpid())) is True
+    assert events[0] == "publisher-created"
+    admitted = SimpleNamespace(
+        source_stamp_ns=100_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+    assert ports.publish_pose(admitted) is True
+    assert len(published) == 1
+    assert owner.closed is False
+
+    ports.close_runtime()
+    assert owner.closed is True
 
 
 def test_pose_publication_fails_closed_when_sim_clock_cannot_reach_source(monkeypatch):
