@@ -32,7 +32,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-024
-next_experiment: EXP-040 is RUNNING
+next_experiment: EXP-040 is INVALID; F45 stable topology correction precedes EXP-041
 ```
 
 Frozen provenance:
@@ -117,6 +117,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F42: Task 14 may narrowly correct the two point-initial observation mappings identified by EXP-037, with direct RED/GREEN tests. The forbidden-contact predicate must be true only when either fingertip-contact collection is nonempty; legal table/support contact in the broad atomic evidence must not fail this predicate. The exact stable Worker-node inventory must include the three required active controller nodes `/arm_controller`, `/gripper_controller`, and `/joint_state_broadcaster` while continuing to reject any missing, duplicate, or unknown node. Reset/session, freshness, joints, goals, attachment, graph stability, all physical thresholds, and all downstream authorization remain unchanged. Cost if wrong: an actual fingertip contact or stale node could pass; therefore tests must prove fingertip rejection and exact-inventory rejection independently.
 - Ruling F43: Before changing the exact Worker-node inventory again, extend only the existing bounded `worker_nodes` rejection diagnostic to report deterministic expected, missing, and unexpected FQNs. Each collection is sorted, length bounded by the frozen graph limit, and contains only already-observed node names; duplicate observations remain rejected and are reported separately by a bounded duplicate list. The equality predicate and every authorization value remain unchanged. Cost if wrong: diagnostic payload could become unbounded; direct tests must prove ordering, bounds, duplicate attribution, and unchanged acceptance/rejection.
 - Ruling F44: Compress the F43 node diagnostic so the complete payload, including the fixed failure prefix, fits the existing 512-byte Worker failure-message contract for the observed graph. Omit the redundant full expected list; retain sorted `missing`, `unexpected`, `duplicates`, and `truncated`, with the same per-list and per-name bounds. Add a direct integration assertion through `_bounded_failure_message` proving no truncation for the bounded payload. Equality and authorization remain unchanged. Cost if wrong: another diagnostic run remains inconclusive; increasing the Worker failure bound or weakening graph admission is not authorized.
+- Ruling F45: Replace impossible whole-graph tuple equality with an exact stable topology predicate that matches the independently observed two-Worker graph and the design's actual stale-node isolation requirement. Require every fixed Worker node exactly once; require the four legitimate fixed internal nodes `/controller_manager`, `/move_group/moveit`, `/moveit_simple_controller_manager`, and `/robotsystem` exactly once; require exactly one node in each runtime-generated category `/move_group_private_<decimal>`, `/moveit_<decimal>`, and `/transform_listener_impl_<lower-hex>`. Reject any missing node, duplicate FQN, second member of a generated category, malformed suffix, or unknown node. Keep stable-graph sampling and all non-node gates unchanged. Cost if wrong: an old in-domain internal node could be admitted; direct tests must cover missing, duplicate-category, malformed, and unknown-node rejection before live execution.
 
 ```yaml
 checkpoint_id: CP-002
@@ -2155,12 +2156,14 @@ decision: RUN diagnostic-only EXP-040 with unchanged authorization and physical 
 
 ```yaml
 experiment_id: EXP-040
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:20:30+08:00
   - status: RUNNING
     at: 2026-09-12T19:20:30+08:00
+  - status: INVALID
+    at: 2026-09-12T19:25:26+08:00
 prior_experiment: EXP-039
 hypothesis: F44 preserves the full stable unexpected-node set in each Worker result under the existing 512-byte failure boundary.
 prediction: A worker_nodes rejection contains parseable complete missing/unexpected/duplicates/truncated JSON, with zero countable attempts.
@@ -2175,6 +2178,28 @@ provenance:
   config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
   catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
   selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+result: >-
+  Command exit was 1. Both Workers produced complete parseable node diagnostics before
+  ATTEMPT_STARTED. Every required node was present, no duplicate FQN existed, and the only seven
+  additional nodes were /controller_manager, /move_group/moveit, one /move_group_private_<digits>,
+  one /moveit_<digits>, /moveit_simple_controller_manager, /robotsystem, and one
+  /transform_listener_impl_<lower-hex>. The two Workers had the same seven categories with only the
+  three expected runtime-generated suffixes differing. Exact whole-graph tuple equality therefore
+  contradicts the design's actual requirement (no old same-Worker node or cross-Worker control
+  topic) and is impossible for this legitimate isolated stack. All points remain UNRUN and zero
+  attempts are countable.
+cleanup: >-
+  Exact CID feb2befbe9a4c5761d88321c04568177064b471aacaea8fa460ea60579e06fa1 was verified against the
+  F44 immutable image, batch/generation labels, and registered mounts, then stopped. Post-stop
+  process/container/GPU audit found zero related residue. The late MuJoCo log was moved without
+  deletion to reports/MUJOCO_LOG-EXP040.txt.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 7f6b63ba28544902215de406e298cdf5d49f8b83020b5e943220edc8d3e7f856
+command_time_sha256: 6889f299d2529b75204505fca07fa88f0aac4451d44222e1529e0d08d7f8ae7d
+worker_01_result_sha256: 91097bf68c47b87f90ea5cdac370623b941f8fc490b1ffe5088920a98051ad87
+worker_02_result_sha256: 7f914ad038c749b9eab0305cc7d417c995ee4934077a0ba2d7ebce10e38217dc
+mujoco_log_sha256: e3afffd59ffc84f9efa47a1388d31e3931eb6cfa176ec701491d0c581ccc82d2
+conclusion: INVALID; zero countable attempts. Replace impossible whole-graph equality with exact required nodes plus an exact one-per-category internal-node topology under F45, retaining unknown/missing/duplicate rejection.
 retained: complete immutable EXP-040 batch and reports plus all prior evidence
 archived: none
 deletion_candidates: p54/direct pytest scratch after readback; no deletion authorized
