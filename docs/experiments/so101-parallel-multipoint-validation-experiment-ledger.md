@@ -6175,10 +6175,12 @@ decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL
 
 ```yaml
 experiment_id: EXP-094
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:59:22+08:00
+  - status: RUNNING
+    at: 2026-09-13T07:00:15+08:00
 prior_experiment: EXP-093
 hypothesis: The F91 delivered-response retirement preserves the accepted two-Worker four-point physical behavior and prevents completed requests from poisoning later service health.
 single_variable: Replace F90 with F91, whose only runtime change retires delivered terminal service responses; selection, N=2, K=2, config, catalog, models, MuJoCo/MoveIt runtime, deadlines, safety decisions, and execute behavior remain fixed from EXP-091.
@@ -6193,6 +6195,7 @@ selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370c
 preflight: No related process, task container, or GPU compute application; 24 CPUs, 25.272 GiB MemAvailable, 15272 MiB GPU free; batch root absent.
 provenance:
   executable_source_commit: ed91c14cc3476fae07847e6907b6d11684ba9d46
+  preregistration_commit: 1b3fbb77df67adfb0f8142c5833284a93788ff53
   preregistration_base_commit: 3fde94a7f
   executable_source_tree: 052dae12a2a46dab28d8e4e9c55dc0930df856c0890b2c9197eaa8bce2a04970
   installed_module_tree: 4aae546b05dfd3aaace20566df98fd9dd53e671d0c2b0c71bb4cea3fb0147f6b
