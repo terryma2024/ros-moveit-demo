@@ -23,40 +23,49 @@ def _lease():
     )
 
 
-def test_production_initial_gate_replays_each_authoritative_action_status(monkeypatch):
+def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkeypatch):
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
-    from so101_demo.backends.mujoco import client as client_module
     from so101_demo.backends.mujoco import teleop_runtime
     from so101_demo.runtime import parallel_ros_runtime as runtime_module
 
     captured_qos = []
 
     class Future:
+        def __init__(self, value):
+            self.value = value
+
         def done(self):
             return True
 
         def result(self):
-            return SimpleNamespace(
-                scene=SimpleNamespace(
-                    robot_state=SimpleNamespace(attached_collision_objects=[])
-                )
-            )
+            return self.value
 
     class ServiceClient:
         def wait_for_service(self, *, timeout_sec):
             return timeout_sec > 0.0
 
         def call_async(self, _request):
-            return Future()
+            return Future(SimpleNamespace(
+                scene=SimpleNamespace(
+                    robot_state=SimpleNamespace(attached_collision_objects=[])
+                )
+            ))
+
+    class CancelClient:
+        def wait_for_service(self, *, timeout_sec):
+            return timeout_sec > 0.0
+
+        def call_async(self, _request):
+            return Future(SimpleNamespace(goals_canceling=[]))
 
     class Node:
         def __init__(self, name):
             self.name = name
             self.callbacks = []
 
-        def create_client(self, *_args):
-            return ServiceClient()
+        def create_client(self, _service, name):
+            return CancelClient() if name.endswith("/cancel_goal") else ServiceClient()
 
         def create_subscription(self, _message, _topic, callback, qos):
             captured_qos.append(qos)
@@ -69,34 +78,15 @@ def test_production_initial_gate_replays_each_authoritative_action_status(monkey
         def destroy_node(self):
             return None
 
-    nodes = {}
-
     def create_node(name):
-        node = Node(name)
-        nodes[name] = node
-        return node
+        return Node(name)
 
     def spin_once(node, *, timeout_sec):
         assert timeout_sec == 0.01
-        for callback in node.callbacks:
-            callback(SimpleNamespace(status_list=[]))
-
-    class MujocoClient:
-        joint_callback_count = 1
-
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def progress(self):
-            return None
-
-        def latest_joint_positions(self):
-            return (0.0,) * 6
 
     monkeypatch.setattr(rclpy, "ok", lambda: True)
     monkeypatch.setattr(rclpy, "create_node", create_node)
     monkeypatch.setattr(rclpy, "spin_once", spin_once)
-    monkeypatch.setattr(client_module, "MujocoRosClient", MujocoClient)
     monkeypatch.setattr(
         teleop_runtime,
         "current_evidence",
@@ -107,13 +97,14 @@ def test_production_initial_gate_replays_each_authoritative_action_status(monkey
     )
 
     runtime_module.observe_parallel_initial_gate(
-        runtime_module.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0),
+        runtime_module.ResetBoundaryReceipt(
+            "reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6
+        ),
         timeout_s=0.25,
     )
 
     assert captured_qos == [qos_profile_action_status_default] * 3
 
-    MujocoClient.joint_callback_count = 0
     with pytest.raises(
         RuntimeError,
         match=r"^POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:joint_state$",
