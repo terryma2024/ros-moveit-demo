@@ -4055,12 +4055,14 @@ decision: RUN EXP-062
 
 ```yaml
 experiment_id: EXP-062
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T01:06:58+08:00
   - status: RUNNING
     at: 2026-09-13T01:06:58+08:00
+  - status: INVALID
+    at: 2026-09-13T01:15:30+08:00
 prior_experiment: EXP-061
 hypothesis: Treating a verified already-absent Broker as successfully retired preserves exact ownership fencing while allowing the unchanged four-point physical and recovery path to qualify.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, all four recovery receipts succeed, exact Broker auto-removes, and no owned task remains.
@@ -4084,10 +4086,30 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f61 and root live-small-f61.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, or cleanup failure remains INVALID.
-result: PENDING
-retained: all prior evidence; runtime evidence pending
+result: INVALID — exit 1 after 194.46 seconds. task_start and sample_05_near_center PASSED with visually correct terminal placement. worker-02's cup_test_forward_5cm consumer emitted READY, but the late-created /cup_pose publisher did not deliver the single pose before being destroyed; the consumer timed out after 5.0 seconds and execute_expert raised POSE_ACCEPTED_PUBLICATION_FAILED. The conservative action-may-have-started boundary sealed this point INDETERMINATE; recovery fenced the generation but could not prove stopped or confirmed, so worker-02 was quarantined. worker-01 then reached K=2 and sample_14_far_right remained UNRUN. The batch is nonterminal, cleanup cannot qualify, and qualification_passed=false.
+cleanup_readback: No related process, running container, GPU compute application, or ROS domain 181-183 claim remains. The exact F61 Broker auto-removed without manual action.
+visual_readback: All five available immutable 640x480 RGB images were inspected at original resolution. The two PASSED points have correct initial and terminal frames. The INDETERMINATE point has only a correct initial frame; the UNRUN point has none. Visual outcome PARTIAL_PASS_INVALID_BATCH.
+retained: complete live-small-f61 tree, command-062 log/time/exit, visual report, root-cause report, cleanup audit, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-055
+last_valid_experiment: EXP-022
+current_hypothesis: Priming one isolated /cup_pose publisher during exact consumer readiness and retaining it through publication will eliminate late DDS/clock discovery loss without changing pose, authorization, or motion policy.
+working_tree_status: clean executable source at bcf538fbb57a056f4edc01da5f09193afc9e3ebb; bounded F62 TDD correction follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-062 reproduced the previously latent consumer/publisher race: consumer readiness alone does not make a newly created publisher's one message durable across a 50 ms lifetime under parallel load.
+  - The failed Worker emitted status=READY, then CUP_POSE_TIMEOUT, while execute_expert reported POSE_ACCEPTED_PUBLICATION_FAILED. It never produced a terminal RGB or dynamic execution manifest.
+  - The unchanged conservative recovery behavior fenced and quarantined the uncertain Worker; the second Worker continued independently to K=2 and passed both points.
+  - Five available RGB frames pass original-resolution inspection, and post-run readback proves no process, container, GPU task, or domain claim remains.
+ruling: F62 may keep a Worker-local isolated ROS publisher alive from consumer readiness through recovery/close, pre-spinning its /clock and DDS graph before inference. It must preserve the exact /cup_pose payload, source timestamp, subscriber count requirement, run-mode authorization, recovery fencing, and all physical criteria. Direct tests must prove prewarm, retention, exact close/rebind cleanup, and fail-closed behavior.
+retained: EXP-062 runtime, visual, root-cause, and cleanup evidence plus all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F62 WITH TDD; do not start another live experiment until focused, adjacent, package, build, provenance, image, smoke, and fresh preflight gates pass.
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
