@@ -352,6 +352,12 @@ class BatchCoordinator:
                       worker_id, generation, self.request.selected_point_ids[0],
                       'registration', 1, 0, 1)
         old = self._state['workers'].get(worker_id)
+        if (
+            self._state['terminal_reason'] is not None
+            and recovery_deadline_monotonic_s is None
+            and old is None
+        ):
+            raise ValueError('STOP_REQUESTED')
         if old:
             if generation < old['generation']:
                 raise ValueError('STALE_WORKER_GENERATION')
@@ -439,6 +445,8 @@ class BatchCoordinator:
             self._active(lease)
             return self.snapshot().workers[lease.worker_id]
         worker = self._active(lease)
+        if worker['stop_requested']:
+            raise ValueError('STOP_REQUESTED')
         if worker['state'] != expected:
             raise ValueError('WRONG_STAGE')
         self._stage(worker, target)
@@ -488,6 +496,8 @@ class BatchCoordinator:
         """Renew within immutable phase/batch bounds; the returned value is the ACK."""
         self._tick()
         worker = self._active(lease)
+        if worker["stop_requested"]:
+            raise ValueError("STOP_REQUESTED")
         self._renew(worker)
         self._emit('LEASE_RENEWED', {'workers': {lease.worker_id: worker}})
         return LeaseIdentity(**worker['lease'])

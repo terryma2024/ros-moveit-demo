@@ -459,12 +459,13 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
 
 
 def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_path):
-    import socket
+    import threading
 
     from so101_demo.cli.mujoco_parallel_batch import (
         ProductionBatchComposition, _write_json, prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.runtime.parallel_ipc import BrokerTransport, _BrokerCoordinatorClient
 
     class Probe:
         def snapshot(self):
@@ -496,11 +497,8 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         spec, resource_probe=Probe(), claim_root=scratch / "brc",
         supervisor=supervisor, broker_command_builder=lambda _owner: ("broker",),
     )
-    directory_fd = os.open(composition.broker_runtime_root, os.O_RDONLY | os.O_DIRECTORY)
-    listener = socket.socket(socket.AF_UNIX)
+    broker_server = None
     try:
-        listener.bind(f"/proc/self/fd/{directory_fd}/{composition.broker_socket_path.name}")
-        composition.broker_socket_path.chmod(0o600)
         ready = {
             "schema_version": 1,
             "kind": "so101_parallel_broker_ready",
@@ -522,14 +520,76 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
                 },
             },
         }
+        composition._start_servers()
+        authority_call = _BrokerCoordinatorClient(
+            composition.broker_authority_server.path,
+            composition.broker_token_path,
+            coordinator_epoch=composition.journal.coordinator_epoch,
+            generation=1,
+            deadline_s=1.0,
+            max_frame_bytes=spec.config.broker_max_frame_bytes,
+        )
+        transport = BrokerTransport(
+            ipc_root=composition.broker_runtime_root,
+            config=spec.config,
+            generation=1,
+            authority_call=authority_call,
+            deadline_s=1.0,
+        )
+        transport.bind_ready_identity(ready)
+        broker_server = transport.server(
+            SimpleNamespace(), endpoint=composition.broker_socket_path
+        )
+        broker_thread = threading.Thread(
+            target=broker_server.serve_forever, daemon=True
+        )
+        broker_thread.start()
         _write_json(composition.broker_runtime_root / "ready.json", ready)
         assert composition._wait_broker_ready() is True
         assert supervisor.health_checks >= 1
     finally:
-        listener.close()
-        os.close(directory_fd)
-        composition.journal.close()
-        composition.allocator.close()
+        if broker_server is not None:
+            broker_server.close()
+            broker_thread.join(timeout=1.0)
+        composition._stop_servers()
+        composition._release_partial()
+
+
+def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError, ProductionBatchComposition, _write_json, prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self): return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain): return False
+        def socket_in_use(self, _path): return False
+
+    class Supervisor:
+        processes = ()
+        def assert_healthy(self): return None
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "ns", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {
+            **verified(value), "image_id": "sha256:" + "b" * 64,
+        },
+    )
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "nsc",
+        supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",),
+    )
+    try:
+        composition.broker_socket_path.write_bytes(b"not a socket")
+        composition.broker_socket_path.chmod(0o600)
+        _write_json(composition.broker_runtime_root / "ready.json", {})
+        with pytest.raises(CliError, match="BROKER_READY"):
+            composition._wait_broker_ready()
+    finally:
+        composition._release_partial()
 
 
 def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tmp_path):
@@ -756,6 +816,13 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
             response.identity,
         )
         assert transport.authorize(request, snapshot) is False
+        valid_snapshot = Snapshot(
+            (4, 5, 3), 12_000_000_000, "task_camera_frame",
+            start_key, "VALIDATION_STARTED", response.identity,
+        )
+        assert transport.authorize(request, valid_snapshot) is True
+        composition.coordinator.request_stop(reason="RACE_STOP")
+        assert transport.authorize(request, valid_snapshot) is False
     finally:
         if broker_server is not None:
             broker_server.close()
@@ -1282,3 +1349,41 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     foreign.write_text("mixed", encoding="utf-8")
     with pytest.raises(CliError, match="MIXED_OVERLAY"):
         _validate_provenance_overlay(repository, module, foreign, config, points)
+
+
+def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError, _installed_overlay_identity,
+    )
+    from so101_demo.cli.parallel_perception_broker import source_hash
+
+    repository = tmp_path / "checkout"
+    source = repository / "src/so101_demo_py/src/so101_demo"
+    module = source / "cli/mujoco_parallel_batch.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("approved = True\n", encoding="utf-8")
+    build = repository / "build/so101_demo_py"
+    build.mkdir(parents=True)
+    (build / "so101_demo").symlink_to(source, target_is_directory=True)
+    console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
+    console.parent.mkdir(parents=True)
+    console.write_text("#!/bin/sh\n", encoding="utf-8")
+    egg = repository / "install/so101_demo_py/lib/python3.12/site-packages/so101-demo-py.egg-link"
+    egg.parent.mkdir(parents=True)
+    egg.write_text(str(build) + "\n.\n", encoding="utf-8")
+    import_path = build / "so101_demo/cli/mujoco_parallel_batch.py"
+
+    identity = _installed_overlay_identity(
+        repository, import_path, console, source_hash=source_hash
+    )
+    assert identity["installed_module_tree_sha256"] == source_hash(source)
+
+    stale = repository / "stale/so101_demo"
+    stale.mkdir(parents=True)
+    (stale / "old.py").write_text("old = True\n", encoding="utf-8")
+    (build / "so101_demo").unlink()
+    (build / "so101_demo").symlink_to(stale, target_is_directory=True)
+    with pytest.raises(CliError, match="INSTALLED_OVERLAY|INSTALLED_BYTES"):
+        _installed_overlay_identity(
+            repository, import_path, console, source_hash=source_hash
+        )

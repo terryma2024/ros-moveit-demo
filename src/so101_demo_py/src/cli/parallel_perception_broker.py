@@ -353,6 +353,7 @@ def main(argv=None, *, transport=None, authorize=None):
                 },
             },
         }
+        transport.bind_ready_identity(strict_ready)
         write_receipt(ready_path, strict_ready)
     if args.smoke_input:
         from PIL import Image

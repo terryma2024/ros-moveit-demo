@@ -229,6 +229,45 @@ class Coordinator:
         return Ack(state, facts["generation"], None)
 
 
+def test_stop_is_atomic_fence_before_worker_can_start_new_work():
+    fake = Fake(RunMode.PLAN_ONLY)
+    worker = ParallelWorker(fake.ports())
+
+    worker.request_stop()
+    outcome = worker.run_one()
+
+    assert outcome.stopped_reason == "STOP_REQUESTED"
+    assert fake.coordinator.calls == []
+    assert fake.runtime.calls == []
+    assert fake.broker.calls == []
+
+
+def test_stop_racing_lease_reply_fences_all_runtime_and_broker_side_effects():
+    fake = Fake(RunMode.PLAN_ONLY)
+    worker = ParallelWorker(fake.ports())
+    entered, release = threading.Event(), threading.Event()
+    original = fake.coordinator.grant_lease
+
+    def blocked_grant(*args, **kwargs):
+        entered.set()
+        release.wait(1.0)
+        return original(*args, **kwargs)
+
+    fake.coordinator.grant_lease = blocked_grant
+    result = []
+    thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    thread.start()
+    assert entered.wait(1.0)
+    worker.request_stop()
+    release.set()
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert result[0].stopped_reason == "LEASE_ACK_FAILED"
+    assert fake.runtime.calls == ["worker_ready_gate"]
+    assert fake.broker.calls == []
+
+
 class Broker:
     def __init__(self):
         self.calls = []

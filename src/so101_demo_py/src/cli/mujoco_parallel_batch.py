@@ -188,7 +188,8 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     image = spec["broker_image"]
     if image != _BROKER_IMAGE:
         raise CliError("PROVENANCE_BROKER_IMAGE")
-    module_path = Path(__file__).resolve()
+    module_import_path = Path(__file__).absolute()
+    module_path = module_import_path.resolve()
     try:
         repository_root = Path(subprocess.run(
             ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
@@ -231,6 +232,9 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     )):
         raise CliError("PROVENANCE_INSTALLED_INPUT_MISSING")
     from so101_demo.cli.parallel_perception_broker import source_hash
+    installed_identity = _installed_overlay_identity(
+        repository_root, module_import_path, console_path, source_hash=source_hash
+    )
     try:
         from so101_demo.cli.parallel_perception_broker import image_record
 
@@ -245,6 +249,7 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         "installed_console_sha256": _sha256(console_path),
         "installed_module_path": str(module_path),
         "installed_module_sha256": _sha256(module_path),
+        **installed_identity,
         "runtime_config_sha256": _sha256(config_path),
         "dynamic_policy_sha256": _sha256(policy_path),
         "task_scene_sha256": _sha256(scene_config),
@@ -285,6 +290,64 @@ def _validate_provenance_overlay(
         != (expected_console_root / "so101_parallel_batch").resolve()
     ):
         raise CliError("PROVENANCE_MIXED_OVERLAY")
+
+
+def _installed_overlay_identity(
+    repository_root: Path,
+    module_import_path: Path,
+    console_path: Path,
+    *,
+    source_hash,
+) -> Mapping[str, object]:
+    """Bind editable build/install artifacts to this exact source checkout."""
+
+    repository_root = Path(repository_root).resolve()
+    source_package = (
+        repository_root / "src/so101_demo_py/src/so101_demo"
+    ).resolve()
+    build_package = repository_root / "build/so101_demo_py/so101_demo"
+    expected_module = build_package / "cli/mujoco_parallel_batch.py"
+    expected_console = (
+        repository_root
+        / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
+    )
+    egg_links = tuple(
+        (repository_root / "install/so101_demo_py/lib").glob(
+            "python*/site-packages/so101-demo-py.egg-link"
+        )
+    )
+    if (
+        Path(module_import_path).absolute() != expected_module.absolute()
+        or Path(console_path).absolute() != expected_console.absolute()
+        or not build_package.is_symlink()
+        or build_package.resolve() != source_package
+        or len(egg_links) != 1
+    ):
+        raise CliError("PROVENANCE_INSTALLED_OVERLAY")
+    egg_link = egg_links[0]
+    try:
+        target_line = egg_link.read_text(encoding="utf-8").splitlines()[0]
+    except (OSError, UnicodeError, IndexError) as error:
+        raise CliError("PROVENANCE_INSTALLED_OVERLAY") from error
+    target = Path(target_line)
+    if not target.is_absolute():
+        target = egg_link.parent / target
+    expected_build_root = (repository_root / "build/so101_demo_py").resolve()
+    if target.resolve() != expected_build_root:
+        raise CliError("PROVENANCE_INSTALLED_OVERLAY")
+    source_tree = source_hash(source_package)
+    build_tree = source_hash(build_package.resolve())
+    if build_tree != source_tree:
+        raise CliError("PROVENANCE_INSTALLED_BYTES")
+    return {
+        "module_import_path": str(expected_module),
+        "module_import_sha256": _sha256(expected_module),
+        "source_module_tree_sha256": source_tree,
+        "installed_module_tree_path": str(build_package),
+        "installed_module_tree_sha256": build_tree,
+        "installed_egg_link_path": str(egg_link),
+        "installed_egg_link_sha256": _sha256(egg_link),
+    }
 
 
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
@@ -1187,6 +1250,8 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
             operation,
             deadline_monotonic_s=time.monotonic() + document["shutdown_deadline_s"],
         )
+        if operation == "stop":
+            worker.request_stop()
         return {"completed": completed}
 
     control_server = AuthenticatedUnixServer(
@@ -1246,6 +1311,7 @@ class ProductionBatchComposition:
         supervisor=None,
         broker_command_builder=None,
         provenance_revalidator=None,
+        broker_health_client_factory=UnixRpcClient,
     ):
         self.spec = spec
         self.allocator = WorkerResourceAllocator(
@@ -1282,6 +1348,7 @@ class ProductionBatchComposition:
             coordinator_epoch=self.journal.coordinator_epoch,
         )
         self._broker_command_builder = broker_command_builder
+        self._broker_health_client_factory = broker_health_client_factory
         self._provenance_revalidator = (
             spec.provenance_verifier
             if provenance_revalidator is None
@@ -1301,6 +1368,7 @@ class ProductionBatchComposition:
                 ipc_root=self.broker_runtime_root,
             )
             broker_token_path = self.broker_authority.issue("broker", 1)
+            self.broker_token_path = broker_token_path
             broker_authority_path = self.broker_runtime_root / "broker-authority.sock"
             self.broker_authority_server = AuthenticatedUnixServer(
                 broker_authority_path,
@@ -1459,21 +1527,27 @@ class ProductionBatchComposition:
         ready = self.broker_runtime_root / "ready.json"
         while time.monotonic() < deadline:
             self.supervisor.assert_healthy()
+            if self.broker_socket_path.exists() and not self.broker_socket_path.is_symlink():
+                socket_info = self.broker_socket_path.lstat()
+                if not stat.S_ISSOCK(socket_info.st_mode):
+                    raise CliError("BROKER_READY_ENDPOINT_NOT_SOCKET")
+            if ready.exists() and ready.is_symlink():
+                raise CliError("BROKER_READY_RECEIPT_INVALID")
             if (
                 self.broker_socket_path.exists()
-                and not self.broker_socket_path.is_symlink()
-                and ready.is_file()
-                and not ready.is_symlink()
-                and self.broker_socket_path.stat().st_uid == os.getuid()
-                and ready.stat().st_uid == os.getuid()
-                and stat.S_IMODE(self.broker_socket_path.stat().st_mode) == 0o600
-                and stat.S_IMODE(ready.stat().st_mode) == 0o600
+                and ready.exists()
+                and stat.S_ISSOCK(self.broker_socket_path.lstat().st_mode)
+                and stat.S_ISREG(ready.lstat().st_mode)
+                and self.broker_socket_path.lstat().st_uid == os.getuid()
+                and ready.lstat().st_uid == os.getuid()
+                and stat.S_IMODE(self.broker_socket_path.lstat().st_mode) == 0o600
+                and stat.S_IMODE(ready.lstat().st_mode) == 0o600
             ):
                 try:
                     document = json.loads(ready.read_text(encoding="utf-8"))
                 except (OSError, UnicodeError, json.JSONDecodeError) as error:
                     raise CliError("BROKER_READY_RECEIPT_INVALID") from error
-                return _validate_broker_ready(document, {
+                expected = {
                     "batch_id": self.spec.request.batch_id,
                     "run_mode": self.spec.request.run_mode.value,
                     "coordinator_epoch": self.journal.coordinator_epoch,
@@ -1481,7 +1555,46 @@ class ProductionBatchComposition:
                     "image_id": self.spec.provenance.get("image_id"),
                     "yolo_weights_sha256": self.spec.yolo_weights_sha256,
                     "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
-                })
+                }
+                _validate_broker_ready(document, expected)
+                ready_bytes = json.dumps(
+                    document, sort_keys=True, separators=(",", ":"), allow_nan=False
+                ).encode("utf-8")
+                ready_sha256 = hashlib.sha256(ready_bytes).hexdigest()
+                client = self._broker_health_client_factory(
+                    self.broker_socket_path,
+                    deadline_s=self.spec.config.heartbeat_timeout_s,
+                    max_frame_bytes=self.spec.config.broker_max_frame_bytes,
+                )
+                message = {
+                    "schema_version": 1,
+                    "kind": "broker_call",
+                    "coordinator_epoch": self.journal.coordinator_epoch,
+                    "worker_id": "broker",
+                    "worker_generation": 1,
+                    "lease": None,
+                    "request_id": "broker-health-1",
+                    "idempotency_key": "broker-health-1",
+                    "token": self.broker_token_path.read_text(encoding="ascii"),
+                    "payload": {"operation": "health", "ready_sha256": ready_sha256},
+                }
+                response = client.call(message)
+                payload = response.get("payload")
+                if (
+                    type(payload) is not dict
+                    or set(payload) != {"ready", "ready_sha256"}
+                    or payload["ready"] != document
+                    or payload["ready_sha256"] != ready_sha256
+                ):
+                    raise CliError("BROKER_READY_HEALTH_IDENTITY")
+                socket_after = self.broker_socket_path.lstat()
+                if (
+                    (socket_after.st_dev, socket_after.st_ino)
+                    != (socket_info.st_dev, socket_info.st_ino)
+                    or not stat.S_ISSOCK(socket_after.st_mode)
+                ):
+                    raise CliError("BROKER_READY_ENDPOINT_CHANGED")
+                return True
             time.sleep(0.01)
         raise CliError("BROKER_READY_TIMEOUT")
 
@@ -1552,7 +1665,14 @@ class ProductionBatchComposition:
                 raise CliError("BROKER_GENERATION")
             if operation == "authenticate_broker_message":
                 inner = payload.get("message")
-                self.authority.authenticate(inner)
+                if type(inner) is not dict:
+                    raise CliError("BROKER_INNER_MESSAGE")
+                token_authority = (
+                    self.broker_authority
+                    if inner.get("worker_id") == "broker"
+                    else self.authority
+                )
+                token_authority.authenticate(inner)
                 return {"authenticated": True}
             if operation == "authorize_inference":
                 request = _inference_request(payload.get("request"))
@@ -1567,6 +1687,8 @@ class ProductionBatchComposition:
                     or worker.state is not WorkerState.EXECUTING
                     or worker.generation != request.worker_generation
                     or worker.lease is None
+                    or worker.stop_requested
+                    or not worker.inference_allowed
                 ):
                     return {"authorized": False}
                 lease = worker.lease

@@ -337,6 +337,7 @@ class WorkerTokenAuthority:
                 "register_worker", "grant_lease", "record_recovery",
                 "cancel_generation", "replace_resources",
                 "authenticate_broker_message", "authorize_inference",
+                "health",
                 "stop", "cancel_motion", "confirm_no_controller_goal", "recover",
             }
             if message["lease"] is None:
@@ -668,6 +669,7 @@ class BrokerTransport:
         self._runtime_identity = (
             None if runtime_identity is None else canonical_json(runtime_identity)
         )
+        self._ready_identity = None
 
     @property
     def runtime_identity(self):
@@ -676,6 +678,14 @@ class BrokerTransport:
             if self._runtime_identity is None
             else _decode_payload(self._runtime_identity)
         )
+
+    def bind_ready_identity(self, receipt) -> str:
+        """Freeze the exact durable ready receipt served by health checks."""
+        if type(receipt) is not dict:
+            raise IpcError("BROKER_READY_IDENTITY")
+        encoded = canonical_json(receipt)
+        self._ready_identity = encoded
+        return hashlib.sha256(encoded).hexdigest()
 
     def authorize(self, request, snapshot=None):
         payload = {"request": self.serialize_request(request)}
@@ -711,6 +721,18 @@ class BrokerTransport:
         if type(payload) is not dict:
             raise IpcError("PAYLOAD_TYPE")
         operation = payload.get("operation")
+        if operation == "health":
+            if set(payload) != {"operation", "ready_sha256"}:
+                raise IpcError("BROKER_HEALTH_FIELDS")
+            if self._ready_identity is None:
+                raise IpcError("BROKER_NOT_READY")
+            digest = hashlib.sha256(self._ready_identity).hexdigest()
+            if payload["ready_sha256"] != digest:
+                raise IpcError("BROKER_READY_IDENTITY_MISMATCH")
+            return {
+                "ready": _decode_payload(self._ready_identity),
+                "ready_sha256": digest,
+            }
         if operation == "infer":
             if set(payload) != {"operation", "request", "snapshot"}:
                 raise IpcError("BROKER_INFER_FIELDS")
