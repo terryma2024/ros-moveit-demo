@@ -728,22 +728,43 @@ class ParallelRosRuntimePorts:
     def initial_gate(self, lease, reset_receipt):
         call = self.dependencies.get("observe_initial", observe_parallel_initial_gate)
         value = call(reset_receipt)
-        valid = (
-            type(value) is InitialGateObservation
-            and value.reset_epoch == reset_receipt.reset_epoch
-            and value.simulation_session_id == reset_receipt.simulation_session_id
-            and value.source_frame_monotonic_s > reset_receipt.reset_completed_monotonic_s
-            and all(abs(actual - expected) <= 0.002 for actual, expected in zip(
-                value.joint_positions, _RESET_JOINTS, strict=True
-            ))
-            and not value.active_controller_goal_ids
-            and not value.moveit_attached_object_ids
-            and value.has_contact is False
-            and value.node_graph_stable is True
-            and value.worker_node_fqns == self.expected_worker_nodes()
-        )
-        if not valid:
-            raise RuntimeError("POINT_INITIAL_GATE_OBSERVATION_REJECTED")
+        if type(value) is not InitialGateObservation:
+            failures = ["type"]
+        else:
+            predicates = (
+                ("reset_epoch", value.reset_epoch == reset_receipt.reset_epoch),
+                (
+                    "simulation_session",
+                    value.simulation_session_id == reset_receipt.simulation_session_id,
+                ),
+                (
+                    "freshness",
+                    value.source_frame_monotonic_s
+                    > reset_receipt.reset_completed_monotonic_s,
+                ),
+                (
+                    "joints",
+                    all(
+                        abs(actual - expected) <= 0.002
+                        for actual, expected in zip(
+                            value.joint_positions, _RESET_JOINTS, strict=True
+                        )
+                    ),
+                ),
+                ("goals", not value.active_controller_goal_ids),
+                ("attachment", not value.moveit_attached_object_ids),
+                ("contact", value.has_contact is False),
+                ("stable_graph", value.node_graph_stable is True),
+                (
+                    "worker_nodes",
+                    value.worker_node_fqns == self.expected_worker_nodes(),
+                ),
+            )
+            failures = [name for name, accepted in predicates if not accepted]
+        if failures:
+            raise RuntimeError(
+                "POINT_INITIAL_GATE_OBSERVATION_REJECTED:" + ",".join(failures)
+            )
         return SimpleNamespace(
             reset_epoch=value.reset_epoch,
             simulation_session_id=value.simulation_session_id,

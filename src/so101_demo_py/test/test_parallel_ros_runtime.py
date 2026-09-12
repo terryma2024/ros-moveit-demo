@@ -165,6 +165,45 @@ def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_an
             ports.initial_gate(_lease(), reset)
 
 
+def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
+    from so101_demo.runtime.parallel_ros_runtime import (
+        InitialGateObservation,
+        ParallelRosRuntimePorts,
+        ResetBoundaryReceipt,
+    )
+
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0)
+    rejected = InitialGateObservation(
+        reset_epoch="reset-3",
+        simulation_session_id="session-2",
+        source_frame_monotonic_s=9.0,
+        joint_positions=(0.1,) + (0.0,) * 5,
+        active_controller_goal_ids=("goal-1",),
+        moveit_attached_object_ids=("plastic_cup",),
+        has_contact=True,
+        worker_node_fqns=("/move_group",),
+        node_graph_stable=False,
+    )
+    ports = ParallelRosRuntimePorts.for_test(
+        resources=SimpleNamespace(session_id="session-1"),
+        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
+        observe_initial=lambda _boundary: rejected,
+    )
+    expected = (
+        "POINT_INITIAL_GATE_OBSERVATION_REJECTED:reset_epoch,simulation_session,"
+        "freshness,joints,goals,attachment,contact,stable_graph,worker_nodes"
+    )
+    with pytest.raises(RuntimeError, match=f"^{expected}$"):
+        ports.initial_gate(_lease(), reset)
+
+    ports.dependencies["observe_initial"] = lambda _boundary: object()
+    with pytest.raises(
+        RuntimeError,
+        match=r"^POINT_INITIAL_GATE_OBSERVATION_REJECTED:type$",
+    ):
+        ports.initial_gate(_lease(), reset)
+
+
 def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_tf():
     from so101_demo.parallel_batch.broker import BrokerResponse
     from so101_demo.parallel_batch.contracts import (
