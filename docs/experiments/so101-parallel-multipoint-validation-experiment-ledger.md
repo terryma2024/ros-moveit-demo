@@ -3418,6 +3418,64 @@ deletion_candidates: new direct pytest scratch after readback; no deletion autho
 decision: BUILD AND FULLY QUALIFY F55 BEFORE A NEW FOUR-POINT EXECUTE
 ```
 
+```yaml
+checkpoint_id: CP-044
+last_valid_experiment: EXP-022
+current_hypothesis: F55's transient-local action status readers will let both successful and conservative-invalid point paths complete mandatory recovery and continue dynamic global queue claiming.
+working_tree_status: clean executable source at 02c21600d with ledger head cde714fe2; EXP-053 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - F55 formal RED pytest-FJiVpktj captured six integer depth values; focused GREEN pytest-pleJ1RmJ proved six qos_profile_action_status_default subscriptions.
+  - Adjacent pytest-HuYPBPZj passed 120 Worker/ROS runtime tests.
+  - p73 is retained invalid because the command accidentally named unknown package Notebook even though colcon ignored it; p74 exact so101_demo_py build passed in 1.39 seconds.
+  - p75 full package test passed 2786 tests with zero errors, failures, or skips in 83.58 seconds.
+  - Installed source/build module tree hash is 8550d93541e9de491c6b428ae313fe0c2953da2593f4923cd3fe71c40d407277 and complete source hash is dbe01edb7d6be8b64ddd8f4acf4a6904b0d1ae6f69da49f8d9d25405e2bf2538.
+  - Immutable F55 image sha256:77fc479d565429929d749e8f34594999c929a4a3d4937dbdebc480542b2a2c87 passed provenance readback and both CUDA models returned QUALIFIED in smoke.
+  - Fresh EXP-053 preflight found 24 CPUs, 25.086 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, exact console resolution, and domains 181-183 lockable.
+ruling: Run a new four-point two-Worker execute gate with only F55 QoS changed from F54; retain the recovery diagnostic for positive readback.
+retained: F55 tests, p73 invalid harness, p74/p75, provenance/image/smoke/preflight, and all prior evidence
+archived: none
+deletion_candidates: pytest-FJiVpktj, pytest-pleJ1RmJ, pytest-HuYPBPZj, p73, p74, and p75 after readback; no deletion authorized
+decision: RUN EXP-053
+```
+
+## EXP-053 — Task 14 transient-local recovery F55 two-Worker execute
+
+```yaml
+experiment_id: EXP-053
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T23:19:22+08:00
+  - status: RUNNING
+    at: 2026-09-12T23:19:22+08:00
+prior_experiment: EXP-052
+hypothesis: Retained action terminal statuses will satisfy both cancel and independent no-goal recovery checks, re-admit each slot at generation 2, and allow all four points to complete.
+prediction: Four unique points finish PASSED with qualification_passed=true and both Workers emit all-true recovery gates after each point.
+single_variable: qos_profile_action_status_default replaces depth=10 for the same six recovery status subscriptions. All other source, configuration, models, points, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f55
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f55
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all-true recovery gates, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 02c21600da0367f4ef7b79c54387bedcb5282123
+  executable_source_tree: dbe01edb7d6be8b64ddd8f4acf4a6904b0d1ae6f69da49f8d9d25405e2bf2538
+  installed_module_tree: 8550d93541e9de491c6b428ae313fe0c2953da2593f4923cd3fe71c40d407277
+  image_id: sha256:77fc479d565429929d749e8f34594999c929a4a3d4937dbdebc480542b2a2c87
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: reports/preflight-exp053.json; sha256 9357f1078646c7cde9316f00c62ffc68a7c3c631c7d782f64a12db7a4f5e6383
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f55 and root live-small-f55.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: PENDING
+retained: preflight and prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
