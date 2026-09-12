@@ -1832,9 +1832,10 @@ class ProductionBatchComposition:
             text=True,
             timeout=self.spec.config.heartbeat_timeout_s + 2.0,
         )
-        if stopped.returncode != 0:
+        after = self._container_inspect(container_id)
+        if stopped.returncode != 0 and after.returncode == 0:
             raise CliError("BROKER_CONTAINER_STOP_FAILED")
-        if self._container_inspect(container_id).returncode == 0:
+        if after.returncode == 0:
             raise CliError("BROKER_CONTAINER_SURVIVED")
         return True
 
