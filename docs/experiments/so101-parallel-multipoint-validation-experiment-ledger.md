@@ -31,8 +31,8 @@ disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-023
-next_experiment: EXP-039 is INVALID; F44 compact bounded diagnostics precede EXP-040
+latest_checkpoint: CP-024
+next_experiment: EXP-040 is RUNNING
 ```
 
 Frozen provenance:
@@ -2128,6 +2128,56 @@ conclusion: INVALID; zero countable attempts. Compress F43 detail under the exis
 retained: all prior evidence plus complete EXP-039 batch and reports
 archived: none
 deletion_candidates: p53 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-024
+last_valid_experiment: EXP-022
+current_hypothesis: F44 will retain the complete stable graph difference inside the immutable Worker result without changing authorization.
+working_tree_status: clean at diagnostic source commit 4b1550d629fb97314e8b336115396493c5658c48 before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F44 RED pytest-h0JdcJN2 failed on redundant/unbounded detail; focused GREEN pytest-d43yREnP passed and adjacent pytest-c6BGQCHc passed 156 tests.
+  - The compact payload omits redundant expected values, retains missing/unexpected/duplicates/truncated, is at most 320 bytes, and direct integration proves `_bounded_failure_message` does not truncate it.
+  - Fresh p54 symlink build passed in 1.53 seconds; all 2770 ordinary tests passed in 83.65 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash fc1420d40bc1651b848c22628c4f01d61425bf16bd56b15a4968526e63e121c6; complete source hash is 2d7f8f2c352ce313c12684c3b7eec6c0c4496ad73353192cc2630076f22a6d8d.
+  - Rebuilt image sha256:18db5459d2795f922dd659bd303292e42df7230e682ca1a45fc135abb131d3fb binds that source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model.
+  - Fresh preflight found 24 CPUs, 25.437 GiB MemAvailable, 15272 MiB free GPU, and no related container, GPU process, or ROS domain owner.
+open_risks:
+  - Full internal-node inventory remains unknown until EXP-040.
+retained: F44 RED/GREEN/adjacent scratch, p54, provenance/image/smoke, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p54 after readback; no deletion authorized
+decision: RUN diagnostic-only EXP-040 with unchanged authorization and physical inputs
+```
+
+## EXP-040 — Task 14 compact-node-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-040
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:20:30+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:20:30+08:00
+prior_experiment: EXP-039
+hypothesis: F44 preserves the full stable unexpected-node set in each Worker result under the existing 512-byte failure boundary.
+prediction: A worker_nodes rejection contains parseable complete missing/unexpected/duplicates/truncated JSON, with zero countable attempts.
+single_variable: Compact diagnostic serialization only; F42 authorization semantics and every runtime/physical input remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f44
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f44
+provenance:
+  executable_source_commit: 4b1550d629fb97314e8b336115396493c5658c48
+  executable_source_tree: 2d7f8f2c352ce313c12684c3b7eec6c0c4496ad73353192cc2630076f22a6d8d
+  image_id: sha256:18db5459d2795f922dd659bd303292e42df7230e682ca1a45fc135abb131d3fb
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+retained: complete immutable EXP-040 batch and reports plus all prior evidence
+archived: none
+deletion_candidates: p54/direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
