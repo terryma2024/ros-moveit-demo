@@ -364,6 +364,75 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
     assert seen["transform"] == ("world", "task_camera_frame", 12_000_000_000)
 
 
+def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
+    from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    stamp_ns = 12_000_000_000
+    seen = {}
+
+    class Localizer:
+        @staticmethod
+        def localize(_response, *, camera_info, depth_message, lookup_exact):
+            seen["camera"] = camera_info
+            seen["depth"] = depth_message
+            seen["transform"] = lookup_exact(
+                "world", "task_camera_frame", stamp_ns
+            )
+            return SimpleNamespace(center_world_xyz=(0.02, -0.28, 0.165))
+
+    class Source:
+        @staticmethod
+        def lookup_exact(target, frame, stamp, timeout_s):
+            seen["lookup"] = (target, frame, stamp, timeout_s)
+            return "exact-transform"
+
+    monkeypatch.setattr(runtime_module, "BrokerMaskLocalizer", lambda: Localizer())
+    camera = object()
+    depth = SimpleNamespace(data=b"depth")
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(session_id="session-1"), catalog={}
+    )
+    ports._rgbd[stamp_ns] = (Source(), camera, depth, "task_camera_frame")
+    request = InferenceRequest(
+        request_id="attempt-1-yolo",
+        model_id="plastic-cup-yolo11n-seg-v1",
+        execution_kind=ExecutionKind.ATTEMPT,
+        batch_id="batch-1",
+        coordinator_epoch=1,
+        worker_id="worker-01",
+        worker_generation=1,
+        point_id="task_start",
+        lease_generation=1,
+        reset_epoch="reset-2",
+        image_timestamp_s=12.0,
+        input_relative_path=(
+            "worker-01/attempts/task_start/attempt-1/working/"
+            "perception/input/rgb.npy"
+        ),
+        input_sha256="ab" * 32,
+        attempt_id="attempt-1",
+    )
+    response = SimpleNamespace(
+        request=request,
+        candidate={"source_stamp_ns": stamp_ns},
+        broker_generation=1,
+    )
+
+    localized = ports.localize(_lease(), response)
+
+    assert seen["camera"] is camera
+    assert seen["depth"] is depth
+    assert seen["transform"] == "exact-transform"
+    assert seen["lookup"] == (
+        "world", "task_camera_frame", stamp_ns, 5.0
+    )
+    assert localized.request is request
+    assert localized.depth_timestamp_s == 12.0
+    assert localized.tf_timestamp_s == 12.0
+
+
 def test_production_port_factory_binds_every_task10_port_without_empty_side_effects():
     from so101_demo.cli.mujoco_parallel_batch import RosWorkerRuntimePorts
 
