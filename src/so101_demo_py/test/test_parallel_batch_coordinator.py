@@ -748,6 +748,33 @@ def test_batch_deadline_requests_stop_from_idle_workers_too(make):
     assert all(w.stop_requested for w in c.snapshot().workers.values())
 
 
+def test_stop_fences_heartbeat_without_renewing_active_lease(make):
+    c, _, *_ = make()
+    lease = start(c)
+    before = c.snapshot().workers["w1"].lease
+    c.request_stop(reason="OPERATOR_STOP")
+
+    with pytest.raises(ValueError, match="STOP_REQUESTED"):
+        c.heartbeat(lease)
+
+    assert c.snapshot().workers["w1"].lease == before
+
+
+def test_stop_racing_lease_ack_cannot_reenable_reset_or_inference(make):
+    c, _, *_ = make()
+    lease = c.grant_lease("w1", generation=1)
+    c.request_stop(reason="RACE_STOP")
+
+    with pytest.raises(ValueError, match="STOP_REQUESTED"):
+        c.ack_lease(lease, request_key="late-lease-ack")
+
+    worker = c.snapshot().workers["w1"]
+    assert worker.stop_requested is True
+    assert worker.reset_allowed is False
+    assert worker.inference_allowed is False
+    assert worker.action_allowed is False
+
+
 @pytest.mark.parametrize('field', [
     'succeeded', 'fenced', 'owned_processes_stopped', 'controllers_stopped', 'readmitted'])
 @pytest.mark.parametrize('malformed', ['false', 1, 0, None])

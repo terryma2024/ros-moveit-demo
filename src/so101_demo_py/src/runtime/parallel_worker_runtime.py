@@ -13,6 +13,7 @@ import re
 import signal
 import stat
 import subprocess
+import threading
 import time
 from typing import Any, Callable
 
@@ -245,6 +246,8 @@ class InferenceSnapshotReceipt:
     source_frame_id: str
     shape: tuple[int, int, int]
     input_sha256: str
+    simulation_session_id: str | None = None
+    source_clock: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", Path(self.path))
@@ -276,6 +279,13 @@ class InferenceSnapshotReceipt:
             or any(character not in "0123456789abcdef" for character in self.input_sha256)
         ):
             raise ValueError("capture input SHA256 must be canonical")
+        if self.simulation_session_id is not None and (
+            not isinstance(self.simulation_session_id, str)
+            or not self.simulation_session_id.strip()
+        ):
+            raise ValueError("capture simulation session must be canonical")
+        if self.source_clock is not None and self.source_clock != "ros_sim":
+            raise ValueError("capture source clock must be ros_sim")
 
 
 @dataclass(frozen=True, slots=True)
@@ -655,6 +665,15 @@ class ParallelWorkerRuntime:
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
         self._active_lease: Any | None = None
+        self._stop_requested = threading.Event()
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_requested.is_set()
+
+    def _execution_allowed(self) -> None:
+        if self._stop_requested.is_set():
+            raise RuntimeError("STOP_REQUESTED")
 
     @property
     def owned_process_manifest(self) -> OwnedProcessManifest:
@@ -836,6 +855,7 @@ class ParallelWorkerRuntime:
         return receipt
 
     def reset_point(self, lease: Any):
+        self._execution_allowed()
         if not self._physical_started:
             raise RuntimeError("parallel Worker physical runtime is not started")
         key, _point_root = self._point_root(lease)
@@ -856,6 +876,7 @@ class ParallelWorkerRuntime:
     def inference_snapshot(self, lease: Any) -> InferenceSnapshotReceipt:
         """Return only the post-reset snapshot bound to this exact lease."""
 
+        self._execution_allowed()
         key = self._lease_key(lease)
         try:
             receipt = self._inference_receipts[key]
@@ -872,6 +893,7 @@ class ParallelWorkerRuntime:
         return receipt
 
     def point_initial_gate(self, lease: Any, reset_receipt: Any):
+        self._execution_allowed()
         gate = self._initial_gate(lease, reset_receipt)
         key = self._lease_key(lease)
         try:
@@ -891,7 +913,17 @@ class ParallelWorkerRuntime:
             raise RuntimeError(
                 "initial camera frame is not newer than reset simulation watermark"
             )
-        self._capture_inference_rgb(lease, boundary)
+        inference = self._capture_inference_rgb(lease, boundary)
+        reset_session = getattr(reset_receipt, "simulation_session_id", None)
+        if simulation_time is not None and (
+            inference.source_clock != "ros_sim"
+            or inference.source_stamp_ns / 1_000_000_000.0 <= float(simulation_time)
+        ):
+            raise RuntimeError(
+                "inference RGB is not newer than reset simulation watermark"
+            )
+        if reset_session is not None and inference.simulation_session_id != reset_session:
+            raise RuntimeError("inference RGB simulation session mismatch")
         return gate
 
     def reset_and_validate_point(self, lease: Any):
@@ -899,6 +931,7 @@ class ParallelWorkerRuntime:
         return receipt, self.point_initial_gate(lease, receipt)
 
     def localize_and_admit_pose(self, lease: Any, broker_result: Any):
+        self._execution_allowed()
         key = self._lease_key(lease)
         try:
             boundary = self._reset_boundaries[key]
@@ -936,6 +969,7 @@ class ParallelWorkerRuntime:
         return self.localize_and_admit_pose(lease, broker_result)
 
     def plan_expert(self, lease: Any, admitted: Any):
+        self._execution_allowed()
         if self.run_mode is not RunMode.PLAN_ONLY:
             raise RuntimeError("expert planning requires plan_only")
         if getattr(admitted, "perception_terminal", False) is True:
@@ -1008,6 +1042,7 @@ class ParallelWorkerRuntime:
         return int(value[6:])
 
     def execute_expert(self, lease: Any, admitted: Any):
+        self._execution_allowed()
         if self.run_mode is not RunMode.EXECUTE:
             raise RuntimeError("expert execution requires execute")
         if getattr(admitted, "perception_terminal", False) is True:
@@ -1188,6 +1223,7 @@ class ParallelWorkerRuntime:
     def shutdown_control(self, operation: str, *, deadline_monotonic_s: float) -> bool:
         """Perform one exact parent-requested shutdown action inside this Worker."""
         if operation == "stop":
+            self._stop_requested.set()
             return True
         lease = self._active_lease
         if operation == "cancel_motion":

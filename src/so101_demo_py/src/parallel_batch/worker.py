@@ -87,6 +87,8 @@ class _HeartbeatWatchdog:
 
     def _run(self) -> None:
         while not self._stop.is_set():
+            if self._owner._stop_requested.is_set():
+                return
             completed = threading.Event()
             response = {}
 
@@ -160,6 +162,8 @@ class ParallelWorker:
         if not isinstance(self._mode, RunMode):
             raise WorkerError("RUN_MODE_REQUIRED")
         self._run_lock = threading.Lock()
+        self._execution_lock = threading.RLock()
+        self._stop_requested = threading.Event()
         self._clock_lock = threading.Lock()
         self._lease_lock = threading.Lock()
         self._last_clock = None
@@ -183,6 +187,16 @@ class ParallelWorker:
                 raise WorkerError("MONOTONIC_CLOCK_REGRESSION")
             self._last_clock = value
             return value
+
+    def request_stop(self) -> None:
+        """Atomically fence all later lease renewal and execution boundaries."""
+        with self._execution_lock:
+            self._stop_requested.set()
+        self._stop_watchdog()
+
+    def _assert_running(self) -> None:
+        if self._stop_requested.is_set():
+            raise WorkerError("STOP_REQUESTED")
 
     def _accept_heartbeat(self, ack, expected: LeaseIdentity) -> bool:
         if not isinstance(ack, LeaseIdentity) or _lease_key(ack) != _lease_key(expected):
@@ -235,6 +249,7 @@ class ParallelWorker:
 
     def _request_ack(self, call, lease, state, timeout, started):
         ack = self._call_before(call, started + timeout, "ACK_TIMEOUT")
+        self._assert_running()
         if not self._ack_matches(ack, lease, state):
             raise WorkerError("ACK_MISSING_OR_STALE")
         with self._lease_lock:
@@ -242,6 +257,7 @@ class ParallelWorker:
         return ack.lease
 
     def _current(self) -> LeaseIdentity:
+        self._assert_running()
         watchdog = self._watchdog
         if watchdog is not None and watchdog.faulted:
             raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
@@ -261,6 +277,7 @@ class ParallelWorker:
             deadline,
             "HEARTBEAT_ACK_TIMEOUT",
         )
+        self._assert_running()
         if watchdog is not None and watchdog.faulted:
             raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
         if not self._accept_heartbeat(ack, lease):
@@ -270,12 +287,20 @@ class ParallelWorker:
         return ack
 
     def _boundary(self, call):
-        lease = self._current()
-        result = call(lease)
-        self._current()
-        return result
+        with self._execution_lock:
+            self._assert_running()
+            lease = self._current()
+            result = call(lease)
+            self._assert_running()
+            self._current()
+            return result
 
     def _register(self) -> bool:
+        with self._execution_lock:
+            return self._register_locked()
+
+    def _register_locked(self) -> bool:
+        self._assert_running()
         if self._registered:
             return True
         try:
@@ -286,8 +311,10 @@ class ParallelWorker:
                 started + self._config.heartbeat_timeout_s,
                 "REGISTRATION_ACK_TIMEOUT",
             )
+            self._assert_running()
             if (getattr(ack, "state", None) is not WorkerState.AVAILABLE
-                    or getattr(ack, "generation", None) != self._generation):
+                    or getattr(ack, "generation", None) != self._generation
+                    or getattr(ack, "stop_requested", False) is True):
                 return False
             if self._mode is not RunMode.DRY_RUN and not self._runtime_started:
                 self._runtime.start_physical_runtime()
@@ -374,8 +401,10 @@ class ParallelWorker:
         }
 
     def _start_watchdog(self, lease) -> None:
-        self._watchdog = _HeartbeatWatchdog(self, lease)
-        self._watchdog.start()
+        with self._execution_lock:
+            self._assert_running()
+            self._watchdog = _HeartbeatWatchdog(self, lease)
+            self._watchdog.start()
 
     def _stop_watchdog(self) -> None:
         if self._watchdog is not None:
@@ -670,6 +699,8 @@ class ParallelWorker:
             return WorkerRunResult(None, None, False, "REENTRANT_CALL_REJECTED")
         lease = None
         try:
+            if self._stop_requested.is_set():
+                return WorkerRunResult(None, None, False, "STOP_REQUESTED")
             if self._quarantined or not self._register() or not self._ready():
                 return WorkerRunResult(None, None, False, "WORKER_NOT_READY")
             lease_wait_started = self._now()
@@ -683,6 +714,7 @@ class ParallelWorker:
                     lease_wait_started + self._config.lease_ack_timeout_s,
                     "LEASE_GRANT_ACK_TIMEOUT",
                 )
+                self._assert_running()
                 if lease is None:
                     return WorkerRunResult(None, None, False, "NO_POINT")
                 if not isinstance(lease, LeaseIdentity):
@@ -800,6 +832,9 @@ class ParallelWorker:
         """Consume global points until the coordinator has none or this slot is fenced."""
         results = []
         while not self._quarantined:
+            if self._stop_requested.is_set():
+                results.append(WorkerRunResult(None, None, False, "STOP_REQUESTED"))
+                break
             result = self.run_one()
             results.append(result)
             if result.stopped_reason != "POINT_TERMINAL" or not result.recovered:

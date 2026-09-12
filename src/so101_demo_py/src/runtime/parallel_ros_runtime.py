@@ -744,6 +744,8 @@ class ParallelRosRuntimePorts:
                     color.header.frame_id,
                     tuple(rgb.shape),
                     hashlib.sha256(payload).hexdigest(),
+                    simulation_session_id=self.resources.session_id,
+                    source_clock="ros_sim",
                 )
                 batch_root = self.resources.worker_root.parent.parent
                 relative = path.relative_to(self.resources.worker_root.parent)

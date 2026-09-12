@@ -76,7 +76,7 @@ def _proc_group_members(pgid: int) -> tuple[int, ...]:
             if entry.stat().st_uid != os.getuid():
                 continue
             candidate = int(entry.name)
-            if os.getpgid(candidate) == pgid:
+            if os.getpgid(candidate) == pgid and os.getsid(candidate) == pgid:
                 members.append(candidate)
         except (OSError, ProcessLookupError, ValueError):
             continue
@@ -150,11 +150,39 @@ class ProcessSupervisor:
                     self._signal_group(second_pgid, signal.SIGKILL)
                 except OSError:
                     pass
+            self._reap_failed_start(child)
             raise SupervisorError("CHILD_IDENTITY")
         owned = OwnedProcess(self.batch_id, role, pid, pgid, cmdline, start_time)
-        self._record_started(owned, poll=child.poll)
-        self.write_manifest()
+        try:
+            self._record_started(owned, poll=child.poll)
+            self.write_manifest()
+        except Exception:
+            try:
+                if self._identity_reader(pid) == owned:
+                    self._signal_group(pgid, signal.SIGKILL)
+            except OSError:
+                pass
+            self._reap_failed_start(child)
+            self._owned.pop(pid, None)
+            raise
         return owned
+
+    @staticmethod
+    def _reap_failed_start(child, timeout_s: float = 1.0) -> None:
+        """Boundedly terminate/reap only the exact Popen child just created."""
+        try:
+            if child.poll() is None and hasattr(child, "terminate"):
+                child.terminate()
+            if hasattr(child, "wait"):
+                child.wait(timeout=timeout_s)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                if child.poll() is None and hasattr(child, "kill"):
+                    child.kill()
+                if hasattr(child, "wait"):
+                    child.wait(timeout=timeout_s)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
     def _record_started(self, process: OwnedProcess, *, poll=lambda: None) -> None:
         """Record only a child proven to come from this supervisor's start path.
@@ -314,9 +342,40 @@ class ProcessSupervisor:
         stopped_pids = []
         for expected, poll in tuple(self._owned.values()):
             if poll() is not None:
-                if not self._group_members_reader(expected.pgid):
+                members = self._group_members_reader(expected.pgid)
+                if not members:
                     stopped_pids.append(expected.pid)
-                else:
+                    continue
+                # This group was created and recorded by this supervisor.  The
+                # leader may already be reaped, but exact /proc membership keeps
+                # signal authority until every member has exited.
+                try:
+                    first_signal = (
+                        signal.SIGINT if expected.role == "worker" else signal.SIGTERM
+                    )
+                    self._signal_group(expected.pgid, first_signal)
+                    deadline = time.monotonic() + (
+                        interrupt_timeout_s
+                        if expected.role == "worker" else term_timeout_s
+                    )
+                    while (
+                        self._group_members_reader(expected.pgid)
+                        and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.01)
+                    if self._group_members_reader(expected.pgid):
+                        self._signal_group(expected.pgid, signal.SIGKILL)
+                        deadline = time.monotonic() + kill_timeout_s
+                        while (
+                            self._group_members_reader(expected.pgid)
+                            and time.monotonic() < deadline
+                        ):
+                            time.sleep(0.01)
+                    if self._group_members_reader(expected.pgid):
+                        cleanup_ok = False
+                    else:
+                        stopped_pids.append(expected.pid)
+                except OSError:
                     cleanup_ok = False
                 continue
             stopped = False

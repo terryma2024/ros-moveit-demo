@@ -111,7 +111,7 @@ def _lease(
     )
 
 
-def _write_capture(path, source_stamp):
+def _write_capture(path, source_stamp, source_stamp_ns=12_000_000_000):
     from so101_demo.runtime.parallel_worker_runtime import (
         InferenceSnapshotReceipt,
         SourceStampedCapture,
@@ -129,11 +129,73 @@ def _write_capture(path, source_stamp):
     return InferenceSnapshotReceipt(
         path,
         source_stamp,
-        source_stamp_ns=12_000_000_000,
+        source_stamp_ns=source_stamp_ns,
         source_frame_id="task_camera_frame",
         shape=(4, 5, 3),
         input_sha256=hashlib.sha256(payload).hexdigest(),
+        simulation_session_id="session-worker-1",
+        source_clock="ros_sim",
     )
+
+
+def test_stop_control_fences_new_runtime_side_effects(tmp_path):
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: pytest.fail("reset started after stop"),
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.shutdown_control("stop", deadline_monotonic_s=99.0) is True
+    assert runtime.stop_requested is True
+    with pytest.raises(RuntimeError, match="STOP_REQUESTED"):
+        runtime.reset_point(_lease())
+
+
+def test_inference_rgb_must_be_newer_than_reset_sim_clock_and_same_session(tmp_path):
+    from so101_demo.runtime.parallel_worker_runtime import (
+        InferenceSnapshotReceipt,
+        SourceStampedCapture,
+        build_worker_runtime,
+    )
+
+    def capture(path, boundary):
+        if path.suffix != ".npy":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"rgb")
+            return SourceStampedCapture(path, boundary + 1.0, source_stamp_ns=12_000_000_001)
+        receipt = _write_capture(path, boundary + 1.0)
+        return InferenceSnapshotReceipt(
+            receipt.path, receipt.source_stamp_monotonic_s,
+            source_stamp_ns=12_000_000_000,
+            source_frame_id=receipt.source_frame_id,
+            shape=receipt.shape,
+            input_sha256=receipt.input_sha256,
+            simulation_session_id="stale-session",
+            source_clock="ros_sim",
+        )
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0,
+            simulation_time_s=12.0,
+            simulation_session_id="session-worker-1",
+        ),
+        initial_gate=lambda *_args: object(),
+        resume_physics=lambda *_args: True,
+        capture_rgb=capture,
+    )
+    runtime.start_physical_runtime()
+    reset = runtime.reset_point(_lease())
+
+    with pytest.raises(RuntimeError, match="simulation watermark|simulation session"):
+        runtime.point_initial_gate(_lease(), reset)
 
 
 @pytest.mark.parametrize(
@@ -1218,7 +1280,7 @@ def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_water
                     21_000_000_000,
                 )
                 if path.name == "initial-rgb.png"
-                else _write_capture(path, boundary + 1.0)
+                    else _write_capture(path, boundary + 1.0, 21_000_000_001)
             )
         ),
         replace_resources=lambda *_args, **_kwargs: _replacement(resources),

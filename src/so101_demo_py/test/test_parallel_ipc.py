@@ -314,6 +314,35 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
     ]
     assert service.mutations == [(inference, snapshot)]
 
+    ready = {
+        "schema_version": 1,
+        "kind": "so101_parallel_broker_ready",
+        "batch_id": "batch-1",
+        "coordinator_epoch": 7,
+        "broker_generation": 1,
+        "image_id": "sha256:" + "b" * 64,
+        "models": {"model": {"ready": True, "sha256": "c" * 64}},
+    }
+    ready_sha = transport.bind_ready_identity(ready)
+    health_server = transport.server(service, endpoint=socket_path)
+    health_thread = threading.Thread(target=health_server.serve_once)
+    health_thread.start()
+    health = request(
+        kind="broker_call",
+        lease=None,
+        request_id="broker-health-1",
+        idempotency_key="broker-health-1",
+        payload={"operation": "health", "ready_sha256": ready_sha},
+    )
+    health_reply = UnixRpcClient(socket_path, deadline_s=1.0).call(health)
+    health_thread.join(timeout=2.0)
+    health_server.close()
+    assert health_reply["payload"] == {
+        "ready": ready,
+        "ready_sha256": ready_sha,
+    }
+    assert service.mutations == [(inference, snapshot)]
+
 
 def test_server_bounds_handler_and_response_send_to_one_absolute_deadline(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
@@ -455,12 +484,20 @@ def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monk
 
     class Child:
         pid = 701
+        returncode = None
         def poll(self):
-            return None
+            return self.returncode
+        def terminate(self):
+            events.append("terminate-child")
+            self.returncode = -15
+        def wait(self, timeout):
+            events.append(("reap-child", timeout))
+            return self.returncode
 
     reads = iter(((0, (), 0), (900, ("unrelated",), 99)))
     monkeypatch.setattr(processes, "_proc_values", lambda _pid: next(reads))
     signals = []
+    events = []
     supervisor = ProcessSupervisor(
         "batch-1", popen=lambda *_args, **_kwargs: Child(),
         signal_group=lambda pgid, value: signals.append((pgid, value)),
@@ -468,6 +505,7 @@ def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monk
     with pytest.raises(SupervisorError, match="CHILD_IDENTITY"):
         supervisor.start("worker", ("worker",))
     assert signals == []
+    assert events == ["terminate-child", ("reap-child", 1.0)]
 
 
 def test_worker_shutdown_uses_bounded_interrupt_before_termination():
@@ -685,6 +723,31 @@ def test_supervisor_refuses_to_release_exited_leader_while_exact_pgid_members_su
     supervisor._record_started(worker, poll=lambda: None)
     assert supervisor.shutdown(wait_group=lambda *_args: True) is False
     assert supervisor.processes == (worker,)
+
+
+def test_shutdown_signals_exact_owned_group_after_leader_is_reaped():
+    import signal
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 2)
+    members = {102: (103,)}
+    signals = []
+
+    def send(pgid, value):
+        signals.append((pgid, value))
+        members[pgid] = ()
+
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: None,
+        signal_group=send,
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    supervisor._record_started(worker, poll=lambda: 0)
+
+    assert supervisor.shutdown(interrupt_timeout_s=0.01) is True
+    assert signals == [(102, signal.SIGINT)]
+    assert supervisor.processes == ()
 
 
 def test_supervisor_default_shutdown_requires_poll_and_proc_absence(tmp_path):
