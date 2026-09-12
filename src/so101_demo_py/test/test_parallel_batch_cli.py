@@ -1685,6 +1685,17 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         with pytest.raises(CliError, match="ACTIVE_LEASE_REQUIRED"):
             proxy.current_broker()
         proxy.register_worker("worker-01", generation=1)
+        from so101_demo.parallel_batch.worker import LeaseGrantPaused
+
+        composition.coordinator.mark_broker_health(False)
+        with pytest.raises(LeaseGrantPaused, match="BROKER_RECOVERING"):
+            proxy.grant_lease(
+                "worker-01", generation=1, request_key="f22-paused-grant"
+            )
+        assert composition.coordinator.snapshot().workers[
+            "worker-01"
+        ].lease_count == 0
+        composition.coordinator.mark_broker_health(True)
         lease = proxy.grant_lease(
             "worker-01", generation=1, request_key="f22-discovery-lease"
         )
@@ -1807,6 +1818,57 @@ def test_broker_recovery_deadline_failure_keeps_shared_dependency_reason(tmp_pat
         composition._release_partial()
 
 
+def test_failed_broker_recovery_waits_for_active_physical_stage_before_shutdown(
+        tmp_path):
+    from test_parallel_batch_fault_injection import (
+        Clock,
+        gate_summary,
+        make_coordinator,
+    )
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    clock = Clock()
+    coordinator, journal = make_coordinator(tmp_path, clock, points=("p1",))
+    try:
+        lease = coordinator.grant_lease("worker-01", generation=1)
+        coordinator.ack_lease(lease, request_key="f22-active-ack")
+        coordinator.ack_attempt_started(
+            lease,
+            request_key="f22-active-start",
+            gate_summary=gate_summary(lease),
+        )
+        coordinator.mark_broker_health(False)
+        for now in range(104, 190, 4):
+            clock.now = float(now)
+            lease = coordinator.heartbeat(lease)
+        clock.now = 190.0
+        snapshot = coordinator.tick()
+        assert snapshot.broker_recovery_failed is True
+        assert snapshot.terminal_reason is None
+        assert snapshot.workers["worker-01"].lease is not None
+
+        composition = object.__new__(ProductionBatchComposition)
+        composition.coordinator = coordinator
+        composition._clock = clock
+        composition._sleep = lambda duration: setattr(
+            clock, "now", clock.now + duration
+        )
+
+        settled = composition._settle_shared_dependency_failure()
+
+        assert settled.terminal_reason == "SHARED_DEPENDENCY_UNAVAILABLE"
+        assert settled.points["p1"].status is PointStatus.INDETERMINATE
+        assert settled.workers["worker-01"].lease_count == 1
+        assert all(
+            event.type != "BATCH_STOPPING"
+            or event.payload["delta"].get("terminal_reason")
+            == "SHARED_DEPENDENCY_UNAVAILABLE"
+            for event in journal.replay().events
+        )
+    finally:
+        journal.close()
+
+
 def test_pre_pose_broker_outage_seals_invalid_and_runs_worker_recovery():
     from test_parallel_batch_worker import Fake
     from so101_demo.cli.mujoco_parallel_batch import CliError
@@ -1851,6 +1913,33 @@ def test_pose_accepted_before_broker_outage_can_complete_without_another_request
     assert len([
         call for call in fake.broker.calls if call[0] == "request_model"
     ]) == 1
+
+
+def test_worker_stays_alive_across_a_paused_grant_and_resumes_remaining_work():
+    from test_parallel_batch_worker import Fake
+    from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
+    from so101_demo.parallel_batch.worker import LeaseGrantPaused, ParallelWorker
+
+    fake = Fake(RunMode.EXECUTE)
+    grant = fake.coordinator.grant_lease
+    paused = True
+
+    def pause_once(*args, **kwargs):
+        nonlocal paused
+        if paused:
+            paused = False
+            raise LeaseGrantPaused("BROKER_RECOVERING")
+        return grant(*args, **kwargs)
+
+    fake.coordinator.grant_lease = pause_once
+
+    results = ParallelWorker(fake.ports()).run()
+
+    assert [result.stopped_reason for result in results] == [
+        "POINT_TERMINAL", "NO_POINT",
+    ]
+    assert results[0].terminal_status is AttemptStatus.PASSED
+    assert fake.coordinator.next_point == 2
 
 
 def test_existing_worker_fetches_current_broker_before_each_request_and_recovery(

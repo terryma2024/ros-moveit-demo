@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import threading
+import time
 from typing import Mapping
 
 from .contracts import (
@@ -25,6 +26,10 @@ from .contracts import (
 
 class WorkerError(RuntimeError):
     """A Worker port or fencing contract failed closed."""
+
+
+class LeaseGrantPaused(WorkerError):
+    """The shared Broker is recovering; the Worker slot must remain alive."""
 
 
 class FaultInjectionAbort(BaseException):
@@ -182,6 +187,7 @@ class ParallelWorker:
         self._ready_after_recovery = False
         self._quarantined = False
         self._local_seals = {}
+        self._lease_request_sequence = 0
 
     def _fault(self, boundary, phase):
         if self._fault_hook is not None:
@@ -726,11 +732,15 @@ class ParallelWorker:
                 return WorkerRunResult(None, None, False, "WORKER_NOT_READY")
             lease_wait_started = self._now()
             try:
+                self._lease_request_sequence += 1
                 lease = self._call_before(
                     lambda: self._coordinator.grant_lease(
                         self._worker_id,
                         generation=self._generation,
-                        request_key=f"lease-{self._worker_id}-{self._generation}",
+                        request_key=(
+                            f"lease-{self._worker_id}-{self._generation}-"
+                            f"{self._lease_request_sequence}"
+                        ),
                     ),
                     lease_wait_started + self._config.lease_ack_timeout_s,
                     "LEASE_GRANT_ACK_TIMEOUT",
@@ -752,6 +762,12 @@ class ParallelWorker:
                     WorkerState.INITIALIZING,
                     self._config.lease_ack_timeout_s,
                     lease_wait_started,
+                )
+            except LeaseGrantPaused:
+                with self._lease_lock:
+                    self._active_lease = None
+                return WorkerRunResult(
+                    None, None, False, "LEASE_GRANT_PAUSED"
                 )
             except Exception:
                 with self._lease_lock:
@@ -857,6 +873,9 @@ class ParallelWorker:
                 results.append(WorkerRunResult(None, None, False, "STOP_REQUESTED"))
                 break
             result = self.run_one()
+            if result.stopped_reason == "LEASE_GRANT_PAUSED":
+                time.sleep(0.01)
+                continue
             results.append(result)
             if result.stopped_reason != "POINT_TERMINAL" or not result.recovered:
                 break

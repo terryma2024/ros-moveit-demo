@@ -76,3 +76,54 @@ def test_retirement_never_adopts_a_similar_unowned_identity():
         supervisor.retire_owned(unowned)
     assert signals == []
     assert supervisor.processes == (owned,)
+
+
+def test_retirement_rejects_a_reused_session_leader_before_any_group_signal():
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    exited = OwnedProcess("batch-1", "broker", 101, 101, ("broker-g1",), 11)
+    reused = OwnedProcess("batch-1", "broker", 101, 101, ("unowned",), 99)
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: reused,
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+        group_members_reader=lambda _pgid: (101,),
+    )
+    supervisor._record_started(exited, poll=lambda: 17)
+
+    with pytest.raises(SupervisorError, match="PID_REUSE"):
+        supervisor.retire_owned(exited)
+
+    assert signals == []
+    assert supervisor.processes == (exited,)
+
+
+def test_terminal_health_failure_waits_for_workers_after_exact_broker_retirement():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    broker = OwnedProcess("batch-1", "broker", 101, 101, ("broker",), 11)
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    identities = {102: worker}
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda pid: identities.get(pid),
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(broker, poll=lambda: 17)
+    supervisor._record_started(worker, poll=lambda: 0)
+
+    def terminal_failure(exited, code):
+        assert (exited, code) == (broker, 17)
+        assert supervisor.retire_owned(exited) is True
+        return False
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0,
+        health_recovery=terminal_failure,
+    ) == (0,)
+    assert supervisor.processes == ()
