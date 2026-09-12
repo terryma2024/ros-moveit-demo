@@ -5687,10 +5687,12 @@ decision: ADVANCE TO NORMAL FOUR-POINT SMALL GATE
 
 ```yaml
 experiment_id: EXP-084
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:45:38+08:00
+  - status: RUNNING
+    at: 2026-09-13T05:46:04+08:00
 prior_experiment: EXP-083
 hypothesis: The immutable F74 runtime will preserve the accepted normal two-Worker four-point physical schedule before synchronized fault and full-catalog gates.
 single_variable: Replace the six-point diagnostic selection and K=3 with the frozen normal small-gate selection and K=2; source, install, image, models, config, catalog, lifecycle, and execute behavior remain fixed.
@@ -5704,6 +5706,7 @@ selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_fa
 selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: f542f82a5ee838b0789dc9ebbb33ae40cbfcdc00
   preregistration_base_commit: f5e4c265be7e6cad026f695b12351116814ae020
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
