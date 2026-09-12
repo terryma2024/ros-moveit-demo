@@ -1452,7 +1452,7 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     )
 
     repository = tmp_path / "checkout"
-    module = repository / "src/so101_demo_py/src/so101_demo/cli/mujoco_parallel_batch.py"
+    module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
     config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
     points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
