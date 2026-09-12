@@ -2300,6 +2300,28 @@ class ProductionBatchComposition:
     def run(self) -> BatchSummary:
         failure = False
         cleanup = False
+        cleanup_actions = {}
+
+        def tracked_cleanup(name, action):
+            def invoke():
+                try:
+                    succeeded = action() is True
+                except Exception as error:
+                    cleanup_actions[name] = {
+                        "succeeded": False,
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                    }
+                    return False
+                cleanup_actions[name] = {
+                    "succeeded": succeeded,
+                    "error_type": None,
+                    "error_message": None,
+                }
+                return succeeded
+
+            return invoke
+
         try:
             self._start_servers()
             self._start_broker()
@@ -2320,22 +2342,100 @@ class ProductionBatchComposition:
             snapshot = self.coordinator.snapshot()
         finally:
             try:
-                process_cleanup = self.supervisor.shutdown(
-                    stop_leases=self._stop_new_leases,
-                    cancel_goal=self._cancel_worker_goals,
-                    confirm_goal_cancelled=self._confirm_worker_goals_cancelled,
-                    request_recovery=self._request_worker_recovery,
-                )
+                process_error = None
+                try:
+                    process_cleanup = self.supervisor.shutdown(
+                        stop_leases=tracked_cleanup(
+                            "stop_leases", self._stop_new_leases
+                        ),
+                        cancel_goal=tracked_cleanup(
+                            "cancel_goal", self._cancel_worker_goals
+                        ),
+                        confirm_goal_cancelled=tracked_cleanup(
+                            "confirm_goal_cancelled",
+                            self._confirm_worker_goals_cancelled,
+                        ),
+                        request_recovery=tracked_cleanup(
+                            "request_recovery", self._request_worker_recovery
+                        ),
+                    )
+                except Exception as error:
+                    process_cleanup = False
+                    process_error = error
+                process_record = {
+                    "succeeded": process_cleanup is True,
+                    "error_type": (
+                        None if process_error is None
+                        else type(process_error).__name__
+                    ),
+                    "error_message": (
+                        None if process_error is None else str(process_error)
+                    ),
+                }
+                container_error = None
                 try:
                     container_cleanup = self._retire_broker_container()
-                except Exception:
+                except Exception as error:
                     container_cleanup = False
+                    container_error = error
+                container_record = {
+                    "succeeded": container_cleanup is True,
+                    "error_type": (
+                        None if container_error is None
+                        else type(container_error).__name__
+                    ),
+                    "error_message": (
+                        None if container_error is None else str(container_error)
+                    ),
+                }
                 cleanup = process_cleanup and container_cleanup
                 snapshot = self.coordinator.snapshot()
+                completion_attempted = bool(
+                    snapshot.terminal_reason and cleanup and not failure
+                )
+                completion_error = None
                 if snapshot.terminal_reason and cleanup and not failure:
-                    snapshot = self.coordinator.complete_cleanup(
-                        owned_processes_stopped=True, controllers_stopped=True
-                    )
+                    try:
+                        snapshot = self.coordinator.complete_cleanup(
+                            owned_processes_stopped=True, controllers_stopped=True
+                        )
+                    except Exception as error:
+                        cleanup = False
+                        completion_error = error
+                _write_json(
+                    self.spec.request.evidence_root / "cleanup-gates.json",
+                    {
+                        "schema_version": 1,
+                        "batch_id": self.spec.request.batch_id,
+                        "actions": cleanup_actions,
+                        "process_cleanup": process_record,
+                        "container_cleanup": container_record,
+                        "cleanup_gates_passed": cleanup,
+                        "coordinator_completion": {
+                            "attempted": completion_attempted,
+                            "succeeded": bool(
+                                completion_attempted
+                                and completion_error is None
+                                and snapshot.summary.batch_cleanup_complete
+                            ),
+                            "error_type": (
+                                None if completion_error is None
+                                else type(completion_error).__name__
+                            ),
+                            "error_message": (
+                                None if completion_error is None
+                                else str(completion_error)
+                            ),
+                        },
+                        "batch_cleanup_complete": (
+                            snapshot.summary.batch_cleanup_complete
+                        ),
+                    },
+                )
+                if process_error is not None:
+                    raise process_error
+                if completion_error is not None:
+                    raise completion_error
             finally:
                 self._stop_servers()
                 self.journal.close()
