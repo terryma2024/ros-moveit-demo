@@ -5402,6 +5402,10 @@ module_tree_sha256: 819a372e4b280fdc0e12756ba0fe49a3b1310afc522f25b2cd4ce162dd59
 dependency_lock_sha256: 84557a10b2d42141ba8875921f4ca7ab1926efeab1a0adb3e85c1ffe5966a5a4
 mujoco_dependency_lock_sha256: 80cb5d2641a95619da6d6fbdf993e973c02914c9bb9213620ef0abc07d4a39ca
 installed_controller_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+image_id: sha256:81b287d4fc8645615cc8f5622ec9b687577eda6ce2446c08e59a15aacd5dba7f
+image_build: p111 passed in 12.55 seconds; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p111-toOiHN1c/tmp; source and independently verified source both 4d68c3518a542ab3353981d89e92c077be9ec512cde60f58323f78938f2480f1
+invalid_smoke_attempt: task14-f73-smoke failed before batch creation because the required batch root was absent; no container or GPU inference started; retained and excluded from product judgment
+smoke: task14-f73-smoke-v2 qualified YOLO and Grounded-SAM on CUDA using the EXP-076 sample_01 frame; 31.697368 ms and 187.294990 ms respectively; immutable provenance matched and container/GPU cleanup was clean
 static_report: reports/f73-static-gates.json
 installed_provenance: reports/installed-provenance-f73.json
 retained: source/tests, all RED/GREEN/package/build/integration evidence, invalid harness evidence, EXP-079, and all prior evidence
