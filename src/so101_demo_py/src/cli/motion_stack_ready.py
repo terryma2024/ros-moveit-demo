@@ -33,6 +33,40 @@ _ACTIONS = (
 )
 
 
+def controller_query_allowed(
+    *, services: dict[str, bool], actions: dict[str, bool]
+) -> bool:
+    """Avoid controller-manager traffic while its startup clients are active."""
+
+    return all(services.get(name, False) for name in _SERVICES) and all(
+        actions.get(name, False) for name in _ACTIONS
+    )
+
+
+def poll_controller_states(
+    client,
+    pending,
+    *,
+    request_factory,
+    spin_until_future_complete,
+    node,
+    timeout_s: float,
+):
+    """Advance one controller query without creating overlapping requests."""
+
+    if pending is None:
+        if not client.service_is_ready():
+            return None, None
+        pending = client.call_async(request_factory())
+    spin_until_future_complete(node, pending, timeout_sec=timeout_s)
+    if not pending.done():
+        return pending, None
+    response = pending.result()
+    if response is None:
+        return None, None
+    return None, {value.name: value.state for value in response.controller}
+
+
 def evaluate_readiness(
     *,
     controllers: dict[str, str],
@@ -126,18 +160,8 @@ def main(arguments: list[str] | None = None) -> int:
     )
     try:
         controllers: dict[str, str] = {}
+        controller_future = None
         while rclpy.ok() and time.monotonic() < deadline:
-            if controller_client.service_is_ready():
-                future = controller_client.call_async(ListControllers.Request())
-                remaining = max(0.0, deadline - time.monotonic())
-                rclpy.spin_until_future_complete(
-                    node, future, timeout_sec=min(1.0, remaining)
-                )
-                if future.done() and future.result() is not None:
-                    controllers = {
-                        value.name: value.state
-                        for value in future.result().controller
-                    }
             services = {
                 name: client.service_is_ready()
                 for name, client in service_clients.items()
@@ -146,6 +170,18 @@ def main(arguments: list[str] | None = None) -> int:
                 name: client.server_is_ready()
                 for name, client in action_clients.items()
             }
+            if controller_query_allowed(services=services, actions=actions):
+                remaining = max(0.0, deadline - time.monotonic())
+                controller_future, observed = poll_controller_states(
+                    controller_client,
+                    controller_future,
+                    request_factory=ListControllers.Request,
+                    spin_until_future_complete=rclpy.spin_until_future_complete,
+                    node=node,
+                    timeout_s=min(1.0, remaining),
+                )
+                if observed is not None:
+                    controllers = observed
             latest = evaluate_readiness(
                 controllers=controllers,
                 services=services,
