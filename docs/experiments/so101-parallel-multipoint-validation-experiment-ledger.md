@@ -3741,10 +3741,14 @@ decision: RUN EXP-057
 
 ```yaml
 experiment_id: EXP-057
-status: PLANNED
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T00:09:03+08:00
+  - status: RUNNING
+    at: 2026-09-13T00:09:03+08:00
+  - status: INVALID
+    at: 2026-09-13T00:16:54+08:00
 prior_experiment: EXP-056
 hypothesis: Holding simulation time fixed during dynamic consumer startup and audited pose publication will preserve exact source freshness, after which both isolated slots recover through K=2 and finish all four points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
@@ -3767,6 +3771,69 @@ preflight: reports/preflight-exp057.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f58 and root live-small-f58.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — exit 1 after 125.42 seconds. Both initially claimed points became INDETERMINATE before action: execute_expert reported POSE_ACCEPTED_PUBLICATION_FAILED, then each prestarted consumer reported CUP_POSE_TIMEOUT. Pausing physics before constructing the fresh use_sim_time publisher and consumer prevented either node from observing a positive source-era /clock sample, so the publisher refused the immutable positive source stamp. Both Workers were quarantined, the remaining two points stayed UNRUN, execution_complete=false, batch_cleanup_complete=false, and qualification_passed=false.
+broker_readback: Container dcd6d4b5f7184137e89bacecd129b192e8859b76952d97844e94fc4a96d68d4e matched the exact F58 image, source label, batch label, isolated network/IPC, GPU request, and model mounts. It was stopped by exact ID and Docker auto-removed it.
+cleanup_readback: No related process, container, GPU compute application, or ROS domain 181-183 claim remained after exact-container cleanup.
+visual_readback: Two authorized initial 640x480 RGB images were inspected at original resolution; both cups were upright at the configured source anchors outside the red targets, both arms were reset, and no terminal frame existed because no action was authorized.
+retained: complete live-small-f58 tree, command-057 log/time/exit, broker inspect summary, visual report, root-cause report, MuJoCo log, cleanup audit, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-050
+last_valid_experiment: EXP-022
+current_hypothesis: Construct and confirm the exact dynamic consumer before the immutable inference snapshot so it has an advancing simulation-clock history; then publish the audited fresh pose without pausing physics.
+working_tree_status: clean executable source at 158b99df17a5a28b8da0d2780fdc71e06ff0c2ae; ledger-only EXP-058 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-057 isolated the pause/bootstrap deadlock: a newly constructed use_sim_time publisher and consumer cannot acquire source-era clock history while MuJoCo physics is paused before their construction.
+  - Formal RED pytest-AnMJppAb failed because the runtime captured rgb.npy before starting the dynamic consumer. Focused GREEN pytest-vbKZ3oNz passed, the corrected runtime file gate pytest-38cMnRdr passed 50 tests, and the corrected adjacent gate pytest-FGGDyRNZ passed 234 tests. Retained harness failures are pytest-o9uK0l (shell-function invocation), pytest-cLCEq87I (stale expectations), pytest-RHO3gTD8 (test-spy oversight), and pytest-rIdch8Hi (partial overlay dependency order).
+  - F59 keys prestarted consumers by lease, requires readiness before the exact inference snapshot, reuses only that exact child for execute_expert, and removes the F58 pause APIs. No execution can precede the broker result and pose audit.
+  - Source commit 158b99df17a5a28b8da0d2780fdc71e06ff0c2ae; p84 symlink build passed in 1.50 seconds. p85 passed 2788 tests with zero errors, failures, or skips in about 84 seconds.
+  - Installed/source module tree hash is d5040c0402485e96e1fd0a23683c1e0818ba6d82e206ac1505ad9c2e45864751; complete source hash is d91ad106d81e5b49a64109771318f0a94a0a26812896954e886973a06911c0aa; compileall and frozen input hashes passed.
+  - F59 image sha256:000d73c29fc7b77e56e852b755db01a60f74b5a2e85b2150915af8512d5584f2 binds the exact source hash. Corrected build r2 exited 0 in 1.34 seconds. Corrected smoke r3 returned QUALIFIED CUDA for YOLO in 34.62 ms and Grounded-SAM in 193.78 ms and left no container or GPU process. The initial build exit-capture error and smoke path-preparation failures are retained as harness evidence and did not alter the qualifying artifacts.
+  - Fresh EXP-058 preflight found 24 CPUs, 24.915 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only consumer readiness moved before the immutable inference snapshot and no physics pause.
+retained: EXP-057 evidence, F59 RED/GREEN/adjacent/build/package/provenance/image/smoke/preflight evidence, and all prior evidence
+archived: none
+deletion_candidates: F59 pytest, p84, and p85 scratch trees after readback; no deletion authorized
+decision: RUN EXP-058
+```
+
+## EXP-058 — Task 14 prestarted-consumer pose freshness F59 two-Worker execute
+
+```yaml
+experiment_id: EXP-058
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T00:29:29+08:00
+  - status: RUNNING
+    at: 2026-09-13T00:29:29+08:00
+prior_experiment: EXP-057
+hypothesis: Starting and confirming each lease's exact dynamic consumer before its immutable inference snapshot gives both publisher and consumer adequate clock history while preserving the pose-freshness and action-authorization gates.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
+single_variable: The exact dynamic consumer is started and ready before the immutable inference snapshot and reused for execute_expert; F58 physics pause behavior is removed. Every source/config/model/point/timeout/freshness/physical criterion remains frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f59
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f59
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete recovery/dynamic receipts, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 158b99df17a5a28b8da0d2780fdc71e06ff0c2ae
+  executable_source_tree: d91ad106d81e5b49a64109771318f0a94a0a26812896954e886973a06911c0aa
+  installed_module_tree: d5040c0402485e96e1fd0a23683c1e0818ba6d82e206ac1505ad9c2e45864751
+  image_id: sha256:000d73c29fc7b77e56e852b755db01a60f74b5a2e85b2150915af8512d5584f2
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp058.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f59 and root live-small-f59.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
