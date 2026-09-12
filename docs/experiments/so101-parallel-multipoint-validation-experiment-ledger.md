@@ -4911,12 +4911,14 @@ decision: RUN EXP-073 F69 CONTROLLED PLAN-ONLY FAULT GATE
 
 ```yaml
 experiment_id: EXP-073
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:51:30+08:00
   - status: RUNNING
     at: 2026-09-13T03:51:30+08:00
+  - status: INVALID
+    at: 2026-09-13T03:55:30+08:00
 prior_experiment: EXP-072
 hypothesis: Docker init makes exact Broker TERM observable and enables bounded generation-2 recovery while the already-proven Worker fault remains fenced and the non-target Worker continues without K over-debit.
 mode: plan_only; no trajectory execution or physical action
@@ -4931,6 +4933,36 @@ fault_sequence:
   - re-read the manifest and inject exact current Broker TERM
 success_criteria: Both injectors exit 0; physical points remain UNRUN; journal records Broker unhealthy then healthy; broker generation advances 1 to 2; non-target Worker continues; old Worker/request authorities stay fenced; no duplicate valid lease or K debit during pause; cleanup and exact residual audit pass.
 provenance: identical executable F69 source/install/image/config/catalog/model identities to EXP-072; distinct batch ID, evidence root, mode, and selection execution identity
+result: >-
+  Both exact injectors exited 0 and physical point statuses stayed UNRUN. Worker-01 termination
+  disconnected an in-flight Broker RPC; generation 1 then crashed with an uncaught BrokenPipeError
+  while sending the reply. The journal correctly recorded Broker unhealthy and the supervisor
+  created generation 2. Because the harness waited only for the old Worker PID and not for Broker
+  healthy/readiness, its explicit Broker injection then correctly targeted the current generation 2
+  before it became ready. That invalidated the intended recovery observation. The batch nevertheless
+  completed conservative cleanup with no task process, container, GPU application, or domain claim.
+root_cause_report: reports/root-cause-EXP073.json
+cleanup_audit: reports/post-073-cleanup-audit.json
+retained: complete live-fault-f69 tree, command/injector/MuJoCo/root-cause/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-073
+last_valid_experiment: EXP-072
+current_hypothesis: Treating a disconnected Unix RPC client as a request-local failure will keep the shared Broker alive during Worker termination, so the subsequent exact Broker TERM can be isolated and its generation recovery observed.
+working_tree_status: clean executable F69 source; EXP-073 closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - Docker --init made Broker process termination observable; generation 1 unhealthy state and generation 2 creation were recorded.
+  - A Worker disconnect can currently kill the shared Broker through uncaught BrokenPipeError.
+  - EXP-073 is invalid because the explicit Broker injection hit a replacement that was still starting.
+ruling: Add a failing IPC test for reply-side BrokenPipeError, contain only client disconnect errors at the request boundary, rerun all source/image/small gates, then repeat the fault gate with explicit healthy-generation synchronization.
+retained: EXP-073 and all prior evidence
+archived: none
+deletion_candidates: registered scratch trees only; no deletion authorized
+decision: IMPLEMENT F70 REQUEST-LOCAL BROKEN-PIPE ISOLATION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
