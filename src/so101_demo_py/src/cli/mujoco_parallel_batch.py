@@ -2075,6 +2075,15 @@ class ProductionBatchComposition:
                 self.authority.advance_generation(worker_id, generation, requested)
             return _jsonable(ack)
         if operation == "grant_lease":
+            snapshot = self.coordinator.snapshot()
+            if (not snapshot.broker_healthy
+                    and snapshot.terminal_reason is None):
+                return {
+                    "lease_grant_paused": True,
+                    "recovery_deadline_monotonic_s": (
+                        snapshot.broker_recovery_deadline_monotonic_s
+                    ),
+                }
             lease = self.coordinator.grant_lease(
                 worker_id,
                 generation=payload.get("generation"),

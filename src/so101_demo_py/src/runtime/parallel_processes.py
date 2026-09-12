@@ -345,47 +345,23 @@ class ProcessSupervisor:
         self.write_manifest()
         return tuple(codes)
 
-    def retire_owned(
+    def _retire_exited_group(
         self,
         expected: OwnedProcess,
         *,
-        term_timeout_s: float = 5.0,
-        kill_timeout_s: float = 2.0,
+        first_signal: int,
+        first_timeout_s: float,
+        kill_timeout_s: float,
     ) -> bool:
-        """Retire one exited child and any survivors of its exact owned PGID."""
-        current = self._owned.get(getattr(expected, "pid", None))
-        if current is None or current[0] != expected:
-            raise SupervisorError("UNOWNED_PROCESS")
-        poll = current[1]
-        if poll() is None:
-            self._confirm_identity(expected)
-            try:
-                self._signal_group(expected.pgid, signal.SIGTERM)
-                stopped = self._wait_group_stopped(
-                    expected, poll, term_timeout_s
-                )
-                if not stopped:
-                    self._confirm_identity(expected)
-                    self._signal_group(expected.pgid, signal.SIGKILL)
-                    stopped = self._wait_group_stopped(
-                        expected, poll, kill_timeout_s
-                    )
-            except OSError:
-                return False
-            if not stopped:
-                return False
-            self._owned.pop(expected.pid)
-            self.write_manifest()
-            return True
+        """Signal descendants only while the owned session leader stays absent."""
         if self._identity_reader(expected.pid) is not None:
             raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
-        members = self._group_members_reader(expected.pgid)
         try:
-            if members:
+            if self._group_members_reader(expected.pgid):
                 if self._identity_reader(expected.pid) is not None:
                     raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
-                self._signal_group(expected.pgid, signal.SIGTERM)
-                deadline = time.monotonic() + term_timeout_s
+                self._signal_group(expected.pgid, first_signal)
+                deadline = time.monotonic() + first_timeout_s
                 while (
                     self._group_members_reader(expected.pgid)
                     and time.monotonic() < deadline
@@ -404,6 +380,53 @@ class ProcessSupervisor:
         except OSError:
             return False
         if self._group_members_reader(expected.pgid):
+            return False
+        if self._identity_reader(expected.pid) is not None:
+            raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
+        return True
+
+    def retire_owned(
+        self,
+        expected: OwnedProcess,
+        *,
+        term_timeout_s: float = 5.0,
+        kill_timeout_s: float = 2.0,
+    ) -> bool:
+        """Retire one exact owned child and every continuous session survivor."""
+        current = self._owned.get(getattr(expected, "pid", None))
+        if current is None or current[0] != expected:
+            raise SupervisorError("UNOWNED_PROCESS")
+        poll = current[1]
+        if poll() is None:
+            self._confirm_identity(expected)
+            try:
+                self._signal_group(expected.pgid, signal.SIGTERM)
+                deadline = time.monotonic() + term_timeout_s
+                while poll() is None and time.monotonic() < deadline:
+                    actual = self._identity_reader(expected.pid)
+                    if actual is not None and actual != expected:
+                        raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
+                    time.sleep(0.01)
+                if poll() is None:
+                    self._confirm_identity(expected)
+                    self._signal_group(expected.pgid, signal.SIGKILL)
+                    deadline = time.monotonic() + kill_timeout_s
+                    while poll() is None and time.monotonic() < deadline:
+                        actual = self._identity_reader(expected.pid)
+                        if actual is not None and actual != expected:
+                            raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
+                        time.sleep(0.01)
+            except OSError:
+                return False
+            if poll() is None:
+                return False
+        stopped = self._retire_exited_group(
+            expected,
+            first_signal=signal.SIGTERM,
+            first_timeout_s=term_timeout_s,
+            kill_timeout_s=kill_timeout_s,
+        )
+        if not stopped:
             return False
         self._owned.pop(expected.pid)
         self.write_manifest()
@@ -450,41 +473,25 @@ class ProcessSupervisor:
         stopped_pids = []
         for expected, poll in tuple(self._owned.values()):
             if poll() is not None:
-                members = self._group_members_reader(expected.pgid)
-                if not members:
-                    stopped_pids.append(expected.pid)
-                    continue
-                # This group was created and recorded by this supervisor.  The
-                # leader may already be reaped, but exact /proc membership keeps
-                # signal authority until every member has exited.
                 try:
                     first_signal = (
                         signal.SIGINT if expected.role == "worker" else signal.SIGTERM
                     )
-                    self._signal_group(expected.pgid, first_signal)
-                    deadline = time.monotonic() + (
-                        interrupt_timeout_s
-                        if expected.role == "worker" else term_timeout_s
+                    stopped = self._retire_exited_group(
+                        expected,
+                        first_signal=first_signal,
+                        first_timeout_s=(
+                            interrupt_timeout_s
+                            if expected.role == "worker" else term_timeout_s
+                        ),
+                        kill_timeout_s=kill_timeout_s,
                     )
-                    while (
-                        self._group_members_reader(expected.pgid)
-                        and time.monotonic() < deadline
-                    ):
-                        time.sleep(0.01)
-                    if self._group_members_reader(expected.pgid):
-                        self._signal_group(expected.pgid, signal.SIGKILL)
-                        deadline = time.monotonic() + kill_timeout_s
-                        while (
-                            self._group_members_reader(expected.pgid)
-                            and time.monotonic() < deadline
-                        ):
-                            time.sleep(0.01)
-                    if self._group_members_reader(expected.pgid):
-                        cleanup_ok = False
-                    else:
-                        stopped_pids.append(expected.pid)
-                except OSError:
+                except (OSError, SupervisorError):
                     cleanup_ok = False
+                    continue
+                cleanup_ok = stopped and cleanup_ok
+                if stopped:
+                    stopped_pids.append(expected.pid)
                 continue
             stopped = False
             if expected.role == "worker":

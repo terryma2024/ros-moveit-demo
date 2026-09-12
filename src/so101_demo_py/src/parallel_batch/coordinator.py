@@ -856,6 +856,11 @@ class BatchCoordinator:
     def _evaluate(self):
         if self._state['terminal_reason']:
             return
+        if (not self._state['broker_healthy']
+                and not self._state.get('broker_recovery_failed')):
+            # A shared dependency recovery may still resume remaining work.
+            # Do not let point/capacity success pre-empt its frozen deadline.
+            return
         if (self._state.get('broker_recovery_failed')
                 and not any(worker['lease'] for worker in self._state['workers'].values())):
             reason = 'SHARED_DEPENDENCY_UNAVAILABLE'
@@ -944,6 +949,7 @@ class BatchCoordinator:
                 'broker_recovery_failed': False,
             }
         self._emit('BROKER_HEALTH_CHANGED', delta)
+        self._evaluate()
         return self.snapshot()
 
     @_locked
