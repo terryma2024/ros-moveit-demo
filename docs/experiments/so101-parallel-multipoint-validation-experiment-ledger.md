@@ -33,7 +33,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-026
-next_experiment: EXP-042 is PLANNED and pre-registered
+next_experiment: EXP-042 is RUNNING
 ```
 
 Frozen provenance:
@@ -2306,10 +2306,12 @@ decision: RUN EXP-042 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-042
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:41:17+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:43:05+08:00
 prior_experiment: EXP-041
 hypothesis: F46 removes the bounded parent/child setsid observation race without weakening process ownership, allowing two Workers to execute four unique points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
