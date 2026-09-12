@@ -6229,10 +6229,12 @@ decision: ADVANCE TO A NEW IMMUTABLE FULL 20-POINT F91 QUALIFICATION
 
 ```yaml
 experiment_id: EXP-095
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T07:07:30+08:00
+  - status: RUNNING
+    at: 2026-09-13T07:08:18+08:00
 prior_experiment: EXP-094
 hypothesis: The statically and four-point-qualified F91 runtime will complete and qualify the complete frozen 20-point catalog without historical delivered responses poisoning perception health.
 single_variable: Expand EXP-094 from its four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, execute behavior, and service-response retirement remain byte-identical.
@@ -6247,6 +6249,7 @@ selection_sha256: 33374bb01c31f342e6a2f3d13943c91e74d62165a5a901678216bbb18ffa9a
 preflight: No related process, task container, or GPU compute application; 24 CPUs, 25.759 GiB MemAvailable, 15269 MiB GPU free; batch root absent; exact F91 image and clean worktree reverified.
 provenance:
   executable_source_commit: ed91c14cc3476fae07847e6907b6d11684ba9d46
+  preregistration_commit: 9e5136c6b486996f6328f1897dbcaa6c1f184a1a
   preregistration_base_commit: 5cd4eb53dbc72a42ee58854fb2fd4ec3de1526c7
   executable_source_tree: 052dae12a2a46dab28d8e4e9c55dc0930df856c0890b2c9197eaa8bce2a04970
   installed_module_tree: 4aae546b05dfd3aaace20566df98fd9dd53e671d0c2b0c71bb4cea3fb0147f6b
