@@ -1212,11 +1212,15 @@ class ParallelRosRuntimePorts:
             return call(admitted)
         import rclpy
         from geometry_msgs.msg import PoseStamped
+        from rclpy.parameter import Parameter
 
         initialized_here = not rclpy.ok()
         if initialized_here:
             rclpy.init()
-        node = rclpy.create_node("so101_parallel_pose_publisher")
+        node = rclpy.create_node(
+            "so101_parallel_pose_publisher",
+            parameter_overrides=[Parameter("use_sim_time", value=True)],
+        )
         publisher = node.create_publisher(PoseStamped, "/cup_pose", 10)
         try:
             message = PoseStamped()
@@ -1235,6 +1239,11 @@ class ParallelRosRuntimePorts:
                 message.pose.orientation.w,
             ) = values
             deadline = time.monotonic() + 2.0
+            while node.get_clock().now().nanoseconds < admitted.source_stamp_ns:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    return False
+                rclpy.spin_once(node, timeout_sec=min(0.02, remaining))
             while publisher.get_subscription_count() < 1 and time.monotonic() < deadline:
                 rclpy.spin_once(node, timeout_sec=0.02)
             if publisher.get_subscription_count() < 1:
