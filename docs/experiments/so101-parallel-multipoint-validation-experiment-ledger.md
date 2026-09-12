@@ -4723,6 +4723,42 @@ deletion_candidates: registered pytest/build scratch trees only; no deletion aut
 decision: PREREGISTER CONTROLLED PLAN-ONLY FAULT GATES BEFORE FULL-20 ADMISSION
 ```
 
+## EXP-070 — F68 controlled plan-only Worker and Broker termination
+
+```yaml
+experiment_id: EXP-070
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:22:47+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:22:47+08:00
+prior_experiment: EXP-069
+hypothesis: Exact manifest-owned termination of one plan-only Worker followed by the current Broker will fence the old Worker/request authority, pause grants during Broker recovery without spending K, restart Broker generation g+1, allow the other Worker to continue, and leave no duplicate lease or owned process.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v1-f68
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f68
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+fault_sequence:
+  - wait for worker-01 to own an attempt workspace, then invoke scripts/inject_so101_parallel_fault.py with the exact batch root, worker-01, TERM
+  - re-read the manifest and invoke the same script against the exact current broker, TERM
+success_criteria: Both injectors exit 0 after double identity readback; no execute action occurs; broker generation advances from 1 to 2; the non-target Worker continues; no old-generation result is admitted, no point has two simultaneous valid leases, K is not consumed by Broker pause, cleanup is conservative, and no owned process/container/GPU task/domain claim remains.
+provenance:
+  executable_source_commit: 7847bf280cf018a8515db8d1d1a67114976d21c0
+  executable_source_tree: f0ac02faa60477a3132b5df5fab13dc5db7d78530218ce8168ad5bf5533ab1bf
+  installed_module_tree: 5e8da0702cbf3b83b649e1b79ad967dbb427926df76ecd6b7dda5c8bc9122e82
+  image_id: sha256:26e992ff4bf37be75f955279f41d20b1246fb59cfaa483d1ae5628bdf44382af
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight_resources: 24 CPUs, 24.414 GiB MemAvailable, 15272 MiB GPU free, zero GPU applications/target containers, domains 181/182/183 unlocked
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
