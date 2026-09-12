@@ -6033,12 +6033,14 @@ decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL
 
 ```yaml
 experiment_id: EXP-091
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:32:37+08:00
   - status: RUNNING
     at: 2026-09-13T06:33:19+08:00
+  - status: VALID
+    at: 2026-09-13T06:38:18+08:00
 prior_experiment: EXP-090
 hypothesis: The diagnostic-only F90 image preserves the accepted two-Worker four-point physical behavior while making any first health-losing perception failure durable.
 single_variable: Add F90 first-failure diagnostics to the F74 source and Broker image; selection, N=2, K=2, config, catalog, models, MuJoCo/MoveIt runtime, deadlines, safety decisions, and execute behavior remain fixed from EXP-084.
@@ -6068,6 +6070,17 @@ provenance:
 success_criteria: Exit 0; all four distinct points PASSED; exactly K=2 leases and generation 3 per Worker; four successful recoveries; all eight original RGB images accepted; numeric, dynamic, exact-TF, model, provenance, manifest hash, coordinator completion, qualification, and cleanup gates pass; no first-failure receipt and no residual owned state.
 failure_rule: Any nonzero exit, non-PASSED point, unexpected first-failure receipt, K/generation violation, evidence/hash/visual/recovery/cleanup failure, qualification false, or residual state blocks a new full-catalog run.
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+result: The F90 command exited 0 in 206.87 seconds. All four distinct points PASSED, each Worker received exactly K=2 leases and reached generation 3 through two successful recoveries, all four dynamic manifests were DONE, and no first-failure receipt was produced. All four sealed attempt manifests and their 44 listed files passed size/SHA-256 readback. Aggregate qualification and cleanup passed, execute-mode validation fields remained false and inapplicable, and fresh original-resolution inspection accepted all eight initial/terminal frames. Post-exit audit found no owned process, task container, GPU compute application, or related process.
+aggregate_results_sha256: c550f27a3187f0262db1375a1e6f8b322704a2374231198a45626cda83aa8ebf
+command_log_sha256: 30e0be83d84dced10b681128bb06d1c95a34cdbcb626e2bdfa7d0fa26b8e0d05
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP091.json
+visual_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP091.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-091-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP091.txt
+retained: complete live-small-f90 tree, command/MuJoCo/result/visual/cleanup reports, F90 qualification evidence, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build/compile scratch and all prior candidates; no deletion authorized
+decision: ADVANCE TO A NEW IMMUTABLE FULL 20-POINT F90 QUALIFICATION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
