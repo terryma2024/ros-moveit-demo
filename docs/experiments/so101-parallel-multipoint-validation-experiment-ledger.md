@@ -5230,10 +5230,12 @@ decision: RUN EXP-078 SIX-POINT EXECUTE DIAGNOSTIC
 
 ```yaml
 experiment_id: EXP-078
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:42:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T04:43:35+08:00
 prior_experiment: EXP-077
 hypothesis: Three complete execute/recovery cycles per Worker will either remain healthy or retain the exact initiating reason at the first post-recovery Broker infrastructure failure instead of a generic BROKER_NOT_READY cascade.
 mode: execute; simulation only
@@ -5246,7 +5248,7 @@ selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5
 selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
 provenance:
   executable_source_commit: 3b5e5ac8cc0ac587319eed77003ebb40efa534ca
-  preregistration_commit: pending
+  preregistration_commit: 49407b9bf5f6697d74922e9660df5205a2655dd7
   executable_source_tree: 1014ac5c014dc3f88876709d893dc6e826b476a3817726e7d94d1c67a196e36d
   installed_module_tree: 4260fb551f30275f621916d8a1f891b2a4175768efdb658f4aa5e7e17974c316
   image_id: sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
