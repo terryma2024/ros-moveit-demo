@@ -1475,7 +1475,7 @@ def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target
     from so101_demo.cli.parallel_perception_broker import source_hash
 
     repository = tmp_path / "checkout"
-    source = repository / "src/so101_demo_py/src/so101_demo"
+    source = repository / "src/so101_demo_py/src"
     module = source / "cli/mujoco_parallel_batch.py"
     module.parent.mkdir(parents=True)
     module.write_text("approved = True\n", encoding="utf-8")

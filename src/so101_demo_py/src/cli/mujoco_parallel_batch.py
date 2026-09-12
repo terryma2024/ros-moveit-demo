@@ -303,9 +303,7 @@ def _installed_overlay_identity(
     """Bind editable build/install artifacts to this exact source checkout."""
 
     repository_root = Path(repository_root).resolve()
-    source_package = (
-        repository_root / "src/so101_demo_py/src/so101_demo"
-    ).resolve()
+    source_package = (repository_root / "src/so101_demo_py/src").resolve()
     build_package = repository_root / "build/so101_demo_py/so101_demo"
     expected_module = build_package / "cli/mujoco_parallel_batch.py"
     expected_console = (
