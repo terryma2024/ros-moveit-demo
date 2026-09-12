@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: d7919dca912f1ec3f97009e697f3724fb9610f11
+current_commit: 53592aa0f8bb8866db581572568f2f4179b1d826
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -25,7 +25,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-014
-next_experiment: EXP-029
+next_experiment: EXP-030
 ```
 
 Frozen provenance:
@@ -975,6 +975,17 @@ observed:
 inferred:
   - Initial cold start and steady-state heartbeat loss are distinct frozen budgets. The current lifecycle also supervises only the attached Docker client PID, not the actual container identity, so process-group absence alone cannot prove cleanup.
 conclusion: INVALID infrastructure bootstrap with zero counted point attempts; it exposed two concrete Broker lifecycle defects requiring F34 TDD repair before another execute run.
+repair: >-
+  Valid behavioral RED pytest-md7VkUVA proved the 5-second/90-second budget mismatch, absent
+  container lifecycle injection, and missing cidfile/labels. Focused GREEN pytest-57Zjafzv passed
+  4 tests, and expanded pytest-wlodUMVR passed 93 CLI/container/fault tests. Commit 53592aa0f adds
+  a private generation-specific cidfile, exact image/label/mount inspect before Docker stop, cleanup
+  truth binding, recovery retirement, and the frozen 90-second initial Broker budget. p35 rebuilt the
+  package and passed 2756 ordinary tests with zero errors/failures/skips; benchmark_test was not
+  collected. Rebuilt immutable image sha256:a340599a2f78b3f47424a151cc69ad61be869c0a2336a2933891ef4ac8a5631d
+  has equal source/verified SHA256 fcc27fdad80ef6f894f381f5cf07efc4dd62cfecc1368f4e0974b71e655df679
+  and fresh task14-f34-smoke qualified both models, left a private 0600 cidfile, and left no container
+  or GPU process.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028.json (empty rejected diagnostic from an incorrect probe class name; retained, not authoritative)
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-028b.json
@@ -990,6 +1001,72 @@ archived: none
 deletion_candidates: empty rejected domain-preflight-before-028.json and scratch p32/p33/p34 plus direct pytest scratch; nothing will be deleted without explicit user authorization
 decision: REPEAT only after F34 RED/GREEN, full ordinary gate, image rebuild, dual-model smoke, and a fresh immutable batch root
 next_experiment: EXP-029 is reserved for the Broker-lifecycle-corrected execute run
+```
+
+## EXP-029 — Task 14 lifecycle-corrected two-Worker execute
+
+```yaml
+experiment_id: EXP-029
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:53:28+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:53:28+08:00
+prior_experiment: EXP-028
+hypothesis: The verified 90-second startup budget and exact Docker-container cleanup identity permit the four-point execute to run without either premature cold-start timeout or detached Broker residue.
+prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
+single_variable: F34 corrects Broker startup/cleanup lifecycle; a fresh immutable batch ID/root is required because EXP-028 evidence is retained, while source, install, image, selection, config, models, N=2, and K=2 remain fixed.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f34
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f34
+preconditions:
+  - F34 RED/GREEN, expanded 93-test gate, and complete p35 ordinary gate passed; installed source/build trees bind to SHA256 4c46529f9a60c7cec3bae6df42e47cb54c38268b0859f1facd1cb9b8348df203.
+  - Immutable image sha256:a340599a2f78b3f47424a151cc69ad61be869c0a2336a2933891ef4ac8a5631d passed fresh dual-model smoke with equal source/verified SHA256 fcc27fdad80ef6f894f381f5cf07efc4dd62cfecc1368f4e0974b71e655df679 and private cidfile evidence.
+  - Fresh inventory and production probe found no stack process, ROS node, related container/GPU task, or domain 181-183 owner; 24 CPUs, 25.871 GiB MemAvailable, and 14.914 GiB GPU free exceed admission; live-small-f34 is absent.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete per-point evidence, and clean shutdown.
+  - Reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt trajectory/controller, final cup support/contact/detachment, retreat, and original-resolution offscreen visual evidence pass readback.
+  - Exact labeled Broker cid is absent from Docker after shutdown and aggregate cleanup is true only with no process/container/GPU residue.
+failure_criteria:
+  - Trustworthy initialized product behavior fails any physical/evidence gate; retain as VALID failed behavior and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, or evidence pollution prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: 53592aa0f8bb8866db581572568f2f4179b1d826
+  executable_source_tree: 4c46529f9a60c7cec3bae6df42e47cb54c38268b0859f1facd1cb9b8348df203
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:a340599a2f78b3f47424a151cc69ad61be869c0a2336a2933891ef4ac8a5631d
+  image_source_sha256: fcc27fdad80ef6f894f381f5cf07efc4dd62cfecc1368f4e0974b71e655df679
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point, inspected fresh and aligned to sealed runtime evidence; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-029.json and reports/domain-preflight-before-029.json
+    exit_code: 0
+  - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with the fresh EXP-029 batch/root and reports/live-small-command-029 log/exit/time evidence
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p35
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f34.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f34.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f34-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-029.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-029.json
+decision: PENDING
+next_experiment: EXP-030 controlled plan-only fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
