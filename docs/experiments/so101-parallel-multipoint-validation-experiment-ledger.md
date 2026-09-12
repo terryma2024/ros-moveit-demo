@@ -3331,12 +3331,14 @@ decision: RUN EXP-052
 
 ```yaml
 experiment_id: EXP-052
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T23:08:10+08:00
   - status: RUNNING
     at: 2026-09-12T23:08:10+08:00
+  - status: INVALID
+    at: 2026-09-12T23:12:23+08:00
 prior_experiment: EXP-051
 hypothesis: The unchanged recovery outcome plus F54 diagnostic will identify exactly which of fenced/stopped/confirmed/recovered/ready is false after a passing point.
 prediction: Either four points pass, or both recovery paths emit bounded deterministic gate diagnostics that permit one evidence-backed fix.
@@ -3358,10 +3360,62 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact EXP-051 command under the verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f54 and root live-small-f54.
 acceptance: The complete frozen Task 14 live-small gate plus exact bounded RECOVERY_GATES diagnostic readback.
-result: PENDING
-retained: preflight and prior evidence; runtime evidence pending
+result: >-
+  Command exited 1 after 116.19 seconds and produced the required exact diagnosis. Worker-01
+  completed cup_test_forward_5cm and sealed PASSED. Worker-02 sealed task_start INVALID before
+  action because its exact TF lookup transiently reported that world did not exist. Both post-point
+  recovery paths emitted fenced=true, recovered=true, ready=true, stopped=false, confirmed=false.
+  This isolates the repeatable recovery false negative to both action-status readers, not Broker
+  fencing, old-stack shutdown, resource replacement, or replacement readiness. The two readers use
+  volatile depth=10 subscriptions, unlike the already-correct initial gate, so they cannot receive
+  the action servers' transient-local retained terminal status when no new status transition occurs.
+visual_observation: >-
+  The three available immutable 640x480 RGB files were inspected at original resolution.
+  cup_test_forward_5cm initial is correct and its terminal shows an upright cup in the target ring
+  with the arm retreated, consistent with PASSED. task_start has only a correct no-contact initial
+  frame because the exact TF boundary failed before action; it is not counted as a behavior result.
+visual_sha256:
+  cup_test_forward_5cm_initial: fad007b56ded2b87722b56a2c926d8e16612a09d9daeabdca4be3481df382f3d
+  cup_test_forward_5cm_terminal: 5e759d3aa989ccd5c63a4bd681d40ed3a0b14bf2d3ae7119081e7209a017ff17
+  task_start_initial: 1c720010f645481f85786c9b8e63615ab96ad2ae2818f810f87545cb0d51f343
+recovery_diagnostics:
+  worker_01: '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES","ready":true,"recovered":true,"stopped":false,"worker_generation":1,"worker_id":"worker-01"}'
+  worker_02: '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES","ready":true,"recovered":true,"stopped":false,"worker_generation":1,"worker_id":"worker-02"}'
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: abf3f12889a710c943901ef348826874066891df49420a155ddcac269056edb3
+command_time_sha256: ec6e56129fb159a4d16f37e4073e6ed4ca50cbddbdd42fbd169088c416c33b47
+aggregate_sha256: 33d3349c8241bda9c934ca7512775e21fab470f6274cd7a28ca129e388879231
+worker_01_result_sha256: 93a9612d09eece6442d347c532b7b20b28485f42d7d50427a76abb5af96a4511
+worker_02_result_sha256: 7a1c38a8c520d08c6ea55956f5a936ee4f2505cf914ee8fda553fa9b41bbcc8a
+mujoco_log_sha256: e2e16068681dcc9b80ee5394d4bbf9f40297b3241f9b2d1148785d5898177b86
+cleanup: >-
+  Exact CID ce428827a0f5d1aab86c8e7ec8f06a368f6337fec40e52cfaedb2f3952f4005e
+  was verified against the F54 image and batch/generation/mount identity, then stopped and removed.
+  Final audit found no related process, container, or GPU task, all domains lockable, and moved the
+  MuJoCo log without deletion.
+post_cleanup_sha256: 0e2efb033cff290de954acc9c21ca6915d733222b55224e2ebe92d028528d21f
+conclusion: INVALID diagnostic run; use the ROS action status transient-local QoS for both recovery status readers and retain all existing cancellation/confirmation gates.
+retained: complete EXP-052 batch/reports, three inspected RGB files, diagnostic lines, recovery receipts, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: no new scratch; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-043
+last_valid_experiment: EXP-022
+current_hypothesis: Using qos_profile_action_status_default for both recovery status subscriptions will deliver retained terminal action states and make the unchanged cancel-plus-independent-confirm gates pass without weakening them.
+working_tree_status: clean executable source at 02c21600d after formal QoS RED/GREEN; ledger-only EXP-052 result pending commit
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-052 proved stopped=false and confirmed=false for both slots while fenced/recovered/ready were true.
+  - Both failing readers passed integer depth 10; the initial point gate already uses qos_profile_action_status_default for the same three action status topics.
+  - Formal RED proved both readers supplied [10,10,10,10,10,10]; focused GREEN proved all six now use qos_profile_action_status_default and both cancellation/confirmation paths retain their exact success conditions.
+  - Adjacent Worker/ROS gate passed 120 tests.
+ruling: F55 changes only the two action-status subscription QoS arguments to the ROS action default transient-local profile. Cancellation requests, active-state set, three exact topics, independent confirmation, timeouts, and every recovery admission gate remain unchanged.
+retained: EXP-052 and F55 RED/GREEN/adjacent evidence plus all prior evidence
+archived: none
+deletion_candidates: new direct pytest scratch after readback; no deletion authorized
+decision: BUILD AND FULLY QUALIFY F55 BEFORE A NEW FOUR-POINT EXECUTE
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
