@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import stat
 from types import SimpleNamespace
 
 import numpy as np
@@ -573,6 +575,59 @@ def test_point_reset_uses_qualified_override_and_scene_restore():
     ):
         assert type(getattr(receipt, field)) is type(getattr(lease, field))
         assert getattr(receipt, field) == getattr(lease, field)
+
+
+def test_capture_rgb_mirror_creates_private_directory_chain(tmp_path, monkeypatch):
+    from so101_demo.cli import rgbd_point_cloud
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    worker_root = tmp_path / "workers/worker-01"
+    worker_root.mkdir(parents=True, mode=0o700)
+    broker_root = tmp_path / "broker-inputs"
+    broker_root.mkdir(mode=0o700)
+    color = SimpleNamespace(
+        header=SimpleNamespace(
+            frame_id="task_camera_frame",
+            stamp=SimpleNamespace(sec=12, nanosec=34),
+        )
+    )
+    source = SimpleNamespace(close=lambda: None)
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+    )
+    ports._capture_aligned = lambda: (
+        source,
+        (object(), color, object()),
+        11.0,
+    )
+    monkeypatch.setattr(
+        rgbd_point_cloud,
+        "_decode_rgb",
+        lambda _message: np.zeros((2, 3, 3), dtype=np.uint8),
+    )
+    destination = (
+        worker_root
+        / "attempts/task_start/attempt-1/working/perception/input/rgb.npy"
+    )
+    previous_umask = os.umask(0o002)
+    try:
+        receipt = ports.capture_rgb(destination, 10.0)
+    finally:
+        os.umask(previous_umask)
+
+    mirror = broker_root / destination.relative_to(worker_root.parent)
+    assert receipt.path == destination
+    assert mirror.stat().st_ino == destination.stat().st_ino
+    current = mirror.parent
+    while current != broker_root:
+        info = current.lstat()
+        assert stat.S_ISDIR(info.st_mode)
+        assert not current.is_symlink()
+        assert info.st_uid == os.getuid()
+        assert stat.S_IMODE(info.st_mode) == 0o700
+        current = current.parent
+    source.close()
 
 
 def test_initial_gate_requires_exact_worker_node_inventory():

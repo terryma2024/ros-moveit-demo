@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import time
 from types import SimpleNamespace
@@ -44,6 +45,34 @@ _RESET_JOINTS = (0.0,) * 6
 _ACTIVE_GOAL_STATES = {1, 2, 3}
 _NODE_DIAGNOSTIC_LIMIT = 16
 _NODE_DIAGNOSTIC_NAME_LIMIT = 96
+
+
+def _mkdir_private_chain(root, target):
+    """Create and verify each target directory beneath a private root."""
+
+    root = Path(root).absolute()
+    target = Path(target).absolute()
+    try:
+        parts = target.relative_to(root).parts
+    except ValueError as error:
+        raise RuntimeError("BROKER_INPUT_DIRECTORY_ESCAPE") from error
+    current = root
+    for part in (None, *parts):
+        if part is not None:
+            current = current / part
+            try:
+                current.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+        info = current.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or current.is_symlink()
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+        ):
+            raise RuntimeError("BROKER_INPUT_DIRECTORY_IDENTITY")
+    return target
 
 
 def _worker_node_diagnostic(observed, expected):
@@ -933,7 +962,9 @@ class ParallelRosRuntimePorts:
                 batch_root = self.resources.worker_root.parent.parent
                 relative = path.relative_to(self.resources.worker_root.parent)
                 broker_copy = batch_root / "broker-inputs" / relative
-                broker_copy.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+                _mkdir_private_chain(
+                    batch_root / "broker-inputs", broker_copy.parent
+                )
                 os.link(path, broker_copy, follow_symlinks=False)
                 parent_fd = os.open(
                     broker_copy.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
