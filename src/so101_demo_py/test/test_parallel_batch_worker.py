@@ -48,6 +48,12 @@ class ResetEvidence:
     reset_epoch: str
     simulation_session_id: str
     reset_completed_monotonic_s: float
+    batch_id: str
+    coordinator_epoch: int
+    worker_id: str
+    worker_generation: int
+    attempt_id: str
+    lease_generation: int
 
 
 @dataclass(frozen=True)
@@ -61,6 +67,12 @@ class GateEvidence:
     reset_epoch: str
     simulation_session_id: str
     source_frame_monotonic_s: float
+    batch_id: str
+    coordinator_epoch: int
+    worker_id: str
+    worker_generation: int
+    attempt_id: str
+    lease_generation: int
 
 
 @dataclass(frozen=True)
@@ -94,11 +106,19 @@ class Coordinator:
         self.reenter = None
         self.sealed_statuses = []
         self.recovery = []
+        self.start_summaries = []
 
-    def register_worker(self, worker_id, *, generation):
+    def register_worker(
+            self, worker_id, *, generation,
+            recovery_deadline_monotonic_s=None):
+        if (recovery_deadline_monotonic_s is not None
+                and self.clock() >= recovery_deadline_monotonic_s):
+            raise TimeoutError("recovery registration deadline")
         self.calls.append(("register_worker", worker_id, generation))
         self.generation = generation
-        return Ack(WorkerState.AVAILABLE, generation, None)
+        state = (WorkerState.RECOVERING if recovery_deadline_monotonic_s is not None
+                 else WorkerState.AVAILABLE)
+        return Ack(state, generation, None)
 
     def grant_lease(self, worker_id, *, generation, request_key):
         self.calls.append(("LEASE_REQUEST", request_key))
@@ -121,14 +141,16 @@ class Coordinator:
             return None
         return Ack(WorkerState.INITIALIZING, self.generation, self.active)
 
-    def ack_attempt_started(self, lease, *, request_key):
+    def ack_attempt_started(self, lease, *, request_key, gate_summary=None):
         self.calls.append(("ATTEMPT_STARTED", request_key))
+        self.start_summaries.append(gate_summary)
         if self.withhold_start_ack:
             return None
         return Ack(WorkerState.EXECUTING, self.generation, self.active)
 
-    def ack_validation_started(self, lease, *, request_key):
+    def ack_validation_started(self, lease, *, request_key, gate_summary=None):
         self.calls.append(("VALIDATION_STARTED", request_key))
+        self.start_summaries.append(gate_summary)
         if self.withhold_start_ack:
             return None
         return Ack(WorkerState.EXECUTING, self.generation, self.active)
@@ -165,8 +187,14 @@ class Coordinator:
         return {"status": self.sealed_statuses[-1], "location": location, "sha256": "b" * 64}
 
     def record_recovery(self, worker_id, **facts):
+        deadline = facts["recovery_deadline_monotonic_s"]
+        if self.clock() >= deadline:
+            raise TimeoutError("recovery record deadline")
         self.calls.append(("RECOVERY", facts["generation"], facts["succeeded"]))
         self.recovery.append(facts)
+        state = (WorkerState.AVAILABLE if facts["succeeded"]
+                 else WorkerState.QUARANTINED)
+        return Ack(state, facts["generation"], None)
 
 
 class Broker:
@@ -216,13 +244,19 @@ class Runtime:
         self.calls.append("reset_point")
         if self.raise_at == "reset_point":
             raise RuntimeError("reset failed")
-        return ResetEvidence(lease.point_id, "reset-1", "session-1", 20.0)
+        return ResetEvidence(
+            lease.point_id, "reset-1", "session-1", 20.0,
+            lease.batch_id, lease.coordinator_epoch, lease.worker_id,
+            lease.worker_generation, lease.attempt_id, lease.lease_generation,
+        )
 
     def point_initial_gate(self, lease, reset):
         self.calls.append("point_initial_gate")
         return GateEvidence(
             lease.point_id, True, True, True, True, True,
             reset.reset_epoch, reset.simulation_session_id, 21.0,
+            lease.batch_id, lease.coordinator_epoch, lease.worker_id,
+            lease.worker_generation, lease.attempt_id, lease.lease_generation,
         )
 
     def admit_pose(self, lease, chain):
@@ -265,6 +299,7 @@ class Results:
     def __init__(self, coordinator):
         self.coordinator = coordinator
         self.calls = []
+        self.advance_receipt_to_deadline = False
 
     def seal_attempt(self, lease, decision):
         self.calls.append(("seal_attempt", decision.status, decision.reason))
@@ -276,9 +311,21 @@ class Results:
         self.coordinator.sealed_statuses.append(decision.status)
         return f"/{lease.attempt_id}/sealed-validation"
 
-    def write_recovery_receipt(self, lease, *, succeeded, generation):
+    def write_recovery_receipt(
+            self, lease, *, succeeded, generation,
+            deadline_monotonic_s=None, clock=None):
+        if self.advance_receipt_to_deadline and deadline_monotonic_s is not None:
+            self.coordinator.clock.now = deadline_monotonic_s
+            if clock() >= deadline_monotonic_s:
+                raise TimeoutError("receipt deadline")
         self.calls.append(("recovery_receipt", succeeded, generation))
         return f"/recoveries/{lease.attempt_id}-{generation}"
+
+    def verify_recovery_receipt(
+            self, location, lease, *, succeeded, generation,
+            deadline_monotonic_s=None, clock=None):
+        self.calls.append(("verify_recovery_receipt", succeeded, generation))
+        return True
 
 
 class Fake:
@@ -304,6 +351,46 @@ class Fake:
 
 def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
+
+
+def expected_gate_summary(lease):
+    return {
+        "schema_version": 1,
+        "kind": "POINT_INITIAL_GATE",
+        "batch_id": lease.batch_id,
+        "coordinator_epoch": lease.coordinator_epoch,
+        "worker_id": lease.worker_id,
+        "worker_generation": lease.worker_generation,
+        "point_id": lease.point_id,
+        "attempt_id": lease.attempt_id,
+        "lease_generation": lease.lease_generation,
+        "reset_epoch": "reset-1",
+        "simulation_session_id": "session-1",
+        "reset_completed_monotonic_s": 20.0,
+        "source_frame_monotonic_s": 21.0,
+        "canonical_joints": True,
+        "no_controller_goal": True,
+        "no_attachment": True,
+        "no_contact": True,
+        "no_stale_node": True,
+    }
+
+
+def expected_scheduler_summary(lease):
+    return {
+        "schema_version": 1,
+        "kind": "SCHEDULER_START",
+        "batch_id": lease.batch_id,
+        "coordinator_epoch": lease.coordinator_epoch,
+        "worker_id": lease.worker_id,
+        "worker_generation": lease.worker_generation,
+        "point_id": lease.point_id,
+        "attempt_id": lease.attempt_id,
+        "lease_generation": lease.lease_generation,
+        "point_gate_applicable": False,
+        "physical_runtime_started": False,
+        "scheduler_only": True,
+    }
 
 
 def test_worker_waits_for_lease_ack_before_reset_or_point_inspection():
@@ -332,7 +419,7 @@ def test_worker_waits_for_attempt_ack_before_perception_or_motion():
         (
             RunMode.EXECUTE,
             ["register_worker", "LEASE_REQUEST", "LEASE_GRANTED", "ATTEMPT_STARTED",
-             "FINALIZING_STARTED", "RESULT_COMMITTED", "RECOVERY", "register_worker"],
+             "FINALIZING_STARTED", "RESULT_COMMITTED", "register_worker", "RECOVERY"],
             ["worker_ready_gate", "reset_point", "point_initial_gate", "pose_admission",
              "submit_motion", "cancel_motion", "confirm_no_controller_goal", "recover",
              "worker_ready_gate"],
@@ -341,7 +428,7 @@ def test_worker_waits_for_attempt_ack_before_perception_or_motion():
         (
             RunMode.PLAN_ONLY,
             ["register_worker", "LEASE_REQUEST", "LEASE_GRANTED", "VALIDATION_STARTED",
-             "FINALIZING_STARTED", "VALIDATION_COMMITTED", "RECOVERY", "register_worker"],
+             "FINALIZING_STARTED", "VALIDATION_COMMITTED", "register_worker", "RECOVERY"],
             ["worker_ready_gate", "reset_point", "point_initial_gate", "pose_admission",
              "submit_plan", "cancel_motion", "confirm_no_controller_goal", "recover",
              "worker_ready_gate"],
@@ -350,7 +437,7 @@ def test_worker_waits_for_attempt_ack_before_perception_or_motion():
         (
             RunMode.DRY_RUN,
             ["register_worker", "LEASE_REQUEST", "LEASE_GRANTED", "VALIDATION_STARTED",
-             "FINALIZING_STARTED", "VALIDATION_COMMITTED", "RECOVERY", "register_worker"],
+             "FINALIZING_STARTED", "VALIDATION_COMMITTED", "register_worker", "RECOVERY"],
             ["worker_ready_gate", "scheduler_trace", "cancel_motion",
              "confirm_no_controller_goal", "recover", "worker_ready_gate"],
             "seal_validation",
@@ -628,7 +715,8 @@ def test_failure_is_sealed_before_recovery_and_success_reuses_slot_at_new_genera
     worker.run()
     ordered = [call[0] for call in fake.results.calls]
     assert ordered == [
-        "seal_attempt", "recovery_receipt", "seal_attempt", "recovery_receipt",
+        "seal_attempt", "recovery_receipt", "verify_recovery_receipt",
+        "seal_attempt", "recovery_receipt", "verify_recovery_receipt",
     ]
     assert [c for c in fake.coordinator.calls if c[0] == "register_worker"] == [
         ("register_worker", "w1", 1), ("register_worker", "w1", 2),
@@ -657,9 +745,12 @@ def test_recovery_deadline_starts_once_and_cannot_be_extended():
         return False
 
     fake.runtime.recover = delayed_recovery
-    ParallelWorker(fake.ports()).run_one()
+    result = ParallelWorker(fake.ports()).run_one()
     assert observed == [10.0 + CONFIG.worker_recovery_timeout_s]
-    assert fake.coordinator.recovery[-1]["succeeded"] is False
+    assert result.recovered is False
+    assert fake.coordinator.recovery == []
+    assert not any(call == ("register_worker", "w1", 2)
+                   for call in fake.coordinator.calls)
 
 
 def test_last_point_recovery_failure_does_not_rewrite_sealed_result():
@@ -784,8 +875,15 @@ def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
         def discover(self, lease, workspace):
             return None
 
-        def write_recovery_receipt(self, lease, *, succeeded, generation):
+        def write_recovery_receipt(
+                self, lease, *, succeeded, generation,
+                deadline_monotonic_s=None, clock=None):
             return str(tmp_path / "recoveries" / f"{lease.attempt_id}-{generation}")
+
+        def verify_recovery_receipt(
+                self, location, lease, *, succeeded, generation,
+                deadline_monotonic_s=None, clock=None):
+            return True
 
     results = DurableResults()
     coordinator = BatchCoordinator(
@@ -813,3 +911,216 @@ def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
         assert snapshot.workers["w1"].state is WorkerState.AVAILABLE
     finally:
         journal.close()
+
+
+def test_worker_passes_exact_locally_validated_gate_summary_to_start_ack():
+    fake = Fake()
+    ParallelWorker(fake.ports()).run_one()
+    lease = next(value for value in fake.coordinator.calls
+                 if value[0] == "LEASE_GRANTED")
+    assert len(fake.coordinator.start_summaries) == 1
+    assert fake.coordinator.start_summaries[0] == expected_gate_summary(
+        LeaseIdentity(
+            "batch-a", 1, "w1", 1, "p1", "p1-lease-1", 1, 10.0, 310.0,
+        ))
+
+
+def test_dry_run_passes_only_exact_scheduler_start_summary():
+    fake = Fake(RunMode.DRY_RUN)
+    ParallelWorker(fake.ports()).run_one()
+    lease = LeaseIdentity(
+        "batch-a", 1, "w1", 1, "p1", "p1-lease-1", 1, 10.0, 310.0,
+    )
+    assert fake.coordinator.start_summaries == [expected_scheduler_summary(lease)]
+    assert "reset_point" not in fake.runtime.calls
+    assert "point_initial_gate" not in fake.runtime.calls
+    assert fake.runtime.physical_starts == 0
+
+
+@pytest.mark.parametrize(
+    "target,field,value",
+    [
+        ("reset", "reset_epoch", ""),
+        ("reset", "simulation_session_id", "   "),
+        ("reset", "reset_completed_monotonic_s", True),
+        ("reset", "attempt_id", "stale-attempt"),
+        ("reset", "lease_generation", 2),
+        ("gate", "batch_id", "other-batch"),
+        ("gate", "worker_generation", 2),
+        ("gate", "attempt_id", "stale-attempt"),
+        ("gate", "lease_generation", 2),
+        ("gate", "source_frame_monotonic_s", False),
+    ],
+)
+def test_malformed_or_stale_gate_evidence_never_starts_attempt(target, field, value):
+    fake = Fake()
+    method_name = "reset_point" if target == "reset" else "point_initial_gate"
+    real = getattr(fake.runtime, method_name)
+
+    def malformed(*args, **kwargs):
+        return replace(real(*args, **kwargs), **{field: value})
+
+    setattr(fake.runtime, method_name, malformed)
+    ParallelWorker(fake.ports()).run_one()
+    assert all(event != "ATTEMPT_STARTED" for event in event_names(fake))
+    assert fake.coordinator.start_summaries == []
+    assert all(call[0] != "request_model" for call in fake.broker.calls)
+
+
+def test_blocked_lease_ack_times_out_and_late_reply_never_authorizes_reset():
+    fake = Fake()
+    entered, release = threading.Event(), threading.Event()
+    real = fake.coordinator.ack_lease
+
+    def blocked(*args, **kwargs):
+        entered.set()
+        release.wait(2)
+        return real(*args, **kwargs)
+
+    fake.coordinator.ack_lease = blocked
+    worker = ParallelWorker(fake.ports())
+    thread = threading.Thread(target=worker.run_one)
+    thread.start()
+    assert entered.wait(1)
+    fake.clock.now += CONFIG.lease_ack_timeout_s
+    time.sleep(0.05)
+    timed_out_before_release = not thread.is_alive()
+    release.set()
+    thread.join(1)
+    assert timed_out_before_release
+    assert fake.runtime.calls == ["worker_ready_gate"]
+
+
+def test_blocked_current_heartbeat_times_out_without_late_side_effect():
+    fake = Fake()
+    entered, release = threading.Event(), threading.Event()
+    real = fake.coordinator.heartbeat
+
+    def blocked(lease):
+        if threading.current_thread().name == "parallel-worker-rpc-w1":
+            entered.set()
+            release.wait(2)
+        return real(lease)
+
+    fake.coordinator.heartbeat = blocked
+    worker = ParallelWorker(fake.ports())
+    thread = threading.Thread(target=worker.run_one, name="worker-main")
+    thread.start()
+    assert entered.wait(1)
+    fake.clock.now += CONFIG.heartbeat_timeout_s
+    time.sleep(0.05)
+    timed_out_before_release = not thread.is_alive()
+    release.set()
+    thread.join(1)
+    assert timed_out_before_release
+    assert "reset_point" not in fake.runtime.calls
+
+
+def test_current_heartbeat_reply_at_exact_five_second_boundary_is_rejected():
+    fake = Fake()
+    real = fake.coordinator.heartbeat
+    crossed = False
+
+    def exact_boundary(lease):
+        nonlocal crossed
+        if (threading.current_thread().name == "parallel-worker-rpc-w1"
+                and not crossed):
+            crossed = True
+            fake.clock.now += CONFIG.heartbeat_timeout_s
+        return real(lease)
+
+    fake.coordinator.heartbeat = exact_boundary
+    worker = ParallelWorker(fake.ports())
+    thread = threading.Thread(target=worker.run_one, name="worker-main")
+    thread.start()
+    thread.join(1)
+    assert not thread.is_alive()
+    assert "reset_point" not in fake.runtime.calls
+
+
+@pytest.mark.parametrize("lost_at", ["post-action-heartbeat", "finalizing"])
+def test_coordinator_loss_after_authorization_still_seals_local_terminal(lost_at):
+    fake = Fake()
+    if lost_at == "post-action-heartbeat":
+        real = fake.runtime.execute_expert
+
+        def lose_after_action(*args, **kwargs):
+            value = real(*args, **kwargs)
+            fake.coordinator.heartbeat_reply = RuntimeError("coordinator lost")
+            return value
+
+        fake.runtime.execute_expert = lose_after_action
+    else:
+        fake.coordinator.begin_finalizing = (
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("lost")))
+    ParallelWorker(fake.ports()).run_one()
+    seals = [call for call in fake.results.calls if call[0] == "seal_attempt"]
+    assert len(seals) == 1
+    if lost_at == "post-action-heartbeat":
+        assert seals[0][1] is AttemptStatus.INDETERMINATE
+    assert fake.coordinator.recovery == []
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["recover", "ready", "receipt", "record", "register"],
+)
+def test_recovery_exact_deadline_at_each_blocking_boundary_never_readmits(boundary):
+    fake = Fake()
+    start = fake.clock.now
+    deadline = start + CONFIG.worker_recovery_timeout_s
+    if boundary == "recover":
+        real = fake.runtime.recover
+
+        def delayed(*args, **kwargs):
+            fake.clock.now = deadline
+            return real(*args, **kwargs)
+
+        fake.runtime.recover = delayed
+    elif boundary == "ready":
+        real = fake.runtime.worker_ready_gate
+        calls = 0
+
+        def delayed():
+            nonlocal calls
+            calls += 1
+            value = real()
+            if calls == 2:
+                fake.clock.now = deadline
+            return value
+
+        fake.runtime.worker_ready_gate = delayed
+    elif boundary == "receipt":
+        fake.results.advance_receipt_to_deadline = True
+    elif boundary == "record":
+        real = fake.coordinator.record_recovery
+
+        def delayed(*args, **kwargs):
+            fake.clock.now = deadline
+            return real(*args, **kwargs)
+
+        fake.coordinator.record_recovery = delayed
+    else:
+        real = fake.coordinator.register_worker
+
+        def delayed(*args, **kwargs):
+            if kwargs["generation"] == 2:
+                fake.clock.now = deadline
+            return real(*args, **kwargs)
+
+        fake.coordinator.register_worker = delayed
+    result = ParallelWorker(fake.ports()).run_one()
+    assert result.recovered is False
+    if boundary != "record":
+        assert not any(call == ("register_worker", "w1", 2)
+                       for call in fake.coordinator.calls)
+    assert not any(facts["succeeded"] is True for facts in fake.coordinator.recovery)
+    assert sum(call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls) == 1
+
+
+def test_recovery_receipt_is_read_back_before_successful_readmission():
+    fake = Fake()
+    result = ParallelWorker(fake.ports()).run_one()
+    names = [call[0] for call in fake.results.calls]
+    assert result.recovered is True
+    assert names.index("recovery_receipt") < names.index("verify_recovery_receipt")

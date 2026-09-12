@@ -419,10 +419,38 @@ def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, m
         coordinator.register_worker('w1', generation=1)
         granted = coordinator.grant_lease('w1', generation=1)
         coordinator.ack_lease(granted, request_key='ack')
+        gate_summary = {
+            'schema_version': 1, 'kind': 'POINT_INITIAL_GATE',
+            'batch_id': granted.batch_id,
+            'coordinator_epoch': granted.coordinator_epoch,
+            'worker_id': granted.worker_id,
+            'worker_generation': granted.worker_generation,
+            'point_id': granted.point_id, 'attempt_id': granted.attempt_id,
+            'lease_generation': granted.lease_generation,
+            'reset_epoch': 'reset-1', 'simulation_session_id': 'session-1',
+            'reset_completed_monotonic_s': 1.0,
+            'source_frame_monotonic_s': 2.0, 'canonical_joints': True,
+            'no_controller_goal': True, 'no_attachment': True,
+            'no_contact': True, 'no_stale_node': True,
+        }
+        if mode is RunMode.DRY_RUN:
+            gate_summary = {
+                'schema_version': 1, 'kind': 'SCHEDULER_START',
+                'batch_id': granted.batch_id,
+                'coordinator_epoch': granted.coordinator_epoch,
+                'worker_id': granted.worker_id,
+                'worker_generation': granted.worker_generation,
+                'point_id': granted.point_id, 'attempt_id': granted.attempt_id,
+                'lease_generation': granted.lease_generation,
+                'point_gate_applicable': False,
+                'physical_runtime_started': False, 'scheduler_only': True,
+            }
         if mode is RunMode.EXECUTE:
-            coordinator.ack_attempt_started(granted, request_key='start')
+            coordinator.ack_attempt_started(
+                granted, request_key='start', gate_summary=gate_summary)
         else:
-            coordinator.ack_validation_started(granted, request_key='start')
+            coordinator.ack_validation_started(
+                granted, request_key='start', gate_summary=gate_summary)
         fields = asdict(granted)
         del fields['lease_issued_monotonic_s'], fields['lease_deadline_monotonic_s']
         validation = mode is not RunMode.EXECUTE
@@ -503,7 +531,33 @@ def test_adapter_requires_parent_durability_after_rename_failure(
         validation = mode is not RunMode.EXECUTE
         start = (coordinator.ack_validation_started if validation
                  else coordinator.ack_attempt_started)
-        start(granted, request_key='start')
+        gate_summary = {
+            'schema_version': 1, 'kind': 'POINT_INITIAL_GATE',
+            'batch_id': granted.batch_id,
+            'coordinator_epoch': granted.coordinator_epoch,
+            'worker_id': granted.worker_id,
+            'worker_generation': granted.worker_generation,
+            'point_id': granted.point_id, 'attempt_id': granted.attempt_id,
+            'lease_generation': granted.lease_generation,
+            'reset_epoch': 'reset-1', 'simulation_session_id': 'session-1',
+            'reset_completed_monotonic_s': 1.0,
+            'source_frame_monotonic_s': 2.0, 'canonical_joints': True,
+            'no_controller_goal': True, 'no_attachment': True,
+            'no_contact': True, 'no_stale_node': True,
+        }
+        if mode is RunMode.DRY_RUN:
+            gate_summary = {
+                'schema_version': 1, 'kind': 'SCHEDULER_START',
+                'batch_id': granted.batch_id,
+                'coordinator_epoch': granted.coordinator_epoch,
+                'worker_id': granted.worker_id,
+                'worker_generation': granted.worker_generation,
+                'point_id': granted.point_id, 'attempt_id': granted.attempt_id,
+                'lease_generation': granted.lease_generation,
+                'point_gate_applicable': False,
+                'physical_runtime_started': False, 'scheduler_only': True,
+            }
+        start(granted, request_key='start', gate_summary=gate_summary)
         fields = asdict(granted)
         del fields['lease_issued_monotonic_s'], fields['lease_deadline_monotonic_s']
         if validation:

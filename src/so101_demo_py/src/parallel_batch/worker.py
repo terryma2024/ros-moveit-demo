@@ -169,6 +169,7 @@ class ParallelWorker:
         self._runtime_started = False
         self._ready_after_recovery = False
         self._quarantined = False
+        self._local_seals = {}
 
     def _now(self) -> float:
         with self._clock_lock:
@@ -203,10 +204,38 @@ class ParallelWorker:
             and _lease_key(ack_lease) == _lease_key(lease)
         )
 
+    def _call_before(self, call, deadline, reason):
+        """Return one synchronous port response only if it finished before deadline."""
+        if self._now() >= deadline:
+            raise WorkerError(reason)
+        completed = threading.Event()
+        response = {}
+
+        def invoke():
+            try:
+                response["value"] = call()
+            except Exception as error:
+                response["error"] = error
+            finally:
+                completed.set()
+
+        threading.Thread(
+            target=invoke,
+            name=f"parallel-worker-rpc-{self._worker_id}",
+            daemon=True,
+        ).start()
+        while not completed.wait(0.01):
+            if self._now() >= deadline:
+                raise WorkerError(reason)
+        if self._now() >= deadline:
+            raise WorkerError(reason)
+        if "error" in response:
+            raise response["error"]
+        return response.get("value")
+
     def _request_ack(self, call, lease, state, timeout, started):
-        ack = call()
-        finished = self._now()
-        if finished - started >= timeout or not self._ack_matches(ack, lease, state):
+        ack = self._call_before(call, started + timeout, "ACK_TIMEOUT")
+        if not self._ack_matches(ack, lease, state):
             raise WorkerError("ACK_MISSING_OR_STALE")
         with self._lease_lock:
             self._active_lease = ack.lease
@@ -223,8 +252,15 @@ class ParallelWorker:
         now = self._now()
         if now >= lease.lease_deadline_monotonic_s:
             raise WorkerError("LEASE_EXPIRED")
-        ack = self._coordinator.heartbeat(lease)
-        self._now()
+        deadline = min(
+            now + self._config.heartbeat_timeout_s,
+            lease.lease_deadline_monotonic_s,
+        )
+        ack = self._call_before(
+            lambda: self._coordinator.heartbeat(lease),
+            deadline,
+            "HEARTBEAT_ACK_TIMEOUT",
+        )
         if not self._accept_heartbeat(ack, lease):
             raise WorkerError("LEASE_FENCED")
         return ack
@@ -239,8 +275,13 @@ class ParallelWorker:
         if self._registered:
             return True
         try:
-            ack = self._coordinator.register_worker(
-                self._worker_id, generation=self._generation)
+            started = self._now()
+            ack = self._call_before(
+                lambda: self._coordinator.register_worker(
+                    self._worker_id, generation=self._generation),
+                started + self._config.heartbeat_timeout_s,
+                "REGISTRATION_ACK_TIMEOUT",
+            )
             if (getattr(ack, "state", None) is not WorkerState.AVAILABLE
                     or getattr(ack, "generation", None) != self._generation):
                 return False
@@ -262,22 +303,71 @@ class ParallelWorker:
             return False
 
     @staticmethod
-    def _gate_valid(lease, reset, gate) -> bool:
-        return all((
-            getattr(reset, "point_id", None) == lease.point_id,
-            getattr(gate, "point_id", None) == lease.point_id,
-            getattr(gate, "canonical_joints", None) is True,
-            getattr(gate, "no_controller_goal", None) is True,
-            getattr(gate, "no_attachment", None) is True,
-            getattr(gate, "no_contact", None) is True,
-            getattr(gate, "no_stale_node", None) is True,
-            getattr(gate, "reset_epoch", None) == getattr(reset, "reset_epoch", None),
-            getattr(gate, "simulation_session_id", None)
-            == getattr(reset, "simulation_session_id", None),
-            isinstance(getattr(gate, "source_frame_monotonic_s", None), (int, float)),
-            getattr(gate, "source_frame_monotonic_s", float("-inf"))
-            > getattr(reset, "reset_completed_monotonic_s", float("inf")),
-        ))
+    def _gate_summary(lease, reset, gate):
+        identity = {
+            "batch_id": lease.batch_id,
+            "coordinator_epoch": lease.coordinator_epoch,
+            "worker_id": lease.worker_id,
+            "worker_generation": lease.worker_generation,
+            "point_id": lease.point_id,
+            "attempt_id": lease.attempt_id,
+            "lease_generation": lease.lease_generation,
+        }
+        for evidence in (reset, gate):
+            for field, expected in identity.items():
+                actual = getattr(evidence, field, None)
+                if type(actual) is not type(expected) or actual != expected:
+                    raise WorkerError("POINT_INITIAL_GATE_IDENTITY")
+        reset_epoch = getattr(reset, "reset_epoch", None)
+        session_id = getattr(reset, "simulation_session_id", None)
+        if (type(reset_epoch) is not str or not reset_epoch.strip()
+                or type(session_id) is not str or not session_id.strip()
+                or getattr(gate, "reset_epoch", None) != reset_epoch
+                or getattr(gate, "simulation_session_id", None) != session_id):
+            raise WorkerError("POINT_INITIAL_GATE_RESET_IDENTITY")
+        reset_time = getattr(reset, "reset_completed_monotonic_s", None)
+        source_time = getattr(gate, "source_frame_monotonic_s", None)
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) for value in (reset_time, source_time)):
+            raise WorkerError("POINT_INITIAL_GATE_TIMESTAMP")
+        if source_time <= reset_time:
+            raise WorkerError("POINT_INITIAL_GATE_STALE")
+        facts = {
+            field: getattr(gate, field, None)
+            for field in (
+                "canonical_joints", "no_controller_goal", "no_attachment",
+                "no_contact", "no_stale_node",
+            )
+        }
+        if any(value is not True for value in facts.values()):
+            raise WorkerError("POINT_INITIAL_GATE_FAILED")
+        return {
+            "schema_version": 1,
+            "kind": "POINT_INITIAL_GATE",
+            **identity,
+            "reset_epoch": reset_epoch,
+            "simulation_session_id": session_id,
+            "reset_completed_monotonic_s": reset_time,
+            "source_frame_monotonic_s": source_time,
+            **facts,
+        }
+
+    @staticmethod
+    def _dry_run_summary(lease):
+        return {
+            "schema_version": 1,
+            "kind": "SCHEDULER_START",
+            "batch_id": lease.batch_id,
+            "coordinator_epoch": lease.coordinator_epoch,
+            "worker_id": lease.worker_id,
+            "worker_generation": lease.worker_generation,
+            "point_id": lease.point_id,
+            "attempt_id": lease.attempt_id,
+            "lease_generation": lease.lease_generation,
+            "point_gate_applicable": False,
+            "physical_runtime_started": False,
+            "scheduler_only": True,
+        }
 
     def _start_watchdog(self, lease) -> None:
         self._watchdog = _HeartbeatWatchdog(self, lease)
@@ -340,6 +430,29 @@ class ParallelWorker:
         expected_type = AttemptStatus if self._mode is RunMode.EXECUTE else ValidationStatus
         if not isinstance(getattr(decision, "status", None), expected_type):
             raise WorkerError("MODE_RESULT_TYPE_MISMATCH")
+        authorization_lost = False
+        if authorized:
+            try:
+                lease = self._current()
+            except Exception:
+                decision, _, _, _ = self._safe_stop(
+                    lease, action_may_have_started=self._mode is RunMode.EXECUTE)
+                authorization_lost = True
+        key = _lease_key(lease)
+        if key in self._local_seals:
+            prior_status, location = self._local_seals[key]
+            if prior_status is not decision.status:
+                raise WorkerError("LOCAL_TERMINAL_ALREADY_SEALED")
+        elif self._mode is RunMode.EXECUTE:
+            location = self._results.seal_attempt(lease, decision)
+            self._local_seals[key] = (decision.status, location)
+        else:
+            location = self._results.seal_validation(lease, decision)
+            self._local_seals[key] = (decision.status, location)
+
+        if authorization_lost:
+            raise WorkerError("AUTHORIZATION_LOST_AFTER_LOCAL_SEAL")
+
         started = self._now()
         if authorized:
             lease = self._request_ack(
@@ -350,18 +463,18 @@ class ParallelWorker:
                 self._config.result_ack_timeout_s,
                 started,
             )
-        lease = self._current()
         if self._mode is RunMode.EXECUTE:
-            location = self._results.seal_attempt(lease, decision)
             commit = lambda: self._coordinator.commit_result(
                 lease, location, request_key=f"result-{lease.attempt_id}")
         else:
-            location = self._results.seal_validation(lease, decision)
             commit = lambda: self._coordinator.commit_validation(
                 lease, location, request_key=f"validation-{lease.attempt_id}")
-        ack = commit()
-        finished = self._now()
-        if finished - started >= self._config.result_ack_timeout_s or not isinstance(ack, dict):
+        ack = self._call_before(
+            commit,
+            started + self._config.result_ack_timeout_s,
+            "RESULT_ACK_TIMEOUT",
+        )
+        if not isinstance(ack, dict):
             raise WorkerError("RESULT_ACK_TIMEOUT")
         if ack.get("status") is not decision.status or ack.get("location") != location:
             raise WorkerError("RESULT_ACK_MISMATCH")
@@ -375,59 +488,118 @@ class ParallelWorker:
         deadline = started + self._config.worker_recovery_timeout_s
         fenced = stopped = confirmed = recovered = ready = receipt = False
         try:
-            fenced = self._broker.cancel_generation(
-                self._worker_id, lease.worker_generation) is True
+            fenced = self._call_before(
+                lambda: self._broker.cancel_generation(
+                    self._worker_id, lease.worker_generation),
+                deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             pass
         try:
-            stopped = self._runtime.cancel_motion(lease) is True
+            stopped = self._call_before(
+                lambda: self._runtime.cancel_motion(lease),
+                deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             pass
         try:
-            confirmed = self._runtime.confirm_no_controller_goal(lease) is True
+            confirmed = self._call_before(
+                lambda: self._runtime.confirm_no_controller_goal(lease),
+                deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             pass
         try:
-            recovered = self._runtime.recover(
-                self._worker_id, lease.worker_generation, deadline) is True
+            recovered = self._call_before(
+                lambda: self._runtime.recover(
+                    self._worker_id, lease.worker_generation, deadline),
+                deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             recovered = False
         try:
-            if recovered and self._now() < deadline:
-                ready = self._runtime.worker_ready_gate() is True
+            if recovered:
+                ready = self._call_before(
+                    self._runtime.worker_ready_gate,
+                    deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             ready = False
         succeeded = all((fenced, stopped, confirmed, recovered, ready))
         try:
-            self._results.write_recovery_receipt(
-                lease, succeeded=succeeded, generation=lease.worker_generation)
-            receipt = True
+            location = self._call_before(
+                lambda: self._results.write_recovery_receipt(
+                    lease,
+                    succeeded=succeeded,
+                    generation=lease.worker_generation,
+                    deadline_monotonic_s=deadline,
+                    clock=self._clock,
+                ),
+                deadline,
+                "RECOVERY_RECEIPT_DEADLINE",
+            )
+            receipt = self._call_before(
+                lambda: self._results.verify_recovery_receipt(
+                    location,
+                    lease,
+                    succeeded=succeeded,
+                    generation=lease.worker_generation,
+                    deadline_monotonic_s=deadline,
+                    clock=self._clock,
+                ),
+                deadline,
+                "RECOVERY_RECEIPT_READBACK_DEADLINE",
+            ) is True
         except Exception:
             succeeded = False
         if not receipt:
             succeeded = False
-        try:
-            self._coordinator.record_recovery(
-                self._worker_id,
-                generation=lease.worker_generation,
-                succeeded=succeeded,
-                fenced=fenced,
-                owned_processes_stopped=stopped and recovered,
-                controllers_stopped=confirmed,
-                readmitted=ready,
-            )
-        except Exception:
-            succeeded = False
         if not succeeded:
+            try:
+                self._call_before(
+                    lambda: self._coordinator.record_recovery(
+                        self._worker_id,
+                        generation=lease.worker_generation,
+                        succeeded=False,
+                        fenced=fenced,
+                        owned_processes_stopped=stopped and recovered,
+                        controllers_stopped=confirmed,
+                        readmitted=ready,
+                        recovery_deadline_monotonic_s=deadline,
+                    ),
+                    deadline,
+                    "RECOVERY_RECORD_ACK_TIMEOUT",
+                )
+            except Exception:
+                pass
             self._quarantined = True
             return False
         next_generation = lease.worker_generation + 1
         try:
-            ack = self._coordinator.register_worker(
-                self._worker_id, generation=next_generation)
-            if (getattr(ack, "state", None) is not WorkerState.AVAILABLE
+            ack = self._call_before(
+                lambda: self._coordinator.register_worker(
+                    self._worker_id,
+                    generation=next_generation,
+                    recovery_deadline_monotonic_s=deadline,
+                ),
+                deadline,
+                "READMISSION_ACK_TIMEOUT",
+            )
+            if (getattr(ack, "state", None) is not WorkerState.RECOVERING
                     or getattr(ack, "generation", None) != next_generation):
                 raise WorkerError("READMISSION_ACK_INVALID")
+            final = self._call_before(
+                lambda: self._coordinator.record_recovery(
+                    self._worker_id,
+                    generation=next_generation,
+                    succeeded=True,
+                    fenced=fenced,
+                    owned_processes_stopped=stopped and recovered,
+                    controllers_stopped=confirmed,
+                    readmitted=ready,
+                    recovery_deadline_monotonic_s=deadline,
+                ),
+                deadline,
+                "RECOVERY_RECORD_ACK_TIMEOUT",
+            )
+            if (getattr(final, "state", None) is not WorkerState.AVAILABLE
+                    or getattr(final, "generation", None) != next_generation):
+                raise WorkerError("RECOVERY_ACK_INVALID")
         except Exception:
             self._quarantined = True
             return False
@@ -473,10 +645,14 @@ class ParallelWorker:
                 return WorkerRunResult(None, None, False, "WORKER_NOT_READY")
             lease_wait_started = self._now()
             try:
-                lease = self._coordinator.grant_lease(
-                    self._worker_id,
-                    generation=self._generation,
-                    request_key=f"lease-{self._worker_id}-{self._generation}",
+                lease = self._call_before(
+                    lambda: self._coordinator.grant_lease(
+                        self._worker_id,
+                        generation=self._generation,
+                        request_key=f"lease-{self._worker_id}-{self._generation}",
+                    ),
+                    lease_wait_started + self._config.lease_ack_timeout_s,
+                    "LEASE_GRANT_ACK_TIMEOUT",
                 )
                 if lease is None:
                     return WorkerRunResult(None, None, False, "NO_POINT")
@@ -498,20 +674,19 @@ class ParallelWorker:
             except Exception:
                 with self._lease_lock:
                     self._active_lease = None
-                if lease is not None:
-                    self._quarantined = True
+                self._quarantined = True
                 return WorkerRunResult(
                     getattr(lease, "point_id", None), None, False, "LEASE_ACK_FAILED")
 
             self._start_watchdog(lease)
             authorized = False
+            gate_summary = self._dry_run_summary(lease)
             if self._mode is not RunMode.DRY_RUN:
                 try:
                     reset = self._boundary(lambda current: self._runtime.reset_point(current))
                     gate = self._boundary(
                         lambda current: self._runtime.point_initial_gate(current, reset))
-                    if not self._gate_valid(lease, reset, gate):
-                        raise WorkerError("POINT_INITIAL_GATE_FAILED")
+                    gate_summary = self._gate_summary(lease, reset, gate)
                 except Exception:
                     decision, _, _, _ = self._safe_stop(
                         lease, action_may_have_started=False)
@@ -529,10 +704,16 @@ class ParallelWorker:
             try:
                 if self._mode is RunMode.EXECUTE:
                     start_call = lambda: self._coordinator.ack_attempt_started(
-                        lease, request_key=f"attempt-start-{lease.attempt_id}")
+                        lease,
+                        request_key=f"attempt-start-{lease.attempt_id}",
+                        gate_summary=gate_summary,
+                    )
                 else:
                     start_call = lambda: self._coordinator.ack_validation_started(
-                        lease, request_key=f"validation-start-{lease.attempt_id}")
+                        lease,
+                        request_key=f"validation-start-{lease.attempt_id}",
+                        gate_summary=gate_summary,
+                    )
                 lease = self._request_ack(
                     start_call,
                     lease,
