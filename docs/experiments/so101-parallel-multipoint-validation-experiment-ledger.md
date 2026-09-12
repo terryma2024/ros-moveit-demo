@@ -34,7 +34,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-027
-next_experiment: EXP-043 is PLANNED and pre-registered
+next_experiment: EXP-043 is INVALID; repeat unchanged as EXP-044 after clean preflight
 ```
 
 Frozen provenance:
@@ -2389,12 +2389,14 @@ decision: RUN EXP-043 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-043
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:51:49+08:00
   - status: RUNNING
     at: 2026-09-12T19:51:49+08:00
+  - status: INVALID
+    at: 2026-09-12T19:55:46+08:00
 prior_experiment: EXP-042
 hypothesis: F47 closes the production gate-receipt identity omission while preserving exact Worker authorization, allowing two Workers to execute four unique points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
@@ -2414,9 +2416,32 @@ provenance:
   yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
-retained: pre-registration ledger record and preflight-exp043.json
+result: >-
+  Command exit was 1 after 77.99 s before any Worker registered a lease. Worker-01's
+  ros2_control_node aborted during concurrent stack initialization when controller_manager threw an
+  rclcpp RCLError while sending a service response (`cannot publish data`); its joint-state and
+  gripper spawners had not completed. The readiness probe consequently timed out with
+  MOTION_STACK_CONTROLLER_NOT_ACTIVE. Worker-02 was stopped by conservative supervisor shutdown.
+  Both Worker results are WORKER_NOT_READY, coordinator attempts are all zero, and no reset,
+  ATTEMPT_STARTED, perception, planning, trajectory, or physical action occurred. This run did not
+  reach the F47 variable and provides no evidence against it.
+cleanup: >-
+  Exact CID 372175a02a7454ecb3dd90cd3e51b6f4b24f26370674f5fcd1901eea4cd49774
+  was verified against immutable F47 image, batch/generation labels, and exact registered mounts,
+  then stopped. The --rm container was removed; post-stop audit found no related process, running
+  container, GPU compute task, or domain owner. The MuJoCo log was moved without deletion to
+  reports/MUJOCO_LOG-EXP043.txt.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 4c416ee3942a9ff627f787870dad1d6217e269897c4d45ad2827e2628dda9819
+command_time_sha256: a09e5b11cc2b784ea6fc7a28ac492cbebf6de354ad5d6418b1b433d8b4bcbac1
+aggregate_sha256: 88dfee692d8d7c45c51508fa715c1123b031865a4538fde8be39c19b244d21b2
+worker_01_result_sha256: be7278bf3c0df75b24dbaf98581c69670cac2b89297d629c68ec6e44597c1945
+worker_02_result_sha256: 08ffbab02a152ced72e6ce810b0fe9177add29f846835286af9e5927ee09e002
+mujoco_log_sha256: ba8df9ac37e604b10a2eeed340f64c11f0da92fc9ac7a754c1b8d78e248cc99b
+conclusion: INVALID; zero countable attempts. Preserve source, install, image, models, thresholds, and selection unchanged; repeat once from clean host state as EXP-044 rather than modifying code from a single startup middleware fault.
+retained: complete EXP-043 batch/reports, moved MuJoCo log, preflight, and all prior evidence
 archived: none
-deletion_candidates: none
+deletion_candidates: p57/direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
