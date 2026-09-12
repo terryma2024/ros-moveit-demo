@@ -5492,6 +5492,31 @@ deletion_candidates: registered pytest/build scratch, invalid smoke command evid
 decision: IMPLEMENT F74 EXACT-TF READINESS WINDOW
 ```
 
+```yaml
+fix_id: F74
+status: VALIDATED_STATIC
+source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+change: Allow up to five seconds for fresh exact-stamp TF discovery while preserving exact timestamp lookup and fail-closed timeout behavior.
+invalid_test_attempts: pytest-IZkbmb8W used an invalid request fixture and pytest-qzJcNDXi asserted a nonexistent LocalizedPose field; both are retained and excluded from product judgment
+formal_red: pytest-1kvdCJGf, 1 failed because production supplied 0.2 seconds instead of the required 5.0 seconds
+focused_green: pytest-MFrd1vnd, 1 passed
+adjacent_green: pytest-nCQXXDQc, 24 passed
+parallel_suite: pytest-JAhNVTb7, 1048 passed in 41.81 seconds
+ordinary_package_gate: pytest-yiqZn26V, 2800 passed and 4 warnings in 81.59 seconds
+build: p112 passed in 1.54 seconds; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p112-dufaASGh/tmp
+backend_integration: passed
+source_tree_sha256: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+module_tree_sha256: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+image_build: p113 passed in 11.63 seconds; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p113-ZqjKjNdH/tmp; source and independently verified source both 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+smoke: task14-f74-smoke qualified YOLO and Grounded-SAM on CUDA using the EXP-076 sample_01 frame; 34.534182 ms and 191.216042 ms respectively; immutable provenance matched and container/GPU cleanup was clean
+static_report: reports/f74-static-gates.json
+installed_provenance: reports/installed-provenance-f74.json
+retained: source/tests, all RED/GREEN/package/build/image/smoke evidence, invalid test evidence, EXP-080, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke command evidence, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
