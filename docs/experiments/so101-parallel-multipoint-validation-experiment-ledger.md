@@ -5587,6 +5587,41 @@ deletion_candidates: registered pytest/build scratch, invalid smoke command evid
 decision: RERUN SIX-POINT F74 AS EXP-082
 ```
 
+## EXP-082 — F74 admissible six-point execute regression
+
+```yaml
+experiment_id: EXP-082
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T05:34:08+08:00
+prior_experiment: EXP-081
+hypothesis: Repeating the identical F74 runtime under an execute-correct acceptance contract will reproduce all six PASSED points, exact recovery, and fresh visual acceptance without the EXP-081 preregistration defect.
+single_variable: Acceptance contract removes only validation_complete and validation_passed, which are inapplicable to execute mode; source, install, image, models, config, catalog, selection, N=2, K=3, and runtime behavior remain fixed.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-diagnostic-execute-20260913-v5-f74
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-diagnostic-execute-f74-v2
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm, sample_01_near_left, sample_02_near_center
+selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
+provenance:
+  executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+  installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: Exit 0; all six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; no initiating TF_UNAVAILABLE, CUP_POSE_TIMEOUT, BROKER_NOT_READY, or controller abort occurs; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
+failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, applicable qualification false, or residual owned state makes this batch non-qualifying and requires diagnosis before later gates.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
