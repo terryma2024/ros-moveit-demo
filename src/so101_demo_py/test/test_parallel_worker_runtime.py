@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
 from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode, ValidationStatus
 from so101_demo.parallel_batch.resources import WorkerResources
 
@@ -62,10 +63,12 @@ class _Child:
 
 
 class _ProcessGroup:
-    def __init__(self) -> None:
+    def __init__(self, events=None, on_shutdown=None) -> None:
         self.specs = []
         self.environments = []
         self.shutdown_calls = 0
+        self.events = events
+        self.on_shutdown = on_shutdown
 
     @property
     def manifest(self):
@@ -76,6 +79,8 @@ class _ProcessGroup:
     def start(self, spec, *, environment=None):
         self.specs.append(spec)
         self.environments.append(dict(environment or {}))
+        if self.events is not None:
+            self.events.append(("start", spec.role))
         return SimpleNamespace(
             role=spec.role,
             pid=100 + len(self.specs),
@@ -84,6 +89,61 @@ class _ProcessGroup:
 
     def shutdown(self):
         self.shutdown_calls += 1
+        if self.on_shutdown is not None:
+            self.on_shutdown()
+
+
+def _lease(worker="worker-1", *, point="P01", attempt="attempt-1"):
+    return SimpleNamespace(
+        batch_id="batch-1",
+        coordinator_epoch=1,
+        worker_id=worker,
+        worker_generation=1,
+        point_id=point,
+        attempt_id=attempt,
+        lease_generation=1,
+    )
+
+
+def _write_capture(path, source_stamp):
+    from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"rgb")
+    return SourceStampedCapture(path, source_stamp)
+
+
+def _write_numeric(root, source_stamp):
+    from so101_demo.runtime.parallel_worker_runtime import NumericEvidenceReceipt
+
+    root.mkdir(parents=True, exist_ok=True)
+    paths = tuple(root / name for name in ("depth.json", "tf.json", "physical.json"))
+    for path in paths:
+        path.write_text("{}")
+    return NumericEvidenceReceipt(*paths, source_stamp)
+
+
+def _plan_receipt(states, completion=25.0):
+    from so101_demo.runtime.parallel_worker_runtime import (
+        PlanPrefixReceipt,
+        PlanSegmentReceipt,
+    )
+
+    terminals = [f"terminal-{index}" for index in range(len(states))]
+    return PlanPrefixReceipt(
+        tuple(
+            PlanSegmentReceipt(
+                state,
+                "initial" if index == 0 else terminals[index - 1],
+                terminals[index],
+                f"plan-{index}",
+                f"before-{index}",
+                f"after-{index}",
+            )
+            for index, state in enumerate(states)
+        ),
+        completion,
+    )
 
 
 def test_worker_launch_configs_keep_resources_distinct(tmp_path: Path) -> None:
@@ -168,6 +228,27 @@ def test_owned_group_refuses_reused_pid_identity() -> None:
         group.shutdown()
 
     assert signals == []
+    assert [process.pid for process in group.manifest.processes] == [510]
+
+
+def test_owned_group_retains_manifest_when_wait_cannot_prove_exit() -> None:
+    from so101_demo.runtime.task_stack import OwnedProcessGroup, StackProcessSpec
+
+    class Unstoppable(_Child):
+        def wait(self, timeout):
+            raise RuntimeError(f"wait failed after {timeout}")
+
+    group = OwnedProcessGroup(
+        popen=lambda *_args, **_kwargs: Unstoppable(520),
+        identity_probe=lambda _pid: (520, ("ros2", "launch", "worker"), 12),
+        killpg=lambda _pgid, _value: None,
+    )
+    group.start(StackProcessSpec("station", ("ros2", "launch", "worker")))
+
+    with pytest.raises(RuntimeError, match="wait failed"):
+        group.shutdown()
+
+    assert [process.pid for process in group.manifest.processes] == [520]
 
 
 def test_dry_run_has_no_physical_or_consumer_command(tmp_path: Path) -> None:
@@ -191,15 +272,23 @@ def test_dry_run_has_no_physical_or_consumer_command(tmp_path: Path) -> None:
 def test_plan_only_plans_complete_expert_prefix_without_consumer_or_action_goal(
     tmp_path: Path,
 ) -> None:
-    from so101_demo.core.domain import State
-    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
+    from so101_demo.runtime.parallel_worker_runtime import (
+        SourceStampedCapture,
+        build_worker_runtime,
+    )
 
     processes = _ProcessGroup()
     calls = []
 
     def plan_prefix(lease, admitted, states):
         calls.append((lease, admitted, states))
-        return "planned"
+        return _plan_receipt(states)
+
+    def capture(path, _boundary):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"rgb")
+        return SourceStampedCapture(path, 26.0)
 
     runtime = build_worker_runtime(
         _resources(tmp_path, "worker-1", 0, 181),
@@ -207,32 +296,66 @@ def test_plan_only_plans_complete_expert_prefix_without_consumer_or_action_goal(
         process_group=processes,
         ready_probe=lambda required: required
         == ("controllers", "move_group", "joint_states", "planning_scene"),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        initial_gate=lambda _lease, receipt: receipt,
+        localize=lambda _lease, result: result,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
+            _write_numeric(root, boundary + 1.0)
+        ),
+        admit_pose=lambda _lease, value: value,
+        publish_pose=lambda _value: True,
         plan_prefix=plan_prefix,
+        capture_rgb=capture,
     )
     runtime.start_physical_runtime()
-    lease = SimpleNamespace(point_id="P01")
+    lease = _lease()
     admitted = SimpleNamespace(pose="accepted")
 
     assert runtime.worker_ready_gate() is True
-    assert runtime.plan_expert(lease, admitted).status is ValidationStatus.VALIDATION_PASSED
-    assert calls[0][2] == (
-        State.MOVE_ABOVE_OBJECT,
-        State.DESCEND,
-        State.LIFT,
-        State.MOVE_ABOVE_PLACE,
-        State.DESCEND_TO_PLACE,
-        State.RETREAT,
+    runtime.reset_and_validate_point(lease)
+    runtime.localize_and_admit_pose(lease, admitted)
+    decision = runtime.plan_expert(lease, admitted)
+    assert decision.status is ValidationStatus.VALIDATION_PASSED
+    assert calls[0][2] == DYNAMIC_REACHABILITY_STATES
+    assert tuple(receipt.state for receipt in decision.segment_receipts) == (
+        DYNAMIC_REACHABILITY_STATES
     )
+    assert decision.terminal_artifacts[0].name == "terminal-rgb.png"
     assert [spec.role for spec in processes.specs] == ["task-station"]
     assert runtime.consumer_argv("7") is None
 
 
 def test_ros_plan_prefix_adapter_uses_dynamic_targets_for_every_motion_state() -> None:
-    from so101_demo.core.domain import State
+    from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
+    from so101_demo.ports.evidence import PoseEvidence
+    from so101_demo.ports.robot_control import (
+        JointStateEvidence,
+        PlanResult,
+        TcpMotionRequest,
+    )
     from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
 
     calls = []
-    planner = SimpleNamespace(control=object())
+    starts = []
+    initial = JointStateEvidence(("shoulder",), (0.0,), 1.0)
+
+    class Control:
+        def plan_tcp_motion(self, request):
+            starts.append(request.start_state)
+            index = len(starts)
+            terminal = JointStateEvidence(
+                ("shoulder",), (float(index),), float(index + 1)
+            )
+            return PlanResult(
+                True,
+                request.start_state or initial,
+                f"trajectory-{index}",
+                terminal_state=terminal,
+            )
+
+    planner = SimpleNamespace(control=Control())
     sample = object()
     template = SimpleNamespace(
         arm_joint_names=("shoulder",),
@@ -249,7 +372,10 @@ def test_ros_plan_prefix_adapter_uses_dynamic_targets_for_every_motion_state() -
 
     def plan_state(**kwargs):
         calls.append(kwargs)
-        return SimpleNamespace(accepted=True), "before", "after"
+        request = TcpMotionRequest(
+            PoseEvidence((0.0, 0.0, 0.2), (0.0, 0.0, 0.0, 1.0))
+        )
+        return kwargs["control"].plan_tcp_motion(request), "before", "after"
 
     adapter = RosDynamicPlanPrefixAdapter(
         object(),
@@ -260,35 +386,123 @@ def test_ros_plan_prefix_adapter_uses_dynamic_targets_for_every_motion_state() -
         if (value, policy) == (sample, template)
         else None,
         plan_state=plan_state,
+        clock=lambda: 42.0,
     )
-    states = (State.MOVE_ABOVE_OBJECT, State.DESCEND, State.RETREAT)
 
-    plans = adapter(SimpleNamespace(point_id="P01"), sample, states)
+    receipt = adapter(_lease(), sample, DYNAMIC_REACHABILITY_STATES)
 
-    assert len(plans) == 3
-    assert [call["state"] for call in calls] == list(states)
+    assert len(receipt.segments) == 7
+    assert [call["state"] for call in calls] == list(DYNAMIC_REACHABILITY_STATES)
     assert all(call["provider"] is targets for call in calls)
-    assert all(call["control"] is planner.control for call in calls)
+    assert starts[0] is None
+    assert starts[1:] == [
+        segment.terminal_state for segment in receipt.segments[:-1]
+    ]
+    assert receipt.completion_monotonic_s == 42.0
+
+
+def test_ros_plan_prefix_adapter_fails_when_an_accepted_plan_has_no_terminal_state() -> None:
+    from so101_demo.ports.evidence import PoseEvidence
+    from so101_demo.ports.robot_control import PlanResult, TcpMotionRequest
+    from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
+
+    control = SimpleNamespace(
+        plan_tcp_motion=lambda _request: PlanResult(True, trajectory="trajectory")
+    )
+    template = SimpleNamespace(
+        arm_joint_names=("shoulder",),
+        planning_frame="world",
+        planning_group="arm",
+        tcp_link="gripper_frame_link",
+        position_tolerance_m=0.01,
+        orientation_tolerance_rad=(0.1, 0.1, 0.1),
+        planning_timeout_s=2.0,
+        velocity_scaling=0.2,
+        acceleration_scaling=0.2,
+    )
+
+    def plan_state(**kwargs):
+        request = TcpMotionRequest(
+            PoseEvidence((0.0, 0.0, 0.2), (0.0, 0.0, 0.0, 1.0))
+        )
+        return kwargs["control"].plan_tcp_motion(request), "before", "after"
+
+    adapter = RosDynamicPlanPrefixAdapter(
+        object(),
+        template,
+        object(),
+        planner_factory=lambda _node, _joints: SimpleNamespace(control=control),
+        target_resolver=lambda _value, _policy: object(),
+        plan_state=plan_state,
+    )
+
+    with pytest.raises(RuntimeError, match="TERMINAL_STATE_MISSING"):
+        adapter(_lease(), object(), DYNAMIC_REACHABILITY_STATES)
 
 
 def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_runtime import (
+        ExecutionCompletionReceipt,
+        RuntimeDecision,
+        build_worker_runtime,
+    )
 
-    processes = _ProcessGroup()
+    events = []
+    processes = _ProcessGroup(events)
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    lease = _lease()
+    reset = SimpleNamespace(reset_epoch="reset-7", reset_completed_monotonic_s=10.0)
+    localized = SimpleNamespace(reset_epoch="reset-7", pose="localized")
+    admitted = SimpleNamespace(reset_epoch="reset-7", pose="accepted")
+
+    def capture(path, boundary):
+        events.append(("capture", path.name, boundary))
+        return _write_capture(path, boundary + 1.0)
+
     runtime = build_worker_runtime(
-        _resources(tmp_path, "worker-1", 0, 181),
+        resources,
         RunMode.EXECUTE,
         process_group=processes,
-        execute_result=lambda _lease, _admitted, _child: SimpleNamespace(
-            status=AttemptStatus.PASSED,
-            physical_action_proven_absent=False,
+        reset_point=lambda _lease: reset,
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=capture,
+        localize=lambda _lease, _result: events.append(("localize",)) or localized,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: events.append(
+            ("numeric", boundary)
+        )
+        or _write_numeric(root, boundary + 1.0),
+        admit_pose=lambda _lease, value: events.append(("admit",)) or admitted,
+        publish_pose=lambda value: events.append(("publish", value)) or True,
+        consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+        execute_result=lambda _lease, _admitted, _child: events.append(("await",))
+        or ExecutionCompletionReceipt(
+            RuntimeDecision(
+                AttemptStatus.PASSED,
+                physical_action_proven_absent=False,
+            ),
+            30.0,
         ),
     )
     runtime.start_physical_runtime()
-    lease = SimpleNamespace(point_id="P01")
-    admitted = SimpleNamespace(reset_epoch="reset-7")
+    runtime.reset_and_validate_point(lease)
+    events.clear()
+    accepted = runtime.localize_and_admit_pose(lease, "broker-result")
 
-    assert runtime.execute_expert(lease, admitted).status is AttemptStatus.PASSED
+    assert accepted is admitted
+    assert events == [("localize",), ("numeric", 10.0), ("admit",)]
+    decision = runtime.execute_expert(lease, admitted)
+
+    assert decision.status is AttemptStatus.PASSED
+    assert events == [
+        ("localize",),
+        ("numeric", 10.0),
+        ("admit",),
+        ("start", "dynamic-consumer"),
+        ("ready", "dynamic-consumer"),
+        ("publish", admitted),
+        ("await",),
+        ("capture", "terminal-rgb.png", 30.0),
+    ]
     consumer = processes.specs[-1]
     assert consumer.role == "dynamic-consumer"
     argv = consumer.argv
@@ -304,6 +518,91 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
     )
     assert "--execute" in argv
     assert processes.environments[-1]["ROS_DOMAIN_ID"] == "181"
+    expected_root = resources.worker_root / "attempts/P01/attempt-1/working"
+    evidence_root = argv.index("--evidence-root")
+    assert argv[evidence_root + 1] == str(expected_root / "dynamic")
+    assert decision.terminal_artifacts == (expected_root / "terminal-rgb.png",)
+
+
+def test_execute_failure_still_captures_terminal_evidence(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import (
+        ExecutionCompletionReceipt,
+        RuntimeDecision,
+        build_worker_runtime,
+    )
+
+    lease = _lease()
+    admitted = SimpleNamespace(reset_epoch="reset-7")
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        localize=lambda _lease, _result: admitted,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
+            _write_numeric(root, boundary + 1.0)
+        ),
+        admit_pose=lambda _lease, value: value,
+        consumer_ready=lambda _child: True,
+        publish_pose=lambda _value: True,
+        execute_result=lambda *_args: ExecutionCompletionReceipt(
+            RuntimeDecision(
+                AttemptStatus.FAILED,
+                reason="MOTION_FAILED",
+                physical_action_proven_absent=False,
+            ),
+            30.0,
+        ),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_and_validate_point(lease)
+    runtime.localize_and_admit_pose(lease, admitted)
+
+    decision = runtime.execute_expert(lease, admitted)
+
+    assert decision.status is AttemptStatus.FAILED
+    assert decision.terminal_artifacts[0].name == "terminal-rgb.png"
+
+
+def test_execute_never_publishes_when_consumer_subscription_is_not_ready(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    events = []
+    lease = _lease()
+    admitted = SimpleNamespace(reset_epoch="reset-7")
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=_ProcessGroup(events),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        localize=lambda _lease, _result: admitted,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
+            _write_numeric(root, boundary + 1.0)
+        ),
+        admit_pose=lambda _lease, value: value,
+        consumer_ready=lambda _child: events.append(("ready",)) or False,
+        publish_pose=lambda _value: events.append(("publish",)),
+        execute_result=lambda *_args: events.append(("await",)),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_and_validate_point(lease)
+    runtime.localize_and_admit_pose(lease, admitted)
+    events.clear()
+
+    with pytest.raises(RuntimeError, match="subscription is not ready"):
+        runtime.execute_expert(lease, admitted)
+
+    assert events == [("start", "dynamic-consumer"), ("ready",)]
 
 
 def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
@@ -313,14 +612,22 @@ def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
 
     events = []
     resources = _resources(tmp_path, "worker-1", 0, 181)
-    reset = SimpleNamespace(reset_completed_monotonic_s=10.0)
+    reset = SimpleNamespace(
+        reset_epoch="reset-8", reset_completed_monotonic_s=10.0
+    )
     localized = SimpleNamespace(reset_epoch="reset-8", pose="world-pose")
     admitted = SimpleNamespace(reset_epoch="reset-8", pose="accepted")
 
     def capture(path, newer_than):
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"rgb")
         events.append((path.name, newer_than))
-        return path
+        from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
+
+        return SourceStampedCapture(path, newer_than + 1.0)
+
+    def plan_prefix(_lease, _admitted, states):
+        return _plan_receipt(states, completion=20.0)
 
     runtime = build_worker_runtime(
         resources,
@@ -332,26 +639,139 @@ def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
         admit_pose=lambda lease, value: admitted,
         publish_pose=lambda value: events.append(("POSE_ACCEPTED", value)),
         capture_rgb=capture,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
+            _write_numeric(root, boundary + 1.0)
+        ),
+        plan_prefix=plan_prefix,
     )
-    lease = SimpleNamespace(point_id="P01")
+    lease = _lease()
     runtime.start_physical_runtime()
 
     receipt, gate = runtime.reset_and_validate_point(lease)
     assert receipt is reset
     assert gate == (lease, reset)
     assert runtime.localize_and_admit_pose(lease, "broker-result") is admitted
-    runtime.capture_terminal(lease, action_boundary_monotonic_s=20.0)
+    decision = runtime.plan_expert(lease, admitted)
 
     assert events == [
         ("initial-rgb.png", 10.0),
         ("POSE_ACCEPTED", admitted),
         ("terminal-rgb.png", 20.0),
     ]
-    assert resources.worker_root / "initial-rgb.png" in runtime.captured_artifacts
-    assert resources.worker_root / "terminal-rgb.png" in runtime.captured_artifacts
+    point_root = resources.worker_root / "validations/P01/attempt-1/working"
+    assert point_root / "initial-rgb.png" in runtime.captured_artifacts
+    assert point_root / "terminal-rgb.png" in runtime.captured_artifacts
+    assert decision.numeric_evidence.depth_path == point_root / "numeric/depth.json"
 
 
-def test_rgb_capture_fails_closed_when_no_regular_artifact_is_saved(tmp_path: Path) -> None:
+def test_rgb_capture_requires_a_strictly_newer_source_stamp(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import (
+        SourceStampedCapture,
+        build_worker_runtime,
+    )
+
+    def stale_capture(path, _newer_than):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"stale")
+        return SourceStampedCapture(path, 10.0)
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=stale_capture,
+    )
+    runtime.start_physical_runtime()
+
+    with pytest.raises(RuntimeError, match="newer than boundary"):
+        runtime.reset_point(_lease())
+
+
+def test_point_artifacts_reject_traversal_before_capture(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    captures = []
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=lambda path, boundary: captures.append((path, boundary)),
+    )
+    runtime.start_physical_runtime()
+
+    with pytest.raises(RuntimeError, match="identity"):
+        runtime.reset_point(_lease(point="../escape"))
+
+    assert captures == []
+
+
+def test_point_artifacts_reject_symlinked_workspace_and_never_overwrite(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (resources.worker_root / "validations").symlink_to(outside, target_is_directory=True)
+    captures = []
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=lambda path, boundary: captures.append((path, boundary)),
+    )
+    runtime.start_physical_runtime()
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        runtime.reset_point(_lease())
+
+    assert captures == []
+
+
+def test_two_points_have_distinct_non_overwriting_evidence_paths(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    observed = []
+
+    def capture(path, boundary):
+        observed.append(path)
+        return _write_capture(path, boundary + 1.0)
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=capture,
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_point(_lease(point="P01"))
+    runtime.reset_point(_lease(point="P02"))
+
+    assert len(set(observed)) == 2
+    assert observed[0].parts[-5:] == (
+        "validations", "P01", "attempt-1", "working", "initial-rgb.png"
+    )
+    assert observed[1].parts[-5:] == (
+        "validations", "P02", "attempt-1", "working", "initial-rgb.png"
+    )
+
+
+def test_localization_fails_closed_without_numeric_depth_tf_physical_receipt(
+    tmp_path: Path,
+) -> None:
     from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 
     runtime = build_worker_runtime(
@@ -361,12 +781,40 @@ def test_rgb_capture_fails_closed_when_no_regular_artifact_is_saved(tmp_path: Pa
         reset_point=lambda _lease: SimpleNamespace(
             reset_completed_monotonic_s=10.0
         ),
-        capture_rgb=lambda path, _newer_than: path,
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        localize=lambda _lease, _result: SimpleNamespace(pose="localized"),
     )
     runtime.start_physical_runtime()
+    runtime.reset_point(_lease())
 
-    with pytest.raises(RuntimeError, match="regular artifact"):
-        runtime.reset_point(SimpleNamespace(point_id="P01"))
+    with pytest.raises(RuntimeError, match="capture_numeric_evidence"):
+        runtime.localize_and_admit_pose(_lease(), "broker-result")
+
+
+def test_numeric_evidence_requires_a_strictly_newer_source_stamp(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    lease = _lease()
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        localize=lambda _lease, _result: SimpleNamespace(pose="localized"),
+        capture_numeric_evidence=lambda _lease, _localized, root, _boundary: (
+            _write_numeric(root, 10.0)
+        ),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_point(lease)
+
+    with pytest.raises(RuntimeError, match="newer than reset boundary"):
+        runtime.localize_and_admit_pose(lease, "broker-result")
 
 
 def test_recover_and_shutdown_use_only_the_runtime_owned_group(tmp_path: Path) -> None:
@@ -382,6 +830,7 @@ def test_recover_and_shutdown_use_only_the_runtime_owned_group(tmp_path: Path) -
             (worker, generation, deadline)
         )
         or True,
+        monotonic=lambda: 1.0,
     )
     runtime.start_physical_runtime()
 
@@ -394,3 +843,46 @@ def test_recover_and_shutdown_use_only_the_runtime_owned_group(tmp_path: Path) -
         "task-station",
         "task-station",
     ]
+
+
+def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    now = [9.0]
+    recovery_calls = []
+    processes = _ProcessGroup(on_shutdown=lambda: now.__setitem__(0, 10.0))
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=lambda *args: recovery_calls.append(args) or True,
+        monotonic=lambda: now[0],
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 3, 10.0) is False
+    assert recovery_calls == []
+    assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_recover_does_not_restart_when_recovery_crosses_deadline(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    now = [9.0]
+    processes = _ProcessGroup()
+
+    def recovery(*_args):
+        now[0] = 10.0
+        return True
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.PLAN_ONLY,
+        process_group=processes,
+        recovery=recovery,
+        monotonic=lambda: now[0],
+    )
+    runtime.start_physical_runtime()
+
+    assert runtime.recover("worker-1", 3, 10.0) is False
+    assert [spec.role for spec in processes.specs] == ["task-station"]
