@@ -32,7 +32,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-023
-next_experiment: EXP-039 is RUNNING
+next_experiment: EXP-039 is INVALID; F44 compact bounded diagnostics precede EXP-040
 ```
 
 Frozen provenance:
@@ -116,6 +116,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F41: Before changing any remaining point-initial predicate, replace the opaque aggregate rejection with a bounded fixed-order list of failed predicate names covering type, reset identity, freshness, joints, goals, attachment, contact, graph stability, and exact node set. Preserve the conjunction and all values unchanged, add direct RED/GREEN coverage, then repeat the unchanged execute. Cost if wrong: diagnostic text could be mistaken for authorization logic; therefore tests must prove it changes only failure attribution and no predicate is removed.
 - Ruling F42: Task 14 may narrowly correct the two point-initial observation mappings identified by EXP-037, with direct RED/GREEN tests. The forbidden-contact predicate must be true only when either fingertip-contact collection is nonempty; legal table/support contact in the broad atomic evidence must not fail this predicate. The exact stable Worker-node inventory must include the three required active controller nodes `/arm_controller`, `/gripper_controller`, and `/joint_state_broadcaster` while continuing to reject any missing, duplicate, or unknown node. Reset/session, freshness, joints, goals, attachment, graph stability, all physical thresholds, and all downstream authorization remain unchanged. Cost if wrong: an actual fingertip contact or stale node could pass; therefore tests must prove fingertip rejection and exact-inventory rejection independently.
 - Ruling F43: Before changing the exact Worker-node inventory again, extend only the existing bounded `worker_nodes` rejection diagnostic to report deterministic expected, missing, and unexpected FQNs. Each collection is sorted, length bounded by the frozen graph limit, and contains only already-observed node names; duplicate observations remain rejected and are reported separately by a bounded duplicate list. The equality predicate and every authorization value remain unchanged. Cost if wrong: diagnostic payload could become unbounded; direct tests must prove ordering, bounds, duplicate attribution, and unchanged acceptance/rejection.
+- Ruling F44: Compress the F43 node diagnostic so the complete payload, including the fixed failure prefix, fits the existing 512-byte Worker failure-message contract for the observed graph. Omit the redundant full expected list; retain sorted `missing`, `unexpected`, `duplicates`, and `truncated`, with the same per-list and per-name bounds. Add a direct integration assertion through `_bounded_failure_message` proving no truncation for the bounded payload. Equality and authorization remain unchanged. Cost if wrong: another diagnostic run remains inconclusive; increasing the Worker failure bound or weakening graph admission is not authorized.
 
 ```yaml
 checkpoint_id: CP-002
@@ -2076,12 +2077,14 @@ decision: RUN EXP-039 with unchanged source semantics, selection, and physical t
 
 ```yaml
 experiment_id: EXP-039
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:13:13+08:00
   - status: RUNNING
     at: 2026-09-12T19:13:13+08:00
+  - status: INVALID
+    at: 2026-09-12T19:15:52+08:00
 prior_experiment: EXP-038
 hypothesis: F43 identifies the complete stable Worker graph difference while preserving the F42 authorization semantics.
 prediction: Either the four points execute and pass, or every node rejection contains bounded deterministic missing/unexpected/duplicate detail with zero countable attempts.
@@ -2102,6 +2105,26 @@ provenance:
   yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point if reached.
+result: >-
+  Command exit was 1. Both Workers rejected only worker_nodes before ATTEMPT_STARTED. The diagnostic
+  proves every required node was present (missing=[] and duplicates=[]), while the stable graph also
+  contained legitimate in-process ros2_control/MoveIt nodes including /controller_manager,
+  /move_group/moveit, runtime-suffixed /move_group_private_*, runtime-suffixed /moveit_*,
+  /moveit_simple_controller_manager, /robotsystem, and at least one /transform_li... node. The
+  Worker failure-message contract truncated the 513-byte message at 512 bytes, so the final name(s)
+  cannot be inferred. All four points remain UNRUN and zero attempts are countable.
+cleanup: >-
+  Exact CID b81689ea3bb94088d7848a24cabb1b13f795bd2a04e31d8f0bacfaf2ae6a0f47 was verified against the
+  F43 immutable image, batch/generation labels, and registered mounts, then stopped. Post-stop
+  process/container/GPU audit found zero related residue. The late MuJoCo log was moved without
+  deletion to reports/MUJOCO_LOG-EXP039.txt.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: d33815217c3ede1456d41bdd50bcbad3e02ca6c53850e62b908acbe637322dc1
+command_time_sha256: 5e0b72eeadb79afafde8eae8b6056e4d62cd2c7982c4ed224dbe2756daa9ccd0
+worker_01_result_sha256: 26836d1369090e6fa523a5b2df8609bde8560be075228560233dd61b25c825c4
+worker_02_result_sha256: 4e20fe78d4c891ea16058bcaeef071844111a3a55f0567b4d225d9f56543edb3
+mujoco_log_sha256: 25d04eff18aa03e7c96a85b407b2ec1a19fddbb0856194a972f09ffdb4bd3054
+conclusion: INVALID; zero countable attempts. Compress F43 detail under the existing 512-byte Worker bound, retain exact equality, and repeat diagnostic-only as EXP-040.
 retained: all prior evidence plus complete EXP-039 batch and reports
 archived: none
 deletion_candidates: p53 and direct pytest scratch after readback; no deletion authorized
