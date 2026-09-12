@@ -5889,12 +5889,14 @@ decision: RERUN WITH DURABLE COORDINATOR WORKER_RECOVERED EVENT AS THE POST-WORK
 
 ```yaml
 experiment_id: EXP-088
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:02:26+08:00
   - status: RUNNING
     at: 2026-09-13T06:03:11+08:00
+  - status: VALID
+    at: 2026-09-13T06:05:41+08:00
 prior_experiment: EXP-087
 hypothesis: Synchronizing Broker TERM on the durable worker-01 generation-2 WORKER_RECOVERED journal event will complete the approved exact two-fault sequence and demonstrate F74 fault recovery.
 single_variable: Replace only the invalid transient replacement-PID predicate with the journal-authoritative worker-01 generation-2 WORKER_RECOVERED predicate; product inputs, persistent observer, plan-only mode, N/K, selection, exact TERM targets, and acceptance remain fixed.
@@ -5922,6 +5924,18 @@ provenance:
 success_criteria: Both exact injectors exit 0; all physical statuses remain UNRUN; worker-01 fault is fenced with physical action proven absent and durable recovery; Broker g1 remains healthy across Worker disconnect; exact g1 TERM yields a journal unhealthy/healthy pair and ready model-loaded g2; no lease grant occurs during the unhealthy window; each stable slot receives exactly two unique leases; cleanup and residual audit pass.
 failure_rule: Any missing or wrong target, identity drift, injector failure, physical action, Worker-induced Broker death, missing ready g2 or health transition, lease during pause, duplicate point, K over-debit, cleanup failure, or residual owned state makes this run INVALID and blocks full-20 admission.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: Both exact manifest-owned TERM injectors exited 0. Worker-01 generation 1 was terminated only after Broker g1/model readiness and a validation working directory; its recovery gates proved fenced, stopped, confirmed, ready, recovered, and physical_action_proven_absent, and the journal durably recorded generation-2 recovery while Broker g1 retained the same PID and readiness. Exact Broker g1 TERM then yielded BROKER_HEALTH_CHANGED false at sequence 90 and true at sequence 109 plus a distinct ready/model-loaded Broker g2. No LEASE_GRANTED event occurred in that unhealthy window; the adjacent grants were sequence 86 before and 111 after. All four unique physical statuses remained UNRUN, each stable Worker slot received exactly K=2 leases and stopped at generation 3, all four plan-only recoveries succeeded, and cleanup/residual gates passed. The main plan-only command's exit 1 and validation_passed=false are expected because injected validations are deliberately invalid; fault-gate validity is determined by the preregistered fault invariants.
+aggregate_results_sha256: 89bd2987a86678d2d9e45ba5052dba5e1838631be09ab5b874cd636a71509d5c
+command_log_sha256: 1c47404ebfdd25fbcf61bb3dec2b69975a42c67ac91e65c67d2f9db21009dad0
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP088.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-088-cleanup-audit.json
+worker_injector_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-worker-088.json
+broker_injector_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-broker-088.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP088.txt
+retained: complete live-fault-f74-v4 tree, command/injector/synchronization/MuJoCo/result/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, invalid diagnostic batches, and superseded fault batches; no deletion authorized
+decision: ADVANCE TO IMMUTABLE FULL 20-POINT QUALIFICATION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
