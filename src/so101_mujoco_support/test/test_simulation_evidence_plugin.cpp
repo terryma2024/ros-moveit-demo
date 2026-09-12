@@ -376,6 +376,52 @@ TEST_F(AtomicEvidenceTest, PluginPublishesAuthoritativePausedResetOnlyFromSnapsh
   rclcpp::shutdown();
 }
 
+TEST_F(AtomicEvidenceTest, LateJoiningObserverReceivesLatestAuthoritativePausedSnapshot)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  const auto topic = "/test/so101/late_join_paused_snapshot";
+  auto options = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("object_body", "cup"),
+      rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
+      rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
+      rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+      rclcpp::Parameter("simulation_session_id", "late-join-test"),
+      rclcpp::Parameter("publish_rate", 100.0),
+      rclcpp::Parameter("topic", topic),
+  });
+  auto plugin_node = std::make_shared<rclcpp::Node>("late_join_snapshot_plugin", options);
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(plugin_node, model_.get(), data_.get()));
+
+  plugin.on_pause(true);
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+
+  auto observer_node = std::make_shared<rclcpp::Node>("late_join_snapshot_observer");
+  std::vector<SimulationEvidence> messages;
+  const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+  const auto subscription = observer_node->create_subscription<SimulationEvidence>(
+    topic, qos, [&messages](const SimulationEvidence & message) {messages.push_back(message);});
+  (void)subscription;
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(plugin_node);
+  executor.add_node(observer_node);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (messages.empty() && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  ASSERT_EQ(messages.size(), 1U);
+  EXPECT_TRUE(messages.back().paused);
+  EXPECT_EQ(messages.back().simulation_session_id, "late-join-test");
+  plugin.cleanup();
+  executor.remove_node(observer_node);
+  executor.remove_node(plugin_node);
+  rclcpp::shutdown();
+}
+
 TEST_F(AtomicEvidenceTest,
        RunningUpdateRetainsPendingGenerationUntilPausedSnapshotPublishesStepZero)
 {
