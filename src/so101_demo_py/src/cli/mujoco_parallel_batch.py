@@ -1832,7 +1832,12 @@ class ProductionBatchComposition:
             text=True,
             timeout=self.spec.config.heartbeat_timeout_s + 2.0,
         )
+        removal_deadline = self._clock() + self.spec.config.heartbeat_timeout_s
         after = self._container_inspect(container_id)
+        while after.returncode == 0 and self._clock() < removal_deadline:
+            remaining = removal_deadline - self._clock()
+            self._sleep(min(0.05, remaining))
+            after = self._container_inspect(container_id)
         if stopped.returncode != 0 and after.returncode == 0:
             raise CliError("BROKER_CONTAINER_STOP_FAILED")
         if after.returncode == 0:
