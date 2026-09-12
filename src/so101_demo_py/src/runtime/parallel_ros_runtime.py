@@ -283,6 +283,7 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
     """Cancel arm, gripper, and MoveIt execution goals and observe all settled."""
 
     import rclpy
+    from rclpy.qos import qos_profile_action_status_default
     from action_msgs.msg import GoalStatusArray
     from action_msgs.srv import CancelGoal
 
@@ -302,7 +303,10 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
 
     subscriptions = [
         node.create_subscription(
-            GoalStatusArray, prefix + "/status", callback(name), 10
+            GoalStatusArray,
+            prefix + "/status",
+            callback(name),
+            qos_profile_action_status_default,
         )
         for name, prefix in names.items()
     ]
@@ -340,6 +344,7 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
     """Independently observe exact controller and MoveIt status topics settled."""
 
     import rclpy
+    from rclpy.qos import qos_profile_action_status_default
     from action_msgs.msg import GoalStatusArray
 
     owner = _open_isolated_ros_node(rclpy, "so101_parallel_goal_confirmation")
@@ -357,7 +362,7 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
             lambda message, key=topic: statuses.__setitem__(
                 key, tuple(int(item.status) for item in message.status_list)
             ),
-            10,
+            qos_profile_action_status_default,
         )
         for topic in topics
     ]
