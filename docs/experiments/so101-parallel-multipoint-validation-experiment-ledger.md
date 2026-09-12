@@ -4965,6 +4965,36 @@ deletion_candidates: registered scratch trees only; no deletion authorized
 decision: IMPLEMENT F70 REQUEST-LOCAL BROKEN-PIPE ISOLATION
 ```
 
+## EXP-074 — F70 two-Worker four-point execute regression gate
+
+```yaml
+experiment_id: EXP-074
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T04:01:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T04:01:00+08:00
+prior_experiment: EXP-073
+hypothesis: Request-local disconnect containment preserves the complete two-Worker physical execution contract before another controlled fault run.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f70
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f70
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+success_criteria: Same complete physical, scheduling, visual, numeric, model, cleanup, qualification, and residual criteria as accepted EXP-072 under exact F70 provenance.
+provenance:
+  executable_source_commit: 86eaa5f7db650b914361cbadddb4a8041b56b87f
+  executable_source_tree: 91e99d8d11302b3946b834834f3a1984c247fc2792e200e07a730f18c51e326a
+  installed_module_tree: ff2679db7581928535b3b320539ea14e65d9deaea01ee379bee88c51e672c03d
+  image_id: sha256:16fccaba3c3b679bf78858f1b9b5a15022bdbe0512133a6d1e7c0b00eb857bc7
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
