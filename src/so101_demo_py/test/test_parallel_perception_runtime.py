@@ -364,6 +364,33 @@ def test_service_preserves_initiating_runtime_failure_before_health_fanout(
     assert not f.runtime.healthy
 
 
+def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
+        tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    f = fixture_runtime(tmp_path, monkeypatch)
+    now = [1.0]
+    service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert service.run_next().outcome is ModelOutcome.QUALIFIED
+
+    now[0] += config.yolo_inference_timeout_s + 1.0
+    second = replace(f.req, request_id='r2')
+    second_snapshot = replace(
+        f.snapshot,
+        start_identity=replace(f.snapshot.start_identity, request_id='r2'))
+    submission = service.submit(second, second_snapshot)
+
+    assert submission.accepted
+    assert service.broker.healthy
+    assert f.runtime.healthy
+    assert not f.receipt.with_name('.failure.json').exists()
+
+
 def test_input_changed_during_detector_never_returns_candidate(tmp_path, monkeypatch):
     from so101_demo.parallel_batch.contracts import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
