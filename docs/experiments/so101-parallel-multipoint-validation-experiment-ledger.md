@@ -5942,12 +5942,14 @@ decision: ADVANCE TO IMMUTABLE FULL 20-POINT QUALIFICATION
 
 ```yaml
 experiment_id: EXP-089
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:07:08+08:00
   - status: RUNNING
     at: 2026-09-13T06:07:37+08:00
+  - status: INVALID
+    at: 2026-09-13T06:19:46+08:00
 prior_experiment: EXP-088
 hypothesis: The immutable F74 runtime will execute and seal all 20 frozen catalog points exactly once with dynamic two-Worker scheduling, K=10 per stable slot, exact-TF localization, YOLO-first perception, complete recovery, and no residual state.
 single_variable: Expand EXP-084 from the four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, and execute behavior remain byte-identical.
@@ -5982,6 +5984,18 @@ provenance:
 success_criteria: Exit 0; all 20 catalog points have unique leases and sealed PASSED attempts; exactly K=10 leases and generation 11 per Worker; all 20 recovery receipts succeed; all 40 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, exact-TF, provenance, manifest file-size/SHA-256, coordinator completion, qualification, and cleanup gates pass; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
 failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, qualification false, target fault, or residual owned state makes this batch non-qualifying; diagnose before any rerun.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: The immutable command exited 1 after 351.18 seconds. task_start and the three cup-test anchors passed, after which each Worker repeatedly received BrokerResponse.INFRA_ERROR/BROKER_NOT_READY for its first sample point; the remaining 16 catalog points therefore remained UNRUN and qualification_passed=false. Both stable slots consumed exactly K=10 leases and stopped at generation 11. All 20 recovery receipts succeeded, all invalid attempts proved physical action absent, all 20 attempt manifests and 108 listed files passed size/SHA-256 readback, and cleanup/residual gates passed. Fresh original-resolution inspection accepted all eight initial/terminal images from the four passed points. CUP_POSE_TIMEOUT is downstream of the missing pose publication, not the initiating failure.
+aggregate_results_sha256: 29046c8bce491dbf2c8877f1f57b6b66fe89646ee4a06c9f24def051c44053a0
+command_log_sha256: 96cf19c1ef350a9e731b5348f0375c15045488c77b79e2e0e36b2188ccbee97a
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP089.json
+root_cause_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/root-cause-EXP089.json
+visual_inspection: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP089.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-089-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP089.txt
+retained: complete live-20-f74 tree, command/MuJoCo/result/root-cause/visual/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, invalid diagnostic batches, superseded fault batches, and this non-qualifying full batch; no deletion authorized
+decision: IMPLEMENT FIRST-INFRASTRUCTURE-ERROR DIAGNOSTIC WITH TDD, REBUILD, AND REPEAT FULL QUALIFICATION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
