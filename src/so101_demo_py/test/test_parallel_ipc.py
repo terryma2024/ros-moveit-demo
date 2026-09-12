@@ -181,6 +181,61 @@ def test_private_token_and_real_authenticated_socket_round_trip(tmp_path):
     assert server.bound_mode == 0o600
 
 
+def test_server_contains_reply_disconnect_to_the_single_client(tmp_path):
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        WorkerTokenAuthority,
+        encode_frame,
+    )
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    authority.bind_lease("worker-01", 2, request()["lease"])
+    handler_entered = threading.Event()
+    release_handler = threading.Event()
+
+    def handler(_value):
+        handler_entered.set()
+        assert release_handler.wait(1.0)
+        return {"ok": True}
+
+    server = AuthenticatedUnixServer(
+        tmp_path / "ipc/coordinator.sock",
+        authority,
+        handler,
+        deadline_s=1.0,
+    )
+    errors = []
+
+    def serve():
+        try:
+            server.serve_once()
+        except BaseException as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        parent_fd = os.open(
+            server.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+        try:
+            connection.connect(f"/proc/self/fd/{parent_fd}/{server.path.name}")
+        finally:
+            os.close(parent_fd)
+        connection.sendall(encode_frame(request()))
+        connection.shutdown(socket.SHUT_WR)
+        assert handler_entered.wait(1.0)
+        connection.setsockopt(
+            socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0)
+        )
+    release_handler.set()
+    thread.join(timeout=2.0)
+    server.close()
+    assert not thread.is_alive()
+    assert errors == []
+
+
 def test_broker_transport_authenticates_with_coordinator_before_real_socket_mutation(
     tmp_path,
 ):
