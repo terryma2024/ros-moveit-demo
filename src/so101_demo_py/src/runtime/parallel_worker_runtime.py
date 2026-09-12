@@ -88,11 +88,16 @@ class WorkerOwnedProcessTree:
         self._identity_probe = identity_probe or _linux_process_identity
         self._interrupt_timeout_s = interrupt_timeout_s
         self._terminate_timeout_s = terminate_timeout_s
+        self._lock = threading.RLock()
         self._children = []
         self._manifest_path = None if manifest_path is None else Path(manifest_path)
         self._write_manifest()
 
     def _write_manifest(self):
+        with self._lock:
+            self._write_manifest_locked()
+
+    def _write_manifest_locked(self):
         if self._manifest_path is None:
             return
         document = {
@@ -134,9 +139,16 @@ class WorkerOwnedProcessTree:
 
     @property
     def manifest(self):
-        return OwnedProcessManifest(tuple(identity for identity, _child in self._children))
+        with self._lock:
+            return OwnedProcessManifest(
+                tuple(identity for identity, _child in self._children)
+            )
 
     def start(self, spec, *, environment=None):
+        with self._lock:
+            return self._start_locked(spec, environment=environment)
+
+    def _start_locked(self, spec, *, environment=None):
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
         child = self._popen(
@@ -204,6 +216,10 @@ class WorkerOwnedProcessTree:
         )
 
     def shutdown(self):
+        with self._lock:
+            self._shutdown_locked()
+
+    def _shutdown_locked(self):
         failures = []
         for identity, child in reversed(self._children):
             if child.poll() is not None:

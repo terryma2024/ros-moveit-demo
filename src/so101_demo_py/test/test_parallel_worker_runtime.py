@@ -1377,6 +1377,60 @@ def test_worker_owned_tree_reaps_exact_child_when_identity_or_manifest_fails(
     assert tree.manifest.processes == ()
 
 
+def test_worker_owned_tree_serializes_concurrent_shutdown_manifest_publication(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    import json
+    import os
+    import threading
+    import time
+
+    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+
+    path = tmp_path / "owned.json"
+    tree = WorkerOwnedProcessTree(manifest_path=path)
+    real_replace = os.replace
+    entered = threading.Event()
+    release = threading.Event()
+    replace_calls = [0]
+    replace_lock = threading.Lock()
+
+    def blocking_first_replace(source, target):
+        with replace_lock:
+            replace_calls[0] += 1
+            call = replace_calls[0]
+        if call == 1:
+            entered.set()
+            assert release.wait(timeout=1.0)
+        real_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", blocking_first_replace)
+    errors = []
+
+    def shutdown():
+        try:
+            tree.shutdown()
+        except Exception as error:  # pragma: no cover - asserted below
+            errors.append(error)
+
+    first = threading.Thread(target=shutdown)
+    second = threading.Thread(target=shutdown)
+    first.start()
+    assert entered.wait(timeout=1.0)
+    second.start()
+    time.sleep(0.05)
+    release.set()
+    first.join(timeout=1.0)
+    second.join(timeout=1.0)
+
+    assert not first.is_alive() and not second.is_alive()
+    assert errors == []
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "processes": [],
+        "schema_version": 1,
+    }
+
+
 def test_ros_planner_adapter_closes_owned_node_and_context() -> None:
     from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
 

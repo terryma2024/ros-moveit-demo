@@ -29,27 +29,33 @@ def _pause_snapshot(node, observer, timeout_s: float):
         raise RuntimeError("atomic evidence publisher discovery timed out")
     request = SetPause.Request()
     request.paused = True
-    future = client.call_async(request)
     deadline = time.monotonic() + timeout_s
+    retry_period_s = min(0.05, timeout_s / 2.0)
+    next_request_s = time.monotonic()
+    future = None
     pause_accepted = False
+    response_received = False
     while rclpy.ok() and time.monotonic() <= deadline:
+        now = time.monotonic()
+        if future is None and now >= next_request_s:
+            future = client.call_async(request)
+            next_request_s = now + retry_period_s
         rclpy.spin_once(node, timeout_sec=0.01)
-        if future.done():
+        if future is not None and future.done():
             response = future.result()
             if response is None:
                 raise RuntimeError("pause snapshot request failed")
-            pause_accepted = bool(response.success)
-            break
-    else:
-        raise RuntimeError("pause snapshot request timed out")
-    while rclpy.ok() and time.monotonic() <= deadline:
-        rclpy.spin_once(node, timeout_sec=0.01)
+            response_received = True
+            pause_accepted = pause_accepted or bool(response.success)
+            future = None
         try:
             evidence = observer.snapshot()
         except EvidenceStale:
             continue
         if evidence.paused:
             return evidence
+    if not response_received:
+        raise RuntimeError("pause snapshot request timed out")
     if not pause_accepted:
         raise RuntimeError("pause snapshot request failed")
     raise RuntimeError("fresh paused atomic MuJoCo evidence unavailable")
