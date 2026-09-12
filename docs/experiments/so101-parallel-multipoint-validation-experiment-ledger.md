@@ -110,6 +110,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F37: Task 14 returns narrowly to the repository-owned atomic MuJoCo evidence publisher and Python observer QoS seams, with their direct tests. The 100 Hz atomic evidence topic must retain exactly its newest sample with reliable transient-local durability, and the strict observer must request matching depth-1 reliable transient-local durability. This gives a late-joining post-reset observer the already-published authoritative paused frame without unpausing, stepping, weakening freshness/session/sequence checks, or changing the pinned third-party MuJoCo service implementation. Existing volatile sensor-data consumers remain compatible with the stronger publisher offer. Cost if wrong: stale history could be mistaken for current evidence, which the existing max-age/session/epoch checks must reject; retaining volatile/volatile QoS makes the documented current_evidence late-join contract impossible, as EXP-031 proved.
 - Ruling F38: Task 14 returns narrowly to the production point-initial observation and its direct tests. The three late-created action-status subscriptions must request ROS 2's exact `qos_profile_action_status_default` (keep-last depth 1, reliable, transient-local), matching the action servers and receiving their retained empty status arrays when no goal has ever run. The observed reset, joint, scene, contact, graph, freshness, and exact-node gates remain unchanged. Cost if wrong: a stale status sample could be admitted, but the retained action status is the authoritative current status set and active goal IDs are still enumerated conservatively; retaining volatile subscriptions makes an empty never-used action server indistinguishable from an absent observation and produced the identical dual-Worker timeout in EXP-032.
 - Ruling F39: Before changing any remaining point-initial observation semantics, make the existing bounded timeout diagnostic enumerate only the missing observation classes: fresh canonical joint callback, exact action-status topic receipts, completed planning-scene response, and stable graph samples. Keep the timeout, gate conjunction, values, and fail-closed behavior unchanged, add direct RED/GREEN coverage, then run one fresh unchanged execute to identify the actual missing class. Cost if wrong: diagnostics could become unbounded or leak payloads; retaining the opaque timeout forces further speculative changes after EXP-033 proved F38 necessary but insufficient.
+- Ruling F40: Task 14 may replace the impossible post-pause joint/status waits with equivalent authoritative evidence, with direct contract and runtime tests. The successful reset transaction must return the exact fresh post-reset six-joint sample that it already requires before re-pausing; point-initial gate must consume that bound sample, never synthesize canonical values. For no-active-goal proof, issue an all-goals CancelGoal query to each isolated action server before authorization and require completed responses with no goals_canceling; any returned goal ID fails the gate. Planning-scene, contact, reset/session, graph, node-identity, freshness, timeout, and pre-authorization motion prohibitions remain unchanged. Cost if wrong: cancellation could mutate a stale active goal, but that condition still fails authorization and is safer than permitting it; retaining fresh subscribers after physics is paused and before any goal exists is unobservable by construction, as EXP-034 proved on both Workers.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1586,12 +1587,14 @@ next_experiment: EXP-034 is reserved for the F39 diagnostic execute repeat; cont
 
 ```yaml
 experiment_id: EXP-034
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T18:13:00+08:00
   - status: RUNNING
     at: 2026-09-12T18:13:00+08:00
+  - status: INVALID
+    at: 2026-09-12T18:15:20+08:00
 prior_experiment: EXP-033
 hypothesis: F39 will identify every missing point-initial observation class without changing whether the gate passes; if no class is missing, the unchanged four-point execute proceeds normally.
 prediction: Either the normal four-point success contract passes, or each pre-authorization failure names only fixed missing classes and remains INVALID with zero countable attempts.
@@ -1623,10 +1626,15 @@ commands:
   - command: fresh inventory and domain/resource probe to reports/*before-034.json
     exit_code: 0
   - command: unchanged four-point execute to reports/live-small-command-034.*
-    exit_code: pending
-observed: pending
-inferred: pending
-conclusion: pending
+    exit_code: 1
+observed:
+  - Both Workers independently leased and reset their first distinct point, then emitted the identical bounded missing set: joint_state, execute_trajectory_status, arm_controller_status, and gripper_controller_status. Planning-scene response and stable graph were present.
+  - No ATTEMPT_STARTED exists; all points remain UNRUN and zero outcomes are countable. The coordinator ended CAPACITY_EXHAUSTED after conservative quarantine.
+  - Reset transaction source proves it already requires a fresh post-reset converged six-joint sample before re-pausing, but discards the values in ResetReceipt. The point gate then creates a new volatile joint subscriber while paused, so no new controller-manager cycle can publish. Likewise, an action server with no goal has no status event to retain, so even matching transient-local QoS cannot create a sample.
+  - Aggregate cleanup correctly remained false and the exact Broker survived. External cleanup verified cidfile, labels, image, and batch mounts before stopping only that container; audit2 found no task process/container/GPU/domain residue. MUJOCO_LOG-EXP034.txt was retained.
+inferred:
+  - The two missing classes are unobservable under the required paused/pre-goal boundary, not slow. Equivalent positive evidence must cross the reset boundary for joints and use completed all-goal cancel responses for active-goal absence.
+conclusion: INVALID; zero countable attempts. Apply F40 with direct RED/GREEN, fresh gates, provenance/image/smoke, then repeat the unchanged execute under EXP-035.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-OgDzg6sz.log
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-gOX2JA6z.log
@@ -1636,11 +1644,26 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f39-smoke
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-034.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-034.json
-retained: all F39 test, build, provenance, image, smoke, and preflight evidence; live-small-f39 will be retained after execution
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-034.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f39/coordinator/events/segment-00000000000000000001.journal
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f39/coordinator/aggregate_results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f39/workers/worker-01/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f39/workers/worker-02/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-034-cleanup-audit2.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP034.txt
+hashes:
+  live_command_log_sha256: 33f280d4694ccd0727b2445a91a36c898534a4967c5e7670ac93160caba184f5
+  journal_sha256: 32cf5580d6f0050be9bb99cbd145b6f35436584e7a51064c0ef3e674508fb573
+  coordinator_aggregate_sha256: 18de541711fcc4f32f38015bf420780e3356535d9791b843e7daa7822cab6b3f
+  worker_01_result_sha256: bcbdacf0f1b5c9cb78ce5f2260c7e54e69c19cff191bc7f4d26c76f2987a29bc
+  worker_02_result_sha256: a3d73f4b9e7542c1fc9c4d692bb2dfc4cd3505e707d9245d35e4c356887e350e
+  cleanup_audit_sha256: 86d5f8a4aac4bd17651678f0acc5ff3a452adbcfcc683f9b9893db231464d152
+  mujoco_warning_log_sha256: f445cda3a88661b3525951a6943537d834d2962541ccdd5eb37b803252a91a23
+retained: complete live-small-f39 tree, command/preflight/cleanup reports, journal/projections, Worker diagnostics, ROS logs, container cidfile, MuJoCo log, and all F39 test/build/image/smoke evidence
 archived: none
 deletion_candidates: p48 and direct-pytest scratch are candidates after readback; nothing was deleted
-decision: pending
-next_experiment: EXP-035 is reserved for the controlled plan-only fault and remains blocked until an execute batch is accepted
+decision: REPEAT after F40 RED/GREEN, package gates, installed provenance, image rebuild, and dual-model smoke
+next_experiment: EXP-035 is reserved for the F40-corrected execute repeat; controlled plan-only fault advances to EXP-036
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
