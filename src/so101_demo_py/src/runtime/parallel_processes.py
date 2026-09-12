@@ -65,6 +65,24 @@ def _proc_values(pid: int) -> tuple[int, tuple[str, ...], int]:
     return pgid, cmdline, start_time
 
 
+def _proc_group_members(pgid: int) -> tuple[int, ...]:
+    """Return same-user members of an exact numeric process group."""
+
+    members = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            if entry.stat().st_uid != os.getuid():
+                continue
+            candidate = int(entry.name)
+            if os.getpgid(candidate) == pgid:
+                members.append(candidate)
+        except (OSError, ProcessLookupError, ValueError):
+            continue
+    return tuple(sorted(members))
+
+
 class ProcessSupervisor:
     """Own only explicitly recorded process groups and recheck before signals."""
 
@@ -76,6 +94,7 @@ class ProcessSupervisor:
         signal_group: Callable[[int, int], None] = os.killpg,
         popen: Callable[..., object] = subprocess.Popen,
         manifest_path: Path | None = None,
+        group_members_reader: Callable[[int], tuple[int, ...]] = _proc_group_members,
     ):
         if not isinstance(batch_id, str) or not batch_id:
             raise SupervisorError("BATCH_ID")
@@ -84,6 +103,7 @@ class ProcessSupervisor:
         self._signal_group = signal_group
         self._popen = popen
         self.manifest_path = None if manifest_path is None else Path(manifest_path)
+        self._group_members_reader = group_members_reader
         self._owned: dict[int, tuple[OwnedProcess, Callable[[], int | None]]] = {}
 
     def _read_owned_identity(self, pid: int) -> OwnedProcess | None:
@@ -240,6 +260,10 @@ class ProcessSupervisor:
                 if code is None:
                     self._confirm_identity(expected)
                     continue
+                if self._group_members_reader(expected.pgid):
+                    raise SupervisorError(
+                        f"OWNED_GROUP_SURVIVORS: {expected.role}"
+                    )
                 codes.append(int(code))
                 completed.append(pid)
             for pid in completed:
@@ -254,7 +278,10 @@ class ProcessSupervisor:
         while time.monotonic() < deadline:
             code = poll()
             if code is not None:
-                return self._identity_reader(expected.pid) is None
+                return (
+                    self._identity_reader(expected.pid) is None
+                    and not self._group_members_reader(expected.pgid)
+                )
             actual = self._identity_reader(expected.pid)
             if actual is None:
                 # The process may be between /proc teardown and child reaping.
@@ -287,7 +314,10 @@ class ProcessSupervisor:
         stopped_pids = []
         for expected, poll in tuple(self._owned.values()):
             if poll() is not None:
-                stopped_pids.append(expected.pid)
+                if not self._group_members_reader(expected.pgid):
+                    stopped_pids.append(expected.pid)
+                else:
+                    cleanup_ok = False
                 continue
             stopped = False
             if expected.role == "worker":
@@ -297,7 +327,10 @@ class ProcessSupervisor:
                     stopped = (
                         self._wait_group_stopped(expected, poll, interrupt_timeout_s)
                         if wait_group is None
-                        else wait_group(expected, interrupt_timeout_s) is True
+                        else (
+                            wait_group(expected, interrupt_timeout_s) is True
+                            and not self._group_members_reader(expected.pgid)
+                        )
                     )
                 except (OSError, SupervisorError):
                     cleanup_ok = False
@@ -312,7 +345,11 @@ class ProcessSupervisor:
                 self._signal_group(expected.pgid, signal.SIGTERM)
                 stopped = (
                     self._wait_group_stopped(expected, poll, term_timeout_s)
-                    if wait_group is None else wait_group(expected, term_timeout_s) is True
+                    if wait_group is None
+                    else (
+                        wait_group(expected, term_timeout_s) is True
+                        and not self._group_members_reader(expected.pgid)
+                    )
                 )
             except (OSError, SupervisorError):
                 cleanup_ok = False
@@ -329,7 +366,11 @@ class ProcessSupervisor:
                 try:
                     stopped = (
                         self._wait_group_stopped(expected, poll, kill_timeout_s)
-                        if wait_group is None else wait_group(expected, kill_timeout_s) is True
+                        if wait_group is None
+                        else (
+                            wait_group(expected, kill_timeout_s) is True
+                            and not self._group_members_reader(expected.pgid)
+                        )
                     )
                 except Exception:
                     stopped = False

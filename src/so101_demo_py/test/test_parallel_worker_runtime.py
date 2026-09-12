@@ -196,8 +196,19 @@ def test_workspace_reservation_precedes_first_post_reset_artifact(tmp_path):
         ) or _write_capture(path, boundary + 1.0),
     )
     runtime.start_physical_runtime()
-    runtime.reset_point(_lease())
-    assert events == [("reserved", "reset-1"), ("capture", "initial-rgb.png")]
+    lease = _lease()
+    reset = runtime.reset_point(lease)
+    assert events == [("reserved", "reset-1")]
+    runtime._initial_gate = lambda *_args: events.append(("initial-gate",)) or object()
+    runtime._resume_physics = lambda *_args: events.append(("resume",)) or True
+    runtime.point_initial_gate(lease, reset)
+    assert events == [
+        ("reserved", "reset-1"),
+        ("initial-gate",),
+        ("resume",),
+        ("capture", "initial-rgb.png"),
+        ("capture", "rgb.npy"),
+    ]
 
 
 def test_post_reset_snapshot_is_canonical_immutable_and_lease_bound(
@@ -810,12 +821,16 @@ def test_rgb_capture_requires_a_strictly_newer_source_stamp(tmp_path: Path) -> N
         reset_point=lambda _lease: SimpleNamespace(
             reset_completed_monotonic_s=10.0
         ),
+        initial_gate=lambda *_args: object(),
+        resume_physics=lambda *_args: True,
         capture_rgb=stale_capture,
     )
     runtime.start_physical_runtime()
 
+    lease = _lease()
+    reset = runtime.reset_point(lease)
     with pytest.raises(RuntimeError, match="newer than boundary"):
-        runtime.reset_point(_lease())
+        runtime.point_initial_gate(lease, reset)
 
 
 def test_point_artifacts_reject_traversal_before_capture(tmp_path: Path) -> None:
@@ -882,17 +897,20 @@ def test_two_points_have_distinct_non_overwriting_evidence_paths(tmp_path: Path)
         reset_point=lambda _lease: SimpleNamespace(
             reset_completed_monotonic_s=10.0
         ),
+        initial_gate=lambda *_args: object(),
+        resume_physics=lambda *_args: True,
         capture_rgb=capture,
     )
     runtime.start_physical_runtime()
-    runtime.reset_point(_lease(point="P01"))
-    runtime.reset_point(_lease(point="P02"))
+    for lease in (_lease(point="P01"), _lease(point="P02")):
+        reset = runtime.reset_point(lease)
+        runtime.point_initial_gate(lease, reset)
 
-    assert len(set(observed)) == 2
+    assert len(set(observed)) == 4
     assert observed[0].parts[-5:] == (
         "validations", "P01", "attempt-1", "working", "initial-rgb.png"
     )
-    assert observed[1].parts[-5:] == (
+    assert observed[2].parts[-5:] == (
         "validations", "P02", "attempt-1", "working", "initial-rgb.png"
     )
 
@@ -1210,16 +1228,19 @@ def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_water
     reset = runtime.reset_point(lease)
     runtime.point_initial_gate(lease, reset)
     assert events[1:] == [
-        ("capture", "initial-rgb.png"),
         ("initial-gate",),
         ("resume",),
+        ("capture", "initial-rgb.png"),
         ("capture", "rgb.npy"),
     ]
 
     stale_root = tmp_path / "stale"
     stale_resources = _resources(stale_root, "worker-1", 0, 181)
+
     def stale_capture(path, boundary):
-        from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
+        from so101_demo.runtime.parallel_worker_runtime import (
+            SourceStampedCapture,
+        )
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"rgb")
@@ -1234,12 +1255,89 @@ def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_water
             reset_completed_monotonic_s=10.0, simulation_time_s=20.0,
         ),
         reserve_workspace=lambda *_args: True,
+        initial_gate=lambda *_args: object(),
+        resume_physics=lambda *_args: True,
         capture_rgb=stale_capture,
-        replace_resources=lambda *_args, **_kwargs: _replacement(stale_resources),
+        replace_resources=lambda *_args, **_kwargs: _replacement(
+            stale_resources
+        ),
     )
     stale.start_physical_runtime()
+    reset = stale.reset_point(lease)
     with pytest.raises(RuntimeError, match="simulation watermark"):
-        stale.reset_point(lease)
+        stale.point_initial_gate(lease, reset)
+
+
+def test_worker_owned_tree_reaps_exact_child_when_identity_or_manifest_fails(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+
+    class Child(_Child):
+        def __init__(self, pid):
+            super().__init__(pid)
+            self.events = []
+
+        def terminate(self):
+            self.events.append("terminate")
+
+        def kill(self):
+            self.events.append("kill")
+
+        def wait(self, timeout):
+            self.events.append(("wait", timeout))
+            self.returncode = 0
+            return 0
+
+    monkeypatch.setattr("os.getpgrp", lambda: 401)
+    bad = Child(502)
+    tree = WorkerOwnedProcessTree(
+        popen=lambda *_args, **_kwargs: bad,
+        identity_probe=lambda _pid: (999, ("other",), 5),
+    )
+    with pytest.raises(RuntimeError, match="escaped"):
+        tree.start(SimpleNamespace(role="task-station", argv=("child",)))
+    assert bad.events[0] == "terminate"
+    assert bad.returncode == 0
+    assert tree.manifest.processes == ()
+
+    child = Child(503)
+    tree = WorkerOwnedProcessTree(
+        popen=lambda *_args, **_kwargs: child,
+        identity_probe=lambda _pid: (401, ("child",), 6),
+        manifest_path=tmp_path / "owned.json",
+    )
+    tree._write_manifest = lambda: (_ for _ in ()).throw(OSError("fsync"))
+    with pytest.raises(OSError, match="fsync"):
+        tree.start(SimpleNamespace(role="task-station", argv=("child",)))
+    assert child.events[0] == "terminate"
+    assert child.returncode == 0
+    assert tree.manifest.processes == ()
+
+
+def test_ros_planner_adapter_closes_owned_node_and_context() -> None:
+    from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
+
+    events = []
+    planner = SimpleNamespace(
+        control=object(), close=lambda: events.append("planner-close")
+    )
+    node = SimpleNamespace(destroy_node=lambda: events.append("node-destroy"))
+    context = SimpleNamespace(shutdown=lambda: events.append("context-shutdown"))
+    template = SimpleNamespace(
+        arm_joint_names=("shoulder",), planning_frame="world", planning_group="arm",
+        tcp_link="tcp", position_tolerance_m=0.01,
+        orientation_tolerance_rad=(0.1, 0.1, 0.1), planning_timeout_s=1.0,
+        velocity_scaling=0.2, acceleration_scaling=0.2,
+    )
+    adapter = RosDynamicPlanPrefixAdapter(
+        node, template, object(), planner_factory=lambda *_args: planner,
+        target_resolver=lambda *_args: object(), plan_state=lambda **_kwargs: None,
+        owned_context=context,
+    )
+    adapter.close()
+    adapter.close()
+    assert events == ["planner-close", "node-destroy", "context-shutdown"]
 
 
 def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: Path) -> None:

@@ -43,6 +43,35 @@ _RESET_JOINTS = (0.0,) * 6
 _ACTIVE_GOAL_STATES = {1, 2, 3}
 
 
+class _IsolatedRosNode:
+    def __init__(self, node, context):
+        self.node = node
+        self.context = context
+        self._closed = False
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.node.destroy_node()
+        finally:
+            self.context.shutdown()
+
+
+def _open_isolated_ros_node(rclpy, name, **node_options):
+    """Create a node whose init/shutdown cannot touch another runtime context."""
+
+    context = rclpy.context.Context()
+    rclpy.init(context=context)
+    try:
+        node = rclpy.create_node(name, context=context, **node_options)
+    except Exception:
+        context.shutdown()
+        raise
+    return _IsolatedRosNode(node, context)
+
+
 @dataclass(frozen=True)
 class ResetBoundaryReceipt:
     reset_epoch: str
@@ -164,10 +193,8 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
     from action_msgs.msg import GoalStatusArray
     from action_msgs.srv import CancelGoal
 
-    initialized_here = not rclpy.ok()
-    if initialized_here:
-        rclpy.init()
-    node = rclpy.create_node("so101_parallel_goal_cancellation")
+    owner = _open_isolated_ros_node(rclpy, "so101_parallel_goal_cancellation")
+    node = owner.node
     names = {
         "arm": "/arm_controller/follow_joint_trajectory/_action",
         "gripper": "/gripper_controller/follow_joint_trajectory/_action",
@@ -213,9 +240,7 @@ def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
         return False
     finally:
         del subscriptions
-        node.destroy_node()
-        if initialized_here and rclpy.ok():
-            rclpy.shutdown()
+        owner.close()
 
 
 def observe_no_parallel_goals(*, timeout_s: float) -> bool:
@@ -224,10 +249,8 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
     import rclpy
     from action_msgs.msg import GoalStatusArray
 
-    initialized_here = not rclpy.ok()
-    if initialized_here:
-        rclpy.init()
-    node = rclpy.create_node("so101_parallel_goal_confirmation")
+    owner = _open_isolated_ros_node(rclpy, "so101_parallel_goal_confirmation")
+    node = owner.node
     topics = (
         "/arm_controller/follow_joint_trajectory/_action/status",
         "/gripper_controller/follow_joint_trajectory/_action/status",
@@ -258,9 +281,7 @@ def observe_no_parallel_goals(*, timeout_s: float) -> bool:
         return False
     finally:
         del subscriptions
-        node.destroy_node()
-        if initialized_here and rclpy.ok():
-            rclpy.shutdown()
+        owner.close()
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,6 +543,7 @@ class ParallelRosRuntimePorts:
         "confirm_no_controller_goal",
         "resume_physics",
         "recovery",
+        "close_runtime",
     }
 
     def __init__(
@@ -576,6 +598,14 @@ class ParallelRosRuntimePorts:
             self._planner = None
         self.resources = resources
         return True
+
+    def close_runtime(self):
+        for source, *_rest in tuple(self._rgbd.values()):
+            source.close()
+        self._rgbd.clear()
+        if self._planner is not None:
+            self._planner.close()
+            self._planner = None
 
     @classmethod
     def for_test(cls, *, resources, catalog, observe_initial):
@@ -1001,17 +1031,27 @@ class ParallelRosRuntimePorts:
         from ..control.planning_scene.task_scene import RosTaskScenePort
         from ..core.dynamic_pick_policy import load_dynamic_policy_variant
 
-        if not rclpy.ok():
-            rclpy.init()
+        context = rclpy.context.Context()
+        rclpy.init(context=context)
         node = rclpy.create_node(
             "so101_parallel_planner",
+            context=context,
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
-        loaded = load_dynamic_policy_variant(
-            Path(get_package_share_directory("so101_demo_py")), backend="mujoco"
-        )
-        scene = RosTaskScenePort(node, "mujoco", loaded.template.planning_timeout_s)
-        self._planner = RosDynamicPlanPrefixAdapter(node, loaded.template, scene)
+        try:
+            loaded = load_dynamic_policy_variant(
+                Path(get_package_share_directory("so101_demo_py")), backend="mujoco"
+            )
+            scene = RosTaskScenePort(
+                node, "mujoco", loaded.template.planning_timeout_s
+            )
+            self._planner = RosDynamicPlanPrefixAdapter(
+                node, loaded.template, scene, owned_context=context
+            )
+        except Exception:
+            node.destroy_node()
+            context.shutdown()
+            raise
         return self._planner
 
     def plan_prefix(self, lease, admitted, states):

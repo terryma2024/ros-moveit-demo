@@ -318,7 +318,7 @@ def main(argv=None, *, transport=None, authorize=None):
         provenance=provenance, authorize=authorize or (lambda request, snapshot: False))
     runtime.start()
     if args.smoke_input is None and model_ready_path.is_file():
-        spec = json.loads(Path(args.runtime_spec).read_text(encoding="utf-8"))
+        spec = getattr(transport, 'runtime_identity', None)
         required = {
             "schema_version", "kind", "batch_id", "coordinator_epoch",
             "broker_generation", "run_mode", "image_id", "yolo_weights_sha256",

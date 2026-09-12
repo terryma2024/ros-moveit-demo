@@ -547,3 +547,40 @@ def test_shutdown_cancels_and_independently_confirms_goals_without_reset(monkeyp
     assert ports.cancel_motion(lease) is True
     assert ports.confirm_no_controller_goal(lease) is True
     assert events == [("cancel", 5.0), ("confirm", 5.0)]
+
+
+def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context():
+    from so101_demo.runtime.parallel_ros_runtime import _open_isolated_ros_node
+
+    events = []
+
+    class Context:
+        def shutdown(self):
+            events.append("private-shutdown")
+
+    node = SimpleNamespace(destroy_node=lambda: events.append("node-destroy"))
+
+    class Rclpy:
+        context = SimpleNamespace(Context=Context)
+
+        @staticmethod
+        def ok():
+            return True
+
+        @staticmethod
+        def init(*, context):
+            events.append(("init", context))
+
+        @staticmethod
+        def create_node(name, *, context, **kwargs):
+            events.append(("create", name, context, kwargs))
+            return node
+
+    owner = _open_isolated_ros_node(Rclpy, "isolated")
+    assert owner.node is node
+    assert events[0][0] == "init"
+    assert events[1][0:2] == ("create", "isolated")
+    assert events[0][1] is events[1][2]
+    owner.close()
+    owner.close()
+    assert events[-2:] == ["node-destroy", "private-shutdown"]
