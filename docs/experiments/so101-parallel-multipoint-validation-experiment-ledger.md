@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 52bf3ef7dee36db9c35df9eec1153df05b3b686b
+current_commit: e94143e015370cfc2f53c70ec552bbede4fbf825
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -21,12 +21,13 @@ confirmed_conclusions:
   - Crash-window and Broker-recovery behavior is review-clean; abnormal terminal reasons cannot produce successful batch or validation outcomes (CP-013).
   - The fresh three-package overlay, complete ordinary package gate, installed provenance, and immutable dual-model Broker image are qualified for live validation (CP-014, EXP-022).
   - F35 preserves bounded Worker initialization diagnostics and closes the supervised-exit observation race without weakening absent-process or PID-reuse rejection; the complete ordinary gate and rebuilt immutable image passed (CP-015).
+  - F36 retries idempotent paused snapshots for volatile subscribers, serializes Worker cleanup publication, and boundedly observes an exiting exact child; the complete ordinary gate and rebuilt immutable image passed (CP-016).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-015
-next_experiment: EXP-031
+latest_checkpoint: CP-016
+next_experiment: EXP-032
 ```
 
 Frozen provenance:
@@ -400,6 +401,28 @@ open_risks:
   - The exact sub-gate that rejected EXP-029 is not recoverable from old evidence; EXP-030 must produce either valid start evidence or the new Worker diagnostic.
   - No four-point execute has yet reached ATTEMPT_STARTED, so controlled fault and 20-point admission remain closed.
 next_command: Execute the clean pre-registered EXP-030 two-Worker four-point batch using image sha256:d549146f76df4c8e4d747fa2c6c3d8ffb11302ce2f3d43d2a1bac98efc74153c.
+```
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-022
+current_hypothesis: The F36-corrected runtime can retain an authoritative paused reset watermark for each new volatile observer and shut down both Workers without manifest or supervisor races.
+working_tree_status: clean at source commit e94143e015370cfc2f53c70ec552bbede4fbf825 before the EXP-031 ledger-only pre-run commit
+owned_processes: NONE; no task container or NVIDIA compute application remains
+preserved_processes: Existing unrelated processes outside this task were not touched.
+confirmed_conclusions:
+  - Formal RED pytest-gNauEfcM failed all three targeted behavior tests at the intended paused-frame-loss, concurrent-manifest, and absent-child waitability assertions. The earlier pytest-wRZSvPkx lacked the worktree message overlay and is retained as a harness failure.
+  - Final focused pytest-pVdw808t passed 6/6, adjacent pytest-WEuadMcR passed 63/63, and expanded pytest-x1NNDLN1 passed 303/303.
+  - Paused evidence acquisition repeats only pause(True) within the original timeout; it neither unpauses nor advances physics. Worker child mutation and publication use one re-entrant lock, and absent-child repolling is bounded to 50 ms while PID mismatch remains immediately fatal.
+  - Fresh p39 symlink build completed in 1.52 s and the complete ordinary suite passed in 83.60 s: 2765 tests, 0 errors, 0 failures, 0 skipped; benchmark_test was not collected. p38 is retained as a harness failure caused by omitting --symlink-install and never counts as a product result.
+  - Installed source/build module trees are equal at SHA256 e8fa535e3678d3fee239735e8b5379cd9a1e7072f7291c5b1bf2e7d70d244396.
+  - Rebuilt immutable image sha256:9a436646a124d4164ed560882f0ec7c3776380733065b10fcb3ca84b13cac34c binds equal source/verified SHA256 0624e00ad3d6967e33eb6b805b40f6ad1f1e84cb21bb0abde4a7166264f4f7d5. Fresh smoke returned one QUALIFIED CUDA candidate from each frozen model and left no container/GPU process.
+  - Fresh EXP-031 preflight found no related process, container, GPU task, or ROS domain 181-183 owner; 24 CPUs, 25.846 GiB MemAvailable, and 14.914 GiB free GPU exceed admission.
+disproven_routes:
+  - A non-symlink colcon build copies modules into install and fails the source-origin contract test; p38 is retained and not reused.
+open_risks:
+  - No four-point execute has yet reached ATTEMPT_STARTED, so controlled fault and 20-point admission remain closed.
+next_command: Execute the clean pre-registered EXP-031 two-Worker four-point batch using image sha256:9a436646a124d4164ed560882f0ec7c3776380733065b10fcb3ca84b13cac34c.
 ```
 
 ## EXP-001 — Task 7 fresh runtime overlay build
@@ -1207,6 +1230,73 @@ archived: none
 deletion_candidates: scratch p32 through p37, prior direct-pytest scratch, and the failed f35 smoke report-only attempt remain candidates; nothing was deleted
 decision: REPEAT after F36 RED/GREEN, ordinary package gate, installed provenance, image rebuild, and dual-model smoke
 next_experiment: EXP-031 is reserved for the F36-corrected execute repeat; controlled plan-only fault advances to EXP-032 and remains blocked until execute acceptance
+```
+
+## EXP-031 — Task 14 paused-evidence and cleanup-corrected two-Worker execute
+
+```yaml
+experiment_id: EXP-031
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T17:31:22+08:00
+  - status: RUNNING
+    at: 2026-09-12T17:31:22+08:00
+prior_experiment: EXP-030
+hypothesis: F36 permits each new volatile observer to obtain the already-authorized paused snapshot and serializes cleanup, so the unchanged four-point execute reaches durable authorization without replacing child outcomes with cleanup races.
+prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
+single_variable: F36 changes paused-snapshot retry, Worker-owned cleanup serialization, and bounded exact-child exit observation only. Selection, configuration, models, N=2, K=2, and physical criteria remain frozen; source/install/image and batch/root identities advance because code changed and prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f36
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f36
+preconditions:
+  - F36 formal RED, focused/adjacent/expanded GREEN, and p39 complete ordinary gate passed 2765 tests with no error/failure/skip and no benchmark collection.
+  - Installed source/build module trees both hash SHA256 e8fa535e3678d3fee239735e8b5379cd9a1e7072f7291c5b1bf2e7d70d244396.
+  - Immutable image sha256:9a436646a124d4164ed560882f0ec7c3776380733065b10fcb3ca84b13cac34c binds equal source/verified SHA256 0624e00ad3d6967e33eb6b805b40f6ad1f1e84cb21bb0abde4a7166264f4f7d5 and passed fresh dual-model smoke.
+  - Fresh inventory and production probe found no related stack process, container, GPU task, or domain 181-183 owner; live-small-f36 is absent.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete per-point evidence, and clean shutdown.
+  - Reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt trajectory/controller, final cup support/contact/detachment, retreat, and original-resolution offscreen visual evidence pass readback.
+  - Exact labeled Broker cid is absent after shutdown and aggregate cleanup is true only with no process/container/GPU residue.
+failure_criteria:
+  - Trustworthy initialized product behavior fails a physical/evidence gate; retain as VALID failed behavior and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, evidence pollution, or an initial boundary failure before ATTEMPT_STARTED prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: e94143e015370cfc2f53c70ec552bbede4fbf825
+  executable_source_tree: 0624e00ad3d6967e33eb6b805b40f6ad1f1e84cb21bb0abde4a7166264f4f7d5
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:9a436646a124d4164ed560882f0ec7c3776380733065b10fcb3ca84b13cac34c
+  image_source_sha256: 0624e00ad3d6967e33eb6b805b40f6ad1f1e84cb21bb0abde4a7166264f4f7d5
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point, inspected fresh and aligned to sealed runtime evidence; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-031.json and reports/domain-preflight-before-031.json
+    exit_code: 0
+  - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with fresh EXP-031 batch/root and reports/live-small-command-031 log/exit/time evidence
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p39
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f36.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f36.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f36-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-031.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-031.json
+decision: PENDING
+next_experiment: EXP-032 controlled plan-only fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
