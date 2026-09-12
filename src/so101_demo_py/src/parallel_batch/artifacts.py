@@ -34,6 +34,13 @@ _WORKSPACE_IDENTITY = 'workspace_identity.json'
 _RESERVED = {_ATTEMPT_MANIFEST, _VALIDATION_MANIFEST, _WORKSPACE_IDENTITY}
 
 
+def _fault(fault_hook, boundary, phase):
+    if fault_hook is not None:
+        if not callable(fault_hook):
+            raise ArtifactError('FAULT_HOOK_CALLABLE')
+        fault_hook(boundary, phase)
+
+
 def _json_bytes(document):
     def validate_keys(value):
         if isinstance(value, dict):
@@ -304,9 +311,9 @@ class AttemptWorkspace(_Workspace):
 
     identity_type = AttemptIdentity
 
-    def seal(self, *, required=()):
+    def seal(self, *, required=(), fault_hook=None):
         """Publish only a physical attempt manifest."""
-        return seal_attempt(self, required=required)
+        return seal_attempt(self, required=required, fault_hook=fault_hook)
 
 
 class ValidationWorkspace(_Workspace):
@@ -314,13 +321,14 @@ class ValidationWorkspace(_Workspace):
 
     identity_type = ValidationIdentity
 
-    def seal(self, *, required=()):
+    def seal(self, *, required=(), fault_hook=None):
         """Publish only a validation manifest."""
-        return seal_validation(self, required=required)
+        return seal_validation(self, required=required, fault_hook=fault_hook)
 
 
-def _seal(workspace, required):
+def _seal(workspace, required, fault_hook):
     root, identity = workspace.path, workspace.identity
+    _fault(fault_hook, 'WORKING_TREE_FSYNC', 'before')
     _, _, manifest_name, result_name = _layout(identity)
     required = sorted({*required, result_name})
     for name in required:
@@ -371,26 +379,33 @@ def _seal(workspace, required):
         fsync_directory(path)
     root.chmod(0o555)
     fsync_directory(root)
+    _fault(fault_hook, 'WORKING_TREE_FSYNC', 'after')
+    _fault(fault_hook, 'ATOMIC_SEAL', 'before')
     os.replace(root, sealed)
     fsync_directory(root.parent)
-    return _verify(sealed, identity)
+    result = _verify(sealed, identity)
+    _fault(fault_hook, 'ATOMIC_SEAL', 'after')
+    return result
 
 
-def seal_attempt(workspace: AttemptWorkspace, *, required=()) -> SealedAttempt:
+def seal_attempt(
+        workspace: AttemptWorkspace, *, required=(), fault_hook=None) -> SealedAttempt:
     """Fsync and atomically publish an attempt, or verify an exact prior seal."""
     if type(workspace) is not AttemptWorkspace:
         raise ArtifactError('WRONG_IDENTITY')
-    return _seal(workspace, required)
+    return _seal(workspace, required, fault_hook)
 
 
-def seal_validation(workspace: ValidationWorkspace, *, required=()) -> SealedValidation:
+def seal_validation(
+        workspace: ValidationWorkspace, *, required=(),
+        fault_hook=None) -> SealedValidation:
     """Fsync and atomically publish a validation with a disjoint manifest."""
     if type(workspace) is not ValidationWorkspace:
         raise ArtifactError('WRONG_IDENTITY')
-    return _seal(workspace, required)
+    return _seal(workspace, required, fault_hook)
 
 
-def write_recovery_receipt(root, identity, *, succeeded):
+def write_recovery_receipt(root, identity, *, succeeded, fault_hook=None):
     """Append a unique recovery receipt outside both kinds of sealed evidence."""
     folder, execution_id, _, _ = _layout(identity)
     if type(succeeded) is not bool:
@@ -400,6 +415,7 @@ def write_recovery_receipt(root, identity, *, succeeded):
                              / execution_id / uuid.uuid4().hex)
     destination.mkdir(parents=True)
     path = destination / 'recovery_receipt.json'
+    _fault(fault_hook, 'RECOVERY_RECEIPT', 'before_fsync')
     atomic_json(path, {
         'identity': asdict(identity), 'succeeded': succeeded,
         'producer_pid': os.getpid(), 'producer_pgid': os.getpgid(os.getpid()),
@@ -408,6 +424,8 @@ def write_recovery_receipt(root, identity, *, succeeded):
         fsync_directory(parent)
         if parent == Path(root):
             break
+    _fault(fault_hook, 'RECOVERY_RECEIPT', 'after_fsync')
+    _fault(fault_hook, 'RECOVERY_RECEIPT', 'before_ack')
     return path
 
 

@@ -351,6 +351,59 @@ def test_retry_after_parent_fsync_failure_must_sync_parent_before_ack(tmp_path, 
     assert parent in synced
 
 
+@pytest.mark.parametrize(
+    "boundary,phase,sealed_visible",
+    [
+        ("WORKING_TREE_FSYNC", "before", False),
+        ("WORKING_TREE_FSYNC", "after", False),
+        ("ATOMIC_SEAL", "before", False),
+        ("ATOMIC_SEAL", "after", True),
+    ],
+)
+def test_seal_fault_port_stops_at_real_durable_boundaries(
+        tmp_path, boundary, phase, sealed_visible):
+    """Injected failures bracket the real fsync and atomic publication calls."""
+    work = populated(tmp_path)
+
+    def crash(observed_boundary, observed_phase):
+        if (observed_boundary, observed_phase) == (boundary, phase):
+            raise RuntimeError("injected seal crash")
+
+    with pytest.raises(RuntimeError, match="injected seal crash"):
+        work.seal(fault_hook=crash)
+
+    sealed = work.path.parent / "sealed"
+    assert sealed.exists() is sealed_visible
+    assert work.path.exists() is not sealed_visible
+    assert workspace(tmp_path).seal().verify().identity == identity()
+
+
+@pytest.mark.parametrize(
+    "phase,receipt_visible",
+    [
+        ("before_fsync", False),
+        ("after_fsync", True),
+        ("before_ack", True),
+    ],
+)
+def test_recovery_receipt_fault_port_brackets_real_fsync_and_ack(
+        tmp_path, phase, receipt_visible):
+    """A crash after fsync leaves one readable receipt before any caller ACK."""
+
+    def crash(boundary, observed_phase):
+        if (boundary, observed_phase) == ("RECOVERY_RECEIPT", phase):
+            raise RuntimeError("injected receipt crash")
+
+    with pytest.raises(RuntimeError, match="injected receipt crash"):
+        api.write_recovery_receipt(
+            tmp_path, identity(), succeeded=True, fault_hook=crash)
+
+    receipts = list((tmp_path / "recoveries").rglob("recovery_receipt.json"))
+    assert bool(receipts) is receipt_visible
+    if receipts:
+        assert json.loads(receipts[0].read_text(encoding="utf-8"))["succeeded"] is True
+
+
 def test_json_nonstring_keys_are_rejected_before_any_artifact_write(tmp_path):
     """JSON coercion cannot silently change evidence field names."""
     work = workspace(tmp_path)

@@ -1,0 +1,78 @@
+"""Focused ownership contracts for replacing an exited shared Broker."""
+
+import signal
+import time
+
+import pytest
+
+
+def test_proc_stat_start_time_parser_ignores_spaces_and_parentheses_in_comm():
+    from so101_demo.runtime.parallel_processes import _parse_proc_stat_start_time
+
+    suffix = "S " + " ".join(str(value) for value in range(1, 19)) + " 4242"
+    assert _parse_proc_stat_start_time(
+        f"123 (broker (generation 2) worker) {suffix}"
+    ) == 4242
+
+
+def test_wait_can_retire_exact_exited_broker_and_continue_with_replacement():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    old = OwnedProcess("batch-1", "broker", 101, 101, ("broker-g1",), 11)
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    replacement = OwnedProcess("batch-1", "broker", 201, 201, ("broker-g2",), 21)
+    identities = {102: worker, 201: replacement}
+    members = {101: (103,), 102: (), 201: (201,)}
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda pid: identities.get(pid),
+        signal_group=lambda pgid, value: (
+            signals.append((pgid, value)), members.__setitem__(pgid, ())
+        ),
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    supervisor._record_started(old, poll=lambda: 17)
+    supervisor._record_started(worker, poll=lambda: 0)
+
+    def recover(exited, code):
+        assert (exited, code) == (old, 17)
+        assert supervisor.retire_owned(exited, term_timeout_s=0.01) is True
+        supervisor._record_started(replacement, poll=lambda: None)
+        return True
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0,
+        health_recovery=recover,
+    ) == (0,)
+    assert signals == [(101, signal.SIGTERM)]
+    assert supervisor.processes == (replacement,)
+    assert supervisor.shutdown(wait_group=lambda *_args: True) is True
+    assert signals == [
+        (101, signal.SIGTERM),
+        (201, signal.SIGTERM),
+    ]
+    assert supervisor.processes == ()
+
+
+def test_retirement_never_adopts_a_similar_unowned_identity():
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    owned = OwnedProcess("batch-1", "broker", 101, 101, ("broker-g1",), 11)
+    unowned = OwnedProcess("batch-1", "broker", 101, 101, ("other",), 12)
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(owned, poll=lambda: 17)
+
+    with pytest.raises(SupervisorError, match="UNOWNED_PROCESS"):
+        supervisor.retire_owned(unowned)
+    assert signals == []
+    assert supervisor.processes == (owned,)
