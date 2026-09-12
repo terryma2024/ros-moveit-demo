@@ -269,6 +269,20 @@ class ProcessSupervisor:
         if actual != expected:
             raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
 
+    def _confirm_running_or_repoll_exit(
+        self, expected: OwnedProcess, poll: Callable[[], int | None]
+    ) -> int | None:
+        """Close the observation race between a nonterminal poll and `/proc`."""
+        actual = self._identity_reader(expected.pid)
+        if actual is None:
+            code = poll()
+            if code is None:
+                raise SupervisorError("OWNED_PROCESS_ABSENT")
+            return int(code)
+        if actual != expected:
+            raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
+        return None
+
     def assert_healthy(self) -> None:
         for expected, poll in self._owned.values():
             code = poll()
@@ -296,6 +310,8 @@ class ProcessSupervisor:
             for pid, (expected, poll) in tuple(self._owned.items()):
                 code = poll()
                 if expected.role == health_role:
+                    if code is None:
+                        code = self._confirm_running_or_repoll_exit(expected, poll)
                     if code is not None:
                         if health_recovery is None:
                             raise SupervisorError(
@@ -325,13 +341,13 @@ class ProcessSupervisor:
                             )
                         self._confirm_identity(replacements[0][0])
                         continue
-                    self._confirm_identity(expected)
                     continue
                 if expected.role != role:
                     continue
                 if code is None:
-                    self._confirm_identity(expected)
-                    continue
+                    code = self._confirm_running_or_repoll_exit(expected, poll)
+                    if code is None:
+                        continue
                 if self._group_members_reader(expected.pgid):
                     raise SupervisorError(
                         f"OWNED_GROUP_SURVIVORS: {expected.role}"

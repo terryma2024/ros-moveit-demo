@@ -54,6 +54,45 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import _write_worker_results
+    from so101_demo.parallel_batch.worker import WorkerRunResult
+
+    resources = SimpleNamespace(
+        worker_id="worker-01", generation=1, worker_root=tmp_path
+    )
+    result = WorkerRunResult(
+        "task_start",
+        None,
+        False,
+        "INITIAL_GATE_FAILED",
+        failure_boundary="point_initial_gate",
+        failure_type="RuntimeError",
+        failure_message="POINT_INITIAL_GATE_OBSERVATION_REJECTED",
+    )
+
+    path = _write_worker_results(resources, (result,))
+
+    assert path == tmp_path / "worker-run-results.json"
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "schema_version": 1,
+        "worker_id": "worker-01",
+        "worker_generation": 1,
+        "results": [{
+            "point_id": "task_start",
+            "terminal_status": None,
+            "recovered": False,
+            "stopped_reason": "INITIAL_GATE_FAILED",
+            "failure_boundary": "point_initial_gate",
+            "failure_type": "RuntimeError",
+            "failure_message": "POINT_INITIAL_GATE_OBSERVATION_REJECTED",
+        }],
+    }
+    with pytest.raises(FileExistsError):
+        _write_worker_results(resources, (result,))
+
+
 @pytest.mark.parametrize(
     "changes,error",
     [
