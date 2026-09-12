@@ -6087,12 +6087,14 @@ decision: ADVANCE TO A NEW IMMUTABLE FULL 20-POINT F90 QUALIFICATION
 
 ```yaml
 experiment_id: EXP-092
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:40:27+08:00
   - status: RUNNING
     at: 2026-09-13T06:41:03+08:00
+  - status: INVALID
+    at: 2026-09-13T06:48:39+08:00
 prior_experiment: EXP-091
 hypothesis: The fully qualified F90 runtime will complete the frozen 20-point catalog and either qualify 20/20 or preserve the exact initiating perception infrastructure failure that F74 concealed.
 single_variable: Expand EXP-091 from its four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, execute behavior, and diagnostics remain byte-identical.
@@ -6122,6 +6124,19 @@ provenance:
 success_criteria: Exit 0; all 20 catalog points have unique leases and sealed PASSED attempts; exactly K=10 leases and generation 11 per Worker; all 20 recoveries succeed; all 40 original RGB images pass fresh inspection; YOLO-first/fallback usage is attributable; numeric, dynamic, exact-TF, model, provenance, manifest size/SHA-256, coordinator completion, qualification, and cleanup gates pass; no failure receipt or residual owned state.
 failure_rule: Any nonzero exit, non-PASSED point, duplicate/missing point, K/generation violation, evidence/hash/visual/recovery/cleanup failure, qualification false, or residual state makes this batch non-qualifying. If perception health is lost, the first-failure receipt and command log must be read before deciding the next fix.
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+result: The command exited 1 after 345.31 seconds with 4 PASSED anchors and 16 UNRUN catalog points after 16 fail-closed PERCEPTION_INFRA_ERROR attempts. F90 durably preserved the initiator: the already delivered and physically PASSED cup_test_right_5cm YOLO request was later reclassified as BrokerResponse.INFERENCE_TIMEOUT/INFERENCE_DEADLINE_EXCEEDED. The identical request ID appears in that point's POSE_ACCEPTED evidence, proving inference completed and was consumed before the later timeout. PerceptionService kept the completed request in its historical _requests scan, while PerceptionBroker._guard reapplied the deadline to terminal QUALIFIED responses; that historical timeout poisoned Broker health and produced downstream BROKER_NOT_READY. Both Workers consumed K=10 and stopped at generation 11, all 20 recoveries succeeded, all invalid attempts proved no physical action, all 20 manifests and 108 listed files passed size/SHA-256 readback, all eight anchor originals were visually accepted, and cleanup/residual gates passed.
+aggregate_results_sha256: 29046c8bce491dbf2c8877f1f57b6b66fe89646ee4a06c9f24def051c44053a0
+first_failure_receipt_sha256: 6179646523533f0506bda4c2b04cda063a3067e402d2d340c0831c134ef8287a
+command_log_sha256: bff3e7f9a1d8baff6971d091d5701cd2797c93eec6dcbb9032504f7c4d508a89
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP092.json
+root_cause_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/root-cause-EXP092.json
+visual_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP092.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-092-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP092.txt
+retained: complete live-20-f90 tree including the first-failure receipt, command/MuJoCo/result/root-cause/visual/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build/compile scratch, non-qualifying full batches, invalid harness attempts, and all prior candidates; no deletion authorized
+decision: TDD-RETIRE DELIVERED TERMINAL RESPONSES FROM SERVICE DEADLINE SYNCHRONIZATION, THEN REQUALIFY STATIC/IMAGE/SMALL/FULL
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
