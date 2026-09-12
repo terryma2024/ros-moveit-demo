@@ -6229,12 +6229,14 @@ decision: ADVANCE TO A NEW IMMUTABLE FULL 20-POINT F91 QUALIFICATION
 
 ```yaml
 experiment_id: EXP-095
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T07:07:30+08:00
   - status: RUNNING
     at: 2026-09-13T07:08:18+08:00
+  - status: VALID
+    at: 2026-09-13T07:24:37+08:00
 prior_experiment: EXP-094
 hypothesis: The statically and four-point-qualified F91 runtime will complete and qualify the complete frozen 20-point catalog without historical delivered responses poisoning perception health.
 single_variable: Expand EXP-094 from its four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, execute behavior, and service-response retirement remain byte-identical.
@@ -6264,6 +6266,18 @@ provenance:
 success_criteria: Exit 0; all 20 catalog points have unique leases and sealed PASSED attempts; exactly K=10 leases and generation 11 per Worker; all 20 recoveries succeed; all 40 original RGB images pass fresh inspection; YOLO-first/fallback usage is attributable; numeric, dynamic, exact-TF, model, provenance, manifest size/SHA-256, coordinator completion, qualification, and cleanup gates pass; no failure receipt or residual owned state.
 failure_rule: Any nonzero exit, non-PASSED point, duplicate/missing point, K/generation violation, evidence/hash/visual/recovery/cleanup failure, qualification false, or residual state makes this batch non-qualifying. If a gate fails, read the initiating evidence and diagnose before deciding the next action.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: The immutable F91 command exited 0 in 856.34 seconds and all 20 frozen catalog points PASSED. Each Worker consumed exactly K=10 unique leases, completed ten successful recoveries, and stopped at generation 11. All 20 dynamic execute manifests were DONE; all 20 sealed attempt manifests and all 220 listed files passed independent size/SHA-256 readback. Every accepted pose used the primary plastic-cup-yolo11n-seg-v1 model (20 requests), so Grounded-SAM fallback usage was zero. No first-failure receipt was produced. Aggregate qualification and cleanup passed, execute-mode validation fields remained false and inapplicable, and fresh original-resolution inspection accepted all 40 initial/terminal RGB images. Post-exit audit found no owned process, task container, GPU compute application, or related process. The batch-created MuJoCo log was moved to the report path, while the unrelated home-directory log retained its preflight identity.
+aggregate_results_sha256: 454e251dff9a16fa4a7b371fe2fea521359ba76c7d89203bf845c791ec4cf8ea
+batch_manifest_sha256: 15b4b3fad1b3d95325bd8708f088f5b9eb106d055dcba7d128aa11dc8282cec0
+command_log_sha256: 9feab8fe79d40c29efb282f04e086f1fd5c90b740cc8e0d2c3678b260255d4e5
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP095.json
+visual_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP095.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-095-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP095.txt; sha256 f731314264012ea83b3ede5a3065b52f634211e53bb42e32d16844806356556c
+retained: complete live-20-f91 and live-small-f91 trees, all final command/MuJoCo/result/visual/cleanup/static/image/smoke evidence, all diagnostic and fault evidence, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build/compile scratch, invalid harness evidence, superseded diagnostic/fault/non-qualifying runtime batches, and all prior candidates; no deletion authorized
+decision: FULL F91 TWO-WORKER 20-POINT QUALIFICATION PASSED; PREPARE FINAL DURABLE REPORT AND FINAL CLEAN-STATE READBACK
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
