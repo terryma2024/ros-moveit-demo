@@ -5314,10 +5314,12 @@ deletion_candidates: registered pytest/build scratch and prior diagnosis runtime
 
 ```yaml
 experiment_id: EXP-079
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:54:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T04:55:16+08:00
 prior_experiment: EXP-078
 hypothesis: The F72 request-local executor boundary prevents the observed recovery-generation controller abort, allowing three complete execute/recovery cycles per Worker while leaving all unrelated controller exceptions fail-fast.
 mode: execute; simulation only
@@ -5330,6 +5332,7 @@ selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5
 selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
 provenance:
   executable_source_commit: ba55e038dfa7b8e3f3edcdcca119066b3b237afa
+  preregistration_commit: 93a0d90d87ff3907804fc0c0afc63b727083468c
   mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
   installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
   broker_image_id: sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
