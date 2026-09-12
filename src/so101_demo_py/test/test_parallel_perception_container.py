@@ -94,7 +94,8 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
     (yolo / 'best.pt').write_bytes(b'model')
     argv = container_run_argv(
         root, image_id='sha256:' + 'b' * 64, yolo_weights=yolo / 'best.pt',
-        grounded_root=grounded, gpu_groups=[44, 109], uid=os.getuid(), gid=os.getgid())
+        grounded_root=grounded, gpu_groups=[44, 109], uid=os.getuid(), gid=os.getgid(),
+        batch_id='batch-1', broker_generation=1)
     assert f'{root}/ipc:/runtime:rw' in argv
     assert f'{root}/workers:/inputs:ro' in argv
     assert argv[argv.index('--user') + 1] == f'{os.getuid()}:{os.getgid()}'
@@ -103,6 +104,9 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
                         ('--security-opt', 'no-new-privileges'), ('--gpus', 'all')]:
         assert argv[argv.index(flag) + 1] == value
     assert '--read-only' in argv
+    assert argv[argv.index('--cidfile') + 1] == str(root / 'ipc/container.cid')
+    assert 'com.so101.batch-id=batch-1' in argv
+    assert 'com.so101.broker-generation=1' in argv
     assert (root / 'ipc').stat().st_mode & 0o777 == 0o700
     assert '/runtime/perception.sock' in argv
     assert '--no-cpu-fallback' in argv
@@ -118,7 +122,8 @@ def test_unknown_or_unsafe_container_inputs_fail_closed(tmp_path, bad):
     weights = tmp_path / 'best.pt'; weights.write_bytes(b'model')
     grounded = tmp_path / 'grounded'; grounded.mkdir()
     args = dict(image_id='sha256:' + 'b' * 64, yolo_weights=weights,
-                grounded_root=grounded, gpu_groups=[44], uid=os.getuid(), gid=os.getgid())
+                grounded_root=grounded, gpu_groups=[44], uid=os.getuid(), gid=os.getgid(),
+                batch_id='batch-1', broker_generation=1)
     if bad == 'relative': root = Path('batch')
     if bad == 'symlink':
         alias = tmp_path / 'alias'; alias.symlink_to(root); root = alias
