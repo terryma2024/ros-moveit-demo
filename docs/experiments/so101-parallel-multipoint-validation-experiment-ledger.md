@@ -5591,10 +5591,12 @@ decision: RERUN SIX-POINT F74 AS EXP-082
 
 ```yaml
 experiment_id: EXP-082
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:34:08+08:00
+  - status: RUNNING
+    at: 2026-09-13T05:34:41+08:00
 prior_experiment: EXP-081
 hypothesis: Repeating the identical F74 runtime under an execute-correct acceptance contract will reproduce all six PASSED points, exact recovery, and fresh visual acceptance without the EXP-081 preregistration defect.
 single_variable: Acceptance contract removes only validation_complete and validation_passed, which are inapplicable to execute mode; source, install, image, models, config, catalog, selection, N=2, K=3, and runtime behavior remain fixed.
@@ -5608,6 +5610,7 @@ selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5
 selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: 51145f94d598642b9801572bccfbd0dd434d50f9
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
   mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
