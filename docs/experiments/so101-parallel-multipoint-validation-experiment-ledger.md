@@ -6033,10 +6033,12 @@ decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL
 
 ```yaml
 experiment_id: EXP-091
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:32:37+08:00
+  - status: RUNNING
+    at: 2026-09-13T06:33:19+08:00
 prior_experiment: EXP-090
 hypothesis: The diagnostic-only F90 image preserves the accepted two-Worker four-point physical behavior while making any first health-losing perception failure durable.
 single_variable: Add F90 first-failure diagnostics to the F74 source and Broker image; selection, N=2, K=2, config, catalog, models, MuJoCo/MoveIt runtime, deadlines, safety decisions, and execute behavior remain fixed from EXP-084.
@@ -6051,6 +6053,7 @@ selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370c
 preflight: No related process, task container, or GPU compute application; 24 CPUs, 24.771 GiB MemAvailable, 15272 MiB GPU free; batch root absent.
 provenance:
   executable_source_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
+  preregistration_commit: e163b2fb8f22fba0fd14b42fb625de1e593521bb
   preregistration_base_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
   executable_source_tree: 58a02ab45ec0df072e7a7e23f28dfaeec3e25034a7fb9e792dc75fc1d0f6fd68
   installed_module_tree: de4b36f48b4b4446c0efa315dd52dd941334088f770897a1636e039e499231ff
