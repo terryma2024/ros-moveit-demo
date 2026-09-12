@@ -493,7 +493,24 @@ def observe_parallel_initial_gate(
             ):
                 break
         else:
-            raise RuntimeError("POINT_INITIAL_GATE_OBSERVATION_TIMEOUT")
+            missing = []
+            if services.joint_callback_count <= 0:
+                missing.append("joint_state")
+            status_names = {
+                topics[0]: "execute_trajectory_status",
+                topics[1]: "arm_controller_status",
+                topics[2]: "gripper_controller_status",
+            }
+            missing.extend(
+                status_names[topic] for topic in topics if topic not in goal_receipts
+            )
+            if not scene_future.done():
+                missing.append("planning_scene")
+            if stable_graph_samples < 2:
+                missing.append("stable_graph")
+            raise RuntimeError(
+                "POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:" + ",".join(missing)
+            )
         scene_response = scene_future.result()
         if scene_response is None:
             raise RuntimeError("POINT_INITIAL_GATE_SCENE_UNAVAILABLE")
