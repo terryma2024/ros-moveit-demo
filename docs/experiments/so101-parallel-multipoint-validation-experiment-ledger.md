@@ -5740,12 +5740,14 @@ decision: ADVANCE TO SYNCHRONIZED CONTROLLED PLAN-ONLY FAULT GATE
 
 ```yaml
 experiment_id: EXP-085
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:52:26+08:00
   - status: RUNNING
     at: 2026-09-13T05:53:11+08:00
+  - status: INVALID
+    at: 2026-09-13T05:55:38+08:00
 prior_experiment: EXP-084
 hypothesis: Exact worker-01 TERM will remain request-local to healthy Broker g1, and subsequent exact Broker g1 TERM will pause grants and recover to healthy ready g2 without physical action, duplicate lease, or K over-debit.
 single_variable: Change only execute mode to the approved synchronized plan-only Worker/Broker TERM sequence; source, install, image, config, catalog, models, N=2, K=2, and four-point selection remain fixed from EXP-084.
@@ -5773,6 +5775,16 @@ provenance:
 success_criteria: Both exact injectors exit 0; all four physical statuses remain UNRUN; the target Worker fault is fenced with physical action proven absent and a new Worker generation admitted; Broker g1 stays healthy across Worker disconnect; explicit g1 TERM produces an unhealthy/healthy journal pair and ready model-loaded g2; no lease is granted during the unhealthy window; each stable Worker slot receives exactly two unique leases despite generation changes; coordinator cleanup and exact residual audit pass.
 failure_rule: Wrong or drifting process identity, injector failure, physical action, Broker death caused by Worker disconnect, missing unhealthy/healthy transition, no ready g2, lease grant during pause, duplicate point, K over-debit, incomplete cleanup, or residual owned state makes the gate INVALID and blocks full-20 admission.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: The exact manifest-owned worker-01 TERM injector exited 0 after verified Broker g1/model readiness and a worker-01 validation working directory. The external synchronizer then remained in its replacement-Worker observation step and never executed the preregistered exact Broker TERM. The product completed conservative plan-only processing in 83.82 seconds: all four physical statuses remained UNRUN, both stable slots stayed at K=2, and cleanup passed with an empty owned-process manifest. This is INVALID orchestration evidence because the two-fault sequence was incomplete, not a product regression. The exact stale observer process was then terminated and the residual audit was clean.
+aggregate_results_sha256: 89bd2987a86678d2d9e45ba5052dba5e1838631be09ab5b874cd636a71509d5c
+command_log_sha256: 715a807fca2d86e696b104e0c09bfb6c9982c1494dc9595a545c917362d59fcf
+root_cause_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/root-cause-EXP085.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-085-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP085.txt
+retained: complete live-fault-f74 tree, command/Worker-injector/MuJoCo/root-cause/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, invalid diagnostic batches, and this incomplete fault batch; no deletion authorized
+decision: RERUN SYNCHRONIZED FAULT GATE WITH PERSISTENT OBSERVER SESSION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
