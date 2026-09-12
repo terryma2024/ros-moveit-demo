@@ -37,14 +37,15 @@ confirmed_conclusions:
   - F51 preserves Broker infrastructure outcome/reason in bounded Worker diagnostics without changing perception or attempt results; its fresh complete ordinary gate and immutable dual-model image passed (CP-035).
   - EXP-048 proved both Workers reach the authenticated Broker with exact lease-bound evidence, and isolated BROKER_NOT_READY to a missed ready callback when an already-started healthy runtime is attached to PerceptionService; F52 is limited to replaying that lifecycle state (CP-036).
   - F52 replays ready state only for an already-started healthy runtime, without rebuilding detectors or rewriting receipts; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-037).
+  - EXP-049 stopped before admission because the verified worktree libexec was absent from PATH; EXP-050 repeats with only that previously validated environment binding (CP-038).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-037
-next_experiment: EXP-049 F52 four-point two-Worker execute
+latest_checkpoint: CP-038
+next_experiment: EXP-050 verified-libexec F52 four-point two-Worker execute
 ```
 
 Frozen provenance:
@@ -3026,12 +3027,14 @@ decision: RUN EXP-049 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-049
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T22:34:04+08:00
   - status: RUNNING
     at: 2026-09-12T22:34:04+08:00
+  - status: INVALID
+    at: 2026-09-12T22:36:07+08:00
 prior_experiment: EXP-048
 hypothesis: F52 will replay the already-loaded model readiness into PerceptionBroker so both Workers can complete perception and proceed under the unchanged physical gates.
 prediction: Four unique points finish PASSED with qualification_passed=true, or any failure is bounded, attributable, safely stopped, and physically evidenced.
@@ -3054,6 +3057,73 @@ preflight: reports/preflight-exp049.json; sha256 98f02b2ec8ebfd9700a6e913a2ea3f7
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: >-
   ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f52 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f52 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
+result: >-
+  Command exited 1 after 0.36 seconds with PROVENANCE_CONSOLE_MISSING. The complete overlay makes
+  ros2 run locate the package libexec, but does not add that independent verified wrapper to PATH
+  for the fail-closed provenance verifier. This is the same already-documented pre-admission
+  environment omission as EXP-024. No batch root, Worker, Broker container, MuJoCo log, lease, RGB,
+  or physical action was created.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 99c39672bf29d69af01c4f046a0639a05b3a0be6f0bd7a83577bd768858e1b8b
+command_time_sha256: ddef1903ee18db15fb90124ecf56469fba4ca3bc38a385a90dd1882811a56bd4
+post_cleanup_sha256: fe64270e36f11f9531df14cae3470e19548c0535c3f28aaf37adc88fbf21494b
+conclusion: INVALID pre-admission harness environment; repeat with only the verified worktree libexec prepended to PATH.
+retained: EXP-049 command and no-side-effect audit, plus all prior evidence
+archived: none
+deletion_candidates: none from this pre-admission attempt
+```
+
+```yaml
+checkpoint_id: CP-038
+last_valid_experiment: EXP-022
+current_hypothesis: Adding only the verified worktree so101_demo_py libexec to PATH will satisfy the already-reviewed provenance boundary and allow the unchanged F52 execute to run.
+working_tree_status: ledger-only EXP-049 result and EXP-050 preregistration after clean executable source 328de1909c6b7ceb19b2d5b6ac9a41e0e7888b69
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-049 stopped at PROVENANCE_CONSOLE_MISSING before creating its batch root or any runtime side effect.
+  - Independent readback resolves so101_parallel_batch exactly to /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch when only that directory is prepended to PATH.
+  - Final audit found the EXP-049 root absent, MuJoCo log absent, no related process or container, and all domains 181-183 lockable.
+  - Fresh EXP-050 preflight found 24 CPUs, 25.371 GiB MemAvailable, 15272 MiB free GPU, no GPU compute application, related process, or related container, exact verified console resolution, and all domains lockable.
+ruling: EXP-050 changes only the command environment by prepending the already-qualified worktree libexec to PATH. F52 source/image, complete overlay, points, configuration, models, N=2, K=2, timeouts, and physical criteria remain unchanged.
+retained: complete EXP-049 no-side-effect evidence, EXP-050 preflight, F52 qualification, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p68 after readback; no deletion authorized
+decision: RUN EXP-050 under the verified libexec PATH
+```
+
+## EXP-050 — Task 14 verified-libexec F52 two-Worker execute
+
+```yaml
+experiment_id: EXP-050
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T22:36:27+08:00
+  - status: RUNNING
+    at: 2026-09-12T22:36:27+08:00
+prior_experiment: EXP-049
+hypothesis: The verified libexec PATH closes the pre-admission provenance boundary and F52 admits both loaded models into the production Broker.
+prediction: Four unique points finish PASSED with qualification_passed=true, or any runtime failure is bounded, attributable, safely stopped, and physically evidenced.
+single_variable: PATH prepends only /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py. All executable and behavioral inputs remain those of EXP-049.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f52b
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f52b
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 328de1909c6b7ceb19b2d5b6ac9a41e0e7888b69
+  executable_source_tree: 42939f1f3f0de945a4f969392826a0c7ea6ef2418baee4acb7884f3666dc5474
+  installed_module_tree: cfffb78938a332bf22203595a53362249cb8b1dae2573d32f89b87e285f68819
+  image_id: sha256:fa118984d55034d1abe09e0b3b6b6ea5d2ceec16b2d24445bd8928269a2865db
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp050.json; sha256 3fb24a8ddf8b257166631db4fca349e19663d13d1ecbeb3bde69ac0ec3d7507c
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  PATH=/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py:$PATH; source install/setup.zsh; ros2 run so101_demo_py so101_parallel_batch with the unchanged EXP-049 arguments, batch parallel-small-20260912-v1-f52b, and root live-small-f52b.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
 result: PENDING
 retained: PENDING
