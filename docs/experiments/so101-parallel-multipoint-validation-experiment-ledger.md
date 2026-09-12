@@ -5942,10 +5942,12 @@ decision: ADVANCE TO IMMUTABLE FULL 20-POINT QUALIFICATION
 
 ```yaml
 experiment_id: EXP-089
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:07:08+08:00
+  - status: RUNNING
+    at: 2026-09-13T06:07:37+08:00
 prior_experiment: EXP-088
 hypothesis: The immutable F74 runtime will execute and seal all 20 frozen catalog points exactly once with dynamic two-Worker scheduling, K=10 per stable slot, exact-TF localization, YOLO-first perception, complete recovery, and no residual state.
 single_variable: Expand EXP-084 from the four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, and execute behavior remain byte-identical.
@@ -5965,6 +5967,7 @@ preflight:
   gpu_memory_free: 15269 MiB
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: 0b72ec074aad9dc4262346875f73fc8d7c4c28e9
   preregistration_base_commit: 812f2ee1749e537aec59769a7ec57ba8bd87eafb
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
