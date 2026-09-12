@@ -494,7 +494,7 @@ def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monk
             events.append(("reap-child", timeout))
             return self.returncode
 
-    reads = iter(((0, (), 0), (900, ("unrelated",), 99)))
+    reads = iter(((0, (), 0),) + ((900, ("unrelated",), 99),) * 7)
     monkeypatch.setattr(processes, "_proc_values", lambda _pid: next(reads))
     signals = []
     events = []
@@ -506,6 +506,36 @@ def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monk
         supervisor.start("worker", ("worker",))
     assert signals == []
     assert events == ["terminate-child", ("reap-child", 1.0)]
+
+
+def test_supervisor_boundedly_waits_for_child_to_establish_its_own_session(monkeypatch):
+    from so101_demo.runtime.parallel_processes import ProcessSupervisor
+    import so101_demo.runtime.parallel_processes as processes
+
+    class Child:
+        pid = 701
+
+        def poll(self):
+            return None
+
+    reads = iter((
+        (600, ("worker",), 50),
+        (600, ("worker",), 50),
+        (701, ("worker",), 50),
+    ))
+    monkeypatch.setattr(processes, "_proc_values", lambda _pid: next(reads))
+    yields = []
+    monkeypatch.setattr(processes.time, "sleep", lambda delay: yields.append(delay))
+    supervisor = ProcessSupervisor(
+        "batch-1", popen=lambda *_args, **_kwargs: Child(),
+    )
+
+    owned = supervisor.start("worker", ("worker",))
+
+    assert owned.pid == owned.pgid == 701
+    assert owned.cmdline == ("worker",)
+    assert owned.start_time == 50
+    assert yields == [0.001, 0.001]
 
 
 def test_worker_shutdown_uses_bounded_interrupt_before_termination():
