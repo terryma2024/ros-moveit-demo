@@ -35,14 +35,15 @@ confirmed_conclusions:
   - F50 preserves conservative authorization-failure semantics while exposing bounded phase/type/message diagnostics; its fresh complete ordinary gate and immutable dual-model image passed (CP-033).
   - EXP-047 separated one transient initial graph rejection from one successful Broker RPC returning model INFRA_ERROR; F51 is limited to preserving the Broker response reason in bounded Worker diagnostics (CP-034).
   - F51 preserves Broker infrastructure outcome/reason in bounded Worker diagnostics without changing perception or attempt results; its fresh complete ordinary gate and immutable dual-model image passed (CP-035).
+  - EXP-048 proved both Workers reach the authenticated Broker with exact lease-bound evidence, and isolated BROKER_NOT_READY to a missed ready callback when an already-started healthy runtime is attached to PerceptionService; F52 is limited to replaying that lifecycle state (CP-036).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-035
-next_experiment: EXP-048 Broker-response-diagnostic four-point two-Worker execute
+latest_checkpoint: CP-036
+next_experiment: F52 ready-state replay formal RED/GREEN
 ```
 
 Frozen provenance:
@@ -2902,12 +2903,14 @@ decision: RUN EXP-048 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-048
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T22:20:27+08:00
   - status: RUNNING
     at: 2026-09-12T22:22:00+08:00
+  - status: INVALID
+    at: 2026-09-12T22:25:47+08:00
 prior_experiment: EXP-047
 hypothesis: F51 will preserve the exact Broker infrastructure response reason while leaving the two-Worker runtime otherwise identical.
 prediction: Either four unique points finish PASSED with full qualification, or every Broker infrastructure result retains a bounded exact reason sufficient for one narrow next fix and proves physical safety.
@@ -2931,10 +2934,69 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f51 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f51 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
-result: PENDING
-retained: PENDING
+result: >-
+  Command exit was 1 after 55.00 seconds. Both Workers passed their exact reset and point-initial
+  gates, durably ACKed ATTEMPT_STARTED, created owner-only Broker input mirrors, and completed an
+  authenticated Broker RPC. F51 preserved the identical bounded result on both Workers:
+  failure_boundary=request_model, failure_type=BrokerResponse.INFRA_ERROR, and
+  failure_message=BROKER_NOT_READY. The unchanged attempt result remained
+  PERCEPTION_INFRA_ERROR with physical_action_proven_absent=true. No pose admission, plan,
+  trajectory, controller goal, or physical action occurred; the remaining two points were never
+  leased. The model-ready and strict ready receipts both prove both CUDA models loaded. Source
+  inspection then closed the lifecycle cause: container_main starts ParallelPerceptionRuntime
+  before transport.serve constructs PerceptionService and installs its health_changed callback;
+  service.start calls the already-started runtime, whose healthy idempotent branch returns without
+  replaying ready state, so PerceptionBroker retains both models as not ready.
+cleanup: >-
+  Exact CID f4c4fe5fc8ede9b746e609c1aaffef1f7299bcfd2d280110e1e7675736f91edd
+  was verified against immutable F51 image, exact batch/generation labels, and registered mounts,
+  then stopped and independently observed removed by --rm. Final readback found no related process
+  or container and all domains 181-183 independently lockable. The MuJoCo log was moved without
+  deletion to reports/MUJOCO_LOG-EXP048.txt.
+visual_observation: >-
+  Both immutable 640x480 initial RGB files were inspected at original resolution. task_start and
+  cup_test_forward_5cm show their expected distinct cup positions and canonical initial arm state;
+  neither image shows robot-object contact or visible penetration.
+visual_sha256:
+  task_start: 1c720010f645481f85786c9b8e63615ab96ad2ae2818f810f87545cb0d51f343
+  cup_test_forward_5cm: fad007b56ded2b87722b56a2c926d8e16612a09d9daeabdca4be3481df382f3d
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: cceeb1dcf002fdfefe850406f59156887ce32c20afd2463b26de4ce51a49fa22
+command_time_sha256: 9ecaf308fafc3aa62ae1a4b8d8802e42daf232eb8f8d4c2f6ed0a798e7b074ef
+aggregate_sha256: 556aaafed719472b8be5f06faf8bc804e4a4a080933a3f579f3e46488eace72d
+coordinator_aggregate_sha256: 8ea710c3dd47d64e6ad0d38c768ccc08b1e9b0f9105a31fd1980d3fdd509ff35
+worker_01_result_sha256: 1987f29d25168af4fe6853d11ca2e2ccd2cffbdb0ca31eddb66f0c88d36e32f1
+worker_02_result_sha256: 66eaaac2f130656e4d0564e5a9a807aab8d3b747963071680453f79cd2d79b30
+mujoco_log_sha256: 5dd6ed3cf7a82236970abb96b4550ad31a5f9bdf5a3e278cfdab9fba94f2dbdc
+broker_inspect_sha256: bf162f03298ade9e8952db9d6baba43d62ba6d424b07f104c6fa2cce5c045bc7
+broker_log_sha256: 01fcc26c9ae6f418d6fe935ea91b0c6017925c9c82cb59da7b8499594f6c64d3
+post_cleanup_sha256: bd07c564e1e6c7c24163325827c58f86677c58c39c8761c7e042197633dddd50
+conclusion: INVALID diagnostic infrastructure result; zero physical actions. Implement F52 as ready-state replay only, qualify completely, then repeat with a new batch identity.
+retained: complete EXP-048 batch/reports, both authorized and visually inspected immutable initial RGB files, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none pending run
+deletion_candidates: p66 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-036
+last_valid_experiment: EXP-022
+current_hypothesis: Replaying the current healthy state when an already-started runtime receives a new lifecycle observer will make both Broker models ready without changing inference, authorization, or failure semantics.
+working_tree_status: ledger-only EXP-048 result and F52 ruling after clean executable source 9c6d36f4822b6795d779f85b8a71535a3162184f
+owned_processes: NONE
+confirmed_conclusions:
+  - Both EXP-048 Workers passed the exact lease-bound reset and graph gates and crossed durable ATTEMPT_STARTED before receiving the same authenticated BrokerResponse.INFRA_ERROR reason BROKER_NOT_READY.
+  - Both model-ready receipts prove successful CUDA model startup, while the Broker's own model readiness remained false.
+  - container_main starts the runtime before transport.serve creates PerceptionService. PerceptionService replaces health_changed only after that first healthy transition, then its service.start reaches the idempotent runtime.start branch, which returns without notifying the new observer.
+  - Both original-resolution images are visually consistent with their frozen points and show no contact or penetration; sealed attempt results prove physical_action_proven_absent=true.
+  - Exact Broker cleanup completed and no related owned process, running batch container, or domain owner remained.
+open_risks:
+  - The ready-state replay path is not covered by a regression test.
+  - A fresh live-small run is required after qualification to prove the Broker admits both models.
+ruling: F52 may make the healthy idempotent ParallelPerceptionRuntime.start branch invoke health_changed(true) before returning. It must not rebuild detectors, rewrite the ready receipt, weaken restart-required behavior for unhealthy runtimes, alter Broker policy, or change authorization, inference, attempt, safe-stop, or physical semantics. Formal RED/GREEN must prove late observer replay, no detector rebuild or receipt rewrite, and unchanged unhealthy restart rejection.
+retained: complete EXP-048 evidence, cleanup audit, all F51 evidence, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p66 after readback; no deletion authorized
+decision: IMPLEMENT F52 READY-STATE REPLAY WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
