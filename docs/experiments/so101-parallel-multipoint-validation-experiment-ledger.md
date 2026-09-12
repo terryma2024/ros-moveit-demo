@@ -4372,6 +4372,63 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F65 PROCESS IDENTITY STABILIZATION WITH TDD
 ```
 
+```yaml
+checkpoint_id: CP-062
+last_valid_experiment: EXP-022
+current_hypothesis: The bounded retry for transient incomplete /proc identity reads while the exact Popen child remains alive will allow both Workers to retain their task-station process identities under concurrent fork/exec without weakening wrong-PGID or PID-reuse rejection.
+working_tree_status: clean executable source at a0524c3d4f80d7b3589990b397770a32df669f90; F65 build, package, immutable-image, and dual-model CUDA smoke gates all pass
+owned_processes: NONE
+confirmed_conclusions:
+  - F65 formal RED pytest-sFz6pw5J failed at the intended transient incomplete-identity boundary; focused GREEN pytest-FQdXkTXl passed the retry and immediate wrong-PGID rejection cases.
+  - The full worker-runtime file passed 51 tests, the adjacent parallel suite passed 1044 tests, and the ordinary package gate passed 2793 tests with zero failures or errors.
+  - The fresh worktree overlay source/install hashes are c93d932332a87dda1e373468c13d5101848de4d2e4122228be3d8a17791eb37f and 01d0ac21c23dd640965b4fd8f2712682ca558b39f23cb07eb50e8c36394a5401.
+  - Immutable image sha256:dee3dd0147cc8c62a2e145491c2512788905d4d61fe8b6903e92c028a8bcd3d2 independently reports the exact F65 source hash.
+  - The isolated F65 smoke executed both models on CUDA: YOLO and Grounded-SAM returned QUALIFIED, and no container, related process, GPU compute application, or domain claim remained.
+ruling: Repeat the unchanged frozen four-point two-Worker gate with F65 as the sole executable variable. Preserve all point selection, K=2, perception, pose, motion, recovery, cleanup, visual, model, image, config, catalog, and physical acceptance criteria.
+retained: all F65 source, build, test, image, smoke, provenance, and prior experiment evidence
+archived: none
+deletion_candidates: all registered pytest/build scratch trees remain deletion candidates; no deletion authorized
+decision: RUN EXP-066 UNCHANGED FOUR-POINT GATE
+```
+
+## EXP-066 — F65 stable Worker process-identity four-point gate
+
+```yaml
+experiment_id: EXP-066
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T02:24:33+08:00
+  - status: RUNNING
+    at: 2026-09-13T02:24:33+08:00
+prior_experiment: EXP-065
+hypothesis: A short retry limited to transient incomplete /proc identity reads while the exact Popen child remains alive will prevent either Worker from being discarded during concurrent task-station fork/exec.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: WorkerOwnedProcessTree start identity acquisition retries only transient incomplete identity exceptions while the exact child remains alive. All scheduling, consumer readiness, perception, pose, motion, recovery, timeout, source/config/model/catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f65
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f65
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: a0524c3d4f80d7b3589990b397770a32df669f90
+  executable_source_tree: c93d932332a87dda1e373468c13d5101848de4d2e4122228be3d8a17791eb37f
+  installed_module_tree: 01d0ac21c23dd640965b4fd8f2712682ca558b39f23cb07eb50e8c36394a5401
+  image_id: sha256:dee3dd0147cc8c62a2e145491c2512788905d4d61fe8b6903e92c028a8bcd3d2
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp066.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f65 and root live-small-f65.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+result: PENDING
+retained: PENDING
+archived: none
+deletion_candidates: none from this experiment unless separately classified after readback
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
