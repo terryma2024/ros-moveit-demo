@@ -702,13 +702,16 @@ class ParallelWorker:
         reset_epoch=None,
     ):
         action_may_have_started = False
+        failure_boundary = "scheduler_trace"
         try:
             if self._mode is RunMode.DRY_RUN:
                 decision = self._boundary(
                     lambda current: self._runtime.scheduler_trace(current))
             else:
+                failure_boundary = "inference_snapshot"
                 snapshot = self._boundary(
                     lambda current: self._runtime.inference_snapshot(current))
+                failure_boundary = "request_model"
                 chain = self._boundary(
                     lambda current: self._broker.request_model(
                         current,
@@ -719,20 +722,27 @@ class ParallelWorker:
                         start_event_type=start_event_type,
                         reset_epoch=reset_epoch,
                     ))
+                failure_boundary = "admit_pose"
                 admitted = self._boundary(
                     lambda current: self._runtime.admit_pose(current, chain))
                 if self._mode is RunMode.EXECUTE:
                     action_may_have_started = True
+                    failure_boundary = "execute_expert"
                     decision = self._boundary(
                         lambda current: self._runtime.execute_expert(current, admitted))
                 else:
+                    failure_boundary = "plan_expert"
                     decision = self._boundary(
                         lambda current: self._runtime.plan_expert(current, admitted))
-            return decision, action_may_have_started
-        except Exception:
+            return decision, action_may_have_started, None
+        except Exception as error:
             decision, _, _, _ = self._safe_stop(
                 lease, action_may_have_started=action_may_have_started)
-            return decision, action_may_have_started
+            return decision, action_may_have_started, {
+                "failure_boundary": failure_boundary,
+                "failure_type": type(error).__name__[:128],
+                "failure_message": _bounded_failure_message(error),
+            }
 
     def run_one(self) -> WorkerRunResult:
         """Run at most one global point, including its separate recovery receipt."""
@@ -862,7 +872,7 @@ class ParallelWorker:
                     self._active_lease = None
                 return WorkerRunResult(lease.point_id, None, False, "START_ACK_FAILED")
 
-            decision, _ = self._run_authorized(
+            decision, _, failure = self._run_authorized(
                 lease,
                 start_event_id=start_event_id,
                 start_event_type=start_event_type,
@@ -881,6 +891,7 @@ class ParallelWorker:
                 lease.point_id, status,
                 self._recover(lease, recovery_deadline),
                 "POINT_TERMINAL",
+                **({} if failure is None else failure),
             )
         except Exception:
             if lease is not None:

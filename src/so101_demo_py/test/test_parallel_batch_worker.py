@@ -539,6 +539,42 @@ def test_initial_boundary_failure_reports_bounded_structured_diagnostic(
     assert "\n" not in result.failure_message
 
 
+@pytest.mark.parametrize(
+    "mode,boundary,target",
+    [
+        (RunMode.EXECUTE, "inference_snapshot", "runtime"),
+        (RunMode.EXECUTE, "request_model", "broker"),
+        (RunMode.EXECUTE, "admit_pose", "runtime"),
+        (RunMode.EXECUTE, "execute_expert", "runtime"),
+        (RunMode.PLAN_ONLY, "plan_expert", "runtime"),
+    ],
+)
+def test_authorized_boundary_failure_reports_bounded_structured_diagnostic(
+    mode, boundary, target
+):
+    fake = Fake(mode)
+    message = "request rejected\n" + "é" * 600
+    error = RuntimeError(message)
+    if target == "broker":
+        fake.broker.raise_request = error
+    else:
+        setattr(
+            fake.runtime,
+            boundary,
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+        )
+
+    result = ParallelWorker(fake.ports()).run_one()
+
+    assert result.stopped_reason == "POINT_TERMINAL"
+    assert result.failure_boundary == boundary
+    assert result.failure_type == "RuntimeError"
+    assert result.failure_message.startswith("request rejected ")
+    assert len(result.failure_message.encode("utf-8")) <= 512
+    assert "\n" not in result.failure_message
+    assert fake.results.calls[0][2] == "AUTHORIZATION_OR_PORT_FAILURE"
+
+
 def expected_gate_summary(lease):
     return {
         "schema_version": 1,
