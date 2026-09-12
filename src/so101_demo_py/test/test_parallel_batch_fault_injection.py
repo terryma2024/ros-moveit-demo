@@ -189,6 +189,46 @@ def test_missed_broker_and_last_lease_deadlines_keep_shared_failure_reason(tmp_p
         journal.close()
 
 
+def test_last_result_cannot_preempt_a_pending_broker_recovery_deadline(tmp_path):
+    """POINTS_COMPLETE waits until the unhealthy dependency recovers or expires."""
+    clock = Clock()
+    coordinator, journal = make_coordinator(tmp_path, clock, points=("p1",))
+    coordinator.result_port = type("Passed", (), {
+        "verify": staticmethod(lambda *_args: {
+            "status": "PASSED", "sha256": "a" * 64,
+        }),
+        "discover": staticmethod(lambda *_args: None),
+    })()
+    try:
+        lease = coordinator.grant_lease("worker-01", generation=1)
+        coordinator.ack_lease(lease, request_key="pending-broker-ack")
+        coordinator.ack_attempt_started(
+            lease,
+            request_key="pending-broker-start",
+            gate_summary=gate_summary(lease),
+        )
+        coordinator.mark_broker_health(False)
+        coordinator.begin_finalizing(
+            lease, request_key="pending-broker-finalizing"
+        )
+        committed = coordinator.commit_result(
+            lease, "/sealed-p1", request_key="pending-broker-result"
+        )
+
+        assert committed["status"].value == "PASSED"
+        snapshot = coordinator.snapshot()
+        assert snapshot.points["p1"].terminal is True
+        assert snapshot.terminal_reason is None
+
+        clock.now = snapshot.broker_recovery_deadline_monotonic_s
+        snapshot = coordinator.tick()
+
+        assert snapshot.terminal_reason == "SHARED_DEPENDENCY_UNAVAILABLE"
+        assert snapshot.summary.qualification_passed is False
+    finally:
+        journal.close()
+
+
 @pytest.mark.parametrize(
     "crash_phase,expected_generation,expected_outcome",
     [

@@ -127,3 +127,56 @@ def test_terminal_health_failure_waits_for_workers_after_exact_broker_retirement
         health_recovery=terminal_failure,
     ) == (0,)
     assert supervisor.processes == ()
+
+
+def test_live_retirement_keeps_authority_when_leader_exits_before_descendants():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    broker = OwnedProcess("batch-1", "broker", 101, 101, ("broker",), 11)
+    state = {"alive": True, "members": (101, 103)}
+    signals = []
+
+    def send(pgid, value):
+        signals.append((pgid, value))
+        if len(signals) == 1:
+            state.update(alive=False, members=(103,))
+        else:
+            state["members"] = ()
+
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: broker if state["alive"] else None,
+        signal_group=send,
+        group_members_reader=lambda _pgid: state["members"],
+    )
+    supervisor._record_started(
+        broker, poll=lambda: None if state["alive"] else 17
+    )
+
+    assert supervisor.retire_owned(
+        broker, term_timeout_s=0.01, kill_timeout_s=0.01
+    ) is True
+    assert signals == [
+        (101, signal.SIGTERM),
+        (101, signal.SIGTERM),
+    ]
+    assert supervisor.processes == ()
+
+
+def test_shutdown_rejects_reused_exited_leader_without_signalling_group():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    exited = OwnedProcess("batch-1", "broker", 101, 101, ("broker",), 11)
+    reused = OwnedProcess("batch-1", "broker", 101, 101, ("unowned",), 99)
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: reused,
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+        group_members_reader=lambda _pgid: (101,),
+    )
+    supervisor._record_started(exited, poll=lambda: 17)
+
+    assert supervisor.shutdown() is False
+    assert signals == []
+    assert supervisor.processes == (exited,)
