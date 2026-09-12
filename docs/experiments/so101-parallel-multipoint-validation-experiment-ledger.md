@@ -25,7 +25,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-014
-next_experiment: EXP-026
+next_experiment: EXP-027
 ```
 
 Frozen provenance:
@@ -97,6 +97,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F29: Every live/fault experiment must commit its PLANNED/RUNNING ledger state in a ledger-only pre-run commit, then append results in a later ledger-only commit. The reviewed production CLI rejects any dirty repository path, including its own controller ledger, before creating batch evidence. Executable source remains pinned to 30f18b7dc's code tree while the clean runtime HEAD may advance by ledger-only commits. Cost if wrong: admission fails before side effects as EXP-023 did; omitting pre-registration would violate the experiment state machine.
 - Ruling F30: Live commands prepend the verified worktree package libexec directory `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py` to PATH before invoking `ros2 run`. ROS 2 can locate a libexec without PATH, but the reviewed independent provenance verifier requires `shutil.which("so101_parallel_batch")` to bind the exact installed wrapper. Cost if wrong: admission fails before side effects as EXP-024 did; invoking an unverified wrapper would violate installed-byte admission.
 - Ruling F31: Task 14 returns to the Task 11 provenance owner for a scoped TDD fix in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must derive the actual repository package_dir layout `src/so101_demo_py/src/cli/...`; it may not weaken console/config/catalog checkout fencing. Cost if wrong: mixed overlays could be accepted; retaining the impossible extra `so101_demo` segment makes every real live run fail before side effects.
+- Ruling F32: Task 14 may make the matching scoped TDD correction to the installed-editable-tree identity in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must bind `build/so101_demo_py/so101_demo` to this repository's actual `package_dir={"so101_demo": "src"}` source root `src/so101_demo_py/src`, while retaining exact module, console, egg-link, entry-point, wrapper-byte, and tree-byte checks. Cost if wrong: a stale or foreign editable tree could be accepted; retaining the impossible nested source target makes every real live run fail before resource or process side effects.
 
 ```yaml
 checkpoint_id: CP-002
@@ -771,12 +772,14 @@ next_experiment: EXP-026 is reserved for the corrected fresh execute batch after
 
 ```yaml
 experiment_id: EXP-026
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:24:24+08:00
   - status: RUNNING
     at: 2026-09-12T16:25:26+08:00
+  - status: INVALID
+    at: 2026-09-12T16:28:00+08:00
 prior_experiment: EXP-025
 hypothesis: The scoped real-layout provenance fix permits the frozen four-point execute to start while preserving all mixed-overlay fences and physical/evidence acceptance gates.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
@@ -813,18 +816,24 @@ commands:
   - command: inventory the pre-run stack to reports/process-inventory-before-026.json
     exit_code: 0
   - command: prepend the verified worktree libexec to PATH, then run the frozen four-point ros2 execute command with reports/live-small-command-026 log/exit/time evidence
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - All module, console-wrapper, and egg-link identity checks matched the exact worktree, but the execute command exited 1 in 0.37 s with PROVENANCE_INSTALLED_OVERLAY.
+  - The editable build symlink resolves to the real package_dir source root src/so101_demo_py/src; the verifier and its synthetic test incorrectly require the nonexistent nested src/so101_demo_py/src/so101_demo directory.
+  - The batch root remained absent and no Worker, Broker, container, ROS stack, simulation, plan, motion, or GPU compute task was started.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - The first scoped path fix exposed the adjacent installed-tree check carrying the same conventional-layout assumption; this is a pre-admission Task 11 verifier defect, not product behavior.
+conclusion: INVALID before resource or process side effects; no physical behavior can be counted.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p31
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f31.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f31-smoke
-decision: PENDING
-next_experiment: EXP-027 controlled plan-only fault only after this execute run is accepted
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-026.json; sha256 cfdbfdc8b7abc2bfde2ca7c07ddd67df79fd43ab08611d6a37969d7871a4707d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-026.log; sha256 13e0220e61ee07524dc6a94108fca6961e50866c4459ed6b9573e0887b772524
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-026.time; sha256 1553b91e8c61e58b23d277e175d2af9e0c42615e565d68ce5f5425987269d286
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-026.exit; sha256 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+decision: REPEAT only after the F32 installed-tree RED/GREEN, full package gate, image rebuild, dual-model smoke, and clean ledger precommit
+next_experiment: EXP-027 is reserved for the corrected fresh execute batch after the scoped fix
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
