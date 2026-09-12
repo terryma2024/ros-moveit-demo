@@ -4637,6 +4637,59 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F68 ACCEPTED-TOPOLOGY STABILITY WITH TDD
 ```
 
+```yaml
+checkpoint_id: CP-068
+last_valid_experiment: EXP-022
+current_hypothesis: Waiting for the exact accepted Worker topology to be present across stable graph samples will remove the transient missing-static-transform failure while preserving fail-closed node isolation.
+working_tree_status: clean executable source at 7847bf280cf018a8515db8d1d1a67114976d21c0; F68 build, complete package, immutable-image, and dual-model CUDA smoke gates pass
+owned_processes: NONE
+confirmed_conclusions:
+  - F68 RED pytest-TvsMIx5o reproduced premature return after two identical incomplete graph samples; focused GREEN returned the later complete topology.
+  - Runtime/Worker adjacent tests passed 173, the full parallel suite passed 1045, and the complete ordinary package gate passed 2796 with no errors, failures, or skips.
+  - The complete source hash is f0ac02faa60477a3132b5df5fab13dc5db7d78530218ce8168ad5bf5533ab1bf and source/install module hashes both equal 5e8da0702cbf3b83b649e1b79ad967dbb427926df76ecd6b7dda5c8bc9122e82.
+  - Immutable image sha256:26e992ff4bf37be75f955279f41d20b1246fb59cfaa483d1ae5628bdf44382af reports the exact F68 source hash; both smoke models qualified on CUDA.
+  - Fresh preflight observed 24 CPUs, 24.394 GiB MemAvailable, 15269 MiB GPU free, zero GPU applications or target containers, and unlocked domains 181/182/183.
+ruling: Repeat the exact frozen four-point two-Worker gate with F68 as the sole executable variable. Preserve every prior scheduling, perception, physical, recovery, visual, cleanup, model, image, config, and catalog criterion.
+retained: all F68 build, test, scratch, provenance, image, smoke, and prior experiment evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+decision: RUN EXP-069 UNCHANGED FOUR-POINT GATE
+```
+
+## EXP-069 — F68 stable accepted-topology four-point gate
+
+```yaml
+experiment_id: EXP-069
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:15:12+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:15:12+08:00
+prior_experiment: EXP-068
+hypothesis: Requiring the exact accepted Worker topology across stable graph samples before returning the point-initial observation will prevent transient missing-node invalidation and allow both Workers to consume the four-point queue.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: initial-gate graph completion waits for the unchanged exact topology predicate within the unchanged timeout. All other scheduling, perception, motion, recovery, cleanup, model, config, catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f68
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f68
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: 7847bf280cf018a8515db8d1d1a67114976d21c0
+  executable_source_tree: f0ac02faa60477a3132b5df5fab13dc5db7d78530218ce8168ad5bf5533ab1bf
+  installed_module_tree: 5e8da0702cbf3b83b649e1b79ad967dbb427926df76ecd6b7dda5c8bc9122e82
+  image_id: sha256:26e992ff4bf37be75f955279f41d20b1246fb59cfaa483d1ae5628bdf44382af
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp069.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f68 and root live-small-f68.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
