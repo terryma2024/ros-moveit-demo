@@ -32,7 +32,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-025
-next_experiment: EXP-041 is RUNNING
+next_experiment: EXP-041 is INVALID; F46 child-session establishment race precedes EXP-042
 ```
 
 Frozen provenance:
@@ -118,6 +118,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F43: Before changing the exact Worker-node inventory again, extend only the existing bounded `worker_nodes` rejection diagnostic to report deterministic expected, missing, and unexpected FQNs. Each collection is sorted, length bounded by the frozen graph limit, and contains only already-observed node names; duplicate observations remain rejected and are reported separately by a bounded duplicate list. The equality predicate and every authorization value remain unchanged. Cost if wrong: diagnostic payload could become unbounded; direct tests must prove ordering, bounds, duplicate attribution, and unchanged acceptance/rejection.
 - Ruling F44: Compress the F43 node diagnostic so the complete payload, including the fixed failure prefix, fits the existing 512-byte Worker failure-message contract for the observed graph. Omit the redundant full expected list; retain sorted `missing`, `unexpected`, `duplicates`, and `truncated`, with the same per-list and per-name bounds. Add a direct integration assertion through `_bounded_failure_message` proving no truncation for the bounded payload. Equality and authorization remain unchanged. Cost if wrong: another diagnostic run remains inconclusive; increasing the Worker failure bound or weakening graph admission is not authorized.
 - Ruling F45: Replace impossible whole-graph tuple equality with an exact stable topology predicate that matches the independently observed two-Worker graph and the design's actual stale-node isolation requirement. Require every fixed Worker node exactly once; require the four legitimate fixed internal nodes `/controller_manager`, `/move_group/moveit`, `/moveit_simple_controller_manager`, and `/robotsystem` exactly once; require exactly one node in each runtime-generated category `/move_group_private_<decimal>`, `/moveit_<decimal>`, and `/transform_listener_impl_<lower-hex>`. Reject any missing node, duplicate FQN, second member of a generated category, malformed suffix, or unknown node. Keep stable-graph sampling and all non-node gates unchanged. Cost if wrong: an old in-domain internal node could be admitted; direct tests must cover missing, duplicate-category, malformed, and unknown-node rejection before live execution.
+- Ruling F46: ProcessSupervisor.start may boundedly retry `/proc` identity reads for an alive exact Popen child while its `start_new_session=True` setsid transition is not yet visible. Retry at most eight reads with a 1 ms yield; admit only a complete identity with pgid==pid. If the child exits or never becomes a self-led group, preserve CHILD_IDENTITY, reap the exact Popen child, and never signal a foreign/unverified group. PID reuse, command/start-time identity, manifest durability, and shutdown semantics remain unchanged. Cost if wrong: a foreign group could be signalled; direct RED/GREEN tests must prove transient inherited-PGID success and persistent foreign-PGID no-signal failure.
 
 ```yaml
 checkpoint_id: CP-002
@@ -2230,12 +2231,14 @@ decision: RUN EXP-041 with the unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-041
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:30:23+08:00
   - status: RUNNING
     at: 2026-09-12T19:30:23+08:00
+  - status: INVALID
+    at: 2026-09-12T19:32:50+08:00
 prior_experiment: EXP-040
 hypothesis: The evidence-derived exact topology gate removes the impossible full-graph equality while preserving stale-node isolation, allowing two Workers to execute four unique points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation/physical/visual/cleanup invariant holds.
@@ -2254,6 +2257,24 @@ provenance:
   yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point, followed by complete per-image visual inspection.
+result: >-
+  Command exit was 1 after 17.78 s at ProcessSupervisor.start for the second Worker with
+  SupervisorError CHILD_IDENTITY. No Worker stack, point lease, reset, ATTEMPT_STARTED, or physical
+  action occurred; worker-01 recorded WORKER_NOT_READY and the owned-process manifest was empty.
+  The child was created with start_new_session=True, but start() performs two immediate /proc reads
+  without yielding for the child-side setsid transition. The observed intermittent failure after
+  many successful launches is the bounded parent/child session-establishment race. The existing
+  fail-closed cleanup reaped the exact Popen child and did not signal an unverified process group.
+cleanup: >-
+  The exact surviving Broker CID 965eef057b75883dd6218a5b12ffb072279a330c397382552cefea0fa355233d
+  was verified against the F45 image, batch/generation labels, and registered mounts, then stopped.
+  Post-stop audit found zero related process, container, GPU task, or domain owner.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 058e212070e49ee371b383763772ab1840adeca20393cf6cd76c786d3d8f3e80
+command_time_sha256: 17ec2dbc491c15e5f618fb2600ab555d13efb8c072ce3b1d393bd721977dda37
+owned_processes_sha256: c61fb2bf4c7c09b4c72b24b314a25423547fc4890246770a0933c3600c9f4621
+worker_01_result_sha256: be7278bf3c0df75b24dbaf98581c69670cac2b89297d629c68ec6e44597c1945
+conclusion: INVALID; zero countable attempts. Add a bounded alive-child retry for the start_new_session /proc identity transition, retaining exact cleanup and PID-reuse rejection, then repeat under EXP-042.
 retained: complete EXP-041 batch/reports plus all prior evidence
 archived: none
 deletion_candidates: p55/direct pytest scratch after readback; no deletion authorized
