@@ -174,6 +174,7 @@ class ParallelPerceptionRuntime:
         if self._started:
             if not self.healthy:
                 raise ModelRuntimeInfrastructureError('RESTART_REQUIRED')
+            self.health_changed(True)
             return
         self._started = True
         try:
