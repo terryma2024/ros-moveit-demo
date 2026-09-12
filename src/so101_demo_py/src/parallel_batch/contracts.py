@@ -363,6 +363,9 @@ class ParallelRuntimeConfig:
     yolo_inference_timeout_s: float
     grounded_sam_queue_timeout_s: float
     grounded_sam_inference_timeout_s: float
+    max_frame_age_s: float
+    max_rgbd_skew_s: float
+    max_tf_skew_s: float
     yolo_model_id: str
     yolo_imgsz: int
     requested_device: str
@@ -430,6 +433,8 @@ class ParallelRuntimeConfig:
             object.__setattr__(
                 self, name, _require_finite(name, getattr(self, name), minimum=0.000001)
             )
+        for name in ("max_frame_age_s", "max_rgbd_skew_s", "max_tf_skew_s"):
+            object.__setattr__(self, name, _require_finite(name, getattr(self, name)))
         for name in (
             "grounding_box_threshold",
             "grounding_text_threshold",
@@ -488,6 +493,9 @@ _FROZEN_RUNTIME_VALUES = {
     "yolo_inference_timeout_s": 20.0,
     "grounded_sam_queue_timeout_s": 10.0,
     "grounded_sam_inference_timeout_s": 60.0,
+    "max_frame_age_s": 5.0,
+    "max_rgbd_skew_s": 0.0,
+    "max_tf_skew_s": 0.0,
     "yolo_model_id": "plastic-cup-yolo11n-seg-v1",
     "yolo_imgsz": 640,
     "requested_device": "cuda",

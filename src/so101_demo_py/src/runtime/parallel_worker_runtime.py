@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
+import io
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import time
 from typing import Any, Callable
+
+import numpy as np
 
 from ..application.qualification_stack import ros2_command
 from ..core.domain import State
@@ -55,6 +61,49 @@ class SourceStampedCapture:
                 "capture source stamp", self.source_stamp_monotonic_s
             ),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class InferenceSnapshotReceipt:
+    """Immutable canonical RGB input identity exported to the Broker."""
+
+    path: Path
+    source_stamp_monotonic_s: float
+    source_stamp_ns: int
+    source_frame_id: str
+    shape: tuple[int, int, int]
+    input_sha256: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", Path(self.path))
+        object.__setattr__(
+            self,
+            "source_stamp_monotonic_s",
+            _finite_timestamp(
+                "capture source stamp", self.source_stamp_monotonic_s
+            ),
+        )
+        if type(self.source_stamp_ns) is not int or self.source_stamp_ns <= 0:
+            raise ValueError("capture source stamp ns must be positive")
+        if (
+            not isinstance(self.source_frame_id, str)
+            or not self.source_frame_id.strip()
+            or any(character.isspace() for character in self.source_frame_id)
+        ):
+            raise ValueError("capture source frame must be canonical")
+        if (
+            type(self.shape) is not tuple
+            or len(self.shape) != 3
+            or self.shape[2] != 3
+            or any(type(value) is not int or value <= 0 for value in self.shape)
+        ):
+            raise ValueError("capture shape must be positive RGB")
+        if (
+            not isinstance(self.input_sha256, str)
+            or len(self.input_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.input_sha256)
+        ):
+            raise ValueError("capture input SHA256 must be canonical")
 
 
 @dataclass(frozen=True, slots=True)
@@ -348,6 +397,7 @@ class ParallelWorkerRuntime:
         process_group: Any | None = None,
         ready_probe: Callable[[tuple[str, ...]], bool] | None = None,
         reset_point: Callable[[Any], Any] | None = None,
+        reserve_workspace: Callable[[Any, Any], Any] | None = None,
         initial_gate: Callable[[Any, Any], Any] | None = None,
         localize: Callable[[Any, Any], Any] | None = None,
         admit_pose: Callable[[Any, Any], Any] | None = None,
@@ -375,6 +425,9 @@ class ParallelWorkerRuntime:
         self._processes = process_group or OwnedProcessGroup()
         self._ready_probe = ready_probe or _required("ready_probe")
         self._reset_point = reset_point or _required("reset_point")
+        # Task 11 production always supplies the durable reservation owner.  The
+        # no-op default preserves the reusable Task 10 unit-test seam.
+        self._reserve_workspace = reserve_workspace or (lambda _lease, _receipt: True)
         self._initial_gate = initial_gate or _required("initial_gate")
         self._localize = localize or _required("localize")
         self._admit_pose = admit_pose or _required("admit_pose")
@@ -400,6 +453,9 @@ class ParallelWorkerRuntime:
         self._reset_boundaries: dict[tuple[object, ...], float] = {}
         self._numeric_receipts: dict[
             tuple[object, ...], NumericEvidenceReceipt
+        ] = {}
+        self._inference_receipts: dict[
+            tuple[object, ...], InferenceSnapshotReceipt
         ] = {}
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
@@ -511,6 +567,44 @@ class ParallelWorkerRuntime:
         self._captured.append(path)
         return captured
 
+    def _capture_inference_rgb(
+        self, lease: Any, boundary: float
+    ) -> InferenceSnapshotReceipt:
+        boundary = _finite_timestamp("capture boundary", boundary)
+        key, point_root = self._point_root(lease)
+        path = point_root / "perception/input/rgb.npy"
+        self._assert_safe_path(path)
+        if path.exists() or path.is_symlink():
+            raise RuntimeError("inference RGB would overwrite point evidence")
+        captured = self._capture_rgb(path, boundary)
+        if type(captured) is not InferenceSnapshotReceipt:
+            raise RuntimeError("inference RGB lacks an immutable snapshot receipt")
+        self._validate_regular_receipt_path(
+            captured.path, path, label="inference RGB"
+        )
+        info = path.stat()
+        if stat.S_IMODE(info.st_mode) != 0o400 or info.st_uid != os.getuid():
+            raise RuntimeError("inference RGB is not immutable and Worker-owned")
+        if captured.source_stamp_monotonic_s <= boundary:
+            raise RuntimeError("inference RGB source stamp is not newer than boundary")
+        payload = path.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != captured.input_sha256:
+            raise RuntimeError("inference RGB hash does not match its receipt")
+        try:
+            rgb = np.load(io.BytesIO(payload), allow_pickle=False)
+        except (OSError, ValueError) as error:
+            raise RuntimeError("inference RGB is not canonical NPY") from error
+        if (
+            rgb.dtype != np.uint8
+            or tuple(rgb.shape) != captured.shape
+            or rgb.ndim != 3
+            or rgb.shape[2] != 3
+        ):
+            raise RuntimeError("inference RGB shape or dtype does not match its receipt")
+        self._captured.append(path)
+        self._inference_receipts[key] = captured
+        return captured
+
     def _capture_numeric(
         self, lease: Any, localized: Any, boundary: float
     ) -> NumericEvidenceReceipt:
@@ -557,12 +651,39 @@ class ParallelWorkerRuntime:
             boundary = _finite_timestamp("reset boundary", boundary)
         except ValueError as error:
             raise RuntimeError("reset receipt lacks a source-frame boundary") from error
+        if self._reserve_workspace(lease, receipt) is not True:
+            raise RuntimeError("point workspace was not durably reserved")
         self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
         self._reset_boundaries[key] = boundary
         return receipt
 
+    def inference_snapshot(self, lease: Any) -> InferenceSnapshotReceipt:
+        """Return only the post-reset snapshot bound to this exact lease."""
+
+        key = self._lease_key(lease)
+        try:
+            receipt = self._inference_receipts[key]
+        except KeyError as error:
+            raise RuntimeError("lease identity has no inference snapshot") from error
+        if (
+            not receipt.path.is_file()
+            or receipt.path.is_symlink()
+            or stat.S_IMODE(receipt.path.stat().st_mode) != 0o400
+            or hashlib.sha256(receipt.path.read_bytes()).hexdigest()
+            != receipt.input_sha256
+        ):
+            raise RuntimeError("inference snapshot identity changed")
+        return receipt
+
     def point_initial_gate(self, lease: Any, reset_receipt: Any):
-        return self._initial_gate(lease, reset_receipt)
+        gate = self._initial_gate(lease, reset_receipt)
+        key = self._lease_key(lease)
+        try:
+            boundary = self._reset_boundaries[key]
+        except KeyError as error:
+            raise RuntimeError("point gate lacks a reset boundary") from error
+        self._capture_inference_rgb(lease, boundary)
+        return gate
 
     def reset_and_validate_point(self, lease: Any):
         receipt = self.reset_point(lease)
@@ -576,6 +697,18 @@ class ParallelWorkerRuntime:
             raise RuntimeError("point localization lacks a reset boundary") from error
         if key in self._accepted_poses:
             raise RuntimeError("point pose was already admitted")
+        if getattr(broker_result, "perception_chain_complete", False) is True:
+            if getattr(broker_result, "perception_terminal", False) is True:
+                return broker_result
+            localized = getattr(broker_result, "localized", None)
+            numeric = self._capture_numeric(lease, localized, boundary)
+            self._accepted_poses[key] = broker_result
+            self._numeric_receipts[key] = numeric
+            if self.run_mode is RunMode.PLAN_ONLY:
+                if self._publish_pose(broker_result) is False:
+                    raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+                self._published_pose_keys.add(key)
+            return broker_result
         localized = self._localize(lease, broker_result)
         numeric = self._capture_numeric(lease, localized, boundary)
         admitted = self._admit_pose(lease, localized)
@@ -596,6 +729,13 @@ class ParallelWorkerRuntime:
     def plan_expert(self, lease: Any, admitted: Any):
         if self.run_mode is not RunMode.PLAN_ONLY:
             raise RuntimeError("expert planning requires plan_only")
+        if getattr(admitted, "perception_terminal", False) is True:
+            status = (
+                ValidationStatus.VALIDATION_FAILED
+                if getattr(admitted, "disposition", None) == "FAILED"
+                else ValidationStatus.VALIDATION_INVALID
+            )
+            return RuntimeDecision(status, getattr(admitted, "reason", None))
         key = self._lease_key(lease)
         if (
             self._accepted_poses.get(key) is not admitted
@@ -650,6 +790,17 @@ class ParallelWorkerRuntime:
     def execute_expert(self, lease: Any, admitted: Any):
         if self.run_mode is not RunMode.EXECUTE:
             raise RuntimeError("expert execution requires execute")
+        if getattr(admitted, "perception_terminal", False) is True:
+            status = (
+                AttemptStatus.FAILED
+                if getattr(admitted, "disposition", None) == "FAILED"
+                else AttemptStatus.INVALID
+            )
+            return RuntimeDecision(
+                status,
+                getattr(admitted, "reason", None),
+                physical_action_proven_absent=True,
+            )
         reset_epoch = getattr(admitted, "reset_epoch", None)
         if reset_epoch is None:
             raise RuntimeError("accepted pose lacks reset epoch")

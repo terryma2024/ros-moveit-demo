@@ -623,18 +623,31 @@ class ParallelWorker:
         self._ready_after_recovery = True
         return True
 
-    def _run_authorized(self, lease):
+    def _run_authorized(
+        self,
+        lease,
+        *,
+        start_event_id=None,
+        start_event_type=None,
+        reset_epoch=None,
+    ):
         action_may_have_started = False
         try:
             if self._mode is RunMode.DRY_RUN:
                 decision = self._boundary(
                     lambda current: self._runtime.scheduler_trace(current))
             else:
+                snapshot = self._boundary(
+                    lambda current: self._runtime.inference_snapshot(current))
                 chain = self._boundary(
                     lambda current: self._broker.request_model(
                         current,
                         ExecutionKind.ATTEMPT if self._mode is RunMode.EXECUTE
                         else ExecutionKind.VALIDATION,
+                        snapshot=snapshot,
+                        start_event_id=start_event_id,
+                        start_event_type=start_event_type,
+                        reset_epoch=reset_epoch,
                     ))
                 admitted = self._boundary(
                     lambda current: self._runtime.admit_pose(current, chain))
@@ -722,15 +735,19 @@ class ParallelWorker:
             start_wait_started = self._now()
             try:
                 if self._mode is RunMode.EXECUTE:
+                    start_event_id = f"attempt-start-{lease.attempt_id}"
+                    start_event_type = "ATTEMPT_STARTED"
                     start_call = lambda: self._coordinator.ack_attempt_started(
                         lease,
-                        request_key=f"attempt-start-{lease.attempt_id}",
+                        request_key=start_event_id,
                         gate_summary=gate_summary,
                     )
                 else:
+                    start_event_id = f"validation-start-{lease.attempt_id}"
+                    start_event_type = "VALIDATION_STARTED"
                     start_call = lambda: self._coordinator.ack_validation_started(
                         lease,
-                        request_key=f"validation-start-{lease.attempt_id}",
+                        request_key=start_event_id,
                         gate_summary=gate_summary,
                     )
                 lease = self._request_ack(
@@ -748,7 +765,12 @@ class ParallelWorker:
                     self._active_lease = None
                 return WorkerRunResult(lease.point_id, None, False, "START_ACK_FAILED")
 
-            decision, _ = self._run_authorized(lease)
+            decision, _ = self._run_authorized(
+                lease,
+                start_event_id=start_event_id,
+                start_event_type=start_event_type,
+                reset_epoch=gate_summary.get("reset_epoch"),
+            )
             try:
                 lease, status, recovery_deadline = self._seal_and_commit(
                     lease, decision, authorized=authorized)

@@ -298,6 +298,9 @@ def test_relative_input_path_rejects_dot_component():
         ("heartbeat_timeout_s", 6.0),
         ("ros_domain_ids", [181, 182, 184]),
         ("broker_queue_capacity_per_model", 4),
+        ("max_frame_age_s", 4.0),
+        ("max_rgbd_skew_s", 0.01),
+        ("max_tf_skew_s", 0.01),
         ("min_available_gpu_gib", 7),
     ],
 )
