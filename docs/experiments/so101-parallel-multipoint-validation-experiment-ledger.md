@@ -4572,12 +4572,14 @@ decision: RUN EXP-068 UNCHANGED FOUR-POINT GATE
 
 ```yaml
 experiment_id: EXP-068
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:01:53+08:00
   - status: RUNNING
     at: 2026-09-13T03:02:54+08:00
+  - status: INVALID
+    at: 2026-09-13T03:08:54+08:00
 prior_experiment: EXP-067
 hypothesis: After exact Broker ownership validation and successful Docker stop, bounded polling of that exact container ID will observe auto-removal and allow the otherwise-complete four-point batch to qualify.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4600,6 +4602,39 @@ preflight: reports/preflight-exp068.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f67 and root live-small-f67.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+result: >-
+  INVALID — exit 1 after 182.28 seconds. task_start and cup_test_forward_5cm PASSED on
+  worker-02; their four original-resolution RGB images passed visual inspection and both recovery
+  receipts succeeded. worker-01 failed closed before authorization because its temporarily stable
+  graph was missing /so101_base_to_camera_link; physical action was proven absent and recovery
+  succeeded. That point was safely reissued and passed, but worker-02 then reached K=2 while
+  worker-01 had stopped, so sample_05_near_center and sample_14_far_right remained UNRUN and the
+  batch was nonterminal. The F67 boundary itself passed: all cleanup actions, process cleanup, and
+  exact-ID container cleanup succeeded, and later readback found no related process, container,
+  GPU task, or domain claim.
+retained: complete live-small-f67 tree, command-068 log/time/exit, visual report, root-cause report, cleanup audit, MuJoCo log, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-067
+last_valid_experiment: EXP-022
+current_hypothesis: The initial-gate graph observer must wait within its existing timeout for the exact accepted Worker topology to become stable, not merely for any incomplete graph snapshot to repeat twice.
+working_tree_status: clean executable source at 26f69805ff29c4cc3b4d7d70d142fba5bd2f2f44; EXP-068 closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - F67 passed its exact cleanup boundary: exact pre-stop ownership remained enforced, Docker stop succeeded, exact-ID removal was observed, and container_cleanup=true.
+  - worker-01 observed a graph missing only /so101_base_to_camera_link at authorization time and correctly failed closed before physical action.
+  - The same graph snapshot included all controller, MoveIt, MuJoCo, robot-state, camera-frame, and legitimate internal nodes, proving a startup visibility race rather than a stale-node admission.
+  - worker-02 completed two unique points and both physical/visual results passed; all three recovery receipts succeeded.
+  - Two points remained UNRUN because the only continuing Worker reached K=2; aggregate terminality and coordinator completion correctly remained false.
+  - No related process, container, GPU application, or domain claim remained after exit.
+ruling: TDD one bounded F68 observation change. Continue graph sampling only within the already-frozen initial-gate timeout until the exact accepted topology is present for stable samples; retain exact topology rejection, duplicate/unknown-node rejection, all other gate predicates, and fail-closed timeout behavior.
+retained: EXP-068 runtime, visual, root-cause, cleanup, MuJoCo, command, and all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F68 ACCEPTED-TOPOLOGY STABILITY WITH TDD
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
