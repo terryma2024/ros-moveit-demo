@@ -32,13 +32,14 @@ confirmed_conclusions:
   - EXP-044 proved the F47 gate receipt is correct but exposed the complementary production reset-receipt identity omission before ATTEMPT_STARTED; F48 is limited to binding that reset receipt to the same seven exact lease fields (CP-028).
   - F48 binds the production reset receipt to all seven exact lease identity fields while preserving reset and Worker gate semantics; its fresh complete ordinary gate and immutable dual-model image passed (CP-029).
   - EXP-045 crossed both exact lease-bound reset/gate receipts and durable ATTEMPT_STARTED, then exposed deterministic insecure-mode rejection in Broker input mirror intermediates; F49 preserves the Broker security gate and fixes the producer path modes (CP-030).
+  - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-031
-next_experiment: EXP-046 F49-qualified four-point two-Worker execute
+latest_checkpoint: CP-032
+next_experiment: F50 formal RED/GREEN for bounded post-authorization failure diagnostics, followed by a fresh complete gate and immutable image
 ```
 
 Frozen provenance:
@@ -2670,12 +2671,14 @@ decision: RUN EXP-046 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-046
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T21:44:57+08:00
   - status: RUNNING
     at: 2026-09-12T21:48:44+08:00
+  - status: INVALID
+    at: 2026-09-12T21:54:31+08:00
 prior_experiment: EXP-045
 hypothesis: F49 exact 0700 mirror construction allows both authorized perception requests through the unchanged Broker security gate and permits four unique points to execute.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
@@ -2699,10 +2702,62 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f49 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f49 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
 acceptance: The complete frozen Task 14 live-small gate; INVALID infrastructure outcomes remain non-qualifying and receive a fresh batch ID after root-cause correction.
-result: PENDING
-retained: PENDING
+result: >-
+  Command exit was 1 after 44.52 seconds. Both Workers received distinct leases, passed reset and
+  point-initial gates, durably ACKed ATTEMPT_STARTED, and produced immutable RGB plus Broker mirror
+  NPY evidence. Every directory in both Broker mirror chains is owner 1000:1000 mode 0700 and both
+  linked RGB inputs passed the producer identity/hash checks, proving F49 fixed EXP-045's exact
+  defect without relaxing the Broker. Both requests then sealed INVALID/PERCEPTION_INFRA_ERROR
+  within about 0.08 seconds of ATTEMPT_STARTED, before any model result, pose admission, plan,
+  trajectory, or controller action. Existing post-authorization Worker handling deliberately maps
+  every caught exception to the same conservative attempt result and discards its boundary/type/text;
+  therefore current durable evidence cannot distinguish Broker authentication, authorization,
+  frame validation, or RPC response rejection. Both physical_action_proven_absent values are true,
+  the two started attempts consume one K unit per Worker, and the remaining points were never leased.
+cleanup: >-
+  Exact CID 022dc3b80343821a98bacc59e36016ad6c99c23ff5155b4ec27f6b57b3d66101
+  was verified against immutable F49 image, exact batch/generation labels, and the four registered
+  mounts, then stopped; delayed --rm removal was independently read back. Final audit found empty
+  coordinator/Worker ownership manifests, no related process or container, no GPU compute task, and
+  no same-UID domain 181-183 owner. The MuJoCo log was moved without deletion to
+  reports/MUJOCO_LOG-EXP046.txt.
+visual_sha256:
+  cup_test_forward_5cm: de0090ccb960d7f6c7d855b6c33c4c3ceacc3eaf3f640e04e455c25a977f9e89
+  task_start: 5a772f4ffcd9d4880ae8bb9c49b7df42edee29f9691f69f7bdf083e1fba2dce7
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: f74ecadd840003768d0b87518c237a3396ea76e22077f2a40f9c22bc074ad2e1
+command_time_sha256: 5c425bdeb88b87bf21e2dda0423b9c76bb9590f52e7b8f0698c44cb683bda989
+aggregate_sha256: 556aaafed719472b8be5f06faf8bc804e4a4a080933a3f579f3e46488eace72d
+coordinator_aggregate_sha256: 9de23b73a53c3ed9dabd4cf167b831a4c2acb2abfb500315a16f4268f5d5b9f5
+worker_01_result_sha256: 85c5236332e7d1fbe47c921384cf49c1dc89892456dced5829c93cde5130257c
+worker_02_result_sha256: 4b2eb091d2844f41c40732a3671ca32cc81141ea251f956ce0431055de7371ae
+mujoco_log_sha256: eaa4dcfaca52a1effb1ad2a2e8c513f479c0e7671d3797673b96f6197b20d860
+post_cleanup_sha256: dd9cbea1085fd24ab22eb48f1a663f0df47d90628e2ce6c02a9149c0e624ab97
+conclusion: INVALID infrastructure result after two durable ATTEMPT_STARTED records; zero physical actions. Add bounded post-authorization boundary/type/message evidence without changing the conservative result, then repeat with a new batch identity after full qualification.
+retained: complete EXP-046 batch/reports, two visually inspected immutable initial RGB frames and NPY mirrors, moved MuJoCo log, all cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none pending run
+deletion_candidates: p61-p64 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-032
+last_valid_experiment: EXP-022
+current_hypothesis: A bounded phase-specific diagnostic on the already-conservative post-authorization failure path will identify the immediate request-layer defect without changing authorization, result status, recovery, or physical behavior.
+working_tree_status: ledger-only EXP-046 result and F50 ruling after clean executable source 1dd480a2fbef595f7a95cce81d8c779d5f22de1b
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-046 crossed both reset/gate identity checks and durable ATTEMPT_STARTED on two distinct points; both attempts ended before pose admission with physical_action_proven_absent=true.
+  - F49 is proven in production: all fourteen created intermediate/leaf directories across both Broker input paths are exact mode 0700, and each immutable NPY mirror has the sealed content hash.
+  - Both failures occurred immediately after authorization entered EXECUTING. The Broker produced no model result, while current _run_authorized catches and discards every exception before returning the generic conservative decision.
+  - Both original-resolution initial frames were completely inspected and show correct cup placement, canonical reset posture, and no visible contact or penetration.
+  - Exact Broker cleanup completed and no related owned process, running batch container, GPU compute task, or domain owner remained.
+open_risks:
+  - The exact request-layer exception is not recoverable from EXP-046 because the production diagnostic seam discards it by design.
+ruling: F50 may only add a fixed phase label plus bounded exception type/message to WorkerRunResult when _run_authorized catches an exception. It must preserve the existing INVALID/INDETERMINATE decision, AUTHORIZATION_OR_PORT_FAILURE reason, safe-stop ordering, sealing, commit, recovery, authorization, timeouts, and all physical/model criteria. Formal RED/GREEN must cover inference_snapshot, request_model, admit_pose, and execute/plan boundaries and prove 512-byte single-line bounding.
+retained: complete EXP-046 evidence, cleanup audit, all F49 evidence, invalid wrapper outputs, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p64 after readback; no deletion authorized
+decision: IMPLEMENT F50 DIAGNOSTICS WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
