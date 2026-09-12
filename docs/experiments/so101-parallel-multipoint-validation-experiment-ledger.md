@@ -5740,10 +5740,12 @@ decision: ADVANCE TO SYNCHRONIZED CONTROLLED PLAN-ONLY FAULT GATE
 
 ```yaml
 experiment_id: EXP-085
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:52:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T05:53:11+08:00
 prior_experiment: EXP-084
 hypothesis: Exact worker-01 TERM will remain request-local to healthy Broker g1, and subsequent exact Broker g1 TERM will pause grants and recover to healthy ready g2 without physical action, duplicate lease, or K over-debit.
 single_variable: Change only execute mode to the approved synchronized plan-only Worker/Broker TERM sequence; source, install, image, config, catalog, models, N=2, K=2, and four-point selection remain fixed from EXP-084.
@@ -5761,6 +5763,7 @@ fault_sequence:
   - require journal unhealthy/healthy transition and ready model-loaded broker-g2 before judging
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: 82654b38f660079a4824c7ba88c22f0cd1b3a3a9
   preregistration_base_commit: b7382569714b1dac56df11fdfa0cac94795f23e0
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
