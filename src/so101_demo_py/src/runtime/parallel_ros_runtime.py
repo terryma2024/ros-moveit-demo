@@ -626,6 +626,7 @@ def observe_parallel_initial_gate(
                 and all(future.done() for future in cancel_futures.values())
                 and scene_future.done()
                 and stable_graph_samples >= 2
+                and ParallelRosRuntimePorts.worker_node_inventory_matches(graph)
             ):
                 break
         else:
@@ -641,9 +642,10 @@ def observe_parallel_initial_gate(
                 missing.append("planning_scene")
             if stable_graph_samples < 2:
                 missing.append("stable_graph")
-            raise RuntimeError(
-                "POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:" + ",".join(missing)
-            )
+            if missing:
+                raise RuntimeError(
+                    "POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:" + ",".join(missing)
+                )
         for future in cancel_futures.values():
             response = future.result()
             if response is None:
