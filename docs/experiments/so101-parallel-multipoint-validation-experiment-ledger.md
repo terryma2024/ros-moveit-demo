@@ -102,6 +102,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F33: Domain-pool preflight and cleanup must stop controller-created ROS 2 discovery daemons for domains 181-183 and verify those domains with `--no-daemon` or the production same-UID `/proc` probe before a live run. The three daemons found by EXP-027 were created at the Task 14 preflight timestamp and are task-owned diagnostic residue, not Worker processes or external users. Cost if wrong: stopping a foreign daemon would disturb unrelated discovery; retaining our own daemons makes every resource admission fail before batch-root creation.
 - Ruling F34: Task 14 returns narrowly to the Task 11/12 Broker lifecycle seams and their direct tests. Initial model-backed Broker readiness must use the frozen 90-second Broker recovery/startup budget instead of the 5-second steady-state heartbeat-loss budget. The Docker launch must publish a private batch/generation-specific cidfile, and cleanup/recovery must verify that exact container's immutable image, labels, and batch-specific mounts before stopping it; aggregate cleanup cannot pass while that container remains. Cost if wrong: an unrelated container could be stopped, or a detached Broker/GPU process could survive while the batch falsely reports cleanup complete; retaining the current behavior guarantees cold-start timeout and already produced both defects in EXP-028.
 - Ruling F35: Task 14 returns narrowly to the Task 9 Worker failure-reporting seam and Task 11 process supervisor, with direct tests only. A Worker that catches a reset or initial-gate exception must emit a bounded, structured local result identifying the failed boundary without changing its conservative `INITIAL_GATE_FAILED` outcome. If a supervised process exits between a first `poll()==None` observation and `/proc` identity readback, the supervisor must re-poll once: a now-terminal exact child follows the existing exit/group-survivor path, while a still-running absent identity remains `OWNED_PROCESS_ABSENT`; PID mismatch remains fatal. Cost if wrong: exception text could leak unbounded data or PID reuse could be accepted; retaining current behavior makes live failures unauditable and replaces the original Worker result with a supervisor traceback, as EXP-029 demonstrated.
+- Ruling F36: Task 14 returns narrowly to the existing MuJoCo paused-evidence acquisition and Worker-owned process-tree seams, with direct tests. A newly joined volatile sensor-data subscriber must retry the already-authorized idempotent `pause(True)` snapshot request within the existing timeout until it receives a fresh authoritative paused frame; it may not unpause or advance physics. Worker child-list mutation and manifest publication must be serialized across the main and authenticated control threads so cleanup cannot collide on or reorder one PID-named temporary publication. The supervisor may boundedly yield and re-poll only while the exact owned child has become absent between observations; a still-nonterminal result remains fatal and PID mismatch remains fatal. Cost if wrong: retry could mask a failed pause or concurrent cleanup could republish stale ownership; retaining current behavior makes every post-reset watermark read fail and produced manifest/temp plus exit-observation races in EXP-030.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1120,12 +1121,14 @@ next_experiment: EXP-030 is reserved for the fresh F35-corrected execute repeat;
 
 ```yaml
 experiment_id: EXP-030
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T17:12:52+08:00
   - status: RUNNING
     at: 2026-09-12T17:12:52+08:00
+  - status: INVALID
+    at: 2026-09-12T17:19:10+08:00
 prior_experiment: EXP-029
 hypothesis: F35 preserves the true initial-boundary outcome and closes the process-exit observation race, allowing the otherwise unchanged four-point execute either to reach authorization or to fail with an exact Worker-local diagnostic and normal cleanup.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass. If an initial boundary still rejects, worker-run-results.json identifies it without a controller traceback.
@@ -1166,12 +1169,17 @@ commands:
   - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-030.json and reports/domain-preflight-before-030.json
     exit_code: 0
   - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with fresh EXP-030 batch/root and reports/live-small-command-030 log/exit/time evidence
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Admission and immutable Broker startup passed. Both isolated stacks reached READY; worker-01 leased task_start and worker-02 leased cup_test_forward_5cm, with no duplicate lease and no ATTEMPT_STARTED event.
+  - Both exact Worker result files retained failure_boundary=reset_point, failure_type=RuntimeError, and failure_message="fresh paused atomic MuJoCo evidence unavailable". All four points remain UNRUN and zero outcomes are countable.
+  - Source inspection confirms the reset transaction leaves physics paused, then reset_point creates a new sensor-data/volatile observer and makes only one pause snapshot request. The publisher is likewise volatile and snapshot publication is one-shot; a matched subscriber can miss that frame and has no retained sample to read.
+  - The authenticated stop request and main Worker finally block concurrently called shutdown_owned. Both publications used the same PID-derived temporary manifest name, producing FileExistsError. During the resulting exit window, the supervisor's immediate second poll still returned nonterminal after the exact /proc identity disappeared and raised OWNED_PROCESS_ABSENT.
+  - Final external readback found empty coordinator and Worker ownership manifests, no temporary manifest, no exact Broker container, no GPU compute application, and no node in domains 181-183. The task-created MuJoCo warning file was retained as reports/MUJOCO_LOG-EXP030.txt.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - This is an initialization/evidence-delivery and concurrent-cleanup defect before physical authorization, not a trustworthy point outcome. The identical independent Worker failures and publication QoS/service behavior explain the common reset watermark failure.
+  - Serializing Worker cleanup is required in addition to collision-free temporary names, because concurrent snapshots could otherwise replace a newer empty manifest with stale ownership. A bounded supervisor yield remains fail-closed but allows waitpid state to catch up after /proc disappearance.
+conclusion: INVALID; zero countable attempts. Apply F36 with RED/GREEN evidence, complete ordinary package gate, installed provenance, rebuilt immutable image, fresh dual-model smoke, and then repeat the unchanged four-point execute under EXP-031.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p37
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f35.json
@@ -1179,8 +1187,26 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f35-smoke2
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-030.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-030.json
-decision: PENDING
-next_experiment: EXP-031 controlled plan-only fault only after this execute run is accepted
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-030.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f35/coordinator/events/segment-00000000000000000001.journal
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f35/coordinator/aggregate_results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f35/workers/worker-01/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f35/workers/worker-02/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-030-cleanup-audit.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP030.txt
+hashes:
+  live_command_log_sha256: 225fedc66549f129c90b8b8881ed87cbac113f2bbafc92fbb3eecd4ec5310c15
+  journal_sha256: 3fce7c4f870a4c0f351781269a8d51300adf46bf4d8223ee90b807cd78c6ac84
+  coordinator_aggregate_sha256: a38d9911655254fdbabd21aa20d155ea6af12e410b2c6cac32174811ca8b4947
+  worker_01_result_sha256: c4d5bb7624b9a6e1748779c96a2c55d4bf80f755bce562da1ad2f2e7406684ee
+  worker_02_result_sha256: e17a02f779c0133d7b833f4d16af17eb34dc1945c423563a490945836ba0de77
+  cleanup_audit_sha256: 4ddb6bd1afe2595d2b9a3e40e4a58d5466f372372909c0c2c6cff651aa151a5e
+  mujoco_warning_log_sha256: 7c2dc647f117c4e39a125bfd2c9a47993d8a50a173bd91282da28f0958811a38
+retained: complete live-small-f35 tree, command/preflight/cleanup reports, journal/projections, Worker diagnostics, ROS logs, container cidfile, and relocated MuJoCo warning log
+archived: none
+deletion_candidates: scratch p32 through p37, prior direct-pytest scratch, and the failed f35 smoke report-only attempt remain candidates; nothing was deleted
+decision: REPEAT after F36 RED/GREEN, ordinary package gate, installed provenance, image rebuild, and dual-model smoke
+next_experiment: EXP-031 is reserved for the F36-corrected execute repeat; controlled plan-only fault advances to EXP-032 and remains blocked until execute acceptance
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
