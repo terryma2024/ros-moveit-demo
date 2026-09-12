@@ -5008,12 +5008,14 @@ deletion_candidates: registered scratch trees only; no deletion authorized
 
 ```yaml
 experiment_id: EXP-075
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:07:00+08:00
   - status: RUNNING
     at: 2026-09-13T04:07:00+08:00
+  - status: VALID
+    at: 2026-09-13T04:13:26+08:00
 prior_experiment: EXP-074
 hypothesis: With reply disconnects contained, exact worker-01 TERM will not kill Broker g1; after Worker recovery is observed, exact Broker g1 TERM will pause grants and recover to a ready healthy g2 without K over-debit.
 mode: plan_only; no trajectory execution or physical action
@@ -5029,6 +5031,77 @@ fault_sequence:
   - require journal unhealthy/healthy transition and ready broker-g2 before judging
 success_criteria: Exact injectors exit 0; all physical statuses UNRUN; old Worker/request fenced; non-target Worker continues; Broker g1 survives Worker disconnect, explicit g1 TERM leads to healthy ready g2; no double lease or K over-debit; cleanup/residual audit passes.
 provenance: F70 source 86eaa5f7db650b914361cbadddb4a8041b56b87f, source tree 91e99d8d11302b3946b834834f3a1984c247fc2792e200e07a730f18c51e326a, image sha256:16fccaba3c3b679bf78858f1b9b5a15022bdbe0512133a6d1e7c0b00eb857bc7
+result: >-
+  Both exact TERM injectors exited 0. Worker-01 generation 1 was fenced and recovered while
+  Broker generation 1 remained healthy. Exact Broker generation-1 termination then produced journal
+  health transitions false at sequence 41 and true at sequence 63, followed by ready generation 2.
+  No lease was granted inside that unhealthy window; each stable Worker slot received exactly two
+  unique points despite reaching generation 3. All four physical statuses remained UNRUN, the
+  non-target Worker continued, coordinator and batch cleanup completed, and the exact residual audit
+  found no related process, container, GPU compute application, domain claim, or owned manifest entry.
+result_report: reports/result-EXP075.json
+cleanup_audit: reports/post-075-cleanup-audit.json
+retained: complete live-fault-f70 tree and all command, injector, MuJoCo, result, cleanup, and prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-075
+last_valid_experiment: EXP-075
+current_hypothesis: The unchanged qualified F70 executable and immutable runtime can complete every frozen catalog point once in one two-Worker batch while preserving K=10, isolation, recovery, evidence sealing, and cleanup invariants.
+working_tree_status: clean executable F70 source at 86eaa5f7db650b914361cbadddb4a8041b56b87f; only this EXP-075 closure and EXP-076 preregistration are pending documentation changes
+owned_processes: NONE
+confirmed_conclusions:
+  - The exact F70 package, parallel-suite, install, immutable-image, dual-model smoke, four-point execute, and synchronized fault gates are valid.
+  - Worker termination is request-local to Broker; explicit Broker termination yields an observable unhealthy pause and ready replacement.
+  - No lease is granted or K debited during the Broker unhealthy window; Worker generation changes do not reset K.
+ruling: Admit one immutable full-catalog execute batch with two Workers and K=10. Source, install, config, catalog, models, and image remain byte-identical to EXP-074/075; only selection, N/K, batch ID, and evidence root change.
+retained: EXP-075 and all prior evidence
+archived: none
+deletion_candidates: all registered pytest/build scratch trees; no deletion authorized
+decision: RUN EXP-076 FULL 20-POINT QUALIFICATION
+```
+
+## EXP-076 — F70 immutable full 20-point qualification
+
+```yaml
+experiment_id: EXP-076
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T04:13:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T04:13:26+08:00
+prior_experiment: EXP-075
+hypothesis: One immutable F70 batch will execute and seal all 20 frozen catalog points exactly once with dynamic two-Worker scheduling, K=10 per stable slot, YOLO-first perception, complete recovery, and no residual state.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-20-20260913-v1-f70
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f70
+worker_count: 2
+max_points_per_worker: 10
+selection: complete frozen 20-point catalog; no --point-id filter
+allowed_differences_from_exp074: complete selection instead of four-point selection; K=10 instead of K=2; batch ID and evidence root
+preflight:
+  related_processes: none
+  containers: none
+  gpu_compute_applications: none
+  host_memory_available: 24 GiB
+  gpu_memory_free: 15272 MiB
+provenance:
+  executable_source_commit: 86eaa5f7db650b914361cbadddb4a8041b56b87f
+  executable_source_tree: 91e99d8d11302b3946b834834f3a1984c247fc2792e200e07a730f18c51e326a
+  installed_module_tree: ff2679db7581928535b3b320539ea14e65d9deaea01ee379bee88c51e672c03d
+  image_id: sha256:16fccaba3c3b679bf78858f1b9b5a15022bdbe0512133a6d1e7c0b00eb857bc7
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: 33374bb01c31f342e6a2f3d13943c91e74d62165a5a901678216bbb18ffa9a64
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: All 20 points have unique leases and sealed PASSED attempts in this batch; K=10 per Worker; coverage_complete, execution_complete, batch_cleanup_complete, and qualification_passed are true; every point passes initial, perception, planning/controller, final physical, attachment/contact/support/retreat, hash, and fresh visual gates; no residual owned state.
+failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate/missing point, K violation, evidence/hash mismatch, cleanup failure, or qualification false makes this batch non-qualifying; after a required fix, rerun all 20 points under a new batch ID.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
