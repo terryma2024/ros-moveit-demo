@@ -27,6 +27,10 @@ class WorkerError(RuntimeError):
     """A Worker port or fencing contract failed closed."""
 
 
+class FaultInjectionAbort(BaseException):
+    """Escape normal recovery handlers to emulate abrupt process termination."""
+
+
 @dataclass(frozen=True)
 class WorkerRunResult:
     """One scheduler pass without promoting validation to physical evidence."""
@@ -181,7 +185,11 @@ class ParallelWorker:
 
     def _fault(self, boundary, phase):
         if self._fault_hook is not None:
-            self._fault_hook(boundary, phase)
+            try:
+                self._fault_hook(boundary, phase)
+            except BaseException as error:
+                raise FaultInjectionAbort(
+                    f"FAULT_INJECTED: {boundary}:{phase}") from error
 
     def _now(self) -> float:
         with self._clock_lock:

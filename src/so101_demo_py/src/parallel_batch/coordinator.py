@@ -267,8 +267,28 @@ class BatchCoordinator:
                     or existing.payload.get('identity') != identity):
                 raise ValueError('REQUEST_KEY_CONFLICT')
             return
+        delta = {}
+        point = self._state['points'].get(lease.point_id)
+        if (self.request.run_mode is RunMode.EXECUTE
+                and point is not None
+                and not point['terminal']
+                and point['active_attempt'] is None):
+            point = deepcopy(point)
+            blocked_by = point['blocked_by']
+            point.update(
+                status=PointStatus.INDETERMINATE,
+                terminal=True,
+                blocked_by=None,
+            )
+            delta['points'] = {lease.point_id: point}
+            worker = self._state['workers'].get(blocked_by)
+            if worker is not None and worker.get('invalid_point') == lease.point_id:
+                worker = deepcopy(worker)
+                worker['invalid_point'] = None
+                delta['workers'] = {blocked_by: worker}
         self._emit(
-            'LATE_RESULT_REJECTED', {}, request_key=key, identity=identity)
+            'LATE_RESULT_REJECTED', delta, request_key=key, identity=identity)
+        self._evaluate()
 
     def _audit_late_seals(self, events):
         grants = {}

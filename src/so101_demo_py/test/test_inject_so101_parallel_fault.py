@@ -44,6 +44,10 @@ def worker_command(root, worker_id="worker-01"):
 
 def write_manifest(root, entries, *, batch_id="batch-1", extra=None):
     root.mkdir(parents=True, exist_ok=True)
+    current = root
+    while current != TASK_ROOT / "scratch":
+        current.chmod(0o700)
+        current = current.parent
     document = {
         "schema_version": 1,
         "batch_id": batch_id,
@@ -51,9 +55,9 @@ def write_manifest(root, entries, *, batch_id="batch-1", extra=None):
     }
     if extra:
         document.update(extra)
-    (root / "owned-processes.json").write_text(
-        json.dumps(document), encoding="utf-8"
-    )
+    path = root / "owned-processes.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    path.chmod(0o600)
 
 
 def evidence_root(tmp_path, suffix):
@@ -358,7 +362,27 @@ def test_manifest_schema_is_closed_and_rejects_partial_or_duplicate_json(module,
         '{"schema_version":1,"batch_id":"batch-1","batch_id":"batch-2","processes":[]}',
         encoding="utf-8",
     )
+    (root / "owned-processes.json").chmod(0o600)
     with pytest.raises(ValueError, match="MANIFEST"):
+        module.inject_fault(
+            [str(root), "worker-01", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda *_: None,
+        )
+
+
+@pytest.mark.parametrize("target", ["root", "manifest"])
+def test_rejects_group_or_world_access_before_deriving_signal_authority(
+        module, tmp_path, target):
+    root = evidence_root(tmp_path, f"permissions-{target}")
+    value = entry(root)
+    write_manifest(root, [value])
+    if target == "root":
+        root.chmod(0o750)
+    else:
+        (root / "owned-processes.json").chmod(0o640)
+
+    with pytest.raises(ValueError, match="(EVIDENCE_ROOT|MANIFEST)"):
         module.inject_fault(
             [str(root), "worker-01", "TERM"],
             proc_reader=lambda _pid: proc(value),

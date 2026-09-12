@@ -50,17 +50,33 @@ def read_proc_identity(pid: int) -> OwnedProcess | None:
     raise SupervisorError("MANIFEST_CONTEXT_REQUIRED")
 
 
+def _parse_proc_stat_start_time(document: str) -> int:
+    """Read field 22 without treating spaces in the parenthesized comm as fields."""
+    if not isinstance(document, str):
+        raise ValueError("PROC_STAT")
+    close = document.rfind(")")
+    if close < 0:
+        raise ValueError("PROC_STAT")
+    fields = document[close + 1:].split()
+    if len(fields) <= 19:
+        raise ValueError("PROC_STAT")
+    value = int(fields[19])
+    if value <= 0:
+        raise ValueError("PROC_STAT")
+    return value
+
+
 def _proc_values(pid: int) -> tuple[int, tuple[str, ...], int]:
     try:
-        stat_fields = (Path("/proc") / str(pid) / "stat").read_text().split()
+        stat_document = (Path("/proc") / str(pid) / "stat").read_text()
         pgid = os.getpgid(pid)
         cmdline = tuple(
             item.decode("utf-8", errors="strict")
             for item in (Path("/proc") / str(pid) / "cmdline").read_bytes().split(b"\0")
             if item
         )
-        start_time = int(stat_fields[21])
-    except (OSError, UnicodeError, ValueError, IndexError):
+        start_time = _parse_proc_stat_start_time(stat_document)
+    except (OSError, UnicodeError, ValueError):
         return 0, (), 0
     return pgid, cmdline, start_time
 
@@ -263,6 +279,7 @@ class ProcessSupervisor:
     def wait_for_children(
         self, *, deadline_monotonic_s: float, role: str = "worker",
         health_role: str | None = "broker",
+        health_recovery: Callable[[OwnedProcess, int], bool] | None = None,
     ) -> tuple[int, ...]:
         """Wait for one role while continuously proving its dependency healthy."""
         if isinstance(deadline_monotonic_s, bool) or not isinstance(
@@ -280,7 +297,33 @@ class ProcessSupervisor:
                 code = poll()
                 if expected.role == health_role:
                     if code is not None:
-                        raise SupervisorError(f"EARLY_EXIT: {expected.role}: {code}")
+                        if health_recovery is None:
+                            raise SupervisorError(
+                                f"EARLY_EXIT: {expected.role}: {code}"
+                            )
+                        try:
+                            recovered = health_recovery(expected, int(code))
+                        except Exception as error:
+                            raise SupervisorError(
+                                f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
+                            ) from error
+                        replacements = tuple(
+                            item
+                            for item in self._owned.values()
+                            if item[0].role == health_role
+                        )
+                        if (
+                            recovered is not True
+                            or pid in self._owned
+                            or len(replacements) != 1
+                            or replacements[0][0] == expected
+                            or replacements[0][1]() is not None
+                        ):
+                            raise SupervisorError(
+                                f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
+                            )
+                        self._confirm_identity(replacements[0][0])
+                        continue
                     self._confirm_identity(expected)
                     continue
                 if expected.role != role:
@@ -300,6 +343,46 @@ class ProcessSupervisor:
                 time.sleep(0.01)
         self.write_manifest()
         return tuple(codes)
+
+    def retire_owned(
+        self,
+        expected: OwnedProcess,
+        *,
+        term_timeout_s: float = 5.0,
+        kill_timeout_s: float = 2.0,
+    ) -> bool:
+        """Retire one exited child and any survivors of its exact owned PGID."""
+        current = self._owned.get(getattr(expected, "pid", None))
+        if current is None or current[0] != expected:
+            raise SupervisorError("UNOWNED_PROCESS")
+        poll = current[1]
+        if poll() is None:
+            raise SupervisorError("OWNED_PROCESS_STILL_RUNNING")
+        members = self._group_members_reader(expected.pgid)
+        try:
+            if members:
+                self._signal_group(expected.pgid, signal.SIGTERM)
+                deadline = time.monotonic() + term_timeout_s
+                while (
+                    self._group_members_reader(expected.pgid)
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+            if self._group_members_reader(expected.pgid):
+                self._signal_group(expected.pgid, signal.SIGKILL)
+                deadline = time.monotonic() + kill_timeout_s
+                while (
+                    self._group_members_reader(expected.pgid)
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+        except OSError:
+            return False
+        if self._group_members_reader(expected.pgid):
+            return False
+        self._owned.pop(expected.pid)
+        self.write_manifest()
+        return True
 
     def _wait_group_stopped(self, expected, poll, timeout_s):
         deadline = time.monotonic() + timeout_s

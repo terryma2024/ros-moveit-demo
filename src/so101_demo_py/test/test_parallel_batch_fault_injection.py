@@ -1,10 +1,12 @@
 """Process-free fault contracts for shared dependencies and generation fencing."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
+    AttemptIdentity,
     BatchRequest,
     ExecutionKind,
     InferenceRequest,
@@ -187,15 +189,24 @@ def test_missed_broker_and_last_lease_deadlines_keep_shared_failure_reason(tmp_p
         journal.close()
 
 
-@pytest.mark.parametrize("crash_phase", ["before", "after"])
-def test_broker_restart_hook_never_allows_old_generation_result(crash_phase):
-    """A restart boundary permanently fences old queued and cached responses."""
+@pytest.mark.parametrize(
+    "crash_phase,expected_generation,expected_outcome",
+    [
+        ("before", 1, ModelOutcome.QUALIFIED),
+        ("after", 2, ModelOutcome.CANCELLED),
+    ],
+)
+def test_broker_restart_hook_interrupts_the_selected_generation_boundary(
+        crash_phase, expected_generation, expected_outcome):
+    """Only a completed generation increment permanently fences old responses."""
     from so101_demo.parallel_batch.broker import ModelResult, PerceptionBroker
 
     events = []
 
     def hook(boundary, phase):
         events.append((boundary, phase))
+        if (boundary, phase) == ("BROKER_RESTART", crash_phase):
+            raise RuntimeError("injected broker crash")
 
     clock = Clock()
     broker = PerceptionBroker(
@@ -214,14 +225,14 @@ def test_broker_restart_hook_never_allows_old_generation_result(crash_phase):
         old, ModelResult(ModelOutcome.QUALIFIED, {"mask": [1]})
     ).candidate == {"mask": [1]}
 
-    assert broker.restart() == 2
-    broker.set_model_ready(YOLO, True)
-    broker.set_model_ready(GROUNDED, True)
+    with pytest.raises(RuntimeError, match="injected broker crash"):
+        broker.restart()
+
+    assert broker.generation == expected_generation
     stale = broker.poll_response(old)
-    assert stale.outcome is ModelOutcome.CANCELLED
-    assert stale.candidate is None
+    assert stale.outcome is expected_outcome
+    assert (stale.candidate is None) is (crash_phase == "after")
     assert ("BROKER_RESTART", crash_phase) in events
-    assert broker.submit(request(generation=2, request_id="fresh")).accepted
 
 
 def test_worker_fault_hook_is_optional_and_brackets_seal_and_recovery_receipt():
@@ -257,9 +268,59 @@ def test_worker_fault_after_local_seal_never_sends_terminal_commit():
         if (boundary, phase) == ("RESULT_SEAL", "after"):
             raise RuntimeError("injected post-seal crash")
 
-    outcome = ParallelWorker(fake.ports() | {"fault_hook": crash}).run_one()
+    with pytest.raises(BaseException, match="FAULT_INJECTED"):
+        ParallelWorker(fake.ports() | {"fault_hook": crash}).run_one()
 
-    assert outcome.recovered is False
-    assert outcome.stopped_reason == "TERMINAL_ACK_FAILED"
     assert [call[0] for call in fake.results.calls] == ["seal_attempt"]
     assert not any(call[0] == "RESULT_COMMITTED" for call in fake.coordinator.calls)
+
+
+@pytest.mark.parametrize("phase,receipt_visible", [("before", False), ("after", True)])
+def test_worker_receipt_crash_uses_real_durable_receipt_without_false_recovery_ack(
+        tmp_path, phase, receipt_visible):
+    """A fault boundary terminates flow instead of journaling contradictory recovery."""
+    from test_parallel_batch_worker import Fake
+    from so101_demo.parallel_batch import artifacts
+    from so101_demo.parallel_batch.worker import ParallelWorker
+
+    fake = Fake(RunMode.EXECUTE)
+    receipt_root = tmp_path / "worker-01"
+
+    def identity(lease):
+        return AttemptIdentity(
+            lease.batch_id,
+            lease.coordinator_epoch,
+            lease.worker_id,
+            lease.worker_generation,
+            lease.point_id,
+            lease.attempt_id,
+            lease.lease_generation,
+        )
+
+    def write(lease, *, succeeded, generation, **_kwargs):
+        assert generation == lease.worker_generation
+        return artifacts.write_recovery_receipt(
+            receipt_root, identity(lease), succeeded=succeeded
+        )
+
+    def verify(location, lease, *, succeeded, generation, **_kwargs):
+        document = json.loads(Path(location).read_text(encoding="utf-8"))
+        return (
+            document["identity"]["attempt_id"] == lease.attempt_id
+            and document["succeeded"] is succeeded
+            and generation == lease.worker_generation
+        )
+
+    fake.results.write_recovery_receipt = write
+    fake.results.verify_recovery_receipt = verify
+
+    def crash(boundary, observed_phase):
+        if (boundary, observed_phase) == ("RECOVERY_RECEIPT", phase):
+            raise RuntimeError("injected receipt crash")
+
+    with pytest.raises(BaseException, match="FAULT_INJECTED"):
+        ParallelWorker(fake.ports() | {"fault_hook": crash}).run_one()
+
+    receipts = list(receipt_root.rglob("recovery_receipt.json"))
+    assert bool(receipts) is receipt_visible
+    assert not any(call[0] == "RECOVERY" for call in fake.coordinator.calls)

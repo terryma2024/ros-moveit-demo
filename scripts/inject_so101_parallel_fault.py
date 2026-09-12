@@ -47,7 +47,7 @@ def _no_symlink_path(path: Path, *, directory=False) -> Path:
     return resolved
 
 
-def _read_json(path: Path):
+def _read_json(path: Path, *, exact_mode=None):
     path = _no_symlink_path(path)
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
@@ -55,6 +55,8 @@ def _read_json(path: Path):
             info = os.fstat(stream.fileno())
             if (not stat.S_ISREG(info.st_mode)
                     or info.st_uid != os.getuid()
+                    or (exact_mode is not None
+                        and stat.S_IMODE(info.st_mode) != exact_mode)
                     or info.st_size > MAX_IDENTITY_DOCUMENT_BYTES):
                 raise ValueError("MANIFEST_FILE_IDENTITY")
             value = json.load(stream, object_pairs_hook=_pairs)
@@ -64,7 +66,7 @@ def _read_json(path: Path):
 
 
 def _manifest(root: Path):
-    value = _read_json(root / "owned-processes.json")
+    value = _read_json(root / "owned-processes.json", exact_mode=0o600)
     if (type(value) is not dict or set(value) != MANIFEST_FIELDS
             or type(value["schema_version"]) is not int
             or value["schema_version"] != 1
@@ -153,6 +155,26 @@ def _proc_start_time(raw: str) -> int:
     return int(fields_after_comm[19])
 
 
+def _validate_evidence_directory_chain(root: Path, task_root: Path):
+    """Require caller-owned private batch directories below shared task roots."""
+    task_info = task_root.stat()
+    if (not stat.S_ISDIR(task_info.st_mode)
+            or task_info.st_uid != os.getuid()):
+        raise ValueError("EVIDENCE_TASK_ROOT_IDENTITY")
+    if root == task_root and stat.S_IMODE(task_info.st_mode) != 0o700:
+        raise ValueError("EVIDENCE_ROOT_IDENTITY")
+    shared_scratch = task_root / "scratch"
+    current = root
+    while current != task_root:
+        info = current.lstat()
+        if (not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.getuid()
+                or (current != shared_scratch
+                    and stat.S_IMODE(info.st_mode) != 0o700)):
+            raise ValueError("EVIDENCE_ROOT_IDENTITY")
+        current = current.parent
+
+
 def _read_proc(pid: int):
     process = Path("/proc") / str(pid)
     try:
@@ -213,6 +235,7 @@ def inject_fault(argv, *, proc_reader=None, signal_group=None):
     task_root = _no_symlink_path(TASK_EVIDENCE_ROOT, directory=True)
     if root != task_root and task_root not in root.parents:
         raise ValueError("EVIDENCE_ROOT_OUT_OF_TASK")
+    _validate_evidence_directory_chain(root, task_root)
     if target not in TARGETS:
         raise ValueError("TARGET_NOT_ALLOWED")
     if requested_signal != "TERM":
@@ -243,6 +266,7 @@ def inject_fault(argv, *, proc_reader=None, signal_group=None):
     first = reader(expected["pid"])
     fingerprint = _validate_proc(expected, first)
     root_after = _no_symlink_path(root, directory=True)
+    _validate_evidence_directory_chain(root_after, task_root)
     info_after = root_after.stat()
     if (info_after.st_dev, info_after.st_ino, info_after.st_uid) != root_identity:
         raise ValueError("EVIDENCE_ROOT_DRIFT")
