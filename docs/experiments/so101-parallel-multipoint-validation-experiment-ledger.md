@@ -5736,6 +5736,42 @@ deletion_candidates: registered pytest/build scratch, invalid smoke and command 
 decision: ADVANCE TO SYNCHRONIZED CONTROLLED PLAN-ONLY FAULT GATE
 ```
 
+## EXP-085 — F74 synchronized controlled plan-only fault gate
+
+```yaml
+experiment_id: EXP-085
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T05:52:26+08:00
+prior_experiment: EXP-084
+hypothesis: Exact worker-01 TERM will remain request-local to healthy Broker g1, and subsequent exact Broker g1 TERM will pause grants and recover to healthy ready g2 without physical action, duplicate lease, or K over-debit.
+single_variable: Change only execute mode to the approved synchronized plan-only Worker/Broker TERM sequence; source, install, image, config, catalog, models, N=2, K=2, and four-point selection remain fixed from EXP-084.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v1-f74
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f74
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+fault_sequence:
+  - wait for Broker g1 ready and worker-01 validation working, then inject exact manifest-owned worker-01 TERM
+  - require Broker remains the same healthy g1 while worker-01 advances generation, then inject exact manifest-owned Broker g1 TERM
+  - require journal unhealthy/healthy transition and ready model-loaded broker-g2 before judging
+provenance:
+  executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_base_commit: b7382569714b1dac56df11fdfa0cac94795f23e0
+  executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+  installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+  broker_image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+success_criteria: Both exact injectors exit 0; all four physical statuses remain UNRUN; the target Worker fault is fenced with physical action proven absent and a new Worker generation admitted; Broker g1 stays healthy across Worker disconnect; explicit g1 TERM produces an unhealthy/healthy journal pair and ready model-loaded g2; no lease is granted during the unhealthy window; each stable Worker slot receives exactly two unique leases despite generation changes; coordinator cleanup and exact residual audit pass.
+failure_rule: Wrong or drifting process identity, injector failure, physical action, Broker death caused by Worker disconnect, missing unhealthy/healthy transition, no ready g2, lease grant during pause, duplicate point, K over-debit, incomplete cleanup, or residual owned state makes the gate INVALID and blocks full-20 admission.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
