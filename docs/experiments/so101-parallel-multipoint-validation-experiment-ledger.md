@@ -5791,12 +5791,14 @@ decision: RERUN SYNCHRONIZED FAULT GATE WITH PERSISTENT OBSERVER SESSION
 
 ```yaml
 experiment_id: EXP-086
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:56:24+08:00
   - status: RUNNING
     at: 2026-09-13T05:56:49+08:00
+  - status: INVALID
+    at: 2026-09-13T05:57:20+08:00
 prior_experiment: EXP-085
 hypothesis: Keeping the external synchronizer in a persistent command session will complete the already-approved exact Worker/Broker TERM sequence and demonstrate F74 fault isolation and recovery.
 single_variable: External observer lifetime only; all product inputs, plan-only mode, N=2, K=2, selection, readiness predicates, exact identity-fenced TERM targets, and acceptance criteria remain EXP-085-identical.
@@ -5824,6 +5826,12 @@ provenance:
 success_criteria: Both exact injectors exit 0; all physical statuses remain UNRUN; worker-01 fault is fenced with physical action proven absent and a new Worker generation admitted; Broker g1 remains healthy across Worker disconnect; exact g1 TERM yields a journal unhealthy/healthy pair and ready model-loaded g2; no lease grant occurs during the unhealthy window; each stable slot receives exactly two unique leases; cleanup and residual audit pass.
 failure_rule: Any missing or wrong target, identity drift, injector failure, physical action, Worker-induced Broker death, missing ready g2 or health transition, lease during pause, duplicate point, K over-debit, cleanup failure, or residual owned state makes this run INVALID and blocks full-20 admission.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: The command exited 1 in 0.33 seconds with YOLO_HASH_MISMATCH because the invocation duplicated part of the frozen expected hash literal. Admission created no batch root, container, GPU task, ROS process, or physical action. This is invalid command-transcription evidence, not a product result.
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP086.json
+retained: command log/time/exit and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, invalid diagnostic batches, and incomplete fault batches; no deletion authorized
+decision: RERUN IDENTICAL PERSISTENT-OBSERVER FAULT GATE WITH CORRECT FROZEN HASH
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
