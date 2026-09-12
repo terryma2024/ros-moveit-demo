@@ -5173,12 +5173,14 @@ deletion_candidates: registered pytest/build scratch and diagnosis runtime copie
 
 ```yaml
 experiment_id: EXP-077
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:37:50+08:00
   - status: RUNNING
     at: 2026-09-13T04:37:50+08:00
+  - status: INVALID
+    at: 2026-09-13T04:40:44+08:00
 prior_experiment: EXP-076
 hypothesis: Repeating three perception/planning cycles per Worker without physical action will either remain healthy or retain the exact initiating reason at the first post-recovery Broker infrastructure failure instead of a generic cascade.
 mode: plan_only; no trajectory execution or physical action
@@ -5192,6 +5194,65 @@ selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a31
 provenance: F71 source 3b5e5ac8cc0ac587319eed77003ebb40efa534ca, source tree 1014ac5c014dc3f88876709d893dc6e826b476a3817726e7d94d1c67a196e36d, image sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
 success_criteria: All six validation outcomes are terminal and uniquely leased at K=3 per Worker; physical statuses stay UNRUN; any infrastructure failure retains its initiating reason; recovery, cleanup, and exact residual audit pass.
 retention_rule: Retain all evidence; delete nothing without explicit authorization.
+result: >-
+  The batch exited 1 after 115.74 seconds with all six unique points terminal as
+  VALIDATION_INVALID at the admit_pose boundary. Each Worker received exactly three leases and
+  recovered through generation 4; every physical point status remained UNRUN. The exact failure was
+  POSE_ACCEPTED_PUBLICATION_FAILED, because plan_only has no consumer for the pose-accepted
+  publication. The batch therefore never exercised the intended post-recovery Broker inference
+  boundary and is invalid as an F71 diagnostic, without constituting a product regression finding.
+  Cleanup was complete with no related process, container, GPU application, or owned manifest entry.
+result_report: reports/result-EXP077.json
+cleanup_audit: reports/post-077-cleanup-audit.json
+retained: complete live-diagnostic-f71 tree, command and MuJoCo logs, result and cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and the invalid diagnostic batch; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-077
+last_valid_experiment: EXP-075
+current_hypothesis: A six-point execute batch is the smallest live gate that reaches three complete perception/recovery cycles per Worker and can reveal F71's preserved initiating Broker reason without the plan_only publication artifact.
+working_tree_status: clean at F71 preregistration commit e669930986021c35aaa3d7cdb07b6c554b99a3a6; this EXP-077 closure and EXP-078 preregistration are the only pending tracked changes
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-077 is invalid as a Broker diagnostic because plan_only stops at POSE_ACCEPTED_PUBLICATION_FAILED before the target post-recovery inference boundary.
+  - Its six unique leases, exact K=3 per Worker, recovery receipts, physical UNRUN status, and clean teardown remain valid audit evidence.
+  - No F71 product conclusion is drawn from EXP-077.
+ruling: Run the same frozen six-point selection in execute simulation mode under a new batch ID and evidence root; inspect every original RGB if the batch reaches physical execution.
+retained: EXP-077 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and invalid diagnostic evidence; no deletion authorized
+decision: RUN EXP-078 SIX-POINT EXECUTE DIAGNOSTIC
+```
+
+## EXP-078 — F71 six-point execute Broker diagnostic
+
+```yaml
+experiment_id: EXP-078
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T04:42:26+08:00
+prior_experiment: EXP-077
+hypothesis: Three complete execute/recovery cycles per Worker will either remain healthy or retain the exact initiating reason at the first post-recovery Broker infrastructure failure instead of a generic BROKER_NOT_READY cascade.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-diagnostic-execute-20260913-v1-f71
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-diagnostic-execute-f71
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm, sample_01_near_left, sample_02_near_center
+selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
+provenance:
+  executable_source_commit: 3b5e5ac8cc0ac587319eed77003ebb40efa534ca
+  preregistration_commit: pending
+  executable_source_tree: 1014ac5c014dc3f88876709d893dc6e826b476a3817726e7d94d1c67a196e36d
+  installed_module_tree: 4260fb551f30275f621916d8a1f891b2a4175768efdb658f4aa5e7e17974c316
+  image_id: sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
+success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; any infrastructure failure retains its exact initiating reason; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; no residual owned state remains.
+failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before another full-catalog run.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
