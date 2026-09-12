@@ -106,6 +106,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F35: Task 14 returns narrowly to the Task 9 Worker failure-reporting seam and Task 11 process supervisor, with direct tests only. A Worker that catches a reset or initial-gate exception must emit a bounded, structured local result identifying the failed boundary without changing its conservative `INITIAL_GATE_FAILED` outcome. If a supervised process exits between a first `poll()==None` observation and `/proc` identity readback, the supervisor must re-poll once: a now-terminal exact child follows the existing exit/group-survivor path, while a still-running absent identity remains `OWNED_PROCESS_ABSENT`; PID mismatch remains fatal. Cost if wrong: exception text could leak unbounded data or PID reuse could be accepted; retaining current behavior makes live failures unauditable and replaces the original Worker result with a supervisor traceback, as EXP-029 demonstrated.
 - Ruling F36: Task 14 returns narrowly to the existing MuJoCo paused-evidence acquisition and Worker-owned process-tree seams, with direct tests. A newly joined volatile sensor-data subscriber must retry the already-authorized idempotent `pause(True)` snapshot request within the existing timeout until it receives a fresh authoritative paused frame; it may not unpause or advance physics. Worker child-list mutation and manifest publication must be serialized across the main and authenticated control threads so cleanup cannot collide on or reorder one PID-named temporary publication. The supervisor may boundedly yield and re-poll only while the exact owned child has become absent between observations; a still-nonterminal result remains fatal and PID mismatch remains fatal. Cost if wrong: retry could mask a failed pause or concurrent cleanup could republish stale ownership; retaining current behavior makes every post-reset watermark read fail and produced manifest/temp plus exit-observation races in EXP-030.
 - Ruling F37: Task 14 returns narrowly to the repository-owned atomic MuJoCo evidence publisher and Python observer QoS seams, with their direct tests. The 100 Hz atomic evidence topic must retain exactly its newest sample with reliable transient-local durability, and the strict observer must request matching depth-1 reliable transient-local durability. This gives a late-joining post-reset observer the already-published authoritative paused frame without unpausing, stepping, weakening freshness/session/sequence checks, or changing the pinned third-party MuJoCo service implementation. Existing volatile sensor-data consumers remain compatible with the stronger publisher offer. Cost if wrong: stale history could be mistaken for current evidence, which the existing max-age/session/epoch checks must reject; retaining volatile/volatile QoS makes the documented current_evidence late-join contract impossible, as EXP-031 proved.
+- Ruling F38: Task 14 returns narrowly to the production point-initial observation and its direct tests. The three late-created action-status subscriptions must request ROS 2's exact `qos_profile_action_status_default` (keep-last depth 1, reliable, transient-local), matching the action servers and receiving their retained empty status arrays when no goal has ever run. The observed reset, joint, scene, contact, graph, freshness, and exact-node gates remain unchanged. Cost if wrong: a stale status sample could be admitted, but the retained action status is the authoritative current status set and active goal IDs are still enumerated conservatively; retaining volatile subscriptions makes an empty never-used action server indistinguishable from an absent observation and produced the identical dual-Worker timeout in EXP-032.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1352,12 +1353,14 @@ next_experiment: EXP-032 is reserved for the F37-corrected execute repeat; contr
 
 ```yaml
 experiment_id: EXP-032
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T17:48:00+08:00
   - status: RUNNING
     at: 2026-09-12T17:48:00+08:00
+  - status: INVALID
+    at: 2026-09-12T17:51:47+08:00
 prior_experiment: EXP-031
 hypothesis: F37 delivers the authoritative paused reset watermark to every new strict observer, allowing the otherwise unchanged four-point execute to cross durable point authorization and complete physical evaluation.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
@@ -1398,10 +1401,17 @@ commands:
   - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-032.json and reports/domain-preflight-before-032.json
     exit_code: 0
   - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with fresh EXP-032 batch/root and reports/live-small-command-032 log/exit/time evidence
-    exit_code: pending
-observed: pending
-inferred: pending
-conclusion: pending
+    exit_code: 1
+observed:
+  - F37 succeeded at its intended boundary: neither Worker reported fresh paused atomic evidence unavailable. Both isolated stacks reached READY, reset their distinct first leased point, and remained before ATTEMPT_STARTED.
+  - Both Workers then retained the identical exact diagnostic failure_boundary=point_initial_gate, failure_type=RuntimeError, failure_message=POINT_INITIAL_GATE_OBSERVATION_TIMEOUT. The journal has two leases/ACKs and no ATTEMPT_STARTED event; all four points remain UNRUN and zero outcomes are countable.
+  - Production code creates three action-status subscriptions only after reset, using integer QoS depth 10, which means reliable but volatile. ROS Jazzy's authoritative action status publisher default is keep-last depth 1, reliable, transient-local. With no action goal yet, its retained empty status array is the only positive no-active-goal observation; each new volatile subscriber can miss it and the gate waits forever for all three goal_receipts.
+  - Both failed recovery replacement launches were stopped conservatively and Workers became QUARANTINED. The coordinator ended CAPACITY_EXHAUSTED. Aggregate cleanup correctly remained false because the detached exact Broker container survived the controller outcome.
+  - External cleanup verified the cidfile, batch/generation labels, immutable image, and batch-specific mounts before stopping only that exact container. Independent audit2 then found empty ownership manifests, no matching process/container/GPU task, and no domain 181-183 owner. The first cleanup log is retained but its pgrep result is inspection-command self-matching and is not used.
+inferred:
+  - This is another late-join observation defect before physical authorization, not a trustworthy point outcome. Matching the action clients' own ROS-default status QoS is the narrow fix and does not weaken any gate.
+  - Controller cleanup still has a separate abnormal-terminal Broker retirement defect: the correct false aggregate prevented a false pass, but an externally verified exact-container stop was required.
+conclusion: INVALID; zero countable attempts. Apply F38 with behavioral RED/GREEN and affected-package gates, rebuild provenance/image, repeat smoke, and then repeat the unchanged four-point execute under EXP-033. Keep Broker abnormal-terminal retirement on the next live readback gate.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p41
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p43
@@ -1414,11 +1424,24 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f37-smoke
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-032.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-032.json
-retained: all F37 test, build, provenance, image, smoke, and preflight evidence; live-small-f37 will be retained after execution
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-032.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f37/coordinator/events/segment-00000000000000000001.journal
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f37/coordinator/aggregate_results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f37/workers/worker-01/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f37/workers/worker-02/worker-run-results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-032-cleanup-audit2.json
+hashes:
+  live_command_log_sha256: 0e769922eb0de289ecb7847106ba8db2b3d7598335035a0c3a8ccc2525201d4c
+  journal_sha256: 37d0d853127462f1bf5b6f6684143166ab24a7b361a033d6cffdeaad69de0650
+  coordinator_aggregate_sha256: 6569a3cf1c50309e68157723d0757a3b993ed4eed50bc30ae95fb41b40afef87
+  worker_01_result_sha256: 6bd757d95103569f98cdef5d34d506c5e20d9ab6642b58e5cf3e96884e20b59b
+  worker_02_result_sha256: a4b821144eb6814b8befc2521a87a3adb80967b8fff06f02b31d25d0d1ec6e03
+  cleanup_audit_sha256: 63122ec3494857e52a452cb859fc773cacecc23a0f37dae6b8c60eda724d70ca
+retained: complete live-small-f37 tree, command/preflight/cleanup reports, journal/projections, Worker diagnostics, ROS logs, container cidfile, and all F37 test/build/image/smoke evidence
 archived: none
 deletion_candidates: p40 through p46 and direct-pytest scratch are candidates after readback; nothing was deleted
-decision: pending
-next_experiment: EXP-033 is reserved for the controlled plan-only fault and remains blocked until EXP-032 execute acceptance
+decision: REPEAT after F38 RED/GREEN, affected-package gate, installed provenance, image rebuild, and dual-model smoke
+next_experiment: EXP-033 is reserved for the F38-corrected execute repeat; controlled plan-only fault advances to EXP-034 and remains blocked until execute acceptance
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
