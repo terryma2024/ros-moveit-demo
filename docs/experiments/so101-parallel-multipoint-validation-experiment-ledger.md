@@ -6143,10 +6143,12 @@ decision: TDD-RETIRE DELIVERED TERMINAL RESPONSES FROM SERVICE DEADLINE SYNCHRON
 
 ```yaml
 experiment_id: EXP-093
-status: PLANNED
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:49:34+08:00
+  - status: VALID
+    at: 2026-09-13T06:58:12+08:00
 prior_experiment: EXP-092
 hypothesis: Removing a request from PerceptionService's deadline-synchronization set immediately after its terminal response is delivered will prevent a later poll from converting a consumed QUALIFIED result into INFERENCE_TIMEOUT, while preserving all Broker pre-delivery guards and new-request timeouts.
 single_variable: Retire only delivered terminal responses from PerceptionService._requests; do not change PerceptionBroker guards, deadlines, inference classification, model behavior, or physical safety gates.
@@ -6154,6 +6156,19 @@ method: Add a fake-clock RED test that delivers a timely QUALIFIED response, adv
 success_criteria: RED reproduces the historical timeout; GREEN preserves health and accepts the second request while existing timeout and initiating-failure tests pass; all static/package/image/smoke/small/full gates subsequently pass.
 failure_rule: Any loss of pre-delivery fencing/deadline behavior, altered model outcome, test/gate failure, evidence or cleanup failure, or non-qualifying runtime batch makes the applicable experiment invalid and requires diagnosis.
 retention_rule: Retain all evidence and scratch; delete nothing without explicit user authorization.
+result: The valid fake-clock RED reproduced the EXP-092 failure exactly: after a timely QUALIFIED response was delivered, advancing past its old deadline caused the second request to be rejected BROKER_NOT_READY. The minimum service-side change retires a request from PerceptionService._requests only after its terminal response is delivered; Broker guards and all pre-delivery deadline behavior are unchanged. The focused GREEN passed 3 tests, adjacent runtime/Broker gate passed 160, the complete parallel suite passed 1085, and the phase-separated ordinary package gate passed 2802 with zero errors, failures, or skips in 83.97 seconds. Static provenance passed with source hash 052dae12a2a46dab28d8e4e9c55dc0930df856c0890b2c9197eaa8bce2a04970 and installed module hash 4aae546b05dfd3aaace20566df98fd9dd53e671d0c2b0c71bb4cea3fb0147f6b. The rebuilt image sha256:d4c8efc976804ae289df50259104147b8030e823927a2070262f471c2b44ff97 preserved that source hash, and both YOLO and Grounded-SAM returned QUALIFIED in the offline CUDA smoke with clean container/GPU teardown.
+implementation_commit: ed91c14cc3476fae07847e6907b6d11684ba9d46
+static_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/f91-static-gates.json
+package_gate_scratch: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p115
+package_test_result: 2802 tests, 0 errors, 0 failures, 0 skipped
+image_id: sha256:d4c8efc976804ae289df50259104147b8030e823927a2070262f471c2b44ff97
+source_tree_sha256: 052dae12a2a46dab28d8e4e9c55dc0930df856c0890b2c9197eaa8bce2a04970
+installed_module_tree_sha256: 4aae546b05dfd3aaace20566df98fd9dd53e671d0c2b0c71bb4cea3fb0147f6b
+smoke_batch: task14-f91-smoke; YOLO QUALIFIED in 34.095614 ms; Grounded-SAM QUALIFIED in 193.843765 ms
+retained: all RED/GREEN/adjacent/parallel/package/static/image/smoke evidence and all prior evidence
+archived: none
+deletion_candidates: every registered EXP-093 pytest/build/compile scratch plus all prior candidates; no deletion authorized
+decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL CATALOG
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
