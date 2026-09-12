@@ -5067,12 +5067,14 @@ decision: RUN EXP-076 FULL 20-POINT QUALIFICATION
 
 ```yaml
 experiment_id: EXP-076
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:13:26+08:00
   - status: RUNNING
     at: 2026-09-13T04:13:26+08:00
+  - status: INVALID
+    at: 2026-09-13T04:30:57+08:00
 prior_experiment: EXP-075
 hypothesis: One immutable F70 batch will execute and seal all 20 frozen catalog points exactly once with dynamic two-Worker scheduling, K=10 per stable slot, YOLO-first perception, complete recovery, and no residual state.
 mode: execute; simulation only
@@ -5102,6 +5104,45 @@ provenance:
 success_criteria: All 20 points have unique leases and sealed PASSED attempts in this batch; K=10 per Worker; coverage_complete, execution_complete, batch_cleanup_complete, and qualification_passed are true; every point passes initial, perception, planning/controller, final physical, attachment/contact/support/retreat, hash, and fresh visual gates; no residual owned state.
 failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate/missing point, K violation, evidence/hash mismatch, cleanup failure, or qualification false makes this batch non-qualifying; after a required fix, rerun all 20 points under a new batch ID.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: >-
+  The immutable batch exited 1 after 338.49 seconds with truthful CAPACITY_EXHAUSTED.
+  task_start and the three cup-test points completed PASSED. After Worker-02 completed its second
+  point and recovered to generation 3, the next model request returned INFRA_ERROR/BROKER_NOT_READY;
+  Worker-01 then observed the same state. The container and immutable health receipt stayed live, so
+  the supervisor did not pause leases or replace the internally unhealthy Broker. Each Worker
+  conservatively sealed eight INVALID attempts without physical action and stopped at K=10, leaving
+  16 points UNRUN. execution_complete and batch_cleanup_complete are true; coverage_complete and
+  qualification_passed are false. No related process, container, GPU application, or owned manifest
+  entry remained.
+diagnosis: >-
+  The failed sample_01 RGB independently qualified both models in the same immutable image. Its exact
+  NPY also qualified through the same ParallelPerceptionRuntime after restoring the required pre-seal
+  0400 mode. The current runtime health callback overwrites the initiating infrastructure response
+  with generic BROKER_NOT_READY before the Worker can retain the specific reason, so the next fix is
+  diagnostic preservation, not a threshold or perception-policy change.
+result_report: reports/result-EXP076.json
+root_cause_report: reports/root-cause-EXP076.json
+cleanup_audit: reports/post-076-cleanup-audit.json
+retained: complete live-20-f70 tree; command, MuJoCo, result, root-cause, cleanup, and isolated image/runtime diagnostic evidence; all prior evidence
+archived: none
+deletion_candidates: diagnosis scratch-style runtime copies and all previously registered pytest/build scratch trees; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-076
+last_valid_experiment: EXP-075
+current_hypothesis: Preserving the first model-runtime infrastructure reason before publishing irreversible unhealthy state will expose the initiating F70 fault without weakening fail-closed Broker behavior.
+working_tree_status: clean at preregistration commit c474b1f6d; EXP-076 closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-076 is non-qualifying at 4 PASSED, 16 UNRUN, 16 INVALID attempts, and exact K=10 per Worker.
+  - The frozen image and failed point input are independently healthy; the generic BROKER_NOT_READY cascade is not a deterministic detection rejection.
+  - Internal Broker unhealthy state is not surfaced through process liveness, allowing invalid retries to consume capacity, contrary to the shared-dependency pause intent.
+ruling: Add a focused RED test that requires the first infrastructure reason to survive health fanout, make the smallest ordering correction, rerun focused/adjacent/full package gates, rebuild overlay and immutable image, then use a fresh live gate to obtain the actionable initiating reason before another full-catalog run.
+retained: EXP-076 and all prior evidence
+archived: none
+deletion_candidates: diagnosis runtime copies plus registered pytest/build scratch trees; no deletion authorized
+decision: IMPLEMENT F71 FIRST-INFRASTRUCTURE-REASON PRESERVATION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
