@@ -4791,12 +4791,14 @@ decision: RUN EXP-071 CORRECTED CONTROLLED PLAN-ONLY FAULT GATE
 
 ```yaml
 experiment_id: EXP-071
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:26:09+08:00
   - status: RUNNING
     at: 2026-09-13T03:26:09+08:00
+  - status: INVALID
+    at: 2026-09-13T03:35:58+08:00
 prior_experiment: EXP-070
 hypothesis: The corrected validation-workspace readiness check will permit exact manifest-owned Worker and Broker TERM injection and demonstrate the frozen fault properties.
 mode: plan_only; no trajectory execution or physical action
@@ -4809,6 +4811,37 @@ selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_fa
 single_harness_change: readiness watches worker-01/validations/*/*/working instead of attempts/*/*/working
 success_criteria: Both exact injectors exit 0; physical points remain UNRUN; Broker generation advances; the non-target Worker continues; no duplicate valid lease or K debit during Broker pause; old authorities remain fenced; cleanup and residual audit pass.
 provenance: identical to EXP-070 except docs-only runtime HEAD, batch ID, evidence root, and harness path
+result: >-
+  Both identity-checked injectors exited 0 and each sent one exact PGID TERM. Worker-01 was
+  fenced and recovered with generation advancement, Worker-02 continued through two validation
+  leases and generation 3, no physical action occurred, and final exact cleanup left no owned
+  process, task container, GPU compute application, or ROS domain claim. The Broker fault criterion
+  was not met: generation 2 was never created and the journal contains no BROKER_HEALTH_CHANGED
+  event. Runtime timestamps prove the generation-1 Broker was model-ready five seconds before TERM.
+  Its production docker command omitted --init, leaving Python as container PID 1; the proxied TERM
+  did not terminate it, so the supervisor had no early exit from which to recover.
+root_cause_report: reports/root-cause-EXP071.json
+cleanup_audit: reports/post-071-cleanup-audit.json
+retained: complete live-fault-f68-r2 tree, command/injector/MuJoCo/root-cause/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-071
+last_valid_experiment: EXP-069
+current_hypothesis: Adding Docker --init to the immutable Broker launch command will make exact manifest-owned TERM observable by the supervisor, enabling bounded generation recovery without changing lease, K, timeout, or execution semantics.
+working_tree_status: F69 RED/GREEN candidate changes only container_run_argv and its focused test; all EXP-071 runtime processes are stopped
+owned_processes: NONE
+confirmed_conclusions:
+  - Worker termination fencing, replacement, non-target continuation, and physical UNRUN separation passed in EXP-071.
+  - Broker TERM delivery passed exact identity checks but did not terminate the container PID-1 Python process.
+  - EXP-071 is invalid for the combined fault gate because Broker generation did not advance.
+ruling: Preserve all fault evidence, add a failing container argv contract for --init, implement only that signal-forwarding boundary, then rerun ordinary gates, the four-point execute gate, and controlled plan-only faults under fresh IDs.
+retained: EXP-071 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+decision: IMPLEMENT F69 CONTAINER INIT SIGNAL FORWARDING
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
