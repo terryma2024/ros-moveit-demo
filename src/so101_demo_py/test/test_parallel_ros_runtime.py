@@ -165,7 +165,18 @@ def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_an
         catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
         observe_initial=lambda _boundary: observation,
     )
-    gate = ports.initial_gate(_lease(), reset)
+    lease = _lease()
+    gate = ports.initial_gate(lease, reset)
+    for field in (
+        "batch_id",
+        "coordinator_epoch",
+        "worker_id",
+        "worker_generation",
+        "point_id",
+        "attempt_id",
+        "lease_generation",
+    ):
+        assert getattr(gate, field) == getattr(lease, field)
     assert gate.canonical_joints is True
     assert gate.no_controller_goal is True
     assert gate.no_attachment is True

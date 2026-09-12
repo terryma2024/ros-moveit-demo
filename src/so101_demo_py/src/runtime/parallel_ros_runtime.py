@@ -858,6 +858,13 @@ class ParallelRosRuntimePorts:
                 )
             raise RuntimeError(message)
         return SimpleNamespace(
+            batch_id=lease.batch_id,
+            coordinator_epoch=lease.coordinator_epoch,
+            worker_id=lease.worker_id,
+            worker_generation=lease.worker_generation,
+            point_id=lease.point_id,
+            attempt_id=lease.attempt_id,
+            lease_generation=lease.lease_generation,
             reset_epoch=value.reset_epoch,
             simulation_session_id=value.simulation_session_id,
             source_frame_monotonic_s=value.source_frame_monotonic_s,
