@@ -29,12 +29,13 @@ confirmed_conclusions:
   - F41 preserves every point-initial predicate while reporting a bounded fixed-order rejected-predicate list; its complete ordinary gate and rebuilt immutable image passed (CP-021).
   - F46 tolerates only the bounded child-side setsid observation race, while persistent incomplete or foreign identities remain fail-closed and receive no process-group signal; its complete ordinary gate and rebuilt immutable image passed (CP-026).
   - F47 binds the already-validated production point-initial facts to all seven exact lease identity fields before the Worker's unchanged authorization check; its complete ordinary gate and rebuilt immutable image passed (CP-027).
+  - EXP-044 proved the F47 gate receipt is correct but exposed the complementary production reset-receipt identity omission before ATTEMPT_STARTED; F48 is limited to binding that reset receipt to the same seven exact lease fields (CP-028).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-027
-next_experiment: EXP-044 is RUNNING with unchanged F47 source and immutable inputs
+latest_checkpoint: CP-028
+next_experiment: F48 formal RED/GREEN for production reset-receipt lease identity, then a fresh complete gate and immutable image before EXP-045
 ```
 
 Frozen provenance:
@@ -2448,12 +2449,14 @@ deletion_candidates: p57/direct pytest scratch after readback; no deletion autho
 
 ```yaml
 experiment_id: EXP-044
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:56:21+08:00
   - status: RUNNING
     at: 2026-09-12T19:56:21+08:00
+  - status: INVALID
+    at: 2026-09-12T20:00:21+08:00
 prior_experiment: EXP-043
 hypothesis: EXP-043 was an isolated pre-lease controller-manager middleware fault; the unchanged F47 runtime can start both Workers and execute the four-point small batch from clean host state.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
@@ -2473,9 +2476,55 @@ provenance:
   yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
-retained: pre-registration ledger record and preflight-exp044.json
+result: >-
+  Command exit was 1 after 67.19 s. Unlike EXP-043, both isolated motion stacks reached READY,
+  both Workers received one unique lease, reset the corresponding point, passed every production
+  observation predicate, and retained immutable initial RGB evidence. Both then failed before
+  ATTEMPT_STARTED with POINT_INITIAL_GATE_IDENTITY. The F47 gate receipt contains all seven exact
+  lease fields, but source and sealed evidence prove production `reset_point()` still constructs a
+  `ResetBoundaryReceipt` with only reset/session/time/joint data. `ParallelWorker._gate_summary`
+  deliberately requires exact type-and-value identity on both reset and gate receipts, so both
+  Workers were quarantined and the remaining two points stayed unleased. The two sealed INVALID
+  results state physical_action_proven_absent=true. There is no ATTEMPT_STARTED, POSE_ACCEPTED,
+  planning, trajectory, or physical-action evidence; the two lease counters are capacity accounting,
+  not countable physical attempts.
+cleanup: >-
+  Exact CID f42212f1d9e6162fed2b78648ff3aa5b520424ad1dc4f6c1b3b730612c659527
+  was verified against immutable image sha256:5e77eba492f065436a078e92be217c64c0bc43f9f9b78c89544b219e470c644f,
+  batch/generation labels, and the four registered mounts, then stopped. The --rm container was
+  removed; post-stop audit found no related process, running container, GPU compute task, or domain
+  owner. The MuJoCo log was moved without deletion to reports/MUJOCO_LOG-EXP044.txt.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 8cf4a73c787eea9bbe7dbc5d8b55facec3cde271eef0506ee5e41f184ccacb11
+command_time_sha256: 398a1ce39ce9b2dae546b776c5a675b4d63ddebb5d8133493b96c18b8f2cfa5e
+aggregate_sha256: 51db1f329bdc0ec78d94946c73a66d57aa9ec3e1cd26da7e58dacb7c831713ff
+worker_01_result_sha256: 61583c466e861851734e2f08049145f1a00faee695c85a268f2406c7459b8c62
+worker_02_result_sha256: 26bb1bcb96292391c4e27a66ae059af98c6302aa96d85ddfe6ea6489ecc7db2b
+mujoco_log_sha256: 0e6dbe312a8e75681598abba11d9942715632c4b05ca50872bb562d2f64e737e
+conclusion: INVALID; zero countable attempts. Bind the production reset receipt to the exact lease under F48, retain strict Worker checks, and repeat only after the complete fresh build/test/image/smoke gate.
+retained: complete EXP-044 batch/reports, two immutable initial RGB frames, moved MuJoCo log, preflight, and all prior evidence
 archived: none
-deletion_candidates: none
+deletion_candidates: p57/direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-028
+last_valid_experiment: EXP-022
+current_hypothesis: F48 supplies the exact production lease identity on the reset receipt that the strict Worker gate already requires, allowing the unchanged four-point execute to cross ATTEMPT_STARTED.
+working_tree_status: ledger-only result/ruling change after clean executable source f4881e44af0af7e470a71ccd1140ccb522b955d6
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-044 started two isolated stacks cleanly, reached READY, reset two unique points, and passed all initial observation predicates; the EXP-043 middleware fault did not recur.
+  - Each Worker consumed one lease capacity slot but neither journal nor sealed evidence contains ATTEMPT_STARTED; physical_action_proven_absent is true and zero physical attempts are countable.
+  - F47 correctly binds all seven exact identity fields to the gate receipt. Production reset_point returns a ResetBoundaryReceipt without those fields, while the Worker intentionally requires both receipts to match the lease exactly.
+  - Exact Broker cleanup completed and audits found no related process, container, GPU compute task, or domain owner.
+open_risks:
+  - ATTEMPT_STARTED and downstream perception/planning/execution have not yet succeeded in a live batch.
+ruling: F48 may only add the seven immutable current-lease identity fields to the production ResetBoundaryReceipt returned by reset_point, without changing reset semantics, gate predicates, Worker checks, topology, timeouts, models, selection, or physical criteria. Formal RED must exercise the production reset path and fail on the absent fields; GREEN must prove exact type and value for all seven fields and preserve existing reset receipt validation.
+retained: complete EXP-044 evidence and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p57 after readback; no deletion authorized
+decision: IMPLEMENT F48 WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
