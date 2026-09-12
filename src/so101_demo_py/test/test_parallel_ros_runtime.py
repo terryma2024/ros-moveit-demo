@@ -24,6 +24,18 @@ def _lease():
     )
 
 
+def _valid_worker_nodes():
+    return tuple(sorted((
+        "/arm_controller", "/controller_manager", "/gripper_controller",
+        "/joint_state_broadcaster", "/move_group", "/move_group/moveit",
+        "/move_group_private_123456", "/moveit_987654",
+        "/moveit_simple_controller_manager", "/mujoco_ros2_control_node",
+        "/robot_state_publisher", "/robotsystem", "/so101_base_to_camera_link",
+        "/so101_camera_link_to_task_camera_frame",
+        "/transform_listener_impl_7a8b9c",
+    )))
+
+
 def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkeypatch):
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
@@ -146,7 +158,7 @@ def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_an
         active_controller_goal_ids=(),
         moveit_attached_object_ids=(),
         has_contact=False,
-        worker_node_fqns=ParallelRosRuntimePorts.expected_worker_nodes(),
+        worker_node_fqns=_valid_worker_nodes(),
     )
     ports = ParallelRosRuntimePorts.for_test(
         resources=SimpleNamespace(session_id="session-1"),
@@ -550,12 +562,20 @@ def test_initial_gate_requires_exact_worker_node_inventory():
         "/move_group", "/mujoco_ros2_control_node", "/robot_state_publisher",
         "/so101_base_to_camera_link", "/so101_camera_link_to_task_camera_frame",
     )
+    legitimate_internal = (
+        "/controller_manager", "/move_group/moveit",
+        "/move_group_private_123456", "/moveit_987654",
+        "/moveit_simple_controller_manager", "/robotsystem",
+        "/transform_listener_impl_7a8b9c",
+    )
+    valid_nodes = tuple(sorted((*expected, *legitimate_internal)))
+    assert valid_nodes == _valid_worker_nodes()
     reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
     base = dict(
         reset_epoch="reset-2", simulation_session_id="session-1",
         source_frame_monotonic_s=11.0, joint_positions=(0.0,) * 6,
         active_controller_goal_ids=(), moveit_attached_object_ids=(), has_contact=False,
-        worker_node_fqns=expected,
+        worker_node_fqns=valid_nodes,
     )
     ports = ParallelRosRuntimePorts.for_test(
         resources=SimpleNamespace(session_id="session-1"),
@@ -563,7 +583,15 @@ def test_initial_gate_requires_exact_worker_node_inventory():
         observe_initial=lambda _boundary: InitialGateObservation(**base),
     )
     assert ports.initial_gate(_lease(), reset).no_stale_node is True
-    for nodes in (expected[:-1], (*expected, "/stale_worker_generation_0")):
+    invalid_node_sets = (
+        tuple(node for node in valid_nodes if node != "/arm_controller"),
+        (*valid_nodes, "/stale_worker_generation_0"),
+        (*valid_nodes, "/moveit_123"),
+        tuple("/moveit_bad" if node == "/moveit_987654" else node
+              for node in valid_nodes),
+        tuple(sorted((*valid_nodes, "/controller_manager"))),
+    )
+    for nodes in invalid_node_sets:
         ports.dependencies["observe_initial"] = lambda _boundary, value=nodes: (
             InitialGateObservation(**{**base, "worker_node_fqns": value})
         )
