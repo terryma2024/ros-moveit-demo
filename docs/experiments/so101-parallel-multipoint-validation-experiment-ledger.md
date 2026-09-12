@@ -32,7 +32,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-021
-next_experiment: EXP-037 is RUNNING
+next_experiment: EXP-037 is INVALID; F42 is the next bounded correction before EXP-038
 ```
 
 Frozen provenance:
@@ -1875,12 +1875,14 @@ next_command: Execute the clean pre-registered diagnostic batch using image sha2
 
 ```yaml
 experiment_id: EXP-037
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T18:48:26+08:00
   - status: RUNNING
     at: 2026-09-12T18:48:26+08:00
+  - status: INVALID
+    at: 2026-09-12T18:54:28+08:00
 prior_experiment: EXP-036
 hypothesis: F41 identifies the exact unchanged point-initial predicate rejected on both Workers; if none is rejected, the four-point execute proceeds normally.
 prediction: Either four unique points pass physically with qualification_passed=true, or each pre-authorization failure names only fixed rejected predicates and remains INVALID with zero countable attempts.
@@ -1914,6 +1916,33 @@ evidence_planned:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-037.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-037.log
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f41
+result: >-
+  Command exit was 1 after 79.28 s. Worker-02 reached the task_start point-initial boundary and
+  F41 reported exactly POINT_INITIAL_GATE_OBSERVATION_REJECTED:contact,worker_nodes. Worker-01
+  stopped WORKER_NOT_READY after the peer failure/recovery path. No ATTEMPT_STARTED event exists;
+  all four points remain UNRUN, so zero attempts are countable and no physical conclusion is
+  authorized. The contact predicate incorrectly consumed the broad evidence.has_contact flag,
+  which includes the required table support contact, instead of only left/right fingertip contact.
+  The exact Worker node inventory omitted the three active controller nodes arm_controller,
+  gripper_controller, and joint_state_broadcaster that the same gate requires. These are bounded
+  point-initial observation defects, not a planning or physical failure.
+cleanup: >-
+  The only surviving owned Broker was container
+  02d30567605b10d4e58f2a97beea3fb39155078b66ccf19a3bf6b9d9633472. Before stopping it, exact
+  readback verified image sha256:9858a5ab5a67f44b5979707c3c2eb0f5183c20e392c6b5f6b80f9b3827fd4777,
+  batch label parallel-small-20260912-v1-f41, generation 1, and only the registered broker input,
+  runtime, and model mounts. It was stopped by exact CID. Post-stop process/container/GPU audit
+  found zero related residue. The late MuJoCo log was moved without deletion into the registered
+  reports root.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 915c541ac85d80f76346903c1807793c803f2dd5bd1570bc8f32b844d189f30e
+command_time_sha256: e9e8b601e5bdcb888de02f22638c7b58096c4c2b36ac007e86f0ad01c334593d
+aggregate_sha256: 556aaafed719472b8be5f06faf8bc804e4a4a080933a3f579f3e46488eace72d
+coordinator_aggregate_sha256: 4d7f1dff2510db2d4d194695f888de94d5cc301c8bd29786669cb694c007adf5
+worker_01_result_sha256: be7278bf3c0df75b24dbaf98581c69670cac2b89297d629c68ec6e44597c1945
+worker_02_result_sha256: 50f1c428735e7e6c84f9d7384e946c3ee997cf565ede7f0be39826e00b6cddd9
+mujoco_log_sha256: 5ef2af162c7beb4479ea04aa63773666507b53f6ec6e9cfd1e73068841485066
+conclusion: INVALID; zero countable attempts. Apply F42 with direct RED/GREEN, fresh gates, provenance/image/smoke, then repeat the unchanged execute under EXP-038.
 retained: all prior evidence plus complete EXP-037 batch and report artifacts
 archived: none
 deletion_candidates: p50 and direct pytest scratch after readback; no deletion authorized
