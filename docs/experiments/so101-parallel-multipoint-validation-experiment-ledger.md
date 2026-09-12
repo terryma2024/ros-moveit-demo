@@ -4848,12 +4848,14 @@ decision: IMPLEMENT F69 CONTAINER INIT SIGNAL FORWARDING
 
 ```yaml
 experiment_id: EXP-072
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:42:00+08:00
   - status: RUNNING
     at: 2026-09-13T03:42:00+08:00
+  - status: VALID
+    at: 2026-09-13T03:50:35+08:00
 prior_experiment: EXP-071
 hypothesis: The F69 Docker init boundary preserves the already-qualified four-point physical schedule, exact cleanup, visual outcomes, YOLO-first policy, and all Worker invariants before fault-gate repetition.
 mode: execute; simulation only
@@ -4872,6 +4874,63 @@ provenance:
   config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
   catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
   selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+result: >-
+  The F69 execute regression completed in 199.90 seconds with all four unique points PASSED,
+  qualification and coordinator cleanup complete, exactly K=2 points per Worker, and all four
+  Worker recoveries true. All eight original RGB images passed visual inspection; numeric terminal
+  evidence showed upright table-supported cups, zero fingertip contacts, no attached object, and
+  completed retreat. Every request selected plastic-cup-yolo11n-seg-v1 first with no fallback.
+  Exact post-exit checks found no owned process, task container, GPU compute application, or ROS
+  domain claim.
+result_report: reports/result-EXP072.json
+visual_report: reports/visual-inspection-EXP072.json
+cleanup_audit: reports/post-072-cleanup-audit.json
+retained: complete live-small-f69 tree, command/MuJoCo/result/visual/cleanup reports, F69 static gates, image build, smoke, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-072
+last_valid_experiment: EXP-072
+current_hypothesis: F69 will make exact Broker TERM observable, pause new leases without K debit, replace generation 1 with generation 2, and preserve Worker fencing and non-target progress in plan-only mode.
+working_tree_status: clean executable source at 8462ea3ed5ac1efa8500604045659b9125fc2ee3; EXP-072 closure and EXP-073 registration are ledger-only
+owned_processes: NONE
+confirmed_conclusions:
+  - The F69 source, overlay, immutable image, dual-model smoke, and four-point execute gates pass.
+  - Four-point dynamic scheduling remains exactly K=2 per Worker with no duplicate point.
+  - Visual, numeric, attachment, retreat, cleanup, and YOLO-first gates all pass.
+ruling: Repeat the corrected combined controlled plan-only Worker and Broker TERM sequence under a fresh root; require a BROKER_HEALTH_CHANGED false/true pair and broker-g2 runtime identity before full-20 admission.
+retained: EXP-072 and all prior evidence
+archived: none
+deletion_candidates: registered scratch trees only; no deletion authorized
+decision: RUN EXP-073 F69 CONTROLLED PLAN-ONLY FAULT GATE
+```
+
+## EXP-073 — F69 controlled plan-only Worker and Broker termination
+
+```yaml
+experiment_id: EXP-073
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:51:30+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:51:30+08:00
+prior_experiment: EXP-072
+hypothesis: Docker init makes exact Broker TERM observable and enables bounded generation-2 recovery while the already-proven Worker fault remains fenced and the non-target Worker continues without K over-debit.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v1-f69
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f69
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+fault_sequence:
+  - wait for worker-01 validation working plus model-ready receipt, then inject exact manifest-owned worker-01 TERM
+  - re-read the manifest and inject exact current Broker TERM
+success_criteria: Both injectors exit 0; physical points remain UNRUN; journal records Broker unhealthy then healthy; broker generation advances 1 to 2; non-target Worker continues; old Worker/request authorities stay fenced; no duplicate valid lease or K debit during pause; cleanup and exact residual audit pass.
+provenance: identical executable F69 source/install/image/config/catalog/model identities to EXP-072; distinct batch ID, evidence root, mode, and selection execution identity
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
