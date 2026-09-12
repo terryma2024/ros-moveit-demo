@@ -269,7 +269,11 @@ class ParallelPerceptionRuntime:
                 raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
             return result
         except Exception as error:
-            self._unhealthy()
+            # PerceptionService publishes this request's exact failure through
+            # the Broker before fanning out the irreversible health loss.  An
+            # eager callback here would invalidate the same in-flight request
+            # as generic BROKER_NOT_READY and erase its initiating reason.
+            self.healthy = False
             return ModelResult(ModelOutcome.INFRA_ERROR, reason=str(error))
 
 

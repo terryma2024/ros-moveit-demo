@@ -306,6 +306,27 @@ def test_service_drives_real_broker_and_fences_late_ack(tmp_path, monkeypatch):
     assert service.broker.poll_response(grounded).outcome is ModelOutcome.CANCELLED
 
 
+def test_service_preserves_initiating_runtime_failure_before_health_fanout(
+        tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    f = fixture_runtime(
+        tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
+    service = PerceptionService(f.runtime, config, generation=1)
+    service.start()
+
+    assert service.submit(f.req, f.snapshot).accepted
+    response = service.run_next()
+
+    assert response.outcome is ModelOutcome.INFRA_ERROR
+    assert response.reason == 'diagnostic CUDA sentinel'
+    assert not service.broker.healthy
+    assert not f.runtime.healthy
+
+
 def test_input_changed_during_detector_never_returns_candidate(tmp_path, monkeypatch):
     from so101_demo.parallel_batch.contracts import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
