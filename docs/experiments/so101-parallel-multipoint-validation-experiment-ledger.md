@@ -31,8 +31,8 @@ disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-024
-next_experiment: EXP-040 is INVALID; F45 stable topology correction precedes EXP-041
+latest_checkpoint: CP-025
+next_experiment: EXP-041 is RUNNING
 ```
 
 Frozen provenance:
@@ -2203,6 +2203,60 @@ conclusion: INVALID; zero countable attempts. Replace impossible whole-graph equ
 retained: complete immutable EXP-040 batch and reports plus all prior evidence
 archived: none
 deletion_candidates: p54/direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-025
+last_valid_experiment: EXP-022
+current_hypothesis: F45 accepts exactly the observed isolated runtime topology while rejecting stale, malformed, duplicate-category, and unknown nodes, allowing the four-point execute to begin.
+working_tree_status: clean at executable source commit 8863a47252ac937ce781cb76b5c1902726b6b02c before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F45 formal RED pytest-L7eUOGkm failed on the legitimate observed topology. Focused GREEN pytest-v2vBoRrS passed. The first adjacent run pytest-UOczVf8W exposed one stale test fixture after 155 passes; corrected-fixture pytest-2nZSZlK4 passed all 156 tests.
+  - The node gate requires all 8 fixed Worker nodes, all 4 fixed internal nodes, and exactly one member of each of 3 strictly formatted generated-node categories. Direct cases reject missing, unknown, duplicate category/FQN, and malformed suffixes.
+  - Fresh p55 symlink build passed in 1.52 seconds; all 2770 ordinary tests passed in 83.77 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash 9fce9ffc8914b9f298a59e1aa567bf76e717e0cf9fa5e646102df06598441ca3; complete source hash is ba376796ab59d5dd5cc98865927d0a5682416626a725602c122c721bdd896f6e.
+  - Rebuilt image sha256:f5e02ccc4e8869ee81fbc71e84c2fab61d5c5c3fda75309406a7ffd415bbde88 binds that source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model.
+  - Fresh preflight found 24 CPUs, 25.363 GiB MemAvailable, 15272 MiB free GPU, and no related container, GPU process, or ROS domain owner.
+open_risks:
+  - EXP-041 is the first run able to reach ATTEMPT_STARTED; downstream perception/planning/execution evidence remains unproven.
+retained: F45 RED/GREEN/adjacent scratch, p55, provenance/image/smoke, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p55 after readback; no deletion authorized
+decision: RUN EXP-041 with the unchanged four points and physical criteria
+```
+
+## EXP-041 — Task 14 stable-topology two-Worker execute
+
+```yaml
+experiment_id: EXP-041
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:30:23+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:30:23+08:00
+prior_experiment: EXP-040
+hypothesis: The evidence-derived exact topology gate removes the impossible full-graph equality while preserving stale-node isolation, allowing two Workers to execute four unique points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation/physical/visual/cleanup invariant holds.
+single_variable: F45 node-topology semantics only. Contact, reset/session, freshness, joints, goals, attachment, graph stability, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f45
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f45
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 8863a47252ac937ce781cb76b5c1902726b6b02c
+  executable_source_tree: ba376796ab59d5dd5cc98865927d0a5682416626a725602c122c721bdd896f6e
+  image_id: sha256:f5e02ccc4e8869ee81fbc71e84c2fab61d5c5c3fda75309406a7ffd415bbde88
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point, followed by complete per-image visual inspection.
+retained: complete EXP-041 batch/reports plus all prior evidence
+archived: none
+deletion_candidates: p55/direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
