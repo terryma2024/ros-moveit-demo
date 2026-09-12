@@ -5998,6 +5998,23 @@ deletion_candidates: registered pytest/build scratch, invalid smoke and command 
 decision: IMPLEMENT FIRST-INFRASTRUCTURE-ERROR DIAGNOSTIC WITH TDD, REBUILD, AND REPEAT FULL QUALIFICATION
 ```
 
+## EXP-090 — First infrastructure-failure diagnostic
+
+```yaml
+experiment_id: EXP-090
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:21:45+08:00
+prior_experiment: EXP-089
+hypothesis: A first-writer-wins durable diagnostic at the runtime/service health boundary will preserve the initiating exception or Broker response that EXP-089 currently collapses to BROKER_NOT_READY, without changing any inference outcome, scheduling, or safety decision.
+single_variable: Add diagnostic emission and a mode-0600 canonical first-failure receipt; leave all runtime classification, Broker readiness, transport, model, deadline, and physical-action behavior unchanged.
+method: Add RED tests for exact runtime exception capture and first-writer preservation, implement the minimum diagnostic path, run focused and package gates with registered ai-station NVMe scratch, rebuild the immutable image, smoke it, and repeat the full catalog with a new batch ID.
+success_criteria: RED tests fail for the missing receipt; GREEN tests prove exact reason/type/identity, canonical JSON, mode 0600, and first-writer preservation; ordinary package tests and static gates pass; image provenance and smoke pass; a fresh full run either qualifies 20/20 or durably exposes the initiating infrastructure error.
+failure_rule: Any changed inference decision, overwritten first failure, missing/unsafe receipt, test or gate failure, provenance drift, cleanup failure, or unexplained full-run failure makes this experiment INVALID.
+retention_rule: Retain all evidence and registered scratch as deletion candidates; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
