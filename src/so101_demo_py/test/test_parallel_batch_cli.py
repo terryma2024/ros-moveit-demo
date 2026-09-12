@@ -807,8 +807,100 @@ def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_pat
         return SimpleNamespace(returncode=1, stdout="", stderr="already removed")
 
     owner._container_runner = run
+    owner._clock = lambda: 0.0
+    owner._sleep = lambda _seconds: None
 
     assert owner._retire_broker_container() is True
+
+
+def test_broker_cleanup_waits_for_exact_auto_remove_after_successful_stop(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        ProductionBatchComposition,
+    )
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner._uses_production_broker_container = True
+    owner.broker_spec_path = tmp_path / "broker-spec.json"
+    owner.broker_generation = 1
+    owner.broker_runtime_root = tmp_path / "ipc"
+    owner.broker_input_root = tmp_path / "inputs"
+    owner.broker_runtime_root.mkdir()
+    owner.broker_input_root.mkdir()
+    owner.broker_container_id_path = owner.broker_runtime_root / "container.cid"
+    container_id = "c" * 64
+    owner.broker_container_id_path.write_text(container_id + "\n", encoding="ascii")
+    owner.broker_container_id_path.chmod(0o600)
+    owner.spec = SimpleNamespace(
+        provenance={"image_id": "sha256:" + "b" * 64},
+        request=SimpleNamespace(batch_id="batch-1"),
+        config=SimpleNamespace(heartbeat_timeout_s=1.0),
+    )
+    present = SimpleNamespace(
+        returncode=0,
+        stdout=json.dumps(
+            [
+                {
+                    "Id": container_id,
+                    "Image": owner.spec.provenance["image_id"],
+                    "Config": {
+                        "Labels": {
+                            "com.so101.batch-id": "batch-1",
+                            "com.so101.broker-generation": "1",
+                        }
+                    },
+                    "Mounts": [
+                        {
+                            "Source": str(owner.broker_runtime_root),
+                            "Destination": "/runtime",
+                        },
+                        {
+                            "Source": str(owner.broker_input_root),
+                            "Destination": "/inputs",
+                        },
+                    ],
+                }
+            ]
+        ),
+        stderr="",
+    )
+    absent = SimpleNamespace(returncode=1, stdout="", stderr="absent")
+    inspections = iter((present, present, absent))
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(tuple(command))
+        if command[1] == "inspect":
+            return next(inspections)
+        assert command[1] == "stop"
+        return SimpleNamespace(returncode=0, stdout=container_id, stderr="")
+
+    class Clock:
+        value = 10.0
+
+        def __call__(self):
+            return self.value
+
+        def sleep(self, seconds):
+            self.value += seconds
+
+    clock = Clock()
+    owner._container_runner = run
+    owner._clock = clock
+    owner._sleep = clock.sleep
+
+    assert owner._retire_broker_container() is True
+    assert [call[1] for call in calls] == ["inspect", "stop", "inspect", "inspect"]
+    assert clock.value > 10.0
+
+    clock.value = 20.0
+    owner._container_inspect = lambda _container_id: present
+    owner._container_runner = lambda *_args, **_kwargs: SimpleNamespace(
+        returncode=0, stdout=container_id, stderr=""
+    )
+    with pytest.raises(CliError, match="BROKER_CONTAINER_SURVIVED"):
+        owner._retire_broker_container()
+    assert clock.value >= 21.0
 
 
 def test_broker_container_id_is_hardened_before_cleanup(tmp_path):
