@@ -562,6 +562,9 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         spec, resource_probe=Probe(), claim_root=scratch / "brc",
         supervisor=supervisor, broker_command_builder=lambda _owner: ("broker",),
     )
+    composition._uses_production_broker_container = True
+    composition.broker_container_id_path.write_text("c" * 64 + "\n", encoding="ascii")
+    composition.broker_container_id_path.chmod(0o664)
     broker_server = None
     try:
         ready = {
@@ -611,6 +614,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         broker_thread.start()
         _write_json(composition.broker_runtime_root / "ready.json", ready)
         assert composition._wait_broker_ready() is True
+        assert composition.broker_container_id_path.stat().st_mode & 0o777 == 0o600
         assert supervisor.health_checks >= 1
     finally:
         if broker_server is not None:
@@ -758,6 +762,18 @@ def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_p
         assert calls[2][:4] == ("docker", "inspect", "--type", "container")
     finally:
         composition._release_partial()
+
+
+def test_broker_container_id_is_hardened_before_cleanup(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner.broker_container_id_path = tmp_path / "container.cid"
+    owner.broker_container_id_path.write_text("c" * 64 + "\n", encoding="ascii")
+    owner.broker_container_id_path.chmod(0o664)
+
+    assert owner._harden_broker_container_id() is True
+    assert owner.broker_container_id_path.stat().st_mode & 0o777 == 0o600
 
 
 def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
@@ -1449,6 +1465,20 @@ def test_composition_cleanup_invokes_real_worker_control_actions_in_order():
         ("confirm_no_controller_goal",), ("confirm_no_controller_goal",),
         ("recover",), ("recover",),
     ]
+
+
+def test_cleanup_skips_dead_control_rpc_after_worker_groups_are_reaped():
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    class Control:
+        def call(self, _operation):
+            raise AssertionError("a reaped Worker has no live control socket")
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner.worker_controls = [Control(), Control()]
+    owner._worker_children_reaped = True
+
+    assert owner._worker_control("cancel_motion") is True
 
 
 def test_broker_ready_receipt_is_exactly_bound_to_batch_generation_and_image():

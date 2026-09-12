@@ -1508,6 +1508,7 @@ class ProductionBatchComposition:
             spec.request.batch_id,
             manifest_path=spec.request.evidence_root / "owned-processes.json",
         )
+        self._worker_children_reaped = False
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
             coordinator_epoch=self.journal.coordinator_epoch,
@@ -1745,6 +1746,36 @@ class ProductionBatchComposition:
             timeout=self.spec.config.heartbeat_timeout_s,
         )
 
+    def _harden_broker_container_id(self):
+        """Make Docker's daemon-created cidfile private before trusting it."""
+
+        path = self.broker_container_id_path
+        try:
+            before = path.lstat()
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError as error:
+            raise CliError("BROKER_CONTAINER_ID_MISSING") from error
+        try:
+            current = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or before.st_uid != os.getuid()
+                or current.st_uid != os.getuid()
+                or (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino)
+            ):
+                raise CliError("BROKER_CONTAINER_ID_INVALID")
+            value = os.read(descriptor, 66).decode("ascii").strip()
+            if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+                raise CliError("BROKER_CONTAINER_ID_INVALID")
+            os.fchmod(descriptor, 0o600)
+            os.fsync(descriptor)
+        except (OSError, UnicodeError) as error:
+            raise CliError("BROKER_CONTAINER_ID_INVALID") from error
+        finally:
+            os.close(descriptor)
+        return True
+
     def _retire_broker_container(self, *, runtime_root=None, generation=None):
         """Stop only the exact Docker container created for this Broker generation."""
 
@@ -1841,6 +1872,8 @@ class ProductionBatchComposition:
                 and stat.S_IMODE(socket_info.st_mode) == 0o600
                 and stat.S_IMODE(ready_info.st_mode) == 0o600
             ):
+                if self._uses_production_broker_container:
+                    self._harden_broker_container_id()
                 try:
                     document = json.loads(ready.read_text(encoding="utf-8"))
                 except (OSError, UnicodeError, json.JSONDecodeError) as error:
@@ -1962,6 +1995,8 @@ class ProductionBatchComposition:
         return snapshot
 
     def _worker_control(self, operation):
+        if getattr(self, "_worker_children_reaped", False):
+            return True
         okay = True
         for control in self.worker_controls:
             try:
@@ -2278,6 +2313,7 @@ class ProductionBatchComposition:
                     ),
                     health_recovery=self._recover_broker,
                 )
+                self._worker_children_reaped = True
             failure = any(code != 0 for code in codes)
             self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
