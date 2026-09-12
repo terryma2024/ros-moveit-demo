@@ -69,6 +69,7 @@ class WorkerProjection:
     inference_allowed: bool = False
     stop_requested: bool = False
     invalid_point: str | None = None
+    recovery_deadline_monotonic_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -185,12 +186,13 @@ class BatchCoordinator:
         return deepcopy(worker)
 
     def _check_recovery_deadline(self, worker, supplied):
-        deadline = worker.get('stage_deadline_monotonic_s')
+        deadline = worker.get('recovery_deadline_monotonic_s')
         if (worker.get('state') != 'RECOVERING'
                 or isinstance(supplied, bool)
                 or not isinstance(supplied, (int, float))
                 or not math.isfinite(supplied)
                 or supplied != deadline
+                or deadline != worker.get('stage_deadline_monotonic_s')
                 or self.clock() >= deadline):
             raise ValueError('RECOVERY_DEADLINE_INVALID')
 
@@ -331,6 +333,9 @@ class BatchCoordinator:
                           stage_deadline_monotonic_s=min(
                               now + self._duration(state),
                               self._state['batch_deadline_monotonic_s']))
+            worker['recovery_deadline_monotonic_s'] = (
+                worker['stage_deadline_monotonic_s']
+                if state == 'RECOVERING' else None)
         worker['action_allowed'] = (
             state == 'EXECUTING' and self.request.run_mode == RunMode.EXECUTE)
         worker['inference_allowed'] = state == 'EXECUTING'
@@ -507,7 +512,13 @@ class BatchCoordinator:
             point.update(status=status, terminal=True)
         worker['lease'] = None
         self._stage(worker, 'RECOVERING')
-        response = {'status': status, 'sha256': digest, 'location': str(location)}
+        response = {
+            'status': status,
+            'sha256': digest,
+            'location': str(location),
+            'recovery_deadline_monotonic_s': worker[
+                'recovery_deadline_monotonic_s'],
+        }
         self._emit(kind, {'points': {lease.point_id: point}, 'workers': {lease.worker_id: worker}},
                    request_key=request_key, identity=identity, response=response)
         self._evaluate()
@@ -645,7 +656,9 @@ class BatchCoordinator:
             raise ValueError('INVALID_REQUIRES_FENCING_AND_READMISSION')
         delta = {'workers': {worker_id: worker}}
         if succeeded:
-            worker.update(state='AVAILABLE', stop_requested=False, invalid_point=None)
+            worker.update(
+                state='AVAILABLE', stop_requested=False, invalid_point=None,
+                recovery_deadline_monotonic_s=None)
             if point_id:
                 point = deepcopy(self._state['points'][point_id])
                 point['blocked_by'] = None

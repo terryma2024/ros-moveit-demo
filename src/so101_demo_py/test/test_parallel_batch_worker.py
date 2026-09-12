@@ -107,6 +107,10 @@ class Coordinator:
         self.sealed_statuses = []
         self.recovery = []
         self.start_summaries = []
+        self.recovery_deadline = None
+        self.recovery_deadline_reply = None
+        self.omit_recovery_deadline = False
+        self.advance_after_commit_s = 0.0
 
     def register_worker(
             self, worker_id, *, generation,
@@ -114,6 +118,9 @@ class Coordinator:
         if (recovery_deadline_monotonic_s is not None
                 and self.clock() >= recovery_deadline_monotonic_s):
             raise TimeoutError("recovery registration deadline")
+        if (recovery_deadline_monotonic_s is not None
+                and recovery_deadline_monotonic_s != self.recovery_deadline):
+            raise ValueError("recovery registration deadline mismatch")
         self.calls.append(("register_worker", worker_id, generation))
         self.generation = generation
         state = (WorkerState.RECOVERING if recovery_deadline_monotonic_s is not None
@@ -177,19 +184,43 @@ class Coordinator:
         if self.withhold_result_ack:
             return None
         self.active = None
-        return {"status": self.sealed_statuses[-1], "location": location, "sha256": "a" * 64}
+        self.recovery_deadline = self.clock() + CONFIG.worker_recovery_timeout_s
+        deadline = (self.recovery_deadline if self.recovery_deadline_reply is None
+                    else self.recovery_deadline_reply)
+        response = {
+            "status": self.sealed_statuses[-1], "location": location,
+            "sha256": "a" * 64,
+            "recovery_deadline_monotonic_s": deadline,
+        }
+        if self.omit_recovery_deadline:
+            del response["recovery_deadline_monotonic_s"]
+        self.clock.now += self.advance_after_commit_s
+        return response
 
     def commit_validation(self, lease, location, *, request_key):
         self.calls.append(("VALIDATION_COMMITTED", request_key))
         if self.withhold_result_ack:
             return None
         self.active = None
-        return {"status": self.sealed_statuses[-1], "location": location, "sha256": "b" * 64}
+        self.recovery_deadline = self.clock() + CONFIG.worker_recovery_timeout_s
+        deadline = (self.recovery_deadline if self.recovery_deadline_reply is None
+                    else self.recovery_deadline_reply)
+        response = {
+            "status": self.sealed_statuses[-1], "location": location,
+            "sha256": "b" * 64,
+            "recovery_deadline_monotonic_s": deadline,
+        }
+        if self.omit_recovery_deadline:
+            del response["recovery_deadline_monotonic_s"]
+        self.clock.now += self.advance_after_commit_s
+        return response
 
     def record_recovery(self, worker_id, **facts):
         deadline = facts["recovery_deadline_monotonic_s"]
         if self.clock() >= deadline:
             raise TimeoutError("recovery record deadline")
+        if deadline != self.recovery_deadline:
+            raise ValueError("recovery record deadline mismatch")
         self.calls.append(("RECOVERY", facts["generation"], facts["succeeded"]))
         self.recovery.append(facts)
         state = (WorkerState.AVAILABLE if facts["succeeded"]
@@ -229,6 +260,7 @@ class Runtime:
         self.plan_decision = Decision(ValidationStatus.VALIDATION_PASSED)
         self.scheduler_decision = Decision(ValidationStatus.VALIDATION_PASSED)
         self.recovery_succeeds = True
+        self.recovery_deadlines = []
         self.goal_confirmed = True
         self.raise_at = None
 
@@ -292,6 +324,7 @@ class Runtime:
 
     def recover(self, worker_id, generation, deadline_monotonic_s):
         self.calls.append("recover")
+        self.recovery_deadlines.append(deadline_monotonic_s)
         return self.recovery_succeeds
 
 
@@ -318,13 +351,17 @@ class Results:
             self.coordinator.clock.now = deadline_monotonic_s
             if clock() >= deadline_monotonic_s:
                 raise TimeoutError("receipt deadline")
-        self.calls.append(("recovery_receipt", succeeded, generation))
+        self.calls.append((
+            "recovery_receipt", succeeded, generation, deadline_monotonic_s))
         return f"/recoveries/{lease.attempt_id}-{generation}"
 
     def verify_recovery_receipt(
             self, location, lease, *, succeeded, generation,
             deadline_monotonic_s=None, clock=None):
-        self.calls.append(("verify_recovery_receipt", succeeded, generation))
+        self.calls.append((
+            "verify_recovery_receipt", succeeded, generation,
+            deadline_monotonic_s,
+        ))
         return True
 
 
@@ -889,6 +926,16 @@ def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
     coordinator = BatchCoordinator(
         journal, request, config=CONFIG, clock=clock, result_port=results,
     )
+    real_commit = coordinator.commit_result
+    committed_deadlines = []
+
+    def advancing_commit(*args, **kwargs):
+        response = real_commit(*args, **kwargs)
+        committed_deadlines.append(response["recovery_deadline_monotonic_s"])
+        clock.now += 1.0
+        return response
+
+    coordinator.commit_result = advancing_commit
     runtime = Runtime(RunMode.EXECUTE)
     broker = Broker()
     worker = ParallelWorker({
@@ -909,6 +956,8 @@ def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
         assert snapshot.points["p1"].status.value == "PASSED"
         assert snapshot.workers["w1"].generation == 2
         assert snapshot.workers["w1"].state is WorkerState.AVAILABLE
+        assert committed_deadlines == [130.0]
+        assert runtime.recovery_deadlines == [130.0]
     finally:
         journal.close()
 
@@ -1038,6 +1087,36 @@ def test_current_heartbeat_reply_at_exact_five_second_boundary_is_rejected():
     assert "reset_point" not in fake.runtime.calls
 
 
+def test_watchdog_fault_while_current_heartbeat_is_in_flight_revokes_reply():
+    fake = Fake()
+    main_entered = threading.Event()
+    release_main = threading.Event()
+    real = fake.coordinator.heartbeat
+
+    def racing_heartbeat(lease):
+        name = threading.current_thread().name
+        if name.startswith("parallel-worker-heartbeat-rpc-"):
+            assert main_entered.wait(1)
+            raise RuntimeError("watchdog lost coordinator")
+        if name == "parallel-worker-rpc-w1":
+            main_entered.set()
+            assert release_main.wait(1)
+        return real(lease)
+
+    fake.coordinator.heartbeat = racing_heartbeat
+    worker = ParallelWorker(fake.ports())
+    thread = threading.Thread(target=worker.run_one, name="worker-main")
+    thread.start()
+    timeout = time.monotonic() + 1
+    while (worker._watchdog is None or not worker._watchdog.faulted):
+        time.sleep(0.01)
+        assert time.monotonic() < timeout
+    release_main.set()
+    thread.join(1)
+    assert not thread.is_alive()
+    assert "reset_point" not in fake.runtime.calls
+
+
 @pytest.mark.parametrize("lost_at", ["post-action-heartbeat", "finalizing"])
 def test_coordinator_loss_after_authorization_still_seals_local_terminal(lost_at):
     fake = Fake()
@@ -1124,3 +1203,29 @@ def test_recovery_receipt_is_read_back_before_successful_readmission():
     names = [call[0] for call in fake.results.calls]
     assert result.recovered is True
     assert names.index("recovery_receipt") < names.index("verify_recovery_receipt")
+
+
+def test_worker_uses_commit_frozen_recovery_deadline_after_clock_advances():
+    fake = Fake()
+    fake.coordinator.advance_after_commit_s = 1.0
+    result = ParallelWorker(fake.ports()).run_one()
+    assert result.recovered is True
+    assert fake.runtime.recovery_deadlines == [130.0]
+    assert all(call[-1] == 130.0 for call in fake.results.calls
+               if call[0] in {"recovery_receipt", "verify_recovery_receipt"})
+
+
+@pytest.mark.parametrize(
+    "reply",
+    ["missing", True, float("nan"), "130.0", 10.0, 131.0],
+)
+def test_missing_malformed_stale_or_mismatched_recovery_deadline_fails_closed(reply):
+    fake = Fake()
+    if reply == "missing":
+        fake.coordinator.omit_recovery_deadline = True
+    else:
+        fake.coordinator.recovery_deadline_reply = reply
+    result = ParallelWorker(fake.ports()).run_one()
+    assert result.recovered is False
+    assert not any(call == ("register_worker", "w1", 2)
+                   for call in fake.coordinator.calls)

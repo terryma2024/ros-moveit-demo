@@ -261,8 +261,12 @@ class ParallelWorker:
             deadline,
             "HEARTBEAT_ACK_TIMEOUT",
         )
+        if watchdog is not None and watchdog.faulted:
+            raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
         if not self._accept_heartbeat(ack, lease):
             raise WorkerError("LEASE_FENCED")
+        if watchdog is not None and watchdog.faulted:
+            raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
         return ack
 
     def _boundary(self, call):
@@ -478,14 +482,26 @@ class ParallelWorker:
             raise WorkerError("RESULT_ACK_TIMEOUT")
         if ack.get("status") is not decision.status or ack.get("location") != location:
             raise WorkerError("RESULT_ACK_MISMATCH")
+        recovery_deadline = ack.get("recovery_deadline_monotonic_s")
+        if (isinstance(recovery_deadline, bool)
+                or not isinstance(recovery_deadline, (int, float))
+                or not math.isfinite(recovery_deadline)
+                or self._now() >= recovery_deadline):
+            raise WorkerError("RECOVERY_DEADLINE_INVALID")
+        recovery_deadline = float(recovery_deadline)
         with self._lease_lock:
             self._active_lease = None
-        return lease, decision.status
+        return lease, decision.status, recovery_deadline
 
-    def _recover(self, lease) -> bool:
+    def _recover(self, lease, deadline) -> bool:
         self._stop_watchdog()
-        started = self._now()
-        deadline = started + self._config.worker_recovery_timeout_s
+        if (isinstance(deadline, bool)
+                or not isinstance(deadline, (int, float))
+                or not math.isfinite(deadline)
+                or self._now() >= deadline):
+            self._quarantined = True
+            return False
+        deadline = float(deadline)
         fenced = stopped = confirmed = recovered = ready = receipt = False
         try:
             fenced = self._call_before(
@@ -691,14 +707,17 @@ class ParallelWorker:
                     decision, _, _, _ = self._safe_stop(
                         lease, action_may_have_started=False)
                     try:
-                        lease, status = self._seal_and_commit(
+                        lease, status, recovery_deadline = self._seal_and_commit(
                             lease, decision, authorized=False)
                     except Exception:
                         self._quarantined = True
                         self._stop_watchdog()
                         return WorkerRunResult(lease.point_id, None, False, "INITIAL_GATE_FAILED")
                     return WorkerRunResult(
-                        lease.point_id, status, self._recover(lease), "INITIAL_GATE_FAILED")
+                        lease.point_id, status,
+                        self._recover(lease, recovery_deadline),
+                        "INITIAL_GATE_FAILED",
+                    )
 
             start_wait_started = self._now()
             try:
@@ -731,7 +750,8 @@ class ParallelWorker:
 
             decision, _ = self._run_authorized(lease)
             try:
-                lease, status = self._seal_and_commit(lease, decision, authorized=authorized)
+                lease, status, recovery_deadline = self._seal_and_commit(
+                    lease, decision, authorized=authorized)
             except Exception:
                 self._safe_stop(
                     lease, action_may_have_started=self._mode is RunMode.EXECUTE)
@@ -739,7 +759,10 @@ class ParallelWorker:
                 self._stop_watchdog()
                 return WorkerRunResult(lease.point_id, None, False, "TERMINAL_ACK_FAILED")
             return WorkerRunResult(
-                lease.point_id, status, self._recover(lease), "POINT_TERMINAL")
+                lease.point_id, status,
+                self._recover(lease, recovery_deadline),
+                "POINT_TERMINAL",
+            )
         except Exception:
             if lease is not None:
                 self._safe_stop(

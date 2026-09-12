@@ -360,6 +360,38 @@ def test_heartbeats_cannot_extend_stage_deadline(make, stage, duration):
     assert not c.snapshot().workers['w1'].action_allowed
 
 
+@pytest.mark.parametrize(
+    'mode,status,event',
+    [
+        (RunMode.EXECUTE, 'PASSED', 'RESULT_COMMITTED'),
+        (RunMode.PLAN_ONLY, 'VALIDATION_PASSED', 'VALIDATION_COMMITTED'),
+    ],
+)
+def test_terminal_commit_returns_frozen_recovery_deadline_idempotently(
+        make, mode, status, event):
+    """Commit ACK and projection expose the same immutable recovery deadline."""
+    c, clock, results, journal, _ = make(points=('p1',), mode=mode)
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    if mode is RunMode.EXECUTE:
+        c.ack_attempt_started(
+            lease, request_key='start', gate_summary=gate_summary(lease))
+    else:
+        c.ack_validation_started(
+            lease, request_key='start', gate_summary=gate_summary(lease))
+    clock.now = 3.0
+    c.begin_finalizing(lease, request_key='final')
+    location = seal(c, results, lease, status)
+    commit = c.commit_result if mode is RunMode.EXECUTE else c.commit_validation
+    first = commit(lease, location, request_key='result')
+    assert first['recovery_deadline_monotonic_s'] == 123.0
+    assert c.snapshot().workers['w1'].stage_deadline_monotonic_s == 123.0
+    clock.now = 4.0
+    assert commit(lease, location, request_key='result') == first
+    committed = next(item for item in journal.replay().events if item.type == event)
+    assert committed.payload['response'] == first
+
+
 def test_recovery_deadline_not_reset_by_reconnect_or_generation(make):
     """Worker reconnection keeps the original recovery deadline."""
     c, clock, results, *_ = make()
