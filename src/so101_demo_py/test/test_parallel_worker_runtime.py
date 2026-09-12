@@ -1420,6 +1420,44 @@ def test_worker_owned_tree_reaps_exact_child_when_identity_or_manifest_fails(
     assert tree.manifest.processes == ()
 
 
+def test_worker_owned_tree_retries_transient_incomplete_proc_identity(
+    monkeypatch,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+
+    child = _Child(504)
+    observations = iter(
+        (
+            RuntimeError("incomplete process identity for PID 504"),
+            (401, ("ros2", "launch", "worker"), 7),
+        )
+    )
+    calls = []
+
+    def identity_probe(pid):
+        calls.append(pid)
+        observed = next(observations)
+        if isinstance(observed, Exception):
+            raise observed
+        return observed
+
+    monkeypatch.setattr("os.getpgrp", lambda: 401)
+    tree = WorkerOwnedProcessTree(
+        popen=lambda *_args, **_kwargs: child,
+        identity_probe=identity_probe,
+    )
+
+    identity = tree.start(
+        SimpleNamespace(role="task-station", argv=("ros2", "launch", "worker"))
+    )
+
+    assert calls == [504, 504]
+    assert identity.pid == 504
+    assert identity.pgid == 401
+    assert identity.start_time_ticks == 7
+    assert tree.manifest.processes == (identity,)
+
+
 def test_worker_owned_tree_serializes_concurrent_shutdown_manifest_publication(
     monkeypatch, tmp_path: Path,
 ) -> None:

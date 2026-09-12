@@ -4307,12 +4307,14 @@ decision: RUN EXP-065
 
 ```yaml
 experiment_id: EXP-065
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T02:07:47+08:00
   - status: RUNNING
     at: 2026-09-13T02:07:47+08:00
+  - status: INVALID
+    at: 2026-09-13T02:14:53+08:00
 prior_experiment: EXP-064
 hypothesis: Worker-local rclpy graph identity plus exact retained-publisher DDS matching and a nonzero simulation clock will eliminate the external graph-probe false negative without weakening consumer readiness.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4335,10 +4337,39 @@ preflight: reports/preflight-exp065.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f64 and root live-small-f64.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
-result: PENDING
-retained: all prior evidence; runtime evidence pending
+result: >-
+  INVALID — exit 1 after 213.42 seconds. F64 removed the consumer-readiness failure: both
+  consumers printed READY, task_start and cup_test_forward_5cm passed, both recovery receipts
+  succeeded, and all four available original-resolution RGB frames passed. worker-02 registered
+  with the coordinator but returned WORKER_NOT_READY before a lease, with no owned task-station
+  identity and no ROS log tree; worker-01 then reached its frozen K=2 limit, leaving two points
+  UNRUN. The first bad boundary is task-station process start/identity registration, before
+  motion-stack readiness. Cleanup diagnostics additionally recorded exact Broker-container cleanup
+  false with BROKER_CONTAINER_SURVIVED, although later exact-ID readback proved it auto-removed.
+  No related process, container, GPU task, or domain claim remained.
+retained: complete live-small-f64 tree, command-065 log/time/exit, visual report, root-cause report, cleanup audit, MuJoCo log, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-061
+last_valid_experiment: EXP-022
+current_hypothesis: A short retry limited to transient incomplete /proc identity reads while the exact Popen child remains alive will prevent one Worker from being discarded during concurrent fork/exec without weakening PGID or PID-reuse safety.
+working_tree_status: clean executable source at 3a5669fd66009521ba1d99bef586b7df9dc2d0a7; ledger-only EXP-065 closure is pending before bounded F65 TDD
+owned_processes: NONE
+confirmed_conclusions:
+  - F64 is validated at its intended boundary: both dynamic consumers printed READY, both attempted points passed, and neither CUP_POSE_TIMEOUT nor consumer readiness failure recurred.
+  - worker-02 registered first but returned WORKER_NOT_READY before a lease. Its owned runtime manifest is empty and no ROS log directory exists, localizing failure before first task-station identity publication rather than at motion_stack_ready.
+  - WorkerOwnedProcessTree currently performs exactly one immediate /proc identity read after Popen. A transient empty cmdline during fork/exec is therefore fatal and is the narrowest code path consistent with the evidence, although the swallowed registration exception means EXP-065 cannot distinguish it from immediate Popen failure.
+  - worker-01 passed two points and both recoveries. Its K=2 cap then correctly yielded NO_POINT because worker-02 had exited, leaving the remaining two points UNRUN.
+  - Cleanup actions and process cleanup passed. Exact container cleanup timed out with BROKER_CONTAINER_SURVIVED, but the exact container was absent at post-run audit; no process, GPU task, or domain claim remained.
+  - F65 formal RED pytest-sFz6pw5J failed on the first transient incomplete identity exception. Focused GREEN pytest-FQdXkTXl passed both the retry and immediate wrong-PGID rejection tests; full worker-runtime file pytest-TAQlLWZF passed 51 tests and adjacent parallel suite pytest-Vu2t237L passed 1044 tests in 41.76 seconds.
+ruling: TDD only transient identity acquisition stabilization in WorkerOwnedProcessTree. Retry probe exceptions briefly while the exact child remains alive; immediately reject any successfully observed wrong PGID or incomplete successful identity; preserve exact process ownership, reaping, and cleanup semantics. Repeat the unchanged four-point gate before considering the independently retained container-retirement timing issue.
+retained: EXP-065 complete runtime, visual, root-cause, cleanup, MuJoCo, and command evidence plus all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F65 PROCESS IDENTITY STABILIZATION WITH TDD
 ```
 
 ## EXP-002 — Task 7 isolated detector package build

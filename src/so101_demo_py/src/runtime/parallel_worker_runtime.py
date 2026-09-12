@@ -148,6 +148,24 @@ class WorkerOwnedProcessTree:
         with self._lock:
             return self._start_locked(spec, environment=environment)
 
+    def _starting_identity(self, child):
+        """Allow the exact child a brief fork/exec window to expose /proc."""
+
+        deadline = time.monotonic() + 0.5
+        while True:
+            try:
+                return self._identity_probe(int(child.pid))
+            except (OSError, RuntimeError) as error:
+                incomplete = str(error) == (
+                    f"incomplete process identity for PID {child.pid}"
+                )
+                if (
+                    not isinstance(error, OSError)
+                    and not incomplete
+                ) or child.poll() is not None or time.monotonic() >= deadline:
+                    raise
+                time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+
     def _start_locked(self, spec, *, environment=None):
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
@@ -157,7 +175,7 @@ class WorkerOwnedProcessTree:
         )
         identity = None
         try:
-            pgid, cmdline, started = self._identity_probe(int(child.pid))
+            pgid, cmdline, started = self._starting_identity(child)
             if pgid != os.getpgrp() or not cmdline or not started:
                 raise RuntimeError("nested child escaped the Worker process group")
             identity = OwnedProcessIdentity(
