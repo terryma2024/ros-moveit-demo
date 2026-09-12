@@ -125,6 +125,13 @@ class ResetBoundaryReceipt:
     simulation_time_s: float
     reset_epoch_value: int | None = None
     joint_positions: tuple[float, ...] | None = None
+    batch_id: str | None = None
+    coordinator_epoch: int | None = None
+    worker_id: str | None = None
+    worker_generation: int | None = None
+    point_id: str | None = None
+    attempt_id: str | None = None
+    lease_generation: int | None = None
 
     def __post_init__(self):
         if (
@@ -804,6 +811,13 @@ class ParallelRosRuntimePorts:
             evidence.simulation_time_s,
             value.new_epoch,
             None if joint_positions is None else tuple(joint_positions),
+            batch_id=lease.batch_id,
+            coordinator_epoch=lease.coordinator_epoch,
+            worker_id=lease.worker_id,
+            worker_generation=lease.worker_generation,
+            point_id=lease.point_id,
+            attempt_id=lease.attempt_id,
+            lease_generation=lease.lease_generation,
         )
         self._reset_receipts[lease.attempt_id] = receipt
         return receipt
