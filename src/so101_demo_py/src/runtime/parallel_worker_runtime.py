@@ -626,7 +626,6 @@ class ParallelWorkerRuntime:
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
         resume_physics: Callable[[Any, Any], bool] | None = None,
-        set_physics_paused: Callable[[Any, bool], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
         rebind_resources: Callable[[WorkerResources], bool] | None = None,
@@ -663,9 +662,6 @@ class ParallelWorkerRuntime:
             lambda _lease: True
         )
         self._resume_physics = resume_physics or (lambda _lease, _reset: True)
-        self._set_physics_paused = set_physics_paused or (
-            lambda _lease, _paused: True
-        )
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
         self._rebind_resources = rebind_resources or (lambda _resources: True)
@@ -684,6 +680,7 @@ class ParallelWorkerRuntime:
         ] = {}
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
+        self._execute_consumers: dict[tuple[object, ...], Any] = {}
         self._active_lease: Any | None = None
         self._stop_requested = threading.Event()
 
@@ -933,6 +930,18 @@ class ParallelWorkerRuntime:
             raise RuntimeError(
                 "initial camera frame is not newer than reset simulation watermark"
             )
+        if self.run_mode is RunMode.EXECUTE:
+            reset_epoch = getattr(reset_receipt, "reset_epoch", None)
+            argv = self.consumer_argv(reset_epoch, lease)
+            if argv is None:
+                raise RuntimeError("execute consumer command is unavailable")
+            child = self._processes.start(
+                StackProcessSpec("dynamic-consumer", argv),
+                environment=self.resources.environment,
+            )
+            if self._consumer_ready(child) is not True:
+                raise RuntimeError("dynamic consumer subscription is not ready")
+            self._execute_consumers[key] = child
         inference = self._capture_inference_rgb(lease, boundary)
         reset_session = getattr(reset_receipt, "simulation_session_id", None)
         if simulation_time is not None and (
@@ -1084,24 +1093,12 @@ class ParallelWorkerRuntime:
             raise RuntimeError("expert execution requires the admitted pose")
         if key in self._published_pose_keys:
             raise RuntimeError("accepted pose was published before consumer readiness")
-        argv = self.consumer_argv(reset_epoch, lease)
-        if argv is None:
-            raise RuntimeError("execute consumer command is unavailable")
-        if self._set_physics_paused(lease, True) is not True:
-            raise RuntimeError("POSE_PUBLICATION_PAUSE_FAILED")
         try:
-            child = self._processes.start(
-                StackProcessSpec("dynamic-consumer", argv),
-                environment=self.resources.environment,
-            )
-            if self._consumer_ready(child) is not True:
-                raise RuntimeError("dynamic consumer subscription is not ready")
-            if self._publish_pose(admitted) is False:
-                raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
-        finally:
-            resumed = self._set_physics_paused(lease, False) is True
-        if not resumed:
-            raise RuntimeError("POSE_PUBLICATION_RESUME_FAILED")
+            child = self._execute_consumers[key]
+        except KeyError as error:
+            raise RuntimeError("execute consumer was not ready before inference") from error
+        if self._publish_pose(admitted) is False:
+            raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
         self._published_pose_keys.add(key)
         receipt = self._execute_result(lease, admitted, child)
         if type(receipt) is not ExecutionCompletionReceipt:

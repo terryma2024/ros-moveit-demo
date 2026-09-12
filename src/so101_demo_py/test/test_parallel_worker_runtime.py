@@ -312,6 +312,46 @@ def test_post_reset_snapshot_is_canonical_immutable_and_lease_bound(
         runtime.inference_snapshot(_lease(point="P02"))
 
 
+def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path) -> None:
+    """Catch constructing fresh sim-time participants after the source frame."""
+
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    events = []
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    processes = _ProcessGroup(events)
+    lease = _lease()
+
+    def capture(path, boundary):
+        events.append(("capture", path.name))
+        return _write_capture(path, boundary + 1.0)
+
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.EXECUTE,
+        process_group=processes,
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-7",
+            reset_completed_monotonic_s=10.0,
+        ),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=capture,
+        consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+    )
+    runtime.start_physical_runtime()
+    events.clear()
+
+    runtime.reset_and_validate_point(lease)
+    runtime.inference_snapshot(lease)
+
+    assert events == [
+        ("capture", "initial-rgb.png"),
+        ("start", "dynamic-consumer"),
+        ("ready", "dynamic-consumer"),
+        ("capture", "rgb.npy"),
+    ]
+
+
 def _write_numeric(root, source_stamp):
     from so101_demo.runtime.parallel_worker_runtime import NumericEvidenceReceipt
 
@@ -680,10 +720,6 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         )
         or _write_numeric(root, boundary + 1.0),
         admit_pose=lambda _lease, value: events.append(("admit",)) or admitted,
-        set_physics_paused=lambda _lease, paused: events.append(
-            ("physics-paused", paused)
-        )
-        or True,
         publish_pose=lambda value: events.append(("publish", value)) or True,
         consumer_ready=lambda child: events.append(("ready", child.role)) or True,
         execute_result=lambda _lease, _admitted, _child: events.append(("await",))
@@ -709,11 +745,7 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         ("localize",),
         ("numeric", 10.0),
         ("admit",),
-        ("physics-paused", True),
-        ("start", "dynamic-consumer"),
-        ("ready", "dynamic-consumer"),
         ("publish", admitted),
-        ("physics-paused", False),
         ("await",),
         ("capture", "terminal-rgb.png", 30.0),
     ]
@@ -752,6 +784,7 @@ def test_execute_failure_still_captures_terminal_evidence(tmp_path: Path) -> Non
         RunMode.EXECUTE,
         process_group=_ProcessGroup(),
         reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-7",
             reset_completed_monotonic_s=10.0
         ),
         initial_gate=lambda _lease, receipt: receipt,
@@ -782,7 +815,7 @@ def test_execute_failure_still_captures_terminal_evidence(tmp_path: Path) -> Non
     assert decision.terminal_artifacts[0].name == "terminal-rgb.png"
 
 
-def test_execute_never_publishes_when_consumer_subscription_is_not_ready(
+def test_execute_snapshot_is_not_captured_when_consumer_subscription_is_not_ready(
     tmp_path: Path,
 ) -> None:
     from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
@@ -795,93 +828,32 @@ def test_execute_never_publishes_when_consumer_subscription_is_not_ready(
         RunMode.EXECUTE,
         process_group=_ProcessGroup(events),
         reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-7",
             reset_completed_monotonic_s=10.0
         ),
         initial_gate=lambda _lease, receipt: receipt,
-        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+        capture_rgb=lambda path, boundary: events.append(("capture", path.name))
+        or _write_capture(path, boundary + 1.0),
         localize=lambda _lease, _result: admitted,
         capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
             _write_numeric(root, boundary + 1.0)
         ),
         admit_pose=lambda _lease, value: value,
-        set_physics_paused=lambda _lease, paused: events.append(
-            ("physics-paused", paused)
-        )
-        or True,
         consumer_ready=lambda _child: events.append(("ready",)) or False,
         publish_pose=lambda _value: events.append(("publish",)),
         execute_result=lambda *_args: events.append(("await",)),
     )
     runtime.start_physical_runtime()
-    runtime.reset_and_validate_point(lease)
-    runtime.localize_and_admit_pose(lease, admitted)
     events.clear()
 
     with pytest.raises(RuntimeError, match="subscription is not ready"):
-        runtime.execute_expert(lease, admitted)
+        runtime.reset_and_validate_point(lease)
 
     assert events == [
-        ("physics-paused", True),
+        ("capture", "initial-rgb.png"),
         ("start", "dynamic-consumer"),
         ("ready",),
-        ("physics-paused", False),
     ]
-
-
-@pytest.mark.parametrize("failed_state", [True, False])
-def test_execute_fails_closed_if_pose_publication_pause_boundary_fails(
-    tmp_path: Path, failed_state: bool
-) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
-
-    events = []
-    lease = _lease()
-    admitted = SimpleNamespace(reset_epoch="reset-7")
-    runtime = build_worker_runtime(
-        _resources(tmp_path, "worker-1", 0, 181),
-        RunMode.EXECUTE,
-        process_group=_ProcessGroup(events),
-        reset_point=lambda _lease: SimpleNamespace(
-            reset_completed_monotonic_s=10.0
-        ),
-        initial_gate=lambda _lease, receipt: receipt,
-        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
-        localize=lambda _lease, _result: admitted,
-        capture_numeric_evidence=lambda _lease, _localized, root, boundary: (
-            _write_numeric(root, boundary + 1.0)
-        ),
-        admit_pose=lambda _lease, value: value,
-        set_physics_paused=lambda _lease, paused: events.append(
-            ("physics-paused", paused)
-        )
-        or (paused is not failed_state),
-        consumer_ready=lambda _child: events.append(("ready",)) or True,
-        publish_pose=lambda _value: events.append(("publish",)) or True,
-        execute_result=lambda *_args: events.append(("await",)),
-    )
-    runtime.start_physical_runtime()
-    runtime.reset_and_validate_point(lease)
-    runtime.localize_and_admit_pose(lease, admitted)
-    events.clear()
-
-    expected = (
-        "POSE_PUBLICATION_PAUSE_FAILED"
-        if failed_state is True
-        else "POSE_PUBLICATION_RESUME_FAILED"
-    )
-    with pytest.raises(RuntimeError, match=expected):
-        runtime.execute_expert(lease, admitted)
-
-    if failed_state is True:
-        assert events == [("physics-paused", True)]
-    else:
-        assert events == [
-            ("physics-paused", True),
-            ("start", "dynamic-consumer"),
-            ("ready",),
-            ("publish",),
-            ("physics-paused", False),
-        ]
 
 
 def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
