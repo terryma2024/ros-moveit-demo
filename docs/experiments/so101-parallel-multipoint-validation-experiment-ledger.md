@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 1bed539ab6766e78c60f6f9ca1a68487ac06921c
+current_commit: 9998277763bfe78b77d3fa798909111ad576f135
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -24,12 +24,13 @@ confirmed_conclusions:
   - F36 retries idempotent paused snapshots for volatile subscribers, serializes Worker cleanup publication, and boundedly observes an exiting exact child; the complete ordinary gate and rebuilt immutable image passed (CP-016).
   - F37 retains exactly the latest authoritative atomic MuJoCo evidence with matching reliable transient-local QoS, so a strict late observer receives the paused reset watermark; affected-package gates and the rebuilt immutable image passed (CP-017).
   - F38 uses the authoritative ROS action-status QoS for the point-initial no-active-goal observations; its complete ordinary gate and rebuilt immutable image passed (CP-018).
+  - F39 preserves the point-initial conjunction while emitting bounded missing-class diagnostics; its complete ordinary gate and rebuilt immutable image passed (CP-019).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-018
-next_experiment: EXP-034
+latest_checkpoint: CP-019
+next_experiment: EXP-035
 ```
 
 Frozen provenance:
@@ -473,6 +474,25 @@ disproven_routes:
 open_risks:
   - No four-point execute has yet reached ATTEMPT_STARTED, and EXP-032 required external exact-container cleanup on its abnormal terminal path.
 next_command: Execute the clean pre-registered EXP-033 two-Worker four-point batch using image sha256:6a0a9744a4773e0bfdaf5fd2127a073d0043aa2988c2fed074e7da520a523ebd.
+```
+
+```yaml
+checkpoint_id: CP-019
+last_valid_experiment: EXP-022
+current_hypothesis: Bounded class-specific F39 evidence will identify the remaining absent point-initial observation without altering the gate.
+working_tree_status: clean at source commit 9998277763bfe78b77d3fa798909111ad576f135 before the EXP-034 ledger-only pre-run commit
+owned_processes: NONE; no task container or NVIDIA compute application remains
+preserved_processes: Existing unrelated processes outside this task were not touched.
+confirmed_conclusions:
+  - Formal diagnostic RED pytest-OgDzg6sz proved the existing timeout omitted the sole missing joint-state class; the preceding pytest-VBy9e3oz is retained as a test-authoring failure.
+  - Final adjacent GREEN pytest-gOX2JA6z passed 154/154. The timeout now lists only fixed missing-class identifiers and retains the exact original conjunction and timeout.
+  - Fresh p48 symlink build completed in 1.49 s and the complete ordinary demo suite passed in 84.12 s: 2767 tests, 0 errors, 0 failures, 0 skipped; benchmark_test was not collected.
+  - Installed source/build module trees are equal at SHA256 839b762488969c3e0a79ae551953be79cdb68d9c07f2290c592348cb018e5b85; complete demo source tree is SHA256 2a99e1fc82cca5f8818f7731db507683f403a4e2ddfe4b6303b7a8ab1078e5d4.
+  - Rebuilt immutable image sha256:35da277058a9dba01ef0ad7073c227d31597c38b3fa0cad2a61e47b500b23f64 binds the same source hash. Fresh smoke returned one QUALIFIED CUDA candidate per frozen model and left no container/GPU process.
+  - Fresh EXP-034 preflight found no related process, container, GPU task, or ROS domain 181-183 owner; 24 CPUs, 25.749 GiB MemAvailable, and 14.911 GiB free GPU exceed admission.
+open_risks:
+  - The remaining initial-gate missing class is not yet known; EXP-034 must not be interpreted as a physical point attempt unless ATTEMPT_STARTED is reached.
+next_command: Execute clean pre-registered diagnostic EXP-034 using image sha256:35da277058a9dba01ef0ad7073c227d31597c38b3fa0cad2a61e47b500b23f64.
 ```
 
 ## EXP-001 — Task 7 fresh runtime overlay build
@@ -1560,6 +1580,67 @@ archived: none
 deletion_candidates: p47 and direct-pytest scratch are candidates after readback; nothing was deleted
 decision: REPEAT after F39 diagnostic RED/GREEN, ordinary package gate, installed provenance, image rebuild, and dual-model smoke
 next_experiment: EXP-034 is reserved for the F39 diagnostic execute repeat; controlled plan-only fault advances to EXP-035 and remains blocked until execute acceptance
+```
+
+## EXP-034 — Task 14 class-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-034
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T18:13:00+08:00
+  - status: RUNNING
+    at: 2026-09-12T18:13:00+08:00
+prior_experiment: EXP-033
+hypothesis: F39 will identify every missing point-initial observation class without changing whether the gate passes; if no class is missing, the unchanged four-point execute proceeds normally.
+prediction: Either the normal four-point success contract passes, or each pre-authorization failure names only fixed missing classes and remains INVALID with zero countable attempts.
+single_variable: F39 changes only bounded timeout diagnostic text. Selection, configuration, models, N=2, K=2, timeout, gate conjunction, and physical criteria remain frozen; source/install/image and batch/root identities advance because code changed and prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f39
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f39
+preconditions:
+  - F39 diagnostic RED/GREEN passed 154 adjacent tests and p48 complete ordinary demo gate passed 2767 tests with no error/failure/skip and no benchmark collection.
+  - Installed source/build module trees both hash SHA256 839b762488969c3e0a79ae551953be79cdb68d9c07f2290c592348cb018e5b85.
+  - Immutable image sha256:35da277058a9dba01ef0ad7073c227d31597c38b3fa0cad2a61e47b500b23f64 binds equal source/verified SHA256 2a99e1fc82cca5f8818f7731db507683f403a4e2ddfe4b6303b7a8ab1078e5d4 and passed fresh dual-model smoke.
+  - Fresh inventory and production probe found no related stack process, container, GPU task, or domain 181-183 owner; live-small-f39 is absent.
+success_criteria:
+  - Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete physical evidence, and clean shutdown.
+diagnostic_criteria:
+  - Any pre-ATTEMPT_STARTED timeout records only the exact absent class set; it remains INVALID and authorizes no physical conclusion.
+provenance:
+  executable_source_commit: 9998277763bfe78b77d3fa798909111ad576f135
+  executable_source_tree: 2a99e1fc82cca5f8818f7731db507683f403a4e2ddfe4b6303b7a8ab1078e5d4
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:35da277058a9dba01ef0ad7073c227d31597c38b3fa0cad2a61e47b500b23f64
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point if authorization is reached; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: fresh inventory and domain/resource probe to reports/*before-034.json
+    exit_code: 0
+  - command: unchanged four-point execute to reports/live-small-command-034.*
+    exit_code: pending
+observed: pending
+inferred: pending
+conclusion: pending
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-OgDzg6sz.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-gOX2JA6z.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p48
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f39.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f39.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f39-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-034.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-034.json
+retained: all F39 test, build, provenance, image, smoke, and preflight evidence; live-small-f39 will be retained after execution
+archived: none
+deletion_candidates: p48 and direct-pytest scratch are candidates after readback; nothing was deleted
+decision: pending
+next_experiment: EXP-035 is reserved for the controlled plan-only fault and remains blocked until an execute batch is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
