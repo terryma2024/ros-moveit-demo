@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config
+from so101_demo.parallel_batch.contracts import (
+    BatchRequest, RunMode, WorkerState, load_parallel_runtime_config,
+)
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 
 
@@ -73,8 +75,55 @@ def start(c, worker='w1'):
     """Obtain both durable ACKs before executing a point."""
     lease = c.grant_lease(worker, generation=1)
     c.ack_lease(lease, request_key=f'ack-{lease.attempt_id}')
-    c.ack_attempt_started(lease, request_key=f'start-{lease.attempt_id}')
+    c.ack_attempt_started(
+        lease, request_key=f'start-{lease.attempt_id}', gate_summary=gate_summary(lease))
     return lease
+
+
+def gate_summary(lease, **changes):
+    """Return one literal valid point-initial summary for a granted lease."""
+    summary = {
+        'schema_version': 1,
+        'kind': 'POINT_INITIAL_GATE',
+        'batch_id': lease.batch_id,
+        'coordinator_epoch': lease.coordinator_epoch,
+        'worker_id': lease.worker_id,
+        'worker_generation': lease.worker_generation,
+        'point_id': lease.point_id,
+        'attempt_id': lease.attempt_id,
+        'lease_generation': lease.lease_generation,
+        'reset_epoch': 'reset-1',
+        'simulation_session_id': 'session-1',
+        'reset_completed_monotonic_s': 1.0,
+        'source_frame_monotonic_s': 2.0,
+        'canonical_joints': True,
+        'no_controller_goal': True,
+        'no_attachment': True,
+        'no_contact': True,
+        'no_stale_node': True,
+    }
+    summary.update(changes)
+    return summary
+
+
+def scheduler_summary(lease, **changes):
+    """Return one strict scheduler-only start proof for dry-run."""
+    summary = {
+        'schema_version': 1,
+        'kind': 'SCHEDULER_START',
+        'batch_id': lease.batch_id,
+        'coordinator_epoch': lease.coordinator_epoch,
+        'worker_id': lease.worker_id,
+        'worker_generation': lease.worker_generation,
+        'point_id': lease.point_id,
+        'attempt_id': lease.attempt_id,
+        'lease_generation': lease.lease_generation,
+        'point_gate_applicable': False,
+        'physical_runtime_started': False,
+        'scheduler_only': True,
+    }
+    summary.update(changes)
+    return summary
 
 
 def test_available_worker_receives_first_selected_point(make):
@@ -98,14 +147,41 @@ def finish(c, results, lease, status):
                            request_key=f'result-{lease.attempt_id}')
 
 
+def recover_worker(c, worker='w1', generation=1, *, succeeded=True, **changes):
+    """Use the fenced two-step generation transition inside one recovery window."""
+    deadline = c.snapshot().workers[worker].stage_deadline_monotonic_s
+    facts = {
+        'fenced': True,
+        'owned_processes_stopped': True,
+        'controllers_stopped': True,
+        'readmitted': True,
+    }
+    facts.update(changes)
+    if succeeded:
+        generation += 1
+        c.register_worker(
+            worker,
+            generation=generation,
+            recovery_deadline_monotonic_s=deadline,
+        )
+    c.record_recovery(
+        worker,
+        generation=generation,
+        succeeded=succeeded,
+        recovery_deadline_monotonic_s=deadline,
+        **facts,
+    )
+    return generation
+
+
 @pytest.mark.parametrize('status', ['PASSED', 'FAILED', 'INDETERMINATE'])
 def test_terminal_point_never_requeued_and_recovered_worker_steals_next(make, status):
     """A spent point stays terminal while the recovered slot takes fresh work."""
     c, _, results, _, _ = make()
     lease = start(c)
     finish(c, results, lease, status)
-    c.record_recovery('w1', generation=1, succeeded=True)
-    second = c.grant_lease('w1', generation=1)
+    generation = recover_worker(c)
+    second = c.grant_lease('w1', generation=generation)
     assert second.point_id == 'p2'
     assert c.snapshot().workers['w1'].lease_count == 2
     assert c.snapshot().points['p1'].status == status
@@ -154,7 +230,8 @@ def test_missing_start_ack_cannot_authorize_next_stage(make, stage):
         if stage == 'LEASED':
             c.ack_lease(lease, request_key='late')
         else:
-            c.ack_attempt_started(lease, request_key='late')
+            c.ack_attempt_started(
+                lease, request_key='late', gate_summary=gate_summary(lease))
     assert not c.snapshot().workers['w1'].action_allowed
 
 
@@ -174,12 +251,19 @@ def test_invalid_requires_all_fencing_gates_before_requeue(make):
     c, _, results, *_ = make(workers=2)
     lease = start(c)
     finish(c, results, lease, 'INVALID')
+    deadline = c.snapshot().workers['w1'].stage_deadline_monotonic_s
+    c.register_worker(
+        'w1', generation=2, recovery_deadline_monotonic_s=deadline)
     with pytest.raises(ValueError):
-        c.record_recovery('w1', generation=1, succeeded=True)
+        c.record_recovery(
+            'w1', generation=2, succeeded=True,
+            recovery_deadline_monotonic_s=deadline)
     assert c.grant_lease('w2', generation=1).point_id == 'p2'
-    c.record_recovery('w1', generation=1, succeeded=True, fenced=True,
-                      owned_processes_stopped=True, controllers_stopped=True, readmitted=True)
-    assert c.grant_lease('w1', generation=1).point_id == 'p1'
+    c.record_recovery(
+        'w1', generation=2, succeeded=True,
+        recovery_deadline_monotonic_s=deadline, fenced=True,
+        owned_processes_stopped=True, controllers_stopped=True, readmitted=True)
+    assert c.grant_lease('w1', generation=2).point_id == 'p1'
 
 
 def test_broker_unhealthy_pauses_without_debit(make):
@@ -196,19 +280,25 @@ def test_capacity_exhaustion_waits_for_inflight_and_recoverable_worker(make):
     """Drain every executable point before marking unused selections UNRUN."""
     c, _, results, *_ = make(points=('p1', 'p2', 'p3'), workers=2, k=2)
     lease = start(c)
-    c.record_recovery('w2', generation=1, succeeded=False)
+    w2_lease = start(c, 'w2')
+    finish(c, results, w2_lease, 'INVALID')
+    recover_worker(c, 'w2', succeeded=False)
     assert c.snapshot().terminal_reason is None
     finish(c, results, lease, 'FAILED')
     assert c.snapshot().terminal_reason is None
-    c.record_recovery('w1', generation=1, succeeded=True)
-    lease2 = start(c)
-    assert lease2.point_id == 'p2'
+    generation = recover_worker(c)
+    lease2 = c.grant_lease('w1', generation=generation)
+    c.ack_lease(lease2, request_key=f'ack-{lease2.attempt_id}')
+    c.ack_attempt_started(
+        lease2, request_key=f'start-{lease2.attempt_id}',
+        gate_summary=gate_summary(lease2))
+    assert lease2.point_id == 'p3'
     finish(c, results, lease2, 'PASSED')
     assert c.snapshot().terminal_reason == 'CAPACITY_EXHAUSTED'
-    assert not c.snapshot().points['p3'].terminal
+    assert not c.snapshot().points['p2'].terminal
     c.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
-    assert c.snapshot().points['p3'].terminal
-    assert c.snapshot().points['p3'].status == 'UNRUN'
+    assert c.snapshot().points['p2'].terminal
+    assert c.snapshot().points['p2'].status == 'UNRUN'
 
 
 def test_last_pass_does_not_qualify_before_cleanup(make):
@@ -229,8 +319,11 @@ def test_validation_has_separate_events_status_and_no_physical_qualification(mak
     lease = c.grant_lease('w1', generation=1)
     c.ack_lease(lease, request_key='ack')
     with pytest.raises(ValueError):
-        c.ack_attempt_started(lease, request_key='wrong')
-    c.ack_validation_started(lease, request_key='start')
+        c.ack_attempt_started(
+            lease, request_key='wrong', gate_summary=gate_summary(lease))
+    summary = scheduler_summary(lease) if mode is RunMode.DRY_RUN else gate_summary(lease)
+    c.ack_validation_started(
+        lease, request_key='start', gate_summary=summary)
     c.commit_validation(lease, seal(c, results, lease, status), request_key='result')
     c.complete_cleanup(owned_processes_stopped=True, controllers_stopped=True)
     s = c.snapshot()
@@ -253,7 +346,8 @@ def test_heartbeats_cannot_extend_stage_deadline(make, stage, duration):
     lease = c.grant_lease('w1', generation=1)
     c.ack_lease(lease, request_key='ack')
     if stage != 'INITIALIZING':
-        c.ack_attempt_started(lease, request_key='start')
+        c.ack_attempt_started(
+            lease, request_key='start', gate_summary=gate_summary(lease))
     if stage == 'FINALIZING':
         c.begin_finalizing(lease, request_key='final')
     for now in range(1, duration):
@@ -271,11 +365,70 @@ def test_recovery_deadline_not_reset_by_reconnect_or_generation(make):
     c, clock, results, *_ = make()
     finish(c, results, start(c), 'FAILED')
     clock.now = 100
-    c.register_worker('w1', generation=2)
+    c.register_worker(
+        'w1', generation=2, recovery_deadline_monotonic_s=120)
     assert c.snapshot().workers['w1'].stage_started_monotonic_s == 0
     clock.now = 120
     c.tick()
     assert c.snapshot().workers['w1'].state == 'QUARANTINED'
+
+
+def test_recovery_generation_registration_has_no_available_grant_window(make):
+    """Only the final recovery record atomically makes the new generation available."""
+    c, _, results, *_ = make(points=('p1', 'p2'))
+    finish(c, results, start(c), 'FAILED')
+    deadline = c.snapshot().workers['w1'].stage_deadline_monotonic_s
+    registered = c.register_worker(
+        'w1', generation=2, recovery_deadline_monotonic_s=deadline)
+    assert registered.state is WorkerState.RECOVERING
+    assert c.grant_lease('w1', generation=2) is None
+    recovered = c.record_recovery(
+        'w1', generation=2, succeeded=True,
+        recovery_deadline_monotonic_s=deadline, fenced=True,
+        owned_processes_stopped=True, controllers_stopped=True, readmitted=True)
+    assert recovered.state is WorkerState.AVAILABLE
+    assert c.grant_lease('w1', generation=2).point_id == 'p2'
+
+
+@pytest.mark.parametrize('boundary', ['register', 'record'])
+def test_recovery_mutation_rejects_exact_or_mismatched_deadline(make, boundary):
+    """The immutable recovery deadline is checked under lock before mutation."""
+    c, clock, results, journal, _ = make(points=('p1', 'p2'))
+    finish(c, results, start(c), 'FAILED')
+    deadline = c.snapshot().workers['w1'].stage_deadline_monotonic_s
+    if boundary == 'record':
+        c.register_worker(
+            'w1', generation=2, recovery_deadline_monotonic_s=deadline)
+    before = c.snapshot()
+    events = journal.replay().events
+    with pytest.raises(ValueError, match='RECOVERY_DEADLINE'):
+        if boundary == 'register':
+            c.register_worker(
+                'w1', generation=2,
+                recovery_deadline_monotonic_s=deadline + 1)
+        else:
+            c.record_recovery(
+                'w1', generation=2, succeeded=True,
+                recovery_deadline_monotonic_s=deadline + 1, fenced=True,
+                owned_processes_stopped=True, controllers_stopped=True,
+                readmitted=True)
+    assert c.snapshot() == before
+    assert journal.replay().events == events
+    clock.now = deadline
+    with pytest.raises(ValueError):
+        if boundary == 'register':
+            c.register_worker(
+                'w1', generation=2,
+                recovery_deadline_monotonic_s=deadline)
+        else:
+            c.record_recovery(
+                'w1', generation=2, succeeded=True,
+                recovery_deadline_monotonic_s=deadline, fenced=True,
+                owned_processes_stopped=True, controllers_stopped=True,
+                readmitted=True)
+    worker = c.snapshot().workers['w1']
+    assert worker.state in (WorkerState.RECOVERING, WorkerState.QUARANTINED)
+    assert c.grant_lease('w1', generation=worker.generation) is None
 
 
 def test_batch_deadline_bounds_renewal_and_preserves_unstarted_until_cleanup(make):
@@ -324,7 +477,8 @@ def test_duplicate_requests_do_not_debit_or_recommit(make):
     lease = c.grant_lease('w1', generation=1, request_key='grant')
     assert c.grant_lease('w1', generation=1, request_key='grant') == lease
     c.ack_lease(lease, request_key='ack')
-    c.ack_attempt_started(lease, request_key='start')
+    c.ack_attempt_started(
+        lease, request_key='start', gate_summary=gate_summary(lease))
     location = seal(c, results, lease, 'PASSED')
     c.commit_result(lease, location, request_key='result')
     count = len(journal.replay().events)
@@ -366,7 +520,8 @@ def test_duplicate_authorization_after_heartbeat_loss_is_rejected(make, operatio
     if operation != 'grant':
         c.ack_lease(lease, request_key='ack')
     if operation == 'start':
-        c.ack_attempt_started(lease, request_key='start')
+        c.ack_attempt_started(
+            lease, request_key='start', gate_summary=gate_summary(lease))
     clock.now = 5
     with pytest.raises(ValueError):
         if operation == 'grant':
@@ -374,7 +529,8 @@ def test_duplicate_authorization_after_heartbeat_loss_is_rejected(make, operatio
         elif operation == 'ack':
             c.ack_lease(lease, request_key='ack')
         else:
-            c.ack_attempt_started(lease, request_key='start')
+            c.ack_attempt_started(
+                lease, request_key='start', gate_summary=gate_summary(lease))
 
 
 def test_old_generation_cannot_repeat_a_committed_result(make):
@@ -383,7 +539,9 @@ def test_old_generation_cannot_repeat_a_committed_result(make):
     lease = start(c)
     location = seal(c, results, lease, 'FAILED')
     c.commit_result(lease, location, request_key='result')
-    c.register_worker('w1', generation=2)
+    deadline = c.snapshot().workers['w1'].stage_deadline_monotonic_s
+    c.register_worker(
+        'w1', generation=2, recovery_deadline_monotonic_s=deadline)
     with pytest.raises(ValueError):
         c.commit_result(lease, location, request_key='result')
 
@@ -393,7 +551,7 @@ def test_restart_preserves_k_and_fences_old_epoch(make):
     c, clock, results, journal, request = make(k=2)
     lease = start(c)
     finish(c, results, lease, 'FAILED')
-    c.record_recovery('w1', generation=1, succeeded=True)
+    recover_worker(c)
     journal.close()
     with CoordinatorJournal.create(journal.root, request.batch_id) as again:
         c2 = type(c)(again, request, config=c.config, clock=clock, result_port=results)
@@ -402,7 +560,8 @@ def test_restart_preserves_k_and_fences_old_epoch(make):
         assert next_lease.point_id == 'p2'
         assert c2.snapshot().workers['w1'].lease_count == 2
         with pytest.raises(ValueError):
-            c2.ack_attempt_started(lease, request_key='old-epoch')
+            c2.ack_attempt_started(
+                lease, request_key='old-epoch', gate_summary=gate_summary(lease))
 
 
 @pytest.mark.parametrize('missing', ['fenced', 'owned_processes_stopped',
@@ -414,8 +573,13 @@ def test_each_invalid_readmission_gate_is_required(make, missing):
     gates = {'fenced': True, 'owned_processes_stopped': True, 'controllers_stopped': True,
              'readmitted': True}
     gates[missing] = False
+    deadline = c.snapshot().workers['w1'].stage_deadline_monotonic_s
+    c.register_worker(
+        'w1', generation=2, recovery_deadline_monotonic_s=deadline)
     with pytest.raises(ValueError):
-        c.record_recovery('w1', generation=1, succeeded=True, **gates)
+        c.record_recovery(
+            'w1', generation=2, succeeded=True,
+            recovery_deadline_monotonic_s=deadline, **gates)
     assert c.snapshot().points['p1'].blocked_by == 'w1'
 
 
@@ -484,12 +648,12 @@ def test_unrecoverable_invalid_does_not_leave_batch_stuck_on_idle_capacity(make)
     """Idle capacity cannot wait forever on a point whose recovery has failed."""
     c, _, results, *_ = make(workers=2)
     finish(c, results, start(c), 'INVALID')
-    c.record_recovery('w1', generation=1, succeeded=False)
+    recover_worker(c, 'w1', succeeded=False)
     lease = start(c, 'w2')
     assert lease.point_id == 'p2'
     finish(c, results, lease, 'PASSED')
-    c.record_recovery('w2', generation=1, succeeded=True)
-    assert c.grant_lease('w2', generation=1) is None
+    generation = recover_worker(c, 'w2')
+    assert c.grant_lease('w2', generation=generation) is None
     assert c.snapshot().terminal_reason == 'CAPACITY_EXHAUSTED'
 
 
@@ -509,11 +673,13 @@ def test_same_phase_request_cannot_restart_stage_clock(make):
     lease = start(c)
     clock.now = 1
     c.heartbeat(lease)
-    c.ack_attempt_started(lease, request_key=f'start-{lease.attempt_id}')
+    c.ack_attempt_started(
+        lease, request_key=f'start-{lease.attempt_id}', gate_summary=gate_summary(lease))
     assert c.snapshot().workers['w1'].stage_started_monotonic_s == 0
     assert c.snapshot().workers['w1'].stage_deadline_monotonic_s == 240
     with pytest.raises(ValueError):
-        c.ack_attempt_started(lease, request_key='another-start')
+        c.ack_attempt_started(
+            lease, request_key='another-start', gate_summary=gate_summary(lease))
 
 
 def test_result_directory_scan_never_overrides_journal_commit(make):
@@ -624,11 +790,155 @@ def test_frozen_nonalphabetical_selection_order_survives_replay(make, restart):
         replay_journal = CoordinatorJournal.create(journal.root, request.batch_id)
         c = type(c)(replay_journal, request, config=c.config, clock=clock, result_port=results)
     try:
+        generation = 1
         for point_id in ('zeta', 'mu', 'alpha'):
-            lease = start(c)
+            lease = c.grant_lease('w1', generation=generation)
+            c.ack_lease(lease, request_key=f'ack-{lease.attempt_id}')
+            c.ack_attempt_started(
+                lease, request_key=f'start-{lease.attempt_id}',
+                gate_summary=gate_summary(lease))
             assert lease.point_id == point_id
             finish(c, results, lease, 'PASSED')
-            c.record_recovery('w1', generation=1, succeeded=True)
+            generation = recover_worker(c, generation=generation)
     finally:
         if replay_journal is not None:
             replay_journal.close()
+
+
+def test_started_event_immutably_persists_exact_gate_summary(make):
+    """The authoritative start event must bind the reviewed initial-state proof."""
+    c, _, _, journal, _ = make(points=('p1',))
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    summary = gate_summary(lease)
+    first = c.ack_attempt_started(
+        lease, request_key='start', gate_summary=summary)
+    summary['reset_epoch'] = 'caller-mutated'
+    before = len(journal.replay().events)
+    duplicate = c.ack_attempt_started(
+        lease, request_key='start', gate_summary=gate_summary(lease))
+    assert duplicate == first
+    assert len(journal.replay().events) == before
+    event = next(event for event in journal.replay().events
+                 if event.type == 'ATTEMPT_STARTED')
+    assert event.payload['identity']['gate_summary'] == gate_summary(lease)
+    with pytest.raises(ValueError, match='REQUEST_KEY_CONFLICT'):
+        c.ack_attempt_started(
+            lease,
+            request_key='start',
+            gate_summary=gate_summary(lease, source_frame_monotonic_s=3.0),
+        )
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'drop': 'attempt_id'},
+        {'extra': 'unexpected'},
+        {'kind': 1},
+        {'reset_epoch': ''},
+        {'simulation_session_id': '   '},
+        {'worker_generation': True},
+        {'lease_generation': 2},
+        {'reset_completed_monotonic_s': True},
+        {'source_frame_monotonic_s': float('nan')},
+        {'source_frame_monotonic_s': 1.0},
+        {'canonical_joints': 1},
+    ],
+)
+def test_started_event_rejects_noncanonical_or_stale_gate_summary(make, change):
+    """Malformed, stale or non-JSON gate facts cannot become start authority."""
+    c, *_ = make(points=('p1',))
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    summary = gate_summary(lease)
+    if 'drop' in change:
+        del summary[change['drop']]
+    elif 'extra' in change:
+        summary[change['extra']] = True
+    else:
+        summary.update(change)
+    with pytest.raises(ValueError, match='GATE_SUMMARY'):
+        c.ack_attempt_started(
+            lease, request_key='start', gate_summary=summary)
+    assert c.snapshot().workers['w1'].state is WorkerState.INITIALIZING
+
+
+def test_validation_start_requires_gate_summary_and_replay_preserves_it(make):
+    """Validation start uses the same strict gate proof without physical aliasing."""
+    c, _, _, journal, request = make(points=('p1',), mode=RunMode.PLAN_ONLY)
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    with pytest.raises(ValueError, match='GATE_SUMMARY'):
+        c.ack_validation_started(lease, request_key='missing')
+    summary = gate_summary(lease)
+    c.ack_validation_started(
+        lease, request_key='start', gate_summary=summary)
+    journal.close()
+    with CoordinatorJournal.create(journal.root, request.batch_id) as again:
+        restored = type(c)(
+            again, request, config=c.config, clock=c.clock,
+            result_port=c.result_port)
+        event = next(event for event in again.replay().events
+                     if event.type == 'VALIDATION_STARTED')
+        assert event.payload['identity']['gate_summary'] == summary
+        assert restored.snapshot().workers['w1'].state is WorkerState.EXECUTING
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'drop': 'scheduler_only'},
+        {'extra': 'reset_epoch'},
+        {'kind': 'POINT_INITIAL_GATE'},
+        {'worker_generation': True},
+        {'point_gate_applicable': True},
+        {'physical_runtime_started': True},
+        {'scheduler_only': 1},
+    ],
+)
+def test_dry_run_start_rejects_noncanonical_or_fabricated_physical_summary(
+        make, change):
+    """Dry-run start cannot fabricate reset facts or claim physical runtime."""
+    c, *_ = make(points=('p1',), mode=RunMode.DRY_RUN)
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    summary = scheduler_summary(lease)
+    if 'drop' in change:
+        del summary[change['drop']]
+    elif 'extra' in change:
+        summary[change['extra']] = 'fabricated'
+    else:
+        summary.update(change)
+    with pytest.raises(ValueError, match='GATE_SUMMARY'):
+        c.ack_validation_started(
+            lease, request_key='dry-start', gate_summary=summary)
+    assert c.snapshot().workers['w1'].state is WorkerState.INITIALIZING
+
+
+def test_dry_run_scheduler_summary_is_idempotent_and_replayable(make):
+    """The exact scheduler-only proof is durable without reset evidence."""
+    c, _, _, journal, request = make(points=('p1',), mode=RunMode.DRY_RUN)
+    lease = c.grant_lease('w1', generation=1)
+    c.ack_lease(lease, request_key='ack')
+    summary = scheduler_summary(lease)
+    first = c.ack_validation_started(
+        lease, request_key='dry-start', gate_summary=summary)
+    duplicate = c.ack_validation_started(
+        lease, request_key='dry-start', gate_summary=scheduler_summary(lease))
+    assert duplicate == first
+    with pytest.raises(ValueError, match='REQUEST_KEY_CONFLICT'):
+        c.ack_validation_started(
+            lease,
+            request_key='dry-start',
+            gate_summary=scheduler_summary(lease, point_id='other'),
+        )
+    journal.close()
+    with CoordinatorJournal.create(journal.root, request.batch_id) as again:
+        restored = type(c)(
+            again, request, config=c.config, clock=c.clock,
+            result_port=c.result_port)
+        event = next(event for event in again.replay().events
+                     if event.type == 'VALIDATION_STARTED')
+        assert event.payload['identity']['gate_summary'] == summary
+        assert restored.snapshot().workers['w1'].state is WorkerState.EXECUTING

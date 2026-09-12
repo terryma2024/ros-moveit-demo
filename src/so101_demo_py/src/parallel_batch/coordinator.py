@@ -8,6 +8,7 @@ the coordinator or authorize worker actions; Task 4 supplies the disk adapter.
 """
 
 import json
+import math
 import os
 import tempfile
 import threading
@@ -183,12 +184,126 @@ class BatchCoordinator:
             raise ValueError('STALE_WORKER_GENERATION')
         return deepcopy(worker)
 
+    def _check_recovery_deadline(self, worker, supplied):
+        deadline = worker.get('stage_deadline_monotonic_s')
+        if (worker.get('state') != 'RECOVERING'
+                or isinstance(supplied, bool)
+                or not isinstance(supplied, (int, float))
+                or not math.isfinite(supplied)
+                or supplied != deadline
+                or self.clock() >= deadline):
+            raise ValueError('RECOVERY_DEADLINE_INVALID')
+
     @staticmethod
     def _identity(lease):
         value = asdict(lease)
         value.pop('lease_issued_monotonic_s')
         value.pop('lease_deadline_monotonic_s')
         return value
+
+    @staticmethod
+    def _gate_summary(lease, value):
+        """Return a detached canonical initial-gate proof bound to ``lease``."""
+        required = {
+            'schema_version', 'kind', 'batch_id', 'coordinator_epoch', 'worker_id',
+            'worker_generation', 'point_id', 'attempt_id', 'lease_generation',
+            'reset_epoch', 'simulation_session_id',
+            'reset_completed_monotonic_s', 'source_frame_monotonic_s',
+            'canonical_joints', 'no_controller_goal', 'no_attachment',
+            'no_contact', 'no_stale_node',
+        }
+        if type(value) is not dict or set(value) != required:
+            raise ValueError('GATE_SUMMARY_SCHEMA')
+        expected = {
+            'batch_id': lease.batch_id,
+            'coordinator_epoch': lease.coordinator_epoch,
+            'worker_id': lease.worker_id,
+            'worker_generation': lease.worker_generation,
+            'point_id': lease.point_id,
+            'attempt_id': lease.attempt_id,
+            'lease_generation': lease.lease_generation,
+        }
+        if type(value['schema_version']) is not int or value['schema_version'] != 1:
+            raise ValueError('GATE_SUMMARY_SCHEMA')
+        if type(value['kind']) is not str or value['kind'] != 'POINT_INITIAL_GATE':
+            raise ValueError('GATE_SUMMARY_SCHEMA')
+        for field, expected_value in expected.items():
+            if type(value[field]) is not type(expected_value) or value[field] != expected_value:
+                raise ValueError('GATE_SUMMARY_IDENTITY')
+        for field in ('reset_epoch', 'simulation_session_id'):
+            if type(value[field]) is not str or not value[field].strip():
+                raise ValueError('GATE_SUMMARY_RESET_IDENTITY')
+        for field in ('reset_completed_monotonic_s', 'source_frame_monotonic_s'):
+            timestamp = value[field]
+            if (isinstance(timestamp, bool)
+                    or not isinstance(timestamp, (int, float))
+                    or not math.isfinite(timestamp)):
+                raise ValueError('GATE_SUMMARY_TIMESTAMP')
+        if value['source_frame_monotonic_s'] <= value['reset_completed_monotonic_s']:
+            raise ValueError('GATE_SUMMARY_TIMESTAMP')
+        for field in ('canonical_joints', 'no_controller_goal', 'no_attachment',
+                      'no_contact', 'no_stale_node'):
+            if value[field] is not True:
+                raise ValueError('GATE_SUMMARY_FACT')
+        try:
+            encoded = json.dumps(
+                value, sort_keys=True, separators=(',', ':'), allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError('GATE_SUMMARY_NOT_CANONICAL') from error
+        return json.loads(encoded)
+
+    @staticmethod
+    def _scheduler_summary(lease, value):
+        required = {
+            'schema_version', 'kind', 'batch_id', 'coordinator_epoch',
+            'worker_id', 'worker_generation', 'point_id', 'attempt_id',
+            'lease_generation', 'point_gate_applicable',
+            'physical_runtime_started', 'scheduler_only',
+        }
+        if type(value) is not dict or set(value) != required:
+            raise ValueError('GATE_SUMMARY_SCHEMA')
+        expected = {
+            'schema_version': 1,
+            'kind': 'SCHEDULER_START',
+            'batch_id': lease.batch_id,
+            'coordinator_epoch': lease.coordinator_epoch,
+            'worker_id': lease.worker_id,
+            'worker_generation': lease.worker_generation,
+            'point_id': lease.point_id,
+            'attempt_id': lease.attempt_id,
+            'lease_generation': lease.lease_generation,
+            'point_gate_applicable': False,
+            'physical_runtime_started': False,
+            'scheduler_only': True,
+        }
+        for field, expected_value in expected.items():
+            if type(value[field]) is not type(expected_value) or value[field] != expected_value:
+                raise ValueError('GATE_SUMMARY_IDENTITY')
+        try:
+            encoded = json.dumps(
+                value, sort_keys=True, separators=(',', ':'), allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError('GATE_SUMMARY_NOT_CANONICAL') from error
+        return json.loads(encoded)
+
+    def _start_summary(self, lease, value):
+        if self.request.run_mode is RunMode.DRY_RUN:
+            return self._scheduler_summary(lease, value)
+        return self._gate_summary(lease, value)
+
+    def _start_transition(self, lease, request_key, kind, gate_summary):
+        """Resolve duplicate start identity before validating a changed payload."""
+        self._tick()
+        identity = self._identity(lease)
+        identity['gate_summary'] = deepcopy(gate_summary)
+        duplicate = self._duplicate(request_key, kind, identity)
+        if duplicate:
+            self._active(lease)
+            return self.snapshot().workers[lease.worker_id]
+        summary = self._start_summary(lease, gate_summary)
+        return self._transition(
+            lease, request_key, kind, 'INITIALIZING', 'EXECUTING',
+            gate_summary=summary)
 
     def _active(self, lease, *, current_epoch=True):
         if current_epoch and lease.coordinator_epoch != self.journal.coordinator_epoch:
@@ -224,7 +339,8 @@ class BatchCoordinator:
         return worker
 
     @_locked
-    def register_worker(self, worker_id, *, generation):
+    def register_worker(
+            self, worker_id, *, generation, recovery_deadline_monotonic_s=None):
         """Register an admitted slot; a restart never replenishes its K budget."""
         # Validate identifiers/generations using the shared immutable identity.
         LeaseIdentity(self.request.batch_id, self.journal.coordinator_epoch,
@@ -235,12 +351,23 @@ class BatchCoordinator:
             if generation < old['generation']:
                 raise ValueError('STALE_WORKER_GENERATION')
             if generation == old['generation']:
+                if recovery_deadline_monotonic_s is not None:
+                    self._check_recovery_deadline(old, recovery_deadline_monotonic_s)
                 return self.snapshot().workers[worker_id]
             if old['lease']:
                 raise ValueError('ACTIVE_LEASE_REQUIRES_FENCING')
+            if old['state'] == 'RECOVERING':
+                if generation != old['generation'] + 1:
+                    raise ValueError('WORKER_GENERATION_SEQUENCE')
+                self._check_recovery_deadline(
+                    old, recovery_deadline_monotonic_s)
+            elif recovery_deadline_monotonic_s is not None:
+                raise ValueError('RECOVERY_DEADLINE_UNEXPECTED')
             worker = deepcopy(old)
             worker['generation'] = generation
         else:
+            if recovery_deadline_monotonic_s is not None:
+                raise ValueError('RECOVERY_DEADLINE_UNEXPECTED')
             if len(self._state['workers']) >= self.request.worker_count:
                 raise ValueError('WORKER_SLOTS_FULL')
             worker = asdict(WorkerProjection(generation, WorkerState.AVAILABLE))
@@ -287,9 +414,11 @@ class BatchCoordinator:
                    request_key=request_key, identity=identity, response=asdict(lease))
         return lease
 
-    def _transition(self, lease, request_key, kind, expected, target):
+    def _transition(self, lease, request_key, kind, expected, target, *, gate_summary=None):
         self._tick()
         identity = self._identity(lease)
+        if gate_summary is not None:
+            identity['gate_summary'] = gate_summary
         duplicate = self._duplicate(request_key, kind, identity)
         if duplicate:
             self._active(lease)
@@ -309,20 +438,20 @@ class BatchCoordinator:
         return self._transition(lease, request_key, 'LEASE_ACKNOWLEDGED', 'LEASED', 'INITIALIZING')
 
     @_locked
-    def ack_attempt_started(self, lease, *, request_key):
+    def ack_attempt_started(self, lease, *, request_key, gate_summary=None):
         """Durably authorize physical execution only after the initial gate."""
         if self.request.run_mode != RunMode.EXECUTE:
             raise ValueError('WRONG_EXECUTION_MODE')
-        return self._transition(
-            lease, request_key, 'ATTEMPT_STARTED', 'INITIALIZING', 'EXECUTING')
+        return self._start_transition(
+            lease, request_key, 'ATTEMPT_STARTED', gate_summary)
 
     @_locked
-    def ack_validation_started(self, lease, *, request_key):
+    def ack_validation_started(self, lease, *, request_key, gate_summary=None):
         """Durably authorize nonphysical validation in dry-run or plan-only."""
         if self.request.run_mode == RunMode.EXECUTE:
             raise ValueError('WRONG_EXECUTION_MODE')
-        return self._transition(
-            lease, request_key, 'VALIDATION_STARTED', 'INITIALIZING', 'EXECUTING')
+        return self._start_transition(
+            lease, request_key, 'VALIDATION_STARTED', gate_summary)
 
     @_locked
     def begin_finalizing(self, lease, *, request_key):
@@ -497,7 +626,7 @@ class BatchCoordinator:
     @_locked
     def record_recovery(self, worker_id, *, generation, succeeded, fenced=False,
                         owned_processes_stopped=False, controllers_stopped=False,
-                        readmitted=False):
+                        readmitted=False, recovery_deadline_monotonic_s=None):
         """Re-admit capacity; INVALID needs all four explicit fencing/stop gates."""
         if any(type(value) is not bool for value in (
                 succeeded, fenced, owned_processes_stopped, controllers_stopped, readmitted)):
@@ -508,6 +637,8 @@ class BatchCoordinator:
             raise ValueError('ACTIVE_LEASE_REQUIRES_EXPIRY')
         if succeeded and worker['state'] != 'RECOVERING':
             raise ValueError('NOT_RECOVERING')
+        self._check_recovery_deadline(
+            worker, recovery_deadline_monotonic_s)
         point_id = worker['invalid_point']
         if succeeded and point_id and not all((
                 fenced, owned_processes_stopped, controllers_stopped, readmitted)):
@@ -523,6 +654,7 @@ class BatchCoordinator:
             worker.update(state='QUARANTINED', stop_requested=True)
         self._emit('WORKER_RECOVERED' if succeeded else 'WORKER_QUARANTINED', delta)
         self._evaluate()
+        return self.snapshot().workers[worker_id]
 
     @_locked
     def mark_broker_health(self, healthy):
