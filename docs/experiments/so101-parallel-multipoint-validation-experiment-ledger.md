@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 1dd480a2fbef595f7a95cce81d8c779d5f22de1b
+current_commit: 42a7306ec99d720638925c8b286a3003ff65efe1
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -32,14 +32,15 @@ confirmed_conclusions:
   - EXP-044 proved the F47 gate receipt is correct but exposed the complementary production reset-receipt identity omission before ATTEMPT_STARTED; F48 is limited to binding that reset receipt to the same seven exact lease fields (CP-028).
   - F48 binds the production reset receipt to all seven exact lease identity fields while preserving reset and Worker gate semantics; its fresh complete ordinary gate and immutable dual-model image passed (CP-029).
   - EXP-045 crossed both exact lease-bound reset/gate receipts and durable ATTEMPT_STARTED, then exposed deterministic insecure-mode rejection in Broker input mirror intermediates; F49 preserves the Broker security gate and fixes the producer path modes (CP-030).
+  - F50 preserves conservative authorization-failure semantics while exposing bounded phase/type/message diagnostics; its fresh complete ordinary gate and immutable dual-model image passed (CP-033).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-032
-next_experiment: F50 formal RED/GREEN for bounded post-authorization failure diagnostics, followed by a fresh complete gate and immutable image
+latest_checkpoint: CP-033
+next_experiment: EXP-047 diagnostic four-point two-Worker execute
 ```
 
 Frozen provenance:
@@ -2758,6 +2759,66 @@ retained: complete EXP-046 evidence, cleanup audit, all F49 evidence, invalid wr
 archived: none
 deletion_candidates: direct pytest scratch and p51-p64 after readback; no deletion authorized
 decision: IMPLEMENT F50 DIAGNOSTICS WITH FORMAL RED/GREEN
+```
+
+```yaml
+checkpoint_id: CP-033
+last_valid_experiment: EXP-022
+current_hypothesis: F50 will retain the exact post-authorization request exception needed to select a narrow corrective variable while preserving fail-closed behavior.
+working_tree_status: clean at executable source commit 42a7306ec99d720638925c8b286a3003ff65efe1 before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F50 formal RED pytest-GGQMNU0y failed all five expected diagnostic assertions. Focused GREEN pytest-xFd6ynLY passed all five, and adjacent Worker/CLI gate pytest-OOrWduG7 passed all 159 tests.
+  - WorkerRunResult now identifies inference_snapshot, request_model, admit_pose, execute_expert, or plan_expert and carries a 128-character type plus single-line 512-byte UTF-8-safe message. Existing safe-stop order, durable result reason/status, recovery, and physical-action semantics are unchanged.
+  - Fresh p65 build passed in 1.52 seconds. All 2777 ordinary tests passed in 81.97 seconds pytest and 83.67 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash 21a0461b4d71b58f179402536c72b790ba130a48f4e20bd676c2d45b1a69e59f; complete package source hash is 55ad0033ad9e0b0ec80a8897875713695eb236788b6d13185619b6195b30ae94.
+  - Rebuilt image sha256:22b83823ab900cc478fc9d492df55bbce20d4b2a8e5f172c50b5c6e743f40e9b binds that source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model: YOLO 35.85 ms and Grounded-SAM 191.84 ms. Exact smoke CID 8d1fc63d0db092587e7604364db2af23f8c367f8f495d6c57476f7031bb5ec79 was absent after --rm.
+  - Fresh EXP-047 preflight found 24 CPUs, 25.412 GiB MemAvailable, 15269 MiB free GPU, no GPU compute application, related process, or running related container, and all domains 181-183 independently lockable.
+open_risks:
+  - The exact request-layer exception still requires one fresh live run to observe.
+retained: F50 RED/GREEN/adjacent scratch and logs, p65 including invalid first test-result wrapper and valid r2 readback, provenance, image build/smoke, EXP-047 preflight, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p65 after readback; no deletion authorized
+decision: RUN EXP-047 with unchanged four points and physical criteria
+```
+
+## EXP-047 — Task 14 bounded request-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-047
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T22:08:26+08:00
+  - status: RUNNING
+    at: 2026-09-12T22:10:00+08:00
+prior_experiment: EXP-046
+hypothesis: F50 will identify the exact post-authorization request boundary and exception while leaving the two-Worker runtime otherwise identical.
+prediction: Either four unique points finish PASSED with full qualification, or every failure retains a bounded exact diagnostic sufficient for one narrow next fix and proves physical safety.
+single_variable: F50 bounded WorkerRunResult diagnostic only. Authorization, Broker checks, reset/gate identity, topology, contact, freshness, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f50
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f50
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown; otherwise exact bounded post-authorization diagnostics with no unproven physical action.
+provenance:
+  executable_source_commit: 42a7306ec99d720638925c8b286a3003ff65efe1
+  executable_source_tree: 55ad0033ad9e0b0ec80a8897875713695eb236788b6d13185619b6195b30ae94
+  installed_module_tree: 21a0461b4d71b58f179402536c72b790ba130a48f4e20bd676c2d45b1a69e59f
+  image_id: sha256:22b83823ab900cc478fc9d492df55bbce20d4b2a8e5f172c50b5c6e743f40e9b
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp047.json; sha256 6e49c7b712c27ede8be37a8ff27e7f2832d7b73bac2d0c01ced736a9ff09157b
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f50 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f50 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
+result: PENDING
+retained: PENDING
+archived: none
+deletion_candidates: none pending run
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
