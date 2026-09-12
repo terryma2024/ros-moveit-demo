@@ -5683,6 +5683,43 @@ deletion_candidates: registered pytest/build scratch, invalid smoke and command 
 decision: ADVANCE TO NORMAL FOUR-POINT SMALL GATE
 ```
 
+## EXP-084 — F74 normal four-point small regression gate
+
+```yaml
+experiment_id: EXP-084
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T05:45:38+08:00
+prior_experiment: EXP-083
+hypothesis: The immutable F74 runtime will preserve the accepted normal two-Worker four-point physical schedule before synchronized fault and full-catalog gates.
+single_variable: Replace the six-point diagnostic selection and K=3 with the frozen normal small-gate selection and K=2; source, install, image, models, config, catalog, lifecycle, and execute behavior remain fixed.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f74
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f74
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+provenance:
+  executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_base_commit: f5e4c265be7e6cad026f695b12351116814ae020
+  executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+  installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+  broker_image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: Exit 0; four distinct points PASSED; exactly K=2 leases and generation 3 per Worker; four recovery receipts succeed; all eight original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, coordinator completion, qualification, and cleanup gates pass; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
+failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, qualification false, or residual owned state makes this batch non-qualifying and requires diagnosis before fault/full gates.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
