@@ -87,23 +87,37 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
     monkeypatch.setattr(rclpy, "ok", lambda: True)
     monkeypatch.setattr(rclpy, "create_node", create_node)
     monkeypatch.setattr(rclpy, "spin_once", spin_once)
+    fingertip_contacts = {"left": (), "right": ()}
     monkeypatch.setattr(
         teleop_runtime,
         "current_evidence",
         lambda *_args, **_kwargs: SimpleNamespace(
             reset_epoch=2,
-            has_contact=False,
+            has_contact=True,
+            left_fingertip_contacts=fingertip_contacts["left"],
+            right_fingertip_contacts=fingertip_contacts["right"],
+            other_object_contacts=(SimpleNamespace(geom2="table"),),
         ),
     )
 
-    runtime_module.observe_parallel_initial_gate(
+    table_supported = runtime_module.observe_parallel_initial_gate(
         runtime_module.ResetBoundaryReceipt(
             "reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6
         ),
         timeout_s=0.25,
     )
+    assert table_supported.has_contact is False
 
-    assert captured_qos == [qos_profile_action_status_default] * 3
+    fingertip_contacts["left"] = (SimpleNamespace(geom1="left_fingertip"),)
+    fingertip_contact = runtime_module.observe_parallel_initial_gate(
+        runtime_module.ResetBoundaryReceipt(
+            "reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6
+        ),
+        timeout_s=0.25,
+    )
+    assert fingertip_contact.has_contact is True
+
+    assert captured_qos == [qos_profile_action_status_default] * 6
 
     with pytest.raises(
         RuntimeError,
@@ -520,6 +534,7 @@ def test_initial_gate_requires_exact_worker_node_inventory():
     )
 
     expected = (
+        "/arm_controller", "/gripper_controller", "/joint_state_broadcaster",
         "/move_group", "/mujoco_ros2_control_node", "/robot_state_publisher",
         "/so101_base_to_camera_link", "/so101_camera_link_to_task_camera_frame",
     )

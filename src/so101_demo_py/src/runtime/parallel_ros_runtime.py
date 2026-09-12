@@ -558,7 +558,10 @@ def observe_parallel_initial_gate(
             boundary.joint_positions,
             tuple(sorted(goal_ids)),
             attached,
-            evidence.has_contact,
+            bool(
+                evidence.left_fingertip_contacts
+                or evidence.right_fingertip_contacts
+            ),
             graph,
             stable_graph_samples >= 2,
         )
@@ -619,6 +622,9 @@ class ParallelRosRuntimePorts:
     @staticmethod
     def expected_worker_nodes():
         return (
+            "/arm_controller",
+            "/gripper_controller",
+            "/joint_state_broadcaster",
             "/move_group",
             "/mujoco_ros2_control_node",
             "/robot_state_publisher",
