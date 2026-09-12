@@ -3220,7 +3220,7 @@ decision: RUN EXP-051
 
 ```yaml
 experiment_id: EXP-051
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T22:53:48+08:00
@@ -3609,12 +3609,14 @@ decision: RUN EXP-055
 
 ```yaml
 experiment_id: EXP-055
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T23:32:14+08:00
   - status: RUNNING
     at: 2026-09-12T23:32:14+08:00
+  - status: INVALID
+    at: 2026-09-12T23:37:05+08:00
 prior_experiment: EXP-054
 hypothesis: Both recovery action-status readers will execute on their private context, report stopped=true and confirmed=true, re-admit generation 2, and finish all four points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, and every recovery diagnostic is all true.
@@ -3638,6 +3640,70 @@ preflight: Reuse EXP-054 preflight because the failed command created no process
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f56-r2, root live-small-f56-r2, and the exact qualified model literals above.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — exit 1 after 200.49 seconds. task_start and sample_05_near_center physically PASSED with 19 transitions and visually upright centered placement plus retreat. cup_test_forward_5cm was INVALID before action because exact task_camera_frame TF was transiently unavailable; sample_14_far_right remained UNRUN. Worker-02 recovered twice with all five gates true. Worker-01 had physical_action_proven_absent=true but stopped=false and confirmed=false because no action status had ever been published, then was quarantined; terminal reason CAPACITY_EXHAUSTED, execution_complete=false, batch_cleanup_complete=false, qualification_passed=false.
+broker_readback: Container dfc4ebd599cf0acbf5ddf24111967f491caf3f0bc5cf631cc76c0d18f0923ebc matched the exact F56 image, source label, batch label, isolated network/IPC, GPU request, and model mounts. It was stopped by exact ID and Docker auto-removed it.
+cleanup_readback: No related process, container, GPU compute application, or ROS domain 181-183 claim remained after manual exact-container cleanup.
+visual_readback: Five authorized RGB images were inspected at original resolution; both terminal images are visual PASS and the INVALID point has initial evidence only.
+retained: complete live-small-f56-r2 tree, command-055 log/time/exit, broker inspect summary, visual report, MuJoCo log, cleanup audit, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-048
+last_valid_experiment: EXP-022
+current_hypothesis: A trusted pre-action absence proof must satisfy the recovery stop/confirmation gates when ROS action servers have never published a status sample; any action-may-have-started path must retain the existing fail-closed observations.
+working_tree_status: clean executable source at 7b50d7e25348546cbe667d9a31adcbd1a050d9e6; ledger-only EXP-056 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-055 isolated the false-negative recovery case: the INVALID attempt sealed physical_action_proven_absent=true, while the same run's two post-action Worker-02 recoveries were all true.
+  - Formal RED pytest-0el54IO6 failed exactly because recovery ignored the trusted pre-action absence proof. The corrected focused run pytest-V6oQVUzk passed 3 tests and adjacent pytest-H4igAEI6 passed 121 tests.
+  - F57 still calls cancel_motion and confirm_no_controller_goal, but only a strict physical_action_proven_absent=true may satisfy missing status observations. The uncertain/action-started comparison remains fail closed.
+  - Source commit 7b50d7e25348546cbe667d9a31adcbd1a050d9e6; p78 symlink build passed in 1.59 seconds.
+  - p79 and p80 are retained harness failures: p79 used system Pydantic v1 and p80 failed its pre-test dependency assertion. p81 used the verified combined dependency path and passed 2787 tests with zero errors, failures, or skips in 83.81 seconds.
+  - Installed/source module tree hash is b96a2d1f3c907caa5d1f68cd8b03f8a72bbc3900cd4f34c8cc2eb05fc09ea732; complete source hash is 911022eb412a4f78f45bb92585bbd453c0efdcaf33939e2e7f46a2c10c94b962; compileall and frozen input hashes passed.
+  - F57 image sha256:418148abd88b3551d5cb3cad1f3b3cac36fd8ee7dc372cba98ebbcac9c4985e9 binds the exact source hash. The corrected smoke returned QUALIFIED CUDA for YOLO and Grounded-SAM and left no container or GPU process.
+  - Fresh EXP-056 preflight found 24 CPUs, 25.000 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only the F57 pre-action recovery proof behavior changed. A recurrent TF failure remains INVALID but must no longer quarantine a slot if no action was possible.
+retained: EXP-055 evidence, F57 RED/GREEN/adjacent/build/package/provenance/image/smoke/preflight evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-0el54IO6, pytest-HhTF8blg, pytest-V6oQVUzk, pytest-H4igAEI6, p78, p79, p80, and p81 after readback; no deletion authorized
+decision: RUN EXP-056
+```
+
+## EXP-056 — Task 14 pre-action recovery proof F57 two-Worker execute
+
+```yaml
+experiment_id: EXP-056
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T23:51:23+08:00
+  - status: RUNNING
+    at: 2026-09-12T23:51:23+08:00
+prior_experiment: EXP-055
+hypothesis: Both slots remain recoverable through K=2 even if one point fails before any formal action status exists, while any post-action recovery still requires observed cancellation and independent confirmation.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, and every recovery diagnostic is all true.
+single_variable: Recovery may use an already-sealed strict physical_action_proven_absent=true fact to satisfy missing action-status samples; all ROS observation paths and every other source/config/model/point/timeout/physical criterion remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f57
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f57
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete recovery receipts, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 7b50d7e25348546cbe667d9a31adcbd1a050d9e6
+  executable_source_tree: 911022eb412a4f78f45bb92585bbd453c0efdcaf33939e2e7f46a2c10c94b962
+  installed_module_tree: b96a2d1f3c907caa5d1f68cd8b03f8a72bbc3900cd4f34c8cc2eb05fc09ea732
+  image_id: sha256:418148abd88b3551d5cb3cad1f3b3cac36fd8ee7dc372cba98ebbcac9c4985e9
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp056.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f57 and root live-small-f57.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
