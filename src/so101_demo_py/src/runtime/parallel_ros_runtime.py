@@ -727,6 +727,8 @@ class ParallelRosRuntimePorts:
         self._admitted = {}
         self._admission_candidates = {}
         self._planner = None
+        self._pose_publisher_owner = None
+        self._pose_publisher = None
 
     @staticmethod
     def expected_worker_nodes():
@@ -793,6 +795,7 @@ class ParallelRosRuntimePorts:
         self._localized.clear()
         self._admitted.clear()
         self._admission_candidates.clear()
+        self._close_pose_publisher()
         if self._planner is not None:
             self._planner.close()
             self._planner = None
@@ -803,6 +806,7 @@ class ParallelRosRuntimePorts:
         for source, *_rest in tuple(self._rgbd.values()):
             source.close()
         self._rgbd.clear()
+        self._close_pose_publisher()
         if self._planner is not None:
             self._planner.close()
             self._planner = None
@@ -1232,6 +1236,39 @@ class ParallelRosRuntimePorts:
             raise RuntimeError("POSE_LOCALIZATION_IDENTITY")
         return self._admitted_pose(lease, localized)
 
+    def _close_pose_publisher(self):
+        owner = self._pose_publisher_owner
+        self._pose_publisher_owner = None
+        self._pose_publisher = None
+        if owner is not None:
+            owner.close()
+
+    def _prime_pose_publisher(self):
+        if self._pose_publisher_owner is not None:
+            if self._pose_publisher is None:
+                raise RuntimeError("POSE_PUBLISHER_STATE")
+            return self._pose_publisher_owner, self._pose_publisher
+        if self._pose_publisher is not None:
+            raise RuntimeError("POSE_PUBLISHER_STATE")
+
+        import rclpy
+        from geometry_msgs.msg import PoseStamped
+        from rclpy.parameter import Parameter
+
+        owner = _open_isolated_ros_node(
+            rclpy,
+            "so101_parallel_pose_publisher",
+            parameter_overrides=[Parameter("use_sim_time", value=True)],
+        )
+        try:
+            publisher = owner.node.create_publisher(PoseStamped, "/cup_pose", 10)
+        except Exception:
+            owner.close()
+            raise
+        self._pose_publisher_owner = owner
+        self._pose_publisher = publisher
+        return owner, publisher
+
     def publish_pose(self, admitted):
         call = self.dependencies.get("publish_pose")
         if call is not None:
@@ -1240,14 +1277,24 @@ class ParallelRosRuntimePorts:
         from geometry_msgs.msg import PoseStamped
         from rclpy.parameter import Parameter
 
-        initialized_here = not rclpy.ok()
-        if initialized_here:
-            rclpy.init()
-        node = rclpy.create_node(
-            "so101_parallel_pose_publisher",
-            parameter_overrides=[Parameter("use_sim_time", value=True)],
-        )
-        publisher = node.create_publisher(PoseStamped, "/cup_pose", 10)
+        retained = self._pose_publisher_owner is not None
+        initialized_here = False
+        if retained:
+            owner, publisher = self._prime_pose_publisher()
+            node = owner.node
+            spin_once = lambda duration: owner.spin_once(timeout_sec=duration)
+        else:
+            initialized_here = not rclpy.ok()
+            if initialized_here:
+                rclpy.init()
+            node = rclpy.create_node(
+                "so101_parallel_pose_publisher",
+                parameter_overrides=[Parameter("use_sim_time", value=True)],
+            )
+            publisher = node.create_publisher(PoseStamped, "/cup_pose", 10)
+            spin_once = lambda duration: rclpy.spin_once(
+                node, timeout_sec=duration
+            )
         try:
             message = PoseStamped()
             message.header.frame_id = "world"
@@ -1269,18 +1316,19 @@ class ParallelRosRuntimePorts:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0.0:
                     return False
-                rclpy.spin_once(node, timeout_sec=min(0.02, remaining))
+                spin_once(min(0.02, remaining))
             while publisher.get_subscription_count() < 1 and time.monotonic() < deadline:
-                rclpy.spin_once(node, timeout_sec=0.02)
+                spin_once(0.02)
             if publisher.get_subscription_count() < 1:
                 return False
             publisher.publish(message)
-            rclpy.spin_once(node, timeout_sec=0.05)
+            spin_once(0.05)
             return True
         finally:
-            node.destroy_node()
-            if initialized_here and rclpy.ok():
-                rclpy.shutdown()
+            if not retained:
+                node.destroy_node()
+                if initialized_here and rclpy.ok():
+                    rclpy.shutdown()
 
     def _planning_adapter(self):
         if self._planner is not None:
@@ -1334,7 +1382,20 @@ class ParallelRosRuntimePorts:
             if RosGraphProbe().subscription_count(
                 "/so101_dynamic_cup_pick_place", "/cup_pose"
             ) == 1:
-                return True
+                try:
+                    owner, publisher = self._prime_pose_publisher()
+                    while time.monotonic() < deadline:
+                        if (
+                            publisher.get_subscription_count() == 1
+                            and owner.node.get_clock().now().nanoseconds > 0
+                        ):
+                            return True
+                        owner.spin_once(timeout_sec=0.02)
+                except Exception:
+                    self._close_pose_publisher()
+                    return False
+                self._close_pose_publisher()
+                return False
             time.sleep(0.05)
         return False
 
