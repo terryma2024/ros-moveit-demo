@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import time
 
 import rclpy
@@ -10,10 +11,22 @@ from mujoco_ros2_control_msgs.srv import SetPause
 from .client import FreeJointResetOverride, MujocoRosClient
 from .observer import EvidenceStale, MujocoWorldObserver
 from .reset import MujocoResetClient
+from ...core.simulation.types import ResetReceipt
 
 CONTROLLERS = ("arm_controller", "gripper_controller")
 RESET_JOINTS = (0.0,) * 6
 CUP_START = (0.02, -0.28, 0.165)
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionalResetEvidence:
+    """Reset receipt plus the exact post-reset joint sample it validated."""
+
+    receipt: ResetReceipt
+    joint_positions: tuple[float, ...]
+
+    def __getattr__(self, name):
+        return getattr(self.receipt, name)
 
 
 def _pause_snapshot(node, observer, timeout_s: float):
@@ -109,7 +122,8 @@ def transactional_reset(
         progress=progress,
     )
     try:
-        return resetter.reset(keyframe, free_joint_overrides)
+        receipt = resetter.reset(keyframe, free_joint_overrides)
+        return TransactionalResetEvidence(receipt, services.latest_joint_positions())
     finally:
         observer_node.destroy_node()
         joint_node.destroy_node()

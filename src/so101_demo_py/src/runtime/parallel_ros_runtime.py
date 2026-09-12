@@ -79,6 +79,7 @@ class ResetBoundaryReceipt:
     reset_completed_monotonic_s: float
     simulation_time_s: float
     reset_epoch_value: int | None = None
+    joint_positions: tuple[float, ...] | None = None
 
     def __post_init__(self):
         if (
@@ -99,6 +100,17 @@ class ResetBoundaryReceipt:
         if self.reset_epoch_value is None:
             object.__setattr__(self, "reset_epoch_value", numeric)
         elif type(self.reset_epoch_value) is not int or self.reset_epoch_value != numeric:
+            raise ValueError("invalid reset boundary receipt")
+        if self.joint_positions is not None and (
+            type(self.joint_positions) is not tuple
+            or len(self.joint_positions) != 6
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                for value in self.joint_positions
+            )
+        ):
             raise ValueError("invalid reset boundary receipt")
 
 
@@ -423,17 +435,15 @@ def observe_parallel_initial_gate(
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
     from action_msgs.msg import GoalStatusArray
+    from action_msgs.srv import CancelGoal
     from moveit_msgs.msg import PlanningSceneComponents
     from moveit_msgs.srv import GetPlanningScene
-    from ..backends.mujoco.client import MujocoRosClient
 
     initialized_here = not rclpy.ok()
     if initialized_here:
         rclpy.init()
     service_node = rclpy.create_node("so101_parallel_gate_services")
-    joint_node = rclpy.create_node("so101_parallel_gate_joints")
     graph_node = rclpy.create_node("so101_parallel_gate_graph")
-    services = MujocoRosClient(service_node, joint_node, service_timeout_s=timeout_s)
     goal_receipts = {}
     goal_ids = set()
 
@@ -457,20 +467,37 @@ def observe_parallel_initial_gate(
         )
         for topic in topics
     ]
+    action_prefixes = {
+        "execute_trajectory": "/execute_trajectory/_action",
+        "arm_controller": "/arm_controller/follow_joint_trajectory/_action",
+        "gripper_controller": "/gripper_controller/follow_joint_trajectory/_action",
+    }
+    cancel_clients = {
+        name: service_node.create_client(CancelGoal, prefix + "/cancel_goal")
+        for name, prefix in action_prefixes.items()
+    }
     scene_client = service_node.create_client(GetPlanningScene, "/get_planning_scene")
     try:
         if not scene_client.wait_for_service(timeout_sec=timeout_s):
             raise RuntimeError("POINT_INITIAL_GATE_SCENE_UNAVAILABLE")
+        if any(
+            not client.wait_for_service(timeout_sec=timeout_s)
+            for client in cancel_clients.values()
+        ):
+            raise RuntimeError("POINT_INITIAL_GATE_GOAL_CANCEL_UNAVAILABLE")
         scene_request = GetPlanningScene.Request()
         scene_request.components.components = (
             PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
         )
         scene_future = scene_client.call_async(scene_request)
+        cancel_futures = {
+            name: client.call_async(CancelGoal.Request())
+            for name, client in cancel_clients.items()
+        }
         deadline = time.monotonic() + timeout_s
         previous_graph = None
         stable_graph_samples = 0
         while time.monotonic() < deadline:
-            services.progress()
             rclpy.spin_once(service_node, timeout_sec=0.01)
             rclpy.spin_once(graph_node, timeout_sec=0.01)
             graph = tuple(
@@ -486,23 +513,20 @@ def observe_parallel_initial_gate(
                 previous_graph = graph
                 stable_graph_samples = 1
             if (
-                services.joint_callback_count > 0
-                and set(goal_receipts) == set(topics)
+                boundary.joint_positions is not None
+                and all(future.done() for future in cancel_futures.values())
                 and scene_future.done()
                 and stable_graph_samples >= 2
             ):
                 break
         else:
             missing = []
-            if services.joint_callback_count <= 0:
+            if boundary.joint_positions is None:
                 missing.append("joint_state")
-            status_names = {
-                topics[0]: "execute_trajectory_status",
-                topics[1]: "arm_controller_status",
-                topics[2]: "gripper_controller_status",
-            }
             missing.extend(
-                status_names[topic] for topic in topics if topic not in goal_receipts
+                name + "_cancel"
+                for name, future in cancel_futures.items()
+                if not future.done()
             )
             if not scene_future.done():
                 missing.append("planning_scene")
@@ -511,6 +535,12 @@ def observe_parallel_initial_gate(
             raise RuntimeError(
                 "POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:" + ",".join(missing)
             )
+        for future in cancel_futures.values():
+            response = future.result()
+            if response is None:
+                raise RuntimeError("POINT_INITIAL_GATE_GOAL_CANCEL_UNAVAILABLE")
+            for goal in response.goals_canceling:
+                goal_ids.add(bytes(goal.goal_id.uuid).hex())
         scene_response = scene_future.result()
         if scene_response is None:
             raise RuntimeError("POINT_INITIAL_GATE_SCENE_UNAVAILABLE")
@@ -525,7 +555,7 @@ def observe_parallel_initial_gate(
             boundary.reset_epoch,
             boundary.simulation_session_id,
             received,
-            services.latest_joint_positions(),
+            boundary.joint_positions,
             tuple(sorted(goal_ids)),
             attached,
             evidence.has_contact,
@@ -535,7 +565,6 @@ def observe_parallel_initial_gate(
     finally:
         del subscriptions
         graph_node.destroy_node()
-        joint_node.destroy_node()
         service_node.destroy_node()
         if initialized_here and rclpy.ok():
             rclpy.shutdown()
@@ -678,12 +707,14 @@ class ParallelRosRuntimePorts:
             or evidence.reset_epoch != value.new_epoch
         ):
             raise RuntimeError("RESET_WATERMARK_IDENTITY")
+        joint_positions = getattr(value, "joint_positions", None)
         receipt = ResetBoundaryReceipt(
             f"reset-{value.new_epoch}",
             value.simulation_session_id,
             time.monotonic(),
             evidence.simulation_time_s,
             value.new_epoch,
+            None if joint_positions is None else tuple(joint_positions),
         )
         self._reset_receipts[lease.attempt_id] = receipt
         return receipt
