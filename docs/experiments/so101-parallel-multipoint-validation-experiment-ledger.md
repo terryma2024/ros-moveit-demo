@@ -6087,10 +6087,12 @@ decision: ADVANCE TO A NEW IMMUTABLE FULL 20-POINT F90 QUALIFICATION
 
 ```yaml
 experiment_id: EXP-092
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:40:27+08:00
+  - status: RUNNING
+    at: 2026-09-13T06:41:03+08:00
 prior_experiment: EXP-091
 hypothesis: The fully qualified F90 runtime will complete the frozen 20-point catalog and either qualify 20/20 or preserve the exact initiating perception infrastructure failure that F74 concealed.
 single_variable: Expand EXP-091 from its four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, execute behavior, and diagnostics remain byte-identical.
@@ -6105,6 +6107,7 @@ selection_sha256: 33374bb01c31f342e6a2f3d13943c91e74d62165a5a901678216bbb18ffa9a
 preflight: No related process, task container, or GPU compute application; 24 CPUs, 25.052 GiB MemAvailable, 15272 MiB GPU free; batch root absent; exact F90 image and worktree console reverified.
 provenance:
   executable_source_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
+  preregistration_commit: 20414c027b0f6d0c881435041bf4c9a49bedf2f6
   preregistration_base_commit: f93570568f5138eac14bc7d3cc6d6563dc01cd7f
   executable_source_tree: 58a02ab45ec0df072e7a7e23f28dfaeec3e25034a7fb9e792dc75fc1d0f6fd68
   installed_module_tree: de4b36f48b4b4446c0efa315dd52dd941334088f770897a1636e039e499231ff
