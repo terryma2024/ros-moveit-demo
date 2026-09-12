@@ -535,6 +535,116 @@ def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
         assert not (workspace.path / "pose_accepted.json").exists()
 
 
+@pytest.mark.parametrize(
+    "outcome,response_reason,expected_type,expected_message",
+    [
+        (
+            "INFRA_ERROR",
+            "INPUT_OPENED_OWNER_MODE",
+            "BrokerResponse.INFRA_ERROR",
+            "INPUT_OPENED_OWNER_MODE",
+        ),
+        ("NORMAL_REJECTION", None, None, None),
+    ],
+)
+def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
+    tmp_path, outcome, response_reason, expected_type, expected_message
+):
+    from so101_demo.parallel_batch.artifacts import ValidationWorkspace
+    from so101_demo.parallel_batch.broker import BrokerResponse
+    from so101_demo.parallel_batch.contracts import (
+        ExecutionKind,
+        InferenceRequest,
+        ModelOutcome,
+        RunMode,
+        ValidationIdentity,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_ros_runtime import (
+        ParallelRosRuntimePorts,
+        PerceptionTerminal,
+        ResetBoundaryReceipt,
+    )
+    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+
+    lease = _lease()
+    workspace = ValidationWorkspace.create(
+        tmp_path / "worker-01",
+        ValidationIdentity(
+            lease.batch_id, lease.coordinator_epoch, lease.worker_id,
+            lease.worker_generation, lease.point_id, lease.attempt_id,
+            lease.lease_generation,
+        ),
+        reset_epoch="reset-2",
+        source_stamp={"simulation_time_s": 10.0},
+        run_mode=RunMode.PLAN_ONLY,
+    )
+    rgb_path = workspace.path / "perception/input/rgb.npy"
+    rgb_path.parent.mkdir(parents=True)
+    rgb_path.write_bytes(b"npy")
+    rgb_path.chmod(0o400)
+    snapshot = InferenceSnapshotReceipt(
+        rgb_path, 11.0, 12_000_000_000, "task_camera_frame", (2, 3, 3),
+        hashlib.sha256(b"npy").hexdigest(),
+    )
+    depth = SimpleNamespace(
+        header=SimpleNamespace(stamp=SimpleNamespace(sec=12, nanosec=0)),
+        data=b"depth",
+    )
+    config = load_parallel_runtime_config(
+        PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+    )
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(
+            worker_id="worker-01", generation=1, session_id="session-1"
+        ),
+        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
+        config=config,
+        broker_generation=1,
+        dependencies={
+            "workspace_provider": lambda _lease: workspace,
+            "authorize": lambda _request: True,
+            "source_clock": lambda _reset: 12.0,
+            "dynamic_template": lambda: SimpleNamespace(
+                workspace_bounds_m=(-0.3, -0.5, 0.1, 0.35, 0.2, 0.5)
+            ),
+        },
+    )
+    ports._reset_receipts[lease.attempt_id] = ResetBoundaryReceipt(
+        "reset-2", "session-1", 10.0, 10.0
+    )
+    ports._rgbd[snapshot.source_stamp_ns] = (
+        SimpleNamespace(close=lambda: None), object(), depth, "task_camera_frame"
+    )
+
+    def broker_request(model_id, before_send):
+        request = InferenceRequest(
+            request_id=f"attempt-1-{model_id}", model_id=model_id,
+            execution_kind=ExecutionKind.VALIDATION, batch_id="batch-1",
+            coordinator_epoch=1, worker_id="worker-01", worker_generation=1,
+            point_id="task_start", lease_generation=1, reset_epoch="reset-2",
+            image_timestamp_s=12.0,
+            input_relative_path=(
+                "worker-01/validations/task_start/attempt-1/working/"
+                "perception/input/rgb.npy"
+            ),
+            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+        )
+        before_send(request)
+        return BrokerResponse(
+            request, 1, ModelOutcome(outcome), None, response_reason,
+            1.0, 2.0, 1.1, 2.1, 1.2,
+        )
+
+    terminal = ports.run_perception_chain(
+        lease, ExecutionKind.VALIDATION, snapshot, broker_request
+    )
+
+    assert isinstance(terminal, PerceptionTerminal)
+    assert terminal.failure_type == expected_type
+    assert terminal.failure_message == expected_message
+
+
 def test_point_reset_uses_qualified_override_and_scene_restore():
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 

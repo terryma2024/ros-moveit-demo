@@ -395,6 +395,8 @@ class AdmittedPose:
 class PerceptionTerminal:
     disposition: str
     reason: str
+    failure_type: str | None = None
+    failure_message: str | None = None
 
     @property
     def perception_terminal(self):
@@ -1116,6 +1118,8 @@ class ParallelRosRuntimePorts:
         decision = policy.decision
         source = self._rgbd[snapshot.source_stamp_ns][0]
         retain_source = False
+        failure_type = None
+        failure_message = None
         try:
             while decision.next_model is not None:
                 response = broker_request(
@@ -1128,6 +1132,13 @@ class ParallelRosRuntimePorts:
                 )
                 if response.broker_generation != self.broker_generation:
                     raise RuntimeError("BROKER_GENERATION_CHANGED")
+                if response.outcome in {
+                    ModelOutcome.INFRA_ERROR,
+                    ModelOutcome.QUEUE_TIMEOUT,
+                    ModelOutcome.INFERENCE_TIMEOUT,
+                }:
+                    failure_type = f"BrokerResponse.{response.outcome.value}"
+                    failure_message = response.reason or response.outcome.value
                 if response.outcome is ModelOutcome.QUALIFIED:
                     self._admission_candidates[response.request.request_id] = response
                     try:
@@ -1161,6 +1172,8 @@ class ParallelRosRuntimePorts:
             return PerceptionTerminal(
                 decision.disposition,
                 decision.reason or "PERCEPTION_TERMINAL",
+                failure_type,
+                failure_message,
             )
         finally:
             if not retain_source:

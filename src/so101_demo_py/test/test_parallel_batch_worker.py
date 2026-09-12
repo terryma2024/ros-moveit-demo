@@ -575,6 +575,30 @@ def test_authorized_boundary_failure_reports_bounded_structured_diagnostic(
     assert fake.results.calls[0][2] == "AUTHORIZATION_OR_PORT_FAILURE"
 
 
+def test_broker_terminal_diagnostic_is_projected_without_changing_result_reason():
+    fake = Fake(RunMode.EXECUTE)
+    terminal = SimpleNamespace(
+        perception_terminal=True,
+        failure_type="BrokerResponse.INFRA_ERROR",
+        failure_message="INPUT_OPENED_OWNER_MODE\n" + "é" * 600,
+    )
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    fake.runtime.execute_decision = Decision(
+        AttemptStatus.INVALID,
+        reason="PERCEPTION_INFRA_ERROR",
+        physical_action_proven_absent=True,
+    )
+
+    result = ParallelWorker(fake.ports()).run_one()
+
+    assert result.failure_boundary == "request_model"
+    assert result.failure_type == "BrokerResponse.INFRA_ERROR"
+    assert result.failure_message.startswith("INPUT_OPENED_OWNER_MODE ")
+    assert len(result.failure_message.encode("utf-8")) <= 512
+    assert "\n" not in result.failure_message
+    assert fake.results.calls[0][2] == "PERCEPTION_INFRA_ERROR"
+
+
 def expected_gate_summary(lease):
     return {
         "schema_version": 1,
