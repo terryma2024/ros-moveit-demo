@@ -179,6 +179,30 @@ def test_execute_exit_matrix_and_validation_does_not_qualify():
     assert outcome_document(summary(RunMode.EXECUTE, {"task_start": PointStatus.PASSED}, cleanup=False))[0] == 1
 
 
+@pytest.mark.parametrize("mode", [RunMode.DRY_RUN, RunMode.PLAN_ONLY])
+def test_nonexecute_dependency_failure_keeps_validation_history_but_exits_nonzero(mode):
+    from so101_demo.cli.mujoco_parallel_batch import outcome_document
+
+    failed = BatchSummary(
+        mode,
+        {"task_start": PointStatus.UNRUN},
+        batch_terminal=True,
+        validation_statuses={
+            "task_start": ValidationStatus.VALIDATION_PASSED,
+        },
+        batch_cleanup_complete=True,
+        terminal_reason="SHARED_DEPENDENCY_UNAVAILABLE",
+    )
+
+    code, document = outcome_document(failed)
+
+    assert code == 1
+    assert document["validation_statuses"] == {
+        "task_start": "VALIDATION_PASSED",
+    }
+    assert document["validation_passed"] is False
+
+
 def test_cli_dependency_injection_runs_composition_and_writes_real_outcome(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import run_cli
 

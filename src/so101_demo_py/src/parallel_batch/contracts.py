@@ -644,9 +644,13 @@ class BatchSummary:
 
     @property
     def validation_passed(self) -> bool:
-        return self.validation_complete and all(
-            status is ValidationStatus.VALIDATION_PASSED
-            for status in self.validation_statuses.values()
+        return (
+            self.terminal_reason == "POINTS_COMPLETE"
+            and self.validation_complete
+            and all(
+                status is ValidationStatus.VALIDATION_PASSED
+                for status in self.validation_statuses.values()
+            )
         )
 
     @property
