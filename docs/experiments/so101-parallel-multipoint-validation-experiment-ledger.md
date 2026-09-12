@@ -5417,10 +5417,12 @@ deletion_candidates: registered pytest/build scratch and prior diagnosis runtime
 
 ```yaml
 experiment_id: EXP-080
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:12:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T05:13:08+08:00
 prior_experiment: EXP-079
 hypothesis: RELIABLE plus VOLATILE subscriber QoS delivers every matched one-shot /cup_pose message across three fresh execute/recovery cycles per Worker while F72 keeps each controller generation healthy.
 mode: execute; simulation only
@@ -5433,6 +5435,7 @@ selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5
 selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
 provenance:
   executable_source_commit: 8d2a3f367119936f88b551dfd96462c2423bcaad
+  preregistration_commit: 31e5e1f99c8b60f27bc42105a8981859763f67df
   executable_source_tree: 4d68c3518a542ab3353981d89e92c077be9ec512cde60f58323f78938f2480f1
   installed_module_tree: 819a372e4b280fdc0e12756ba0fe49a3b1310afc522f25b2cd4ce162dd59be25
   mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
