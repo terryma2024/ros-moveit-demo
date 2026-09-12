@@ -999,3 +999,122 @@ def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context(
     owner.close()
     owner.close()
     assert events[-2:] == ["node-destroy", "private-shutdown"]
+
+
+def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    clock_ns = [0]
+    created = {}
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 1
+
+        @staticmethod
+        def publish(message):
+            published.append((clock_ns[0], message))
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=clock_ns[0])
+            )
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    def create_node(name, **kwargs):
+        created.update(name=name, kwargs=kwargs)
+        return Node()
+
+    def spin_once(_node, *, timeout_sec):
+        assert 0.0 < timeout_sec <= 0.05
+        clock_ns[0] += 40_000_000
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", create_node)
+    monkeypatch.setattr(rclpy, "spin_once", spin_once)
+    admitted = SimpleNamespace(
+        source_stamp_ns=100_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+    ports = ParallelRosRuntimePorts(SimpleNamespace(), catalog={})
+
+    assert ports.publish_pose(admitted) is True
+    assert created["name"] == "so101_parallel_pose_publisher"
+    overrides = created["kwargs"]["parameter_overrides"]
+    assert [(parameter.name, parameter.value) for parameter in overrides] == [
+        ("use_sim_time", True)
+    ]
+    assert published[0][0] >= admitted.source_stamp_ns
+    message = published[0][1]
+    assert (message.header.stamp.sec, message.header.stamp.nanosec) == (0, 100_000_000)
+    assert message.header.frame_id == "world"
+    assert (
+        message.pose.position.x,
+        message.pose.position.y,
+        message.pose.position.z,
+        message.pose.orientation.x,
+        message.pose.orientation.y,
+        message.pose.orientation.z,
+        message.pose.orientation.w,
+    ) == admitted.pose_world.values
+
+
+def test_pose_publication_fails_closed_when_sim_clock_cannot_reach_source(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    monotonic_s = [0.0]
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=0))
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    def monotonic():
+        monotonic_s[0] += 1.0
+        return monotonic_s[0]
+
+    monkeypatch.setattr(runtime_module.time, "monotonic", monotonic)
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
+    monkeypatch.setattr(rclpy, "spin_once", lambda *_args, **_kwargs: None)
+    admitted = SimpleNamespace(
+        source_stamp_ns=100_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+
+    assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(admitted) is False
+    assert published == []
