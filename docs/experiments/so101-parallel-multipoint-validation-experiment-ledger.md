@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 30f18b7dc24bc6aed7e5bdfdc446e92f37bf5f5f
+current_commit: f9984f07413c561f3bdedd8288df751b96d39565
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -25,7 +25,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-014
-next_experiment: EXP-023
+next_experiment: EXP-026
 ```
 
 Frozen provenance:
@@ -96,6 +96,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F28: Task 13 supplies the current reviewed container CLI's required exclusive `--output` receipt for build, then passes its read-back immutable image ID together with a fresh private batch root to smoke. This reconciles the frozen intent with the stricter Task 11 interface added after the plan example. Cost if wrong: image qualification fails closed without Docker mutation or a fresh experiment is required.
 - Ruling F29: Every live/fault experiment must commit its PLANNED/RUNNING ledger state in a ledger-only pre-run commit, then append results in a later ledger-only commit. The reviewed production CLI rejects any dirty repository path, including its own controller ledger, before creating batch evidence. Executable source remains pinned to 30f18b7dc's code tree while the clean runtime HEAD may advance by ledger-only commits. Cost if wrong: admission fails before side effects as EXP-023 did; omitting pre-registration would violate the experiment state machine.
 - Ruling F30: Live commands prepend the verified worktree package libexec directory `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py` to PATH before invoking `ros2 run`. ROS 2 can locate a libexec without PATH, but the reviewed independent provenance verifier requires `shutil.which("so101_parallel_batch")` to bind the exact installed wrapper. Cost if wrong: admission fails before side effects as EXP-024 did; invoking an unverified wrapper would violate installed-byte admission.
+- Ruling F31: Task 14 returns to the Task 11 provenance owner for a scoped TDD fix in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must derive the actual repository package_dir layout `src/so101_demo_py/src/cli/...`; it may not weaken console/config/catalog checkout fencing. Cost if wrong: mixed overlays could be accepted; retaining the impossible extra `so101_demo` segment makes every real live run fail before side effects.
 
 ```yaml
 checkpoint_id: CP-002
@@ -712,12 +713,14 @@ next_experiment: EXP-025 repeats the frozen execute from a clean precommitted le
 
 ```yaml
 experiment_id: EXP-025
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:18:23+08:00
   - status: RUNNING
     at: 2026-09-12T16:18:23+08:00
+  - status: INVALID
+    at: 2026-09-12T16:20:05+08:00
 prior_experiment: EXP-024
 hypothesis: Adding only the verified worktree libexec to PATH satisfies the final provenance boundary and permits the otherwise identical four-point execute run.
 prediction: Provenance and resource admission succeed; exactly four unique points reach PASSED with qualification_passed=true; N=2/K=2 isolation and all numeric, visual, and cleanup gates pass.
@@ -749,6 +752,67 @@ provenance:
 visual_method: Original-resolution immutable MuJoCo offscreen RGB per point with freshness, source-stamp, and runtime-evidence alignment; no Gazebo client/window exists.
 commands:
   - command: prepend verified worktree libexec to PATH, then run the exact EXP-023 ros2 execute command with reports/live-small-command-025 log/exit/time evidence
+    exit_code: 1
+observed:
+  - Console discovery passed, then execution exited 1 in 0.38 s with PROVENANCE_MIXED_OVERLAY before batch-root creation or any process side effect.
+  - Imported module resolves to src/so101_demo_py/src/cli/mujoco_parallel_batch.py; verifier expects the nonexistent src/so101_demo_py/src/so101_demo/cli/mujoco_parallel_batch.py.
+inferred:
+  - The helper and its fake test encode a conventional nested package path that does not match this repository's setup.py package_dir mapping.
+conclusion: INVALID before product execution, but it confirms a Task 11 provenance implementation defect requiring scoped TDD repair.
+repair: TDD RED pytest-UF9TFOfi failed 1/1 on the real package_dir layout; focused GREEN pytest-ETvtcUlA passed 1/1; expanded pytest-6W1zTYoH passed 64 tests. Scoped fix commit f9984f074 changes only the verifier and its direct test. Fresh package gate p31 passed 2754 tests with no errors/failures, and rebuilt image sha256:3db5046e9eba7448ab03505f5a3240df7e70c922194d07316599a20ea2261018 passed both-model smoke.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-025.log; sha256 30462a747fb2fcfe642a9d0b2221a85ed020724f54613610b707be92fbacf6fa
+decision: REPEAT only after scoped provenance RED/GREEN, overlay/image rebuild, and clean ledger precommit
+next_experiment: EXP-026 is reserved for the corrected fresh execute batch after the scoped fix
+```
+
+## EXP-026 — Task 14 corrected-provenance two-Worker execute
+
+```yaml
+experiment_id: EXP-026
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:24:24+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:25:26+08:00
+prior_experiment: EXP-025
+hypothesis: The scoped real-layout provenance fix permits the frozen four-point execute to start while preserving all mixed-overlay fences and physical/evidence acceptance gates.
+prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
+single_variable: Verifier expected-module path matches the repository's actual package_dir; source commit, installed overlay, and image are freshly rebuilt from f9984f074, while selection, config, models, N=2, K=2, batch ID, and absent live-small root remain frozen.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Provenance TDD RED/GREEN and expanded 64-test gate passed; full p31 package gate passed 2754 tests with no errors/failures.
+  - Rebuilt immutable image sha256:3db5046e9eba7448ab03505f5a3240df7e70c922194d07316599a20ea2261018 has source/verified SHA256 6a0db750d1a4c438a74ac23acfa82358328b692d79040be3b4fbd1ef8668a7bc and passed dual-model smoke.
+  - The ledger-only pre-run commit containing RUNNING state is clean; no relevant stack/container/GPU task exists and live-small is absent.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete per-point evidence, and clean shutdown.
+  - Reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt trajectory/controller, final cup support/contact/detachment, retreat, and original-resolution offscreen visual evidence pass readback.
+failure_criteria:
+  - Trustworthy initialized product behavior fails any physical/evidence gate; retain as VALID failed behavior and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, or evidence pollution prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: f9984f07413c561f3bdedd8288df751b96d39565
+  executable_source_tree: 53cf6d5e8b96dec73bf677d536c5da3fbe9d4f81
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:3db5046e9eba7448ab03505f5a3240df7e70c922194d07316599a20ea2261018
+  image_source_sha256: 6a0db750d1a4c438a74ac23acfa82358328b692d79040be3b4fbd1ef8668a7bc
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point, inspected fresh and aligned to sealed runtime evidence; no Gazebo client/window is part of this headless backend.
+commands:
+  - command: inventory the pre-run stack to reports/process-inventory-before-026.json
+    exit_code: 0
+  - command: prepend the verified worktree libexec to PATH, then run the frozen four-point ros2 execute command with reports/live-small-command-026 log/exit/time evidence
     exit_code: PENDING
 observed:
   - PENDING
@@ -756,9 +820,11 @@ inferred:
   - PENDING
 conclusion: PENDING
 evidence:
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p31
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-broker-image-build-f31.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f31-smoke
 decision: PENDING
-next_experiment: EXP-026 controlled plan-only fault only after this execute run is accepted
+next_experiment: EXP-027 controlled plan-only fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
