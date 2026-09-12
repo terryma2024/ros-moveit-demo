@@ -8,6 +8,7 @@ therefore still the source of truth for lease identity, phase and deadlines.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
 import threading
 import time
@@ -605,6 +606,16 @@ class ParallelWorker:
         except Exception:
             ready = False
         succeeded = all((fenced, stopped, confirmed, recovered, ready))
+        print(json.dumps({
+            "kind": "RECOVERY_GATES",
+            "worker_id": self._worker_id,
+            "worker_generation": lease.worker_generation,
+            "fenced": fenced,
+            "stopped": stopped,
+            "confirmed": confirmed,
+            "recovered": recovered,
+            "ready": ready,
+        }, sort_keys=True, separators=(",", ":")), flush=True)
         try:
             self._fault("RECOVERY_RECEIPT", "before")
             location = self._call_before(
