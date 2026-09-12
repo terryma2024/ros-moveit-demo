@@ -40,12 +40,17 @@ def broker_argv():
 
 
 def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
-                       gpu_groups, uid, gid, runtime_root=None,
+                       gpu_groups, uid, gid, batch_id, broker_generation,
+                       runtime_root=None,
                        input_root=None, path_checker=checked_path):
     if type(uid) is not int or uid <= 0 or uid != os.getuid() or gid != os.getgid():
         raise ValueError('HOST_NONROOT_IDENTITY_REQUIRED')
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
         raise ValueError('IMMUTABLE_IMAGE_ID_REQUIRED')
+    if not isinstance(batch_id, str) or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', batch_id) is None:
+        raise ValueError('BATCH_ID_REQUIRED')
+    if type(broker_generation) is not int or broker_generation <= 0:
+        raise ValueError('BROKER_GENERATION_REQUIRED')
     if not gpu_groups or any(type(group) is not int or group < 0 for group in gpu_groups):
         raise ValueError('GPU_GROUPS_REQUIRED')
     root = path_checker(batch_root, owner=(uid, gid), directory=True)
@@ -59,12 +64,15 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
     path_checker(ipc, owner=(uid, gid), mode=0o700, directory=True)
     if ipc.parent != root / 'ipc' and ipc != root / 'ipc':
         raise ValueError('RUNTIME_ROOT_OUTSIDE_BATCH_IPC')
-    for name in ('ready.json', 'perception.sock'):
+    for name in ('ready.json', 'perception.sock', 'container.cid'):
         if (ipc / name).exists() or (ipc / name).is_symlink():
             raise ValueError('EXISTING_RUNTIME_ENDPOINT')
     yolo_weights = path_checker(yolo_weights)
     grounded_root = path_checker(grounded_root, directory=True)
-    argv = ['docker', 'run', '--rm', '--gpus', 'all', '--network', 'none', '--ipc', 'private',
+    argv = ['docker', 'run', '--rm', '--cidfile', str(ipc / 'container.cid'),
+            '--label', f'com.so101.batch-id={batch_id}',
+            '--label', f'com.so101.broker-generation={broker_generation}',
+            '--gpus', 'all', '--network', 'none', '--ipc', 'private',
             '--read-only', '--security-opt', 'no-new-privileges', '--user', f'{uid}:{gid}',
             '--tmpfs', f'/tmp:rw,nosuid,nodev,mode=0700,uid={uid},gid={gid}']
     for group in sorted(set(gpu_groups)):
@@ -190,7 +198,8 @@ def container_main(argv):
     groups = gpu_groups()
     command = container_run_argv(args.batch_root, image_id=args.image_id,
                                  yolo_weights=args.yolo_weights, grounded_root=args.grounded_root,
-                                 gpu_groups=groups, uid=os.getuid(), gid=os.getgid())
+                                 gpu_groups=groups, uid=os.getuid(), gid=os.getgid(),
+                                 batch_id=args.batch_root.name, broker_generation=1)
     if args.operation == 'smoke':
         source = checked_path(args.input)
         destination = args.batch_root / 'workers/smoke.png'

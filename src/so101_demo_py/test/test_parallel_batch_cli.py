@@ -618,6 +618,109 @@ def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
         composition._release_partial()
 
 
+def test_initial_broker_ready_uses_broker_startup_budget_not_heartbeat(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError, ProductionBatchComposition, prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self): return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain): return False
+        def socket_in_use(self, _path): return False
+
+    class Supervisor:
+        processes = ()
+        def assert_healthy(self): return None
+
+    class Clock:
+        value = 100.0
+        def __call__(self): return self.value
+        def sleep(self, _seconds): self.value += 10.0
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    clock = Clock()
+    spec = prepare_batch(
+        argv(scratch / "s", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {
+            **verified(value), "image_id": "sha256:" + "b" * 64,
+        },
+    )
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "sc",
+        supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",),
+        clock=clock, sleep=clock.sleep,
+    )
+    try:
+        with pytest.raises(CliError, match="BROKER_READY_TIMEOUT"):
+            composition._wait_broker_ready()
+        assert clock.value - 100.0 >= spec.config.broker_recovery_timeout_s
+        assert clock.value - 100.0 < spec.config.broker_recovery_timeout_s + 10.0
+    finally:
+        composition._release_partial()
+
+
+def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_path):
+    from types import SimpleNamespace
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition, prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self): return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain): return False
+        def socket_in_use(self, _path): return False
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "c", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {
+            **verified(value), "image_id": "sha256:" + "b" * 64,
+        },
+    )
+    calls = []
+    container_id = "c" * 64
+
+    def run(command, **_kwargs):
+        calls.append(tuple(command))
+        if command[1] == "inspect" and len(calls) == 1:
+            document = [{
+                "Id": container_id,
+                "Image": spec.provenance["image_id"],
+                "Config": {"Labels": {
+                    "com.so101.batch-id": spec.request.batch_id,
+                    "com.so101.broker-generation": "1",
+                }},
+                "Mounts": [
+                    {"Source": str(composition.broker_runtime_root),
+                     "Destination": "/runtime"},
+                    {"Source": str(composition.broker_input_root),
+                     "Destination": "/inputs"},
+                ],
+            }]
+            return SimpleNamespace(returncode=0, stdout=json.dumps(document), stderr="")
+        if command[1] == "stop":
+            return SimpleNamespace(returncode=0, stdout=container_id, stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="absent")
+
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "cc",
+        container_runner=run,
+    )
+    try:
+        composition.broker_container_id_path.write_text(container_id + "\n")
+        composition.broker_container_id_path.chmod(0o600)
+        assert composition._retire_broker_container() is True
+        assert calls[0][:4] == ("docker", "inspect", "--type", "container")
+        assert calls[1][:3] == ("docker", "stop", "--timeout")
+        assert calls[2][:4] == ("docker", "inspect", "--type", "container")
+    finally:
+        composition._release_partial()
+
+
 def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     tmp_path, monkeypatch,
 ):
@@ -1194,6 +1297,7 @@ def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tm
             image_id="sha256:" + "b" * 64,
             yolo_weights=spec.yolo_weights, grounded_root=spec.grounded_root,
             gpu_groups=[44], uid=os.getuid(), gid=os.getgid(),
+            batch_id=spec.request.batch_id, broker_generation=1,
             path_checker=lambda path, **_kwargs: Path(path),
         )
         runtime_mounts = [

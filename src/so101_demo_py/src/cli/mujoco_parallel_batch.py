@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import stat
@@ -1458,6 +1459,7 @@ class ProductionBatchComposition:
         broker_command_builder=None,
         provenance_revalidator=None,
         broker_health_client_factory=UnixRpcClient,
+        container_runner=subprocess.run,
         clock=time.monotonic,
         sleep=time.sleep,
     ):
@@ -1500,6 +1502,8 @@ class ProductionBatchComposition:
         )
         self._broker_command_builder = broker_command_builder
         self._broker_health_client_factory = broker_health_client_factory
+        self._container_runner = container_runner
+        self._uses_production_broker_container = broker_command_builder is None
         self._provenance_revalidator = (
             spec.provenance_verifier
             if provenance_revalidator is None
@@ -1626,6 +1630,7 @@ class ProductionBatchComposition:
         self.broker_generation = generation
         self.broker_runtime_root = runtime_root
         self.broker_socket_path = runtime_root / "perception.sock"
+        self.broker_container_id_path = runtime_root / "container.cid"
         self.broker_authority = authority
         self.broker_token_path = token_path
         self.broker_spec_path = spec_path
@@ -1714,14 +1719,87 @@ class ProductionBatchComposition:
                 gpu_groups=gpu_groups(),
                 uid=os.getuid(),
                 gid=os.getgid(),
+                batch_id=self.spec.request.batch_id,
+                broker_generation=self.broker_generation,
             )
         return self.supervisor.start("broker", command)
+
+    def _container_inspect(self, container_id):
+        return self._container_runner(
+            ["docker", "inspect", "--type", "container", container_id],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=self.spec.config.heartbeat_timeout_s,
+        )
+
+    def _retire_broker_container(self, *, runtime_root=None, generation=None):
+        """Stop only the exact Docker container created for this Broker generation."""
+
+        if not self._uses_production_broker_container or self.broker_spec_path is None:
+            return True
+        runtime_root = self.broker_runtime_root if runtime_root is None else Path(runtime_root)
+        generation = self.broker_generation if generation is None else generation
+        container_id_path = runtime_root / "container.cid"
+        try:
+            identity = container_id_path.lstat()
+            container_id = container_id_path.read_text(encoding="ascii").strip()
+        except (OSError, UnicodeError) as error:
+            raise CliError("BROKER_CONTAINER_ID_MISSING") from error
+        if (
+            not stat.S_ISREG(identity.st_mode)
+            or identity.st_uid != os.getuid()
+            or stat.S_IMODE(identity.st_mode) != 0o600
+            or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
+        ):
+            raise CliError("BROKER_CONTAINER_ID_INVALID")
+        inspected = self._container_inspect(container_id)
+        if inspected.returncode != 0:
+            return True
+        try:
+            documents = json.loads(inspected.stdout)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise CliError("BROKER_CONTAINER_INSPECT_INVALID") from error
+        if type(documents) is not list or len(documents) != 1 or type(documents[0]) is not dict:
+            raise CliError("BROKER_CONTAINER_INSPECT_INVALID")
+        document = documents[0]
+        labels = document.get("Config", {}).get("Labels", {})
+        mounts = {
+            (item.get("Source"), item.get("Destination"))
+            for item in document.get("Mounts", ())
+            if type(item) is dict
+        }
+        if (
+            document.get("Id") != container_id
+            or document.get("Image") != self.spec.provenance.get("image_id")
+            or labels.get("com.so101.batch-id") != self.spec.request.batch_id
+            or labels.get("com.so101.broker-generation") != str(generation)
+            or (str(runtime_root), "/runtime") not in mounts
+            or (str(self.broker_input_root), "/inputs") not in mounts
+        ):
+            raise CliError("BROKER_CONTAINER_IDENTITY")
+        stopped = self._container_runner(
+            [
+                "docker", "stop", "--timeout",
+                str(max(1, int(self.spec.config.heartbeat_timeout_s))),
+                container_id,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=self.spec.config.heartbeat_timeout_s + 2.0,
+        )
+        if stopped.returncode != 0:
+            raise CliError("BROKER_CONTAINER_STOP_FAILED")
+        if self._container_inspect(container_id).returncode == 0:
+            raise CliError("BROKER_CONTAINER_SURVIVED")
+        return True
 
     def _wait_broker_ready(self, *, deadline_monotonic_s=None):
         if self.broker_spec_path is None:
             return True
         deadline = (
-            self._clock() + self.spec.config.heartbeat_timeout_s
+            self._clock() + self.spec.config.broker_recovery_timeout_s
             if deadline_monotonic_s is None
             else deadline_monotonic_s
         )
@@ -1815,9 +1893,16 @@ class ProductionBatchComposition:
         if deadline is None:
             raise CliError("BROKER_RECOVERY_DEADLINE_MISSING")
         replacement = None
+        previous_runtime_root = self.broker_runtime_root
+        previous_generation = self.broker_generation
         try:
             if self.supervisor.retire_owned(expected) is not True:
                 raise CliError("BROKER_RETIRE_FAILED")
+            if self._retire_broker_container(
+                runtime_root=previous_runtime_root,
+                generation=previous_generation,
+            ) is not True:
+                raise CliError("BROKER_CONTAINER_RETIRE_FAILED")
             self._prepare_broker_generation(self.broker_generation + 1)
             self._start_broker_authority_server()
             replacement = self._start_broker()
@@ -2186,12 +2271,17 @@ class ProductionBatchComposition:
             snapshot = self.coordinator.snapshot()
         finally:
             try:
-                cleanup = self.supervisor.shutdown(
+                process_cleanup = self.supervisor.shutdown(
                     stop_leases=self._stop_new_leases,
                     cancel_goal=self._cancel_worker_goals,
                     confirm_goal_cancelled=self._confirm_worker_goals_cancelled,
                     request_recovery=self._request_worker_recovery,
                 )
+                try:
+                    container_cleanup = self._retire_broker_container()
+                except Exception:
+                    container_cleanup = False
+                cleanup = process_cleanup and container_cleanup
                 snapshot = self.coordinator.snapshot()
                 if snapshot.terminal_reason and cleanup and not failure:
                     snapshot = self.coordinator.complete_cleanup(
