@@ -4395,12 +4395,14 @@ decision: RUN EXP-066 UNCHANGED FOUR-POINT GATE
 
 ```yaml
 experiment_id: EXP-066
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T02:24:33+08:00
   - status: RUNNING
     at: 2026-09-13T02:24:33+08:00
+  - status: INVALID
+    at: 2026-09-13T02:33:54+08:00
 prior_experiment: EXP-065
 hypothesis: A short retry limited to transient incomplete /proc identity reads while the exact Popen child remains alive will prevent either Worker from being discarded during concurrent task-station fork/exec.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4423,10 +4425,40 @@ preflight: reports/preflight-exp066.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f65 and root live-small-f65.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
-result: PENDING
-retained: PENDING
+result: >-
+  INVALID — exit 1 after 194.77 seconds. F65 passed its intended boundary: both Workers
+  registered task-station process identities and created ROS log trees. worker-01 then failed
+  before its first lease when ros2_control_node threw an unhandled rclcpp::exceptions::RCLError
+  while sending a controller-manager service response (`cannot publish data`) and aborted with
+  exit -6. worker-02 passed task_start and cup_test_forward_5cm with both recoveries true, then
+  reached K=2, leaving sample_05_near_center and sample_14_far_right UNRUN. All four available
+  original-resolution 640x480 RGB frames passed visual inspection. Cleanup actions and process
+  cleanup passed; exact container cleanup reported BROKER_CONTAINER_SURVIVED, but the exact-ID
+  post-run audit proved that it auto-removed. No related process, container, GPU task, or domain
+  claim remained.
+retained: complete live-small-f65 tree, command-066 log/time/exit, visual report, root-cause report, cleanup audit, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment unless separately classified after readback
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-063
+last_valid_experiment: EXP-022
+current_hypothesis: Repeated ListControllers readiness requests overlap controller-spawner startup and expose the documented Fast DDS basic-service discovery/response race; waiting for all required service/action graph endpoints before issuing the controller-state request will remove that overlap without weakening readiness.
+working_tree_status: clean executable source at a0524c3d4f80d7b3589990b397770a32df669f90; ledger-only EXP-066 closure pending bounded F66 TDD
+owned_processes: NONE
+confirmed_conclusions:
+  - F65 process-identity stabilization is validated at its exact boundary because both Workers registered task-station identities and produced ROS log trees.
+  - worker-01 ros2_control_node completed MuJoCo/EGL initialization and scene readback, then aborted in the controller-manager service execution stack with `failed to send response: cannot publish data` before any lease.
+  - At failure, joint_state_broadcaster had activated and exited while arm_controller and gripper_controller spawners were still waiting; the concurrently started motion_stack_ready client polls ListControllers once per loop before required action endpoints exist.
+  - ROS 2 upstream reports the same Jazzy `/controller_manager/list_controllers` response failure and documents a Fast DDS basic-service discovery race that is exacerbated when many nodes launch together.
+  - worker-02 passed two physical points and both recoveries; all four available images passed. Exact post-run audit found no residual owned task.
+  - The independent Broker retirement observation race recurred and remains separate from the first bad boundary.
+ruling: TDD one bounded F66 readiness-ordering change. motion_stack_ready must establish all required MoveIt service and action graph endpoints before it sends a ListControllers request, retain the exact controller-active checks and bounded deadline, and avoid overlapping controller-state requests. Repeat the unchanged four-point gate after full static/image/smoke qualification.
+retained: EXP-066 runtime, visual, root-cause, cleanup, command, and upstream diagnostic evidence plus all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F66 READINESS REQUEST ORDERING WITH TDD
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
