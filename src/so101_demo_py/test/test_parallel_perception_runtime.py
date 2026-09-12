@@ -92,6 +92,38 @@ def test_both_execution_kinds_normalize_lossless_candidates(tmp_path, monkeypatc
     assert json.loads(f.receipt.read_text())['ready'] is True
 
 
+def test_started_healthy_runtime_replays_ready_to_late_lifecycle_observer(
+        tmp_path, monkeypatch):
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    receipt = f.receipt.read_bytes()
+    receipt_mtime_ns = f.receipt.stat().st_mtime_ns
+    observed = []
+    f.runtime.health_changed = observed.append
+
+    f.runtime.start()
+
+    assert observed == [True]
+    assert sum(call[0] == 'build' for call in f.calls) == 2
+    assert f.receipt.read_bytes() == receipt
+    assert f.receipt.stat().st_mtime_ns == receipt_mtime_ns
+
+
+def test_started_unhealthy_runtime_still_requires_new_generation(tmp_path, monkeypatch):
+    from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    f.runtime._unhealthy()
+    observed = []
+    f.runtime.health_changed = observed.append
+
+    with pytest.raises(ModelRuntimeInfrastructureError, match='RESTART_REQUIRED'):
+        f.runtime.start()
+
+    assert observed == []
+    assert sum(call[0] == 'build' for call in f.calls) == 2
+
+
 @pytest.mark.parametrize('bad', ['kind_path', 'event_type', 'event_identity', 'ack',
                                'hash', 'shape', 'stamp', 'mode', 'symlink'])
 @pytest.mark.parametrize('validation', [False, True])
