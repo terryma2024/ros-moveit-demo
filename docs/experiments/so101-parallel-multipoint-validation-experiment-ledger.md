@@ -5889,10 +5889,12 @@ decision: RERUN WITH DURABLE COORDINATOR WORKER_RECOVERED EVENT AS THE POST-WORK
 
 ```yaml
 experiment_id: EXP-088
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:02:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T06:03:11+08:00
 prior_experiment: EXP-087
 hypothesis: Synchronizing Broker TERM on the durable worker-01 generation-2 WORKER_RECOVERED journal event will complete the approved exact two-fault sequence and demonstrate F74 fault recovery.
 single_variable: Replace only the invalid transient replacement-PID predicate with the journal-authoritative worker-01 generation-2 WORKER_RECOVERED predicate; product inputs, persistent observer, plan-only mode, N/K, selection, exact TERM targets, and acceptance remain fixed.
@@ -5910,6 +5912,7 @@ fault_sequence:
   - require a different manifest-owned Broker PID plus ready.json and .model-ready.json under broker-g2
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: 2e2ff4b5ea69538f20ca1a9c50af2e891fd6ed8c
   preregistration_base_commit: 89cb9e22c185ad60e60a2e441ae44eb312ea1ab3
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
