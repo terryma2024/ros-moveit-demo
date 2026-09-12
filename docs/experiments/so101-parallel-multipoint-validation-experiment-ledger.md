@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: c5cc7fc987d119e4d5c15fd50635f97899448be6
+current_commit: f4881e44af0af7e470a71ccd1140ccb522b955d6
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -28,12 +28,13 @@ confirmed_conclusions:
   - F40 carries the reset transaction's already-validated six-joint sample across the reset boundary and uses completed all-goal CancelGoal responses as positive no-active-goal evidence; its complete ordinary gate and rebuilt immutable image passed (CP-020).
   - F41 preserves every point-initial predicate while reporting a bounded fixed-order rejected-predicate list; its complete ordinary gate and rebuilt immutable image passed (CP-021).
   - F46 tolerates only the bounded child-side setsid observation race, while persistent incomplete or foreign identities remain fail-closed and receive no process-group signal; its complete ordinary gate and rebuilt immutable image passed (CP-026).
+  - F47 binds the already-validated production point-initial facts to all seven exact lease identity fields before the Worker's unchanged authorization check; its complete ordinary gate and rebuilt immutable image passed (CP-027).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-026
-next_experiment: EXP-042 is INVALID; F47 production gate-identity binding precedes EXP-043
+latest_checkpoint: CP-027
+next_experiment: EXP-043 is PLANNED and pre-registered
 ```
 
 Frozen provenance:
@@ -2361,6 +2362,61 @@ conclusion: INVALID; zero countable attempts. Bind the production initial-gate r
 retained: complete EXP-042 batch/reports, moved MuJoCo log, preflight, and all prior evidence
 archived: none
 deletion_candidates: p56/direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-027
+last_valid_experiment: EXP-022
+current_hypothesis: F47 supplies the exact production lease identity that the strict Worker gate already requires, allowing the unchanged four-point execute to cross ATTEMPT_STARTED without weakening authorization.
+working_tree_status: clean at executable source commit f4881e44af0af7e470a71ccd1140ccb522b955d6 before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F47 formal RED pytest-IG4lggIK failed on absent production gate batch_id. Focused GREEN pytest-KTW445F6 passed and adjacent runtime/Worker pytest-zmhsPmc8 passed all 107 tests.
+  - Production `initial_gate` now copies batch, coordinator epoch, Worker/generation, point, attempt, and lease generation directly from the current lease after every existing observation predicate passes. The Worker retains exact type-and-value checks against both reset and gate evidence.
+  - Fresh p57 symlink build passed in 1.51 seconds. All 2771 ordinary tests passed in 83.53 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash 72b6c85efbf97cfb989519e683efebc143922c4308adb08428f04d96cf98a4a8; complete package source hash is f2d93a94041d29fba92671471ea8dc458de6303ba669ae1d6c68dfae7db40d14.
+  - Rebuilt image sha256:5e77eba492f065436a078e92be217c64c0bc43f9f9b78c89544b219e470c644f binds that source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model.
+  - Fresh EXP-043 preflight found 24 CPUs, 25.432 GiB MemAvailable, 15272 MiB free GPU, no GPU compute application, no related process/container, and all domains 181-183 independently lockable.
+open_risks:
+  - ATTEMPT_STARTED and downstream perception/planning/execution have not yet succeeded in a live batch.
+retained: F47 RED/GREEN/adjacent scratch, p57, installed provenance, image build/smoke, EXP-043 preflight, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p57 after readback; no deletion authorized
+decision: RUN EXP-043 with unchanged four points and physical criteria
+```
+
+## EXP-043 — Task 14 lease-identity-bound two-Worker execute
+
+```yaml
+experiment_id: EXP-043
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:51:49+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:51:49+08:00
+prior_experiment: EXP-042
+hypothesis: F47 closes the production gate-receipt identity omission while preserving exact Worker authorization, allowing two Workers to execute four unique points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
+single_variable: F47 production initial-gate receipt identity fields only. Observation predicates, Worker identity checks, topology, contact, reset/session, freshness, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f47
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f47
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: f4881e44af0af7e470a71ccd1140ccb522b955d6
+  executable_source_tree: f2d93a94041d29fba92671471ea8dc458de6303ba669ae1d6c68dfae7db40d14
+  installed_module_tree: 72b6c85efbf97cfb989519e683efebc143922c4308adb08428f04d96cf98a4a8
+  image_id: sha256:5e77eba492f065436a078e92be217c64c0bc43f9f9b78c89544b219e470c644f
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+retained: pre-registration ledger record and preflight-exp043.json
+archived: none
+deletion_candidates: none
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
