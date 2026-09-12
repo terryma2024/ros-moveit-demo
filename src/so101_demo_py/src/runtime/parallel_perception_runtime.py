@@ -392,6 +392,9 @@ class PerceptionService:
             self._response_health(self.broker.poll_response(request))
 
     def _response_health(self, response):
+        if response is not None:
+            with self._lock:
+                self._requests.pop(response.request.request_id, None)
         if not self.broker.healthy or (response is not None and response.outcome in {
                 ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT, ModelOutcome.INFERENCE_TIMEOUT}):
             if response is not None:
