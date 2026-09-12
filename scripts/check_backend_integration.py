@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 APPROVED_URL = "git@gitee.com:zjumty/mujoco_ros2_control.git"
-CANDIDATE_COMMIT = "71bc9346cf93d6227a6678fcacf63f3e18acfcba"
+CANDIDATE_COMMIT = "c16b5a5fe880b6e1857f56486dab4ae726576969"
 CANDIDATE_LABEL = "main"
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
 LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
