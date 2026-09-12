@@ -151,21 +151,18 @@ class ProcessSupervisor:
             start_new_session=True,
         )
         pid = child.pid
-        pgid, cmdline, start_time = _proc_values(pid)
+        pgid, cmdline, start_time = 0, (), 0
+        for attempt in range(8):
+            pgid, cmdline, start_time = _proc_values(pid)
+            if pgid == pid and cmdline and start_time:
+                break
+            if child.poll() is not None:
+                break
+            if attempt < 7:
+                time.sleep(0.001)
         if pgid != pid or not cmdline or not start_time:
-            # A PID is not signal authority.  Re-read once and signal only a
-            # complete, self-led process group that is still this child.
-            second_pgid, second_cmdline, second_start = _proc_values(pid)
-            if (
-                child.poll() is None
-                and second_pgid == pid
-                and second_cmdline
-                and second_start
-            ):
-                try:
-                    self._signal_group(second_pgid, signal.SIGKILL)
-                except OSError:
-                    pass
+            # An incomplete identity is never process-group signal authority.
+            # Reap only the exact Popen child created above.
             self._reap_failed_start(child)
             raise SupervisorError("CHILD_IDENTITY")
         owned = OwnedProcess(self.batch_id, role, pid, pgid, cmdline, start_time)
