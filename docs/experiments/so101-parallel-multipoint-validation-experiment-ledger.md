@@ -38,14 +38,15 @@ confirmed_conclusions:
   - EXP-048 proved both Workers reach the authenticated Broker with exact lease-bound evidence, and isolated BROKER_NOT_READY to a missed ready callback when an already-started healthy runtime is attached to PerceptionService; F52 is limited to replaying that lifecycle state (CP-036).
   - F52 replays ready state only for an already-started healthy runtime, without rebuilding detectors or rewriting receipts; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-037).
   - EXP-049 stopped before admission because the verified worktree libexec was absent from PATH; EXP-050 repeats with only that previously validated environment binding (CP-038).
+  - EXP-050 proved F52 Broker readiness and one complete physical PASS, then exposed a `/cup_pose` publication race against the new consumer node's uninitialized simulation clock; F53 synchronizes publication to the accepted source stamp without relaxing pose freshness (CP-039).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-038
-next_experiment: EXP-050 verified-libexec F52 four-point two-Worker execute
+latest_checkpoint: CP-039
+next_experiment: F53 source-clock-synchronized pose publication formal RED/GREEN
 ```
 
 Frozen provenance:
@@ -3096,12 +3097,14 @@ decision: RUN EXP-050 under the verified libexec PATH
 
 ```yaml
 experiment_id: EXP-050
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T22:36:27+08:00
   - status: RUNNING
     at: 2026-09-12T22:36:27+08:00
+  - status: INVALID
+    at: 2026-09-12T22:41:50+08:00
 prior_experiment: EXP-049
 hypothesis: The verified libexec PATH closes the pre-admission provenance boundary and F52 admits both loaded models into the production Broker.
 prediction: Four unique points finish PASSED with qualification_passed=true, or any runtime failure is bounded, attributable, safely stopped, and physically evidenced.
@@ -3125,10 +3128,69 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   PATH=/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py:$PATH; source install/setup.zsh; ros2 run so101_demo_py so101_parallel_batch with the unchanged EXP-049 arguments, batch parallel-small-20260912-v1-f52b, and root live-small-f52b.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
-result: PENDING
-retained: PENDING
+result: >-
+  Command exited 1 after 100.15 seconds. F52 closed BROKER_NOT_READY: both Workers passed
+  exact reset/gate/ATTEMPT_STARTED and perception, Broker remained healthy, and both accepted
+  lease-bound poses. Worker-02 completed the entire physical workflow for cup_test_forward_5cm,
+  wrote the 19-transition dynamic manifest, and sealed PASSED/OK. Worker-01's dynamic consumer
+  received the accepted task_start pose stamped 3.549999999 s before its newly-created use_sim_time
+  clock had caught up, rejected it as CUP_POSE_STALE: source stamp is too far in the future, then
+  timed out with no second publication. The Worker conservatively sealed INDETERMINATE with
+  DYNAMIC_EXECUTION_RECEIPT_MISSING and physical_action_proven_absent=false; subsequent recovery
+  motion occurred. The other two points were never leased and qualification remained false.
+visual_observation: >-
+  All four immutable 640x480 RGB files were inspected at original resolution. Both initial frames
+  match their expected distinct point positions with canonical initial arm and no robot-object
+  contact. Worker-02 terminal shows the cup upright at the marked support region and the arm
+  retreated, consistent with its PASS. Worker-01 terminal shows the work surface without a visible
+  cup and is not acceptable physical evidence; this agrees with the INDETERMINATE result and is not
+  counted as a behavior pass.
+visual_sha256:
+  task_start_initial: 218b60a7787d46a0fa511e1c93f33d593767b7095256c54e145ce009f63d3566
+  task_start_terminal: ab5e97ab73ea68f62ea6a9c091018fd0dfa20c4925b68b67fd59d49d4491f28f
+  cup_test_forward_5cm_initial: de0090ccb960d7f6c7d855b6c33c4c3ceacc3eaf3f640e04e455c25a977f9e89
+  cup_test_forward_5cm_terminal: ea24450d64be560b809b7327a3977ca092e28b5aaadde0f7ee170e02275cdb3e
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: ec4ab1fd636499a68c72d041fbe00ac7e11d23c7ef0cf4c671871d5cdb2a6382
+command_time_sha256: 36de92050e715110ccc4ad67330d188ae9abfcae24178b42c547882508aa5b61
+aggregate_sha256: eaa25ba1fad7db2a408282fef81615ef43699ee03fdfcf7869f162361af6bcc8
+coordinator_aggregate_sha256: 79ea9859780e4a426cc12cdc375d865d9420ec153a992126837565a565425519
+worker_01_result_sha256: 2dcaaec506313a019d7b38b244d668244161dfb17d45f9b0557184687dc0beba
+worker_02_result_sha256: 034211da0c7805e9ae6f901b32ca91f421315961f62653357afa57882e676a5e
+mujoco_log_sha256: 8163a0e8ba57125cdb6ade885ee3f1eea91f8d6afd064e2d74126be8eaa58ab7
+cleanup: >-
+  Exact CID d76ab5e8f911c143b8ca4bdb4f47e8257362af707fc5a6604184e6294fca2dcd
+  was verified against the immutable F52 image, exact batch/generation labels, and registered
+  mounts, then stopped. The first immediate removal observation raced Docker --rm; the next bounded
+  readback proved it removed. Final audit found no related process, container, or GPU compute task
+  and all domains 181-183 lockable. The MuJoCo log was moved without deletion.
+post_cleanup_sha256: d53773c1269513e7d4a8e3096e6e65b5847e990d3c05a177cae57fb8198f004c
+conclusion: INVALID mixed physical result; one PASSED and one INDETERMINATE. Synchronize the one-shot accepted pose publication to the source simulation timestamp, retain the consumer freshness gate unchanged, then fully requalify.
+retained: complete EXP-050 batch/reports, all four visually inspected RGB files, dynamic PASS manifest, INDETERMINATE evidence, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none pending run
+deletion_candidates: no new scratch; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-039
+last_valid_experiment: EXP-022
+current_hypothesis: Waiting on the Worker's isolated use_sim_time publisher node until its ROS clock reaches the already-admitted pose source stamp will prevent a startup-only false future rejection without weakening the consumer's freshness/skew contract.
+working_tree_status: ledger-only EXP-050 result and F53 ruling after clean executable source 328de1909c6b7ceb19b2d5b6ac9a41e0e7888b69
+owned_processes: NONE
+confirmed_conclusions:
+  - Both Workers completed F52 Broker admission; Worker-02 completed all 19 dynamic transitions and sealed PASSED.
+  - Worker-01's accepted source stamp was 3.549999999 s. Its new dynamic consumer printed CUP_POSE_STALE: source stamp is too far in the future, then timed out because publication is intentionally one-shot.
+  - ParallelRosRuntimePorts.publish_pose currently creates a system-clock node and publishes immediately after subscriber discovery; it does not observe the Worker's simulation clock. The consumer correctly uses use_sim_time and enforces the frozen 0.05 s future-skew limit.
+  - A publisher-side use_sim_time wait can prove the same domain clock has reached the accepted source stamp before the existing one-shot publication, keeping every consumer validation unchanged.
+  - Worker-01 remained conservatively INDETERMINATE and its unacceptable terminal frame was not counted; exact cleanup completed.
+open_risks:
+  - The publisher clock synchronization path needs bounded timeout and regression coverage proving no early publication.
+  - Full four-point physical qualification remains pending.
+ruling: F53 may create the isolated pose publisher node with use_sim_time=true and, within the existing two-second publication bound, spin until its ROS clock is at least admitted.source_stamp_ns before publishing. Timeout must return false, the pose timestamp and one-shot semantics remain unchanged, and no future-skew/freshness threshold may be relaxed. Formal RED/GREEN must prove delayed publication, exact node clock configuration, bounded timeout, and unchanged message contents.
+retained: complete EXP-050 evidence, F52 qualification, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p68 after readback; no deletion authorized
+decision: IMPLEMENT F53 SOURCE-CLOCK-SYNCHRONIZED POSE PUBLICATION WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
