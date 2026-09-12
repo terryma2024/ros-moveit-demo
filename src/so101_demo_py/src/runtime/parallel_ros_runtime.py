@@ -45,6 +45,7 @@ _RESET_JOINTS = (0.0,) * 6
 _ACTIVE_GOAL_STATES = {1, 2, 3}
 _NODE_DIAGNOSTIC_LIMIT = 16
 _NODE_DIAGNOSTIC_NAME_LIMIT = 96
+_EXACT_TF_DISCOVERY_TIMEOUT_S = 5.0
 
 
 def _mkdir_private_chain(root, target):
@@ -1033,7 +1034,7 @@ class ParallelRosRuntimePorts:
             camera_info=camera,
             depth_message=depth,
             lookup_exact=lambda target, frame, stamp: source.lookup_exact(
-                target, frame, stamp, 0.2
+                target, frame, stamp, _EXACT_TF_DISCOVERY_TIMEOUT_S
             ),
         )
         depth_hash = hashlib.sha256(bytes(depth.data)).hexdigest()
