@@ -31,7 +31,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-020
-next_experiment: EXP-036 is RUNNING
+next_experiment: EXP-037
 ```
 
 Frozen provenance:
@@ -112,6 +112,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F38: Task 14 returns narrowly to the production point-initial observation and its direct tests. The three late-created action-status subscriptions must request ROS 2's exact `qos_profile_action_status_default` (keep-last depth 1, reliable, transient-local), matching the action servers and receiving their retained empty status arrays when no goal has ever run. The observed reset, joint, scene, contact, graph, freshness, and exact-node gates remain unchanged. Cost if wrong: a stale status sample could be admitted, but the retained action status is the authoritative current status set and active goal IDs are still enumerated conservatively; retaining volatile subscriptions makes an empty never-used action server indistinguishable from an absent observation and produced the identical dual-Worker timeout in EXP-032.
 - Ruling F39: Before changing any remaining point-initial observation semantics, make the existing bounded timeout diagnostic enumerate only the missing observation classes: fresh canonical joint callback, exact action-status topic receipts, completed planning-scene response, and stable graph samples. Keep the timeout, gate conjunction, values, and fail-closed behavior unchanged, add direct RED/GREEN coverage, then run one fresh unchanged execute to identify the actual missing class. Cost if wrong: diagnostics could become unbounded or leak payloads; retaining the opaque timeout forces further speculative changes after EXP-033 proved F38 necessary but insufficient.
 - Ruling F40: Task 14 may replace the impossible post-pause joint/status waits with equivalent authoritative evidence, with direct contract and runtime tests. The successful reset transaction must return the exact fresh post-reset six-joint sample that it already requires before re-pausing; point-initial gate must consume that bound sample, never synthesize canonical values. For no-active-goal proof, issue an all-goals CancelGoal query to each isolated action server before authorization and require completed responses with no goals_canceling; any returned goal ID fails the gate. Planning-scene, contact, reset/session, graph, node-identity, freshness, timeout, and pre-authorization motion prohibitions remain unchanged. Cost if wrong: cancellation could mutate a stale active goal, but that condition still fails authorization and is safer than permitting it; retaining fresh subscribers after physics is paused and before any goal exists is unobservable by construction, as EXP-034 proved on both Workers.
+- Ruling F41: Before changing any remaining point-initial predicate, replace the opaque aggregate rejection with a bounded fixed-order list of failed predicate names covering type, reset identity, freshness, joints, goals, attachment, contact, graph stability, and exact node set. Preserve the conjunction and all values unchanged, add direct RED/GREEN coverage, then repeat the unchanged execute. Cost if wrong: diagnostic text could be mistaken for authorization logic; therefore tests must prove it changes only failure attribution and no predicate is removed.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1769,12 +1770,14 @@ next_experiment: EXP-036 is reserved for the corrected-environment F40 execute r
 
 ```yaml
 experiment_id: EXP-036
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T18:37:41+08:00
   - status: RUNNING
     at: 2026-09-12T18:37:41+08:00
+  - status: INVALID
+    at: 2026-09-12T18:41:24+08:00
 prior_experiment: EXP-035
 hypothesis: With the complete fresh worktree overlay sourced, F40's reset-bound joint evidence and completed all-goal queries allow both Workers to satisfy the strict point-initial gate and execute the unchanged four points.
 prediction: Both plugin classes load, four unique points pass physically with qualification_passed=true and clean shutdown; otherwise any failure remains bounded, attributable, and cannot qualify the batch.
@@ -1812,9 +1815,32 @@ evidence_planned:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-036.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-036.log
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40b
-retained: all prior evidence plus the complete EXP-036 batch tree and reports
+commands:
+  - command: fresh resource/inventory/complete-overlay preflight
+    exit_code: 0
+  - command: unchanged four-point execute after complete worktree install/setup.zsh
+    exit_code: 1
+  - command: exact Broker identity/mount verification, stop, and cleanup audit2
+    exit_code: 0
+observed:
+  - Both Workers loaded CameraPlugin and the atomic SimulationEvidence plugin, completed reset, completed every F40 observation future, and then failed with the identical bounded boundary POINT_INITIAL_GATE_OBSERVATION_REJECTED before ATTEMPT_STARTED.
+  - All four points remain UNRUN; zero outcomes are countable. The coordinator ended CAPACITY_EXHAUSTED with both failed points INVALID and both Workers quarantined.
+  - One ros2_control_node later aborted during conservative recovery when a controller-manager service attempted to respond to a vanished client; the other stack then observed arm_controller absent. These events occurred after the upstream point-gate rejection and do not explain it.
+  - The existing aggregate rejection does not identify which unchanged predicate failed. F41 diagnostic-only attribution is required before any semantic fix.
+  - Aggregate qualification and cleanup remained false. External cleanup verified the exact surviving Broker cidfile, image, batch/generation labels, and batch-specific mounts before stopping it; audit2 found no related process, container, GPU task, or domain residue.
+conclusion: INVALID; zero countable attempts. Apply F41 diagnostic-only RED/GREEN and ordinary gates, then repeat unchanged under EXP-037.
+hashes:
+  live_command_log_sha256: 020866235aea03c7c1d9f49f92e21e78e3704c01e5af820b05e746e9f35a97c2
+  journal_sha256: 8c7bbd55d03c5aeb66889d8a089d4c307808cdd0e33115d5570f9e51f0678c81
+  coordinator_aggregate_sha256: 9191b460a64628cff584c202799166a3bf55d5614b35a60bc11bbb22e00bd9d2
+  worker_01_result_sha256: 59fff5e359262a66bbe0b3d3af8e7c605a796d6ab61f6c7e154bd8a543fb1368
+  worker_02_result_sha256: 0e178c5328b319b9083f061b03fbf55d3e3725aee0b47574bf9a4e42722b79e5
+  cleanup_audit_sha256: fcef54e0e763add5cc8079bbb7e8653bd69628b78cc3fa3dc07802cc8561891b
+retained: complete live-small-f40b tree, command/preflight/cleanup reports, journal/projections, Worker diagnostics, ROS logs, container cidfile, and all unchanged F40 qualification evidence
 archived: none
-deletion_candidates: p49 and direct pytest scratch after readback; nothing will be deleted without user authorization
+deletion_candidates: p49 and direct pytest scratch are candidates after readback; nothing was deleted
+decision: REPEAT after F41 diagnostic RED/GREEN, package gate, installed provenance, image rebuild, and dual-model smoke
+next_experiment: EXP-037 is reserved for the F41 diagnostic execute repeat; controlled plan-only fault advances to EXP-038 and remains blocked until execute acceptance
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
