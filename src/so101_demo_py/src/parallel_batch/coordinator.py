@@ -269,23 +269,45 @@ class BatchCoordinator:
             return
         delta = {}
         point = self._state['points'].get(lease.point_id)
+        expired = any(
+            event.type == 'LEASE_EXPIRED'
+            and event.payload.get('identity') == self._identity(lease)
+            for event in self._events.values()
+        )
         if (self.request.run_mode is RunMode.EXECUTE
                 and point is not None
                 and not point['terminal']
-                and point['active_attempt'] is None):
+                and expired):
             point = deepcopy(point)
             blocked_by = point['blocked_by']
+            active_attempt = point['active_attempt']
             point.update(
                 status=PointStatus.INDETERMINATE,
                 terminal=True,
+                active_attempt=None,
                 blocked_by=None,
             )
             delta['points'] = {lease.point_id: point}
+            changed_workers = {}
             worker = self._state['workers'].get(blocked_by)
             if worker is not None and worker.get('invalid_point') == lease.point_id:
                 worker = deepcopy(worker)
                 worker['invalid_point'] = None
-                delta['workers'] = {blocked_by: worker}
+                changed_workers[blocked_by] = worker
+            for worker_id, candidate in self._state['workers'].items():
+                active = candidate.get('lease')
+                if (type(active) is not dict
+                        or active.get('point_id') != lease.point_id
+                        or active.get('attempt_id') != active_attempt):
+                    continue
+                worker = deepcopy(candidate)
+                worker['lease'] = None
+                if worker.get('invalid_point') == lease.point_id:
+                    worker['invalid_point'] = None
+                self._stage(worker, 'RECOVERING')
+                changed_workers[worker_id] = worker
+            if changed_workers:
+                delta['workers'] = changed_workers
         self._emit(
             'LATE_RESULT_REJECTED', delta, request_key=key, identity=identity)
         self._evaluate()

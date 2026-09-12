@@ -124,18 +124,51 @@ def _worker_target(root: Path, item) -> str | None:
 def _broker_target(root: Path, item) -> str | None:
     if item["role"] != "broker":
         return None
-    required_mount = f"{root / 'ipc/broker'}:/runtime:rw"
-    for argument in item["cmdline"]:
-        if argument == required_mount:
-            document = _read_json(root / "ipc/broker/broker-spec.json")
-            if (type(document) is not dict
-                    or document.get("schema_version") != 1
-                    or document.get("kind") != "so101_parallel_broker_runtime"):
-                raise ValueError("MANIFEST_INVALID")
-            if document.get("batch_id") != item["batch_id"]:
-                raise ValueError("BATCH_MISMATCH")
-            return "broker"
-    return None
+    suffix = ":/runtime:rw"
+    mounts = [value[:-len(suffix)] for value in item["cmdline"]
+              if value.endswith(suffix)]
+    if len(mounts) != 1:
+        return None
+    try:
+        ipc_root = _no_symlink_path(root / "ipc", directory=True)
+        runtime_root = _no_symlink_path(Path(mounts[0]), directory=True)
+    except ValueError:
+        return None
+    ipc_info = ipc_root.stat()
+    runtime_info = runtime_root.stat()
+    if any(
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+        for info in (ipc_info, runtime_info)
+    ):
+        raise ValueError("MANIFEST_INVALID")
+    if runtime_root.parent != ipc_root:
+        return None
+    name = runtime_root.name
+    if name == "broker":
+        generation = 1
+    elif name.startswith("broker-g"):
+        raw_generation = name.removeprefix("broker-g")
+        if (not raw_generation.isdecimal()
+                or raw_generation.startswith("0")
+                or int(raw_generation) < 2):
+            return None
+        generation = int(raw_generation)
+    else:
+        return None
+    document = _read_json(runtime_root / "broker-spec.json", exact_mode=0o600)
+    if (type(document) is not dict
+            or document.get("schema_version") != 1
+            or document.get("kind") != "so101_parallel_broker_runtime"
+            or type(document.get("coordinator_epoch")) is not int
+            or document["coordinator_epoch"] <= 0
+            or type(document.get("broker_generation")) is not int
+            or document["broker_generation"] != generation):
+        raise ValueError("MANIFEST_INVALID")
+    if document.get("batch_id") != item["batch_id"]:
+        raise ValueError("BATCH_MISMATCH")
+    return "broker"
 
 
 def _target_identity(root: Path, item) -> str | None:

@@ -518,6 +518,72 @@ def test_prestart_expiry_then_late_seal_becomes_indeterminate_and_never_requeues
     assert recovered.snapshot().workers["worker-01"].lease_count == 2
 
 
+def test_old_prestart_seal_fences_a_newer_active_retry_for_the_same_point(harness):
+    """A late old seal cannot coexist with a newly authorized retry."""
+    expired = harness.grant()
+    harness.acknowledge(expired)
+    harness.clock.now = 15.0
+    assert harness.coordinator.expire_lease(expired) is True
+    worker = harness.coordinator.snapshot().workers["worker-01"]
+    harness.coordinator.register_worker(
+        "worker-01",
+        generation=2,
+        recovery_deadline_monotonic_s=worker.recovery_deadline_monotonic_s,
+    )
+    harness.coordinator.record_recovery(
+        "worker-01",
+        generation=2,
+        succeeded=True,
+        fenced=True,
+        owned_processes_stopped=True,
+        controllers_stopped=True,
+        readmitted=True,
+        recovery_deadline_monotonic_s=worker.recovery_deadline_monotonic_s,
+    )
+    retry = harness.coordinator.grant_lease("worker-01", generation=2)
+    assert retry.point_id == expired.point_id
+    location = harness.results.write_working(expired)
+    harness.results.publish(location)
+
+    with pytest.raises(ValueError, match="LATE_RESULT_REJECTED"):
+        harness.coordinator.commit_result(
+            expired, location, request_key="late-old-seal-during-retry"
+        )
+
+    snapshot = harness.coordinator.snapshot()
+    point = snapshot.points[expired.point_id]
+    assert point.status is PointStatus.INDETERMINATE
+    assert point.terminal is True
+    assert point.active_attempt is None
+    assert point.blocked_by is None
+    current = snapshot.workers["worker-01"]
+    assert current.state is WorkerState.RECOVERING
+    assert current.lease is None
+    assert current.lease_count == 2
+    assert harness.coordinator.grant_lease("worker-01", generation=2) is None
+    harness.coordinator.register_worker(
+        "worker-01",
+        generation=3,
+        recovery_deadline_monotonic_s=current.recovery_deadline_monotonic_s,
+    )
+    harness.coordinator.record_recovery(
+        "worker-01",
+        generation=3,
+        succeeded=True,
+        fenced=True,
+        owned_processes_stopped=True,
+        controllers_stopped=True,
+        readmitted=True,
+        recovery_deadline_monotonic_s=current.recovery_deadline_monotonic_s,
+    )
+    following = harness.coordinator.grant_lease("worker-01", generation=3)
+    assert following.point_id == "p2"
+    assert harness.coordinator.snapshot().workers["worker-01"].lease_count == 3
+    assert sum(
+        event.type == "LEASE_GRANTED" for event in harness.journal.replay().events
+    ) == 3
+
+
 def test_repeated_late_result_submission_replays_one_rejection(harness):
     """A retry after expiry cannot change the audit trail or failure class."""
     lease = harness.grant()

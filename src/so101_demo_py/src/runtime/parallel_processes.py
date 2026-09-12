@@ -312,13 +312,14 @@ class ProcessSupervisor:
                             for item in self._owned.values()
                             if item[0].role == health_role
                         )
-                        if (
-                            recovered is not True
-                            or pid in self._owned
-                            or len(replacements) != 1
-                            or replacements[0][0] == expected
-                            or replacements[0][1]() is not None
-                        ):
+                        retired = pid not in self._owned
+                        if recovered is False and retired and not replacements:
+                            continue
+                        if (recovered is not True
+                                or not retired
+                                or len(replacements) != 1
+                                or replacements[0][0] == expected
+                                or replacements[0][1]() is not None):
                             raise SupervisorError(
                                 f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
                             )
@@ -357,10 +358,32 @@ class ProcessSupervisor:
             raise SupervisorError("UNOWNED_PROCESS")
         poll = current[1]
         if poll() is None:
-            raise SupervisorError("OWNED_PROCESS_STILL_RUNNING")
+            self._confirm_identity(expected)
+            try:
+                self._signal_group(expected.pgid, signal.SIGTERM)
+                stopped = self._wait_group_stopped(
+                    expected, poll, term_timeout_s
+                )
+                if not stopped:
+                    self._confirm_identity(expected)
+                    self._signal_group(expected.pgid, signal.SIGKILL)
+                    stopped = self._wait_group_stopped(
+                        expected, poll, kill_timeout_s
+                    )
+            except OSError:
+                return False
+            if not stopped:
+                return False
+            self._owned.pop(expected.pid)
+            self.write_manifest()
+            return True
+        if self._identity_reader(expected.pid) is not None:
+            raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
         members = self._group_members_reader(expected.pgid)
         try:
             if members:
+                if self._identity_reader(expected.pid) is not None:
+                    raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
                 self._signal_group(expected.pgid, signal.SIGTERM)
                 deadline = time.monotonic() + term_timeout_s
                 while (
@@ -369,6 +392,8 @@ class ProcessSupervisor:
                 ):
                     time.sleep(0.01)
             if self._group_members_reader(expected.pgid):
+                if self._identity_reader(expected.pid) is not None:
+                    raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
                 self._signal_group(expected.pgid, signal.SIGKILL)
                 deadline = time.monotonic() + kill_timeout_s
                 while (

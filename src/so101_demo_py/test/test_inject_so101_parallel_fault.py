@@ -66,26 +66,34 @@ def evidence_root(tmp_path, suffix):
     return TASK_ROOT / "scratch" / run_id / "fault-injector" / tmp_path.name / suffix
 
 
-def entry(root, target="worker-01", **changes):
+def entry(root, target="worker-01", *, broker_generation=1, **changes):
     role = "broker" if target == "broker" else "worker"
     if role == "broker":
-        broker_spec = root / "ipc" / "broker" / "broker-spec.json"
+        runtime_name = (
+            "broker" if broker_generation == 1
+            else f"broker-g{broker_generation}"
+        )
+        broker_spec = root / "ipc" / runtime_name / "broker-spec.json"
         broker_spec.parent.mkdir(parents=True, exist_ok=True)
         broker_spec.write_text(
             json.dumps({
                 "schema_version": 1,
                 "kind": "so101_parallel_broker_runtime",
                 "batch_id": "batch-1",
-                "broker_generation": 1,
+                "coordinator_epoch": 1,
+                "broker_generation": broker_generation,
             }),
             encoding="utf-8",
         )
+        (root / "ipc").chmod(0o700)
+        broker_spec.parent.chmod(0o700)
+        broker_spec.chmod(0o600)
     command = (
         (
             "docker",
             "run",
             "--volume",
-            f"{root / 'ipc/broker'}:/runtime:rw",
+            f"{broker_spec.parent}:/runtime:rw",
             "sha256:" + "a" * 64,
         )
         if role == "broker"
@@ -131,6 +139,23 @@ def test_exact_owned_identity_is_rechecked_before_term(module, tmp_path, target)
     assert result["target"] == target
     assert result["pid"] == value["pid"]
     assert result["pgid"] == value["pgid"]
+    assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+
+def test_recovered_broker_generation_is_resolved_from_its_exact_runtime_mount(
+        module, tmp_path):
+    root = evidence_root(tmp_path, "broker-g2")
+    value = entry(root, "broker", broker_generation=2)
+    write_manifest(root, [value])
+    sent = []
+
+    result = module.inject_fault(
+        [str(root), "broker", "TERM"],
+        proc_reader=lambda _pid: proc(value),
+        signal_group=lambda pgid, signal_number: sent.append((pgid, signal_number)),
+    )
+
+    assert result["target"] == "broker"
     assert sent == [(value["pgid"], module.signal.SIGTERM)]
 
 

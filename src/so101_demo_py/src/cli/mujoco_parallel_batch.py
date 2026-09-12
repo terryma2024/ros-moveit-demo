@@ -48,7 +48,7 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import WorkerResourceAllocator, WorkerResources
-from so101_demo.parallel_batch.worker import ParallelWorker
+from so101_demo.parallel_batch.worker import LeaseGrantPaused, ParallelWorker
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
     BrokerTransport,
@@ -828,6 +828,15 @@ class _CoordinatorRpcProxy:
 
     def grant_lease(self, worker_id, *, generation, request_key=None):
         value = self._call("grant_lease", generation=generation, request_key=request_key)
+        if type(value) is dict and set(value) == {
+            "lease_grant_paused", "recovery_deadline_monotonic_s",
+        }:
+            deadline = value["recovery_deadline_monotonic_s"]
+            if (value["lease_grant_paused"] is not True
+                    or isinstance(deadline, bool)
+                    or not isinstance(deadline, (int, float))):
+                raise CliError("LEASE_GRANT_PAUSE_SCHEMA")
+            raise LeaseGrantPaused("BROKER_RECOVERING")
         self._lease = None if value is None else LeaseIdentity(**value)
         return self._lease
 
@@ -1802,16 +1811,22 @@ class ProductionBatchComposition:
         deadline = snapshot.broker_recovery_deadline_monotonic_s
         if deadline is None:
             raise CliError("BROKER_RECOVERY_DEADLINE_MISSING")
+        replacement = None
         try:
             if self.supervisor.retire_owned(expected) is not True:
                 raise CliError("BROKER_RETIRE_FAILED")
             self._prepare_broker_generation(self.broker_generation + 1)
             self._start_broker_authority_server()
-            self._start_broker()
+            replacement = self._start_broker()
             self._wait_broker_ready(deadline_monotonic_s=deadline)
             self.coordinator.mark_broker_health(True)
             return True
         except Exception:
+            if replacement is not None:
+                try:
+                    self.supervisor.retire_owned(replacement)
+                except Exception:
+                    pass
             while self._clock() < deadline:
                 self._sleep(min(0.01, max(0.0, deadline - self._clock())))
             self.coordinator.tick()
@@ -1820,6 +1835,31 @@ class ProductionBatchComposition:
     def _stop_new_leases(self):
         self.coordinator.request_stop(reason="SUPERVISOR_SHUTDOWN")
         return self._worker_control("stop")
+
+    def _settle_shared_dependency_failure(self):
+        """Let active leases reach terminal or immutable stage deadlines."""
+        snapshot = self.coordinator.snapshot()
+        while snapshot.broker_recovery_failed and snapshot.terminal_reason is None:
+            active = [
+                worker for worker in snapshot.workers.values()
+                if worker.lease is not None
+            ]
+            if not active:
+                snapshot = self.coordinator.tick()
+                break
+            deadlines = [snapshot.batch_deadline_monotonic_s]
+            for worker in active:
+                deadlines.extend(value for value in (
+                    worker.lease.lease_deadline_monotonic_s,
+                    worker.stage_deadline_monotonic_s,
+                    worker.heartbeat_deadline_monotonic_s,
+                ) if value is not None)
+            deadline = min(deadlines)
+            now = self._clock()
+            if now < deadline:
+                self._sleep(min(0.01, deadline - now))
+            snapshot = self.coordinator.tick()
+        return snapshot
 
     def _worker_control(self, operation):
         okay = True
@@ -2040,6 +2080,16 @@ class ProductionBatchComposition:
                 generation=payload.get("generation"),
                 request_key=message["idempotency_key"],
             )
+            snapshot = self.coordinator.snapshot()
+            if (lease is None
+                    and not snapshot.broker_healthy
+                    and snapshot.terminal_reason is None):
+                return {
+                    "lease_grant_paused": True,
+                    "recovery_deadline_monotonic_s": (
+                        snapshot.broker_recovery_deadline_monotonic_s
+                    ),
+                }
             if lease is not None:
                 self.authority.bind_lease(worker_id, generation, _lease_wire(lease))
             return _jsonable(lease)
@@ -2138,6 +2188,7 @@ class ProductionBatchComposition:
                     health_recovery=self._recover_broker,
                 )
             failure = any(code != 0 for code in codes)
+            self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
         finally:
             try:
