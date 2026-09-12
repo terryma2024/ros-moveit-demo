@@ -33,7 +33,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-026
-next_experiment: EXP-042 is RUNNING
+next_experiment: EXP-042 is INVALID; F47 production gate-identity binding precedes EXP-043
 ```
 
 Frozen provenance:
@@ -120,6 +120,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F44: Compress the F43 node diagnostic so the complete payload, including the fixed failure prefix, fits the existing 512-byte Worker failure-message contract for the observed graph. Omit the redundant full expected list; retain sorted `missing`, `unexpected`, `duplicates`, and `truncated`, with the same per-list and per-name bounds. Add a direct integration assertion through `_bounded_failure_message` proving no truncation for the bounded payload. Equality and authorization remain unchanged. Cost if wrong: another diagnostic run remains inconclusive; increasing the Worker failure bound or weakening graph admission is not authorized.
 - Ruling F45: Replace impossible whole-graph tuple equality with an exact stable topology predicate that matches the independently observed two-Worker graph and the design's actual stale-node isolation requirement. Require every fixed Worker node exactly once; require the four legitimate fixed internal nodes `/controller_manager`, `/move_group/moveit`, `/moveit_simple_controller_manager`, and `/robotsystem` exactly once; require exactly one node in each runtime-generated category `/move_group_private_<decimal>`, `/moveit_<decimal>`, and `/transform_listener_impl_<lower-hex>`. Reject any missing node, duplicate FQN, second member of a generated category, malformed suffix, or unknown node. Keep stable-graph sampling and all non-node gates unchanged. Cost if wrong: an old in-domain internal node could be admitted; direct tests must cover missing, duplicate-category, malformed, and unknown-node rejection before live execution.
 - Ruling F46: ProcessSupervisor.start may boundedly retry `/proc` identity reads for an alive exact Popen child while its `start_new_session=True` setsid transition is not yet visible. Retry at most eight reads with a 1 ms yield; admit only a complete identity with pgid==pid. If the child exits or never becomes a self-led group, preserve CHILD_IDENTITY, reap the exact Popen child, and never signal a foreign/unverified group. PID reuse, command/start-time identity, manifest durability, and shutdown semantics remain unchanged. Cost if wrong: a foreign group could be signalled; direct RED/GREEN tests must prove transient inherited-PGID success and persistent foreign-PGID no-signal failure.
+- Ruling F47: `ParallelRosRuntime.initial_gate` must bind its already-validated point-initial facts to the exact current lease by copying the seven immutable lease identity fields into the returned gate receipt. It may not synthesize, normalize, or omit identity, and `ParallelWorker._gate_summary` retains exact type-and-value checks against both reset and gate receipts before ATTEMPT_STARTED. Cost if wrong: evidence from another point, generation, or Worker could authorize execution; direct RED/GREEN tests must prove all seven production fields and preserve mismatch rejection.
 
 ```yaml
 checkpoint_id: CP-002
@@ -2306,12 +2307,14 @@ decision: RUN EXP-042 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-042
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:41:17+08:00
   - status: RUNNING
     at: 2026-09-12T19:43:05+08:00
+  - status: INVALID
+    at: 2026-09-12T19:46:38+08:00
 prior_experiment: EXP-041
 hypothesis: F46 removes the bounded parent/child setsid observation race without weakening process ownership, allowing two Workers to execute four unique points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
@@ -2331,9 +2334,33 @@ provenance:
   yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
-retained: pre-registration ledger record and preflight-exp042.json
+result: >-
+  Command exit was 1 after 63.69 s. Both Workers passed stack startup, reset, and the production
+  observation predicates, then failed before ATTEMPT_STARTED with POINT_INITIAL_GATE_IDENTITY.
+  Source inspection proves `ParallelRosRuntime.initial_gate()` returns reset/session/time plus five
+  true gate facts but omits all seven immutable lease identity fields required by
+  `ParallelWorker._gate_summary`. The coordinator recorded one lease for task_start and one for
+  cup_test_forward_5cm, then conservatively quarantined both Workers with terminal reason
+  CAPACITY_EXHAUSTED; the other two points remained unleased. Both sealed INVALID attempt results
+  state physical_action_proven_absent=true. There is no ATTEMPT_STARTED, POSE_ACCEPTED, planning,
+  trajectory, or physical action evidence, so zero physical attempts are countable.
+cleanup: >-
+  Exact CID 8a6ad668b05d66a0a8e2ef5a9bc895547e2c56cbe3218efd4f95eca8abd1f28c
+  was verified against immutable image sha256:6d72a620d833fbba18698bc630bb1af349d3d62be174a5f3fb064ae29335142a,
+  batch/generation labels, and the four registered mounts, then stopped. The --rm container was
+  removed; post-stop audit found no related process, running container, GPU compute task, or domain
+  owner. The MuJoCo log was moved without deletion to reports/MUJOCO_LOG-EXP042.txt.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: dde91626cf6ecf60f23099074e44b76431206a87d1545bedfd7f53b82caf0d0e
+command_time_sha256: 4e15056df904a9a15eb1ee3ecad6fe060b102d78635ff0ae256cde45907460cd
+aggregate_sha256: dfd7f4305f057ecf9087d317e9afffe874f26d19ed9168d32ca6fdaaa83bb68b
+worker_01_result_sha256: 61583c466e861851734e2f08049145f1a00faee695c85a268f2406c7459b8c62
+worker_02_result_sha256: 26bb1bcb96292391c4e27a66ae059af98c6302aa96d85ddfe6ea6489ecc7db2b
+mujoco_log_sha256: 3d820ff4088d4b170e23a2446241edec52c41705e320a0011382a329da701830
+conclusion: INVALID; zero countable attempts. Bind the production initial-gate receipt to the exact lease under F47, retain strict Worker checks, and repeat as EXP-043.
+retained: complete EXP-042 batch/reports, moved MuJoCo log, preflight, and all prior evidence
 archived: none
-deletion_candidates: none
+deletion_candidates: p56/direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
