@@ -964,6 +964,69 @@ def test_shutdown_cancels_and_independently_confirms_goals_without_reset(monkeyp
     assert events == [("cancel", 5.0), ("confirm", 5.0)]
 
 
+def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch):
+    import rclpy
+    from rclpy.qos import qos_profile_action_status_default
+    from so101_demo.runtime import parallel_ros_runtime as ros_runtime
+
+    captured_qos = []
+
+    class Future:
+        @staticmethod
+        def done():
+            return True
+
+        @staticmethod
+        def result():
+            return SimpleNamespace(goals_canceling=[])
+
+    class Client:
+        @staticmethod
+        def wait_for_service(*, timeout_sec):
+            return timeout_sec > 0.0
+
+        @staticmethod
+        def call_async(_request):
+            return Future()
+
+    class Node:
+        def __init__(self):
+            self.callbacks = []
+
+        def create_subscription(self, _message, _topic, callback, qos):
+            captured_qos.append(qos)
+            self.callbacks.append(callback)
+            return object()
+
+        @staticmethod
+        def create_client(_service, _topic):
+            return Client()
+
+    class Owner:
+        def __init__(self):
+            self.node = Node()
+
+        @staticmethod
+        def close():
+            return None
+
+    monkeypatch.setattr(
+        ros_runtime, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner()
+    )
+
+    def spin_once(node, *, timeout_sec):
+        assert timeout_sec > 0.0
+        message = SimpleNamespace(status_list=[])
+        for callback in node.callbacks:
+            callback(message)
+
+    monkeypatch.setattr(rclpy, "spin_once", spin_once)
+
+    assert ros_runtime.cancel_and_confirm_parallel_goals(timeout_s=1.0) is True
+    assert ros_runtime.observe_no_parallel_goals(timeout_s=1.0) is True
+    assert captured_qos == [qos_profile_action_status_default] * 6
+
+
 def test_isolated_ros_node_never_uses_or_shuts_down_the_retained_global_context():
     from so101_demo.runtime.parallel_ros_runtime import _open_isolated_ros_node
 
