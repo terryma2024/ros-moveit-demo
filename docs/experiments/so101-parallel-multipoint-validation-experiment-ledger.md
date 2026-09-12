@@ -34,7 +34,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-027
-next_experiment: EXP-043 is INVALID; repeat unchanged as EXP-044 after clean preflight
+next_experiment: EXP-044 is RUNNING with unchanged F47 source and immutable inputs
 ```
 
 Frozen provenance:
@@ -2442,6 +2442,40 @@ conclusion: INVALID; zero countable attempts. Preserve source, install, image, m
 retained: complete EXP-043 batch/reports, moved MuJoCo log, preflight, and all prior evidence
 archived: none
 deletion_candidates: p57/direct pytest scratch after readback; no deletion authorized
+```
+
+## EXP-044 — Task 14 unchanged retry after isolated startup middleware fault
+
+```yaml
+experiment_id: EXP-044
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:56:21+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:56:21+08:00
+prior_experiment: EXP-043
+hypothesis: EXP-043 was an isolated pre-lease controller-manager middleware fault; the unchanged F47 runtime can start both Workers and execute the four-point small batch from clean host state.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
+single_variable: Fresh batch/runtime identities only. Executable source, install tree, image, models, point selection, config, N=2, K=2, timeouts, point gates, and physical criteria are byte-identical to EXP-043.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f47-r2
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f47-r2
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: f4881e44af0af7e470a71ccd1140ccb522b955d6
+  executable_source_tree: f2d93a94041d29fba92671471ea8dc458de6303ba669ae1d6c68dfae7db40d14
+  installed_module_tree: 72b6c85efbf97cfb989519e683efebc143922c4308adb08428f04d96cf98a4a8
+  image_id: sha256:5e77eba492f065436a078e92be217c64c0bc43f9f9b78c89544b219e470c644f
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+retained: pre-registration ledger record and preflight-exp044.json
+archived: none
+deletion_candidates: none
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
