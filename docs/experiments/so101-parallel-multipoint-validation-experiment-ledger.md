@@ -5885,6 +5885,42 @@ deletion_candidates: registered pytest/build scratch, invalid smoke/command/diag
 decision: RERUN WITH DURABLE COORDINATOR WORKER_RECOVERED EVENT AS THE POST-WORKER SYNCHRONIZATION PREDICATE
 ```
 
+## EXP-088 — F74 journal-synchronized controlled plan-only fault gate
+
+```yaml
+experiment_id: EXP-088
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:02:26+08:00
+prior_experiment: EXP-087
+hypothesis: Synchronizing Broker TERM on the durable worker-01 generation-2 WORKER_RECOVERED journal event will complete the approved exact two-fault sequence and demonstrate F74 fault recovery.
+single_variable: Replace only the invalid transient replacement-PID predicate with the journal-authoritative worker-01 generation-2 WORKER_RECOVERED predicate; product inputs, persistent observer, plan-only mode, N/K, selection, exact TERM targets, and acceptance remain fixed.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v4-f74
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f74-v4
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+fault_sequence:
+  - wait for Broker g1 ready and worker-01 validation working, then inject exact manifest-owned worker-01 TERM
+  - require durable worker-01 generation-2 WORKER_RECOVERED plus the same healthy Broker g1 PID, then inject exact manifest-owned Broker g1 TERM
+  - require a different manifest-owned Broker PID plus ready.json and .model-ready.json under broker-g2
+provenance:
+  executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_base_commit: 89cb9e22c185ad60e60a2e441ae44eb312ea1ab3
+  executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+  installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+  broker_image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+success_criteria: Both exact injectors exit 0; all physical statuses remain UNRUN; worker-01 fault is fenced with physical action proven absent and durable recovery; Broker g1 remains healthy across Worker disconnect; exact g1 TERM yields a journal unhealthy/healthy pair and ready model-loaded g2; no lease grant occurs during the unhealthy window; each stable slot receives exactly two unique leases; cleanup and residual audit pass.
+failure_rule: Any missing or wrong target, identity drift, injector failure, physical action, Worker-induced Broker death, missing ready g2 or health transition, lease during pause, duplicate point, K over-debit, cleanup failure, or residual owned state makes this run INVALID and blocks full-20 admission.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
