@@ -78,6 +78,7 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
         def __init__(self, name):
             self.name = name
             self.callbacks = []
+            self.graph_reads = 0
 
         def create_client(self, _service, name):
             return CancelClient() if name.endswith("/cancel_goal") else ServiceClient()
@@ -88,7 +89,16 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
             return object()
 
         def get_node_names_and_namespaces(self):
-            return [("move_group", "/")]
+            valid = _valid_worker_nodes()
+            incomplete = tuple(
+                node for node in valid if node != "/so101_base_to_camera_link"
+            )
+            nodes = incomplete if self.graph_reads < 2 else valid
+            self.graph_reads += 1
+            return [
+                (node.rsplit("/", 1)[1], node.rsplit("/", 1)[0] or "/")
+                for node in nodes
+            ]
 
         def destroy_node(self):
             return None
@@ -122,6 +132,7 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
         timeout_s=0.25,
     )
     assert table_supported.has_contact is False
+    assert table_supported.worker_node_fqns == _valid_worker_nodes()
 
     fingertip_contacts["left"] = (SimpleNamespace(geom1="left_fingertip"),)
     fingertip_contact = runtime_module.observe_parallel_initial_gate(
