@@ -23,6 +23,97 @@ def _lease():
     )
 
 
+def test_production_initial_gate_replays_each_authoritative_action_status(monkeypatch):
+    import rclpy
+    from rclpy.qos import qos_profile_action_status_default
+    from so101_demo.backends.mujoco import client as client_module
+    from so101_demo.backends.mujoco import teleop_runtime
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+
+    captured_qos = []
+
+    class Future:
+        def done(self):
+            return True
+
+        def result(self):
+            return SimpleNamespace(
+                scene=SimpleNamespace(
+                    robot_state=SimpleNamespace(attached_collision_objects=[])
+                )
+            )
+
+    class ServiceClient:
+        def wait_for_service(self, *, timeout_sec):
+            return timeout_sec == 0.25
+
+        def call_async(self, _request):
+            return Future()
+
+    class Node:
+        def __init__(self, name):
+            self.name = name
+            self.callbacks = []
+
+        def create_client(self, *_args):
+            return ServiceClient()
+
+        def create_subscription(self, _message, _topic, callback, qos):
+            captured_qos.append(qos)
+            self.callbacks.append(callback)
+            return object()
+
+        def get_node_names_and_namespaces(self):
+            return [("move_group", "/")]
+
+        def destroy_node(self):
+            return None
+
+    nodes = {}
+
+    def create_node(name):
+        node = Node(name)
+        nodes[name] = node
+        return node
+
+    def spin_once(node, *, timeout_sec):
+        assert timeout_sec == 0.01
+        for callback in node.callbacks:
+            callback(SimpleNamespace(status_list=[]))
+
+    class MujocoClient:
+        joint_callback_count = 1
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def progress(self):
+            return None
+
+        def latest_joint_positions(self):
+            return (0.0,) * 6
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", create_node)
+    monkeypatch.setattr(rclpy, "spin_once", spin_once)
+    monkeypatch.setattr(client_module, "MujocoRosClient", MujocoClient)
+    monkeypatch.setattr(
+        teleop_runtime,
+        "current_evidence",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            reset_epoch=2,
+            has_contact=False,
+        ),
+    )
+
+    runtime_module.observe_parallel_initial_gate(
+        runtime_module.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0),
+        timeout_s=0.25,
+    )
+
+    assert captured_qos == [qos_profile_action_status_default] * 3
+
+
 def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_and_nodes():
     from so101_demo.runtime.parallel_ros_runtime import (
         InitialGateObservation,
