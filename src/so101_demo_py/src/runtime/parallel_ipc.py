@@ -461,7 +461,15 @@ class AuthenticatedUnixServer:
             if remaining <= 0:
                 return
             connection.settimeout(remaining)
-            connection.sendall(encode_frame(reply, max_frame_bytes=self.max_frame_bytes))
+            try:
+                connection.sendall(
+                    encode_frame(reply, max_frame_bytes=self.max_frame_bytes)
+                )
+            except (BrokenPipeError, ConnectionResetError):
+                # A Worker can disappear after its authenticated request was
+                # handled.  Its reply channel is request-local and must not
+                # take down the shared Broker/coordinator service loop.
+                return
 
     def close(self) -> None:
         self._closed.set()
