@@ -190,8 +190,7 @@ class ParallelWorker:
 
     def request_stop(self) -> None:
         """Atomically fence all later lease renewal and execution boundaries."""
-        with self._execution_lock:
-            self._stop_requested.set()
+        self._stop_requested.set()
         self._stop_watchdog()
 
     def _assert_running(self) -> None:

@@ -592,6 +592,91 @@ def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
         composition._release_partial()
 
 
+def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
+    tmp_path, monkeypatch,
+):
+    import socket
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition, _write_json, prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self): return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain): return False
+        def socket_in_use(self, _path): return False
+
+    class Supervisor:
+        processes = ()
+        def assert_healthy(self): return None
+
+    class HealthClient:
+        def __init__(self, *_args, **_kwargs): pass
+        def call(self, message):
+            return {"payload": {
+                "ready": ready,
+                "ready_sha256": message["payload"]["ready_sha256"],
+            }}
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "race", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {
+            **verified(value), "image_id": "sha256:" + "b" * 64,
+        },
+    )
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "race-claims",
+        supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",),
+        broker_health_client_factory=HealthClient,
+    )
+    ready = {
+        "schema_version": 1, "kind": "so101_parallel_broker_ready",
+        "batch_id": spec.request.batch_id, "run_mode": "plan_only",
+        "coordinator_epoch": composition.journal.coordinator_epoch,
+        "broker_generation": 1, "image_id": spec.provenance["image_id"],
+        "yolo_weights_sha256": spec.yolo_weights_sha256,
+        "grounded_manifest_sha256": spec.grounded_manifest_sha256,
+        "models": {
+            "plastic-cup-yolo11n-seg-v1": {
+                "ready": True, "weights_sha256": spec.yolo_weights_sha256,
+            },
+            "grounded-sam": {
+                "ready": True,
+                "manifest_sha256": spec.grounded_manifest_sha256,
+            },
+        },
+    }
+    _write_json(composition.broker_runtime_root / "ready.json", ready)
+    listener = socket.socket(socket.AF_UNIX)
+    directory_fd = os.open(
+        composition.broker_runtime_root, os.O_RDONLY | os.O_DIRECTORY
+    )
+    original_lstat = Path.lstat
+    checks = 0
+
+    def racing_lstat(path):
+        nonlocal checks
+        if path == composition.broker_socket_path:
+            checks += 1
+            if checks == 1:
+                listener.bind(
+                    f"/proc/self/fd/{directory_fd}/{composition.broker_socket_path.name}"
+                )
+                composition.broker_socket_path.chmod(0o600)
+                raise FileNotFoundError(path)
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", racing_lstat)
+    try:
+        assert composition._wait_broker_ready() is True
+    finally:
+        listener.close()
+        os.close(directory_fd)
+        composition._release_partial()
+
+
 def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
@@ -1373,6 +1458,20 @@ def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target
     egg.write_text(str(build) + "\n.\n", encoding="utf-8")
     import_path = build / "so101_demo/cli/mujoco_parallel_batch.py"
 
+    metadata = build / "so101_demo_py.egg-info/entry_points.txt"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        "[console_scripts]\n"
+        "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CliError, match="CONSOLE"):
+        _installed_overlay_identity(
+            repository, import_path, console, source_hash=source_hash
+        )
+
+    console.write_text(_canonical_console_wrapper(), encoding="utf-8")
     identity = _installed_overlay_identity(
         repository, import_path, console, source_hash=source_hash
     )
@@ -1387,3 +1486,40 @@ def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target
         _installed_overlay_identity(
             repository, import_path, console, source_hash=source_hash
         )
+
+
+def _canonical_console_wrapper():
+    return """#!/usr/bin/python3
+# EASY-INSTALL-ENTRY-SCRIPT: 'so101-demo-py','console_scripts','so101_parallel_batch'
+import re
+import sys
+
+# for compatibility with easy_install; see #2198
+__requires__ = 'so101-demo-py'
+
+try:
+    from importlib.metadata import distribution
+except ImportError:
+    try:
+        from importlib_metadata import distribution
+    except ImportError:
+        from pkg_resources import load_entry_point
+
+
+def importlib_load_entry_point(spec, group, name):
+    dist_name, _, _ = spec.partition('==')
+    matches = (
+        entry_point
+        for entry_point in distribution(dist_name).entry_points
+        if entry_point.group == group and entry_point.name == name
+    )
+    return next(matches).load()
+
+
+globals().setdefault('load_entry_point', importlib_load_entry_point)
+
+
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\\.pyw?|\\.exe)?$', '', sys.argv[0])
+    sys.exit(load_entry_point('so101-demo-py', 'console_scripts', 'so101_parallel_batch')())
+"""

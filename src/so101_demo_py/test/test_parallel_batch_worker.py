@@ -268,6 +268,61 @@ def test_stop_racing_lease_reply_fences_all_runtime_and_broker_side_effects():
     assert fake.broker.calls == []
 
 
+def test_stop_ack_does_not_wait_for_blocked_broker_boundary():
+    fake = Fake(RunMode.PLAN_ONLY)
+    worker = ParallelWorker(fake.ports())
+    fake.broker.block = threading.Event()
+    result = []
+    run_thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    run_thread.start()
+    assert fake.broker.entered.wait(1.0)
+
+    stopped = threading.Event()
+    stop_thread = threading.Thread(
+        target=lambda: (worker.request_stop(), stopped.set())
+    )
+    stop_thread.start()
+    assert stopped.wait(0.1), "stop ACK waited for the Broker boundary"
+
+    fake.broker.block.set()
+    run_thread.join(timeout=1.0)
+    stop_thread.join(timeout=1.0)
+    assert "pose_admission" not in fake.runtime.calls
+    assert "submit_plan" not in fake.runtime.calls
+    assert "submit_motion" not in fake.runtime.calls
+
+
+def test_stop_ack_does_not_wait_for_blocked_action_or_allow_later_boundary():
+    fake = Fake(RunMode.EXECUTE)
+    worker = ParallelWorker(fake.ports())
+    entered, release = threading.Event(), threading.Event()
+    original = fake.runtime.execute_expert
+
+    def blocked_action(*args, **kwargs):
+        entered.set()
+        release.wait(1.0)
+        return original(*args, **kwargs)
+
+    fake.runtime.execute_expert = blocked_action
+    result = []
+    run_thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    run_thread.start()
+    assert entered.wait(1.0)
+
+    stopped = threading.Event()
+    stop_thread = threading.Thread(
+        target=lambda: (worker.request_stop(), stopped.set())
+    )
+    stop_thread.start()
+    assert stopped.wait(0.1), "stop ACK waited for the action boundary"
+
+    release.set()
+    run_thread.join(timeout=1.0)
+    stop_thread.join(timeout=1.0)
+    assert fake.runtime.calls.count("submit_motion") == 1
+    assert "capture_terminal" not in fake.runtime.calls
+
+
 class Broker:
     def __init__(self):
         self.calls = []

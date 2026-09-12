@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import configparser
 from dataclasses import asdict, dataclass
 from enum import Enum
 import hashlib
@@ -335,6 +336,32 @@ def _installed_overlay_identity(
     expected_build_root = (repository_root / "build/so101_demo_py").resolve()
     if target.resolve() != expected_build_root:
         raise CliError("PROVENANCE_INSTALLED_OVERLAY")
+    entry_points = expected_build_root / "so101_demo_py.egg-info/entry_points.txt"
+    if (
+        not entry_points.is_file()
+        or entry_points.is_symlink()
+        or not console_path.is_file()
+        or console_path.is_symlink()
+    ):
+        raise CliError("PROVENANCE_CONSOLE_METADATA")
+    parser = configparser.ConfigParser(interpolation=None, strict=True)
+    try:
+        parser.read_string(entry_points.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, configparser.Error) as error:
+        raise CliError("PROVENANCE_CONSOLE_METADATA") from error
+    entry_point = "so101_demo.cli.mujoco_parallel_batch:main"
+    if (
+        "console_scripts" not in parser
+        or parser["console_scripts"].get("so101_parallel_batch") != entry_point
+    ):
+        raise CliError("PROVENANCE_CONSOLE_METADATA")
+    expected_wrapper = _expected_console_wrapper()
+    try:
+        console_bytes = console_path.read_bytes()
+    except OSError as error:
+        raise CliError("PROVENANCE_CONSOLE_CONTENT") from error
+    if console_bytes != expected_wrapper:
+        raise CliError("PROVENANCE_CONSOLE_CONTENT")
     source_tree = source_hash(source_package)
     build_tree = source_hash(build_package.resolve())
     if build_tree != source_tree:
@@ -347,7 +374,48 @@ def _installed_overlay_identity(
         "installed_module_tree_sha256": build_tree,
         "installed_egg_link_path": str(egg_link),
         "installed_egg_link_sha256": _sha256(egg_link),
+        "installed_entry_points_path": str(entry_points),
+        "installed_entry_points_sha256": _sha256(entry_points),
     }
+
+
+def _expected_console_wrapper() -> bytes:
+    """Return the frozen setuptools wrapper for the reviewed entry point."""
+
+    return b"""#!/usr/bin/python3
+# EASY-INSTALL-ENTRY-SCRIPT: 'so101-demo-py','console_scripts','so101_parallel_batch'
+import re
+import sys
+
+# for compatibility with easy_install; see #2198
+__requires__ = 'so101-demo-py'
+
+try:
+    from importlib.metadata import distribution
+except ImportError:
+    try:
+        from importlib_metadata import distribution
+    except ImportError:
+        from pkg_resources import load_entry_point
+
+
+def importlib_load_entry_point(spec, group, name):
+    dist_name, _, _ = spec.partition('==')
+    matches = (
+        entry_point
+        for entry_point in distribution(dist_name).entry_points
+        if entry_point.group == group and entry_point.name == name
+    )
+    return next(matches).load()
+
+
+globals().setdefault('load_entry_point', importlib_load_entry_point)
+
+
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\\.pyw?|\\.exe)?$', '', sys.argv[0])
+    sys.exit(load_entry_point('so101-demo-py', 'console_scripts', 'so101_parallel_batch')())
+"""
 
 
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
@@ -1527,21 +1595,28 @@ class ProductionBatchComposition:
         ready = self.broker_runtime_root / "ready.json"
         while time.monotonic() < deadline:
             self.supervisor.assert_healthy()
-            if self.broker_socket_path.exists() and not self.broker_socket_path.is_symlink():
+            try:
                 socket_info = self.broker_socket_path.lstat()
+            except FileNotFoundError:
+                socket_info = None
+            try:
+                ready_info = ready.lstat()
+            except FileNotFoundError:
+                ready_info = None
+            if socket_info is not None:
                 if not stat.S_ISSOCK(socket_info.st_mode):
                     raise CliError("BROKER_READY_ENDPOINT_NOT_SOCKET")
-            if ready.exists() and ready.is_symlink():
+            if ready_info is not None and stat.S_ISLNK(ready_info.st_mode):
                 raise CliError("BROKER_READY_RECEIPT_INVALID")
             if (
-                self.broker_socket_path.exists()
-                and ready.exists()
-                and stat.S_ISSOCK(self.broker_socket_path.lstat().st_mode)
-                and stat.S_ISREG(ready.lstat().st_mode)
-                and self.broker_socket_path.lstat().st_uid == os.getuid()
-                and ready.lstat().st_uid == os.getuid()
-                and stat.S_IMODE(self.broker_socket_path.lstat().st_mode) == 0o600
-                and stat.S_IMODE(ready.lstat().st_mode) == 0o600
+                socket_info is not None
+                and ready_info is not None
+                and stat.S_ISSOCK(socket_info.st_mode)
+                and stat.S_ISREG(ready_info.st_mode)
+                and socket_info.st_uid == os.getuid()
+                and ready_info.st_uid == os.getuid()
+                and stat.S_IMODE(socket_info.st_mode) == 0o600
+                and stat.S_IMODE(ready_info.st_mode) == 0o600
             ):
                 try:
                     document = json.loads(ready.read_text(encoding="utf-8"))
@@ -1587,7 +1662,10 @@ class ProductionBatchComposition:
                     or payload["ready_sha256"] != ready_sha256
                 ):
                     raise CliError("BROKER_READY_HEALTH_IDENTITY")
-                socket_after = self.broker_socket_path.lstat()
+                try:
+                    socket_after = self.broker_socket_path.lstat()
+                except FileNotFoundError as error:
+                    raise CliError("BROKER_READY_ENDPOINT_CHANGED") from error
                 if (
                     (socket_after.st_dev, socket_after.st_ino)
                     != (socket_info.st_dev, socket_info.st_ino)
