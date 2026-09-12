@@ -5687,12 +5687,14 @@ decision: ADVANCE TO NORMAL FOUR-POINT SMALL GATE
 
 ```yaml
 experiment_id: EXP-084
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:45:38+08:00
   - status: RUNNING
     at: 2026-09-13T05:46:04+08:00
+  - status: VALID
+    at: 2026-09-13T05:50:46+08:00
 prior_experiment: EXP-083
 hypothesis: The immutable F74 runtime will preserve the accepted normal two-Worker four-point physical schedule before synchronized fault and full-catalog gates.
 single_variable: Replace the six-point diagnostic selection and K=3 with the frozen normal small-gate selection and K=2; source, install, image, models, config, catalog, lifecycle, and execute behavior remain fixed.
@@ -5721,6 +5723,17 @@ provenance:
 success_criteria: Exit 0; four distinct points PASSED; exactly K=2 leases and generation 3 per Worker; four recovery receipts succeed; all eight original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, coordinator completion, qualification, and cleanup gates pass; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
 failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, qualification false, or residual owned state makes this batch non-qualifying and requires diagnosis before fault/full gates.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: Exit 0 in 197.97 seconds. All four distinct points PASSED; each Worker received exactly K=2 leases and completed two successful recoveries before stopping at generation 3. All four sealed attempt manifests passed file size and SHA-256 readback and all dynamic manifests were DONE. Aggregate coordinator completion, qualification, and cleanup passed; execute-mode validation fields remained false and inapplicable. Fresh original-resolution inspection accepted all eight RGB images, with distinct upright initial cup positions and upright target placement plus open-gripper retreat in every terminal image. Exact post-exit audit found no owned process, task container, GPU compute application, or related process.
+aggregate_results_sha256: c550f27a3187f0262db1375a1e6f8b322704a2374231198a45626cda83aa8ebf
+command_log_sha256: 8be4b01f3d1958a9ffae3684d864f1d6b6625c044225831bee3c48af6a55745b
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP084.json
+visual_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP084.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-084-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP084.txt
+retained: complete live-small-f74 tree, command/MuJoCo/result/visual/cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+decision: ADVANCE TO SYNCHRONIZED CONTROLLED PLAN-ONLY FAULT GATE
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
