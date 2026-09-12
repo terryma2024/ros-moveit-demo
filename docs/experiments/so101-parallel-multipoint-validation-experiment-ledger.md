@@ -3581,8 +3581,66 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f56 and root live-small-f56.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — harness transcription used a nonexistent YOLO path and two mistyped frozen hashes, so the CLI failed closed with YOLO_HASH_MISMATCH in 0.33 seconds before starting ROS, Docker, or physical execution.
+retained: preflight, command-054 log/time/exit, post-failure readback, and prior evidence
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
+```yaml
+checkpoint_id: CP-047
+last_valid_experiment: EXP-022
+current_hypothesis: EXP-054 exercised no implementation behavior; the F56 private-context executor hypothesis remains unchanged.
+working_tree_status: clean executable source at dd3f2071476ef4aacc1acd77e92322980391cc10; ledger-only EXP-055 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-054 stopped at immutable-input verification in 0.33 seconds with YOLO_HASH_MISMATCH and did not start ROS, Docker, GPU work, or a physical action.
+  - Readback recovered the already-qualified exact YOLO path and sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781.
+  - Readback recovered the frozen Grounded-SAM manifest sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775.
+  - No batch-labelled container or GPU compute application exists after the failed precheck.
+ruling: Preserve EXP-054 as invalid harness evidence and repeat the unchanged four-point gate as EXP-055 with the exact previously qualified model path and hashes.
+retained: EXP-054 and all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: RUN EXP-055
+```
+
+## EXP-055 — Task 14 private recovery executor F56 two-Worker execute, corrected frozen model literals
+
+```yaml
+experiment_id: EXP-055
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T23:32:14+08:00
+  - status: RUNNING
+    at: 2026-09-12T23:32:14+08:00
+prior_experiment: EXP-054
+hypothesis: Both recovery action-status readers will execute on their private context, report stopped=true and confirmed=true, re-admit generation 2, and finish all four points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, and every recovery diagnostic is all true.
+single_variable: No implementation or experiment variable changed from EXP-054; only the command transcription is corrected to the exact previously qualified YOLO path and frozen YOLO/Grounded-SAM hashes.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f56-r2
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f56-r2
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all-true recovery gates, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: dd3f2071476ef4aacc1acd77e92322980391cc10
+  executable_source_tree: 147e7b947e9e4ed3ce063eda7093f9d8a7cdc8ed8d50de051d8b74310ceb1ba5
+  installed_module_tree: 84d2a6b3024998af08066773b6917976f9deff7aee83eb2b531de49725e73150
+  image_id: sha256:f18aca1428823046d5eec9cd088bb16400a9f999cec742a9c6d0c80c22d3cc37
+  yolo_path: /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: Reuse EXP-054 preflight because the failed command created no process/container/domain claim; exact model readback recorded at CP-047.
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f56-r2, root live-small-f56-r2, and the exact qualified model literals above.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
 result: PENDING
-retained: preflight and prior evidence; runtime evidence pending
+retained: all prior evidence; runtime evidence pending
 archived: none
 deletion_candidates: none from this experiment yet
 ```
