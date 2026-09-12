@@ -4112,6 +4112,67 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F62 WITH TDD; do not start another live experiment until focused, adjacent, package, build, provenance, image, smoke, and fresh preflight gates pass.
 ```
 
+```yaml
+checkpoint_id: CP-056
+last_valid_experiment: EXP-022
+current_hypothesis: F62's primed retained pose publisher removes the reproduced late-publisher loss while preserving all safety, recovery, and physical contracts.
+working_tree_status: clean executable source at 99a54199cbd2823254732f0da741f2153670dcc9; ledger-only EXP-063 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - Formal RED pytest-F5M6nnPb proved the old consumer-ready path did not create a publisher. Focused GREEN pytest-mHraPB5c passed four tests after the correction.
+  - pytest-38KiYUMU is retained as an invalid test harness: the partial setup resolved mujoco_ros2_control_msgs from /opt/ros instead of the worktree. The corrected full-overlay pytest-VJJBiphQ passed all 23 ROS runtime tests.
+  - The complete adjacent parallel suite pytest-Rdyomqc8 passed 1043 tests in 41.63 seconds.
+  - F62 pre-creates a private-context /cup_pose publisher only after the exact consumer graph is present, requires exactly one matched subscriber and a nonzero simulation clock, retains the publisher through the publish, and closes it on recovery rebind or runtime close. The direct non-primed path remains unchanged.
+  - Source commit 99a54199cbd2823254732f0da741f2153670dcc9; p91 symlink build passed in 1.51 seconds. p92 passed 2792 ordinary package tests with zero errors, failures, or skips in 83.49 seconds using registered scratch.
+  - Installed/source module tree hash is 92d8ed122f8879190c3e4ea3221b9318be595255eb52fb2343eaa54e40159923; complete source hash is e81e3b738ed7826206c59d6c31ddb5a481ed3eef5e5572642c79d03c41b4ba59; compileall and frozen input hashes passed.
+  - F62 image sha256:6c46f0a9d0d3d910ae74ff4491ef20e3996d9169ad49f418dc61bb2cb686c5ef binds the exact source hash. Build exited 0; smoke returned QUALIFIED CUDA for YOLO in 32.70 ms and Grounded-SAM in 191.80 ms, with no residual container or GPU process.
+  - Fresh EXP-063 preflight found 24 CPUs, 24.695 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only the F62 publisher lifetime correction added to the already-tested F61 cleanup behavior.
+retained: F62 RED/GREEN/invalid-harness/adjacent/build/package/provenance/image/smoke/preflight evidence, EXP-062 MuJoCo log, and all prior evidence
+archived: none
+deletion_candidates: pytest-F5M6nnPb, pytest-mHraPB5c, pytest-38KiYUMU, pytest-VJJBiphQ, pytest-Rdyomqc8, p91, and p92 scratch trees after readback; no deletion authorized
+decision: RUN EXP-063
+```
+
+## EXP-063 — Task 14 retained pose publisher F62 two-Worker execute
+
+```yaml
+experiment_id: EXP-063
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T01:26:53+08:00
+  - status: RUNNING
+    at: 2026-09-13T01:26:53+08:00
+prior_experiment: EXP-062
+hypothesis: A publisher whose DDS match and simulation clock are established before inference and whose lifetime extends beyond the single publish will deliver every accepted pose without weakening any execution gate.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, all four recovery receipts succeed, exact Broker auto-removes, and no owned task remains.
+single_variable: Worker-local /cup_pose publisher setup moves into consumer readiness and its isolated owner is retained until recovery/close. Every Broker, recovery, execution, source/config/model/point/timeout/freshness/physical criterion remains frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f62
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f62
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recovery/dynamic receipts complete and successful, batch_cleanup_complete=true, complete evidence, and no residual task.
+provenance:
+  executable_source_commit: 99a54199cbd2823254732f0da741f2153670dcc9
+  executable_source_tree: e81e3b738ed7826206c59d6c31ddb5a481ed3eef5e5572642c79d03c41b4ba59
+  installed_module_tree: 92d8ed122f8879190c3e4ea3221b9318be595255eb52fb2343eaa54e40159923
+  image_id: sha256:6c46f0a9d0d3d910ae74ff4491ef20e3996d9169ad49f418dc61bb2cb686c5ef
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp063.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f62 and root live-small-f62.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, or cleanup failure remains INVALID.
+result: PENDING
+retained: all prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
