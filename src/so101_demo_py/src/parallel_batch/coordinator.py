@@ -7,6 +7,7 @@ artifact in the workspace reserved by LEASE_GRANTED. It must not call back into
 the coordinator or authorize worker actions; Task 4 supplies the disk adapter.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -23,6 +24,9 @@ from .contracts import (
     AttemptStatus, BatchSummary, LeaseIdentity, ParallelRuntimeConfig,
     PointStatus, RunMode, ValidationStatus, WorkerState,
 )
+
+
+_START_AUTHORIZATION_FROM_PROJECTION = object()
 
 
 class SealedResultPort(Protocol):
@@ -81,6 +85,8 @@ class CoordinatorSnapshot:
     batch_started_monotonic_s: float
     batch_deadline_monotonic_s: float
     broker_healthy: bool
+    broker_recovery_deadline_monotonic_s: float | None
+    broker_recovery_failed: bool
     terminal_reason: str | None
     batch_cleanup_complete: bool
     summary: BatchSummary
@@ -103,18 +109,28 @@ class BatchCoordinator:
     identity is a fencing token, not permission to execute by itself.
     """
 
-    def __init__(self, journal, request, *, config, clock=time.monotonic, result_port):
+    def __init__(
+            self, journal, request, *, config, clock=time.monotonic, result_port,
+            fault_hook=None, recovery_start_authorization=None):
         """Restore durable state or initialize one immutable batch."""
         self._lock = threading.RLock()
         self.journal, self.request = journal, request
         self.clock, self.result_port = clock, result_port
+        if fault_hook is not None and not callable(fault_hook):
+            raise ValueError('FAULT_HOOK_CALLABLE')
+        if (recovery_start_authorization is not None
+                and not callable(recovery_start_authorization)):
+            raise ValueError('RECOVERY_AUTHORIZATION_CALLABLE')
+        self._fault_hook = fault_hook
+        self._recovery_start_authorization = recovery_start_authorization
         if not isinstance(config, ParallelRuntimeConfig):
             raise ValueError('FROZEN_CONFIG_REQUIRED')
         self.config = config
         self._state = {'workers': {}, 'points': {}}
         self._events = {}
         with self._lock:
-            for event in journal.replay().events:
+            replay = journal.replay()
+            for event in replay.events:
                 self._apply(event)
             frozen = asdict(request)
             frozen['evidence_root'] = str(request.evidence_root)
@@ -122,15 +138,28 @@ class BatchCoordinator:
             if self._events:
                 if self._state.get('request') != frozen:
                     raise ValueError('BATCH_REQUEST_CHANGED')
+                # Older review-clean journal prefixes did not need these fields.
+                # Their absence means no Broker failure had yet been observed.
+                self._state.setdefault('broker_recovery_deadline_monotonic_s', None)
+                self._state.setdefault('broker_recovery_failed', False)
+                self._recover_interrupted_leases(replay.events)
+                self._audit_late_seals(replay.events)
             else:
                 now = self.clock()
                 self._emit('BATCH_STARTED', {
                     'request': frozen, 'batch_started_monotonic_s': now,
                     'batch_deadline_monotonic_s': now + self.config.batch_hard_timeout_s,
-                    'broker_healthy': True, 'terminal_reason': None,
+                    'broker_healthy': True,
+                    'broker_recovery_deadline_monotonic_s': None,
+                    'broker_recovery_failed': False,
+                    'terminal_reason': None,
                     'batch_cleanup_complete': False,
                     'points': {p: asdict(PointProjection()) for p in request.selected_point_ids},
                 })
+
+    def _fault(self, boundary, phase):
+        if self._fault_hook is not None:
+            self._fault_hook(boundary, phase)
 
     def _apply(self, event):
         if event.idempotency_key in self._events:
@@ -145,12 +174,138 @@ class BatchCoordinator:
         key = request_key or f'coordinator-{len(self._events) + 1}'
         if key in self._events:
             raise ValueError('REQUEST_KEY_CONFLICT')
+        self._fault(kind, 'before_fsync')
         event = self.journal.append(kind, key, {
             'delta': delta, 'identity': identity, 'response': response,
         })
+        self._fault(kind, 'after_fsync')
         self._apply(event)
         self._write_aggregate()
+        self._fault(kind, 'before_ack')
         return response
+
+    @staticmethod
+    def _event_authorized_start(lease, events):
+        expected = BatchCoordinator._identity(lease)
+        for event in events:
+            if event.type != 'ATTEMPT_STARTED':
+                continue
+            identity = event.payload.get('identity')
+            if (type(identity) is dict
+                    and all(identity.get(key) == value
+                            for key, value in expected.items())):
+                return True
+        return False
+
+    def _recover_interrupted_leases(self, events):
+        """Adjudicate every active lease issued by a previous coordinator epoch."""
+        # Non-physical validation has no motion ambiguity and remains resumable;
+        # Task 12's conservative crash adjudication is the physical ATTEMPT boundary.
+        if self.request.run_mode is not RunMode.EXECUTE:
+            return
+        for worker in tuple(deepcopy(self._state['workers']).values()):
+            if not worker.get('lease'):
+                continue
+            lease = LeaseIdentity(**worker['lease'])
+            if lease.coordinator_epoch == self.journal.coordinator_epoch:
+                continue
+            durable_start = self._event_authorized_start(lease, events)
+            if durable_start:
+                # An injected diagnostic port may add uncertainty but can never
+                # erase the journal's durable authorization boundary.
+                started = True
+            elif self._recovery_start_authorization is None:
+                started = False
+            else:
+                started = self._recovery_start_authorization(lease, tuple(events))
+                if started not in (True, False, None):
+                    raise ValueError('RECOVERY_AUTHORIZATION_PROOF')
+            location = None
+            if started is True:
+                try:
+                    location = self.result_port.discover(
+                        lease, Path(worker['workspace']))
+                except (OSError, ValueError):
+                    location = None
+            if location is not None:
+                try:
+                    self._commit(
+                        lease,
+                        location,
+                        None,
+                        validation=self.request.run_mode != RunMode.EXECUTE,
+                        discovered=True,
+                    )
+                    continue
+                except ValueError:
+                    pass
+            self._expire(
+                lease,
+                force=True,
+                start_authorized=started,
+                allow_discovery=False,
+            )
+        self._evaluate()
+
+    @staticmethod
+    def _late_result_identity(lease, location, kind):
+        return {
+            **BatchCoordinator._identity(lease),
+            'location': str(location),
+            'rejected_kind': kind,
+        }
+
+    def _audit_late_result(self, lease, location, kind):
+        identity = self._late_result_identity(lease, location, kind)
+        digest = hashlib.sha256(json.dumps(
+            identity, sort_keys=True, separators=(',', ':'), allow_nan=False,
+        ).encode()).hexdigest()
+        key = f'late-result-{digest}'
+        existing = self._events.get(key)
+        if existing is not None:
+            if (existing.type != 'LATE_RESULT_REJECTED'
+                    or existing.payload.get('identity') != identity):
+                raise ValueError('REQUEST_KEY_CONFLICT')
+            return
+        self._emit(
+            'LATE_RESULT_REJECTED', {}, request_key=key, identity=identity)
+
+    def _audit_late_seals(self, events):
+        grants = {}
+        for event in events:
+            if event.type != 'LEASE_GRANTED':
+                continue
+            response = event.payload.get('response')
+            try:
+                lease = LeaseIdentity(**response)
+                workspace = event.payload['delta']['workers'][lease.worker_id]['workspace']
+            except (KeyError, TypeError, ValueError):
+                continue
+            grants[tuple(self._identity(lease).items())] = (lease, workspace)
+        for event in events:
+            if event.type != 'LEASE_EXPIRED':
+                continue
+            identity = event.payload.get('identity')
+            if type(identity) is not dict:
+                continue
+            granted = grants.get(tuple(identity.items()))
+            if granted is None:
+                # Canonical dict order is not authority; compare by value too.
+                granted = next((
+                    value for value in grants.values()
+                    if self._identity(value[0]) == identity
+                ), None)
+            if granted is None:
+                continue
+            lease, workspace = granted
+            try:
+                location = self.result_port.discover(lease, Path(workspace))
+            except (OSError, ValueError):
+                location = None
+            if location is not None:
+                kind = ('RESULT_COMMITTED' if self.request.run_mode is RunMode.EXECUTE
+                        else 'VALIDATION_COMMITTED')
+                self._audit_late_result(lease, location, kind)
 
     def _duplicate(self, key, kind, identity):
         if key is None or key not in self._events:
@@ -511,6 +666,12 @@ class BatchCoordinator:
             if lease.coordinator_epoch != self.journal.coordinator_epoch:
                 raise ValueError('STALE_COORDINATOR_EPOCH')
             return deepcopy(duplicate.payload['response'])
+        point = self._state['points'].get(lease.point_id)
+        worker_state = self._state['workers'].get(lease.worker_id)
+        if (point is None or point.get('active_attempt') != lease.attempt_id
+                or worker_state is None or worker_state.get('lease') is None):
+            self._audit_late_result(lease, location, kind)
+            raise ValueError('LATE_RESULT_REJECTED')
         worker = self._active(lease, current_epoch=not discovered)
         result = self.result_port.verify(lease, str(location), self.request.run_mode)
         status = (ValidationStatus if validation else AttemptStatus)(result['status'])
@@ -558,7 +719,10 @@ class BatchCoordinator:
             raise ValueError('WRONG_EXECUTION_MODE')
         return self._commit(lease, sealed_location, request_key, validation=True)
 
-    def _expire(self, lease, *, force=False):
+    def _expire(
+            self, lease, *, force=False,
+            start_authorized=_START_AUTHORIZATION_FROM_PROJECTION,
+            allow_discovery=True):
         worker = self._active(lease, current_epoch=False)
         now = self.clock()
         deadline = min(worker['lease']['lease_deadline_monotonic_s'],
@@ -569,7 +733,8 @@ class BatchCoordinator:
             return False
         # The known workspace was journaled at grant. Scan it only while the
         # lease remains active in authoritative history, under this state lock.
-        location = self.result_port.discover(lease, Path(worker['workspace']))
+        location = (self.result_port.discover(lease, Path(worker['workspace']))
+                    if allow_discovery else None)
         if location is not None:
             try:
                 self._commit(lease, location, None,
@@ -583,7 +748,13 @@ class BatchCoordinator:
         point['active_attempt'] = None
         if self.request.run_mode != RunMode.EXECUTE:
             point.update(validation_status=ValidationStatus.VALIDATION_INVALID, terminal=True)
-        elif worker['state'] in ('EXECUTING', 'FINALIZING'):
+        elif (start_authorized is True
+              or (start_authorized is _START_AUTHORIZATION_FROM_PROJECTION
+                  and worker['state'] in ('EXECUTING', 'FINALIZING'))):
+            point.update(status=PointStatus.INDETERMINATE, terminal=True)
+        elif start_authorized is None:
+            # An unavailable proof is never optimistic, even when the replayed
+            # projection happens to resemble a pre-start phase.
             point.update(status=PointStatus.INDETERMINATE, terminal=True)
         else:
             point['blocked_by'] = lease.worker_id
@@ -624,6 +795,14 @@ class BatchCoordinator:
             elif worker['state'] == 'RECOVERING' and now >= worker['stage_deadline_monotonic_s']:
                 worker.update(state='QUARANTINED', stop_requested=True)
                 self._emit('RECOVERY_EXPIRED', {'workers': {worker_id: worker}})
+        broker_deadline = self._state.get('broker_recovery_deadline_monotonic_s')
+        if (not self._state['broker_healthy']
+                and broker_deadline is not None
+                and now >= broker_deadline
+                and not self._state.get('broker_recovery_failed')):
+            self._emit('BROKER_RECOVERY_EXPIRED', {
+                'broker_recovery_failed': True,
+            })
         self._evaluate()
 
     @_locked
@@ -635,7 +814,10 @@ class BatchCoordinator:
     def _evaluate(self):
         if self._state['terminal_reason']:
             return
-        if all(p['terminal'] for p in self._state['points'].values()):
+        if (self._state.get('broker_recovery_failed')
+                and not any(worker['lease'] for worker in self._state['workers'].values())):
+            reason = 'SHARED_DEPENDENCY_UNAVAILABLE'
+        elif all(p['terminal'] for p in self._state['points'].values()):
             reason = 'POINTS_COMPLETE'
         else:
             workers = self._state['workers']
@@ -694,7 +876,33 @@ class BatchCoordinator:
         """Pause new grants on broker failure without spending worker capacity."""
         if type(healthy) is not bool:
             raise ValueError('BOOLEAN_BROKER_HEALTH')
-        self._emit('BROKER_HEALTH_CHANGED', {'broker_healthy': healthy})
+        self._tick()
+        if healthy:
+            deadline = self._state.get('broker_recovery_deadline_monotonic_s')
+            if (self._state.get('broker_recovery_failed')
+                    or (deadline is not None and self.clock() >= deadline)):
+                raise ValueError('BROKER_RECOVERY_DEADLINE_EXCEEDED')
+            if self._state['broker_healthy']:
+                return self.snapshot()
+            delta = {
+                'broker_healthy': True,
+                'broker_recovery_deadline_monotonic_s': None,
+                'broker_recovery_failed': False,
+            }
+        else:
+            if not self._state['broker_healthy']:
+                return self.snapshot()
+            now = self.clock()
+            delta = {
+                'broker_healthy': False,
+                'broker_recovery_deadline_monotonic_s': min(
+                    now + self.config.broker_recovery_timeout_s,
+                    self._state['batch_deadline_monotonic_s'],
+                ),
+                'broker_recovery_failed': False,
+            }
+        self._emit('BROKER_HEALTH_CHANGED', delta)
+        return self.snapshot()
 
     @_locked
     def request_stop(self, *, reason):
@@ -768,4 +976,6 @@ class BatchCoordinator:
         return CoordinatorSnapshot(
             workers, points, value['batch_started_monotonic_s'],
             value['batch_deadline_monotonic_s'], value['broker_healthy'],
+            value.get('broker_recovery_deadline_monotonic_s'),
+            value.get('broker_recovery_failed', False),
             value['terminal_reason'], value['batch_cleanup_complete'], summary)

@@ -79,7 +79,7 @@ class PerceptionBroker:
     """Linearize admission, dispatch, completion and permanent fencing."""
 
     def __init__(self, config, *, grounded_model_id, authorize, clock=time.monotonic, generation=1,
-                 detectors=None):
+                 detectors=None, fault_hook=None):
         """Bind the frozen model limits and injected host authorization ports."""
         if type(config) is not ParallelRuntimeConfig:
             raise BrokerError('RUNTIME_CONFIG_REQUIRED')
@@ -88,6 +88,8 @@ class PerceptionBroker:
             raise BrokerError('DISTINCT_MODEL_IDS_REQUIRED')
         if not callable(authorize) or not callable(clock):
             raise BrokerError('CALLABLE_PORTS_REQUIRED')
+        if fault_hook is not None and not callable(fault_hook):
+            raise BrokerError('FAULT_HOOK_CALLABLE')
         self._generation = _require_positive_int('broker_generation', generation)
         self._models = (config.yolo_model_id, grounded_model_id)
         self._queue_timeout = dict(zip(self._models, (
@@ -101,6 +103,7 @@ class PerceptionBroker:
                for model, detector in self._detectors.items()):
             raise BrokerError('MODEL_DETECTORS_REQUIRED')
         self._authorize, self._clock = authorize, clock
+        self._fault_hook = fault_hook
         self._lock = threading.RLock()
         self._ready = dict.fromkeys(self._models, False)
         self._queues = {model: {} for model in self._models}
@@ -110,6 +113,10 @@ class PerceptionBroker:
         self._inflight = {}
         self._fenced_generations = set()
         self._last_clock = None
+
+    def _fault(self, boundary, phase):
+        if self._fault_hook is not None:
+            self._fault_hook(boundary, phase)
 
     @property
     def generation(self):
@@ -373,10 +380,12 @@ class PerceptionBroker:
     def restart(self):
         """Advance epoch and require both models to pass warmup again."""
         with self._lock:
+            self._fault('BROKER_RESTART', 'before')
             self._generation += 1
             self._ready = dict.fromkeys(self._models, False)
             for entry in self._entries.values():
                 self._finish(entry, ModelOutcome.CANCELLED, 'GENERATION_FENCED')
+            self._fault('BROKER_RESTART', 'after')
             return self._generation
 
     def poll_response(self, request):

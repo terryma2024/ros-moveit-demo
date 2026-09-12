@@ -139,7 +139,8 @@ class ParallelWorker:
             "coordinator", "broker", "runtime", "results", "clock", "config",
             "worker_id", "generation",
         }
-        if not isinstance(ports, Mapping) or set(ports) != required:
+        if (not isinstance(ports, Mapping)
+                or set(ports) not in (required, required | {"fault_hook"})):
             raise WorkerError("WORKER_PORTS_REQUIRED")
         self._coordinator = ports["coordinator"]
         self._broker = ports["broker"]
@@ -149,6 +150,9 @@ class ParallelWorker:
         self._config = ports["config"]
         self._worker_id = ports["worker_id"]
         self._generation = ports["generation"]
+        self._fault_hook = ports.get("fault_hook")
+        if self._fault_hook is not None and not callable(self._fault_hook):
+            raise WorkerError("FAULT_HOOK_CALLABLE")
         if type(self._config) is not ParallelRuntimeConfig:
             raise WorkerError("FROZEN_CONFIG_REQUIRED")
         if not isinstance(self._worker_id, str) or not self._worker_id:
@@ -174,6 +178,10 @@ class ParallelWorker:
         self._ready_after_recovery = False
         self._quarantined = False
         self._local_seals = {}
+
+    def _fault(self, boundary, phase):
+        if self._fault_hook is not None:
+            self._fault_hook(boundary, phase)
 
     def _now(self) -> float:
         with self._clock_lock:
@@ -476,11 +484,15 @@ class ParallelWorker:
             if prior_status is not decision.status:
                 raise WorkerError("LOCAL_TERMINAL_ALREADY_SEALED")
         elif self._mode is RunMode.EXECUTE:
+            self._fault("RESULT_SEAL", "before")
             location = self._results.seal_attempt(lease, decision)
             self._local_seals[key] = (decision.status, location)
+            self._fault("RESULT_SEAL", "after")
         else:
+            self._fault("RESULT_SEAL", "before")
             location = self._results.seal_validation(lease, decision)
             self._local_seals[key] = (decision.status, location)
+            self._fault("RESULT_SEAL", "after")
 
         if authorization_lost:
             raise WorkerError("AUTHORIZATION_LOST_AFTER_LOCAL_SEAL")
@@ -566,6 +578,7 @@ class ParallelWorker:
             ready = False
         succeeded = all((fenced, stopped, confirmed, recovered, ready))
         try:
+            self._fault("RECOVERY_RECEIPT", "before")
             location = self._call_before(
                 lambda: self._results.write_recovery_receipt(
                     lease,
@@ -589,6 +602,7 @@ class ParallelWorker:
                 deadline,
                 "RECOVERY_RECEIPT_READBACK_DEADLINE",
             ) is True
+            self._fault("RECOVERY_RECEIPT", "after")
         except Exception:
             succeeded = False
         if not receipt:
