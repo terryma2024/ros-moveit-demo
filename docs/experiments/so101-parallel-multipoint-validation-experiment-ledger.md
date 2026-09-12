@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 42a7306ec99d720638925c8b286a3003ff65efe1
+current_commit: 9c6d36f4822b6795d779f85b8a71535a3162184f
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -34,14 +34,15 @@ confirmed_conclusions:
   - EXP-045 crossed both exact lease-bound reset/gate receipts and durable ATTEMPT_STARTED, then exposed deterministic insecure-mode rejection in Broker input mirror intermediates; F49 preserves the Broker security gate and fixes the producer path modes (CP-030).
   - F50 preserves conservative authorization-failure semantics while exposing bounded phase/type/message diagnostics; its fresh complete ordinary gate and immutable dual-model image passed (CP-033).
   - EXP-047 separated one transient initial graph rejection from one successful Broker RPC returning model INFRA_ERROR; F51 is limited to preserving the Broker response reason in bounded Worker diagnostics (CP-034).
+  - F51 preserves Broker infrastructure outcome/reason in bounded Worker diagnostics without changing perception or attempt results; its fresh complete ordinary gate and immutable dual-model image passed (CP-035).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-034
-next_experiment: F51 formal RED/GREEN for bounded Broker response diagnostics, followed by a fresh complete gate and immutable image
+latest_checkpoint: CP-035
+next_experiment: EXP-048 Broker-response-diagnostic four-point two-Worker execute
 ```
 
 Frozen provenance:
@@ -2873,6 +2874,67 @@ retained: complete EXP-047 evidence, cleanup audit, all F50 evidence, and all pr
 archived: none
 deletion_candidates: direct pytest scratch and p51-p65 after readback; no deletion authorized
 decision: IMPLEMENT F51 BROKER RESPONSE DIAGNOSTICS WITH FORMAL RED/GREEN
+```
+
+```yaml
+checkpoint_id: CP-035
+last_valid_experiment: EXP-022
+current_hypothesis: F51 exposes the exact Broker infrastructure response reason needed for a narrow correction while preserving all result and safety semantics.
+working_tree_status: clean at executable source commit 9c6d36f4822b6795d779f85b8a71535a3162184f before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F51 formal RED pytest-TprOrPop failed all three expected diagnostic assertions. Focused GREEN pytest-JEoIISdq passed all three; correctly sourced adjacent gate pytest-G8ygDbhE passed all 193 tests. pytest-O0Xr9kdP is retained as an invalid old-overlay environment attempt.
+  - PerceptionTerminal now retains only infrastructure BrokerResponse outcome/reason as optional diagnostics. Worker projects them through F50's fixed request_model boundary and bounds while the generic perception terminal and persistent attempt reason remain unchanged. Normal rejection does not fabricate diagnostics.
+  - Fresh p66 build passed in 1.50 seconds. All 2780 ordinary tests passed in 88.50 seconds pytest and 90.19 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash cb0325cf78d6d18413ec15a4fc33bfe147b26eff04ec5fefeac07027de5384e1; complete package source hash is 08148d13761feb753a85a59ea1b7d6deed945d48ec5f302d744ec172f4b4d92a.
+  - Rebuilt image sha256:36bd327006f8bd8cc93b3c69da0bee0407ce7a9c430d0f0e65fd2b98f2d6a18e binds that source and passed dual-model CUDA smoke with one QUALIFIED candidate per model: YOLO 36.79 ms and Grounded-SAM 194.22 ms. Exact smoke CID 610e558448ae50eb1170ab060a5b5039fed124fd60b9b57de6d0c8c7ea6dd1c4 was absent after --rm.
+  - Fresh EXP-048 preflight found 24 CPUs, 25.364 GiB MemAvailable, 15269 MiB free GPU, no GPU compute application, related process, or running related container, and all domains 181-183 independently lockable.
+open_risks:
+  - One fresh live run is required to observe the exact Broker infrastructure reason.
+  - The point-initial graph can still sample a transient missing fixed camera node.
+retained: F51 RED/GREEN/adjacent scratch and logs, p66, provenance, image build/smoke, EXP-048 preflight, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p66 after readback; no deletion authorized
+decision: RUN EXP-048 with unchanged four points and physical criteria
+```
+
+## EXP-048 — Task 14 Broker-response-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-048
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T22:20:27+08:00
+  - status: RUNNING
+    at: 2026-09-12T22:22:00+08:00
+prior_experiment: EXP-047
+hypothesis: F51 will preserve the exact Broker infrastructure response reason while leaving the two-Worker runtime otherwise identical.
+prediction: Either four unique points finish PASSED with full qualification, or every Broker infrastructure result retains a bounded exact reason sufficient for one narrow next fix and proves physical safety.
+single_variable: F51 bounded BrokerResponse diagnostic only. Authorization, Broker checks, reset/gate identity, topology, contact, freshness, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f51
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f51
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown; otherwise exact bounded Broker diagnostics with no unproven physical action.
+provenance:
+  executable_source_commit: 9c6d36f4822b6795d779f85b8a71535a3162184f
+  executable_source_tree: 08148d13761feb753a85a59ea1b7d6deed945d48ec5f302d744ec172f4b4d92a
+  installed_module_tree: cb0325cf78d6d18413ec15a4fc33bfe147b26eff04ec5fefeac07027de5384e1
+  image_id: sha256:36bd327006f8bd8cc93b3c69da0bee0407ce7a9c430d0f0e65fd2b98f2d6a18e
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp048.json; sha256 ec1b52c188d5231fd55218d46ee1f87adf8bf1b6690ac515eaf48695fafbbaff
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f51 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f51 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
+result: PENDING
+retained: PENDING
+archived: none
+deletion_candidates: none pending run
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
