@@ -6139,6 +6139,23 @@ deletion_candidates: registered pytest/build/compile scratch, non-qualifying ful
 decision: TDD-RETIRE DELIVERED TERMINAL RESPONSES FROM SERVICE DEADLINE SYNCHRONIZATION, THEN REQUALIFY STATIC/IMAGE/SMALL/FULL
 ```
 
+## EXP-093 — Retire delivered service responses from deadline synchronization
+
+```yaml
+experiment_id: EXP-093
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:49:34+08:00
+prior_experiment: EXP-092
+hypothesis: Removing a request from PerceptionService's deadline-synchronization set immediately after its terminal response is delivered will prevent a later poll from converting a consumed QUALIFIED result into INFERENCE_TIMEOUT, while preserving all Broker pre-delivery guards and new-request timeouts.
+single_variable: Retire only delivered terminal responses from PerceptionService._requests; do not change PerceptionBroker guards, deadlines, inference classification, model behavior, or physical safety gates.
+method: Add a fake-clock RED test that delivers a timely QUALIFIED response, advances beyond its inference deadline, and submits a second request; require the old response to remain out of _sync_health and the service to remain healthy. Then run focused/adjacent/package gates, rebuild/smoke the image, and repeat small/full execute batches.
+success_criteria: RED reproduces the historical timeout; GREEN preserves health and accepts the second request while existing timeout and initiating-failure tests pass; all static/package/image/smoke/small/full gates subsequently pass.
+failure_rule: Any loss of pre-delivery fencing/deadline behavior, altered model outcome, test/gate failure, evidence or cleanup failure, or non-qualifying runtime batch makes the applicable experiment invalid and requires diagnosis.
+retention_rule: Retain all evidence and scratch; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
