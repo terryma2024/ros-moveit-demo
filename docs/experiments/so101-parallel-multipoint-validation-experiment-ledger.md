@@ -5413,6 +5413,40 @@ archived: none
 deletion_candidates: registered pytest/build scratch and prior diagnosis runtime copies; no deletion authorized
 ```
 
+## EXP-080 — F73 six-point execute delivery and recovery regression
+
+```yaml
+experiment_id: EXP-080
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T05:12:26+08:00
+prior_experiment: EXP-079
+hypothesis: RELIABLE plus VOLATILE subscriber QoS delivers every matched one-shot /cup_pose message across three fresh execute/recovery cycles per Worker while F72 keeps each controller generation healthy.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-diagnostic-execute-20260913-v3-f73
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-diagnostic-execute-f73
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm, sample_01_near_left, sample_02_near_center
+selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
+provenance:
+  executable_source_commit: 8d2a3f367119936f88b551dfd96462c2423bcaad
+  executable_source_tree: 4d68c3518a542ab3353981d89e92c077be9ec512cde60f58323f78938f2480f1
+  installed_module_tree: 819a372e4b280fdc0e12756ba0fe49a3b1310afc522f25b2cd4ce162dd59be25
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image_id: sha256:81b287d4fc8645615cc8f5622ec9b687577eda6ce2446c08e59a15aacd5dba7f
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; no CUP_POSE_TIMEOUT or controller abort occurs; execution_complete, batch_cleanup_complete, coverage_complete, validation_complete, validation_passed, and qualification_passed are true; no residual owned state remains.
+failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before the small, synchronized-fault, or full-catalog gates.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
