@@ -41,6 +41,41 @@ from .parallel_worker_runtime import (
 
 _RESET_JOINTS = (0.0,) * 6
 _ACTIVE_GOAL_STATES = {1, 2, 3}
+_NODE_DIAGNOSTIC_LIMIT = 16
+_NODE_DIAGNOSTIC_NAME_LIMIT = 96
+
+
+def _worker_node_diagnostic(observed, expected):
+    """Return bounded deterministic detail without changing exact equality."""
+
+    normalized = tuple(
+        node if isinstance(node, str) else f"<non-string:{type(node).__name__}>"
+        for node in observed
+    )
+    counts = {}
+    for node in normalized:
+        counts[node] = counts.get(node, 0) + 1
+    observed_set = set(normalized)
+    groups = {
+        "expected": sorted(expected),
+        "missing": sorted(set(expected) - observed_set),
+        "unexpected": sorted(observed_set - set(expected)),
+        "duplicates": sorted(node for node, count in counts.items() if count > 1),
+    }
+    truncated = any(
+        len(values) > _NODE_DIAGNOSTIC_LIMIT
+        or any(len(value) > _NODE_DIAGNOSTIC_NAME_LIMIT for value in values)
+        for values in groups.values()
+    )
+    bounded = {
+        name: [
+            value[:_NODE_DIAGNOSTIC_NAME_LIMIT]
+            for value in values[:_NODE_DIAGNOSTIC_LIMIT]
+        ]
+        for name, values in groups.items()
+    }
+    bounded["truncated"] = truncated
+    return json.dumps(bounded, sort_keys=True, separators=(",", ":"))
 
 
 class _IsolatedRosNode:
@@ -768,9 +803,12 @@ class ParallelRosRuntimePorts:
             )
             failures = [name for name, accepted in predicates if not accepted]
         if failures:
-            raise RuntimeError(
-                "POINT_INITIAL_GATE_OBSERVATION_REJECTED:" + ",".join(failures)
-            )
+            message = "POINT_INITIAL_GATE_OBSERVATION_REJECTED:" + ",".join(failures)
+            if type(value) is InitialGateObservation and "worker_nodes" in failures:
+                message += ";worker_nodes=" + _worker_node_diagnostic(
+                    value.worker_node_fqns, self.expected_worker_nodes()
+                )
+            raise RuntimeError(message)
         return SimpleNamespace(
             reset_epoch=value.reset_epoch,
             simulation_session_id=value.simulation_session_id,
