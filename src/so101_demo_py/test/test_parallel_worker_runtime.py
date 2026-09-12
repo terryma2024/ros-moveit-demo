@@ -1,7 +1,10 @@
 from dataclasses import replace
+import hashlib
+import io
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
@@ -109,11 +112,128 @@ def _lease(
 
 
 def _write_capture(path, source_stamp):
-    from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
+    from so101_demo.runtime.parallel_worker_runtime import (
+        InferenceSnapshotReceipt,
+        SourceStampedCapture,
+    )
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"rgb")
-    return SourceStampedCapture(path, source_stamp)
+    if path.suffix != ".npy":
+        path.write_bytes(b"rgb")
+        return SourceStampedCapture(path, source_stamp)
+    buffer = io.BytesIO()
+    np.save(buffer, np.zeros((4, 5, 3), dtype=np.uint8), allow_pickle=False)
+    payload = buffer.getvalue()
+    path.write_bytes(payload)
+    path.chmod(0o400)
+    return InferenceSnapshotReceipt(
+        path,
+        source_stamp,
+        source_stamp_ns=12_000_000_000,
+        source_frame_id="task_camera_frame",
+        shape=(4, 5, 3),
+        input_sha256=hashlib.sha256(payload).hexdigest(),
+    )
+
+
+@pytest.mark.parametrize(
+    "mode,disposition,expected",
+    [
+        (RunMode.PLAN_ONLY, "FAILED", ValidationStatus.VALIDATION_FAILED),
+        (RunMode.PLAN_ONLY, "INVALID", ValidationStatus.VALIDATION_INVALID),
+        (RunMode.EXECUTE, "FAILED", AttemptStatus.FAILED),
+        (RunMode.EXECUTE, "INVALID", AttemptStatus.INVALID),
+    ],
+)
+def test_perception_terminal_maps_without_planning_or_execution(
+    tmp_path, mode, disposition, expected
+):
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    called = []
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 1, 181),
+        mode,
+        plan_prefix=lambda *_args: called.append("plan"),
+        execute_result=lambda *_args: called.append("execute"),
+    )
+    terminal = SimpleNamespace(
+        perception_terminal=True,
+        disposition=disposition,
+        reason="PERCEPTION_TEST",
+    )
+    if mode is RunMode.PLAN_ONLY:
+        decision = runtime.plan_expert(_lease(), terminal)
+    else:
+        decision = runtime.execute_expert(_lease(), terminal)
+    assert decision.status is expected
+    assert decision.reason == "PERCEPTION_TEST"
+    assert called == []
+
+
+def test_workspace_reservation_precedes_first_post_reset_artifact(tmp_path):
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    resources = _resources(tmp_path, "worker-1", 1, 31)
+    events = []
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-1",
+            simulation_session_id=resources.session_id,
+            reset_completed_monotonic_s=10.0,
+        ),
+        reserve_workspace=lambda _lease, receipt: events.append(
+            ("reserved", receipt.reset_epoch)
+        ) or True,
+        capture_rgb=lambda path, boundary: events.append(
+            ("capture", path.name)
+        ) or _write_capture(path, boundary + 1.0),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_point(_lease())
+    assert events == [("reserved", "reset-1"), ("capture", "initial-rgb.png")]
+
+
+def test_post_reset_snapshot_is_canonical_immutable_and_lease_bound(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    lease = _lease()
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_completed_monotonic_s=10.0
+        ),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=lambda path, boundary: _write_capture(path, boundary + 1.0),
+    )
+    runtime.start_physical_runtime()
+
+    runtime.reset_point(lease)
+    runtime.point_initial_gate(
+        lease, SimpleNamespace(reset_completed_monotonic_s=10.0)
+    )
+    snapshot = runtime.inference_snapshot(lease)
+
+    expected = (
+        resources.worker_root
+        / "validations/P01/attempt-1/working/perception/input/rgb.npy"
+    )
+    assert snapshot.path == expected
+    assert snapshot.shape == (4, 5, 3)
+    assert snapshot.source_stamp_ns == 12_000_000_000
+    assert snapshot.source_frame_id == "task_camera_frame"
+    assert snapshot.input_sha256 == hashlib.sha256(expected.read_bytes()).hexdigest()
+    assert expected.stat().st_mode & 0o777 == 0o400
+    with pytest.raises(RuntimeError, match="lease identity"):
+        runtime.inference_snapshot(_lease(point="P02"))
 
 
 def _write_numeric(root, source_stamp):
@@ -290,10 +410,7 @@ def test_plan_only_plans_complete_expert_prefix_without_consumer_or_action_goal(
     tmp_path: Path,
 ) -> None:
     from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
-    from so101_demo.runtime.parallel_worker_runtime import (
-        SourceStampedCapture,
-        build_worker_runtime,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 
     processes = _ProcessGroup()
     calls = []
@@ -303,9 +420,7 @@ def test_plan_only_plans_complete_expert_prefix_without_consumer_or_action_goal(
         return _plan_receipt(states)
 
     def capture(path, _boundary):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"rgb")
-        return SourceStampedCapture(path, 26.0)
+        return _write_capture(path, 26.0)
 
     runtime = build_worker_runtime(
         _resources(tmp_path, "worker-1", 0, 181),
@@ -636,12 +751,8 @@ def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
     admitted = SimpleNamespace(reset_epoch="reset-8", pose="accepted")
 
     def capture(path, newer_than):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"rgb")
         events.append((path.name, newer_than))
-        from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
-
-        return SourceStampedCapture(path, newer_than + 1.0)
+        return _write_capture(path, newer_than + 1.0)
 
     def plan_prefix(_lease, _admitted, states):
         return _plan_receipt(states, completion=20.0)
@@ -672,25 +783,22 @@ def test_runtime_owns_localization_publication_and_fresh_camera_artifacts(
 
     assert events == [
         ("initial-rgb.png", 10.0),
+        ("rgb.npy", 10.0),
         ("POSE_ACCEPTED", admitted),
         ("terminal-rgb.png", 20.0),
     ]
     point_root = resources.worker_root / "validations/P01/attempt-1/working"
     assert point_root / "initial-rgb.png" in runtime.captured_artifacts
+    assert point_root / "perception/input/rgb.npy" in runtime.captured_artifacts
     assert point_root / "terminal-rgb.png" in runtime.captured_artifacts
     assert decision.numeric_evidence.depth_path == point_root / "numeric/depth.json"
 
 
 def test_rgb_capture_requires_a_strictly_newer_source_stamp(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
-        SourceStampedCapture,
-        build_worker_runtime,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 
     def stale_capture(path, _newer_than):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"stale")
-        return SourceStampedCapture(path, 10.0)
+        return _write_capture(path, 10.0)
 
     runtime = build_worker_runtime(
         _resources(tmp_path, "worker-1", 0, 181),

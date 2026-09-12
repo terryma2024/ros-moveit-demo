@@ -20,7 +20,7 @@ from so101_demo.adapters.perception.errors import (
 )
 
 from so101_demo.runtime.parallel_perception_runtime import (
-    GROUNDED_ID, GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
+    GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
@@ -28,7 +28,9 @@ from so101_demo.runtime.parallel_perception_runtime import (
 
 def broker_argv():
     return ['--endpoint', '/runtime/perception.sock', '--input-root', '/inputs',
-            '--ready-receipt', '/runtime/ready.json', '--yolo-weights', '/models/yolo/best.pt',
+            '--ready-receipt', '/runtime/ready.json',
+            '--runtime-spec', '/runtime/broker-spec.json',
+            '--yolo-weights', '/models/yolo/best.pt',
             '--yolo-weights-sha256', YOLO_SHA, '--yolo-model-id', YOLO_ID, '--yolo-imgsz', '640',
             '--grounded-root', '/models/grounded', '--grounded-manifest-sha256', GROUNDED_SHA,
             '--device', 'cuda', '--no-cpu-fallback', '--grounding-box-threshold', '0.35',
@@ -281,8 +283,14 @@ def main(argv=None, *, transport=None, authorize=None):
             index += 2
     parser.add_argument('--smoke-input', type=Path)
     args = parser.parse_args(argv)
-    if args.smoke_input is None and (transport is None or authorize is None):
-        raise ValueError('AUTHENTICATED_TRANSPORT_REQUIRED: Task 11 supplies IPC')
+    if args.smoke_input is None and transport is None:
+        from so101_demo.runtime.parallel_ipc import build_broker_transport
+
+        transport = build_broker_transport(Path(args.runtime_spec))
+    if args.smoke_input is None and authorize is None:
+        authorize = getattr(transport, 'authorize', None)
+    if args.smoke_input is None and not callable(authorize):
+        raise ValueError('AUTHENTICATED_TRANSPORT_REQUIRED')
     versions = {}
     for pin in PINS:
         name, expected = pin.split('==')

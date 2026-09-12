@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -235,8 +236,25 @@ class Broker:
         self.entered = threading.Event()
         self.raise_request = None
 
-    def request_model(self, lease, execution_kind):
-        self.calls.append(("request_model", execution_kind, lease.worker_generation))
+    def request_model(
+        self,
+        lease,
+        execution_kind,
+        *,
+        snapshot,
+        start_event_id,
+        start_event_type,
+        reset_epoch,
+    ):
+        self.calls.append((
+            "request_model",
+            execution_kind,
+            lease.worker_generation,
+            snapshot,
+            start_event_id,
+            start_event_type,
+            reset_epoch,
+        ))
         if self.block:
             self.entered.set()
             self.block.wait(2)
@@ -263,6 +281,14 @@ class Runtime:
         self.recovery_deadlines = []
         self.goal_confirmed = True
         self.raise_at = None
+        self.snapshot = SimpleNamespace(
+            path="/inputs/w1/attempts/p1/p1-lease-1/working/perception/input/rgb.npy",
+            source_stamp_monotonic_s=21.0,
+            source_stamp_ns=21_000_000_000,
+            source_frame_id="task_camera_frame",
+            shape=(4, 5, 3),
+            input_sha256="a" * 64,
+        )
 
     def start_physical_runtime(self):
         self.physical_starts += 1
@@ -290,6 +316,10 @@ class Runtime:
             lease.batch_id, lease.coordinator_epoch, lease.worker_id,
             lease.worker_generation, lease.attempt_id, lease.lease_generation,
         )
+
+    def inference_snapshot(self, lease):
+        self.calls.append("inference_snapshot")
+        return self.snapshot
 
     def admit_pose(self, lease, chain):
         self.calls.append("pose_admission")
@@ -457,7 +487,7 @@ def test_worker_waits_for_attempt_ack_before_perception_or_motion():
             RunMode.EXECUTE,
             ["register_worker", "LEASE_REQUEST", "LEASE_GRANTED", "ATTEMPT_STARTED",
              "FINALIZING_STARTED", "RESULT_COMMITTED", "register_worker", "RECOVERY"],
-            ["worker_ready_gate", "reset_point", "point_initial_gate", "pose_admission",
+            ["worker_ready_gate", "reset_point", "point_initial_gate", "inference_snapshot", "pose_admission",
              "submit_motion", "cancel_motion", "confirm_no_controller_goal", "recover",
              "worker_ready_gate"],
             "seal_attempt",
@@ -466,7 +496,7 @@ def test_worker_waits_for_attempt_ack_before_perception_or_motion():
             RunMode.PLAN_ONLY,
             ["register_worker", "LEASE_REQUEST", "LEASE_GRANTED", "VALIDATION_STARTED",
              "FINALIZING_STARTED", "VALIDATION_COMMITTED", "register_worker", "RECOVERY"],
-            ["worker_ready_gate", "reset_point", "point_initial_gate", "pose_admission",
+            ["worker_ready_gate", "reset_point", "point_initial_gate", "inference_snapshot", "pose_admission",
              "submit_plan", "cancel_motion", "confirm_no_controller_goal", "recover",
              "worker_ready_gate"],
             "seal_validation",
@@ -500,6 +530,42 @@ def test_point_gate_binds_exact_reset_and_fresh_source_frame():
     ParallelWorker(fake.ports()).run_one()
     assert fake.runtime.ready_args == [(), ()]
     assert fake.runtime.chain.chain_id == "yolo-to-expert"
+
+
+@pytest.mark.parametrize(
+    "mode,event_id,event_type,execution_kind",
+    [
+        (
+            RunMode.EXECUTE,
+            "attempt-start-p1-lease-1",
+            "ATTEMPT_STARTED",
+            ExecutionKind.ATTEMPT,
+        ),
+        (
+            RunMode.PLAN_ONLY,
+            "validation-start-p1-lease-1",
+            "VALIDATION_STARTED",
+            ExecutionKind.VALIDATION,
+        ),
+    ],
+)
+def test_broker_receives_post_reset_snapshot_and_exact_committed_start_identity(
+    mode, event_id, event_type, execution_kind
+):
+    fake = Fake(mode)
+
+    ParallelWorker(fake.ports()).run_one()
+
+    request = next(call for call in fake.broker.calls if call[0] == "request_model")
+    assert request == (
+        "request_model",
+        execution_kind,
+        1,
+        fake.runtime.snapshot,
+        event_id,
+        event_type,
+        "reset-1",
+    )
 
 
 @pytest.mark.parametrize(

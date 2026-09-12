@@ -409,7 +409,17 @@ class BatchCoordinator:
             point_id, attempt, point['attempts'] + 1, now,
             min(now + self.config.lease_duration_s, now + self.config.lease_ack_timeout_s,
                 self._state['batch_deadline_monotonic_s']))
-        workspace = self.request.evidence_root / 'attempts' / attempt
+        roots = getattr(self.result_port, 'worker_roots', None)
+        result_mode = getattr(self.result_port, 'run_mode', None)
+        if (isinstance(roots, dict) and worker_id in roots
+                and result_mode is self.request.run_mode):
+            collection = ('attempts' if self.request.run_mode is RunMode.EXECUTE
+                          else 'validations')
+            workspace = Path(roots[worker_id]) / collection / point_id / attempt
+        else:
+            # Compatibility for abstract result ports used outside the production
+            # composition. Production always supplies the exact WorkerRoot map.
+            workspace = self.request.evidence_root / 'attempts' / attempt
         worker.update(lease=asdict(lease), lease_count=worker['lease_count'] + 1,
                       workspace=str(workspace),
                       heartbeat_deadline_monotonic_s=now + self.config.heartbeat_timeout_s)

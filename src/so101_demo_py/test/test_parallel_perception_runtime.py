@@ -450,6 +450,50 @@ def test_transport_serve_failure_poison_runtime(tmp_path, monkeypatch):
     assert not f.runtime.healthy
 
 
+def test_container_entry_installs_task11_transport_from_exact_runtime_spec(
+    tmp_path, monkeypatch
+):
+    from so101_demo.cli import parallel_perception_broker as cli
+    from so101_demo.runtime import parallel_ipc
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, 'ParallelPerceptionRuntime', lambda **kwargs: f.runtime)
+    pins = dict(pin.split('==') for pin in cli.PINS)
+    monkeypatch.setattr(cli.importlib.metadata, 'version', pins.__getitem__)
+    monkeypatch.setenv('PARALLEL_IMAGE_ID', 'sha256:' + 'b' * 64)
+    read_bytes = Path.read_bytes
+    provenance = {'source_sha256': 'c' * 64, 'verified_source_sha256': 'c' * 64}
+    monkeypatch.setattr(
+        Path,
+        'read_bytes',
+        lambda path: cli.canonical_json(provenance)
+        if str(path) == '/opt/parallel-provenance.json'
+        else read_bytes(path),
+    )
+    monkeypatch.setattr(cli, 'verify_source', lambda package, expected: expected)
+    calls = []
+
+    class Transport:
+        def authorize(self, request, snapshot):
+            calls.append(('authorize', request, snapshot))
+            return True
+
+        def serve(self, runtime, *, endpoint):
+            calls.append(('serve', runtime, endpoint))
+            return 0
+
+    monkeypatch.setattr(
+        parallel_ipc,
+        'build_broker_transport',
+        lambda runtime_spec: calls.append(('build', runtime_spec)) or Transport(),
+        raising=False,
+    )
+
+    assert cli.main(cli.broker_argv()) == 0
+    assert calls[0] == ('build', Path('/runtime/broker-spec.json'))
+    assert calls[1] == ('serve', f.runtime, Path('/runtime/perception.sock'))
+
+
 @pytest.mark.parametrize('phase', ['submit', 'dispatch', 'completion'])
 @pytest.mark.parametrize('error_type', [ConnectionError, TimeoutError])
 def test_authority_failure_is_infrastructure_at_every_boundary(tmp_path, monkeypatch, phase, error_type):

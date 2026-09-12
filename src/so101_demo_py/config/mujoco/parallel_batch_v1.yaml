@@ -22,6 +22,9 @@ yolo_queue_timeout_s: 10.0
 yolo_inference_timeout_s: 20.0
 grounded_sam_queue_timeout_s: 10.0
 grounded_sam_inference_timeout_s: 60.0
+max_frame_age_s: 5.0
+max_rgbd_skew_s: 0.0
+max_tf_skew_s: 0.0
 yolo_model_id: plastic-cup-yolo11n-seg-v1
 yolo_imgsz: 640
 requested_device: cuda
