@@ -764,6 +764,53 @@ def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_p
         composition._release_partial()
 
 
+def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner._uses_production_broker_container = True
+    owner.broker_spec_path = tmp_path / "broker-spec.json"
+    owner.broker_generation = 1
+    owner.broker_runtime_root = tmp_path / "ipc"
+    owner.broker_input_root = tmp_path / "inputs"
+    owner.broker_runtime_root.mkdir()
+    owner.broker_input_root.mkdir()
+    owner.broker_container_id_path = owner.broker_runtime_root / "container.cid"
+    container_id = "c" * 64
+    owner.broker_container_id_path.write_text(container_id + "\n", encoding="ascii")
+    owner.broker_container_id_path.chmod(0o600)
+    owner.spec = SimpleNamespace(
+        provenance={"image_id": "sha256:" + "b" * 64},
+        request=SimpleNamespace(batch_id="batch-1"),
+        config=SimpleNamespace(heartbeat_timeout_s=1.0),
+    )
+    inspections = iter([
+        SimpleNamespace(returncode=0, stdout=json.dumps([{
+            "Id": container_id,
+            "Image": owner.spec.provenance["image_id"],
+            "Config": {"Labels": {
+                "com.so101.batch-id": "batch-1",
+                "com.so101.broker-generation": "1",
+            }},
+            "Mounts": [
+                {"Source": str(owner.broker_runtime_root), "Destination": "/runtime"},
+                {"Source": str(owner.broker_input_root), "Destination": "/inputs"},
+            ],
+        }]), stderr=""),
+        SimpleNamespace(returncode=1, stdout="", stderr="absent"),
+    ])
+
+    def run(command, **_kwargs):
+        if command[1] == "inspect":
+            return next(inspections)
+        assert command[1] == "stop"
+        return SimpleNamespace(returncode=1, stdout="", stderr="already removed")
+
+    owner._container_runner = run
+
+    assert owner._retire_broker_container() is True
+
+
 def test_broker_container_id_is_hardened_before_cleanup(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
 
