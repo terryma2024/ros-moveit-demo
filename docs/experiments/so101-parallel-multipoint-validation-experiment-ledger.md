@@ -5230,12 +5230,14 @@ decision: RUN EXP-078 SIX-POINT EXECUTE DIAGNOSTIC
 
 ```yaml
 experiment_id: EXP-078
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:42:26+08:00
   - status: RUNNING
     at: 2026-09-13T04:43:35+08:00
+  - status: INVALID
+    at: 2026-09-13T04:47:51+08:00
 prior_experiment: EXP-077
 hypothesis: Three complete execute/recovery cycles per Worker will either remain healthy or retain the exact initiating reason at the first post-recovery Broker infrastructure failure instead of a generic BROKER_NOT_READY cascade.
 mode: execute; simulation only
@@ -5254,6 +5256,85 @@ provenance:
   image_id: sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
 success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; any infrastructure failure retains its exact initiating reason; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; no residual owned state remains.
 failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before another full-catalog run.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: >-
+  The batch exited 1 after 255.91 seconds with five unique points PASSED and
+  sample_02_near_center UNRUN. Broker health remained true and no model or Broker failure occurred.
+  Worker-01's generation-3 ros2_control_node aborted with exit -6 during recovery startup after an
+  orphaned controller-manager service response threw rclcpp::exceptions::RCLError through the
+  executor top level. Worker-01's second recovery receipt was false, leaving lease counts 2 and 3;
+  the coordinator truthfully terminated CAPACITY_EXHAUSTED. execution_complete and
+  batch_cleanup_complete are true; coverage_complete and qualification_passed are false. No process,
+  container, GPU application, or owned manifest entry remained.
+result_report: reports/result-EXP078.json
+root_cause_report: reports/root-cause-EXP078.json
+cleanup_audit: reports/post-078-cleanup-audit.json
+retained: complete live-diagnostic-execute-f71 tree, command and MuJoCo logs, result, root-cause and cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-078
+last_valid_experiment: EXP-075
+current_hypothesis: Treating a disconnected-client send_response RCLError as a request-local executor event will preserve the healthy controller process and allow every Worker recovery generation to complete.
+working_tree_status: clean at F72 source commit ba55e038dfa7b8e3f3edcdcca119066b3b237afa
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-078 proves F71 did not encounter the prior Broker failure: five physical points passed and Broker health remained true throughout.
+  - The only lost point came from an uncaught controller-manager send_response RCLError during Worker-01 recovery startup; its exact launch log and failed recovery receipt are retained.
+  - The response target had disappeared, so the failure is request-local; unrelated rclcpp exceptions must remain fatal.
+ruling: Add a narrowly classified executor boundary that logs and continues only for the exact disconnected-response error, rethrowing every other RCLError; compile and test the controller package before a fresh six-point execute rerun.
+retained: EXP-078 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, diagnosis runtime copies, and invalid diagnostic evidence; no deletion authorized
+decision: IMPLEMENT AND VALIDATE F72
+```
+
+```yaml
+fix_id: F72
+status: VALIDATED_STATIC
+source_commit: ba55e038dfa7b8e3f3edcdcca119066b3b237afa
+submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+change: Keep ros2_control_node alive when ControllerManager cannot send a response to a disconnected service client; emit MUJOCO_ROS2_CONTROL_DROPPED_SERVICE_RESPONSE and rethrow every unrelated rclcpp::exceptions::RCLError.
+formal_red: pytest-KfU5I8p7, 1 failed because the resilient executor boundary was absent
+invalid_adjacent_harness: pytest-A5TKoGzO omitted the full worktree message overlay and produced 3 unrelated ImportErrors; retained and excluded from product judgment
+focused_green: pytest-HEESdNSA, 1 passed
+adjacent_green: pytest-FTvRR6yO, 12 passed and 3 platform skips in 0.32 seconds
+build: p108 passed in 7.98 seconds; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p108-fximheOJ/tmp
+package_gate: p109 colcon test passed all 10 test targets in 7.63 seconds and 8.03 seconds wall; scratch /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p109-LrRFPWD4/tmp
+installed_binary_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+read_only_uncrustify: reports/f72-uncrustify.log records repository-baseline whole-file divergence; no automatic reformat was performed and the targeted patch follows the file's existing brace style
+retained: source/tests, RED/GREEN/build/package evidence, invalid harness evidence, EXP-078, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch and prior diagnosis runtime copies; no deletion authorized
+```
+
+## EXP-079 — F72 six-point execute recovery regression
+
+```yaml
+experiment_id: EXP-079
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T04:54:00+08:00
+prior_experiment: EXP-078
+hypothesis: The F72 request-local executor boundary prevents the observed recovery-generation controller abort, allowing three complete execute/recovery cycles per Worker while leaving all unrelated controller exceptions fail-fast.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-diagnostic-execute-20260913-v2-f72
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-diagnostic-execute-f72
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start, cup_test_forward_5cm, cup_test_left_5cm, cup_test_right_5cm, sample_01_near_left, sample_02_near_center
+selection_sha256: 2c4052ef4c72a434f7a57b1e075b02d517250c0130c7014ff60443203b0a318a
+provenance:
+  executable_source_commit: ba55e038dfa7b8e3f3edcdcca119066b3b237afa
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image_id: sha256:0d2307e52e470a0461c2f383009c086fe2c0a3cc10b1220c8864e0686e91a776
+success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; no residual owned state remains.
+failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before any full-catalog run.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
 ```
 
