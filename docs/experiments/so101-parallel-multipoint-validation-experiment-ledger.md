@@ -1828,6 +1828,7 @@ observed:
   - One ros2_control_node later aborted during conservative recovery when a controller-manager service attempted to respond to a vanished client; the other stack then observed arm_controller absent. These events occurred after the upstream point-gate rejection and do not explain it.
   - The existing aggregate rejection does not identify which unchanged predicate failed. F41 diagnostic-only attribution is required before any semantic fix.
   - Aggregate qualification and cleanup remained false. External cleanup verified the exact surviving Broker cidfile, image, batch/generation labels, and batch-specific mounts before stopping it; audit2 found no related process, container, GPU task, or domain residue.
+  - The late-created MUJOCO_LOG.TXT was moved without content change into the registered report root as MUJOCO_LOG-EXP036.txt and retained.
 conclusion: INVALID; zero countable attempts. Apply F41 diagnostic-only RED/GREEN and ordinary gates, then repeat unchanged under EXP-037.
 hashes:
   live_command_log_sha256: 020866235aea03c7c1d9f49f92e21e78e3704c01e5af820b05e746e9f35a97c2
@@ -1836,6 +1837,7 @@ hashes:
   worker_01_result_sha256: 59fff5e359262a66bbe0b3d3af8e7c605a796d6ab61f6c7e154bd8a543fb1368
   worker_02_result_sha256: 0e178c5328b319b9083f061b03fbf55d3e3725aee0b47574bf9a4e42722b79e5
   cleanup_audit_sha256: fcef54e0e763add5cc8079bbb7e8653bd69628b78cc3fa3dc07802cc8561891b
+  mujoco_log_sha256: 5fb81c84f2c34691a31e4ce959768dc7c31a063925d29929e451657d892cb614
 retained: complete live-small-f40b tree, command/preflight/cleanup reports, journal/projections, Worker diagnostics, ROS logs, container cidfile, and all unchanged F40 qualification evidence
 archived: none
 deletion_candidates: p49 and direct pytest scratch are candidates after readback; nothing was deleted
