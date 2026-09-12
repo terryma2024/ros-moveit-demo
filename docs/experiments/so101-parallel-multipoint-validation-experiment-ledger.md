@@ -31,8 +31,8 @@ disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-021
-next_experiment: EXP-037 is INVALID; F42 is the next bounded correction before EXP-038
+latest_checkpoint: CP-022
+next_experiment: EXP-038 is RUNNING
 ```
 
 Frozen provenance:
@@ -1947,6 +1947,80 @@ conclusion: INVALID; zero countable attempts. Apply F42 with direct RED/GREEN, f
 retained: all prior evidence plus complete EXP-037 batch and report artifacts
 archived: none
 deletion_candidates: p50 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-022
+last_valid_experiment: EXP-022
+current_hypothesis: F42 corrects only the two false initial-gate rejections identified by EXP-037, allowing the unchanged four-point execute to reach authorization without admitting fingertip contact or an unknown Worker node.
+working_tree_status: clean at executable source commit df0e543dc32e63284084dd815bfb183551c277c0 before this ledger-only pre-run commit
+owned_processes: NONE
+preserved_processes: NONE; EXP-037 exact cleanup and fresh EXP-038 preflight found no related process, container, GPU task, or domain 181-183 owner.
+confirmed_conclusions:
+  - F42 formal RED pytest-G1MY33fi failed independently on table-only contact mapping and the omitted legal controller nodes. Focused GREEN pytest-lDzeNeaD passed 2 tests, the complete runtime file pytest-Dn96hJCB passed 15 tests, and adjacent pytest-iOajWrPg passed 155 tests.
+  - The earlier pytest-FuqiG7Co is retained but invalid as semantic evidence because the incomplete package overlay selected the underlay message package during import.
+  - F42 maps only nonempty left/right fingertip contact collections to the forbidden-contact bit. The broad atomic has_contact flag and other_object_contacts, including the required table support, are not authorization failures. Direct coverage still rejects a nonempty fingertip collection.
+  - The exact Worker inventory now includes arm_controller, gripper_controller, and joint_state_broadcaster, while direct coverage still rejects every missing or unknown node.
+  - p51 is retained as an invalid build-environment run: omission of --symlink-install caused one source-layout contract failure after 2768 passes. Fresh p52 used the required symlink install, built in 1.39 seconds, passed all 2769 ordinary tests in 83.77 seconds wall with zero errors, failures, or skips, and did not collect benchmark_test. Package-scoped colcon readback reports 2769 tests, zero errors/failures/skips.
+  - Source and installed module trees both hash 33bea12d30ad2121e9b7a34c79b0c69413b907eab379cd155ee89010a1bf1acd; complete package source hash is e233b76a84f43e62ad8e73ef5be7a455eec8fd88cf71906689081888ef61b6b7.
+  - Rebuilt image sha256:cecab6876dfb118890b3a290418433c631f67f97d143f3a3423aca2e07b44de3 binds the same complete source and passed fresh CUDA smoke: YOLO first and Grounded-SAM each returned exactly one QUALIFIED candidate from the exact reviewed RGB image.
+  - Fresh EXP-038 preflight found 24 CPUs, 25.604 GiB MemAvailable, 15269 MiB free GPU memory, no related process/container/GPU/domain owner, all three runtime package prefixes inside this worktree, and exact immutable-image labels.
+open_risks:
+  - EXP-038 must prove the live graph equals the corrected exact inventory and that no later pre-authorization or physical gate fails.
+  - No ATTEMPT_STARTED, planning, motion, point evidence, controlled fault, or 20-point qualification has yet been accepted.
+retained: all F42 RED/GREEN/adjacent scratch, invalid p51, valid p52, installed provenance, immutable image build, dual-model smoke, EXP-037 evidence, and EXP-038 preflight reports
+archived: none
+deletion_candidates: direct pytest scratch plus p50, p51, and p52 after readback; nothing was deleted
+decision: RUN EXP-038 with unchanged four-point selection, physical thresholds, and complete worktree overlay
+next_command: Execute the clean pre-registered F42 batch using image sha256:cecab6876dfb118890b3a290418433c631f67f97d143f3a3423aca2e07b44de3.
+```
+
+## EXP-038 — Task 14 corrected-contact-and-node two-Worker execute
+
+```yaml
+experiment_id: EXP-038
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:05:05+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:05:05+08:00
+prior_experiment: EXP-037
+hypothesis: F42 removes exactly the two false point-initial rejections while retaining strict fingertip-contact and exact-node rejection, so both Workers can execute four unique points and satisfy every physical criterion.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker processes at most two points, and no lease, process, domain, session, controller, socket, or evidence identity overlaps.
+single_variable: F42 changes only forbidden-contact projection from broad object contact to fingertip contact and adds the three required controller nodes to the exact inventory. F40/F41 semantics, complete overlay, selection, configuration, models, N=2, K=2, timeouts, other gate predicates, and physical criteria remain frozen; source/install/image and immutable batch identities advance.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f42
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f42
+preconditions:
+  - F42 RED/GREEN and adjacent gates passed; p52 complete ordinary demo gate passed 2769 tests with no error/failure/skip and no benchmark collection.
+  - Installed/source module trees both hash SHA256 33bea12d30ad2121e9b7a34c79b0c69413b907eab379cd155ee89010a1bf1acd.
+  - Immutable image sha256:cecab6876dfb118890b3a290418433c631f67f97d143f3a3423aca2e07b44de3 binds equal source/verified SHA256 e233b76a84f43e62ad8e73ef5be7a455eec8fd88cf71906689081888ef61b6b7 and passed fresh dual-model smoke.
+  - Fresh inventory/resource/overlay probe found no related process, container, GPU task, or domain 181-183 owner and resolves all runtime packages inside the worktree.
+success_criteria:
+  - Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete physical/visual/numeric evidence, and clean shutdown.
+failure_criteria:
+  - Any physical, planning, recovery, cleanup, ownership, provenance, or invariant failure remains exactly classified and cannot contribute a pass.
+provenance:
+  executable_source_commit: df0e543dc32e63284084dd815bfb183551c277c0
+  executable_source_tree: e233b76a84f43e62ad8e73ef5be7a455eec8fd88cf71906689081888ef61b6b7
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:cecab6876dfb118890b3a290418433c631f67f97d143f3a3423aca2e07b44de3
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point; every produced point image must be visually inspected after the batch.
+evidence_planned:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-038.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-038.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-038.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-038.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f42
+retained: all prior evidence plus complete EXP-038 batch and report artifacts
+archived: none
+deletion_candidates: p51, p52, and direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
