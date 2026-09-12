@@ -32,7 +32,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-022
-next_experiment: EXP-038 is RUNNING
+next_experiment: EXP-038 is INVALID; F43 bounded node-inventory diagnostics precede EXP-039
 ```
 
 Frozen provenance:
@@ -115,6 +115,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F40: Task 14 may replace the impossible post-pause joint/status waits with equivalent authoritative evidence, with direct contract and runtime tests. The successful reset transaction must return the exact fresh post-reset six-joint sample that it already requires before re-pausing; point-initial gate must consume that bound sample, never synthesize canonical values. For no-active-goal proof, issue an all-goals CancelGoal query to each isolated action server before authorization and require completed responses with no goals_canceling; any returned goal ID fails the gate. Planning-scene, contact, reset/session, graph, node-identity, freshness, timeout, and pre-authorization motion prohibitions remain unchanged. Cost if wrong: cancellation could mutate a stale active goal, but that condition still fails authorization and is safer than permitting it; retaining fresh subscribers after physics is paused and before any goal exists is unobservable by construction, as EXP-034 proved on both Workers.
 - Ruling F41: Before changing any remaining point-initial predicate, replace the opaque aggregate rejection with a bounded fixed-order list of failed predicate names covering type, reset identity, freshness, joints, goals, attachment, contact, graph stability, and exact node set. Preserve the conjunction and all values unchanged, add direct RED/GREEN coverage, then repeat the unchanged execute. Cost if wrong: diagnostic text could be mistaken for authorization logic; therefore tests must prove it changes only failure attribution and no predicate is removed.
 - Ruling F42: Task 14 may narrowly correct the two point-initial observation mappings identified by EXP-037, with direct RED/GREEN tests. The forbidden-contact predicate must be true only when either fingertip-contact collection is nonempty; legal table/support contact in the broad atomic evidence must not fail this predicate. The exact stable Worker-node inventory must include the three required active controller nodes `/arm_controller`, `/gripper_controller`, and `/joint_state_broadcaster` while continuing to reject any missing, duplicate, or unknown node. Reset/session, freshness, joints, goals, attachment, graph stability, all physical thresholds, and all downstream authorization remain unchanged. Cost if wrong: an actual fingertip contact or stale node could pass; therefore tests must prove fingertip rejection and exact-inventory rejection independently.
+- Ruling F43: Before changing the exact Worker-node inventory again, extend only the existing bounded `worker_nodes` rejection diagnostic to report deterministic expected, missing, and unexpected FQNs. Each collection is sorted, length bounded by the frozen graph limit, and contains only already-observed node names; duplicate observations remain rejected and are reported separately by a bounded duplicate list. The equality predicate and every authorization value remain unchanged. Cost if wrong: diagnostic payload could become unbounded; direct tests must prove ordering, bounds, duplicate attribution, and unchanged acceptance/rejection.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1979,12 +1980,14 @@ next_command: Execute the clean pre-registered F42 batch using image sha256:ceca
 
 ```yaml
 experiment_id: EXP-038
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T19:05:05+08:00
   - status: RUNNING
     at: 2026-09-12T19:05:05+08:00
+  - status: INVALID
+    at: 2026-09-12T19:07:33+08:00
 prior_experiment: EXP-037
 hypothesis: F42 removes exactly the two false point-initial rejections while retaining strict fingertip-contact and exact-node rejection, so both Workers can execute four unique points and satisfy every physical criterion.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker processes at most two points, and no lease, process, domain, session, controller, socket, or evidence identity overlaps.
@@ -2018,6 +2021,29 @@ evidence_planned:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-038.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-038.log
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f42
+result: >-
+  Command exit was 1 after 40.43 s. Worker-01 rejected task_start and Worker-02 rejected
+  cup_test_forward_5cm at the point-initial boundary with exactly
+  POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes. The F42 contact correction therefore
+  removed the independent false contact rejection on both Workers, while exact node equality
+  remained fail closed. No ATTEMPT_STARTED event exists; all four points remain UNRUN and zero
+  attempts are countable. The current bounded diagnostic does not reveal the actual stable graph,
+  so changing the whitelist again without evidence is not authorized.
+cleanup: >-
+  The only surviving owned Broker was exact CID
+  5f41ae9c88d7443934b7b5065358612dbf278f5fcffd6d6e3c3c71ad0c6f54d9. Readback before stop
+  verified the exact F42 image, batch/generation labels, and only registered runtime/input/model
+  mounts. It was stopped by exact CID. Post-stop process/container/GPU audit found zero related
+  residue. The late MuJoCo log was moved without deletion into the registered reports root.
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 9d1696a47289316b40de14e86febb00af8ea20a3a4cbe2d0aa1cfdb2fb7a3fd9
+command_time_sha256: 6439551d29fcee35a2775b02d02e7f9e2ae9b78cdb2b92aeb89ecd1561e67075
+aggregate_sha256: 556aaafed719472b8be5f06faf8bc804e4a4a080933a3f579f3e46488eace72d
+coordinator_aggregate_sha256: 8fb5bfeebc6bcbd3d7a3f168b6078cf16b3185f07ac7c50e72ecf5adcaf184ba
+worker_01_result_sha256: 2a0b672f70f3d948cb6d74c15d8a1dc67d2451e0d6653ee518cb57f93bcc3bb1
+worker_02_result_sha256: be96056078ea1a8df468000f6b7f790232ef7ae6a42c712cf2605a7098d676b6
+mujoco_log_sha256: 69fbe8c9c3244500131016943cf43c33346fd09a98806eb655d521a14906dc59
+conclusion: INVALID; zero countable attempts. Add F43 diagnostic-only bounded expected/observed node attribution, rebuild, and repeat under EXP-039 before any whitelist change.
 retained: all prior evidence plus complete EXP-038 batch and report artifacts
 archived: none
 deletion_candidates: p51, p52, and direct pytest scratch after readback; no deletion authorized
