@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import math
 from pathlib import Path
+import re
+import time
 from typing import Any, Callable
 
 from ..application.qualification_stack import ros2_command
 from ..core.domain import State
+from ..core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
 from ..parallel_batch.contracts import AttemptStatus, RunMode, ValidationStatus
 from ..parallel_batch.resources import WorkerResources
 from .task_stack import (
@@ -25,14 +29,87 @@ _READY_REQUIREMENTS = (
     "planning_scene",
 )
 
-_EXPERT_MOTION_PREFIX = (
-    State.MOVE_ABOVE_OBJECT,
-    State.DESCEND,
-    State.LIFT,
-    State.MOVE_ABOVE_PLACE,
-    State.DESCEND_TO_PLACE,
-    State.RETREAT,
-)
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def _finite_timestamp(name: str, value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be finite")
+    result = float(value)
+    if not math.isfinite(result) or result < 0.0:
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class SourceStampedCapture:
+    path: Path
+    source_stamp_monotonic_s: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", Path(self.path))
+        object.__setattr__(
+            self,
+            "source_stamp_monotonic_s",
+            _finite_timestamp(
+                "capture source stamp", self.source_stamp_monotonic_s
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class NumericEvidenceReceipt:
+    depth_path: Path
+    tf_path: Path
+    physical_path: Path
+    source_stamp_monotonic_s: float
+
+    def __post_init__(self) -> None:
+        for name in ("depth_path", "tf_path", "physical_path"):
+            object.__setattr__(self, name, Path(getattr(self, name)))
+        object.__setattr__(
+            self,
+            "source_stamp_monotonic_s",
+            _finite_timestamp(
+                "numeric evidence source stamp", self.source_stamp_monotonic_s
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PlanSegmentReceipt:
+    state: State
+    start_state: Any
+    terminal_state: Any
+    plan: Any
+    before_scene: Any
+    after_scene: Any
+
+    def __post_init__(self) -> None:
+        if self.state not in DYNAMIC_REACHABILITY_STATES:
+            raise ValueError("plan segment state is not authoritative")
+        if self.start_state is None or self.terminal_state is None or self.plan is None:
+            raise ValueError("plan segment receipt is incomplete")
+        if self.before_scene is None or self.after_scene is None:
+            raise ValueError("plan segment scene receipt is incomplete")
+
+
+@dataclass(frozen=True, slots=True)
+class PlanPrefixReceipt:
+    segments: tuple[PlanSegmentReceipt, ...]
+    completion_monotonic_s: float
+
+    def __post_init__(self) -> None:
+        if tuple(segment.state for segment in self.segments) != DYNAMIC_REACHABILITY_STATES:
+            raise ValueError("plan prefix does not cover authoritative reachability states")
+        for previous, current in zip(self.segments, self.segments[1:]):
+            if current.start_state != previous.terminal_state:
+                raise ValueError("plan prefix start state is not chained")
+        object.__setattr__(
+            self,
+            "completion_monotonic_s",
+            _finite_timestamp("plan completion", self.completion_monotonic_s),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +117,44 @@ class RuntimeDecision:
     status: AttemptStatus | ValidationStatus
     reason: str = "OK"
     physical_action_proven_absent: bool = True
+    segment_receipts: tuple[PlanSegmentReceipt, ...] = ()
+    numeric_evidence: NumericEvidenceReceipt | None = None
+    terminal_artifacts: tuple[Path, ...] = ()
+    completion_monotonic_s: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionCompletionReceipt:
+    decision: RuntimeDecision
+    completion_monotonic_s: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, RuntimeDecision):
+            raise TypeError("execution completion decision is required")
+        if not isinstance(self.decision.status, AttemptStatus):
+            raise ValueError("execution completion requires AttemptStatus")
+        object.__setattr__(
+            self,
+            "completion_monotonic_s",
+            _finite_timestamp("execution completion", self.completion_monotonic_s),
+        )
+
+
+class _ChainedPlanningControl:
+    def __init__(self, control: Any) -> None:
+        self._control = control
+        self._start_state = None
+
+    def plan_tcp_motion(self, request: Any):
+        if self._start_state is not None:
+            request = replace(request, start_state=self._start_state)
+        plan = self._control.plan_tcp_motion(request)
+        if getattr(plan, "accepted", None) is True:
+            terminal = getattr(plan, "terminal_state", None)
+            if terminal is None:
+                raise RuntimeError("CUP_POSE_PLAN_TERMINAL_STATE_MISSING")
+            self._start_state = terminal
+        return plan
 
 
 class RosDynamicPlanPrefixAdapter:
@@ -54,6 +169,7 @@ class RosDynamicPlanPrefixAdapter:
         planner_factory: Callable[[Any, tuple[str, ...]], Any] | None = None,
         target_resolver: Callable[[Any, Any], Any] | None = None,
         plan_state: Callable[..., Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if planner_factory is None:
             from ..ros.dynamic_planner import RosDynamicPlanner
@@ -74,6 +190,7 @@ class RosDynamicPlanPrefixAdapter:
         self._planner = planner_factory(node, template.arm_joint_names)
         self._target_resolver = target_resolver
         self._plan_state = plan_state
+        self._clock = clock
         self._options = DynamicPlanningOptions(
             template.planning_frame,
             template.planning_group,
@@ -87,13 +204,16 @@ class RosDynamicPlanPrefixAdapter:
 
     def __call__(self, lease: Any, admitted: Any, states: tuple[State, ...]):
         del lease
+        if states != DYNAMIC_REACHABILITY_STATES:
+            raise RuntimeError("PLAN_PREFIX_STATES_NOT_AUTHORITATIVE")
         targets = self._target_resolver(admitted, self._template)
-        plans = []
+        control = _ChainedPlanningControl(self._planner.control)
+        segments = []
         for state in states:
-            plan, _before, _after = self._plan_state(
+            plan, before, after = self._plan_state(
                 state=state,
                 provider=targets,
-                control=self._planner.control,
+                control=control,
                 options=self._options,
                 scene=self._scene,
                 sample=admitted,
@@ -101,8 +221,20 @@ class RosDynamicPlanPrefixAdapter:
             )
             if getattr(plan, "accepted", None) is not True:
                 raise RuntimeError("CUP_POSE_PLAN_FAILED")
-            plans.append(plan)
-        return tuple(plans)
+            terminal = getattr(plan, "terminal_state", None)
+            if terminal is None:
+                raise RuntimeError("CUP_POSE_PLAN_TERMINAL_STATE_MISSING")
+            segments.append(
+                PlanSegmentReceipt(
+                    state,
+                    getattr(plan, "start_state", None),
+                    terminal,
+                    plan,
+                    before,
+                    after,
+                )
+            )
+        return PlanPrefixReceipt(tuple(segments), self._clock())
 
     def close(self) -> None:
         self._planner.close()
@@ -222,10 +354,16 @@ class ParallelWorkerRuntime:
         publish_pose: Callable[[Any], Any] | None = None,
         plan_prefix: Callable[[Any, Any, tuple[State, ...]], Any] | None = None,
         execute_result: Callable[[Any, Any, Any], Any] | None = None,
-        capture_rgb: Callable[[Path, float], Path] | None = None,
+        consumer_ready: Callable[[Any], bool] | None = None,
+        capture_rgb: Callable[[Path, float], SourceStampedCapture] | None = None,
+        capture_numeric_evidence: Callable[
+            [Any, Any, Path, float], NumericEvidenceReceipt
+        ]
+        | None = None,
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
             raise TypeError("WorkerResources are required")
@@ -242,14 +380,26 @@ class ParallelWorkerRuntime:
         self._publish_pose = publish_pose or _required("publish_pose")
         self._plan_prefix = plan_prefix or _required("plan_prefix")
         self._execute_result = execute_result or _required("execute_result")
+        self._consumer_ready = consumer_ready or _required("consumer_ready")
         self._capture_rgb = capture_rgb or _required("capture_rgb")
+        self._capture_numeric_evidence = capture_numeric_evidence or _required(
+            "capture_numeric_evidence"
+        )
         self._cancel_motion = cancel_motion or (lambda _lease: True)
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
         )
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
+        self._monotonic = monotonic
         self._physical_started = False
         self._captured: list[Path] = []
+        self._batch_id: str | None = None
+        self._reset_boundaries: dict[tuple[object, ...], float] = {}
+        self._numeric_receipts: dict[
+            tuple[object, ...], NumericEvidenceReceipt
+        ] = {}
+        self._accepted_poses: dict[tuple[object, ...], Any] = {}
+        self._published_pose_keys: set[tuple[object, ...]] = set()
 
     @property
     def owned_process_manifest(self) -> OwnedProcessManifest:
@@ -270,24 +420,142 @@ class ParallelWorkerRuntime:
     def worker_ready_gate(self) -> bool:
         return self._physical_started and self._ready_probe(_READY_REQUIREMENTS) is True
 
-    def _capture_fresh_rgb(self, name: str, boundary: float) -> Path:
-        path = self.resources.worker_root / name
+    @staticmethod
+    def _lease_value(lease: Any, name: str) -> Any:
+        value = getattr(lease, name, None)
+        if name in {"batch_id", "worker_id", "point_id", "attempt_id"}:
+            if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
+                raise RuntimeError(f"lease {name} is not a canonical identity")
+        elif isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise RuntimeError(f"lease {name} is not a canonical identity")
+        return value
+
+    def _lease_key(self, lease: Any) -> tuple[object, ...]:
+        key = tuple(
+            self._lease_value(lease, name)
+            for name in (
+                "batch_id",
+                "coordinator_epoch",
+                "worker_id",
+                "worker_generation",
+                "point_id",
+                "attempt_id",
+                "lease_generation",
+            )
+        )
+        if key[2] != self.resources.worker_id or key[3] != self.resources.generation:
+            raise RuntimeError("lease identity does not own this Worker root")
+        if self._batch_id is None:
+            self._batch_id = str(key[0])
+        elif key[0] != self._batch_id:
+            raise RuntimeError("lease batch identity does not own this Worker root")
+        return key
+
+    def _assert_safe_path(self, path: Path) -> None:
+        root = self.resources.worker_root.absolute()
+        target = Path(path).absolute()
+        try:
+            relative = target.relative_to(root)
+        except ValueError as error:
+            raise RuntimeError("artifact path escaped the Worker root") from error
+        current = root
+        if current.is_symlink():
+            raise RuntimeError("artifact path contains a symlink")
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise RuntimeError("artifact path contains a symlink")
+
+    def _point_root(self, lease: Any) -> tuple[tuple[object, ...], Path]:
+        key = self._lease_key(lease)
+        collection = "attempts" if self.run_mode is RunMode.EXECUTE else "validations"
+        root = (
+            self.resources.worker_root
+            / collection
+            / str(key[4])
+            / str(key[5])
+            / "working"
+        )
+        self._assert_safe_path(root)
+        return key, root
+
+    def _validate_regular_receipt_path(
+        self, actual: Path, expected: Path, *, label: str
+    ) -> Path:
+        actual = Path(actual)
+        if actual != expected:
+            raise RuntimeError(f"{label} receipt escaped its canonical point identity")
+        self._assert_safe_path(actual)
+        if actual.is_symlink() or not actual.is_file():
+            raise RuntimeError(f"{label} receipt is not a regular artifact")
+        return actual
+
+    def _capture_fresh_rgb(
+        self, lease: Any, name: str, boundary: float
+    ) -> SourceStampedCapture:
+        boundary = _finite_timestamp("capture boundary", boundary)
+        _key, point_root = self._point_root(lease)
+        path = point_root / name
+        self._assert_safe_path(path)
+        if path.exists() or path.is_symlink():
+            raise RuntimeError(f"{name} capture would overwrite point evidence")
         captured = self._capture_rgb(path, boundary)
-        if Path(captured) != path:
-            raise RuntimeError(f"{name} capture escaped the Worker root")
-        if path.is_symlink() or not path.is_file():
-            raise RuntimeError(f"{name} capture did not save a regular artifact")
+        if type(captured) is not SourceStampedCapture:
+            raise RuntimeError(f"{name} capture lacks a source-stamped receipt")
+        self._validate_regular_receipt_path(captured.path, path, label=name)
+        if captured.source_stamp_monotonic_s <= boundary:
+            raise RuntimeError(f"{name} source stamp is not newer than boundary")
         self._captured.append(path)
-        return path
+        return captured
+
+    def _capture_numeric(
+        self, lease: Any, localized: Any, boundary: float
+    ) -> NumericEvidenceReceipt:
+        key, point_root = self._point_root(lease)
+        numeric_root = point_root / "numeric"
+        self._assert_safe_path(numeric_root)
+        if any(
+            (numeric_root / name).exists()
+            for name in ("depth.json", "tf.json", "physical.json")
+        ):
+            raise RuntimeError("numeric evidence would overwrite point evidence")
+        receipt = self._capture_numeric_evidence(
+            lease, localized, numeric_root, boundary
+        )
+        if type(receipt) is not NumericEvidenceReceipt:
+            raise RuntimeError("numeric evidence lacks a strict source-stamped receipt")
+        expected = (
+            numeric_root / "depth.json",
+            numeric_root / "tf.json",
+            numeric_root / "physical.json",
+        )
+        for actual, path, label in zip(
+            (receipt.depth_path, receipt.tf_path, receipt.physical_path),
+            expected,
+            ("depth", "TF", "physical"),
+        ):
+            self._validate_regular_receipt_path(actual, path, label=label)
+        if receipt.source_stamp_monotonic_s <= boundary:
+            raise RuntimeError(
+                "numeric evidence source stamp is not newer than reset boundary"
+            )
+        self._numeric_receipts[key] = receipt
+        return receipt
 
     def reset_point(self, lease: Any):
         if not self._physical_started:
             raise RuntimeError("parallel Worker physical runtime is not started")
+        key, _point_root = self._point_root(lease)
+        if key in self._reset_boundaries:
+            raise RuntimeError("point reset evidence already exists")
         receipt = self._reset_point(lease)
         boundary = getattr(receipt, "reset_completed_monotonic_s", None)
-        if isinstance(boundary, bool) or not isinstance(boundary, (int, float)):
-            raise RuntimeError("reset receipt lacks a source-frame boundary")
-        self._capture_fresh_rgb("initial-rgb.png", float(boundary))
+        try:
+            boundary = _finite_timestamp("reset boundary", boundary)
+        except ValueError as error:
+            raise RuntimeError("reset receipt lacks a source-frame boundary") from error
+        self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
+        self._reset_boundaries[key] = boundary
         return receipt
 
     def point_initial_gate(self, lease: Any, reset_receipt: Any):
@@ -298,13 +566,25 @@ class ParallelWorkerRuntime:
         return receipt, self.point_initial_gate(lease, receipt)
 
     def localize_and_admit_pose(self, lease: Any, broker_result: Any):
+        key = self._lease_key(lease)
+        try:
+            boundary = self._reset_boundaries[key]
+        except KeyError as error:
+            raise RuntimeError("point localization lacks a reset boundary") from error
+        if key in self._accepted_poses:
+            raise RuntimeError("point pose was already admitted")
         localized = self._localize(lease, broker_result)
+        numeric = self._capture_numeric(lease, localized, boundary)
         admitted = self._admit_pose(lease, localized)
         if admitted is None or admitted is False:
             raise RuntimeError("POSE_ADMISSION_REJECTED")
-        published = self._publish_pose(admitted)
-        if published is False:
-            raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+        self._accepted_poses[key] = admitted
+        self._numeric_receipts[key] = numeric
+        if self.run_mode is RunMode.PLAN_ONLY:
+            published = self._publish_pose(admitted)
+            if published is False:
+                raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+            self._published_pose_keys.add(key)
         return admitted
 
     def admit_pose(self, lease: Any, broker_result: Any):
@@ -313,12 +593,36 @@ class ParallelWorkerRuntime:
     def plan_expert(self, lease: Any, admitted: Any):
         if self.run_mode is not RunMode.PLAN_ONLY:
             raise RuntimeError("expert planning requires plan_only")
-        self._plan_prefix(lease, admitted, _EXPERT_MOTION_PREFIX)
-        return RuntimeDecision(ValidationStatus.VALIDATION_PASSED)
+        key = self._lease_key(lease)
+        if (
+            self._accepted_poses.get(key) is not admitted
+            or key not in self._published_pose_keys
+        ):
+            raise RuntimeError("expert planning requires the admitted published pose")
+        prefix = self._plan_prefix(lease, admitted, DYNAMIC_REACHABILITY_STATES)
+        if type(prefix) is not PlanPrefixReceipt:
+            raise RuntimeError("expert planning lacks complete segment receipts")
+        if prefix.completion_monotonic_s <= self._reset_boundaries[key]:
+            raise RuntimeError("plan completion is not newer than the reset boundary")
+        terminal = self.capture_terminal(
+            lease, action_boundary_monotonic_s=prefix.completion_monotonic_s
+        )
+        return RuntimeDecision(
+            ValidationStatus.VALIDATION_PASSED,
+            segment_receipts=prefix.segments,
+            numeric_evidence=self._numeric_receipts[key],
+            terminal_artifacts=terminal,
+            completion_monotonic_s=prefix.completion_monotonic_s,
+        )
 
-    def consumer_argv(self, reset_epoch: object) -> tuple[str, ...] | None:
+    def consumer_argv(
+        self, reset_epoch: object, lease: Any | None = None
+    ) -> tuple[str, ...] | None:
         if self.run_mode is not RunMode.EXECUTE:
             return None
+        if lease is None:
+            raise RuntimeError("execute consumer command requires a lease identity")
+        _key, point_root = self._point_root(lease)
         return tuple(
             ros2_command(
                 "run",
@@ -334,7 +638,7 @@ class ParallelWorkerRuntime:
                 "--session-id",
                 self.resources.session_id,
                 "--evidence-root",
-                str(self.resources.worker_root / "dynamic"),
+                str(point_root / "dynamic"),
                 "--scene-source",
                 "observe_only",
             )
@@ -346,17 +650,39 @@ class ParallelWorkerRuntime:
         reset_epoch = getattr(admitted, "reset_epoch", None)
         if reset_epoch is None:
             raise RuntimeError("accepted pose lacks reset epoch")
-        argv = self.consumer_argv(reset_epoch)
+        key = self._lease_key(lease)
+        if self._accepted_poses.get(key) is not admitted:
+            raise RuntimeError("expert execution requires the admitted pose")
+        if key in self._published_pose_keys:
+            raise RuntimeError("accepted pose was published before consumer readiness")
+        argv = self.consumer_argv(reset_epoch, lease)
         if argv is None:
             raise RuntimeError("execute consumer command is unavailable")
         child = self._processes.start(
             StackProcessSpec("dynamic-consumer", argv),
             environment=self.resources.environment,
         )
-        result = self._execute_result(lease, admitted, child)
-        if not isinstance(getattr(result, "status", None), AttemptStatus):
-            raise RuntimeError("execute result lacks an AttemptStatus")
-        return result
+        if self._consumer_ready(child) is not True:
+            raise RuntimeError("dynamic consumer subscription is not ready")
+        if self._publish_pose(admitted) is False:
+            raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+        self._published_pose_keys.add(key)
+        receipt = self._execute_result(lease, admitted, child)
+        if type(receipt) is not ExecutionCompletionReceipt:
+            raise RuntimeError("execute result lacks an authoritative completion receipt")
+        decision = receipt.decision
+        if receipt.completion_monotonic_s <= self._reset_boundaries[key]:
+            raise RuntimeError("execution completion is not newer than the reset boundary")
+        terminal = self.capture_terminal(
+            lease,
+            action_boundary_monotonic_s=receipt.completion_monotonic_s,
+        )
+        return replace(
+            decision,
+            numeric_evidence=self._numeric_receipts[key],
+            terminal_artifacts=terminal,
+            completion_monotonic_s=receipt.completion_monotonic_s,
+        )
 
     def capture_terminal(
         self,
@@ -364,16 +690,14 @@ class ParallelWorkerRuntime:
         *,
         action_boundary_monotonic_s: float,
     ) -> tuple[Path, ...]:
-        del lease
-        if (
-            isinstance(action_boundary_monotonic_s, bool)
-            or not isinstance(action_boundary_monotonic_s, (int, float))
-        ):
-            raise RuntimeError("terminal capture boundary is required")
-        self._capture_fresh_rgb(
-            "terminal-rgb.png", float(action_boundary_monotonic_s)
-        )
-        return tuple(self._captured)
+        try:
+            boundary = _finite_timestamp(
+                "terminal capture boundary", action_boundary_monotonic_s
+            )
+        except ValueError as error:
+            raise RuntimeError("terminal capture boundary is required") from error
+        capture = self._capture_fresh_rgb(lease, "terminal-rgb.png", boundary)
+        return (capture.path,)
 
     def cancel_motion(self, lease: Any) -> bool:
         return self._cancel_motion(lease) is True
@@ -382,11 +706,25 @@ class ParallelWorkerRuntime:
         return self._confirm_no_controller_goal(lease) is True
 
     def recover(self, worker_id: str, generation: int, deadline_monotonic_s: float) -> bool:
+        try:
+            deadline = _finite_timestamp("recovery deadline", deadline_monotonic_s)
+        except ValueError:
+            return False
+        if self._monotonic() >= deadline:
+            return False
         self.shutdown_owned()
-        recovered = self._recovery(worker_id, generation, deadline_monotonic_s) is True
-        if recovered:
-            self.start_physical_runtime()
-        return recovered
+        if self._monotonic() >= deadline:
+            return False
+        recovered = self._recovery(worker_id, generation, deadline) is True
+        if not recovered or self._monotonic() >= deadline:
+            return False
+        if self._monotonic() >= deadline:
+            return False
+        self.start_physical_runtime()
+        if self._monotonic() >= deadline:
+            self.shutdown_owned()
+            return False
+        return True
 
     def shutdown_owned(self) -> None:
         try:

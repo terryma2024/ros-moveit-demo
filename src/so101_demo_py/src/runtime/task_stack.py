@@ -159,46 +159,76 @@ class OwnedProcessGroup:
         self._children.append((identity, child))
         return identity
 
-    def _identity_is_current(self, identity: OwnedProcessIdentity) -> bool:
+    def _identity_status(self, identity: OwnedProcessIdentity) -> str:
         if not self._strict_identity:
-            return True
+            return "match"
         try:
             pgid, cmdline, start_time_ticks = self._identity_probe(identity.pid)
-        except (OSError, ProcessLookupError):
-            return False
-        return (
+        except (FileNotFoundError, ProcessLookupError):
+            return "absent"
+        except OSError:
+            return "unknown"
+        matches = (
             pgid == identity.pgid
             and tuple(cmdline) == identity.cmdline
             and start_time_ticks == identity.start_time_ticks
         )
+        return "match" if matches else "changed"
 
     def shutdown(self) -> None:
         failures = []
+        survivors = []
         for identity, child in reversed(self._children):
             if child.poll() is not None:
                 continue
-            if not self._identity_is_current(identity):
-                failures.append((identity.role, RuntimeError("owned process identity changed")))
+            identity_status = self._identity_status(identity)
+            if identity_status == "absent":
+                continue
+            if identity_status != "match":
+                survivors.append((identity, child))
+                failures.append(
+                    (
+                        identity.role,
+                        RuntimeError(
+                            "owned process identity changed"
+                            if identity_status == "changed"
+                            else "owned process identity unavailable"
+                        ),
+                    )
+                )
                 continue
             try:
                 self._killpg(identity.pgid, signal.SIGINT)
                 child.wait(timeout=self._interrupt_timeout_s)
             except subprocess.TimeoutExpired:
-                if not self._identity_is_current(identity):
+                identity_status = self._identity_status(identity)
+                if identity_status == "absent":
+                    continue
+                if identity_status != "match":
+                    survivors.append((identity, child))
                     failures.append(
-                        (identity.role, RuntimeError("owned process identity changed"))
+                        (
+                            identity.role,
+                            RuntimeError(
+                                "owned process identity changed"
+                                if identity_status == "changed"
+                                else "owned process identity unavailable"
+                            ),
+                        )
                     )
                     continue
                 try:
                     self._killpg(identity.pgid, signal.SIGTERM)
                     child.wait(timeout=self._terminate_timeout_s)
                 except BaseException as error:
+                    survivors.append((identity, child))
                     failures.append((identity.role, error))
             except ProcessLookupError:
                 continue
             except BaseException as error:
+                survivors.append((identity, child))
                 failures.append((identity.role, error))
-        self._children.clear()
+        self._children = list(reversed(survivors))
         if failures:
             raise RuntimeError(
                 "; ".join(f"{role}: {error}" for role, error in failures)
