@@ -276,6 +276,10 @@ class ProcessSupervisor:
         actual = self._identity_reader(expected.pid)
         if actual is None:
             code = poll()
+            repoll_deadline = time.monotonic() + 0.05
+            while code is None and time.monotonic() < repoll_deadline:
+                time.sleep(0.001)
+                code = poll()
             if code is None:
                 raise SupervisorError("OWNED_PROCESS_ABSENT")
             return int(code)

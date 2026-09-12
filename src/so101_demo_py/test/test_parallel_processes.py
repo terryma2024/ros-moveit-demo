@@ -147,6 +147,24 @@ def test_wait_repolls_worker_that_exits_between_poll_and_identity_readback():
     assert supervisor.processes == ()
 
 
+def test_wait_boundedly_repolls_until_absent_child_becomes_waitable():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    observations = iter((None, None, 7))
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: None,
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(worker, poll=lambda: next(observations))
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0
+    ) == (7,)
+    assert supervisor.processes == ()
+
+
 def test_wait_still_rejects_absent_worker_that_remains_nonterminal():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,
