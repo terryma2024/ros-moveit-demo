@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 8b2ae006aee61ef9602d92a66c08e103f56bfe86
+current_commit: 6ead76c3dc9b7eb27cce626624ffdc2700ada601
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -26,12 +26,13 @@ confirmed_conclusions:
   - F38 uses the authoritative ROS action-status QoS for the point-initial no-active-goal observations; its complete ordinary gate and rebuilt immutable image passed (CP-018).
   - F39 preserves the point-initial conjunction while emitting bounded missing-class diagnostics; its complete ordinary gate and rebuilt immutable image passed (CP-019).
   - F40 carries the reset transaction's already-validated six-joint sample across the reset boundary and uses completed all-goal CancelGoal responses as positive no-active-goal evidence; its complete ordinary gate and rebuilt immutable image passed (CP-020).
+  - F41 preserves every point-initial predicate while reporting a bounded fixed-order rejected-predicate list; its complete ordinary gate and rebuilt immutable image passed (CP-021).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-020
-next_experiment: EXP-037
+latest_checkpoint: CP-021
+next_experiment: EXP-037 is RUNNING
 ```
 
 Frozen provenance:
@@ -1843,6 +1844,79 @@ archived: none
 deletion_candidates: p49 and direct pytest scratch are candidates after readback; nothing was deleted
 decision: REPEAT after F41 diagnostic RED/GREEN, package gate, installed provenance, image rebuild, and dual-model smoke
 next_experiment: EXP-037 is reserved for the F41 diagnostic execute repeat; controlled plan-only fault advances to EXP-038 and remains blocked until execute acceptance
+```
+
+```yaml
+checkpoint_id: CP-021
+last_valid_experiment: EXP-022
+current_hypothesis: F41 will identify the exact remaining point-initial predicate without changing authorization behavior.
+working_tree_status: clean at source commit 6ead76c3dc9b7eb27cce626624ffdc2700ada601 before this ledger-only pre-run commit
+owned_processes: NONE
+preserved_processes: NONE; EXP-036 exact cleanup and fresh EXP-037 preflight found no related process, container, GPU task, or domain owner.
+confirmed_conclusions:
+  - F41 formal RED pytest-ZEZVbDai failed on the prior opaque rejection; focused GREEN pytest-ZPukPIk6 passed and adjacent pytest-OKdRpt0g passed 155 tests.
+  - The diagnostic enumerates type, reset identity, freshness, joints, goals, attachment, contact, graph stability, and exact Worker nodes in fixed order while leaving every predicate and success receipt unchanged.
+  - Fresh p50 build passed in 1.52 seconds; the complete ordinary so101_demo_py gate passed 2769 tests with zero errors, failures, or skips in 83.92 seconds and did not collect benchmark_test.
+  - Source and installed module trees both hash fb946a5fafa5b508d964bb036224d3fb59326cc5096a92d615bc1165627674ab; complete package source hashes 44315a1995588cc424db966f7f79cce39ab6e043a9efa3bc058006417ee79996.
+  - Rebuilt image sha256:9858a5ab5a67f44b5979707c3c2eb0f5183c20e392c6b5f6b80f9b3827fd4777 binds the same source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate from each model.
+  - A malformed shell command created only empty task14-f41-smoke/workers directories before parse failure; no container or report was created. The empty root is retained and not reused; valid smoke evidence is task14-f41-smoke2.
+  - Fresh EXP-037 preflight found no related process/container/GPU/domain owner, 24 CPUs, 25.661 GiB MemAvailable, 14.914 GiB free GPU, the complete worktree overlay, and the exact F41 image ID.
+open_risks:
+  - The exact failing predicate in EXP-036 is unknown until EXP-037 runs.
+  - No ATTEMPT_STARTED, planning, motion, point evidence, fault, or 20-point qualification has yet been accepted.
+retained: F41 RED/GREEN/adjacent scratch, p50, installed provenance, image build, empty failed smoke root, valid smoke2 root, and EXP-037 preflight reports
+archived: none
+deletion_candidates: direct pytest scratch and p50 after readback; nothing was deleted
+decision: RUN EXP-037 with unchanged F41 source, four-point selection, and complete overlay
+next_command: Execute the clean pre-registered diagnostic batch using image sha256:9858a5ab5a67f44b5979707c3c2eb0f5183c20e392c6b5f6b80f9b3827fd4777.
+```
+
+## EXP-037 — Task 14 predicate-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-037
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T18:48:26+08:00
+  - status: RUNNING
+    at: 2026-09-12T18:48:26+08:00
+prior_experiment: EXP-036
+hypothesis: F41 identifies the exact unchanged point-initial predicate rejected on both Workers; if none is rejected, the four-point execute proceeds normally.
+prediction: Either four unique points pass physically with qualification_passed=true, or each pre-authorization failure names only fixed rejected predicates and remains INVALID with zero countable attempts.
+single_variable: F41 changes only bounded rejection diagnostic text. F40 semantics, complete overlay, selection, configuration, models, N=2, K=2, timeout, gate conjunction, and physical criteria remain frozen; source/install/image and batch/root identities advance because code changed and prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f41
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f41
+preconditions:
+  - F41 RED/GREEN and adjacent gates passed; p50 complete ordinary demo gate passed 2769 tests with no error/failure/skip and no benchmark collection.
+  - Installed/source module trees both hash SHA256 fb946a5fafa5b508d964bb036224d3fb59326cc5096a92d615bc1165627674ab.
+  - Immutable image sha256:9858a5ab5a67f44b5979707c3c2eb0f5183c20e392c6b5f6b80f9b3827fd4777 binds equal source/verified SHA256 44315a1995588cc424db966f7f79cce39ab6e043a9efa3bc058006417ee79996 and passed fresh dual-model smoke.
+  - Fresh inventory/resource/overlay probe found no related process, container, GPU task, or domain 181-183 owner and resolves all runtime packages inside the worktree.
+success_criteria:
+  - Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete physical/visual/numeric evidence, and clean shutdown.
+diagnostic_criteria:
+  - Any pre-ATTEMPT_STARTED rejection records only the fixed rejected predicate names; it remains INVALID and authorizes no physical conclusion.
+provenance:
+  executable_source_commit: 6ead76c3dc9b7eb27cce626624ffdc2700ada601
+  executable_source_tree: 44315a1995588cc424db966f7f79cce39ab6e043a9efa3bc058006417ee79996
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:9858a5ab5a67f44b5979707c3c2eb0f5183c20e392c6b5f6b80f9b3827fd4777
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point if reached; no Gazebo client/window is part of this headless backend.
+evidence_planned:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-037.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-037.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-037.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-037.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f41
+retained: all prior evidence plus complete EXP-037 batch and report artifacts
+archived: none
+deletion_candidates: p50 and direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
