@@ -6171,6 +6171,44 @@ deletion_candidates: every registered EXP-093 pytest/build/compile scratch plus 
 decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL CATALOG
 ```
 
+## EXP-094 — F91 normal four-point small regression gate
+
+```yaml
+experiment_id: EXP-094
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:59:22+08:00
+prior_experiment: EXP-093
+hypothesis: The F91 delivered-response retirement preserves the accepted two-Worker four-point physical behavior and prevents completed requests from poisoning later service health.
+single_variable: Replace F90 with F91, whose only runtime change retires delivered terminal service responses; selection, N=2, K=2, config, catalog, models, MuJoCo/MoveIt runtime, deadlines, safety decisions, and execute behavior remain fixed from EXP-091.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f91
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f91
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: No related process, task container, or GPU compute application; 24 CPUs, 25.272 GiB MemAvailable, 15272 MiB GPU free; batch root absent.
+provenance:
+  executable_source_commit: ed91c14cc3476fae07847e6907b6d11684ba9d46
+  preregistration_base_commit: 3fde94a7f
+  executable_source_tree: 052dae12a2a46dab28d8e4e9c55dc0930df856c0890b2c9197eaa8bce2a04970
+  installed_module_tree: 4aae546b05dfd3aaace20566df98fd9dd53e671d0c2b0c71bb4cea3fb0147f6b
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+  broker_image_id: sha256:d4c8efc976804ae289df50259104147b8030e823927a2070262f471c2b44ff97
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: Exit 0; all four distinct points PASSED; exactly K=2 leases and generation 3 per Worker; four successful recoveries; all eight original RGB images accepted; numeric, dynamic, exact-TF, model, provenance, manifest hash, coordinator completion, qualification, and cleanup gates pass; no first-failure receipt and no residual owned state.
+failure_rule: Any nonzero exit, non-PASSED point, unexpected first-failure receipt, K/generation violation, evidence/hash/visual/recovery/cleanup failure, qualification false, or residual state blocks a new full-catalog run.
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
