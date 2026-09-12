@@ -537,6 +537,7 @@ def test_point_reset_uses_qualified_override_and_scene_restore():
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     calls = []
+    lease = _lease()
     reset_value = SimpleNamespace(
         simulation_session_id="session-1", new_epoch=9,
     )
@@ -548,7 +549,7 @@ def test_point_reset_uses_qualified_override_and_scene_restore():
 
     ports = ParallelRosRuntimePorts(
         SimpleNamespace(session_id="session-1"),
-        catalog={"sample": {"cup_position_world_m": [0.1, -0.2, 0.17]}},
+        catalog={"task_start": {"cup_position_world_m": [0.1, -0.2, 0.17]}},
         dependencies={
             "execute_reset": execute,
             "current_evidence": lambda _session: SimpleNamespace(
@@ -557,10 +558,21 @@ def test_point_reset_uses_qualified_override_and_scene_restore():
             )
         },
     )
-    receipt = ports.reset_point(SimpleNamespace(point_id="sample", attempt_id="a1"))
+    receipt = ports.reset_point(lease)
     assert calls == [("session-1", "task_start", (0.1, -0.2, 0.17))]
     assert receipt.reset_epoch == "reset-9"
     assert receipt.reset_epoch_value == 9
+    for field in (
+        "batch_id",
+        "coordinator_epoch",
+        "worker_id",
+        "worker_generation",
+        "point_id",
+        "attempt_id",
+        "lease_generation",
+    ):
+        assert type(getattr(receipt, field)) is type(getattr(lease, field))
+        assert getattr(receipt, field) == getattr(lease, field)
 
 
 def test_initial_gate_requires_exact_worker_node_inventory():
