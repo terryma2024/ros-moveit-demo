@@ -3924,12 +3924,14 @@ decision: RUN EXP-060
 
 ```yaml
 experiment_id: EXP-060
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T00:33:26+08:00
   - status: RUNNING
     at: 2026-09-13T00:33:26+08:00
+  - status: INVALID
+    at: 2026-09-13T00:50:50+08:00
 prior_experiment: EXP-059
 hypothesis: Starting and confirming each lease's exact dynamic consumer before its immutable inference snapshot gives both publisher and consumer adequate clock history while preserving the pose-freshness and action-authorization gates.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
@@ -3954,6 +3956,69 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f59-r3, root live-small-f59-r3, and package-local exact-hash catalog.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — exit 1 after 218.59 seconds. All four points physically PASSED with 19-state dynamic execution, exact YOLO-first accepted poses, upright stable table support, empty fingertip contacts, empty attachment state, centered target placement, and retreat. Each Worker completed exactly two leases and all four recovery receipts succeeded. Nevertheless qualification_passed=false because batch_cleanup_complete=false. Docker created the cidfile as mode 0664 while exact retirement requires 0600, so the Broker remained; after both Worker groups were proven reaped, shutdown also treated their already-closed control sockets as failures. The exact Broker was inspected, stopped by full container ID, and auto-removed.
+broker_readback: Container d35ec49412a510ffda7d72462a8fc6c37f8fbe1c7d33b27ff9d65c73c9a27b56 matched exact F59 image/source/batch/generation labels, isolated network/IPC, read-only root, no-new-privileges, GPU request, UID:GID 1000:1000, and exact model/runtime/input mounts.
+cleanup_readback: After exact manual Broker cleanup there was no related process, container, GPU compute application, or ROS domain 181-183 claim.
+visual_readback: All eight authorized 640x480 RGB images were inspected at original resolution. Initial cups were upright outside target with reset arms; terminal cups were upright inside target with detached grippers and retreated arms. Visual outcome PASS.
+retained: complete live-small-f59-r3 tree, command-060 log/time/exit, broker inspect/full summary, visual report, root-cause report, MuJoCo log, cleanup audit, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-053
+last_valid_experiment: EXP-022
+current_hypothesis: Hardening Docker's exact cidfile before broker-ready acceptance and accepting already-proven reaped Worker groups as completed control cleanup will allow the same 4/4 physical outcome to seal batch_cleanup_complete=true.
+working_tree_status: clean executable source at e371651a2da02edeb9480cb10f092861577f6b2a; ledger-only EXP-061 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-060 proves the F59 consumer-before-inference correction physically passed all four frozen points; only cleanup accounting prevented qualification.
+  - Formal RED pytest-OhmycwHY failed both missing cleanup behaviors. Focused GREEN pytest-oW2KRie3 and pytest-APF01X14 passed, the complete CLI gate pytest-BSzdhv1o passed 65 tests, and the adjacent parallel suite passed 992 tests.
+  - F60 validates the cidfile as same inode, regular, same UID, and exact 64-hex content before fchmod/fsync to 0600 in the broker-ready gate. It bypasses dead control RPC only after wait_for_children has positively reaped every Worker group; live Worker cleanup behavior is unchanged.
+  - Source commit e371651a2da02edeb9480cb10f092861577f6b2a; p86 symlink build passed in 1.51 seconds. p87 is retained as an invalid test harness because its long randomized TMPDIR exceeded AF_UNIX limits and unscoped test-result read stale packages. Corrected short-path p88 passed 2790 tests with zero errors, failures, or skips in 83.48 seconds.
+  - Installed/source module tree hash is f2f46a426e15110271aeb1e1d9915dfdbfac3473a9642620d540ebe588d513bb; complete source hash is cc24ca107638bbe9039f840a4b1af7c6ce1b9f311cbc3936c9cf1fcf6c681773; compileall and frozen input hashes passed.
+  - F60 image sha256:24a0043a7c60968617d735bf3708890a814bb7b1b78ce4627d5c14f442c1c795 binds the exact source hash. Build exited 0 in 12.08 seconds; smoke returned QUALIFIED CUDA for YOLO in 38.41 ms and Grounded-SAM in 197.47 ms, with no residual container or GPU process.
+  - Fresh EXP-061 preflight found 24 CPUs, 24.831 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only exact Broker/Worker cleanup completion behavior changed.
+retained: EXP-060 evidence, F60 RED/GREEN/adjacent/build/package/provenance/image/smoke/preflight evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-OhmycwHY, pytest-oW2KRie3, pytest-APF01X14, pytest-BSzdhv1o, the 992-test scratch, p86, p87, and p88 scratch trees after readback; no deletion authorized
+decision: RUN EXP-061
+```
+
+## EXP-061 — Task 14 complete-cleanup F60 two-Worker execute
+
+```yaml
+experiment_id: EXP-061
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T00:51:10+08:00
+  - status: RUNNING
+    at: 2026-09-13T00:51:10+08:00
+prior_experiment: EXP-060
+hypothesis: The exact cidfile and reaped-Worker cleanup fixes preserve the 4/4 physical outcome while allowing automatic Broker retirement and batch cleanup completion.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every recovery receipt succeeds, exact Broker auto-removes, and no owned task remains.
+single_variable: Broker cidfile is hardened before readiness and cleanup skips dead RPC only after positive Worker-group reap proof. Every execution, source/config/model/point/timeout/freshness/physical criterion remains frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f60
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f60
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete recovery/dynamic receipts, batch_cleanup_complete=true, complete evidence, and no residual task.
+provenance:
+  executable_source_commit: e371651a2da02edeb9480cb10f092861577f6b2a
+  executable_source_tree: cc24ca107638bbe9039f840a4b1af7c6ce1b9f311cbc3936c9cf1fcf6c681773
+  installed_module_tree: f2f46a426e15110271aeb1e1d9915dfdbfac3473a9642620d540ebe588d513bb
+  image_id: sha256:24a0043a7c60968617d735bf3708890a814bb7b1b78ce4627d5c14f442c1c795
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp061.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f60 and root live-small-f60.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, or cleanup failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
 archived: none
