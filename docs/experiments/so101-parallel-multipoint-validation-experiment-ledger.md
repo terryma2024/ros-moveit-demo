@@ -3193,6 +3193,68 @@ deletion_candidates: direct pytest scratch and p51-p68 after readback; no deleti
 decision: IMPLEMENT F53 SOURCE-CLOCK-SYNCHRONIZED POSE PUBLICATION WITH FORMAL RED/GREEN
 ```
 
+```yaml
+checkpoint_id: CP-040
+last_valid_experiment: EXP-022
+current_hypothesis: F53's source-clock-synchronized one-shot publication will preserve the frozen freshness checks while allowing every newly created use_sim_time consumer to receive its admitted pose.
+working_tree_status: clean executable source at 1842d241ec7c639f515f7ece26866f7a0bc5a44c; ledger-only EXP-051 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - Formal RED pytest-HOjSaIn6 failed both new synchronization cases before implementation; focused GREEN pytest-t1sGOxWp passed both after implementation.
+  - The valid adjacent gate pytest-Ym2RAJqx passed 73 tests under the complete worktree overlay.
+  - p69 build passed in 1.59 seconds; p70 full package test passed 2784 tests with zero errors, failures, or skips in 84.61 seconds.
+  - Installed source and build module-tree hashes are both d5e8337bb99af529f71d196988a244001cf16a1ab140dc536f9ae1401945ce22; the complete package source hash is ce7acbe6d0de62e1c40685f7e36ff6cd29bd1c9c5a3a7250a8eaae20ea65df74.
+  - Immutable F53 image sha256:8e69f3c804326867c170aed5472411afbabdbeb6b2f6e6af98255b04da7351fb was read back with the same complete source hash.
+  - F53 smoke ran both models on CUDA: YOLO and Grounded-SAM each returned QUALIFIED; the exact --rm container disappeared and no GPU compute task remained.
+  - Fresh EXP-051 preflight found 24 CPUs, 25.195 GiB MemAvailable, 15272 MiB free GPU, exact verified console resolution, no related process/container/GPU task, and domains 181-183 independently lockable.
+open_risks:
+  - Four-point physical qualification has not yet been demonstrated with F53.
+ruling: Run one new two-Worker four-point gate with only F53 source/image changed from EXP-050. Keep the verified libexec PATH, full overlay, configuration, points, N=2, K=2, models, thresholds, and physical criteria frozen.
+retained: all F53 RED/GREEN/adjacent/build/full-test/provenance/image/smoke/preflight evidence, invalid harness attempts, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p70 after readback; no deletion authorized
+decision: RUN EXP-051
+```
+
+## EXP-051 — Task 14 source-clock-synchronized F53 two-Worker execute
+
+```yaml
+experiment_id: EXP-051
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T22:53:48+08:00
+  - status: RUNNING
+    at: 2026-09-12T22:53:48+08:00
+prior_experiment: EXP-050
+hypothesis: F53 will wait for each isolated publisher's simulation clock to reach the admitted source stamp, preventing the startup-only future-stamp rejection while retaining exact one-shot and consumer freshness semantics.
+prediction: Four unique points finish PASSED with qualification_passed=true, or any failure is bounded, attributable, safely stopped, and physically evidenced.
+single_variable: F53 source-clock-synchronized pose publication only. Verified libexec PATH, full overlay, Broker checks, reset/gate identity, topology, contact, freshness thresholds, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f53
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f53
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 1842d241ec7c639f515f7ece26866f7a0bc5a44c
+  executable_source_tree: ce7acbe6d0de62e1c40685f7e36ff6cd29bd1c9c5a3a7250a8eaae20ea65df74
+  installed_module_tree: d5e8337bb99af529f71d196988a244001cf16a1ab140dc536f9ae1401945ce22
+  image_id: sha256:8e69f3c804326867c170aed5472411afbabdbeb6b2f6e6af98255b04da7351fb
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp051.json; sha256 a2c281fe3ae1c39a457fe16184fb0945dec112ad30fd1f938b428e984a4461b2
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  PATH=/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py:$PATH; source install/setup.zsh; ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f53 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f53 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
+result: PENDING
+retained: all preflight and prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
