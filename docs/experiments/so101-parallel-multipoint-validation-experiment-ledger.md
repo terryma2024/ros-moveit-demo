@@ -3443,12 +3443,14 @@ decision: RUN EXP-053
 
 ```yaml
 experiment_id: EXP-053
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T23:19:22+08:00
   - status: RUNNING
     at: 2026-09-12T23:19:22+08:00
+  - status: INVALID
+    at: 2026-09-12T23:23:58+08:00
 prior_experiment: EXP-052
 hypothesis: Retained action terminal statuses will satisfy both cancel and independent no-goal recovery checks, re-admit each slot at generation 2, and allow all four points to complete.
 prediction: Four unique points finish PASSED with qualification_passed=true and both Workers emit all-true recovery gates after each point.
@@ -3470,10 +3472,62 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f55 and root live-small-f55.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
-result: PENDING
-retained: preflight and prior evidence; runtime evidence pending
+result: >-
+  Command exited 1 after 124.22 seconds. Worker-02 completed cup_test_forward_5cm and sealed
+  PASSED. Worker-01 sealed task_start INVALID at point_initial_gate because its exact graph snapshot
+  transiently missed robot_state_publisher and rejected an inconsistent node set. Both mandatory
+  recoveries again reported stopped=false and confirmed=false while fenced, recovered, and ready
+  were true. The QoS correction therefore was necessary but not sufficient. Source inspection and
+  the repeated ignored SingleThreadedExecutor.__del__ _sigint_gc exceptions show both helpers call
+  rclpy.spin_once(node) without an executor even though _open_isolated_ros_node created the node on
+  a private Context; rclpy then constructs/uses the default-context global executor instead of an
+  executor bound to the private node context, and both recovery calls fail closed.
+visual_observation: >-
+  The two available 640x480 RGB files were inspected at original resolution. The
+  cup_test_forward_5cm initial frame has the expected cup position and no contact; its terminal
+  frame shows the cup upright in the target ring with the arm retreated, consistent with PASSED.
+  task_start failed before RGB capture and has no physical behavior evidence.
+visual_sha256:
+  cup_test_forward_5cm_initial: 26ec41b1c975a34a931f22ba01067f06f7ed87e04c67699653b15849948177c3
+  cup_test_forward_5cm_terminal: ade1483c89b7ee12f0db990baa0770e91617dc01e7d3fda147115d21dbcf27bf
+recovery_diagnostics:
+  worker_01: '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES","ready":true,"recovered":true,"stopped":false,"worker_generation":1,"worker_id":"worker-01"}'
+  worker_02: '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES","ready":true,"recovered":true,"stopped":false,"worker_generation":1,"worker_id":"worker-02"}'
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 0f3577eab85c73bf634dbf5bc0f4389499c314843890574c2e03e91fe9fcbb42
+command_time_sha256: a2fe8cc8001d46bbd775c2d7f1681e462403f70bf73ef73294321c7641768b61
+aggregate_sha256: 33d3349c8241bda9c934ca7512775e21fab470f6274cd7a28ca129e388879231
+worker_01_result_sha256: 66b39434abdfe320e36391f85e7bebebe9b4207ea4c80efabf75b3fc763fe28b
+worker_02_result_sha256: 034211da0c7805e9ae6f901b32ca91f421315961f62653357afa57882e676a5e
+mujoco_log_sha256: ea168f77550e9d2c7001139f2776539acc70afef1e0feebe88d5c1cccf494d0a
+cleanup: >-
+  Exact CID 7dc04dcb8a12386b4a14c0fbb24b162e446604930dacdcdde7b64f647e6b0217
+  was verified against F55 and its batch/generation/mount identity, then stopped and removed.
+  Final audit found no related process, container, or GPU task, all domains lockable, and the
+  MuJoCo log moved without deletion.
+post_cleanup_sha256: 92323f4d0fad526ce0afe5c5ecfcf885043930e4026505eb10d3ad4c17fe1db4
+conclusion: INVALID; bind a dedicated executor to each isolated ROS Context and spin both recovery readers only through that executor.
+retained: complete EXP-053 batch/reports, two inspected RGB files, recovery diagnostics/receipts, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment yet
+deletion_candidates: no new scratch; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-045
+last_valid_experiment: EXP-022
+current_hypothesis: A SingleThreadedExecutor constructed with the same private Context as each recovery node will receive the retained action status callbacks and eliminate the default-context failure while preserving isolation.
+working_tree_status: ledger-only EXP-053 result after executable source 02c21600da0367f4ef7b79c54387bedcb5282123
+owned_processes: NONE
+confirmed_conclusions:
+  - Transient-local QoS alone did not change the live recovery outcome; both readers still failed together.
+  - rclpy.spin_once without an explicit executor always uses get_global_executor(), whose executor is tied to get_default_context().
+  - Both nodes are intentionally created with explicit private Context objects, so passing them to the implicit global executor violates the isolation model.
+  - The live logs repeatedly show partially constructed default SingleThreadedExecutor destructor errors with missing _sigint_gc exactly at these swallowed recovery exceptions.
+ruling: F56 may extend _IsolatedRosNode to own a SingleThreadedExecutor(context=the same private context), add its node exactly once, expose spin_once(timeout_sec), and remove/shutdown that executor during close before shutting the context. The two helpers must use owner.spin_once; QoS, topics, requests, status rules, and timeouts stay unchanged.
+retained: EXP-053 evidence and all prior evidence
+archived: none
+deletion_candidates: existing scratch only; no deletion authorized
+decision: IMPLEMENT F56 PRIVATE-CONTEXT EXECUTOR WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
