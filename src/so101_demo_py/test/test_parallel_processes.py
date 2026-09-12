@@ -180,3 +180,36 @@ def test_shutdown_rejects_reused_exited_leader_without_signalling_group():
     assert supervisor.shutdown() is False
     assert signals == []
     assert supervisor.processes == (exited,)
+
+
+def test_shutdown_retires_descendants_when_live_worker_leader_exits_on_sigint():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    worker = OwnedProcess("batch-1", "worker", 101, 101, ("worker",), 11)
+    state = {"alive": True, "members": (101, 103)}
+    signals = []
+
+    def send(pgid, value):
+        signals.append((pgid, value))
+        if value == signal.SIGINT:
+            state.update(alive=False, members=(103,))
+        else:
+            state["members"] = ()
+
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: worker if state["alive"] else None,
+        signal_group=send,
+        group_members_reader=lambda _pgid: state["members"],
+    )
+    supervisor._record_started(
+        worker, poll=lambda: None if state["alive"] else 0
+    )
+
+    assert supervisor.shutdown(
+        interrupt_timeout_s=0.01,
+        term_timeout_s=0.01,
+        kill_timeout_s=0.01,
+    ) is True
+    assert signals == [(101, signal.SIGINT), (101, signal.SIGTERM)]
+    assert supervisor.processes == ()

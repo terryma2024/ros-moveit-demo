@@ -139,6 +139,41 @@ def test_expired_broker_recovery_deadline_stops_with_shared_dependency_reason(tm
         journal.close()
 
 
+def test_atomic_grant_replays_durable_lease_before_reporting_broker_pause(tmp_path):
+    """A dropped grant ACK is replayed without another K debit during a pause."""
+    clock = Clock()
+    coordinator, journal = make_coordinator(tmp_path, clock)
+    try:
+        first = coordinator.grant_lease_outcome(
+            "worker-01", generation=1, request_key="lost-grant-ack"
+        )
+        lease = first["lease"]
+        assert lease is not None
+        assert first["lease_grant_paused"] is False
+
+        coordinator.mark_broker_health(False)
+        replay = coordinator.grant_lease_outcome(
+            "worker-01", generation=1, request_key="lost-grant-ack"
+        )
+        paused = coordinator.grant_lease_outcome(
+            "worker-01", generation=1, request_key="next-request"
+        )
+
+        assert replay == {
+            "lease": lease,
+            "lease_grant_paused": False,
+            "recovery_deadline_monotonic_s": None,
+        }
+        assert paused["lease"] is None
+        assert paused["lease_grant_paused"] is True
+        assert paused["recovery_deadline_monotonic_s"] == (
+            coordinator.snapshot().broker_recovery_deadline_monotonic_s
+        )
+        assert coordinator.snapshot().workers["worker-01"].lease_count == 1
+    finally:
+        journal.close()
+
+
 def test_broker_deadline_waits_for_existing_lease_to_reach_a_terminal_boundary(tmp_path):
     """Shared failure does not rewrite an already leased attempt as a new grant."""
     clock = Clock()
@@ -224,6 +259,12 @@ def test_last_result_cannot_preempt_a_pending_broker_recovery_deadline(tmp_path)
         snapshot = coordinator.tick()
 
         assert snapshot.terminal_reason == "SHARED_DEPENDENCY_UNAVAILABLE"
+        snapshot = coordinator.complete_cleanup(
+            owned_processes_stopped=True, controllers_stopped=True
+        )
+        assert snapshot.points["p1"].status.value == "PASSED"
+        assert snapshot.summary.coverage_complete is True
+        assert snapshot.summary.batch_cleanup_complete is True
         assert snapshot.summary.qualification_passed is False
     finally:
         journal.close()

@@ -146,6 +146,7 @@ def summary(mode, statuses, *, cleanup=True, terminal=True):
         batch_terminal=terminal,
         validation_statuses=validations,
         batch_cleanup_complete=cleanup,
+        terminal_reason="POINTS_COMPLETE" if terminal else None,
     )
 
 
@@ -1688,57 +1689,26 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         from so101_demo.parallel_batch.worker import LeaseGrantPaused
 
         composition.coordinator.mark_broker_health(False)
-        grant = composition.coordinator.grant_lease
-        grant_calls = []
-
-        def unhealthy_to_healthy_race(*args, **kwargs):
-            grant_calls.append(True)
-            value = grant(*args, **kwargs)
-            composition.coordinator.mark_broker_health(True)
-            return value
-
-        composition.coordinator.grant_lease = unhealthy_to_healthy_race
         with pytest.raises(LeaseGrantPaused, match="BROKER_RECOVERING"):
             proxy.grant_lease(
                 "worker-01", generation=1, request_key="f22-paused-grant"
             )
-        assert grant_calls == []
         assert composition.coordinator.snapshot().workers[
             "worker-01"
         ].lease_count == 0
-        composition.coordinator.grant_lease = grant
         composition.coordinator.mark_broker_health(True)
-        grant_calls.clear()
-
-        def healthy_to_unhealthy_race(*args, **kwargs):
-            grant_calls.append(True)
-            composition.coordinator.mark_broker_health(False)
-            return grant(*args, **kwargs)
-
-        composition.coordinator.grant_lease = healthy_to_unhealthy_race
-        with pytest.raises(LeaseGrantPaused, match="BROKER_RECOVERING"):
-            proxy.grant_lease(
-                "worker-01", generation=1, request_key="f22-paused-grant-inverse"
-            )
-        assert grant_calls == [True]
-        assert composition.coordinator.snapshot().workers[
-            "worker-01"
-        ].lease_count == 0
-        composition.coordinator.grant_lease = grant
-        composition.coordinator.mark_broker_health(True)
+        dropped_ack = composition.coordinator.grant_lease_outcome(
+            "worker-01", generation=1, request_key="f22-discovery-lease"
+        )["lease"]
+        composition.coordinator.mark_broker_health(False)
         lease = proxy.grant_lease(
             "worker-01", generation=1, request_key="f22-discovery-lease"
         )
-        assert lease is not None
+        assert lease == dropped_ack
+        assert composition.coordinator.snapshot().workers[
+            "worker-01"
+        ].lease_count == 1
         proxy.ack_lease(lease, request_key="f22-discovery-lease-ack")
-        first = proxy.current_broker()
-        assert first == {
-            "healthy": True,
-            "broker_generation": 1,
-            "broker_socket_path": str(root / "ipc/broker/perception.sock"),
-            "recovery_deadline_monotonic_s": None,
-        }
-        composition.coordinator.mark_broker_health(False)
         assert proxy.current_broker() == {
             "healthy": False,
             "broker_generation": None,
@@ -1747,6 +1717,14 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
                 composition.coordinator.snapshot()
                 .broker_recovery_deadline_monotonic_s
             ),
+        }
+        composition.coordinator.mark_broker_health(True)
+        first = proxy.current_broker()
+        assert first == {
+            "healthy": True,
+            "broker_generation": 1,
+            "broker_socket_path": str(root / "ipc/broker/perception.sock"),
+            "recovery_deadline_monotonic_s": None,
         }
         composition._prepare_broker_generation(2)
         composition.coordinator.mark_broker_health(True)

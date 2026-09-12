@@ -582,28 +582,52 @@ class BatchCoordinator:
         self._emit('WORKER_REGISTERED', {'workers': {worker_id: worker}})
         return self.snapshot().workers[worker_id]
 
-    @_locked
-    def grant_lease(self, worker_id, *, generation, request_key=None):
-        """Atomically reserve the next eligible point and debit one immutable slot."""
+    def _grant_lease_outcome_locked(
+            self, worker_id, *, generation, request_key=None):
+        """Return one authoritative grant/pause outcome while holding the state lock."""
         self._tick()
         identity = {'worker_id': worker_id, 'generation': generation}
         duplicate = self._duplicate(request_key, 'LEASE_GRANTED', identity)
         if duplicate:
             lease = LeaseIdentity(**duplicate.payload['response'])
             self._active(lease)
-            return lease
-        if self._state['terminal_reason'] or not self._state['broker_healthy']:
-            return None
+            return {
+                'lease': lease,
+                'lease_grant_paused': False,
+                'recovery_deadline_monotonic_s': None,
+            }
+        if self._state['terminal_reason']:
+            return {
+                'lease': None,
+                'lease_grant_paused': False,
+                'recovery_deadline_monotonic_s': None,
+            }
+        if not self._state['broker_healthy']:
+            return {
+                'lease': None,
+                'lease_grant_paused': True,
+                'recovery_deadline_monotonic_s': self._state[
+                    'broker_recovery_deadline_monotonic_s'
+                ],
+            }
         worker = self._worker(worker_id, generation)
         if (worker['state'] != 'AVAILABLE'
                 or worker['lease_count'] >= self.request.max_points_per_worker):
-            return None
+            return {
+                'lease': None,
+                'lease_grant_paused': False,
+                'recovery_deadline_monotonic_s': None,
+            }
         point_id = next((p for p in self.request.selected_point_ids
                          if not self._state['points'][p]['terminal']
                          and not self._state['points'][p]['active_attempt']
                          and not self._state['points'][p]['blocked_by']), None)
         if point_id is None:
-            return None
+            return {
+                'lease': None,
+                'lease_grant_paused': False,
+                'recovery_deadline_monotonic_s': None,
+            }
         point = deepcopy(self._state['points'][point_id])
         now = self.clock()
         attempt = f'{point_id}-lease-{point["attempts"] + 1}'
@@ -630,7 +654,25 @@ class BatchCoordinator:
         point.update(active_attempt=attempt, attempts=point['attempts'] + 1)
         self._emit('LEASE_GRANTED', {'workers': {worker_id: worker}, 'points': {point_id: point}},
                    request_key=request_key, identity=identity, response=asdict(lease))
-        return lease
+        return {
+            'lease': lease,
+            'lease_grant_paused': False,
+            'recovery_deadline_monotonic_s': None,
+        }
+
+    @_locked
+    def grant_lease_outcome(self, worker_id, *, generation, request_key=None):
+        """Atomically distinguish a durable grant, Broker pause, and no point."""
+        return self._grant_lease_outcome_locked(
+            worker_id, generation=generation, request_key=request_key
+        )
+
+    @_locked
+    def grant_lease(self, worker_id, *, generation, request_key=None):
+        """Atomically reserve the next eligible point and debit one immutable slot."""
+        return self._grant_lease_outcome_locked(
+            worker_id, generation=generation, request_key=request_key
+        )['lease']
 
     def _transition(self, lease, request_key, kind, expected, target, *, gate_summary=None):
         self._tick()
@@ -1020,7 +1062,8 @@ class BatchCoordinator:
             batch_terminal=all(point.terminal for point in points.values()),
             validation_statuses={p: v.validation_status for p, v in points.items()
                                  if v.validation_status is not None},
-            batch_cleanup_complete=value['batch_cleanup_complete'])
+            batch_cleanup_complete=value['batch_cleanup_complete'],
+            terminal_reason=value['terminal_reason'])
         return CoordinatorSnapshot(
             workers, points, value['batch_started_monotonic_s'],
             value['batch_deadline_monotonic_s'], value['broker_healthy'],

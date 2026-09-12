@@ -584,6 +584,7 @@ class BatchSummary:
     batch_terminal: bool = False
     validation_statuses: Mapping[str, ValidationStatus] = field(default_factory=dict)
     batch_cleanup_complete: bool = False
+    terminal_reason: str | None = None
 
     def __post_init__(self) -> None:
         _require_enum("run_mode", self.run_mode, RunMode)
@@ -591,6 +592,12 @@ class BatchSummary:
             raise ContractError("BOOLEAN: batch_terminal")
         if not isinstance(self.batch_cleanup_complete, bool):
             raise ContractError("BOOLEAN: batch_cleanup_complete")
+        if self.terminal_reason is not None:
+            object.__setattr__(
+                self,
+                "terminal_reason",
+                _require_id("terminal_reason", self.terminal_reason),
+            )
         if not isinstance(self.point_statuses, Mapping):
             raise ContractError("POINT_STATUSES")
         if not isinstance(self.validation_statuses, Mapping):
@@ -648,6 +655,11 @@ class BatchSummary:
 
     @property
     def qualification_passed(self) -> bool:
-        return self.coverage_complete and self.batch_cleanup_complete and all(
-            status is PointStatus.PASSED for status in self.point_statuses.values()
+        return (
+            self.terminal_reason == "POINTS_COMPLETE"
+            and self.coverage_complete
+            and self.batch_cleanup_complete
+            and all(
+                status is PointStatus.PASSED for status in self.point_statuses.values()
+            )
         )
