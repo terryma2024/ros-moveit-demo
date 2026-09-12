@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: f4881e44af0af7e470a71ccd1140ccb522b955d6
+current_commit: b7a6e99cf969f1e1ff3bd87a0e44bb7af9376921
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -30,12 +30,13 @@ confirmed_conclusions:
   - F46 tolerates only the bounded child-side setsid observation race, while persistent incomplete or foreign identities remain fail-closed and receive no process-group signal; its complete ordinary gate and rebuilt immutable image passed (CP-026).
   - F47 binds the already-validated production point-initial facts to all seven exact lease identity fields before the Worker's unchanged authorization check; its complete ordinary gate and rebuilt immutable image passed (CP-027).
   - EXP-044 proved the F47 gate receipt is correct but exposed the complementary production reset-receipt identity omission before ATTEMPT_STARTED; F48 is limited to binding that reset receipt to the same seven exact lease fields (CP-028).
+  - F48 binds the production reset receipt to all seven exact lease identity fields while preserving reset and Worker gate semantics; its fresh complete ordinary gate and immutable dual-model image passed (CP-029).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-028
-next_experiment: F48 formal RED/GREEN for production reset-receipt lease identity, then a fresh complete gate and immutable image before EXP-045
+latest_checkpoint: CP-029
+next_experiment: EXP-045 is preregistered with F48 source, image, immutable inputs, and a clean two-Worker preflight
 ```
 
 Frozen provenance:
@@ -2525,6 +2526,61 @@ retained: complete EXP-044 evidence and all prior evidence
 archived: none
 deletion_candidates: direct pytest scratch and p51-p57 after readback; no deletion authorized
 decision: IMPLEMENT F48 WITH FORMAL RED/GREEN
+```
+
+```yaml
+checkpoint_id: CP-029
+last_valid_experiment: EXP-022
+current_hypothesis: F48 closes the complementary reset-receipt lease-identity omission, allowing the unchanged four-point execute to cross ATTEMPT_STARTED without weakening authorization.
+working_tree_status: clean at executable source commit b7a6e99cf969f1e1ff3bd87a0e44bb7af9376921 before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F48 formal RED pytest-HhpjwIz1 failed on absent production reset receipt batch_id. Focused GREEN pytest-vtEjq3ro passed, and the correctly sourced adjacent runtime/Worker gate pytest-NykRKYVs passed all 156 tests.
+  - Production reset_point now copies batch, coordinator epoch, Worker/generation, point, attempt, and lease generation directly from the current lease into ResetBoundaryReceipt. Reset behavior and strict Worker checks are unchanged.
+  - pytest-1c01GhsK and p58 are retained as invalid harness-environment attempts: each omitted the locked ML path or correct overlay/result scope; neither reports a product failure.
+  - Fresh p59 symlink build passed in 1.51 seconds. All 2771 ordinary tests passed in 82.42 seconds pytest and 84.11 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source/install module trees both hash 04735643c65be3e568964c83b75e39c50e6f75c527209e4a62ff88771cad8231; complete package source hash is 9e7451a932cadd923b445e09b91dd76867789337e6c943cc5df88e87215c4173.
+  - Rebuilt image sha256:f05493c493c62d45a8d393e87ef5034bc88de622098a3be2f49578c0cc524bb8 binds that source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model: YOLO 37.61 ms and Grounded-SAM 187.07 ms.
+  - Fresh EXP-045 preflight found 24 CPUs, 25.459 GiB MemAvailable, 15272 MiB free GPU, no GPU compute application, no related running process/container, and all domains 181-183 independently lockable.
+open_risks:
+  - ATTEMPT_STARTED and downstream perception/planning/execution have not yet succeeded in a live batch.
+retained: F48 RED/GREEN/adjacent scratch, invalid environment runs, p58/p59, provenance reports including failed empty outputs, image build/smoke, EXP-045 preflight attempts, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p59 after readback; no deletion authorized
+decision: RUN EXP-045 with unchanged four points and physical criteria
+```
+
+## EXP-045 — Task 14 reset-and-gate lease-identity-bound two-Worker execute
+
+```yaml
+experiment_id: EXP-045
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T20:18:48+08:00
+prior_experiment: EXP-044
+hypothesis: F48 supplies exact current-lease identity on both production reset and gate receipts, allowing two Workers to execute four unique points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
+single_variable: F48 production reset-receipt identity fields only. Reset behavior, gate predicates, Worker identity checks, topology, contact, freshness, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f48
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f48
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: b7a6e99cf969f1e1ff3bd87a0e44bb7af9376921
+  executable_source_tree: 9e7451a932cadd923b445e09b91dd76867789337e6c943cc5df88e87215c4173
+  installed_module_tree: 04735643c65be3e568964c83b75e39c50e6f75c527209e4a62ff88771cad8231
+  image_id: sha256:f05493c493c62d45a8d393e87ef5034bc88de622098a3be2f49578c0cc524bb8
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp045-r3.json; earlier empty preflight-exp045.json and preflight-exp045-r2.json are retained invalid wrapper outputs and are not authorities
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+retained: preregistration, F48 qualification evidence, preflight-exp045-r3.json, and all prior evidence
+archived: none
+deletion_candidates: p58/p59 and direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
