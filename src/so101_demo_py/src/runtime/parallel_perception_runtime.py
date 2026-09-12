@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import sys
 import threading
 
 import numpy as np
@@ -170,6 +171,41 @@ class ParallelPerceptionRuntime:
         self.healthy = False
         self.health_changed(False)
 
+    def record_failure(self, *, kind, request, error_type, reason):
+        """Persist the first health-losing failure without changing its outcome."""
+        document = {
+            'schema_version': 1,
+            'kind': kind,
+            'error_type': error_type,
+            'reason': reason,
+            'request_id': request.request_id,
+            'model_id': request.model_id,
+            'execution_kind': request.execution_kind.value,
+            'batch_id': request.batch_id,
+            'worker_id': request.worker_id,
+            'worker_generation': request.worker_generation,
+            'point_id': request.point_id,
+        }
+        payload = canonical_json(document)
+        try:
+            print(payload.decode(), file=sys.stderr, flush=True)
+        except Exception:
+            pass
+        try:
+            write_receipt(self.ready_receipt.with_name('.failure.json'), document)
+        except FileExistsError:
+            pass
+        except Exception as diagnostic_error:
+            try:
+                print(canonical_json({
+                    'schema_version': 1,
+                    'kind': 'failure_receipt_write_error',
+                    'error_type': type(diagnostic_error).__name__,
+                    'reason': str(diagnostic_error),
+                }).decode(), file=sys.stderr, flush=True)
+            except Exception:
+                pass
+
     def start(self):
         if self._started:
             if not self.healthy:
@@ -273,6 +309,9 @@ class ParallelPerceptionRuntime:
             # the Broker before fanning out the irreversible health loss.  An
             # eager callback here would invalidate the same in-flight request
             # as generic BROKER_NOT_READY and erase its initiating reason.
+            self.record_failure(
+                kind='runtime_inference_failure', request=request,
+                error_type=type(error).__name__, reason=str(error))
             self.healthy = False
             return ModelResult(ModelOutcome.INFRA_ERROR, reason=str(error))
 
@@ -355,5 +394,10 @@ class PerceptionService:
     def _response_health(self, response):
         if not self.broker.healthy or (response is not None and response.outcome in {
                 ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT, ModelOutcome.INFERENCE_TIMEOUT}):
+            if response is not None:
+                self.runtime.record_failure(
+                    kind='broker_response_failure', request=response.request,
+                    error_type='BrokerResponse.' + response.outcome.value,
+                    reason=response.reason or response.outcome.value)
             self.runtime._unhealthy()
         return response

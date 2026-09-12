@@ -171,6 +171,43 @@ def test_runtime_errors_are_infrastructure_and_poison_health(tmp_path, monkeypat
     assert not f.runtime.healthy
 
 
+def test_first_runtime_failure_is_durable_and_never_overwritten(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.contracts import ModelOutcome
+
+    f = fixture_runtime(
+        tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
+    f.runtime.start()
+
+    result = f.runtime.infer(f.req, f.snapshot)
+
+    assert result.outcome is ModelOutcome.INFRA_ERROR
+    assert result.reason == 'diagnostic CUDA sentinel'
+    failure_receipt = f.receipt.with_name('.failure.json')
+    first_payload = failure_receipt.read_bytes()
+    first_mtime_ns = failure_receipt.stat().st_mtime_ns
+    assert failure_receipt.stat().st_mode & 0o777 == 0o600
+    assert json.loads(first_payload) == {
+        'schema_version': 1,
+        'kind': 'runtime_inference_failure',
+        'error_type': 'RuntimeError',
+        'reason': 'diagnostic CUDA sentinel',
+        'request_id': 'r1',
+        'model_id': 'plastic-cup-yolo11n-seg-v1',
+        'execution_kind': 'attempt',
+        'batch_id': 'b1',
+        'worker_id': 'w1',
+        'worker_generation': 1,
+        'point_id': 'p1',
+    }
+
+    second = f.runtime.infer(f.req, f.snapshot)
+
+    assert second.outcome is ModelOutcome.INFRA_ERROR
+    assert second.reason == 'BROKER_UNHEALTHY'
+    assert failure_receipt.read_bytes() == first_payload
+    assert failure_receipt.stat().st_mtime_ns == first_mtime_ns
+
+
 def test_deterministic_error_is_model_error_and_empty_is_normal(tmp_path, monkeypatch):
     from so101_demo.adapters.perception.errors import DeterministicModelResultError
     from so101_demo.parallel_batch.contracts import ModelOutcome
@@ -390,6 +427,11 @@ def test_service_preserves_empty_rejection_and_marks_deadline_unhealthy(tmp_path
     assert service.poll_response(late).outcome is ModelOutcome.QUEUE_TIMEOUT
     assert not f.runtime.healthy
     assert not service.broker.healthy
+    failure = json.loads(f.receipt.with_name('.failure.json').read_bytes())
+    assert failure['kind'] == 'broker_response_failure'
+    assert failure['error_type'] == 'BrokerResponse.QUEUE_TIMEOUT'
+    assert failure['reason'] == 'QUEUE_DEADLINE_EXCEEDED'
+    assert failure['request_id'] == 'late'
 
 
 def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch):
