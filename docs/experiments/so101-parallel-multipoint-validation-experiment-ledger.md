@@ -95,6 +95,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F27: The Task 13 pytest scratch remains a unique previously nonexistent directory under the registered durable evidence root, but its leaf is deliberately short enough that test-owned Unix sockets remain at most 107 bytes. The exact interpreter must still resolve tempfile inside that directory. Cost if wrong: EXP-021 is INVALID; lengthening a security test's socket path already produced 48 expected fail-closed results in EXP-020.
 - Ruling F28: Task 13 supplies the current reviewed container CLI's required exclusive `--output` receipt for build, then passes its read-back immutable image ID together with a fresh private batch root to smoke. This reconciles the frozen intent with the stricter Task 11 interface added after the plan example. Cost if wrong: image qualification fails closed without Docker mutation or a fresh experiment is required.
 - Ruling F29: Every live/fault experiment must commit its PLANNED/RUNNING ledger state in a ledger-only pre-run commit, then append results in a later ledger-only commit. The reviewed production CLI rejects any dirty repository path, including its own controller ledger, before creating batch evidence. Executable source remains pinned to 30f18b7dc's code tree while the clean runtime HEAD may advance by ledger-only commits. Cost if wrong: admission fails before side effects as EXP-023 did; omitting pre-registration would violate the experiment state machine.
+- Ruling F30: Live commands prepend the verified worktree package libexec directory `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py` to PATH before invoking `ros2 run`. ROS 2 can locate a libexec without PATH, but the reviewed independent provenance verifier requires `shutil.which("so101_parallel_batch")` to bind the exact installed wrapper. Cost if wrong: admission fails before side effects as EXP-024 did; invoking an unverified wrapper would violate installed-byte admission.
 
 ```yaml
 checkpoint_id: CP-002
@@ -652,12 +653,14 @@ next_experiment: EXP-024 repeats the same frozen execute run from a clean ledger
 
 ```yaml
 experiment_id: EXP-024
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:17:14+08:00
   - status: RUNNING
     at: 2026-09-12T16:17:14+08:00
+  - status: INVALID
+    at: 2026-09-12T16:18:23+08:00
 prior_experiment: EXP-023
 hypothesis: Committing the ledger-only pre-run state removes EXP-023's sole provenance dirtiness and permits the otherwise identical frozen two-Worker four-point execute to exercise product behavior.
 prediction: Clean-source admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; no slot exceeds K=2, no point has two valid leases, and all numeric, visual, isolation, and cleanup gates pass.
@@ -692,6 +695,60 @@ provenance:
 visual_method: Headless MuJoCo offscreen per-point RGB at original resolution, checked for freshness and aligned to sealed runtime evidence; no Gazebo window exists, so window recording/capture would be false provenance.
 commands:
   - command: ros2 run so101_demo_py so101_parallel_batch with the exact EXP-023 arguments and unique reports/live-small-command-024 log/exit/time evidence
+    exit_code: 1
+observed:
+  - The clean HEAD passed the source-dirty boundary, then the execute command exited 1 in 0.37 s with PROVENANCE_CONSOLE_MISSING before batch-root creation or process startup.
+inferred:
+  - The overlay locates the libexec through ament for ros2 run, while the independent verifier needs the same installed wrapper explicitly discoverable through PATH.
+conclusion: INVALID pre-admission environment omission; no product behavior was exercised.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-024.log; sha256 99c39672bf29d69af01c4f046a0639a05b3a0be6f0bd7a83577bd768858e1b8b
+decision: REPEAT with only the verified libexec PATH added
+next_experiment: EXP-025 repeats the frozen execute from a clean precommitted ledger and verified libexec PATH
+```
+
+## EXP-025 — Task 14 verified-libexec two-Worker execute
+
+```yaml
+experiment_id: EXP-025
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:18:23+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:18:23+08:00
+prior_experiment: EXP-024
+hypothesis: Adding only the verified worktree libexec to PATH satisfies the final provenance boundary and permits the otherwise identical four-point execute run.
+prediction: Provenance and resource admission succeed; exactly four unique points reach PASSED with qualification_passed=true; N=2/K=2 isolation and all numeric, visual, and cleanup gates pass.
+single_variable: PATH gains only /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py; all EXP-024 executable inputs and absent batch root remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-022 is VALID; EXP-024 stopped before any side effect at console discovery.
+  - The pre-run ledger is committed and clean, live-small is absent, inventory has no stack, and the exact PATH-resolved wrapper hash is f04ec5fff42403737d1703e8dafe01e8a7d4454963e2d547e0e937db64914c53.
+success_criteria:
+  - Exit 0, normal POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, per-Worker K<=2, complete evidence, and clean shutdown.
+failure_criteria:
+  - Trustworthy initialized product behavior fails any physical/evidence gate; stop Task 15.
+invalid_criteria:
+  - A provenance, command, initial-state, or evidence defect prevents trustworthy behavior counting.
+provenance:
+  executable_source_commit: 30f18b7dc24bc6aed7e5bdfdc446e92f37bf5f5f
+  executable_source_tree: 3e0eef3773e2f2be7930614403f5fe621a2d2727
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:3ca6f7db5303c05c6a899889d73c0cf16b1fe91c4e5d7ef2ce69af2ddbd7e5d4
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per point with freshness, source-stamp, and runtime-evidence alignment; no Gazebo client/window exists.
+commands:
+  - command: prepend verified worktree libexec to PATH, then run the exact EXP-023 ros2 execute command with reports/live-small-command-025 log/exit/time evidence
     exit_code: PENDING
 observed:
   - PENDING
@@ -701,7 +758,7 @@ conclusion: PENDING
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
 decision: PENDING
-next_experiment: EXP-025 controlled plan-only Worker/Broker fault only after this execute run is accepted
+next_experiment: EXP-026 controlled plan-only fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
