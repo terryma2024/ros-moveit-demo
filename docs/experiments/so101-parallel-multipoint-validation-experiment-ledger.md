@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 6ead76c3dc9b7eb27cce626624ffdc2700ada601
+current_commit: c5cc7fc987d119e4d5c15fd50635f97899448be6
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -27,12 +27,13 @@ confirmed_conclusions:
   - F39 preserves the point-initial conjunction while emitting bounded missing-class diagnostics; its complete ordinary gate and rebuilt immutable image passed (CP-019).
   - F40 carries the reset transaction's already-validated six-joint sample across the reset boundary and uses completed all-goal CancelGoal responses as positive no-active-goal evidence; its complete ordinary gate and rebuilt immutable image passed (CP-020).
   - F41 preserves every point-initial predicate while reporting a bounded fixed-order rejected-predicate list; its complete ordinary gate and rebuilt immutable image passed (CP-021).
+  - F46 tolerates only the bounded child-side setsid observation race, while persistent incomplete or foreign identities remain fail-closed and receive no process-group signal; its complete ordinary gate and rebuilt immutable image passed (CP-026).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-025
-next_experiment: EXP-041 is INVALID; F46 child-session establishment race precedes EXP-042
+latest_checkpoint: CP-026
+next_experiment: EXP-042 is PLANNED and pre-registered
 ```
 
 Frozen provenance:
@@ -2278,6 +2279,59 @@ conclusion: INVALID; zero countable attempts. Add a bounded alive-child retry fo
 retained: complete EXP-041 batch/reports plus all prior evidence
 archived: none
 deletion_candidates: p55/direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-026
+last_valid_experiment: EXP-022
+current_hypothesis: F46 removes only the bounded child-session observation race, allowing the unchanged four-point execute to reach the already-qualified Worker topology gate.
+working_tree_status: clean at executable source commit c5cc7fc987d119e4d5c15fd50635f97899448be6 before this ledger-only pre-run commit
+owned_processes: NONE
+confirmed_conclusions:
+  - F46 formal RED pytest-fDK4r9SW failed when the child became a self-led session on the third identity read. Focused GREEN pytest-MdEc5jYV passed 2 tests and adjacent pytest-ESVDyxI3 passed all 39 process-supervision tests.
+  - Process startup now performs at most eight identity reads with 1 ms yields only while the exact Popen child remains alive. It admits only complete pgid==pid identity and never signals a persistent foreign or incomplete group.
+  - Fresh p56 symlink build passed in 1.50 seconds. All 2771 ordinary package tests passed in 82.95 seconds wall with zero errors, failures, or skips and no benchmark collection. The first build evidence wrapper is retained as invalid because it used zsh's read-only status variable after a successful build; the corrected r2 wrapper recorded exit 0.
+  - Source/install module trees both hash d6bc05d7f22d8989021fe9137380daf4a2a641af50f972e0989d0bb6c0609f47; complete package source hash is 98251f8e047a55a3b7161b05945c9a41d2b40e10181587a19de61e6cb3d6315c.
+  - Rebuilt image sha256:6d72a620d833fbba18698bc630bb1af349d3d62be174a5f3fb064ae29335142a binds that source. Fresh dual-model CUDA smoke produced one QUALIFIED candidate from each model and the --rm container left no residue.
+  - Fresh EXP-042 preflight found 24 CPUs, 25.552 GiB MemAvailable, 15272 MiB free GPU memory, no GPU compute application, no related process/container, and all domains 181-183 independently lockable.
+open_risks:
+  - EXP-042 remains the first run able to reach ATTEMPT_STARTED; downstream perception, planning, execution, and visual evidence remain unproven.
+retained: F46 RED/GREEN/adjacent scratch, p56 including invalid first build wrapper, installed provenance, image build, smoke, preflight, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p56 after readback; no deletion authorized
+decision: RUN EXP-042 with unchanged four points and physical criteria
+```
+
+## EXP-042 — Task 14 child-session-race-fixed two-Worker execute
+
+```yaml
+experiment_id: EXP-042
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:41:17+08:00
+prior_experiment: EXP-041
+hypothesis: F46 removes the bounded parent/child setsid observation race without weakening process ownership, allowing two Workers to execute four unique points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
+single_variable: F46 ProcessSupervisor child-identity read timing only. Point gates, topology, contact, reset/session, freshness, joints, goals, attachment, selection, config, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f46
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f46
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: c5cc7fc987d119e4d5c15fd50635f97899448be6
+  executable_source_tree: 98251f8e047a55a3b7161b05945c9a41d2b40e10181587a19de61e6cb3d6315c
+  installed_module_tree: d6bc05d7f22d8989021fe9137380daf4a2a641af50f972e0989d0bb6c0609f47
+  image_id: sha256:6d72a620d833fbba18698bc630bb1af349d3d62be174a5f3fb064ae29335142a
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+retained: pre-registration ledger record and preflight-exp042.json
+archived: none
+deletion_candidates: none
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
