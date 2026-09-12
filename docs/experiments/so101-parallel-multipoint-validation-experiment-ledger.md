@@ -3530,6 +3530,63 @@ deletion_candidates: existing scratch only; no deletion authorized
 decision: IMPLEMENT F56 PRIVATE-CONTEXT EXECUTOR WITH FORMAL RED/GREEN
 ```
 
+```yaml
+checkpoint_id: CP-046
+last_valid_experiment: EXP-022
+current_hypothesis: F56's private-context executors will let the already-correct transient-local recovery subscriptions execute callbacks and re-admit both slots.
+working_tree_status: clean executable source at dd3f2071476ef4aacc1acd77e92322980391cc10; ledger-only EXP-054 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - Formal RED pytest-VxSwDw2v failed because _IsolatedRosNode had no context-bound executor or spin_once.
+  - Focused GREEN pytest-bwavH9EL passed both private-executor and recovery-QoS cases; adjacent pytest-U2jLrmTx passed 120 tests.
+  - p76 exact build passed in 1.37 seconds; p77 full package test passed 2786 tests with zero errors, failures, or skips in 83.77 seconds.
+  - Installed source/build module tree hash is 84d2a6b3024998af08066773b6917976f9deff7aee83eb2b531de49725e73150 and complete source hash is 147e7b947e9e4ed3ce063eda7093f9d8a7cdc8ed8d50de051d8b74310ceb1ba5.
+  - Immutable F56 image sha256:f18aca1428823046d5eec9cd088bb16400a9f999cec742a9c6d0c80c22d3cc37 passed provenance readback and both CUDA smoke paths returned QUALIFIED.
+  - Fresh EXP-054 preflight found 24 CPUs, 25.106 GiB MemAvailable, 15272 MiB free GPU, exact console resolution, no related process/container/GPU task, and all domains lockable.
+ruling: Run the unchanged four-point gate with only the F56 private executor behavior changed. Require all-true recovery diagnostics before counting dynamic continuation.
+retained: F56 RED/GREEN/adjacent/p76/p77/provenance/image/smoke/preflight evidence and all prior evidence
+archived: none
+deletion_candidates: pytest-VxSwDw2v, pytest-bwavH9EL, pytest-U2jLrmTx, p76, and p77 after readback; no deletion authorized
+decision: RUN EXP-054
+```
+
+## EXP-054 — Task 14 private recovery executor F56 two-Worker execute
+
+```yaml
+experiment_id: EXP-054
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T23:29:10+08:00
+  - status: RUNNING
+    at: 2026-09-12T23:29:10+08:00
+prior_experiment: EXP-053
+hypothesis: Both recovery action-status readers will execute on their private context, report stopped=true and confirmed=true, re-admit generation 2, and finish all four points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, and every recovery diagnostic is all true.
+single_variable: Dedicated same-context executor ownership/spinning for the two isolated recovery ROS nodes. All QoS, topics, requests, status rules, source, config, points, models, N=2, K=2, timeouts, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f56
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f56
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all-true recovery gates, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: dd3f2071476ef4aacc1acd77e92322980391cc10
+  executable_source_tree: 147e7b947e9e4ed3ce063eda7093f9d8a7cdc8ed8d50de051d8b74310ceb1ba5
+  installed_module_tree: 84d2a6b3024998af08066773b6917976f9deff7aee83eb2b531de49725e73150
+  image_id: sha256:f18aca1428823046d5eec9cd088bb16400a9f999cec742a9c6d0c80c22d3cc37
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: reports/preflight-exp054.json; sha256 c58f45500fab40dedbd809cd80d2cc28d5232a6a5ca0b43017b6767dddaac737
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f56 and root live-small-f56.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: PENDING
+retained: preflight and prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
