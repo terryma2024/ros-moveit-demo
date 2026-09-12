@@ -3676,12 +3676,14 @@ decision: RUN EXP-056
 
 ```yaml
 experiment_id: EXP-056
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T23:51:23+08:00
   - status: RUNNING
     at: 2026-09-12T23:51:23+08:00
+  - status: INVALID
+    at: 2026-09-12T23:59:57+08:00
 prior_experiment: EXP-055
 hypothesis: Both slots remain recoverable through K=2 even if one point fails before any formal action status exists, while any post-action recovery still requires observed cancellation and independent confirmation.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, and every recovery diagnostic is all true.
@@ -3704,6 +3706,67 @@ preflight: reports/preflight-exp056.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260912-v1-f57 and root live-small-f57.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — exit 1 after 220.06 seconds. cup_test_forward_5cm and sample_05_near_center physically PASSED with complete dynamic receipts and visually upright centered placement plus retreat. task_start became INDETERMINATE because the dynamic consumer rejected the already-audited pose as CUP_POSE_STALE after MuJoCo simulation time advanced more than the frozen 5-second source-age limit during consumer startup; sample_14_far_right remained UNRUN. Worker-01 recovered both post-action points with all gates true. Worker-02 correctly remained quarantined because action might have started and stopped/confirmed were false. Terminal reason CAPACITY_EXHAUSTED, execution_complete=false, batch_cleanup_complete=false, and qualification_passed=false.
+broker_readback: Container bfe2e613253b557df82eb1c87bbf50700ba749da229588101d9af2ac8f855364 matched the exact F57 image, source label, batch label, isolated network/IPC, GPU request, and model mounts. It was stopped by exact ID and Docker auto-removed it.
+cleanup_readback: No related process, container, GPU compute application, or ROS domain 181-183 claim remained after exact-container cleanup.
+visual_readback: Six authorized original-resolution RGB images were inspected; both PASSED terminal images show upright centered placement and retreat, while task_start initial and terminal frames are identical with the cup unmoved and arm reset. Formal status remains INDETERMINATE because action-start absence was not proven.
+retained: complete live-small-f57 tree, command-056 log/time/exit, broker inspect summary, visual report, MuJoCo log, cleanup audit, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-049
+last_valid_experiment: EXP-022
+current_hypothesis: Freeze simulation time only while the already-audited pose's dynamic consumer starts and the pose is published, then resume simulation before execution, preserving the frozen 5-second freshness threshold and source stamp.
+working_tree_status: clean executable source at e921c313424093761ac86822a36e2e4d453ed2e8; ledger-only EXP-057 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-056 isolated a simulation-clock race: task_start perception and POSE_ACCEPTED completed, then the newly started consumer observed CUP_POSE_STALE after accelerated simulation time advanced beyond the 5-second source-age limit.
+  - Formal RED pytest-I9ubO75F proved the runtime lacked pause control. Focused pytest-jnjnEOpT passed 1 test, expanded pytest-TQR0vb7r passed 4 tests, and adjacent pytest-jMNPgO0V passed 78 tests after the correction.
+  - F58 pauses physics before consumer startup, waits for readiness and publishes the accepted pose while paused, resumes in a finally block, and only then awaits execution. Pause/resume errors fail closed and execution never proceeds while paused.
+  - Source commit e921c313424093761ac86822a36e2e4d453ed2e8; p82 symlink build passed in 1.53 seconds; p83 passed 2789 tests with zero errors, failures, or skips in 84.68 seconds.
+  - Installed/source module tree hash is cb87c4b33466636041847e18edd566784f0f2a00e4c58e7bfc0998fb622aabe8; complete source hash is 74cb881b931f16b38ca55a188be65a2a5ccbbbb4d39f493ab36c41722ff7bd71; compileall and frozen input hashes passed.
+  - F58 image sha256:0e4733e3077c60ebeea053b3212316f2d36fe3b39fd1977525d92f47ad0baa9c binds the exact source hash. The corrected build completed in 12.26 seconds, and smoke returned QUALIFIED CUDA for YOLO in 33.83 ms and Grounded-SAM in 191.94 ms with no residual container or GPU process. The first build wrapper invocation is retained as an invalid pre-Docker environment-loading attempt.
+  - Fresh EXP-057 preflight found 24 CPUs, 24.995 GiB MemAvailable, 15269 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only the F58 simulation-pause window around dynamic consumer startup and audited pose publication changed.
+retained: EXP-056 evidence, F58 RED/GREEN/adjacent/build/package/provenance/image/smoke/preflight evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-I9ubO75F, pytest-jnjnEOpT, pytest-TQR0vb7r, pytest-jMNPgO0V, p82, and p83 scratch trees after readback; no deletion authorized
+decision: RUN EXP-057
+```
+
+## EXP-057 — Task 14 pose-freshness pause F58 two-Worker execute
+
+```yaml
+experiment_id: EXP-057
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T00:09:03+08:00
+prior_experiment: EXP-056
+hypothesis: Holding simulation time fixed during dynamic consumer startup and audited pose publication will preserve exact source freshness, after which both isolated slots recover through K=2 and finish all four points.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
+single_variable: Physics is paused only around dynamic consumer startup, readiness, and publication of the immutable accepted pose, then resumed before awaiting execution; every source/config/model/point/timeout/freshness/physical criterion remains frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f58
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f58
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete recovery/dynamic receipts, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: e921c313424093761ac86822a36e2e4d453ed2e8
+  executable_source_tree: 74cb881b931f16b38ca55a188be65a2a5ccbbbb4d39f493ab36c41722ff7bd71
+  installed_module_tree: cb87c4b33466636041847e18edd566784f0f2a00e4c58e7bfc0998fb622aabe8
+  image_id: sha256:0e4733e3077c60ebeea053b3212316f2d36fe3b39fd1977525d92f47ad0baa9c
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp057.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f58 and root live-small-f58.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
