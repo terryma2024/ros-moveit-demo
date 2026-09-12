@@ -4660,12 +4660,14 @@ decision: RUN EXP-069 UNCHANGED FOUR-POINT GATE
 
 ```yaml
 experiment_id: EXP-069
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:15:12+08:00
   - status: RUNNING
     at: 2026-09-13T03:15:12+08:00
+  - status: VALID
+    at: 2026-09-13T03:21:21+08:00
 prior_experiment: EXP-068
 hypothesis: Requiring the exact accepted Worker topology across stable graph samples before returning the point-initial observation will prevent transient missing-node invalidation and allow both Workers to consume the four-point queue.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4688,6 +4690,37 @@ preflight: reports/preflight-exp069.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f68 and root live-small-f68.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+result: >-
+  VALID — exit 0 after 209.03 seconds. All four unique points PASSED; worker-01 completed
+  cup_test_forward_5cm and sample_14_far_right, worker-02 completed task_start and
+  sample_05_near_center, and each stayed at K=2. All four recovery receipts succeeded. All four
+  attempts used the YOLO-first model without fallback, and all eight original-resolution RGB
+  images passed visual inspection. Numeric evidence showed upright table-supported cups, empty
+  fingertip contacts and attachments, and complete retreat at every point. Aggregate terminality,
+  cleanup, coordinator completion, and qualification were all true. Exact-ID container readback,
+  owned-process manifests, GPU process readback, and domains 181/182/183 were clean after exit.
+retained: complete live-small-f68 tree, command-069 log/time/exit, visual/result/cleanup reports, MuJoCo log, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-069
+last_valid_experiment: EXP-069
+current_hypothesis: The qualified F68 composition will preserve generation fencing, no-double-lease semantics, K accounting, and exact owned-process cleanup under controlled plan-only Worker and Broker termination.
+working_tree_status: clean executable source at 7847bf280cf018a8515db8d1d1a67114976d21c0; EXP-069 closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - The frozen four-point execute gate is fully accepted with four PASSED points, four successful recoveries, eight passing original RGB inspections, and complete cleanup/qualification.
+  - Dynamic queue assignment gave exactly two points to each Worker without duplicate valid leases or K overflow.
+  - All four points used plastic-cup-yolo11n-seg-v1; Grounded-SAM fallback was not invoked.
+  - F67 exact-ID Broker retirement and F68 accepted-topology stability both passed their live boundaries.
+  - No process, container, GPU application, or ROS domain claim remained after the accepted batch.
+ruling: Run controlled faults only in plan-only mode through scripts/inject_so101_parallel_fault.py against exact supervisor manifest identities. Never terminate a Worker during execute or use name-based process selection. Preserve source, install, image, config, catalog, models, N, K, and all safety timeouts.
+retained: EXP-069 runtime, visual, result, cleanup, MuJoCo, command, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+decision: PREREGISTER CONTROLLED PLAN-ONLY FAULT GATES BEFORE FULL-20 ADMISSION
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
