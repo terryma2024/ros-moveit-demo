@@ -5791,10 +5791,12 @@ decision: RERUN SYNCHRONIZED FAULT GATE WITH PERSISTENT OBSERVER SESSION
 
 ```yaml
 experiment_id: EXP-086
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:56:24+08:00
+  - status: RUNNING
+    at: 2026-09-13T05:56:49+08:00
 prior_experiment: EXP-085
 hypothesis: Keeping the external synchronizer in a persistent command session will complete the already-approved exact Worker/Broker TERM sequence and demonstrate F74 fault isolation and recovery.
 single_variable: External observer lifetime only; all product inputs, plan-only mode, N=2, K=2, selection, readiness predicates, exact identity-fenced TERM targets, and acceptance criteria remain EXP-085-identical.
@@ -5812,6 +5814,7 @@ fault_sequence:
   - require a different manifest-owned Broker PID plus ready.json and .model-ready.json under broker-g2
 provenance:
   executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_commit: eee17b98fef9a843060affe41f31505990b03519
   preregistration_base_commit: 35e5642d073d93505a674bb1104a150ab2740f76
   executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
   installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
