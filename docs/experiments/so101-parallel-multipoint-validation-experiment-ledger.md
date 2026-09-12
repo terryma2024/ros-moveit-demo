@@ -33,14 +33,15 @@ confirmed_conclusions:
   - F48 binds the production reset receipt to all seven exact lease identity fields while preserving reset and Worker gate semantics; its fresh complete ordinary gate and immutable dual-model image passed (CP-029).
   - EXP-045 crossed both exact lease-bound reset/gate receipts and durable ATTEMPT_STARTED, then exposed deterministic insecure-mode rejection in Broker input mirror intermediates; F49 preserves the Broker security gate and fixes the producer path modes (CP-030).
   - F50 preserves conservative authorization-failure semantics while exposing bounded phase/type/message diagnostics; its fresh complete ordinary gate and immutable dual-model image passed (CP-033).
+  - EXP-047 separated one transient initial graph rejection from one successful Broker RPC returning model INFRA_ERROR; F51 is limited to preserving the Broker response reason in bounded Worker diagnostics (CP-034).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-033
-next_experiment: EXP-047 diagnostic four-point two-Worker execute
+latest_checkpoint: CP-034
+next_experiment: F51 formal RED/GREEN for bounded Broker response diagnostics, followed by a fresh complete gate and immutable image
 ```
 
 Frozen provenance:
@@ -2786,12 +2787,14 @@ decision: RUN EXP-047 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-047
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T22:08:26+08:00
   - status: RUNNING
     at: 2026-09-12T22:10:00+08:00
+  - status: INVALID
+    at: 2026-09-12T22:14:27+08:00
 prior_experiment: EXP-046
 hypothesis: F50 will identify the exact post-authorization request boundary and exception while leaving the two-Worker runtime otherwise identical.
 prediction: Either four unique points finish PASSED with full qualification, or every failure retains a bounded exact diagnostic sufficient for one narrow next fix and proves physical safety.
@@ -2815,10 +2818,61 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1-f50 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f50 --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic failure remains INVALID and non-qualifying.
-result: PENDING
-retained: PENDING
+result: >-
+  Command exit was 1 after 53.67 seconds. Worker-01 failed the point-initial graph gate before
+  ATTEMPT_STARTED because /so101_base_to_camera_link was absent from its stable sample; no RGB or
+  physical action followed for that Worker. Worker-02 passed the gate, durably ACKed
+  ATTEMPT_STARTED, created an exact 0700 Broker mirror chain, and completed a Broker RPC. The
+  response outcome was INFRA_ERROR rather than an exception: run_perception_chain converted it to
+  the unchanged PERCEPTION_INFRA_ERROR terminal, so the F50 exception fields correctly remained
+  null. The Broker response's reason is not currently projected into any durable Worker field,
+  leaving the exact frame/model cause unavailable after shutdown. worker-02 sealed
+  physical_action_proven_absent=true; no pose admission, plan, trajectory, or controller action
+  occurred. The two started/failed leases exhausted both Workers and the remaining points were not
+  leased.
+cleanup: >-
+  Exact CID d386d4523ed9c182ee8bdb56cd3b0f13bc0d6f481b9ca42f6f9651f75f659c34
+  was verified against immutable F50 image, exact batch/generation labels, and registered mounts,
+  then stopped and independently observed removed by --rm. Final audit found empty ownership
+  manifests, no related process or container, no GPU compute task, and no same-UID domain 181-183
+  owner. The MuJoCo log was moved without deletion to reports/MUJOCO_LOG-EXP047.txt.
+visual_sha256:
+  task_start: 1c720010f645481f85786c9b8e63615ab96ad2ae2818f810f87545cb0d51f343
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: de14b2b8d7c573fea4ae78e06673ad90a8e3912277e3078deffa27fc98a06a3a
+command_time_sha256: 1476c7d2a493a729bdb3d601a77fb2aa2caa15776d1bbc415922327674a810d8
+aggregate_sha256: 556aaafed719472b8be5f06faf8bc804e4a4a080933a3f579f3e46488eace72d
+coordinator_aggregate_sha256: 3ae39755abe895e746ccf2e7485ec8dd5dae30427ee38c6364d44764e77b324e
+worker_01_result_sha256: a6ad0d293f92ecbc2e31dc14bdbaa0bff795a1c0b0f8c61fcb8acbf76f711746
+worker_02_result_sha256: 4b2eb091d2844f41c40732a3671ca32cc81141ea251f956ce0431055de7371ae
+mujoco_log_sha256: 0b449c36f52dcc764120d71b1c27938b49fb1b75914a3b2743cbf6a39fb8bd41
+post_cleanup_sha256: ec2f2ca2f4c6e7bd27d9c6f5c9917fbf85a6adba55fc94924ab3cb913bc435af
+conclusion: INVALID diagnostic infrastructure result; zero physical actions. Preserve the Broker response reason in bounded Worker diagnostics under F51, then repeat with a new batch identity after complete qualification.
+retained: complete EXP-047 batch/reports, the one authorized and visually inspected immutable initial RGB, moved MuJoCo log, cleanup evidence, and all prior evidence
 archived: none
-deletion_candidates: none pending run
+deletion_candidates: p65 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-034
+last_valid_experiment: EXP-022
+current_hypothesis: A bounded diagnostic projection of BrokerResponse outcome/reason will expose the exact model infrastructure rejection without altering the conservative perception terminal or attempt result.
+working_tree_status: ledger-only EXP-047 result and F51 ruling after clean executable source 42a7306ec99d720638925c8b286a3003ff65efe1
+owned_processes: NONE
+confirmed_conclusions:
+  - Worker-02 completed a Broker RPC and received ModelOutcome.INFRA_ERROR; this was not an exception, so F50 correctly did not fabricate exception diagnostics.
+  - run_perception_chain has the exact BrokerResponse.reason but returns only the generic policy terminal; the unchanged execute adapter then seals PERCEPTION_INFRA_ERROR.
+  - Worker-01 independently failed the strict graph gate on missing /so101_base_to_camera_link before ATTEMPT_STARTED, with no captured RGB or physical action.
+  - The only authorized original-resolution frame was inspected and is visually consistent with reset and no contact or penetration.
+  - Exact Broker cleanup completed and no related owned process, running batch container, GPU compute task, or domain owner remained.
+open_risks:
+  - Exact Broker response reason is not present in current durable evidence.
+  - The point-initial graph can still sample a transient missing fixed camera node.
+ruling: F51 may add optional diagnostic type/message fields to PerceptionTerminal and copy only an infrastructure BrokerResponse outcome/reason into them, then project those fields through the existing F50 WorkerRunResult boundary using the same 128-character type and 512-byte single-line UTF-8 limits. It must preserve PerceptionTerminal disposition/reason, attempt status/reason, model sequence, safe-stop, authorization, and physical behavior. Formal RED/GREEN must prove exact projection and that normal rejection/success do not fabricate diagnostics.
+retained: complete EXP-047 evidence, cleanup audit, all F50 evidence, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p65 after readback; no deletion authorized
+decision: IMPLEMENT F51 BROKER RESPONSE DIAGNOSTICS WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
