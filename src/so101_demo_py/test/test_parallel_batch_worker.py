@@ -1450,6 +1450,28 @@ def test_recovery_receipt_is_read_back_before_successful_readmission():
     assert names.index("recovery_receipt") < names.index("verify_recovery_receipt")
 
 
+def test_recovery_emits_bounded_existing_gate_diagnostic_before_receipt(capsys):
+    fake = Fake()
+    fake.runtime.goal_confirmed = False
+    real_write = fake.results.write_recovery_receipt
+    observed_before_receipt = []
+
+    def write(*args, **kwargs):
+        observed_before_receipt.extend(capsys.readouterr().out.splitlines())
+        return real_write(*args, **kwargs)
+
+    fake.results.write_recovery_receipt = write
+
+    result = ParallelWorker(fake.ports()).run_one()
+
+    assert result.recovered is False
+    assert observed_before_receipt == [
+        '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES",'
+        '"ready":true,"recovered":true,"stopped":true,'
+        '"worker_generation":1,"worker_id":"w1"}'
+    ]
+
+
 def test_worker_uses_commit_frozen_recovery_deadline_after_clock_advances():
     fake = Fake()
     fake.coordinator.advance_after_commit_s = 1.0
