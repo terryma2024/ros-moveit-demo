@@ -31,7 +31,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-020
-next_experiment: EXP-035 is RUNNING
+next_experiment: EXP-036
 ```
 
 Frozen provenance:
@@ -1698,12 +1698,14 @@ next_command: Execute the clean pre-registered EXP-035 batch using image sha256:
 
 ```yaml
 experiment_id: EXP-035
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T18:31:13+08:00
   - status: RUNNING
     at: 2026-09-12T18:31:13+08:00
+  - status: INVALID
+    at: 2026-09-12T18:36:37+08:00
 prior_experiment: EXP-034
 hypothesis: F40's reset-bound joint evidence and completed all-goal queries allow both Workers to satisfy the unchanged strict point-initial gate and execute the four selected points.
 prediction: Four unique points pass physically with qualification_passed=true and clean shutdown; otherwise any failure remains bounded, attributable, and cannot qualify the batch.
@@ -1736,9 +1738,31 @@ evidence_planned:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-035.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-035.log
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40
-retained: F40 test/build/provenance/image/smoke/preflight evidence and the complete live batch tree will be retained
+commands:
+  - command: fresh inventory and production domain/resource probe to reports/*before-035.json
+    exit_code: 0
+  - command: four-point execute with individually sourced package overlays
+    exit_code: 1
+  - command: exact Broker identity/mount verification, stop, and cleanup audit2
+    exit_code: 0
+observed:
+  - Both Workers failed in reset_point with ResetFailed initial evidence unavailable before ATTEMPT_STARTED; all points remain UNRUN and zero outcomes are countable.
+  - The launch log proves both stacks failed to discover mujoco_ros2_control_plugins/CameraPlugin because the command sourced selected package scripts but omitted the worktree's mujoco_ros2_control_plugins overlay. Plugin-loader construction then failed before SimulationEvidencePlugin could publish the atomic topic.
+  - This differs from EXP-034, where the same runtime image and launch configuration loaded the plugin stack and reset completed. It is a command-environment transcription defect, not evidence about F40.
+  - Aggregate qualification and cleanup remained false. The exact Broker survived; external cleanup verified its cidfile, immutable image, batch/generation labels, and all four expected mounts before stopping only that container. Audit2 found no related process, container, GPU task, or domain residue.
+conclusion: INVALID; zero countable attempts. Source the complete fresh worktree install/setup.zsh, verify both plugin package prefixes resolve inside the worktree, and repeat unchanged under EXP-036.
+hashes:
+  live_command_log_sha256: 176387970683b83960dbc024ad2da4111e07be3a310c23aec45dd055c9798b94
+  journal_sha256: 0e45a87758d51705dae55f8e513a292df926b0d9ba7a2b22c43de44b3d4766f1
+  coordinator_aggregate_sha256: 24ae24e366daf6bc4bbe95e9d16227ea634be768af2b2bfae1fa89c34d0ea562
+  worker_01_result_sha256: a15236d984443d75394f2b635dce7d1d5c46c3f21addcb0aa218c11f6cb45adc
+  worker_02_result_sha256: 4d84a42a731a49daa1261b7151bfbab27b64515b4d7899d7292091622521e153
+  cleanup_audit_sha256: ae01a8feb503285958b2639e8d970a60df95380b2c8dd87cbbca9dd6d6e51d4b
+retained: F40 test/build/provenance/image/smoke/preflight evidence, complete live-small-f40 tree, command log, Worker results, journal/projections, and cleanup audit
 archived: none
 deletion_candidates: p49 and direct pytest scratch after readback; nothing will be deleted without user authorization
+decision: REPEAT under EXP-036 with the complete worktree overlay source; controlled plan-only fault advances to EXP-037 and remains blocked until execute acceptance
+next_experiment: EXP-036 is reserved for the corrected-environment F40 execute repeat
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
