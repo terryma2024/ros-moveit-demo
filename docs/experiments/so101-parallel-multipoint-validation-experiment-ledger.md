@@ -5938,6 +5938,49 @@ deletion_candidates: registered pytest/build scratch, invalid smoke and command 
 decision: ADVANCE TO IMMUTABLE FULL 20-POINT QUALIFICATION
 ```
 
+## EXP-089 — F74 immutable full 20-point qualification
+
+```yaml
+experiment_id: EXP-089
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:07:08+08:00
+prior_experiment: EXP-088
+hypothesis: The immutable F74 runtime will execute and seal all 20 frozen catalog points exactly once with dynamic two-Worker scheduling, K=10 per stable slot, exact-TF localization, YOLO-first perception, complete recovery, and no residual state.
+single_variable: Expand EXP-084 from the four-point selection and K=2 to the complete frozen catalog and K=10; source, install, image, models, config, catalog, N=2, lifecycle, and execute behavior remain byte-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-20-20260913-v1-f74
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f74
+worker_count: 2
+max_points_per_worker: 10
+selection: complete frozen 20-point catalog; no --point-id filter
+selection_sha256: 33374bb01c31f342e6a2f3d13943c91e74d62165a5a901678216bbb18ffa9a64
+preflight:
+  related_processes: none
+  containers: none
+  gpu_compute_applications: none
+  host_memory_available: 24 GiB
+  gpu_memory_free: 15269 MiB
+provenance:
+  executable_source_commit: 853c2271048d3dfcf1e801d20d4554f0e7af2201
+  preregistration_base_commit: 812f2ee1749e537aec59769a7ec57ba8bd87eafb
+  executable_source_tree: 7ff410a3a9a823c49f77a7483417080060bc395b93f74769d76a10c8190d09a3
+  installed_module_tree: 68f0f7f6977df926b94c8555c06419f9bf1f613c1423c75d435ed017cc2e145a
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+  broker_image_id: sha256:106a34fa7a5d0e69e05d66e122e6f3fa1aab54ce0afca7108eed219e62a61d42
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: Exit 0; all 20 catalog points have unique leases and sealed PASSED attempts; exactly K=10 leases and generation 11 per Worker; all 20 recovery receipts succeed; all 40 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, exact-TF, provenance, manifest file-size/SHA-256, coordinator completion, qualification, and cleanup gates pass; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
+failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, qualification false, target fault, or residual owned state makes this batch non-qualifying; diagnose before any rerun.
+retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
