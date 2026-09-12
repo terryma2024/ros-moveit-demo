@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e4d06020598eda8f22c54b3826802df84b84291f
+current_commit: 30f18b7dc24bc6aed7e5bdfdc446e92f37bf5f5f
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
@@ -94,6 +94,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F26: The locked ML site-packages are injected only after the package build and worktree overlay source, immediately before the test/import phase. Build retains the bare ROS/worktree interpreter environment because the venv setuptools does not support colcon's develop uninstall option. Cost if wrong: another fresh experiment is required; mixing the test-only dependency path into build already invalidated EXP-019 before test startup.
 - Ruling F27: The Task 13 pytest scratch remains a unique previously nonexistent directory under the registered durable evidence root, but its leaf is deliberately short enough that test-owned Unix sockets remain at most 107 bytes. The exact interpreter must still resolve tempfile inside that directory. Cost if wrong: EXP-021 is INVALID; lengthening a security test's socket path already produced 48 expected fail-closed results in EXP-020.
 - Ruling F28: Task 13 supplies the current reviewed container CLI's required exclusive `--output` receipt for build, then passes its read-back immutable image ID together with a fresh private batch root to smoke. This reconciles the frozen intent with the stricter Task 11 interface added after the plan example. Cost if wrong: image qualification fails closed without Docker mutation or a fresh experiment is required.
+- Ruling F29: Every live/fault experiment must commit its PLANNED/RUNNING ledger state in a ledger-only pre-run commit, then append results in a later ledger-only commit. The reviewed production CLI rejects any dirty repository path, including its own controller ledger, before creating batch evidence. Executable source remains pinned to 30f18b7dc's code tree while the clean runtime HEAD may advance by ledger-only commits. Cost if wrong: admission fails before side effects as EXP-023 did; omitting pre-registration would violate the experiment state machine.
 
 ```yaml
 checkpoint_id: CP-002
@@ -578,6 +579,129 @@ smoke_models: grounded-sam QUALIFIED one candidate 199.154 ms; plastic-cup-yolo1
 retained: all logs, JUnit, provenance, image, smoke, and scratch evidence
 archived: none
 deletion_candidates: scratch/p22 after readback; nothing will be deleted without explicit user authorization
+```
+
+## EXP-023 — Task 14 two-Worker four-point execute
+
+```yaml
+experiment_id: EXP-023
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:14:08+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:15:53+08:00
+  - status: INVALID
+    at: 2026-09-12T16:16:39+08:00
+prior_experiment: EXP-022
+hypothesis: Two isolated headless MuJoCo Workers dynamically lease and physically pass the four preregistered representative points through one immutable external Broker while preserving all per-point numeric, visual, isolation, and cleanup gates.
+prediction: Exactly four unique points reach PASSED with qualification_passed=true; no slot exceeds K=2, no point has two valid leases, both Workers use disjoint domains/sessions/roots/sockets, and every point has fresh post-reset through post-retreat evidence.
+single_variable: Move from offline package/image qualification to the frozen four-point two-Worker execute selection; source, install, runtime policy, models, image ID, and catalog remain fixed.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-022 package and immutable-image gate is VALID.
+  - No relevant MuJoCo, MoveIt, controller, ROS worker, Broker, container, or GPU compute process is active; domains 181-183 have no nodes.
+  - CPU 24, MemAvailable 27.965 GB, and GPU free 15.272 GiB exceed two-Worker admission thresholds.
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small did not exist before planning.
+success_criteria:
+  - Command exits 0 and authoritative summary reports normal POINTS_COMPLETE plus qualification_passed=true.
+  - task_start, cup_test_forward_5cm, sample_05_near_center, and sample_14_far_right each have exactly one valid lease and PASSED sealed result.
+  - Each Worker completes at most two points; all identity and resource isolation fields are pairwise disjoint.
+  - Per-point reset, canonical joints, fresh RGB-D, POSE_ACCEPTED, MoveIt/controller, final cup support/contact/detachment, retreat, and fresh offscreen RGB evidence pass readback.
+  - Cleanup is true and no owned process, container, GPU compute task, active controller goal, MoveIt attachment, or stale Worker node remains.
+failure_criteria:
+  - A correctly initialized counted point fails a physical or evidence gate; preserve it as a VALID failed behavior run and stop Task 15.
+invalid_criteria:
+  - Provenance, initial state, command, stack uniqueness, recorder/capture identity, or evidence completeness is polluted; retain evidence but do not count the behavior result.
+provenance:
+  source_commit: 30f18b7dc24bc6aed7e5bdfdc446e92f37bf5f5f
+  source_tree: 3e0eef3773e2f2be7930614403f5fe621a2d2727
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:3ca6f7db5303c05c6a899889d73c0cf16b1fe91c4e5d7ef2ce69af2ddbd7e5d4
+  image_source_sha256: c5fcae2e99975d37030ce1827d50367d36db404077b272687fe8f13d63a5f426
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Workers are headless MuJoCo with no Gazebo client or window; GUI capture is therefore not a truthful route. Apply the gui-capture freshness/identity rule and gazebo-video-debug ready-frame/timeline principles to each immutable Worker offscreen RGB sequence, using original-resolution local image inspection and numeric runtime alignment.
+commands:
+  - command: ros2 run so101_teleop so101_stack_inventory.py --json /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+    exit_code: 0
+    environment_note: The installed tool requires Pydantic v2; its read-only invocation prepended /data/work/microduck_rl/.venv/lib/python3.12/site-packages after the bare system attempt failed at import. The resulting inventory contains no stack process, ROS node, or GUI window.
+  - command: ros2 run so101_demo_py so101_parallel_batch --points src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml --point-id task_start --point-id cup_test_forward_5cm --point-id sample_05_near_center --point-id sample_14_far_right --config src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml --batch-id parallel-small-20260912-v1 --worker-count 2 --max-points-per-worker 2 --evidence-root /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --yolo-weights /data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781 --grounded-root /data/work/so101-models/grounded-sam-v2-scipy-lock --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775 --run-mode execute
+    exit_code: 1
+observed:
+  - The inventory command exited 0 and found no stack process, ROS node, or GUI window.
+  - The execute command exited 1 in 0.37 s with PROVENANCE_SOURCE_DIRTY before creating the batch root or starting any Worker, Broker, container, ROS node, simulation, plan, or motion.
+inferred:
+  - The controller-owned ledger update is the sole dirty path and conflicts with strict clean-repository admission unless its pre-run state is committed first.
+conclusion: INVALID pre-admission harness ordering; no product behavior was exercised.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/task14-preflight-023.txt
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command.log; sha256 82fc295a5ca0a20eba622efdf04f8a904196dd006c6048160c6b528ecd09eb26
+decision: REPEAT after a ledger-only pre-run commit
+next_experiment: EXP-024 repeats the same frozen execute run from a clean ledger-precommitted HEAD
+```
+
+## EXP-024 — Task 14 clean-head two-Worker four-point execute
+
+```yaml
+experiment_id: EXP-024
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T16:17:14+08:00
+  - status: RUNNING
+    at: 2026-09-12T16:17:14+08:00
+prior_experiment: EXP-023
+hypothesis: Committing the ledger-only pre-run state removes EXP-023's sole provenance dirtiness and permits the otherwise identical frozen two-Worker four-point execute to exercise product behavior.
+prediction: Clean-source admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; no slot exceeds K=2, no point has two valid leases, and all numeric, visual, isolation, and cleanup gates pass.
+single_variable: Ledger state is committed before runtime; all executable source, install bytes, selection, policy, models, image ID, N=2, K=2, batch ID, and absent batch root are unchanged from EXP-023.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-022 is VALID and EXP-023 stopped before side effects solely because its ledger was dirty.
+  - The ledger-only pre-run commit containing this RUNNING record is the runtime HEAD; executable source tree remains 3e0eef3773e2f2be7930614403f5fe621a2d2727.
+  - No relevant stack/process/container/GPU task or domain 181-183 node exists, and live-small remains absent.
+success_criteria:
+  - Command exits 0 with normal POINTS_COMPLETE and qualification_passed=true.
+  - All four selected points have exactly one PASSED sealed result; both Workers remain within K=2 with disjoint identity/resources.
+  - Reset, joints, RGB-D, POSE_ACCEPTED, MoveIt/controller, final support/contact/detachment, retreat, offscreen visual, and cleanup readback all pass.
+failure_criteria:
+  - A correctly initialized counted point fails a physical or evidence gate; preserve as a VALID failed behavior run and stop Task 15.
+invalid_criteria:
+  - Admission/provenance/initial-state/command/evidence pollution prevents a trustworthy behavior result.
+provenance:
+  executable_source_commit: 30f18b7dc24bc6aed7e5bdfdc446e92f37bf5f5f
+  executable_source_tree: 3e0eef3773e2f2be7930614403f5fe621a2d2727
+  runtime_head: clean ledger-only pre-run commit containing this record
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_ids: [181, 182]
+  gz_partition: not_applicable
+  image_id: sha256:3ca6f7db5303c05c6a899889d73c0cf16b1fe91c4e5d7ef2ce69af2ddbd7e5d4
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Headless MuJoCo offscreen per-point RGB at original resolution, checked for freshness and aligned to sealed runtime evidence; no Gazebo window exists, so window recording/capture would be false provenance.
+commands:
+  - command: ros2 run so101_demo_py so101_parallel_batch with the exact EXP-023 arguments and unique reports/live-small-command-024 log/exit/time evidence
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-023.json
+decision: PENDING
+next_experiment: EXP-025 controlled plan-only Worker/Broker fault only after this execute run is accepted
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
