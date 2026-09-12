@@ -4572,10 +4572,12 @@ decision: RUN EXP-068 UNCHANGED FOUR-POINT GATE
 
 ```yaml
 experiment_id: EXP-068
-status: PLANNED
+status: RUNNING
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:01:53+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:02:54+08:00
 prior_experiment: EXP-067
 hypothesis: After exact Broker ownership validation and successful Docker stop, bounded polling of that exact container ID will observe auto-removal and allow the otherwise-complete four-point batch to qualify.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
