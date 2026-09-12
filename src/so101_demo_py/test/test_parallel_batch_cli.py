@@ -943,6 +943,56 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
     with pytest.raises(RuntimeError, match="boom"):
         composition.run()
     assert supervisor.cleanup_facts == (True, True, True, True)
+    cleanup_receipt = json.loads(
+        (spec.request.evidence_root / "cleanup-gates.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert cleanup_receipt == {
+        "schema_version": 1,
+        "batch_id": "batch-1",
+        "actions": {
+            "stop_leases": {
+                "succeeded": True,
+                "error_type": None,
+                "error_message": None,
+            },
+            "cancel_goal": {
+                "succeeded": True,
+                "error_type": None,
+                "error_message": None,
+            },
+            "confirm_goal_cancelled": {
+                "succeeded": True,
+                "error_type": None,
+                "error_message": None,
+            },
+            "request_recovery": {
+                "succeeded": True,
+                "error_type": None,
+                "error_message": None,
+            },
+        },
+        "process_cleanup": {
+            "succeeded": True,
+            "error_type": None,
+            "error_message": None,
+        },
+        "container_cleanup": {
+            "succeeded": True,
+            "error_type": None,
+            "error_message": None,
+        },
+        "cleanup_gates_passed": True,
+        "coordinator_completion": {
+            "attempted": True,
+            "succeeded": True,
+            "error_type": None,
+            "error_message": None,
+        },
+        "batch_cleanup_complete": True,
+    }
+    assert (spec.request.evidence_root / "cleanup-gates.json").stat().st_mode & 0o777 == 0o600
 
 
 def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):

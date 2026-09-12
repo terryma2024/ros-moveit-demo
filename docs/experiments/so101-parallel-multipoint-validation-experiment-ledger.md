@@ -4138,12 +4138,14 @@ decision: RUN EXP-063
 
 ```yaml
 experiment_id: EXP-063
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T01:26:53+08:00
   - status: RUNNING
     at: 2026-09-13T01:26:53+08:00
+  - status: INVALID
+    at: 2026-09-13T01:36:58+08:00
 prior_experiment: EXP-062
 hypothesis: A publisher whose DDS match and simulation clock are established before inference and whose lifetime extends beyond the single publish will deliver every accepted pose without weakening any execution gate.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, all four recovery receipts succeed, exact Broker auto-removes, and no owned task remains.
@@ -4167,10 +4169,28 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f62 and root live-small-f62.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, or cleanup failure remains INVALID.
-result: PENDING
-retained: all prior evidence; runtime evidence pending
+result: INVALID — exit 1 after 242.73 seconds. All four unique points passed, all four recovery receipts succeeded, both Workers remained within K=2, and all eight original-resolution RGB frames passed visual inspection. The coordinator reached POINTS_COMPLETE, but batch_cleanup_complete remained false. Post-run readback found an empty owned-process manifest and no related process, container, GPU task, or domain claim. Because the current composition collapses supervisor and container cleanup into one boolean while swallowing component exceptions, the retained run cannot identify which exact cleanup sub-gate failed.
+retained: complete live-small-f62 tree, command-063 log/time/exit, visual report, root-cause report, cleanup audit, MuJoCo log, and all prior evidence
 archived: none
 deletion_candidates: none from this experiment yet
+```
+
+```yaml
+checkpoint_id: CP-057
+last_valid_experiment: EXP-022
+current_hypothesis: A private immutable per-component cleanup receipt will expose the exact strict cleanup sub-gate responsible for EXP-063 without changing scheduling, motion, perception, recovery, or qualification semantics.
+working_tree_status: executable source remains clean at 99a54199cbd2823254732f0da741f2153670dcc9; ledger and EXP-063 reports are the only pending records before bounded F63 TDD instrumentation
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-063 physically passed all four points and all eight original-resolution visual checks; every recovery receipt succeeded.
+  - POINTS_COMPLETE was durable, but no BATCH_CLEANUP_COMPLETE event was emitted and qualification_passed remained false.
+  - Post-run readback proves the owned manifest is empty and no related process, exact Broker container, GPU task, or domain claim remains.
+  - Existing retained evidence does not distinguish process_cleanup=false from container_cleanup=false because the composition swallows component exceptions and emits only the aggregate qualification document.
+ruling: Add fail-closed, mode-0600 cleanup-gates.json diagnostics under the already-private batch evidence root. Record named shutdown-action results, process_cleanup, container_cleanup, and exception class/message; never turn a false or exceptional gate into success. Prove the receipt with RED/GREEN tests, then repeat the unchanged four-point execute gate under fresh provenance.
+retained: EXP-063 runtime, visual, root-cause, cleanup, MuJoCo, and command evidence plus all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F63 DIAGNOSTIC WITH TDD; do not run fault injection or full validation until a fresh small gate qualifies.
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
