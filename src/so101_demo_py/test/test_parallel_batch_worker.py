@@ -404,6 +404,8 @@ class Runtime:
 
     def point_initial_gate(self, lease, reset):
         self.calls.append("point_initial_gate")
+        if self.raise_at == "point_initial_gate":
+            raise RuntimeError("initial gate rejected\nsecond line")
         return GateEvidence(
             lease.point_id, True, True, True, True, True,
             reset.reset_epoch, reset.simulation_session_id, 21.0,
@@ -512,6 +514,29 @@ class Fake:
 
 def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
+
+
+@pytest.mark.parametrize(
+    "boundary,message",
+    [
+        ("reset_point", "reset failed"),
+        ("point_initial_gate", "initial gate rejected second line"),
+    ],
+)
+def test_initial_boundary_failure_reports_bounded_structured_diagnostic(
+    boundary, message
+):
+    fake = Fake(RunMode.EXECUTE)
+    fake.runtime.raise_at = boundary
+
+    result = ParallelWorker(fake.ports()).run_one()
+
+    assert result.stopped_reason == "INITIAL_GATE_FAILED"
+    assert result.failure_boundary == boundary
+    assert result.failure_type == "RuntimeError"
+    assert result.failure_message == message
+    assert len(result.failure_message.encode("utf-8")) <= 512
+    assert "\n" not in result.failure_message
 
 
 def expected_gate_summary(lease):

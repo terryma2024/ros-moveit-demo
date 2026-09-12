@@ -1366,6 +1366,17 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     return worker, runtime
 
 
+def _write_worker_results(resources, results):
+    path = resources.worker_root / "worker-run-results.json"
+    _write_json(path, {
+        "schema_version": 1,
+        "worker_id": resources.worker_id,
+        "worker_generation": resources.generation,
+        "results": [_jsonable(result) for result in results],
+    })
+    return path
+
+
 def _run_worker_spec(path, *, runtime_side_effects=None):
     worker, runtime = _build_worker_from_spec(
         path, runtime_side_effects=runtime_side_effects
@@ -1412,6 +1423,7 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_thread.start()
     try:
         results = worker.run()
+        _write_worker_results(resources, results)
         return int(
             not results
             or any(

@@ -129,6 +129,77 @@ def test_terminal_health_failure_waits_for_workers_after_exact_broker_retirement
     assert supervisor.processes == ()
 
 
+def test_wait_repolls_worker_that_exits_between_poll_and_identity_readback():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    observations = iter((None, 7))
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: None,
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(worker, poll=lambda: next(observations))
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0
+    ) == (7,)
+    assert supervisor.processes == ()
+
+
+def test_wait_still_rejects_absent_worker_that_remains_nonterminal():
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    supervisor = ProcessSupervisor(
+        "batch-1", identity_reader=lambda _pid: None
+    )
+    supervisor._record_started(worker, poll=lambda: None)
+
+    with pytest.raises(SupervisorError, match="OWNED_PROCESS_ABSENT"):
+        supervisor.wait_for_children(
+            deadline_monotonic_s=time.monotonic() + 1.0
+        )
+
+
+def test_wait_repolls_broker_exit_before_invoking_exact_recovery():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    broker = OwnedProcess("batch-1", "broker", 101, 101, ("broker",), 11)
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    broker_observations = [None, 17]
+
+    def broker_poll():
+        if len(broker_observations) > 1:
+            return broker_observations.pop(0)
+        return broker_observations[0]
+
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda pid: worker if pid == worker.pid else None,
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(broker, poll=broker_poll)
+    supervisor._record_started(worker, poll=lambda: 0)
+    recovered = []
+
+    def terminal_failure(exited, code):
+        recovered.append((exited, code))
+        assert supervisor.retire_owned(exited) is True
+        return False
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0,
+        health_recovery=terminal_failure,
+    ) == (0,)
+    assert recovered == [(broker, 17)]
+    assert supervisor.processes == ()
+
+
 def test_live_retirement_keeps_authority_when_leader_exits_before_descendants():
     from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
 

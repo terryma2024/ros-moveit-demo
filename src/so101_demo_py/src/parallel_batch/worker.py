@@ -44,6 +44,20 @@ class WorkerRunResult:
     terminal_status: AttemptStatus | ValidationStatus | None
     recovered: bool
     stopped_reason: str
+    failure_boundary: str | None = None
+    failure_type: str | None = None
+    failure_message: str | None = None
+
+
+def _bounded_failure_message(error: Exception) -> str:
+    normalized = " ".join(str(error).splitlines())
+    payload = normalized.encode("utf-8", errors="replace")[:512]
+    while payload:
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError:
+            payload = payload[:-1]
+    return ""
 
 
 def _lease_key(lease: LeaseIdentity) -> tuple:
@@ -780,25 +794,39 @@ class ParallelWorker:
             authorized = False
             gate_summary = self._dry_run_summary(lease)
             if self._mode is not RunMode.DRY_RUN:
+                failure_boundary = "reset_point"
                 try:
                     reset = self._boundary(lambda current: self._runtime.reset_point(current))
+                    failure_boundary = "point_initial_gate"
                     gate = self._boundary(
                         lambda current: self._runtime.point_initial_gate(current, reset))
                     gate_summary = self._gate_summary(lease, reset, gate)
-                except Exception:
+                except Exception as error:
                     decision, _, _, _ = self._safe_stop(
                         lease, action_may_have_started=False)
+                    failure = {
+                        "failure_boundary": failure_boundary,
+                        "failure_type": type(error).__name__[:128],
+                        "failure_message": _bounded_failure_message(error),
+                    }
                     try:
                         lease, status, recovery_deadline = self._seal_and_commit(
                             lease, decision, authorized=False)
                     except Exception:
                         self._quarantined = True
                         self._stop_watchdog()
-                        return WorkerRunResult(lease.point_id, None, False, "INITIAL_GATE_FAILED")
+                        return WorkerRunResult(
+                            lease.point_id,
+                            None,
+                            False,
+                            "INITIAL_GATE_FAILED",
+                            **failure,
+                        )
                     return WorkerRunResult(
                         lease.point_id, status,
                         self._recover(lease, recovery_deadline),
                         "INITIAL_GATE_FAILED",
+                        **failure,
                     )
 
             start_wait_started = self._now()
