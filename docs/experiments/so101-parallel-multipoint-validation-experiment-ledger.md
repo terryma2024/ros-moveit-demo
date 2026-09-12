@@ -31,7 +31,7 @@ disproven_routes:
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
 latest_checkpoint: CP-020
-next_experiment: EXP-036
+next_experiment: EXP-036 is RUNNING
 ```
 
 Frozen provenance:
@@ -1763,6 +1763,58 @@ archived: none
 deletion_candidates: p49 and direct pytest scratch after readback; nothing will be deleted without user authorization
 decision: REPEAT under EXP-036 with the complete worktree overlay source; controlled plan-only fault advances to EXP-037 and remains blocked until execute acceptance
 next_experiment: EXP-036 is reserved for the corrected-environment F40 execute repeat
+```
+
+## EXP-036 — Task 14 corrected-overlay reset-boundary two-Worker execute
+
+```yaml
+experiment_id: EXP-036
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T18:37:41+08:00
+  - status: RUNNING
+    at: 2026-09-12T18:37:41+08:00
+prior_experiment: EXP-035
+hypothesis: With the complete fresh worktree overlay sourced, F40's reset-bound joint evidence and completed all-goal queries allow both Workers to satisfy the strict point-initial gate and execute the unchanged four points.
+prediction: Both plugin classes load, four unique points pass physically with qualification_passed=true and clean shutdown; otherwise any failure remains bounded, attributable, and cannot qualify the batch.
+single_variable: Only command environment sourcing changes from selected package scripts to the complete worktree install/setup.zsh. F40 source, image, selection, configuration, models, N=2, K=2, timeout, gates, and physical criteria remain frozen; batch/root identities advance because prior evidence is immutable.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f40b
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40b
+preconditions:
+  - EXP-035 exact Broker cleanup and audit2 found zero related process, container, GPU task, or domain residue.
+  - Fresh resource/inventory preflight again found 24 CPUs, 25.765 GiB MemAvailable, 14.914 GiB free GPU, and no related process/container/GPU/domain owner.
+  - Overlay readback resolves mujoco_ros2_control, mujoco_ros2_control_plugins, mujoco_ros2_control_msgs, so101_mujoco_support, so101_teleop, and so101_demo_py exclusively from this worktree before /opt/ros/jazzy.
+  - p49, installed provenance, immutable image sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a, and dual-model smoke remain unchanged and valid.
+success_criteria:
+  - Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete physical/visual/numeric evidence, and clean shutdown.
+failure_criteria:
+  - Any gate, planning, execution, evidence, isolation, or cleanup failure is attributed exactly and cannot produce qualification_passed=true.
+provenance:
+  executable_source_commit: 8b2ae006aee61ef9602d92a66c08e103f56bfe86
+  executable_source_tree: 22f51331ec58d0e811ea1a2637158a08a48f01f60bbb5de9c48a71bcc9d20d3b
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:fc7f3a6cfa6d67c37593ee83d39ac4bb8dd452a92960244950f2059ecab4872a
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight_hashes:
+  domain_sha256: 9db388e228517e4e21909ecd4f3afa9d2646206a8e1b343d298e9f287d758db9
+  inventory_sha256: b10475323b4c5e11eeefa6d787f2aa4bfb7b0a20ef80299357c72c8a36540dcb
+  overlay_sha256: 7f3f483a6a616f7b675f3e9e13a91462ebdbba1baa4a65bd800fe25fe3433a17
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point; no Gazebo client/window is part of this headless backend.
+evidence_planned:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-036.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-036.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/overlay-preflight-before-036.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-036.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f40b
+retained: all prior evidence plus the complete EXP-036 batch tree and reports
+archived: none
+deletion_candidates: p49 and direct pytest scratch after readback; nothing will be deleted without user authorization
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
