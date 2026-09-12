@@ -9,6 +9,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -58,6 +61,7 @@ from so101_demo.runtime.parallel_ros_runtime import (
     ParallelRosRuntimePorts as _ConcreteRosWorkerRuntimePorts,
 )
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+from so101_demo.runtime.task_stack import OwnedProcessIdentity
 
 
 _CATALOG_SHA256 = "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
@@ -89,6 +93,8 @@ class PreparedBatch:
     grounded_manifest_sha256: str
     provenance: Mapping[str, object]
     manifest: Mapping[str, object]
+    provenance_inputs: Mapping[str, object]
+    provenance_verifier: Callable[[Mapping[str, object]], Mapping[str, object]]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,8 +103,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id", action="append", default=[])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--batch-id", required=True)
-    parser.add_argument("--worker-count", required=True)
-    parser.add_argument("--max-points-per-worker", required=True)
+    parser.add_argument("--worker-count", default="2")
+    parser.add_argument("--max-points-per-worker", default="10")
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--broker-image", required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
@@ -182,18 +188,46 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     image = spec["broker_image"]
     if image != _BROKER_IMAGE:
         raise CliError("PROVENANCE_BROKER_IMAGE")
+    module_path = Path(__file__).resolve()
     try:
-        source_commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+        repository_root = Path(subprocess.run(
+            ["git", "-C", str(module_path.parent), "rev-parse", "--show-toplevel"],
             check=True,
             capture_output=True,
             text=True,
             timeout=5.0,
+        ).stdout.strip()).resolve()
+        source_commit = subprocess.run(
+            ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True, timeout=5.0,
         ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(repository_root), "status", "--porcelain",
+             "--untracked-files=no"],
+            check=True, capture_output=True, text=True, timeout=5.0,
+        ).stdout
     except (OSError, subprocess.SubprocessError) as error:
         raise CliError("PROVENANCE_SOURCE_COMMIT") from error
     if len(source_commit) != 40 or any(character not in "0123456789abcdef" for character in source_commit):
         raise CliError("PROVENANCE_SOURCE_COMMIT")
+    if dirty:
+        raise CliError("PROVENANCE_SOURCE_DIRTY")
+    package_root = repository_root / "src/so101_demo_py"
+    console = shutil.which("so101_parallel_batch")
+    if console is None:
+        raise CliError("PROVENANCE_CONSOLE_MISSING")
+    console_path = Path(console).resolve()
+    config_path = Path(spec["config"]).resolve()
+    points_path = Path(spec["points"]).resolve()
+    policy_path = package_root / "config/mujoco/headless_execution.yaml"
+    scene_config = package_root / "config/mujoco/task_scene.yaml"
+    scene_model = package_root / "assets/mujoco/scene.xml"
+    if any(not value.is_file() or value.is_symlink() for value in (
+        console_path, module_path, config_path, points_path,
+        policy_path, scene_config, scene_model,
+    )):
+        raise CliError("PROVENANCE_INSTALLED_INPUT_MISSING")
+    from so101_demo.cli.parallel_perception_broker import source_hash
     try:
         from so101_demo.cli.parallel_perception_broker import image_record
 
@@ -202,6 +236,16 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         raise CliError("PROVENANCE_BROKER_IMAGE_READBACK") from error
     return {
         "source_commit": source_commit,
+        "source_dirty": False,
+        "source_tree_sha256": source_hash(package_root),
+        "installed_console_path": str(console_path),
+        "installed_console_sha256": _sha256(console_path),
+        "installed_module_path": str(module_path),
+        "installed_module_sha256": _sha256(module_path),
+        "runtime_config_sha256": _sha256(config_path),
+        "dynamic_policy_sha256": _sha256(policy_path),
+        "task_scene_sha256": _sha256(scene_config),
+        "scene_model_sha256": _sha256(scene_model),
         "catalog_sha256": spec["catalog_sha256"],
         "yolo_weights_sha256": spec["yolo_weights_sha256"],
         "grounded_manifest_sha256": spec["grounded_manifest_sha256"],
@@ -254,7 +298,8 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             raise CliError(f"INSUFFICIENT_CAPACITY: {message}") from error
         raise CliError(message) from error
     inputs = {
-        "points": options.points,
+        "points": options.points.resolve(),
+        "config": config_path,
         "catalog_sha256": catalog_sha,
         "broker_image": options.broker_image,
         "yolo_weights": options.yolo_weights,
@@ -297,6 +342,8 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         options.grounded_manifest_sha256,
         dict(provenance),
         manifest,
+        dict(inputs),
+        provenance_verifier,
     )
 
 
@@ -488,6 +535,73 @@ def _lease_wire(lease):
     }
 
 
+_RPC_PAYLOAD_FIELDS = {
+    "register_worker": {"generation", "recovery_deadline_monotonic_s"},
+    "grant_lease": {"generation"},
+    "record_recovery": {
+        "generation", "succeeded", "fenced", "owned_processes_stopped",
+        "controllers_stopped", "readmitted", "recovery_deadline_monotonic_s",
+    },
+    "replace_resources": {"expected_generation"},
+    "heartbeat": set(),
+    "ack_lease": set(),
+    "ack_attempt_started": {"gate_summary"},
+    "ack_validation_started": {"gate_summary"},
+    "begin_finalizing": set(),
+    "commit_result": {"location"},
+    "commit_validation": {"location"},
+}
+
+
+def _validate_rpc_payload(payload):
+    if type(payload) is not dict or type(payload.get("operation")) is not str:
+        raise CliError("RPC_PAYLOAD_SCHEMA")
+    operation = payload["operation"]
+    fields = _RPC_PAYLOAD_FIELDS.get(operation)
+    if fields is None or set(payload) != {"operation", *fields}:
+        raise CliError("RPC_PAYLOAD_SCHEMA")
+    values = {name: payload[name] for name in fields}
+    integer_fields = {"generation", "expected_generation"}
+    if any(type(values[name]) is not int or values[name] <= 0 for name in fields & integer_fields):
+        raise CliError("RPC_PAYLOAD_TYPE")
+    if "location" in fields and (
+        not isinstance(values["location"], str) or not values["location"]
+    ):
+        raise CliError("RPC_PAYLOAD_TYPE")
+    if "gate_summary" in fields and type(values["gate_summary"]) is not dict:
+        raise CliError("RPC_PAYLOAD_TYPE")
+    if operation == "register_worker":
+        deadline = values["recovery_deadline_monotonic_s"]
+        if deadline is not None and (
+            isinstance(deadline, bool) or not isinstance(deadline, (int, float))
+        ):
+            raise CliError("RPC_PAYLOAD_TYPE")
+    if operation == "record_recovery":
+        if any(type(values[name]) is not bool for name in (
+            "succeeded", "fenced", "owned_processes_stopped",
+            "controllers_stopped", "readmitted",
+        )):
+            raise CliError("RPC_PAYLOAD_TYPE")
+        deadline = values["recovery_deadline_monotonic_s"]
+        if isinstance(deadline, bool) or not isinstance(deadline, (int, float)):
+            raise CliError("RPC_PAYLOAD_TYPE")
+    return payload
+
+
+def _validate_broker_authority_payload(payload):
+    if type(payload) is not dict or type(payload.get("operation")) is not str:
+        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
+    expected = {
+        "authenticate_broker_message": {"operation", "message"},
+        "authorize_inference": {"operation", "request", "snapshot"},
+    }.get(payload["operation"])
+    if expected is None or set(payload) != expected:
+        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
+    if any(type(payload[name]) is not dict for name in expected - {"operation"}):
+        raise CliError("BROKER_RPC_PAYLOAD_TYPE")
+    return payload
+
+
 class _CoordinatorRpcProxy:
     """Worker-side authenticated proxy with retry-safe idempotency identities."""
 
@@ -640,6 +754,123 @@ class _CoordinatorRpcProxy:
             expected_generation=expected_generation,
         )
         return _resource_from_dict(value)
+
+
+class _WorkerControlProxy:
+    """Parent-side authenticated control of one live Worker shutdown path."""
+
+    def __init__(self, socket_path, token_path, *, worker_id, generation,
+                 coordinator_epoch, deadline_s, orphan_manifest=None,
+                 identity_probe=None, signal_process=os.kill):
+        self.socket_path = Path(socket_path)
+        self.client = UnixRpcClient(self.socket_path, deadline_s=deadline_s)
+        self.token = Path(token_path).read_text(encoding="ascii")
+        self.worker_id = worker_id
+        self.generation = generation
+        self.coordinator_epoch = coordinator_epoch
+        self.deadline_s = deadline_s
+        self.orphan_manifest = (
+            None if orphan_manifest is None else Path(orphan_manifest)
+        )
+        if identity_probe is None:
+            from so101_demo.runtime.task_stack import _linux_process_identity
+            identity_probe = _linux_process_identity
+        self._identity_probe = identity_probe
+        self._signal_process = signal_process
+        self._sequence = 0
+
+    def _orphan_identities(self):
+        path = self.orphan_manifest
+        if path is None or not path.exists():
+            return ()
+        if (
+            path.is_symlink() or not path.is_file()
+            or path.stat().st_uid != os.getuid()
+            or stat.S_IMODE(path.stat().st_mode) != 0o600
+        ):
+            raise CliError("WORKER_CHILD_MANIFEST_IDENTITY")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if type(document) is not dict or set(document) != {"schema_version", "processes"}:
+            raise CliError("WORKER_CHILD_MANIFEST_SCHEMA")
+        if document["schema_version"] != 1 or type(document["processes"]) is not list:
+            raise CliError("WORKER_CHILD_MANIFEST_SCHEMA")
+        identities = []
+        for value in document["processes"]:
+            if type(value) is not dict or set(value) != {
+                "role", "pid", "pgid", "cmdline", "start_time_ticks"
+            }:
+                raise CliError("WORKER_CHILD_MANIFEST_SCHEMA")
+            identity = OwnedProcessIdentity(
+                value["role"], value["pid"], value["pgid"],
+                tuple(value["cmdline"]), value["start_time_ticks"],
+            )
+            identities.append(identity)
+        return tuple(identities)
+
+    def _recover_orphans(self):
+        identities = self._orphan_identities()
+
+        def matches(identity):
+            try:
+                return self._identity_probe(identity.pid) == (
+                    identity.pgid, identity.cmdline, identity.start_time_ticks
+                )
+            except (OSError, ProcessLookupError, RuntimeError):
+                return False
+
+        for identity in identities:
+            if not matches(identity):
+                return False
+        deadline = time.monotonic() + self.deadline_s / 2.0
+        for identity in identities:
+            try:
+                self._signal_process(identity.pid, signal.SIGINT)
+            except ProcessLookupError:
+                continue
+        while identities and time.monotonic() < deadline:
+            identities = tuple(
+                identity for identity in identities
+                if matches(identity)
+            )
+            if identities:
+                time.sleep(0.01)
+        for identity in identities:
+            if not matches(identity):
+                return False
+            self._signal_process(identity.pid, signal.SIGTERM)
+        deadline = time.monotonic() + self.deadline_s / 2.0
+        while identities and time.monotonic() < deadline:
+            identities = tuple(identity for identity in identities if matches(identity))
+            if identities:
+                time.sleep(0.01)
+        return not identities
+
+    def call(self, operation):
+        if operation not in {
+            "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
+        }:
+            raise CliError("WORKER_CONTROL_OPERATION")
+        # A cleanly exited Worker has already run its own finally path.
+        if not self.socket_path.exists():
+            identities = self._orphan_identities()
+            if not identities:
+                return True
+            return operation == "recover" and self._recover_orphans()
+        self._sequence += 1
+        message = {
+            "schema_version": 1,
+            "kind": "worker_control",
+            "coordinator_epoch": self.coordinator_epoch,
+            "worker_id": f"{self.worker_id}-control",
+            "worker_generation": self.generation,
+            "lease": None,
+            "request_id": f"control-{self.worker_id}-{self._sequence}",
+            "idempotency_key": f"control-{operation}-{self._sequence}",
+            "token": self.token,
+            "payload": {"operation": operation},
+        }
+        value = self.client.call(message)["payload"]
+        return type(value) is dict and value == {"completed": True}
 
 
 def _worker_ack(value):
@@ -823,9 +1054,12 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     if type(document) is not dict or set(document) != {
         "schema_version", "batch_id", "run_mode", "config_path", "socket_path",
         "token_path", "coordinator_epoch", "resources", "broker_socket_path",
-        "broker_generation", "catalog",
+        "broker_generation", "catalog", "control_token_path",
+        "control_socket_path", "shutdown_deadline_s", "max_frame_bytes",
     } or document["schema_version"] != 1:
         raise CliError("WORKER_SPEC_INVALID")
+    if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
+        raise CliError("WORKER_SPEC_BROKER_GENERATION")
     resources = _resource_from_dict(document["resources"])
     mode = RunMode(document["run_mode"])
     config = load_parallel_runtime_config(Path(document["config_path"]))
@@ -840,6 +1074,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     results = _ArtifactResults({resources.worker_id: resources.worker_root}, mode)
     runtime_kwargs = {}
     runtime_ports = None
+    broker_proxy = None
     if mode is not RunMode.DRY_RUN:
         runtime_ports = RosWorkerRuntimePorts(
             resources,
@@ -856,14 +1091,23 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
-    runtime = build_worker_runtime(resources, mode, **runtime_kwargs)
-    worker = ParallelWorker({
-        "coordinator": coordinator,
-        "broker": _WorkerBrokerProxy(
+        broker_proxy = _WorkerBrokerProxy(
             coordinator, document["broker_socket_path"], resources, config,
             broker_generation=document["broker_generation"],
             perception_runner=runtime_ports.run_perception_chain,
-        ) if mode is not RunMode.DRY_RUN else SimpleNamespace(
+        )
+
+        def rebind(replacement):
+            if runtime_ports.rebind_resources(replacement) is not True:
+                return False
+            broker_proxy.resources = replacement
+            return True
+
+        runtime_kwargs["rebind_resources"] = rebind
+    runtime = build_worker_runtime(resources, mode, **runtime_kwargs)
+    worker = ParallelWorker({
+        "coordinator": coordinator,
+        "broker": broker_proxy if mode is not RunMode.DRY_RUN else SimpleNamespace(
             request_model=lambda *_args, **_kwargs: (_ for _ in ()).throw(
                 CliError("DRY_RUN_BROKER_FORBIDDEN")
             ),
@@ -883,6 +1127,42 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     worker, runtime = _build_worker_from_spec(
         path, runtime_side_effects=runtime_side_effects
     )
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    resources = _resource_from_dict(document["resources"])
+    control_id = f"{resources.worker_id}-control"
+    control_path = Path(document["control_socket_path"])
+    control_authority = WorkerTokenAuthority(
+        control_path.parent.parent,
+        coordinator_epoch=document["coordinator_epoch"],
+    )
+    control_authority.load_token(
+        control_id, resources.generation, Path(document["control_token_path"])
+    )
+
+    def control_handler(message):
+        payload = message["payload"]
+        if type(payload) is not dict or set(payload) != {"operation"}:
+            raise CliError("WORKER_CONTROL_SCHEMA")
+        operation = payload["operation"]
+        if operation not in {
+            "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
+        }:
+            raise CliError("WORKER_CONTROL_OPERATION")
+        completed = runtime.shutdown_control(
+            operation,
+            deadline_monotonic_s=time.monotonic() + document["shutdown_deadline_s"],
+        )
+        return {"completed": completed}
+
+    control_server = AuthenticatedUnixServer(
+        control_path,
+        control_authority,
+        control_handler,
+        deadline_s=document["shutdown_deadline_s"],
+        max_frame_bytes=document["max_frame_bytes"],
+    )
+    control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
+    control_thread.start()
     try:
         results = worker.run()
         return int(
@@ -893,13 +1173,33 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
             )
         )
     finally:
-        runtime.shutdown_owned()
+        try:
+            runtime.shutdown_owned()
+        finally:
+            control_server.close()
+            control_thread.join(timeout=1.0)
 
 
 class ProductionBatchComposition:
     """Connect reviewed batch components; no result is synthesized by this layer."""
 
     def __init__(
+        self,
+        spec: PreparedBatch,
+        **kwargs,
+    ):
+        self.worker_servers = []
+        self._server_threads = []
+        self.broker_authority_server = None
+        self.allocator = None
+        self.journal = None
+        try:
+            self._initialize(spec, **kwargs)
+        except BaseException:
+            self._release_partial()
+            raise
+
+    def _initialize(
         self,
         spec: PreparedBatch,
         *,
@@ -910,6 +1210,7 @@ class ProductionBatchComposition:
         worker_launcher=None,
         supervisor=None,
         broker_command_builder=None,
+        provenance_revalidator=None,
     ):
         self.spec = spec
         self.allocator = WorkerResourceAllocator(
@@ -946,22 +1247,36 @@ class ProductionBatchComposition:
             coordinator_epoch=self.journal.coordinator_epoch,
         )
         self._broker_command_builder = broker_command_builder
+        self._provenance_revalidator = (
+            spec.provenance_verifier
+            if provenance_revalidator is None
+            else provenance_revalidator
+        )
         self.broker_spec_path = None
         self.broker_authority_server = None
-        self.broker_socket_path = self.authority.ipc_root / "perception.sock"
+        self.broker_runtime_root = self.authority.ipc_root / "broker"
+        self.broker_input_root = spec.request.evidence_root / "broker-inputs"
+        self.broker_authority = None
+        self.broker_socket_path = self.broker_runtime_root / "perception.sock"
         if spec.request.run_mode is not RunMode.DRY_RUN:
-            broker_token_path = self.authority.issue("broker", 1)
-            broker_authority_path = self.authority.ipc_root / "broker-authority.sock"
+            self.broker_input_root.mkdir(mode=0o700)
+            self.broker_authority = WorkerTokenAuthority(
+                spec.request.evidence_root,
+                coordinator_epoch=self.journal.coordinator_epoch,
+                ipc_root=self.broker_runtime_root,
+            )
+            broker_token_path = self.broker_authority.issue("broker", 1)
+            broker_authority_path = self.broker_runtime_root / "broker-authority.sock"
             self.broker_authority_server = AuthenticatedUnixServer(
                 broker_authority_path,
-                self.authority,
+                self.broker_authority,
                 self._coordinator_handler,
                 deadline_s=spec.config.heartbeat_timeout_s,
                 max_frame_bytes=spec.config.broker_max_frame_bytes,
             )
-            config_copy = self.authority.ipc_root / "runtime-config.yaml"
+            config_copy = self.broker_runtime_root / "runtime-config.yaml"
             _write_bytes(config_copy, spec.config_path.read_bytes())
-            self.broker_spec_path = self.authority.ipc_root / "broker-spec.json"
+            self.broker_spec_path = self.broker_runtime_root / "broker-spec.json"
             _write_json(
                 self.broker_spec_path,
                 {
@@ -970,6 +1285,10 @@ class ProductionBatchComposition:
                     "batch_id": spec.request.batch_id,
                     "coordinator_epoch": self.journal.coordinator_epoch,
                     "broker_generation": 1,
+                    "run_mode": spec.request.run_mode.value,
+                    "image_id": spec.provenance.get("image_id"),
+                    "yolo_weights_sha256": spec.yolo_weights_sha256,
+                    "grounded_manifest_sha256": spec.grounded_manifest_sha256,
                     "config_path": "/runtime/runtime-config.yaml",
                     "authority_endpoint": "/runtime/broker-authority.sock",
                     "authority_token_path": f"/runtime/{broker_token_path.name}",
@@ -978,12 +1297,14 @@ class ProductionBatchComposition:
                 },
             )
         self.worker_specs = []
-        self.worker_servers = []
-        self._server_threads = []
+        self.worker_controls = []
         self._runtime_side_effects_factory = runtime_side_effects_factory
         self._worker_launcher = worker_launcher
         for resources in self.resource_manifest.workers:
             token_path = self.authority.issue(resources.worker_id, resources.generation)
+            control_id = f"{resources.worker_id}-control"
+            control_token_path = self.authority.issue(control_id, resources.generation)
+            control_socket_path = self.authority.ipc_root / f"{control_id}.sock"
             socket_path = self.authority.ipc_root / f"{resources.worker_id}.sock"
             server = AuthenticatedUnixServer(
                 socket_path,
@@ -999,6 +1320,10 @@ class ProductionBatchComposition:
                 "config_path": str(spec.config_path),
                 "socket_path": str(socket_path),
                 "token_path": str(token_path),
+                "control_token_path": str(control_token_path),
+                "control_socket_path": str(control_socket_path),
+                "shutdown_deadline_s": spec.config.heartbeat_timeout_s,
+                "max_frame_bytes": spec.config.broker_max_frame_bytes,
                 "coordinator_epoch": self.journal.coordinator_epoch,
                 "broker_socket_path": str(self.broker_socket_path),
                 "broker_generation": 1,
@@ -1012,10 +1337,52 @@ class ProductionBatchComposition:
             _write_json(worker_path, worker_spec)
             self.worker_specs.append(worker_path)
             self.worker_servers.append(server)
+            self.worker_controls.append(_WorkerControlProxy(
+                control_socket_path,
+                control_token_path,
+                worker_id=resources.worker_id,
+                generation=resources.generation,
+                coordinator_epoch=self.journal.coordinator_epoch,
+                deadline_s=spec.config.heartbeat_timeout_s,
+                orphan_manifest=resources.worker_root / "owned-runtime-processes.json",
+            ))
+
+    def _release_partial(self):
+        for server in getattr(self, "worker_servers", ()):
+            try:
+                server.close()
+            except Exception:
+                pass
+        server = getattr(self, "broker_authority_server", None)
+        if server is not None:
+            try:
+                server.close()
+            except Exception:
+                pass
+        journal = getattr(self, "journal", None)
+        if journal is not None:
+            try:
+                journal.close()
+            except Exception:
+                pass
+        allocator = getattr(self, "allocator", None)
+        if allocator is not None:
+            try:
+                allocator.close()
+            except Exception:
+                pass
 
     def _start_broker(self):
         if self.broker_spec_path is None:
             return None
+        try:
+            current_provenance = self._provenance_revalidator(
+                self.spec.provenance_inputs
+            )
+        except Exception as error:
+            raise CliError("PROVENANCE_REVALIDATION_FAILED") from error
+        if dict(current_provenance) != dict(self.spec.provenance):
+            raise CliError("PROVENANCE_DRIFT")
         if self._broker_command_builder is not None:
             command = self._broker_command_builder(self)
         else:
@@ -1039,6 +1406,8 @@ class ProductionBatchComposition:
                 raise CliError("BROKER_IMAGE_TAG_DRIFT")
             command = container_run_argv(
                 self.spec.request.evidence_root,
+                runtime_root=self.broker_runtime_root,
+                input_root=self.broker_input_root,
                 image_id=image_id,
                 yolo_weights=self.spec.yolo_weights.resolve(),
                 grounded_root=self.spec.grounded_root.resolve(),
@@ -1052,7 +1421,7 @@ class ProductionBatchComposition:
         if self.broker_spec_path is None:
             return True
         deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
-        ready = self.authority.ipc_root / "ready.json"
+        ready = self.broker_runtime_root / "ready.json"
         while time.monotonic() < deadline:
             self.supervisor.assert_healthy()
             if (
@@ -1060,25 +1429,48 @@ class ProductionBatchComposition:
                 and not self.broker_socket_path.is_symlink()
                 and ready.is_file()
                 and not ready.is_symlink()
+                and self.broker_socket_path.stat().st_uid == os.getuid()
+                and ready.stat().st_uid == os.getuid()
+                and stat.S_IMODE(self.broker_socket_path.stat().st_mode) == 0o600
+                and stat.S_IMODE(ready.stat().st_mode) == 0o600
             ):
-                return True
+                try:
+                    document = json.loads(ready.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                    raise CliError("BROKER_READY_RECEIPT_INVALID") from error
+                return _validate_broker_ready(document, {
+                    "batch_id": self.spec.request.batch_id,
+                    "run_mode": self.spec.request.run_mode.value,
+                    "coordinator_epoch": self.journal.coordinator_epoch,
+                    "broker_generation": 1,
+                    "image_id": self.spec.provenance.get("image_id"),
+                    "yolo_weights_sha256": self.spec.yolo_weights_sha256,
+                    "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
+                })
             time.sleep(0.01)
         raise CliError("BROKER_READY_TIMEOUT")
 
-    def _cleanup_facts(self):
-        snapshot = self.coordinator.snapshot()
-        workers = tuple(snapshot.workers.values())
-        no_leases = snapshot.terminal_reason is not None and all(
-            worker.lease is None for worker in workers
-        )
-        no_worker_processes = all(
-            process.role != "worker" for process in self.supervisor.processes
-        )
-        recovered = all(
-            worker.state in {WorkerState.AVAILABLE, WorkerState.QUARANTINED}
-            for worker in workers
-        )
-        return no_leases, no_worker_processes, recovered
+    def _stop_new_leases(self):
+        self.coordinator.request_stop(reason="SUPERVISOR_SHUTDOWN")
+        return self._worker_control("stop")
+
+    def _worker_control(self, operation):
+        okay = True
+        for control in self.worker_controls:
+            try:
+                okay = control.call(operation) is True and okay
+            except Exception:
+                okay = False
+        return okay
+
+    def _cancel_worker_goals(self):
+        return self._worker_control("cancel_motion")
+
+    def _confirm_worker_goals_cancelled(self):
+        return self._worker_control("confirm_no_controller_goal")
+
+    def _request_worker_recovery(self):
+        return self._worker_control("recover")
 
     def _start_workers(self):
         for path, resources in zip(
@@ -1088,9 +1480,23 @@ class ProductionBatchComposition:
                 sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
                 "--internal-worker", str(path),
             )
-            environment = dict(os.environ)
-            environment.update(resources.environment)
-            self.supervisor.start("worker", command, environment=environment)
+            self.supervisor.start(
+                "worker", command, environment=dict(resources.environment)
+            )
+        if not callable(getattr(self.supervisor, "assert_healthy", None)):
+            return
+        deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
+        while time.monotonic() < deadline:
+            self.supervisor.assert_healthy()
+            if all(
+                control.socket_path.is_socket()
+                and not control.socket_path.is_symlink()
+                and stat.S_IMODE(control.socket_path.stat().st_mode) == 0o600
+                for control in self.worker_controls
+            ):
+                return
+            time.sleep(0.01)
+        raise CliError("WORKER_CONTROL_READY_TIMEOUT")
 
     def _active_lease(self, message):
         worker = self.coordinator.snapshot().workers.get(message["worker_id"])
@@ -1106,6 +1512,7 @@ class ProductionBatchComposition:
         worker_id = message["worker_id"]
         generation = message["worker_generation"]
         if worker_id == "broker":
+            _validate_broker_authority_payload(payload)
             if generation != 1:
                 raise CliError("BROKER_GENERATION")
             if operation == "authenticate_broker_message":
@@ -1184,6 +1591,7 @@ class ProductionBatchComposition:
                 )
                 return {"authorized": authorized}
             raise CliError("BROKER_AUTHORITY_OPERATION")
+        _validate_rpc_payload(payload)
         if operation == "register_worker":
             requested = payload.get("generation")
             ack = self.coordinator.register_worker(
@@ -1296,10 +1704,10 @@ class ProductionBatchComposition:
         finally:
             try:
                 cleanup = self.supervisor.shutdown(
-                    stop_leases=lambda: self._cleanup_facts()[0],
-                    cancel_goal=lambda: self._cleanup_facts()[1],
-                    confirm_goal_cancelled=lambda: self._cleanup_facts()[1],
-                    request_recovery=lambda: self._cleanup_facts()[2],
+                    stop_leases=self._stop_new_leases,
+                    cancel_goal=self._cancel_worker_goals,
+                    confirm_goal_cancelled=self._confirm_worker_goals_cancelled,
+                    request_recovery=self._request_worker_recovery,
                 )
                 snapshot = self.coordinator.snapshot()
                 if snapshot.terminal_reason and cleanup and not failure:
@@ -1360,6 +1768,54 @@ def _write_bytes(path: Path, payload: bytes) -> None:
         os.close(descriptor)
 
 
+def _validate_broker_ready(document, expected):
+    fields = {
+        "schema_version", "kind", "batch_id", "run_mode", "coordinator_epoch",
+        "broker_generation", "image_id", "yolo_weights_sha256",
+        "grounded_manifest_sha256", "models",
+    }
+    if type(document) is not dict or set(document) != fields:
+        raise CliError("BROKER_READY_RECEIPT_SCHEMA")
+    if document["schema_version"] != 1 or document["kind"] != "so101_parallel_broker_ready":
+        raise CliError("BROKER_READY_RECEIPT_SCHEMA")
+    for name, value in expected.items():
+        if type(document.get(name)) is not type(value) or document.get(name) != value:
+            raise CliError("BROKER_READY_RECEIPT_IDENTITY")
+    models = document["models"]
+    expected_models = {
+        "plastic-cup-yolo11n-seg-v1": {
+            "ready": True,
+            "weights_sha256": expected["yolo_weights_sha256"],
+        },
+        "grounded-sam": {
+            "ready": True,
+            "manifest_sha256": expected["grounded_manifest_sha256"],
+        },
+    }
+    if models != expected_models:
+        raise CliError("BROKER_READY_RECEIPT_MODELS")
+    return True
+
+
+def _run_with_shutdown_signals(call):
+    """Turn SIGINT/SIGTERM into the same bounded exception/finally path."""
+
+    if threading.current_thread() is not threading.main_thread():
+        return call()
+    previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+
+    def terminate(number, _frame):
+        raise CliError(f"SHUTDOWN_SIGNAL:{signal.Signals(number).name}")
+
+    try:
+        for number in previous:
+            signal.signal(number, terminate)
+        return call()
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
 def run_cli(
     argv=None,
     *,
@@ -1373,7 +1829,7 @@ def run_cli(
         if not root.exists():
             root.mkdir(parents=True, mode=0o700)
         _write_json(root / "batch_manifest.json", spec.manifest)
-        summary = composition.run()
+        summary = _run_with_shutdown_signals(composition.run)
         code, document = outcome_document(summary)
         aggregate = root / "aggregate_results.json"
         _write_json(aggregate, document)
@@ -1389,7 +1845,9 @@ def main(argv=None) -> int:
     if values[:1] == ["--internal-worker"]:
         if len(values) != 2:
             return 1
-        return _run_worker_spec(Path(values[1]))
+        return _run_with_shutdown_signals(
+            lambda: _run_worker_spec(Path(values[1]))
+        )
     return run_cli(values)
 
 

@@ -148,7 +148,10 @@ def _write_capture(path, source_stamp):
 def test_perception_terminal_maps_without_planning_or_execution(
     tmp_path, mode, disposition, expected
 ):
-    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_runtime import (
+        SourceStampedCapture,
+        build_worker_runtime,
+    )
 
     called = []
     runtime = build_worker_runtime(
@@ -646,7 +649,7 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         "execute",
         "--execute",
         "--expected-reset-epoch",
-        "reset-7",
+        "7",
     )
     assert "--execute" in argv
     assert processes.environments[-1]["ROS_DOMAIN_ID"] == "181"
@@ -1164,6 +1167,130 @@ def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Pat
     assert runtime.recover("worker-1", 1, 10.0) is False
     assert recovery_calls == []
     assert [spec.role for spec in processes.specs] == ["task-station"]
+
+
+def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_watermark(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import (
+        SourceStampedCapture,
+        build_worker_runtime,
+    )
+
+    events = []
+    resources = _resources(tmp_path, "worker-1", 0, 181)
+    runtime = build_worker_runtime(
+        resources,
+        RunMode.PLAN_ONLY,
+        process_group=_ProcessGroup(events=events),
+        ready_probe=lambda _requirements: True,
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-7", reset_epoch_value=7,
+            reset_completed_monotonic_s=10.0, simulation_time_s=20.0,
+        ),
+        reserve_workspace=lambda *_args: True,
+        initial_gate=lambda *_args: events.append(("initial-gate",)) or object(),
+        resume_physics=lambda _lease, _reset: events.append(("resume",)) or True,
+        capture_rgb=lambda path, boundary: (
+            events.append(("capture", path.name))
+            or (
+                SourceStampedCapture(
+                    _write_capture(path, boundary + 1.0).path,
+                    boundary + 1.0,
+                    21_000_000_000,
+                )
+                if path.name == "initial-rgb.png"
+                else _write_capture(path, boundary + 1.0)
+            )
+        ),
+        replace_resources=lambda *_args, **_kwargs: _replacement(resources),
+    )
+    runtime.start_physical_runtime()
+    lease = _lease()
+    reset = runtime.reset_point(lease)
+    runtime.point_initial_gate(lease, reset)
+    assert events[1:] == [
+        ("capture", "initial-rgb.png"),
+        ("initial-gate",),
+        ("resume",),
+        ("capture", "rgb.npy"),
+    ]
+
+    stale_root = tmp_path / "stale"
+    stale_resources = _resources(stale_root, "worker-1", 0, 181)
+    def stale_capture(path, boundary):
+        from so101_demo.runtime.parallel_worker_runtime import SourceStampedCapture
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"rgb")
+        return SourceStampedCapture(
+            path, boundary + 1.0, source_stamp_ns=20_000_000_000
+        )
+
+    stale = build_worker_runtime(
+        stale_resources, RunMode.PLAN_ONLY, process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(
+            reset_epoch="reset-7", reset_epoch_value=7,
+            reset_completed_monotonic_s=10.0, simulation_time_s=20.0,
+        ),
+        reserve_workspace=lambda *_args: True,
+        capture_rgb=stale_capture,
+        replace_resources=lambda *_args, **_kwargs: _replacement(stale_resources),
+    )
+    stale.start_physical_runtime()
+    with pytest.raises(RuntimeError, match="simulation watermark"):
+        stale.reset_point(lease)
+
+
+def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181), RunMode.EXECUTE,
+        process_group=_ProcessGroup(),
+    )
+    command = runtime.consumer_argv("reset-17", _lease())
+    index = command.index("--expected-reset-epoch")
+    assert command[index + 1] == "17"
+    with pytest.raises(RuntimeError, match="reset epoch"):
+        runtime.consumer_argv("not-an-epoch", _lease())
+
+
+def test_generation_replacement_rebinds_runtime_ports_before_restart(tmp_path: Path) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    original = _resources(tmp_path, "worker-1", 0, 181)
+    replacement = _replacement(original)
+    events = []
+    runtime = build_worker_runtime(
+        original, RunMode.PLAN_ONLY, process_group=_ProcessGroup(events=events),
+        recovery=lambda *_args: True,
+        replace_resources=lambda *_args, **_kwargs: replacement,
+        rebind_resources=lambda value: events.append(("rebind", value.session_id)) or True,
+        monotonic=lambda: 1.0,
+    )
+    runtime.start_physical_runtime()
+    assert runtime.recover("worker-1", 1, 10.0) is True
+    assert events[-2:] == [
+        ("rebind", replacement.session_id),
+        ("start", "task-station"),
+    ]
+
+
+def test_default_worker_process_tree_joins_outer_worker_pgid(monkeypatch, tmp_path: Path):
+    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+
+    calls = []
+    child = _Child(502)
+    monkeypatch.setattr("os.getpgrp", lambda: 401)
+    tree = WorkerOwnedProcessTree(
+        popen=lambda argv, **kwargs: calls.append((tuple(argv), kwargs)) or child,
+        identity_probe=lambda _pid: (401, ("child",), 99),
+        signal_process=lambda *_args: None,
+    )
+    tree.start(SimpleNamespace(role="task-station", argv=("child",)), environment={"PATH": "/bin"})
+    assert calls == [(("child",), {"start_new_session": False, "env": {"PATH": "/bin"}})]
+    assert tree.manifest.processes[0].pgid == 401
 
 
 def test_recover_does_not_restart_when_recovery_crosses_deadline(tmp_path: Path) -> None:

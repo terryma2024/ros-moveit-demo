@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import io
+import json
 import math
 import os
 from pathlib import Path
 import re
+import signal
 import stat
+import subprocess
 import time
 from typing import Any, Callable
 
@@ -22,6 +25,7 @@ from ..parallel_batch.contracts import AttemptStatus, RunMode, ValidationStatus
 from ..parallel_batch.resources import WorkerResources
 from .task_stack import (
     OwnedProcessGroup,
+    OwnedProcessIdentity,
     OwnedProcessManifest,
     PersistentStackConfig,
     StackProcessSpec,
@@ -51,6 +55,7 @@ def _finite_timestamp(name: str, value: object) -> float:
 class SourceStampedCapture:
     path: Path
     source_stamp_monotonic_s: float
+    source_stamp_ns: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", Path(self.path))
@@ -61,6 +66,132 @@ class SourceStampedCapture:
                 "capture source stamp", self.source_stamp_monotonic_s
             ),
         )
+        if self.source_stamp_ns is not None and (
+            type(self.source_stamp_ns) is not int or self.source_stamp_ns <= 0
+        ):
+            raise ValueError("capture ROS source stamp must be positive")
+
+
+class WorkerOwnedProcessTree:
+    """Keep nested runtime children inside the supervisor-owned Worker PGID."""
+
+    def __init__(
+        self, *, popen=subprocess.Popen, signal_process=os.kill,
+        identity_probe=None, interrupt_timeout_s=20.0, terminate_timeout_s=5.0,
+        manifest_path: Path | None = None,
+    ):
+        from .task_stack import _linux_process_identity
+
+        self._popen = popen
+        self._signal_process = signal_process
+        self._identity_probe = identity_probe or _linux_process_identity
+        self._interrupt_timeout_s = interrupt_timeout_s
+        self._terminate_timeout_s = terminate_timeout_s
+        self._children = []
+        self._manifest_path = None if manifest_path is None else Path(manifest_path)
+        self._write_manifest()
+
+    def _write_manifest(self):
+        if self._manifest_path is None:
+            return
+        document = {
+            "schema_version": 1,
+            "processes": [
+                {
+                    "role": identity.role,
+                    "pid": identity.pid,
+                    "pgid": identity.pgid,
+                    "cmdline": list(identity.cmdline),
+                    "start_time_ticks": identity.start_time_ticks,
+                }
+                for identity, _child in self._children
+            ],
+        }
+        payload = json.dumps(
+            document, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        self._manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self._manifest_path.with_name(
+            f".{self._manifest_path.name}.{os.getpid()}.tmp"
+        )
+        descriptor = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+        )
+        try:
+            os.write(descriptor, payload)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, self._manifest_path)
+        parent = os.open(
+            self._manifest_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+
+    @property
+    def manifest(self):
+        return OwnedProcessManifest(tuple(identity for identity, _child in self._children))
+
+    def start(self, spec, *, environment=None):
+        if any(identity.role == spec.role for identity, _child in self._children):
+            raise RuntimeError(f"owned process role already exists: {spec.role}")
+        child = self._popen(
+            list(spec.argv), start_new_session=False,
+            env=None if environment is None else dict(environment),
+        )
+        pgid, cmdline, started = self._identity_probe(int(child.pid))
+        if pgid != os.getpgrp() or not cmdline or not started:
+            raise RuntimeError("nested child escaped the Worker process group")
+        identity = OwnedProcessIdentity(
+            spec.role, int(child.pid), int(pgid), tuple(cmdline), int(started)
+        )
+        self._children.append((identity, child))
+        self._write_manifest()
+        return identity
+
+    def _matches(self, identity):
+        try:
+            pgid, cmdline, started = self._identity_probe(identity.pid)
+        except (OSError, ProcessLookupError):
+            return False
+        return (pgid, tuple(cmdline), started) == (
+            identity.pgid, identity.cmdline, identity.start_time_ticks
+        )
+
+    def shutdown(self):
+        failures = []
+        for identity, child in reversed(self._children):
+            if child.poll() is not None:
+                continue
+            if not self._matches(identity):
+                failures.append(f"{identity.role}: identity changed")
+                continue
+            try:
+                self._signal_process(identity.pid, signal.SIGINT)
+                child.wait(timeout=self._interrupt_timeout_s)
+            except subprocess.TimeoutExpired:
+                if not self._matches(identity):
+                    failures.append(f"{identity.role}: identity changed")
+                    continue
+                try:
+                    self._signal_process(identity.pid, signal.SIGTERM)
+                    child.wait(timeout=self._terminate_timeout_s)
+                except Exception as error:
+                    failures.append(f"{identity.role}: {error}")
+            except ProcessLookupError:
+                pass
+            except Exception as error:
+                failures.append(f"{identity.role}: {error}")
+        self._children = [
+            (identity, child) for identity, child in self._children
+            if child.poll() is None
+        ]
+        self._write_manifest()
+        if failures:
+            raise RuntimeError("; ".join(failures))
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,8 +543,10 @@ class ParallelWorkerRuntime:
         | None = None,
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
+        resume_physics: Callable[[Any, Any], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
+        rebind_resources: Callable[[WorkerResources], bool] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
@@ -422,7 +555,9 @@ class ParallelWorkerRuntime:
             raise ValueError("physical Worker runtime requires plan_only or execute")
         self.resources = resources
         self.run_mode = run_mode
-        self._processes = process_group or OwnedProcessGroup()
+        self._processes = process_group or WorkerOwnedProcessTree(
+            manifest_path=resources.worker_root / "owned-runtime-processes.json"
+        )
         self._ready_probe = ready_probe or _required("ready_probe")
         self._reset_point = reset_point or _required("reset_point")
         # Task 11 production always supplies the durable reservation owner.  The
@@ -443,8 +578,10 @@ class ParallelWorkerRuntime:
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
         )
+        self._resume_physics = resume_physics or (lambda _lease, _reset: True)
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
+        self._rebind_resources = rebind_resources or (lambda _resources: True)
         self._monotonic = monotonic
         self._physical_started = False
         self._captured: list[Path] = []
@@ -459,6 +596,7 @@ class ParallelWorkerRuntime:
         ] = {}
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
+        self._active_lease: Any | None = None
 
     @property
     def owned_process_manifest(self) -> OwnedProcessManifest:
@@ -645,6 +783,7 @@ class ParallelWorkerRuntime:
         key, _point_root = self._point_root(lease)
         if key in self._reset_boundaries:
             raise RuntimeError("point reset evidence already exists")
+        self._active_lease = lease
         receipt = self._reset_point(lease)
         boundary = getattr(receipt, "reset_completed_monotonic_s", None)
         try:
@@ -653,7 +792,15 @@ class ParallelWorkerRuntime:
             raise RuntimeError("reset receipt lacks a source-frame boundary") from error
         if self._reserve_workspace(lease, receipt) is not True:
             raise RuntimeError("point workspace was not durably reserved")
-        self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
+        initial = self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
+        simulation_time = getattr(receipt, "simulation_time_s", None)
+        if simulation_time is not None and (
+            isinstance(simulation_time, bool)
+            or not isinstance(simulation_time, (int, float))
+            or type(initial.source_stamp_ns) is not int
+            or initial.source_stamp_ns / 1_000_000_000.0 <= float(simulation_time)
+        ):
+            raise RuntimeError("initial camera frame is not newer than reset simulation watermark")
         self._reset_boundaries[key] = boundary
         return receipt
 
@@ -682,6 +829,8 @@ class ParallelWorkerRuntime:
             boundary = self._reset_boundaries[key]
         except KeyError as error:
             raise RuntimeError("point gate lacks a reset boundary") from error
+        if self._resume_physics(lease, reset_receipt) is not True:
+            raise RuntimeError("qualified point boundary did not resume simulation")
         self._capture_inference_rgb(lease, boundary)
         return gate
 
@@ -777,7 +926,7 @@ class ParallelWorkerRuntime:
                 "execute",
                 "--execute",
                 "--expected-reset-epoch",
-                str(reset_epoch),
+                str(self._reset_epoch_integer(reset_epoch)),
                 "--session-id",
                 self.resources.session_id,
                 "--evidence-root",
@@ -786,6 +935,17 @@ class ParallelWorkerRuntime:
                 "observe_only",
             )
         )
+
+    @staticmethod
+    def _reset_epoch_integer(value):
+        if (
+            not isinstance(value, str)
+            or not value.startswith("reset-")
+            or not value[6:].isascii()
+            or not value[6:].isdecimal()
+        ):
+            raise RuntimeError("execute consumer reset epoch is not canonical")
+        return int(value[6:])
 
     def execute_expert(self, lease: Any, admitted: Any):
         if self.run_mode is not RunMode.EXECUTE:
@@ -938,6 +1098,8 @@ class ParallelWorkerRuntime:
             return False
         if self._monotonic() >= deadline:
             return False
+        if self._rebind_resources(replacement) is not True:
+            return False
         self.resources = replacement
         self._used_session_ids.add(replacement.session_id)
         if self._monotonic() >= deadline:
@@ -959,6 +1121,28 @@ class ParallelWorkerRuntime:
             self._processes.shutdown()
         finally:
             self._physical_started = False
+
+    def shutdown_control(self, operation: str, *, deadline_monotonic_s: float) -> bool:
+        """Perform one exact parent-requested shutdown action inside this Worker."""
+        if operation == "stop":
+            return True
+        lease = self._active_lease
+        if operation == "cancel_motion":
+            return lease is None or self.cancel_motion(lease)
+        if operation == "confirm_no_controller_goal":
+            return lease is None or self.confirm_no_controller_goal(lease)
+        if operation == "recover":
+            if self._monotonic() >= deadline_monotonic_s:
+                return False
+            self.shutdown_owned()
+            if self._monotonic() >= deadline_monotonic_s:
+                return False
+            return self._recovery(
+                self.resources.worker_id,
+                self.resources.generation,
+                deadline_monotonic_s,
+            ) is True
+        raise RuntimeError("unknown Worker shutdown operation")
 
 
 def build_worker_runtime(
