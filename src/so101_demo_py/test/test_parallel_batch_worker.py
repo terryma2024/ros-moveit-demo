@@ -1450,6 +1450,27 @@ def test_recovery_receipt_is_read_back_before_successful_readmission():
     assert names.index("recovery_receipt") < names.index("verify_recovery_receipt")
 
 
+def test_pre_action_failure_recovery_accepts_trusted_absence_when_status_never_published():
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.raise_request = RuntimeError("TF unavailable before action")
+    fake.runtime.cancel_motion = lambda lease: False
+    fake.runtime.goal_confirmed = False
+
+    result = ParallelWorker(fake.ports()).run_one()
+
+    assert fake.results.calls[0][1] is AttemptStatus.INVALID
+    assert result.recovered is True
+    assert fake.coordinator.recovery[-1] == {
+        "succeeded": True,
+        "fenced": True,
+        "owned_processes_stopped": True,
+        "controllers_stopped": True,
+        "readmitted": True,
+        "generation": 2,
+        "recovery_deadline_monotonic_s": 130.0,
+    }
+
+
 def test_recovery_emits_bounded_existing_gate_diagnostic_before_receipt(capsys):
     fake = Fake()
     fake.runtime.goal_confirmed = False
@@ -1467,7 +1488,8 @@ def test_recovery_emits_bounded_existing_gate_diagnostic_before_receipt(capsys):
     assert result.recovered is False
     assert observed_before_receipt == [
         '{"confirmed":false,"fenced":true,"kind":"RECOVERY_GATES",'
-        '"ready":true,"recovered":true,"stopped":true,'
+        '"physical_action_proven_absent":false,"ready":true,'
+        '"recovered":true,"stopped":true,'
         '"worker_generation":1,"worker_id":"w1"}'
     ]
 

@@ -562,7 +562,13 @@ class ParallelWorker:
             self._active_lease = None
         return lease, decision.status, recovery_deadline
 
-    def _recover(self, lease, deadline) -> bool:
+    def _recover(
+        self,
+        lease,
+        deadline,
+        *,
+        physical_action_proven_absent: bool,
+    ) -> bool:
         self._stop_watchdog()
         if (isinstance(deadline, bool)
                 or not isinstance(deadline, (int, float))
@@ -591,6 +597,9 @@ class ParallelWorker:
                 deadline, "RECOVERY_DEADLINE") is True
         except Exception:
             pass
+        if physical_action_proven_absent is True:
+            stopped = True
+            confirmed = True
         try:
             recovered = self._call_before(
                 lambda: self._runtime.recover(
@@ -615,6 +624,7 @@ class ParallelWorker:
             "confirmed": confirmed,
             "recovered": recovered,
             "ready": ready,
+            "physical_action_proven_absent": physical_action_proven_absent,
         }, sort_keys=True, separators=(",", ":")), flush=True)
         try:
             self._fault("RECOVERY_RECEIPT", "before")
@@ -864,7 +874,13 @@ class ParallelWorker:
                         )
                     return WorkerRunResult(
                         lease.point_id, status,
-                        self._recover(lease, recovery_deadline),
+                        self._recover(
+                            lease,
+                            recovery_deadline,
+                            physical_action_proven_absent=(
+                                decision.physical_action_proven_absent is True
+                            ),
+                        ),
                         "INITIAL_GATE_FAILED",
                         **failure,
                     )
@@ -919,7 +935,13 @@ class ParallelWorker:
                 return WorkerRunResult(lease.point_id, None, False, "TERMINAL_ACK_FAILED")
             return WorkerRunResult(
                 lease.point_id, status,
-                self._recover(lease, recovery_deadline),
+                self._recover(
+                    lease,
+                    recovery_deadline,
+                    physical_action_proven_absent=(
+                        decision.physical_action_proven_absent is True
+                    ),
+                ),
                 "POINT_TERMINAL",
                 **({} if failure is None else failure),
             )
