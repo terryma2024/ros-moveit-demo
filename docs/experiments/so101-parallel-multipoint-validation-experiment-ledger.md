@@ -100,6 +100,7 @@ Preflight rulings adopted before Task 1:
 - Ruling F32: Task 14 may make the matching scoped TDD correction to the installed-editable-tree identity in `mujoco_parallel_batch.py` and its direct CLI test. The verifier must bind `build/so101_demo_py/so101_demo` to this repository's actual `package_dir={"so101_demo": "src"}` source root `src/so101_demo_py/src`, while retaining exact module, console, egg-link, entry-point, wrapper-byte, and tree-byte checks. Cost if wrong: a stale or foreign editable tree could be accepted; retaining the impossible nested source target makes every real live run fail before resource or process side effects.
 - Ruling F33: Domain-pool preflight and cleanup must stop controller-created ROS 2 discovery daemons for domains 181-183 and verify those domains with `--no-daemon` or the production same-UID `/proc` probe before a live run. The three daemons found by EXP-027 were created at the Task 14 preflight timestamp and are task-owned diagnostic residue, not Worker processes or external users. Cost if wrong: stopping a foreign daemon would disturb unrelated discovery; retaining our own daemons makes every resource admission fail before batch-root creation.
 - Ruling F34: Task 14 returns narrowly to the Task 11/12 Broker lifecycle seams and their direct tests. Initial model-backed Broker readiness must use the frozen 90-second Broker recovery/startup budget instead of the 5-second steady-state heartbeat-loss budget. The Docker launch must publish a private batch/generation-specific cidfile, and cleanup/recovery must verify that exact container's immutable image, labels, and batch-specific mounts before stopping it; aggregate cleanup cannot pass while that container remains. Cost if wrong: an unrelated container could be stopped, or a detached Broker/GPU process could survive while the batch falsely reports cleanup complete; retaining the current behavior guarantees cold-start timeout and already produced both defects in EXP-028.
+- Ruling F35: Task 14 returns narrowly to the Task 9 Worker failure-reporting seam and Task 11 process supervisor, with direct tests only. A Worker that catches a reset or initial-gate exception must emit a bounded, structured local result identifying the failed boundary without changing its conservative `INITIAL_GATE_FAILED` outcome. If a supervised process exits between a first `poll()==None` observation and `/proc` identity readback, the supervisor must re-poll once: a now-terminal exact child follows the existing exit/group-survivor path, while a still-running absent identity remains `OWNED_PROCESS_ABSENT`; PID mismatch remains fatal. Cost if wrong: exception text could leak unbounded data or PID reuse could be accepted; retaining current behavior makes live failures unauditable and replaces the original Worker result with a supervisor traceback, as EXP-029 demonstrated.
 
 ```yaml
 checkpoint_id: CP-002
@@ -1007,12 +1008,14 @@ next_experiment: EXP-029 is reserved for the Broker-lifecycle-corrected execute 
 
 ```yaml
 experiment_id: EXP-029
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T16:53:28+08:00
   - status: RUNNING
     at: 2026-09-12T16:53:28+08:00
+  - status: INVALID
+    at: 2026-09-12T16:59:33+08:00
 prior_experiment: EXP-028
 hypothesis: The verified 90-second startup budget and exact Docker-container cleanup identity permit the four-point execute to run without either premature cold-start timeout or detached Broker residue.
 prediction: Clean admission succeeds; exactly four unique points reach PASSED with qualification_passed=true; both Workers remain within K=2 and all identity, numeric, visual, and cleanup gates pass.
@@ -1052,12 +1055,17 @@ commands:
   - command: fresh stack inventory and production domain/resource probe to reports/process-inventory-before-029.json and reports/domain-preflight-before-029.json
     exit_code: 0
   - command: prepend verified worktree libexec, then run the frozen four-point ros2 execute with the fresh EXP-029 batch/root and reports/live-small-command-029 log/exit/time evidence
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Admission and immutable Broker startup passed. Both isolated headless MuJoCo/MoveIt stacks reached READY; worker-01 leased task_start and worker-02 leased cup_test_forward_5cm, so no point had more than one lease.
+  - Both Workers remained in INITIALIZING. The journal contains no ATTEMPT_STARTED or terminal point event and aggregate projection leaves all four points UNRUN; therefore zero point outcomes are countable.
+  - worker-01 reset task_start successfully, then its initial boundary failed and its owned launch tree shut down. The current Worker result collapses the caught exception to INITIAL_GATE_FAILED and writes no diagnostic, so the exact rejected sub-gate is not recoverable from immutable evidence. A MoveIt diagnostic reported that attached body plastic_cup was absent during canonical scene restoration, but that log alone does not prove it was the exception source.
+  - While observing the exiting Worker, ProcessSupervisor saw poll()==None and then an absent /proc identity, raised OWNED_PROCESS_ABSENT, and replaced the original child exit with a controller traceback. The final controller aggregate has terminal_reason SUPERVISOR_SHUTDOWN and batch_cleanup_complete=false.
+  - Finally cleanup emptied the exact owned-process manifests, removed the exact labeled Broker container/cid, released domains 181/182, and left no NVIDIA compute application. A post-run no-daemon probe found domains 181-183 empty. The task-created MuJoCo warning log was retained under reports instead of being discarded.
 inferred:
-  - PENDING
-conclusion: PENDING
+  - The live stack progressed past every EXP-023 through EXP-028 bootstrap defect, but the first point authorization boundary was never reached. This is an infrastructure/observability failure before trustworthy behavior counting, not a physical point failure.
+  - The supervisor failure is a deterministic exit-observation race: an absent identity after a nonterminal poll must be re-polled before classifying it as disappearance, without weakening PID-reuse fencing.
+conclusion: INVALID; zero countable attempts. Repair the Worker boundary diagnostic and supervisor exit race under F35, then repeat the unchanged four-point execute from a fresh clean commit, batch ID, and evidence root before any fault or 20-point run.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p35
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/installed-provenance-f34.json
@@ -1065,8 +1073,23 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-f34-smoke
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-inventory-before-029.json
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/domain-preflight-before-029.json
-decision: PENDING
-next_experiment: EXP-030 controlled plan-only fault only after this execute run is accepted
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/live-small-command-029.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f34/coordinator/events/segment-00000000000000000001.journal
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f34/coordinator/aggregate_results.json
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-029-cleanup-audit.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP029.txt
+hashes:
+  live_command_log_sha256: d9cb351be4f5e61dec7cb8d2248276575e0d6f126d8fa4b2172e3a6c3b025354
+  journal_sha256: d6d1c7f8cd6c18ec2436ab8aaf77b844372a7600894ad2c8d35742eb704766d9
+  coordinator_aggregate_sha256: 05a5b26b78c26e6f380b6e827945b145b21356fab7ad7908c24f9b4f65bd4fe8
+  final_owned_manifest_sha256: 84ddaa068e4bc361545ff1eae55756858d69626df2cf899f2404922e9f0c3d1c
+  cleanup_audit_sha256: 8b6304d397d38186795b4fe1fedecf7d9b7bb5aaf9cade6a70271513ac85e9f8
+  mujoco_warning_log_sha256: 03a7c77559e983df564943604fe6a2035756e1accbf34193ecfb401b7f969fc6
+retained: complete live-small-f34 tree, command/preflight/cleanup reports, journal/projections, ROS logs, container cidfile, and relocated MuJoCo warning log
+archived: none
+deletion_candidates: scratch p32/p33/p34/p35 and prior direct-pytest scratch remain candidates; nothing was deleted
+decision: REPEAT after F35 RED/GREEN, ordinary package gate, installed provenance, image rebuild, and dual-model smoke
+next_experiment: EXP-030 is reserved for the fresh F35-corrected execute repeat; controlled plan-only fault remains blocked until execute acceptance
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
