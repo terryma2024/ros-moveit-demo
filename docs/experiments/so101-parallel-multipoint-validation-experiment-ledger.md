@@ -4193,6 +4193,65 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F63 DIAGNOSTIC WITH TDD; do not run fault injection or full validation until a fresh small gate qualifies.
 ```
 
+```yaml
+checkpoint_id: CP-058
+last_valid_experiment: EXP-022
+current_hypothesis: F63 will preserve the four-point physical success while emitting the exact cleanup component responsible for a failure, or will qualify if every strict component succeeds.
+working_tree_status: clean executable source at 09d334fa97d5220c6061779f251d368ec875afaf; ledger-only EXP-064 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - Formal RED pytest-SN6MM2Hr failed because cleanup-gates.json did not exist. Focused GREEN pytest-GTGLf7nA passed 14 tests; the combined CLI/process suite pytest-n1q9mBJ5 passed 78 tests.
+  - pytest-sEKIJgej is retained as an invalid partial-overlay harness (1042 pass, one /opt/ros FreeJointState import failure). Corrected full-overlay pytest-4xgrQIXH passed all 1043 adjacent parallel tests in 41.54 seconds.
+  - F63 records named action results, supervisor process cleanup, exact Broker container cleanup, coordinator completion, exception types/messages, and the final cleanup bit in private cleanup-gates.json. Every false or exception remains fail-closed.
+  - Commit 09d334fa97d5220c6061779f251d368ec875afaf; p93 build passed in 1.49 seconds. p94 is an invalid bare dependency harness; corrected p95 passed 2792 ordinary package tests with zero errors, failures, or skips in 82.08 seconds.
+  - Source/install module hashes both equal 7bae5d97bdc0357849db4d107549ac3cc390cc62f0e5a41a744dd5b2aa8ad422; complete source hash is a4910c8116c003f5da5c8221432f29d41c1ca215086682a0c9fa4bde9623aca9.
+  - F63 image sha256:c9ad87b0d8094c771c578b95e4d6e5aaf875844368affb6a0e3750542ec5f544 binds the exact source. The first smoke is invalid only because wrapper umask left cidfile 0664; fresh smoke-r2 has private evidence and QUALIFIED CUDA results for YOLO (32.66 ms inference) and Grounded-SAM (150.20 ms inference), with no residual container or GPU process.
+  - Fresh EXP-064 preflight found 24 CPUs, 24.664 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and no extant domain claim.
+ruling: Repeat the unchanged four-point execute gate with F63 diagnostics. Do not proceed to controlled faults or the 20-point batch unless physical, recovery, visual, cleanup, and residual gates all pass.
+retained: F63 RED/GREEN/invalid-harness/adjacent/build/package/provenance/image/smoke/preflight evidence, EXP-063 complete evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-SN6MM2Hr, pytest-yDSZPEOy, pytest-GTGLf7nA, pytest-n1q9mBJ5, pytest-sEKIJgej, pytest-4xgrQIXH, p93, p94, and p95 scratch trees after readback; no deletion authorized
+decision: RUN EXP-064
+```
+
+## EXP-064 — Task 14 cleanup-component receipt F63 two-Worker execute
+
+```yaml
+experiment_id: EXP-064
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T01:48:43+08:00
+  - status: RUNNING
+    at: 2026-09-13T01:48:43+08:00
+prior_experiment: EXP-063
+hypothesis: Private per-component cleanup evidence will either prove every strict cleanup sub-gate and permit qualification or identify the exact remaining failure without ambiguity.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: Addition of fail-closed cleanup diagnostics; all scheduling, perception, pose, motion, recovery, timeout, source/config/model/catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f63
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f63
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: 09d334fa97d5220c6061779f251d368ec875afaf
+  executable_source_tree: a4910c8116c003f5da5c8221432f29d41c1ca215086682a0c9fa4bde9623aca9
+  installed_module_tree: 7bae5d97bdc0357849db4d107549ac3cc390cc62f0e5a41a744dd5b2aa8ad422
+  image_id: sha256:c9ad87b0d8094c771c578b95e4d6e5aaf875844368affb6a0e3750542ec5f544
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp064.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f63 and root live-small-f63.
+acceptance: The complete frozen Task 14 live-small gate plus the F63 cleanup receipt; any diagnostic, physical, recovery, visual, or residual failure remains INVALID.
+result: PENDING
+retained: all prior evidence; runtime evidence pending
+archived: none
+deletion_candidates: none from this experiment yet
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
