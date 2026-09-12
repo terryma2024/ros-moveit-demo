@@ -6002,10 +6002,12 @@ decision: IMPLEMENT FIRST-INFRASTRUCTURE-ERROR DIAGNOSTIC WITH TDD, REBUILD, AND
 
 ```yaml
 experiment_id: EXP-090
-status: PLANNED
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T06:21:45+08:00
+  - status: VALID
+    at: 2026-09-13T06:31:31+08:00
 prior_experiment: EXP-089
 hypothesis: A first-writer-wins durable diagnostic at the runtime/service health boundary will preserve the initiating exception or Broker response that EXP-089 currently collapses to BROKER_NOT_READY, without changing any inference outcome, scheduling, or safety decision.
 single_variable: Add diagnostic emission and a mode-0600 canonical first-failure receipt; leave all runtime classification, Broker readiness, transport, model, deadline, and physical-action behavior unchanged.
@@ -6013,6 +6015,56 @@ method: Add RED tests for exact runtime exception capture and first-writer prese
 success_criteria: RED tests fail for the missing receipt; GREEN tests prove exact reason/type/identity, canonical JSON, mode 0600, and first-writer preservation; ordinary package tests and static gates pass; image provenance and smoke pass; a fresh full run either qualifies 20/20 or durably exposes the initiating infrastructure error.
 failure_rule: Any changed inference decision, overwritten first failure, missing/unsafe receipt, test or gate failure, provenance drift, cleanup failure, or unexplained full-run failure makes this experiment INVALID.
 retention_rule: Retain all evidence and registered scratch as deletion candidates; delete nothing without explicit user authorization.
+result: The valid RED failed only because the first-failure receipt was absent. The focused module gate then passed 81 tests, including exact runtime exception capture, canonical mode-0600 receipt readback, first-writer preservation, and Broker queue-timeout capture. The phase-separated short-root ordinary package gate built successfully and passed 2801 tests with zero errors, failures, or skips in 84.31 seconds; benchmark_test was not collected. Git/submodule cleanliness, compileall, installed path, catalog/config/model hashes, and source provenance passed. The rebuilt immutable image sha256:7d1067110ff8f8a244dbf976c0297d73ba53fdeebbd5e444d03bf00ffbc757d2 carries source hash 58a02ab45ec0df072e7a7e23f28dfaeec3e25034a7fb9e792dc75fc1d0f6fd68, and both YOLO and Grounded-SAM returned one QUALIFIED candidate in the offline CUDA smoke with clean container/GPU teardown.
+implementation_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
+static_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/f90-static-gates.json
+package_gate_scratch: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p113
+package_test_result: 2801 tests, 0 errors, 0 failures, 0 skipped
+image_id: sha256:7d1067110ff8f8a244dbf976c0297d73ba53fdeebbd5e444d03bf00ffbc757d2
+source_tree_sha256: 58a02ab45ec0df072e7a7e23f28dfaeec3e25034a7fb9e792dc75fc1d0f6fd68
+smoke_batch: task14-f90-smoke; YOLO QUALIFIED in 34.761185 ms; Grounded-SAM QUALIFIED in 193.084648 ms
+retained: all RED/GREEN/package/static/image/smoke evidence, invalid harness evidence, and prior evidence
+archived: none
+deletion_candidates: every registered EXP-090 pytest/build/compile scratch plus prior candidates; no deletion authorized
+decision: RUN A NEW FOUR-POINT TWO-WORKER EXECUTE GATE BEFORE REPEATING THE FULL CATALOG
+```
+
+## EXP-091 — F90 normal four-point small regression gate
+
+```yaml
+experiment_id: EXP-091
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T06:32:37+08:00
+prior_experiment: EXP-090
+hypothesis: The diagnostic-only F90 image preserves the accepted two-Worker four-point physical behavior while making any first health-losing perception failure durable.
+single_variable: Add F90 first-failure diagnostics to the F74 source and Broker image; selection, N=2, K=2, config, catalog, models, MuJoCo/MoveIt runtime, deadlines, safety decisions, and execute behavior remain fixed from EXP-084.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f90
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f90
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+preflight: No related process, task container, or GPU compute application; 24 CPUs, 24.771 GiB MemAvailable, 15272 MiB GPU free; batch root absent.
+provenance:
+  executable_source_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
+  preregistration_base_commit: a2397d97d6c367be9b4dd60b049d8ee9ec91df5c
+  executable_source_tree: 58a02ab45ec0df072e7a7e23f28dfaeec3e25034a7fb9e792dc75fc1d0f6fd68
+  installed_module_tree: de4b36f48b4b4446c0efa315dd52dd941334088f770897a1636e039e499231ff
+  mujoco_ros2_control_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  installed_ros2_control_node_sha256: 96bdf673ae8dfc05e76191cb5f5ad0184f60e637631a1c06a178f525846a2358
+  broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+  broker_image_id: sha256:7d1067110ff8f8a244dbf976c0297d73ba53fdeebbd5e444d03bf00ffbc757d2
+  runtime_config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+success_criteria: Exit 0; all four distinct points PASSED; exactly K=2 leases and generation 3 per Worker; four successful recoveries; all eight original RGB images accepted; numeric, dynamic, exact-TF, model, provenance, manifest hash, coordinator completion, qualification, and cleanup gates pass; no first-failure receipt and no residual owned state.
+failure_rule: Any nonzero exit, non-PASSED point, unexpected first-failure receipt, K/generation violation, evidence/hash/visual/recovery/cleanup failure, qualification false, or residual state blocks a new full-catalog run.
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
