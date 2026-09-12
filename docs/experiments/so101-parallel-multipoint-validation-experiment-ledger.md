@@ -3990,12 +3990,14 @@ decision: RUN EXP-061
 
 ```yaml
 experiment_id: EXP-061
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T00:51:10+08:00
   - status: RUNNING
     at: 2026-09-13T00:51:10+08:00
+  - status: INVALID
+    at: 2026-09-13T01:06:58+08:00
 prior_experiment: EXP-060
 hypothesis: The exact cidfile and reaped-Worker cleanup fixes preserve the 4/4 physical outcome while allowing automatic Broker retirement and batch cleanup completion.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every recovery receipt succeeds, exact Broker auto-removes, and no owned task remains.
@@ -4019,6 +4021,69 @@ visual_method: Original-resolution immutable MuJoCo offscreen RGB for every auth
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f60 and root live-small-f60.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, or cleanup failure remains INVALID.
+result: INVALID — exit 1 after 284.28 seconds. All four point statuses are PASSED and all eight immutable 640x480 RGB images pass original-resolution inspection: every cup starts upright outside the target and ends upright inside it with the gripper detached and arm retreated. Three recovery receipts succeeded. The final worker-02 recovery after sample_14_far_right failed because ros2_control_node aborted with exit -6 while sending a controller-manager service response; gripper_controller consequently did not become active and the recovery receipt is false. Broker retirement separately hit an idempotency race: exact ownership inspection succeeded, Docker auto-removed the container before docker stop completed, and F60 treated the nonzero stop result as cleanup failure despite verified absence. Therefore batch_cleanup_complete=false and qualification_passed=false.
+cleanup_readback: The cidfile is exact owner mode 0600. No related process, running container, GPU compute application, or ROS domain 181-183 claim remains. The Broker was already auto-removed; no manual destructive action was needed.
+visual_readback: All eight authorized 640x480 RGB images were inspected at original resolution. Initial cups were upright outside target with reset arms; terminal cups were upright inside target with detached grippers and retreated arms. Visual outcome PASS.
+retained: complete live-small-f60 tree, command-061 log/time/exit, visual report, root-cause report, cleanup audit, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-054
+last_valid_experiment: EXP-022
+current_hypothesis: F61's idempotent exact Broker retirement will preserve verified ownership while accepting the already-absent post-inspect Docker state; the unrelated final Worker recovery abort in EXP-061 was transient and should not recur under the unchanged recovery implementation.
+working_tree_status: clean executable source at bcf538fbb57a056f4edc01da5f09193afc9e3ebb; ledger-only EXP-062 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-061 again physically passed all four frozen points, including complete original-resolution visual evidence, but is INVALID because only three of four recovery receipts succeeded and batch cleanup remained false.
+  - The failed final recovery is directly explained by a controller-manager rclcpp response-publication abort; it did not alter any already-sealed PASSED point and left no runtime residue.
+  - F61 changes only exact Broker retirement: a nonzero docker stop is accepted only when the mandatory after-inspect proves the exact container absent; it remains a failure when the container is still present.
+  - Formal RED pytest-UHF9IPBT reproduced the inspect/stop disappearance race. Focused GREEN passed four tests and the adjacent parallel suite passed 993 tests.
+  - Source commit bcf538fbb57a056f4edc01da5f09193afc9e3ebb; p89 symlink build passed in 1.50 seconds. Corrected p90 passed 2791 ordinary package tests with zero errors, failures, or skips in 83.41 seconds using registered scratch.
+  - Installed/source module tree hash is 61008539abdc8c5f870a7f31177dc1eead7f0f4c7831e85f567c5459ce2eee7d; complete source hash is 4f2195b04fcb749c0311c7af97a0d88e0a747af3ff540362b81c1354e90c4a7b.
+  - F61 image sha256:755538c1270ebbe5d9ce8b561e2d536079cd49bc5eb6cbe2f67687d2fd5a5d7e binds the exact source hash. Build exited 0 in 13.00 seconds; smoke returned QUALIFIED CUDA for YOLO in 31.15 ms and Grounded-SAM in 172.89 ms, with no residual container or GPU process.
+  - Fresh EXP-062 preflight found 24 CPUs, 24.827 GiB MemAvailable, 15269 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged four-point execute gate with only idempotent exact Broker retirement changed. Do not change the recovery implementation unless the same controller-manager fault reproduces.
+retained: EXP-061 evidence, F61 RED/GREEN/adjacent/build/package/provenance/image/smoke/preflight evidence, and all prior evidence
+archived: none
+deletion_candidates: pytest-UHF9IPBT, focused/adjacent F61 test scratches, p89, and p90 scratch trees after readback; no deletion authorized
+decision: RUN EXP-062
+```
+
+## EXP-062 — Task 14 idempotent Broker retirement F61 two-Worker execute
+
+```yaml
+experiment_id: EXP-062
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T01:06:58+08:00
+  - status: RUNNING
+    at: 2026-09-13T01:06:58+08:00
+prior_experiment: EXP-061
+hypothesis: Treating a verified already-absent Broker as successfully retired preserves exact ownership fencing while allowing the unchanged four-point physical and recovery path to qualify.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, all four recovery receipts succeed, exact Broker auto-removes, and no owned task remains.
+single_variable: Exact Broker retirement accepts docker stop failure only when mandatory after-inspect proves the exact container absent. Every Worker recovery, execution, source/config/model/point/timeout/freshness/physical criterion remains frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f61
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f61
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recovery/dynamic receipts complete and successful, batch_cleanup_complete=true, complete evidence, and no residual task.
+provenance:
+  executable_source_commit: bcf538fbb57a056f4edc01da5f09193afc9e3ebb
+  executable_source_tree: 4f2195b04fcb749c0311c7af97a0d88e0a747af3ff540362b81c1354e90c4a7b
+  installed_module_tree: 61008539abdc8c5f870a7f31177dc1eead7f0f4c7831e85f567c5459ce2eee7d
+  image_id: sha256:755538c1270ebbe5d9ce8b561e2d536079cd49bc5eb6cbe2f67687d2fd5a5d7e
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp062.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f61 and root live-small-f61.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, or cleanup failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
 archived: none
