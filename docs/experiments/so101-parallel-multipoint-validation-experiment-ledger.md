@@ -4727,12 +4727,14 @@ decision: PREREGISTER CONTROLLED PLAN-ONLY FAULT GATES BEFORE FULL-20 ADMISSION
 
 ```yaml
 experiment_id: EXP-070
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T03:22:47+08:00
   - status: RUNNING
     at: 2026-09-13T03:22:47+08:00
+  - status: INVALID
+    at: 2026-09-13T03:26:09+08:00
 prior_experiment: EXP-069
 hypothesis: Exact manifest-owned termination of one plan-only Worker followed by the current Broker will fence the old Worker/request authority, pause grants during Broker recovery without spending K, restart Broker generation g+1, allow the other Worker to continue, and leave no duplicate lease or owned process.
 mode: plan_only; no trajectory execution or physical action
@@ -4757,6 +4759,56 @@ provenance:
   yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 preflight_resources: 24 CPUs, 24.414 GiB MemAvailable, 15272 MiB GPU free, zero GPU applications/target containers, domains 181/182/183 unlocked
+result: >-
+  INVALID harness — no signal was injected. The readiness loop incorrectly watched execute-mode
+  attempts/ paths while plan_only correctly created validations/ paths. Worker and Broker injector
+  sentinels recorded 124 and 125 without invoking the script. The batch completed naturally in
+  106.51 seconds; physical points remained UNRUN, all four validation outcomes were conservatively
+  invalid, all cleanup components succeeded, and no related process, container, or GPU task remained.
+retained: complete live-fault-f68 tree, command and injector sentinel reports, root-cause report, MuJoCo log, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-070
+last_valid_experiment: EXP-069
+current_hypothesis: Correctly observing the plan-only validations working path will provide a deterministic pre-seal injection window without changing the exact ownership or signal boundary.
+working_tree_status: clean executable source at 7847bf280cf018a8515db8d1d1a67114976d21c0; EXP-070 closure and corrected EXP-071 registration are pending as ledger-only changes
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-070 sent no signal and therefore says nothing about fault recovery; it is solely a harness-path failure.
+  - Plan-only uses workers/<worker>/validations/<point>/<validation>/working, matching the frozen validation/physical artifact separation.
+  - The no-signal batch still preserved physical UNRUN status and complete owned cleanup.
+ruling: Repeat with the identical plan-only batch parameters under a fresh batch/root, changing only the readiness path from attempts to validations. Inject only after exact manifest and worker-01 validation working directory both exist.
+retained: EXP-070 and all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: RUN EXP-071 CORRECTED CONTROLLED PLAN-ONLY FAULT GATE
+```
+
+## EXP-071 — Corrected controlled plan-only Worker and Broker termination
+
+```yaml
+experiment_id: EXP-071
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:26:09+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:26:09+08:00
+prior_experiment: EXP-070
+hypothesis: The corrected validation-workspace readiness check will permit exact manifest-owned Worker and Broker TERM injection and demonstrate the frozen fault properties.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v1-f68-r2
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f68-r2
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+single_harness_change: readiness watches worker-01/validations/*/*/working instead of attempts/*/*/working
+success_criteria: Both exact injectors exit 0; physical points remain UNRUN; Broker generation advances; the non-target Worker continues; no duplicate valid lease or K debit during Broker pause; old authorities remain fenced; cleanup and residual audit pass.
+provenance: identical to EXP-070 except docs-only runtime HEAD, batch ID, evidence root, and harness path
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
