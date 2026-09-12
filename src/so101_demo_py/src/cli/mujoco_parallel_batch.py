@@ -275,7 +275,7 @@ def _validate_provenance_overlay(
     repository_root = Path(repository_root).resolve()
     package_root = repository_root / "src/so101_demo_py"
     expected_module = (
-        package_root / "src/so101_demo/cli/mujoco_parallel_batch.py"
+        package_root / "src/cli/mujoco_parallel_batch.py"
     ).resolve()
     expected_console_root = (
         repository_root / "install/so101_demo_py/lib/so101_demo_py"
