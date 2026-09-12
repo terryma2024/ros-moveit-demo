@@ -45,7 +45,7 @@ def test_production_initial_gate_replays_each_authoritative_action_status(monkey
 
     class ServiceClient:
         def wait_for_service(self, *, timeout_sec):
-            return timeout_sec == 0.25
+            return timeout_sec > 0.0
 
         def call_async(self, _request):
             return Future()
@@ -112,6 +112,16 @@ def test_production_initial_gate_replays_each_authoritative_action_status(monkey
     )
 
     assert captured_qos == [qos_profile_action_status_default] * 3
+
+    MujocoClient.joint_callback_count = 0
+    with pytest.raises(
+        RuntimeError,
+        match=r"^POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:joint_state$",
+    ):
+        runtime_module.observe_parallel_initial_gate(
+            runtime_module.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0),
+            timeout_s=0.05,
+        )
 
 
 def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_and_nodes():
