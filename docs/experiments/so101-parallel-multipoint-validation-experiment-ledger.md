@@ -4844,6 +4844,36 @@ deletion_candidates: registered pytest/build scratch trees only; no deletion aut
 decision: IMPLEMENT F69 CONTAINER INIT SIGNAL FORWARDING
 ```
 
+## EXP-072 — F69 two-Worker four-point execute regression gate
+
+```yaml
+experiment_id: EXP-072
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:42:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T03:42:00+08:00
+prior_experiment: EXP-071
+hypothesis: The F69 Docker init boundary preserves the already-qualified four-point physical schedule, exact cleanup, visual outcomes, YOLO-first policy, and all Worker invariants before fault-gate repetition.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f69
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f69
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+success_criteria: Four distinct points PASSED in one batch; K=2 per Worker; all recoveries, original RGB inspections, terminal geometry, detach/retreat, cleanup, coordinator completion, qualification, exact container/GPU/process/domain residual checks pass; YOLO first and Grounded-SAM only as fallback.
+provenance:
+  executable_source_commit: 8462ea3ed5ac1efa8500604045659b9125fc2ee3
+  executable_source_tree: ab94fcf022d60257514656dfde2a34a35fd4f0fe894d61f9490ee891cb1d7943
+  installed_module_tree: f58ede82803183ca7ab5f56c187bdb83073aafe78b2a15cb671805f09144fb81
+  image_id: sha256:c4f5d7bd655476800b035d6740d07f0e8bfa3a03528e7d68a622a22c45c12730
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
