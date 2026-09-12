@@ -8,7 +8,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 from so101_demo.core.simulation.types import (
     ContactEvidence,
     ObjectState,
@@ -24,6 +29,14 @@ class EvidenceRejected(RuntimeError):
 
 class EvidenceStale(RuntimeError):
     """Raised when no sufficiently recent accepted atomic message exists."""
+
+
+ATOMIC_EVIDENCE_QOS = QoSProfile(
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 
 def vector3(value: Any) -> tuple[float, float, float]:
@@ -114,7 +127,7 @@ class MujocoWorldObserver:
         self._rejected_count = 0
         self._last_rejection = ""
         self._subscription = node.create_subscription(
-            RosSimulationEvidence, topic, self._callback, qos_profile_sensor_data
+            RosSimulationEvidence, topic, self._callback, ATOMIC_EVIDENCE_QOS
         )
 
     def _callback(self, message: RosSimulationEvidence) -> None:
