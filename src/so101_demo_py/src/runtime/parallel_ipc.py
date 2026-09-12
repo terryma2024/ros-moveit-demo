@@ -173,10 +173,17 @@ def _identifier(name: str, value: object) -> str:
 class WorkerTokenAuthority:
     """Coordinator-owned Worker tokens, active leases, and replay responses."""
 
-    def __init__(self, evidence_root: Path, *, coordinator_epoch: int):
+    def __init__(
+        self, evidence_root: Path, *, coordinator_epoch: int,
+        ipc_root: Path | None = None,
+    ):
         self.root = Path(evidence_root)
         self.coordinator_epoch = _positive_int("EPOCH", coordinator_epoch)
-        self.ipc_root = self.root / "ipc"
+        self.ipc_root = self.root / "ipc" if ipc_root is None else Path(ipc_root)
+        try:
+            self.ipc_root.relative_to(self.root / "ipc")
+        except ValueError as error:
+            raise IpcError("IPC_ROOT_OUTSIDE_EVIDENCE") from error
         if self.ipc_root.exists():
             info = self.ipc_root.lstat()
             if not stat.S_ISDIR(info.st_mode) or self.ipc_root.is_symlink():
@@ -219,6 +226,32 @@ class WorkerTokenAuthority:
                 raise IpcError("TOKEN_MODE")
             self._tokens[key] = token
             return path
+
+    def load_token(self, worker_id: str, generation: int, path: Path) -> None:
+        """Load an existing private token without creating or replacing its inode."""
+
+        worker_id = _identifier("WORKER_ID", worker_id)
+        generation = _positive_int("GENERATION", generation)
+        path = Path(path)
+        if (
+            path.parent != self.ipc_root
+            or path.is_symlink()
+            or not path.is_file()
+            or stat.S_IMODE(path.stat().st_mode) != 0o600
+            or path.stat().st_uid != os.getuid()
+        ):
+            raise IpcError("TOKEN_PATH")
+        try:
+            token = bytes.fromhex(path.read_text(encoding="ascii"))
+        except (OSError, UnicodeError, ValueError) as error:
+            raise IpcError("TOKEN_TYPE") from error
+        if len(token) != 32:
+            raise IpcError("TOKEN_SIZE")
+        key = (worker_id, generation)
+        with self._lock:
+            if key in self._tokens:
+                raise IpcError("TOKEN_ALREADY_ISSUED")
+            self._tokens[key] = token
 
     def bind_lease(self, worker_id: str, generation: int, lease: Mapping[str, object]) -> None:
         key = (_identifier("WORKER_ID", worker_id), _positive_int("GENERATION", generation))
@@ -302,8 +335,9 @@ class WorkerTokenAuthority:
             operation = message["payload"].get("operation")
             lease_optional = operation in {
                 "register_worker", "grant_lease", "record_recovery",
-                "broker_cancel_generation", "replace_resources",
+                "cancel_generation", "replace_resources",
                 "authenticate_broker_message", "authorize_inference",
+                "stop", "cancel_motion", "confirm_no_controller_goal", "recover",
             }
             if message["lease"] is None:
                 if not lease_optional:

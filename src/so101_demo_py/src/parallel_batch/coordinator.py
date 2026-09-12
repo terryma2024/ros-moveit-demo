@@ -687,6 +687,28 @@ class BatchCoordinator:
         self._emit('BROKER_HEALTH_CHANGED', {'broker_healthy': healthy})
 
     @_locked
+    def request_stop(self, *, reason):
+        """Fence every new lease/action while preserving active lease identity for recovery."""
+        if not isinstance(reason, str) or not reason:
+            raise ValueError('STOP_REASON_REQUIRED')
+        if self._state['terminal_reason'] is not None:
+            return self.snapshot()
+        workers = deepcopy(self._state['workers'])
+        for worker in workers.values():
+            worker.update(
+                stop_requested=True,
+                action_allowed=False,
+                reset_allowed=False,
+                inference_allowed=False,
+            )
+        self._emit('BATCH_STOPPING', {
+            'workers': workers,
+            'terminal_reason': reason,
+            'broker_healthy': False,
+        })
+        return self.snapshot()
+
+    @_locked
     def complete_cleanup(self, *, owned_processes_stopped, controllers_stopped):
         """Finalize unstarted selections only after owned processes/controllers stop."""
         if any(type(value) is not bool for value in (

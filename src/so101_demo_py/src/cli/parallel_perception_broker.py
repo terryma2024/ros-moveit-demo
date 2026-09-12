@@ -40,30 +40,36 @@ def broker_argv():
 
 
 def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
-                       gpu_groups, uid, gid):
+                       gpu_groups, uid, gid, runtime_root=None,
+                       input_root=None, path_checker=checked_path):
     if type(uid) is not int or uid <= 0 or uid != os.getuid() or gid != os.getgid():
         raise ValueError('HOST_NONROOT_IDENTITY_REQUIRED')
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
         raise ValueError('IMMUTABLE_IMAGE_ID_REQUIRED')
     if not gpu_groups or any(type(group) is not int or group < 0 for group in gpu_groups):
         raise ValueError('GPU_GROUPS_REQUIRED')
-    root = checked_path(batch_root, owner=(uid, gid), directory=True)
-    workers = checked_path(root / 'workers', owner=(uid, gid), directory=True)
-    ipc = root / 'ipc'
-    if not ipc.exists() and not ipc.is_symlink():
+    root = path_checker(batch_root, owner=(uid, gid), directory=True)
+    inputs = path_checker(
+        root / 'workers' if input_root is None else Path(input_root),
+        owner=(uid, gid), directory=True,
+    )
+    ipc = root / 'ipc' if runtime_root is None else Path(runtime_root)
+    if runtime_root is None and not ipc.exists() and not ipc.is_symlink():
         ipc.mkdir(mode=0o700)
-    checked_path(ipc, owner=(uid, gid), mode=0o700, directory=True)
+    path_checker(ipc, owner=(uid, gid), mode=0o700, directory=True)
+    if ipc.parent != root / 'ipc' and ipc != root / 'ipc':
+        raise ValueError('RUNTIME_ROOT_OUTSIDE_BATCH_IPC')
     for name in ('ready.json', 'perception.sock'):
         if (ipc / name).exists() or (ipc / name).is_symlink():
             raise ValueError('EXISTING_RUNTIME_ENDPOINT')
-    yolo_weights = checked_path(yolo_weights)
-    grounded_root = checked_path(grounded_root, directory=True)
+    yolo_weights = path_checker(yolo_weights)
+    grounded_root = path_checker(grounded_root, directory=True)
     argv = ['docker', 'run', '--rm', '--gpus', 'all', '--network', 'none', '--ipc', 'private',
             '--read-only', '--security-opt', 'no-new-privileges', '--user', f'{uid}:{gid}',
             '--tmpfs', f'/tmp:rw,nosuid,nodev,mode=0700,uid={uid},gid={gid}']
     for group in sorted(set(gpu_groups)):
         argv.extend(['--group-add', str(group)])
-    for mount in (f'{ipc}:/runtime:rw', f'{workers}:/inputs:ro',
+    for mount in (f'{ipc}:/runtime:rw', f'{inputs}:/inputs:ro',
                   f'{yolo_weights}:/models/yolo/best.pt:ro', f'{grounded_root}:/models/grounded:ro'):
         argv.extend(['--volume', mount])
     argv.extend(['--env', f'PARALLEL_IMAGE_ID={image_id}', image_id, *broker_argv()])
@@ -304,11 +310,50 @@ def main(argv=None, *, transport=None, authorize=None):
     provenance['versions'] = versions
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', provenance['image_id']):
         raise ValueError('IMAGE_ID_REQUIRED')
+    ready_path = Path(args.ready_receipt)
+    model_ready_path = ready_path.with_name(".model-ready.json")
     runtime = ParallelPerceptionRuntime(
-        input_root=Path(args.input_root), ready_receipt=Path(args.ready_receipt),
+        input_root=Path(args.input_root), ready_receipt=model_ready_path,
         options=frozen_options(Path(args.yolo_weights), Path(args.grounded_root)),
         provenance=provenance, authorize=authorize or (lambda request, snapshot: False))
     runtime.start()
+    if args.smoke_input is None and model_ready_path.is_file():
+        spec = json.loads(Path(args.runtime_spec).read_text(encoding="utf-8"))
+        required = {
+            "schema_version", "kind", "batch_id", "coordinator_epoch",
+            "broker_generation", "run_mode", "image_id", "yolo_weights_sha256",
+            "grounded_manifest_sha256", "config_path", "authority_endpoint",
+            "authority_token_path", "request_deadline_s", "max_frame_bytes",
+        }
+        if type(spec) is not dict or set(spec) != required:
+            raise ValueError("BROKER_RUNTIME_SPEC_SCHEMA")
+        model_receipt = json.loads(model_ready_path.read_text(encoding="utf-8"))
+        if model_receipt.get("ready") is not True or set(runtime.detectors) != {
+            YOLO_ID, "grounded-sam"
+        }:
+            raise ValueError("BROKER_MODEL_READY_SCHEMA")
+        strict_ready = {
+            "schema_version": 1,
+            "kind": "so101_parallel_broker_ready",
+            "batch_id": spec["batch_id"],
+            "run_mode": spec["run_mode"],
+            "coordinator_epoch": spec["coordinator_epoch"],
+            "broker_generation": spec["broker_generation"],
+            "image_id": spec["image_id"],
+            "yolo_weights_sha256": spec["yolo_weights_sha256"],
+            "grounded_manifest_sha256": spec["grounded_manifest_sha256"],
+            "models": {
+                YOLO_ID: {
+                    "ready": True,
+                    "weights_sha256": spec["yolo_weights_sha256"],
+                },
+                "grounded-sam": {
+                    "ready": True,
+                    "manifest_sha256": spec["grounded_manifest_sha256"],
+                },
+            },
+        }
+        write_receipt(ready_path, strict_ready)
     if args.smoke_input:
         from PIL import Image
         import numpy as np

@@ -16,7 +16,7 @@ from typing import Callable, Mapping
 
 import numpy as np
 
-from ..application.object_pose import RgbdLocalizer
+from ..application.object_pose import LocalizationError, RgbdLocalizer
 from ..application.qualification_stack import ros2_command
 from ..core.detection import DetectionCandidate
 from ..core.task_geometry import Pose7
@@ -49,6 +49,7 @@ class ResetBoundaryReceipt:
     simulation_session_id: str
     reset_completed_monotonic_s: float
     simulation_time_s: float
+    reset_epoch_value: int | None = None
 
     def __post_init__(self):
         if (
@@ -61,6 +62,14 @@ class ResetBoundaryReceipt:
             or not math.isfinite(self.simulation_time_s)
             or self.simulation_time_s < 0.0
         ):
+            raise ValueError("invalid reset boundary receipt")
+        expected = self.reset_epoch.removeprefix("reset-")
+        if not expected.isascii() or not expected.isdecimal():
+            raise ValueError("invalid reset boundary receipt")
+        numeric = int(expected)
+        if self.reset_epoch_value is None:
+            object.__setattr__(self, "reset_epoch_value", numeric)
+        elif type(self.reset_epoch_value) is not int or self.reset_epoch_value != numeric:
             raise ValueError("invalid reset boundary receipt")
 
 
@@ -143,6 +152,112 @@ def observe_worker_shutdown(session_id: str, *, timeout_s: float) -> ShutdownObs
                 previous, stable = graph, 1
         return ShutdownObservation(tuple(sorted(pids)), graph, stable >= 2)
     finally:
+        node.destroy_node()
+        if initialized_here and rclpy.ok():
+            rclpy.shutdown()
+
+
+def cancel_and_confirm_parallel_goals(*, timeout_s: float) -> bool:
+    """Cancel arm, gripper, and MoveIt execution goals and observe all settled."""
+
+    import rclpy
+    from action_msgs.msg import GoalStatusArray
+    from action_msgs.srv import CancelGoal
+
+    initialized_here = not rclpy.ok()
+    if initialized_here:
+        rclpy.init()
+    node = rclpy.create_node("so101_parallel_goal_cancellation")
+    names = {
+        "arm": "/arm_controller/follow_joint_trajectory/_action",
+        "gripper": "/gripper_controller/follow_joint_trajectory/_action",
+        "moveit": "/execute_trajectory/_action",
+    }
+    statuses = {name: None for name in names}
+
+    def callback(name):
+        return lambda message: statuses.__setitem__(
+            name, tuple(int(item.status) for item in message.status_list)
+        )
+
+    subscriptions = [
+        node.create_subscription(
+            GoalStatusArray, prefix + "/status", callback(name), 10
+        )
+        for name, prefix in names.items()
+    ]
+    clients = {
+        name: node.create_client(CancelGoal, prefix + "/cancel_goal")
+        for name, prefix in names.items()
+    }
+    try:
+        deadline = time.monotonic() + timeout_s
+        futures = []
+        for client in clients.values():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not client.wait_for_service(timeout_sec=remaining):
+                return False
+            futures.append(client.call_async(CancelGoal.Request()))
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.01)
+            if (
+                all(future.done() and future.result() is not None for future in futures)
+                and all(value is not None for value in statuses.values())
+                and all(
+                    status not in _ACTIVE_GOAL_STATES
+                    for values in statuses.values()
+                    for status in values
+                )
+            ):
+                return True
+        return False
+    finally:
+        del subscriptions
+        node.destroy_node()
+        if initialized_here and rclpy.ok():
+            rclpy.shutdown()
+
+
+def observe_no_parallel_goals(*, timeout_s: float) -> bool:
+    """Independently observe exact controller and MoveIt status topics settled."""
+
+    import rclpy
+    from action_msgs.msg import GoalStatusArray
+
+    initialized_here = not rclpy.ok()
+    if initialized_here:
+        rclpy.init()
+    node = rclpy.create_node("so101_parallel_goal_confirmation")
+    topics = (
+        "/arm_controller/follow_joint_trajectory/_action/status",
+        "/gripper_controller/follow_joint_trajectory/_action/status",
+        "/execute_trajectory/_action/status",
+    )
+    statuses = {topic: None for topic in topics}
+    subscriptions = [
+        node.create_subscription(
+            GoalStatusArray,
+            topic,
+            lambda message, key=topic: statuses.__setitem__(
+                key, tuple(int(item.status) for item in message.status_list)
+            ),
+            10,
+        )
+        for topic in topics
+    ]
+    try:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.01)
+            if all(value is not None for value in statuses.values()):
+                return all(
+                    status not in _ACTIVE_GOAL_STATES
+                    for values in statuses.values()
+                    for status in values
+                )
+        return False
+    finally:
+        del subscriptions
         node.destroy_node()
         if initialized_here and rclpy.ok():
             rclpy.shutdown()
@@ -340,6 +455,7 @@ def observe_parallel_initial_gate(
                 sorted(
                     f"{namespace.rstrip('/')}/{name}"
                     for name, namespace in graph_node.get_node_names_and_namespaces()
+                    if not name.startswith("so101_parallel_gate_")
                 )
             )
             if graph == previous_graph:
@@ -404,6 +520,7 @@ class ParallelRosRuntimePorts:
         "capture_numeric_evidence",
         "cancel_motion",
         "confirm_no_controller_goal",
+        "resume_physics",
         "recovery",
     }
 
@@ -430,6 +547,36 @@ class ParallelRosRuntimePorts:
         self._admission_candidates = {}
         self._planner = None
 
+    @staticmethod
+    def expected_worker_nodes():
+        return (
+            "/move_group",
+            "/mujoco_ros2_control_node",
+            "/robot_state_publisher",
+            "/so101_base_to_camera_link",
+            "/so101_camera_link_to_task_camera_frame",
+        )
+
+    def rebind_resources(self, resources):
+        if (
+            getattr(resources, "worker_id", None) != getattr(self.resources, "worker_id", None)
+            or getattr(resources, "generation", 0) != getattr(self.resources, "generation", 0) + 1
+            or getattr(resources, "session_id", None) == getattr(self.resources, "session_id", None)
+        ):
+            raise RuntimeError("RUNTIME_RESOURCE_REBIND_IDENTITY")
+        for source, *_rest in self._rgbd.values():
+            source.close()
+        self._rgbd.clear()
+        self._reset_receipts.clear()
+        self._localized.clear()
+        self._admitted.clear()
+        self._admission_candidates.clear()
+        if self._planner is not None:
+            self._planner.close()
+            self._planner = None
+        self.resources = resources
+        return True
+
     @classmethod
     def for_test(cls, *, resources, catalog, observe_initial):
         return cls(
@@ -455,13 +602,21 @@ class ParallelRosRuntimePorts:
     def reset_point(self, lease):
         call = self.dependencies.get("reset_point")
         point = self.catalog[lease.point_id]
+        qualified = call is None
+        if qualified:
+            call = self.dependencies.get("execute_reset")
         if call is None:
-            from ..backends.mujoco.teleop_runtime import transactional_reset
+            from ..cli.teleop_reset import execute_mujoco_reset
 
-            value = transactional_reset(
+            call = execute_mujoco_reset
+        if qualified:
+            value, scene = call(
                 self.resources.session_id,
-                expected_object_position=tuple(point["cup_position_world_m"]),
+                keyframe="task_start",
+                cup_position_world_m=tuple(point["cup_position_world_m"]),
             )
+            if getattr(scene, "success", None) is not True:
+                raise RuntimeError("RESET_PLANNING_SCENE_RESTORE")
         else:
             value = call(lease, point)
         observe = self.dependencies.get("current_evidence")
@@ -480,6 +635,7 @@ class ParallelRosRuntimePorts:
             value.simulation_session_id,
             time.monotonic(),
             evidence.simulation_time_s,
+            value.new_epoch,
         )
         self._reset_receipts[lease.attempt_id] = receipt
         return receipt
@@ -505,7 +661,7 @@ class ParallelRosRuntimePorts:
             and not value.moveit_attached_object_ids
             and value.has_contact is False
             and value.node_graph_stable is True
-            and len(value.worker_node_fqns) == len(set(value.worker_node_fqns))
+            and value.worker_node_fqns == self.expected_worker_nodes()
         )
         if not valid:
             raise RuntimeError("POINT_INITIAL_GATE_OBSERVATION_REJECTED")
@@ -559,11 +715,23 @@ class ParallelRosRuntimePorts:
                     tuple(rgb.shape),
                     hashlib.sha256(payload).hexdigest(),
                 )
+                batch_root = self.resources.worker_root.parent.parent
+                relative = path.relative_to(self.resources.worker_root.parent)
+                broker_copy = batch_root / "broker-inputs" / relative
+                broker_copy.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+                os.link(path, broker_copy, follow_symlinks=False)
+                parent_fd = os.open(
+                    broker_copy.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+                )
+                try:
+                    os.fsync(parent_fd)
+                finally:
+                    os.close(parent_fd)
                 self._rgbd[stamp] = (source, camera, depth, color.header.frame_id)
                 source = None
                 return receipt
             write_png_rgb8(rgb, path)
-            return SourceStampedCapture(path, received)
+            return SourceStampedCapture(path, received, source_stamp_ns=stamp)
         finally:
             if source is not None:
                 source.close()
@@ -580,17 +748,14 @@ class ParallelRosRuntimePorts:
             ]
         except (AttributeError, KeyError) as error:
             raise RuntimeError("BROKER_RGBD_IDENTITY_MISSING") from error
-        try:
-            localized = BrokerMaskLocalizer().localize(
-                broker_result,
-                camera_info=camera,
-                depth_message=depth,
-                lookup_exact=lambda target, frame, stamp: source.lookup_exact(
-                    target, frame, stamp, 0.2
-                ),
-            )
-        finally:
-            source.close()
+        localized = BrokerMaskLocalizer().localize(
+            broker_result,
+            camera_info=camera,
+            depth_message=depth,
+            lookup_exact=lambda target, frame, stamp: source.lookup_exact(
+                target, frame, stamp, 0.2
+            ),
+        )
         depth_hash = hashlib.sha256(bytes(depth.data)).hexdigest()
         value = LocalizedPose(
             request,
@@ -611,15 +776,13 @@ class ParallelRosRuntimePorts:
         call = self.dependencies.get("source_clock")
         if call is not None:
             return call(reset_receipt)
-        from ..backends.mujoco.teleop_runtime import current_evidence
-
-        evidence = current_evidence(reset_receipt.simulation_session_id)
-        if (
-            evidence.simulation_session_id != reset_receipt.simulation_session_id
-            or f"reset-{evidence.reset_epoch}" != reset_receipt.reset_epoch
-        ):
+        sources = [source for source, *_rest in self._rgbd.values()]
+        if len(sources) != 1:
             raise RuntimeError("SOURCE_CLOCK_IDENTITY")
-        return evidence.simulation_time_s
+        node = getattr(sources[0], "_node", None)
+        if node is None:
+            raise RuntimeError("SOURCE_CLOCK_IDENTITY")
+        return int(node.get_clock().now().nanoseconds) / 1_000_000_000.0
 
     def _dynamic_template(self):
         supplied = self.dependencies.get("dynamic_template")
@@ -705,48 +868,60 @@ class ParallelRosRuntimePorts:
             grounded_model_id=GROUNDED_ID,
         )
         decision = policy.decision
-        while decision.next_model is not None:
-            response = broker_request(
+        source = self._rgbd[snapshot.source_stamp_ns][0]
+        retain_source = False
+        try:
+            while decision.next_model is not None:
+                response = broker_request(
                 decision.next_model,
                 before_send=lambda request: policy.start_request(
                     request,
                     depth_timestamp_s=depth_stamp_s,
                     depth_sha256=depth_hash,
                 ),
-            )
-            if response.broker_generation != self.broker_generation:
-                raise RuntimeError("BROKER_GENERATION_CHANGED")
-            if response.outcome is ModelOutcome.QUALIFIED:
-                self._admission_candidates[response.request.request_id] = response
-                try:
-                    localized = self.localize(lease, response)
-                except Exception:
-                    decision = policy.record_result(
+                )
+                if response.broker_generation != self.broker_generation:
+                    raise RuntimeError("BROKER_GENERATION_CHANGED")
+                if response.outcome is ModelOutcome.QUALIFIED:
+                    self._admission_candidates[response.request.request_id] = response
+                    try:
+                        localized = self.localize(lease, response)
+                    except LocalizationError as error:
+                        if error.code != "GEOMETRY_REJECTED":
+                            raise
+                        decision = policy.record_result(
+                            response.request,
+                            ModelOutcome.NORMAL_REJECTION,
+                            broker_generation=response.broker_generation,
+                        )
+                        continue
+                    policy.record_result(
                         response.request,
-                        ModelOutcome.NORMAL_REJECTION,
+                        response.outcome,
                         broker_generation=response.broker_generation,
                     )
-                    continue
-                policy.record_result(
+                    decision = policy.admit_pose(response.request, localized)
+                    if decision.disposition == "CONTINUE":
+                        admitted = self._admitted_pose(lease, localized)
+                        self._admitted[lease.attempt_id] = admitted
+                        retain_source = True
+                        return admitted
+                else:
+                    decision = policy.record_result(
                     response.request,
                     response.outcome,
                     broker_generation=response.broker_generation,
                 )
-                decision = policy.admit_pose(response.request, localized)
-                if decision.disposition == "CONTINUE":
-                    admitted = self._admitted_pose(lease, localized)
-                    self._admitted[lease.attempt_id] = admitted
-                    return admitted
-            else:
-                decision = policy.record_result(
-                    response.request,
-                    response.outcome,
-                    broker_generation=response.broker_generation,
-                )
-        return PerceptionTerminal(
-            decision.disposition,
-            decision.reason or "PERCEPTION_TERMINAL",
-        )
+            return PerceptionTerminal(
+                decision.disposition,
+                decision.reason or "PERCEPTION_TERMINAL",
+            )
+        finally:
+            if not retain_source:
+                close = getattr(source, "close", None)
+                if callable(close):
+                    close()
+                self._rgbd.pop(snapshot.source_stamp_ns, None)
 
     @staticmethod
     def _admitted_pose(lease, localized):
@@ -891,9 +1066,7 @@ class ParallelRosRuntimePorts:
         value, depth, localized_object = self._localized[lease.attempt_id]
         if value is not localized:
             raise RuntimeError("NUMERIC_LOCALIZATION_IDENTITY")
-        from ..backends.mujoco.teleop_runtime import current_evidence
-
-        physical = current_evidence(self.resources.session_id)
+        physical = self._running_evidence(localized.request.image_timestamp_s)
         documents = {
             "depth.json": {
                 "source_stamp_ns": localized.request.image_timestamp_s * 1_000_000_000,
@@ -917,23 +1090,72 @@ class ParallelRosRuntimePorts:
         if observed <= boundary:
             raise RuntimeError("NUMERIC_EVIDENCE_STALE")
         del localized_object
-        return NumericEvidenceReceipt(*paths, observed)
+        try:
+            return NumericEvidenceReceipt(*paths, observed)
+        finally:
+            stamp = round(localized.request.image_timestamp_s * 1_000_000_000)
+            retained = self._rgbd.pop(stamp, None)
+            if retained is not None:
+                close = getattr(retained[0], "close", None)
+                if callable(close):
+                    close()
+
+    def _running_evidence(self, minimum_simulation_time_s):
+        call = self.dependencies.get("running_evidence")
+        if call is not None:
+            return call(self.resources.session_id, minimum_simulation_time_s)
+        sources = [source for source, *_rest in self._rgbd.values()]
+        if len(sources) != 1 or getattr(sources[0], "_node", None) is None:
+            raise RuntimeError("RUNNING_EVIDENCE_SOURCE_CONTEXT")
+        from ..backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
+        import rclpy
+
+        node = sources[0]._node
+        observer = MujocoWorldObserver(
+            node, self.resources.session_id, max_age_s=1.0
+        )
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.01)
+            try:
+                evidence = observer.snapshot()
+            except EvidenceStale:
+                continue
+            if (
+                evidence.simulation_session_id == self.resources.session_id
+                and evidence.paused is False
+                and evidence.simulation_time_s >= minimum_simulation_time_s
+            ):
+                return evidence
+        raise RuntimeError("RUNNING_EVIDENCE_UNAVAILABLE")
 
     def cancel_motion(self, lease):
         call = self.dependencies.get("cancel_motion")
         if call is not None:
             return call(lease)
-        return self.reset_point(lease) is not None
+        del lease
+        return cancel_and_confirm_parallel_goals(timeout_s=5.0)
 
     def confirm_no_controller_goal(self, lease):
         call = self.dependencies.get("confirm_no_controller_goal")
         if call is not None:
             return call(lease)
-        receipt = self._reset_receipts.get(lease.attempt_id)
-        if receipt is None:
+        if lease.attempt_id not in self._reset_receipts:
             return False
-        observed = observe_parallel_initial_gate(receipt)
-        return not observed.active_controller_goal_ids
+        return observe_no_parallel_goals(timeout_s=5.0)
+
+    def resume_physics(self, lease, reset_receipt):
+        call = self.dependencies.get("resume_physics")
+        if call is not None:
+            return call(lease, reset_receipt)
+        if (
+            reset_receipt.simulation_session_id != self.resources.session_id
+            or reset_receipt.reset_epoch_value is None
+        ):
+            return False
+        from ..backends.mujoco.lifecycle import resume_physics
+
+        return resume_physics(None)
 
     def recovery(self, worker_id, generation, deadline):
         call = self.dependencies.get("recovery")

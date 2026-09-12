@@ -349,7 +349,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     assert broker_spec["config_path"] == "/runtime/runtime-config.yaml"
     assert broker_spec["authority_token_path"] == "/runtime/broker-g1.token"
     worker_spec = json.loads(composition.worker_specs[0].read_text())
-    assert worker_spec["broker_socket_path"] == str(root / "ipc/perception.sock")
+    assert worker_spec["broker_socket_path"] == str(root / "ipc/broker/perception.sock")
     assert worker_spec["broker_generation"] == 1
     composition._start_broker()
     assert supervisor.started == [
@@ -461,7 +461,9 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
 def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_path):
     import socket
 
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition, _write_json, prepare_batch,
+    )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -494,11 +496,33 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         spec, resource_probe=Probe(), claim_root=scratch / "brc",
         supervisor=supervisor, broker_command_builder=lambda _owner: ("broker",),
     )
-    directory_fd = os.open(composition.authority.ipc_root, os.O_RDONLY | os.O_DIRECTORY)
+    directory_fd = os.open(composition.broker_runtime_root, os.O_RDONLY | os.O_DIRECTORY)
     listener = socket.socket(socket.AF_UNIX)
     try:
         listener.bind(f"/proc/self/fd/{directory_fd}/{composition.broker_socket_path.name}")
-        (composition.authority.ipc_root / "ready.json").write_text("{}")
+        composition.broker_socket_path.chmod(0o600)
+        ready = {
+            "schema_version": 1,
+            "kind": "so101_parallel_broker_ready",
+            "batch_id": spec.request.batch_id,
+            "run_mode": spec.request.run_mode.value,
+            "coordinator_epoch": composition.journal.coordinator_epoch,
+            "broker_generation": 1,
+            "image_id": spec.provenance["image_id"],
+            "yolo_weights_sha256": spec.yolo_weights_sha256,
+            "grounded_manifest_sha256": spec.grounded_manifest_sha256,
+            "models": {
+                "plastic-cup-yolo11n-seg-v1": {
+                    "ready": True,
+                    "weights_sha256": spec.yolo_weights_sha256,
+                },
+                "grounded-sam": {
+                    "ready": True,
+                    "manifest_sha256": spec.grounded_manifest_sha256,
+                },
+            },
+        }
+        _write_json(composition.broker_runtime_root / "ready.json", ready)
         assert composition._wait_broker_ready() is True
         assert supervisor.health_checks >= 1
     finally:
@@ -542,7 +566,7 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
     )
     with pytest.raises(RuntimeError, match="boom"):
         composition.run()
-    assert supervisor.cleanup_facts == (False, True, True, True)
+    assert supervisor.cleanup_facts == (True, True, True, True)
 
 
 def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
@@ -649,14 +673,14 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
         )
         authority_call = _BrokerCoordinatorClient(
             composition.broker_authority_server.path,
-            root / "ipc/broker-g1.token",
+                root / "ipc/broker/broker-g1.token",
             coordinator_epoch=composition.journal.coordinator_epoch,
             generation=1,
             deadline_s=1.0,
             max_frame_bytes=spec.config.broker_max_frame_bytes,
         )
         transport = BrokerTransport(
-            ipc_root=root / "ipc",
+            ipc_root=root / "ipc/broker",
             config=spec.config,
             generation=1,
             authority_call=authority_call,
@@ -895,3 +919,308 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
             start_event_type="VALIDATION_STARTED",
             reset_epoch="reset-1",
         )
+
+
+def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    values = argv(tmp_path / "defaults")
+    for flag in ("--worker-count", "--max-points-per-worker"):
+        index = values.index(flag)
+        del values[index:index + 2]
+    prepared = prepare_batch(values, provenance_verifier=verified)
+    assert prepared.request.worker_count == 2
+    assert prepared.request.max_points_per_worker == 10
+    assert prepared.manifest["worker_count"] == 2
+    assert prepared.manifest["max_points_per_worker"] == 10
+
+
+def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain):
+            return False
+        def socket_in_use(self, _path):
+            return False
+
+    class Supervisor:
+        def __init__(self):
+            self.environments = []
+        def start(self, _role, _command, *, environment=None):
+            self.environments.append(dict(environment))
+
+    monkey = "SO101_TEST_SECRET_MUST_NOT_LEAK"
+    os.environ[monkey] = "secret"
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "x", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
+    )
+    supervisor = Supervisor()
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "xc",
+        supervisor=supervisor, broker_command_builder=lambda _owner: ("broker",),
+    )
+    try:
+        composition._start_workers()
+        assert supervisor.environments == [
+            dict(composition.resource_manifest.workers[0].environment)
+        ]
+        assert monkey not in supervisor.environments[0]
+    finally:
+        composition._release_partial()
+        os.environ.pop(monkey, None)
+
+
+def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.cli.parallel_perception_broker import container_run_argv
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain):
+            return False
+        def socket_in_use(self, _path):
+            return False
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "b", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
+    )
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "bc",
+        broker_command_builder=lambda _owner: ("broker",),
+    )
+    try:
+        runtime_root = composition.broker_spec_path.parent
+        assert not list(runtime_root.glob("worker-*.token"))
+        assert not list(runtime_root.glob("worker-*.sock"))
+        command = container_run_argv(
+            spec.request.evidence_root, runtime_root=runtime_root,
+            input_root=composition.broker_input_root,
+            image_id="sha256:" + "b" * 64,
+            yolo_weights=spec.yolo_weights, grounded_root=spec.grounded_root,
+            gpu_groups=[44], uid=os.getuid(), gid=os.getgid(),
+            path_checker=lambda path, **_kwargs: Path(path),
+        )
+        runtime_mounts = [
+            command[index + 1] for index, value in enumerate(command) if value == "--volume"
+        ]
+        assert f"{runtime_root}:/runtime:rw" in runtime_mounts
+        assert f"{composition.broker_input_root}:/inputs:ro" in runtime_mounts
+        assert all(f"{spec.request.evidence_root / 'workers'}:/inputs" not in mount
+                   for mount in runtime_mounts)
+        assert all(str(composition.authority.ipc_root) + ":/runtime" not in mount for mount in runtime_mounts)
+    finally:
+        composition._release_partial()
+
+
+@pytest.mark.parametrize(
+    "operation,payload",
+    [
+        ("register_worker", {"generation": 1, "recovery_deadline_monotonic_s": None}),
+        ("grant_lease", {"generation": 1}),
+        ("heartbeat", {}),
+        ("ack_lease", {}),
+        ("ack_validation_started", {"gate_summary": {}}),
+        ("begin_finalizing", {}),
+        ("commit_validation", {"location": "/sealed"}),
+        ("record_recovery", {
+            "generation": 1, "succeeded": False, "fenced": False,
+            "owned_processes_stopped": False, "controllers_stopped": False,
+            "readmitted": False, "recovery_deadline_monotonic_s": 1.0,
+        }),
+        ("replace_resources", {"expected_generation": 1}),
+    ],
+)
+def test_coordinator_rpc_payload_schema_rejects_extra_and_missing_before_mutation(
+    operation, payload
+):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _validate_rpc_payload
+
+    valid = {"operation": operation, **payload}
+    assert _validate_rpc_payload(valid) == valid
+    with pytest.raises(CliError, match="RPC_PAYLOAD_SCHEMA"):
+        _validate_rpc_payload({**valid, "extra": True})
+    removable = next(name for name in valid if name != "operation") if len(valid) > 1 else "operation"
+    with pytest.raises(CliError, match="RPC_PAYLOAD_SCHEMA"):
+        _validate_rpc_payload({name: value for name, value in valid.items() if name != removable})
+
+
+def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tmp_path, monkeypatch):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    import so101_demo.cli.mujoco_parallel_batch as batch_cli
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain):
+            return False
+        def socket_in_use(self, _path):
+            return False
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "f", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda value: {**verified(value), "image_id": "sha256:" + "b" * 64},
+    )
+    real = batch_cli.AuthenticatedUnixServer
+    calls = []
+
+    def fail_second(*args, **kwargs):
+        if len(calls) == 1:
+            raise RuntimeError("constructor fault")
+        calls.append(real(*args, **kwargs))
+        return calls[-1]
+
+    monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_second)
+    with pytest.raises(RuntimeError, match="constructor fault"):
+        ProductionBatchComposition(
+            spec, resource_probe=Probe(), claim_root=scratch / "fc"
+        )
+    assert all(server.path.exists() is False for server in calls)
+    assert not (scratch / "fc" / spec.request.batch_id).exists()
+
+
+def test_composition_cleanup_invokes_real_worker_control_actions_in_order():
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    events = []
+
+    class Coordinator:
+        def request_stop(self, *, reason):
+            events.append(("stop", reason))
+            return True
+
+    class Control:
+        def call(self, operation):
+            events.append((operation,))
+            return True
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner.coordinator = Coordinator()
+    owner.worker_controls = [Control(), Control()]
+    assert owner._stop_new_leases() is True
+    assert owner._cancel_worker_goals() is True
+    assert owner._confirm_worker_goals_cancelled() is True
+    assert owner._request_worker_recovery() is True
+    assert events == [
+        ("stop", "SUPERVISOR_SHUTDOWN"),
+        ("stop",), ("stop",),
+        ("cancel_motion",), ("cancel_motion",),
+        ("confirm_no_controller_goal",), ("confirm_no_controller_goal",),
+        ("recover",), ("recover",),
+    ]
+
+
+def test_broker_ready_receipt_is_exactly_bound_to_batch_generation_and_image():
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _validate_broker_ready
+
+    expected = {
+        "batch_id": "batch-1", "run_mode": "plan_only", "coordinator_epoch": 3,
+        "broker_generation": 1, "image_id": "sha256:" + "b" * 64,
+        "yolo_weights_sha256": YOLO_SHA,
+        "grounded_manifest_sha256": GROUNDED_SHA,
+    }
+    receipt = {
+        "schema_version": 1, "kind": "so101_parallel_broker_ready",
+        **expected,
+        "models": {
+            "plastic-cup-yolo11n-seg-v1": {"ready": True, "weights_sha256": YOLO_SHA},
+            "grounded-sam": {"ready": True, "manifest_sha256": GROUNDED_SHA},
+        },
+    }
+    assert _validate_broker_ready(receipt, expected) is True
+    for mutation in ({}, {**receipt, "broker_generation": 2}, {**receipt, "extra": True}):
+        with pytest.raises(CliError, match="BROKER_READY_RECEIPT"):
+            _validate_broker_ready(mutation, expected)
+
+
+def test_physical_start_revalidates_complete_provenance_before_process_side_effect(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition, prepare_batch
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+        def ros_domain_in_use(self, _domain):
+            return False
+        def socket_in_use(self, _path):
+            return False
+
+    record = {
+        **verified({}), "image_id": "sha256:" + "b" * 64,
+        "source_tree_sha256": "c" * 64, "source_dirty": False,
+        "installed_console_sha256": "d" * 64, "installed_module_sha256": "e" * 64,
+    }
+    scratch = Path(os.environ["TMPDIR"]).parent
+    spec = prepare_batch(
+        argv(scratch / "v", worker_count="1", max_points_per_worker="1",
+             point_id=("task_start",), run_mode="plan_only"),
+        provenance_verifier=lambda _value: record,
+    )
+
+    class Supervisor:
+        def __init__(self):
+            self.started = []
+        def start(self, *args, **kwargs):
+            self.started.append((args, kwargs))
+
+    supervisor = Supervisor()
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "vc",
+        supervisor=supervisor, broker_command_builder=lambda _owner: ("broker",),
+        provenance_revalidator=lambda _inputs: {**record, "source_dirty": True},
+    )
+    try:
+        with pytest.raises(CliError, match="PROVENANCE_DRIFT"):
+            composition._start_broker()
+        assert supervisor.started == []
+    finally:
+        composition._release_partial()
+
+
+def test_crashed_worker_recovery_terminates_only_exact_recorded_children(tmp_path):
+    import signal
+    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+
+    token = tmp_path / "control.token"
+    token.write_text("ab" * 32, encoding="ascii")
+    token.chmod(0o600)
+    manifest = tmp_path / "children.json"
+    manifest.write_text(json.dumps({
+        "schema_version": 1,
+        "processes": [{
+            "role": "task-station", "pid": 711, "pgid": 700,
+            "cmdline": ["task-station"], "start_time_ticks": 91,
+        }],
+    }), encoding="utf-8")
+    manifest.chmod(0o600)
+    alive = {711: (700, ("task-station",), 91)}
+    signals = []
+
+    def send(pid, value):
+        signals.append((pid, value))
+        alive.pop(pid, None)
+
+    proxy = _WorkerControlProxy(
+        tmp_path / "absent.sock", token,
+        worker_id="worker-01", generation=1, coordinator_epoch=1,
+        deadline_s=0.1, orphan_manifest=manifest,
+        identity_probe=lambda pid: alive.get(pid, (0, (), 0)),
+        signal_process=send,
+    )
+    assert proxy.call("cancel_motion") is False
+    assert proxy.call("recover") is True
+    assert signals == [(711, signal.SIGINT)]

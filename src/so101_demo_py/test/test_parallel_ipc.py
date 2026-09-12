@@ -449,6 +449,66 @@ def test_supervisor_cleanup_order_pid_reuse_and_failure_are_visible():
     assert ("signal", 101, signal.SIGKILL) in order
 
 
+def test_child_identity_failure_never_signals_an_unverified_or_reused_group(monkeypatch):
+    from so101_demo.runtime.parallel_processes import ProcessSupervisor, SupervisorError
+    import so101_demo.runtime.parallel_processes as processes
+
+    class Child:
+        pid = 701
+        def poll(self):
+            return None
+
+    reads = iter(((0, (), 0), (900, ("unrelated",), 99)))
+    monkeypatch.setattr(processes, "_proc_values", lambda _pid: next(reads))
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1", popen=lambda *_args, **_kwargs: Child(),
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+    )
+    with pytest.raises(SupervisorError, match="CHILD_IDENTITY"):
+        supervisor.start("worker", ("worker",))
+    assert signals == []
+
+
+def test_worker_shutdown_uses_bounded_interrupt_before_termination():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    owned = OwnedProcess("batch-1", "worker", 701, 701, ("worker",), 12)
+    signals = []
+    waits = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: owned,
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+    )
+    supervisor._record_started(owned, poll=lambda: None)
+    assert supervisor.shutdown(
+        wait_group=lambda _process, timeout: waits.append(timeout) or len(waits) == 2,
+        interrupt_timeout_s=1.0,
+        term_timeout_s=2.0,
+    ) is True
+    assert signals == [(701, signal.SIGINT), (701, signal.SIGTERM)]
+    assert waits == [1.0, 2.0]
+
+
+def test_broker_cancel_generation_is_lease_optional_and_strict(tmp_path):
+    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    token = bytes.fromhex("ab" * 32)
+    authority.install_token("worker-01", 1, token)
+    message = request(
+        worker_generation=1,
+        lease=None,
+        payload={
+            "operation": "cancel_generation",
+            "worker_id": "worker-01",
+            "worker_generation": 1,
+        },
+    )
+    assert authority.authenticate(message)["payload"]["operation"] == "cancel_generation"
+
+
 def test_supervisor_rejects_absent_incomplete_and_batch_mismatched_manifest():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,

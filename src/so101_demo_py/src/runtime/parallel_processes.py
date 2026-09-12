@@ -117,10 +117,19 @@ class ProcessSupervisor:
         pid = child.pid
         pgid, cmdline, start_time = _proc_values(pid)
         if pgid != pid or not cmdline or not start_time:
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except OSError:
-                pass
+            # A PID is not signal authority.  Re-read once and signal only a
+            # complete, self-led process group that is still this child.
+            second_pgid, second_cmdline, second_start = _proc_values(pid)
+            if (
+                child.poll() is None
+                and second_pgid == pid
+                and second_cmdline
+                and second_start
+            ):
+                try:
+                    self._signal_group(second_pgid, signal.SIGKILL)
+                except OSError:
+                    pass
             raise SupervisorError("CHILD_IDENTITY")
         owned = OwnedProcess(self.batch_id, role, pid, pgid, cmdline, start_time)
         self._record_started(owned, poll=child.poll)
@@ -265,6 +274,7 @@ class ProcessSupervisor:
         confirm_goal_cancelled=lambda: True,
         request_recovery=lambda: True,
         wait_group=None,
+        interrupt_timeout_s: float = 5.0,
         term_timeout_s: float = 5.0,
         kill_timeout_s: float = 2.0,
     ) -> bool:
@@ -279,17 +289,34 @@ class ProcessSupervisor:
             if poll() is not None:
                 stopped_pids.append(expected.pid)
                 continue
+            stopped = False
+            if expected.role == "worker":
+                try:
+                    self._confirm_identity(expected)
+                    self._signal_group(expected.pgid, signal.SIGINT)
+                    stopped = (
+                        self._wait_group_stopped(expected, poll, interrupt_timeout_s)
+                        if wait_group is None
+                        else wait_group(expected, interrupt_timeout_s) is True
+                    )
+                except (OSError, SupervisorError):
+                    cleanup_ok = False
+                    continue
+                except Exception:
+                    stopped = False
+            if stopped:
+                stopped_pids.append(expected.pid)
+                continue
             try:
                 self._confirm_identity(expected)
                 self._signal_group(expected.pgid, signal.SIGTERM)
-            except (OSError, SupervisorError):
-                cleanup_ok = False
-                continue
-            try:
                 stopped = (
                     self._wait_group_stopped(expected, poll, term_timeout_s)
                     if wait_group is None else wait_group(expected, term_timeout_s) is True
                 )
+            except (OSError, SupervisorError):
+                cleanup_ok = False
+                continue
             except Exception:
                 stopped = False
             if not stopped:
