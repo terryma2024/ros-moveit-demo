@@ -1,6 +1,9 @@
 import importlib.util
+import platform
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from launch.actions import (
     DeclareLaunchArgument,
@@ -114,3 +117,74 @@ def test_task_station_registers_teleop_start_handler_before_mujoco(
         and isinstance(action.event_handler, OnProcessStart)
     )
     assert handler_index < mujoco_index
+
+
+def _configured_task_station(tmp_path: Path, monkeypatch, **values):
+    description = build_task_station_launch_description()
+    declared = {
+        entity.name: entity
+        for entity in description.entities
+        if isinstance(entity, DeclareLaunchArgument)
+    }
+    context = LaunchContext()
+    for name, argument in declared.items():
+        context.launch_configurations[name] = argument.default_value[0].perform(context)
+    context.launch_configurations.update(
+        {
+            "session_id": "parallel-a",
+            "task_evidence_root": str(tmp_path),
+            **values,
+        }
+    )
+    opaque = next(
+        entity for entity in description.entities if isinstance(entity, OpaqueFunction)
+    )
+    monkeypatch.setattr(platform, "system", lambda: values.pop("platform_name", "Linux"))
+    return opaque.execute(context)
+
+
+def test_linux_headless_task_station_keeps_camera_controllers_and_moveit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    actions = _configured_task_station(
+        tmp_path,
+        monkeypatch,
+        platform_name="Linux",
+        headless="true",
+        sensor_rendering="true",
+        include_teleop="false",
+    )
+    executables = [
+        action.node_executable for action in actions if isinstance(action, Node)
+    ]
+
+    assert executables.count("static_transform_publisher") == 2
+    assert "ros2_control_node" in executables
+    assert "graceful_shutdown_move_group" in executables
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "sensor_rendering", "include_teleop", "message"),
+    (
+        ("Darwin", "true", "false", "macOS"),
+        ("Linux", "false", "false", "sensor_rendering"),
+        ("Linux", "true", "true", "include_teleop"),
+    ),
+)
+def test_headless_task_station_rejects_unsupported_platform_or_shared_ui(
+    tmp_path: Path,
+    monkeypatch,
+    platform_name: str,
+    sensor_rendering: str,
+    include_teleop: str,
+    message: str,
+) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        _configured_task_station(
+            tmp_path,
+            monkeypatch,
+            platform_name=platform_name,
+            headless="true",
+            sensor_rendering=sensor_rendering,
+            include_teleop=include_teleop,
+        )

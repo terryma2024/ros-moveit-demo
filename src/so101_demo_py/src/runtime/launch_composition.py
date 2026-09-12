@@ -2206,8 +2206,11 @@ def _configured_task_station_actions(context):
     if not _SESSION_ID_PATTERN.fullmatch(session_id):
         raise RuntimeError("task station session_id is invalid")
     headless = LaunchConfiguration("headless").perform(context)
-    if headless != "false":
-        raise RuntimeError("macOS task station requires headless=false")
+    if headless not in {"true", "false"}:
+        raise RuntimeError("headless must be true or false")
+    sensor_rendering = LaunchConfiguration("sensor_rendering").perform(context)
+    if sensor_rendering != "true":
+        raise RuntimeError("task station requires sensor_rendering=true")
     evidence_root = Path(
         LaunchConfiguration("task_evidence_root").perform(context)
     )
@@ -2216,6 +2219,14 @@ def _configured_task_station_actions(context):
     include_teleop = LaunchConfiguration("include_teleop").perform(context)
     if include_teleop not in {"true", "false"}:
         raise RuntimeError("include_teleop must be true or false")
+    platform_name = platform.system()
+    if headless == "true":
+        if platform_name == "Darwin":
+            raise RuntimeError("macOS task station requires headless=false")
+        if platform_name != "Linux":
+            raise RuntimeError("headless task station requires Linux")
+        if include_teleop == "true":
+            raise RuntimeError("headless task station requires include_teleop=false")
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(context, share, session_id)
     teleop_actions = []
@@ -2286,7 +2297,9 @@ def build_task_station_launch_description() -> LaunchDescription:
     unique = uuid.uuid4().hex
     return LaunchDescription(
         [
-            DeclareLaunchArgument("headless", default_value="false", choices=("false",)),
+            DeclareLaunchArgument(
+                "headless", default_value="false", choices=("true", "false")
+            ),
             DeclareLaunchArgument(
                 "sensor_rendering", default_value="true", choices=("true",)
             ),
