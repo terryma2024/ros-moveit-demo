@@ -828,16 +828,21 @@ class _CoordinatorRpcProxy:
 
     def grant_lease(self, worker_id, *, generation, request_key=None):
         value = self._call("grant_lease", generation=generation, request_key=request_key)
-        if type(value) is dict and set(value) == {
-            "lease_grant_paused", "recovery_deadline_monotonic_s",
+        if type(value) is not dict or set(value) != {
+            "lease", "lease_grant_paused", "recovery_deadline_monotonic_s",
         }:
-            deadline = value["recovery_deadline_monotonic_s"]
-            if (value["lease_grant_paused"] is not True
-                    or isinstance(deadline, bool)
+            raise CliError("LEASE_GRANT_OUTCOME_SCHEMA")
+        lease = value["lease"]
+        paused = value["lease_grant_paused"]
+        deadline = value["recovery_deadline_monotonic_s"]
+        if paused is True:
+            if (lease is not None or isinstance(deadline, bool)
                     or not isinstance(deadline, (int, float))):
-                raise CliError("LEASE_GRANT_PAUSE_SCHEMA")
+                raise CliError("LEASE_GRANT_OUTCOME_SCHEMA")
             raise LeaseGrantPaused("BROKER_RECOVERING")
-        self._lease = None if value is None else LeaseIdentity(**value)
+        if paused is not False or deadline is not None:
+            raise CliError("LEASE_GRANT_OUTCOME_SCHEMA")
+        self._lease = None if lease is None else LeaseIdentity(**lease)
         return self._lease
 
     def ack_lease(self, lease, *, request_key):
@@ -2075,33 +2080,15 @@ class ProductionBatchComposition:
                 self.authority.advance_generation(worker_id, generation, requested)
             return _jsonable(ack)
         if operation == "grant_lease":
-            snapshot = self.coordinator.snapshot()
-            if (not snapshot.broker_healthy
-                    and snapshot.terminal_reason is None):
-                return {
-                    "lease_grant_paused": True,
-                    "recovery_deadline_monotonic_s": (
-                        snapshot.broker_recovery_deadline_monotonic_s
-                    ),
-                }
-            lease = self.coordinator.grant_lease(
+            outcome = self.coordinator.grant_lease_outcome(
                 worker_id,
                 generation=payload.get("generation"),
                 request_key=message["idempotency_key"],
             )
-            snapshot = self.coordinator.snapshot()
-            if (lease is None
-                    and not snapshot.broker_healthy
-                    and snapshot.terminal_reason is None):
-                return {
-                    "lease_grant_paused": True,
-                    "recovery_deadline_monotonic_s": (
-                        snapshot.broker_recovery_deadline_monotonic_s
-                    ),
-                }
+            lease = outcome["lease"]
             if lease is not None:
                 self.authority.bind_lease(worker_id, generation, _lease_wire(lease))
-            return _jsonable(lease)
+            return _jsonable(outcome)
         if operation == "record_recovery":
             values = {key: value for key, value in payload.items() if key != "operation"}
             return _jsonable(self.coordinator.record_recovery(worker_id, **values))

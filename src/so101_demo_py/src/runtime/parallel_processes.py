@@ -511,6 +511,21 @@ class ProcessSupervisor:
                     continue
                 except Exception:
                     stopped = False
+                if not stopped and poll() is not None:
+                    try:
+                        stopped = self._retire_exited_group(
+                            expected,
+                            first_signal=signal.SIGTERM,
+                            first_timeout_s=term_timeout_s,
+                            kill_timeout_s=kill_timeout_s,
+                        )
+                    except (OSError, SupervisorError):
+                        cleanup_ok = False
+                        continue
+                    cleanup_ok = stopped and cleanup_ok
+                    if stopped:
+                        stopped_pids.append(expected.pid)
+                    continue
             if stopped:
                 stopped_pids.append(expected.pid)
                 continue
@@ -530,6 +545,21 @@ class ProcessSupervisor:
                 continue
             except Exception:
                 stopped = False
+            if not stopped and poll() is not None:
+                try:
+                    stopped = self._retire_exited_group(
+                        expected,
+                        first_signal=signal.SIGTERM,
+                        first_timeout_s=term_timeout_s,
+                        kill_timeout_s=kill_timeout_s,
+                    )
+                except (OSError, SupervisorError):
+                    cleanup_ok = False
+                    continue
+                cleanup_ok = stopped and cleanup_ok
+                if stopped:
+                    stopped_pids.append(expected.pid)
+                continue
             if not stopped:
                 try:
                     self._confirm_identity(expected)

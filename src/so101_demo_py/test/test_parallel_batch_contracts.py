@@ -468,3 +468,30 @@ def test_pending_validation_and_batch_terminality_keep_qualification_false():
             validation_statuses={"task_start": ValidationStatus.VALIDATION_PASSED},
             batch_terminal=True,
         )
+
+
+def test_execute_qualification_requires_normal_points_complete_terminal_reason():
+    """Durable PASSED points cannot qualify a dependency-failed batch."""
+
+    from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus, RunMode
+
+    statuses = {"task_start": PointStatus.PASSED}
+    completed = BatchSummary(
+        run_mode=RunMode.EXECUTE,
+        point_statuses=statuses,
+        batch_terminal=True,
+        batch_cleanup_complete=True,
+        terminal_reason="POINTS_COMPLETE",
+    )
+    dependency_failed = BatchSummary(
+        run_mode=RunMode.EXECUTE,
+        point_statuses=statuses,
+        batch_terminal=True,
+        batch_cleanup_complete=True,
+        terminal_reason="SHARED_DEPENDENCY_UNAVAILABLE",
+    )
+
+    assert completed.qualification_passed is True
+    assert dependency_failed.point_statuses == statuses
+    assert dependency_failed.coverage_complete is True
+    assert dependency_failed.qualification_passed is False
