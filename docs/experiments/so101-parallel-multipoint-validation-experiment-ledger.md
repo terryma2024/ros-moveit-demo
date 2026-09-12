@@ -4548,6 +4548,58 @@ deletion_candidates: none newly authorized
 decision: IMPLEMENT F67 BOUNDED AUTO-REMOVE OBSERVATION WITH TDD
 ```
 
+```yaml
+checkpoint_id: CP-066
+last_valid_experiment: EXP-022
+current_hypothesis: Bounded exact-ID polling after a validated Docker stop will absorb only the observed auto-remove lag and allow complete cleanup qualification without weakening Broker ownership or survival checks.
+working_tree_status: clean executable source at 26f69805ff29c4cc3b4d7d70d142fba5bd2f2f44; F67 build, complete package, immutable-image, and dual-model CUDA smoke gates pass; this ledger update is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - F67 formal RED pytest-XZxTjFkA failed at the intended transient post-stop inspect boundary; focused GREEN passed twice with three selected tests.
+  - The complete CLI gate passed 67 tests, the parallel suite passed 1045 tests, and the complete ordinary package gate passed 2796 tests with no errors, failures, or skips.
+  - The complete source hash is 71106d326d45edb938743f6f2e4aff67dcaea2e05c211439c4924e72fc2a626d and source/install module hashes both equal cdd9e4635d58bb7625be6f9393da0aa5d5706eb048695dfceb3a63be2aa2b08d.
+  - Immutable image sha256:7ef1b8fbe0fe1b62bccbae456b643f6473cb72c2670d51b9c94dfc4073dfdd01 independently reports the exact F67 source hash.
+  - The isolated F67 smoke executed both YOLO and Grounded-SAM on CUDA with QUALIFIED outcomes; no related container, process, or GPU task remained.
+  - Fresh preflight observed 24 CPUs, 24.407 GiB MemAvailable, 15272 MiB GPU free, no GPU applications or target container, and independently unlocked domains 181/182/183.
+ruling: Repeat the exact frozen four-point two-Worker gate with F67 as the sole executable variable. Preserve every prior scheduling, perception, physical, recovery, visual, cleanup, model, image, config, and catalog criterion.
+retained: all F67 build, test, scratch, provenance, image, smoke, and prior experiment evidence
+archived: none
+deletion_candidates: registered pytest/build scratch trees only; no deletion authorized
+decision: RUN EXP-068 UNCHANGED FOUR-POINT GATE
+```
+
+## EXP-068 — F67 bounded Broker auto-remove four-point gate
+
+```yaml
+experiment_id: EXP-068
+status: PLANNED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T03:01:53+08:00
+prior_experiment: EXP-067
+hypothesis: After exact Broker ownership validation and successful Docker stop, bounded polling of that exact container ID will observe auto-removal and allow the otherwise-complete four-point batch to qualify.
+prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
+single_variable: exact-ID post-stop absence polling within the existing heartbeat timeout. All scheduling, worker identity, consumer readiness, perception, pose, motion, recovery, timeout, source/config/model/catalog, and physical criteria remain frozen.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f67
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f67
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, all recoveries and visuals pass, cleanup receipt entirely true, and no residual task.
+provenance:
+  executable_source_commit: 26f69805ff29c4cc3b4d7d70d142fba5bd2f2f44
+  executable_source_tree: 71106d326d45edb938743f6f2e4aff67dcaea2e05c211439c4924e72fc2a626d
+  installed_module_tree: cdd9e4635d58bb7625be6f9393da0aa5d5706eb048695dfceb3a63be2aa2b08d
+  image_id: sha256:7ef1b8fbe0fe1b62bccbae456b643f6473cb72c2670d51b9c94dfc4073dfdd01
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp068.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f67 and root live-small-f67.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
+```
+
 ## EXP-002 — Task 7 isolated detector package build
 
 ```yaml
