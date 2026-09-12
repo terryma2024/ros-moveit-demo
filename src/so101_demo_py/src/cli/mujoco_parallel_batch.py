@@ -219,6 +219,9 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
     console_path = Path(console).resolve()
     config_path = Path(spec["config"]).resolve()
     points_path = Path(spec["points"]).resolve()
+    _validate_provenance_overlay(
+        repository_root, module_path, console_path, config_path, points_path
+    )
     policy_path = package_root / "config/mujoco/headless_execution.yaml"
     scene_config = package_root / "config/mujoco/task_scene.yaml"
     scene_model = package_root / "assets/mujoco/scene.xml"
@@ -252,6 +255,36 @@ def verify_provenance(spec: Mapping[str, object]) -> Mapping[str, object]:
         "broker_image": image,
         **immutable_image,
     }
+
+
+def _validate_provenance_overlay(
+    repository_root: Path,
+    module_path: Path,
+    console_path: Path,
+    config_path: Path,
+    points_path: Path,
+) -> None:
+    """Reject a source/import/console/config selection spanning checkouts."""
+
+    repository_root = Path(repository_root).resolve()
+    package_root = repository_root / "src/so101_demo_py"
+    expected_module = (
+        package_root / "src/so101_demo/cli/mujoco_parallel_batch.py"
+    ).resolve()
+    expected_console_root = (
+        repository_root / "install/so101_demo_py/lib/so101_demo_py"
+    ).resolve()
+    try:
+        Path(config_path).resolve().relative_to(package_root.resolve())
+        Path(points_path).resolve().relative_to(package_root.resolve())
+    except ValueError as error:
+        raise CliError("PROVENANCE_MIXED_OVERLAY") from error
+    if (
+        Path(module_path).resolve() != expected_module
+        or Path(console_path).resolve()
+        != (expected_console_root / "so101_parallel_batch").resolve()
+    ):
+        raise CliError("PROVENANCE_MIXED_OVERLAY")
 
 
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
@@ -859,7 +892,7 @@ class _WorkerControlProxy:
         self._sequence += 1
         message = {
             "schema_version": 1,
-            "kind": "worker_control",
+            "kind": "worker_call",
             "coordinator_epoch": self.coordinator_epoch,
             "worker_id": f"{self.worker_id}-control",
             "worker_generation": self.generation,
@@ -1140,6 +1173,8 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     )
 
     def control_handler(message):
+        if message.get("kind") != "worker_call":
+            raise CliError("WORKER_CONTROL_SCHEMA")
         payload = message["payload"]
         if type(payload) is not dict or set(payload) != {"operation"}:
             raise CliError("WORKER_CONTROL_SCHEMA")

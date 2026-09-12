@@ -647,7 +647,10 @@ class _CoordinatorBackedBrokerAuthority:
 class BrokerTransport:
     """Task 11 authenticated transport around the existing Task 7 service seam."""
 
-    def __init__(self, *, ipc_root, config, generation, authority_call, deadline_s):
+    def __init__(
+        self, *, ipc_root, config, generation, authority_call, deadline_s,
+        runtime_identity=None,
+    ):
         self.ipc_root = Path(ipc_root)
         if not self.ipc_root.is_dir() or self.ipc_root.is_symlink():
             raise IpcError("IPC_DIRECTORY_TYPE")
@@ -661,6 +664,17 @@ class BrokerTransport:
             raise IpcError("DEADLINE")
         self.max_frame_bytes = _positive_int(
             "FRAME_LIMIT", getattr(config, "broker_max_frame_bytes", None)
+        )
+        self._runtime_identity = (
+            None if runtime_identity is None else canonical_json(runtime_identity)
+        )
+
+    @property
+    def runtime_identity(self):
+        return (
+            None
+            if self._runtime_identity is None
+            else _decode_payload(self._runtime_identity)
         )
 
     def authorize(self, request, snapshot=None):
@@ -835,6 +849,10 @@ def build_broker_transport(runtime_spec):
         "batch_id",
         "coordinator_epoch",
         "broker_generation",
+        "run_mode",
+        "image_id",
+        "yolo_weights_sha256",
+        "grounded_manifest_sha256",
         "config_path",
         "authority_endpoint",
         "authority_token_path",
@@ -849,6 +867,28 @@ def build_broker_transport(runtime_spec):
     ):
         raise IpcError("BROKER_SPEC_FIELDS")
     _identifier("BATCH_ID", document["batch_id"])
+    _positive_int("EPOCH", document["coordinator_epoch"])
+    generation = _positive_int("BROKER_GENERATION", document["broker_generation"])
+    if document["run_mode"] not in {"plan_only", "execute"}:
+        raise IpcError("BROKER_RUN_MODE")
+    if (
+        not isinstance(document["image_id"], str)
+        or len(document["image_id"]) != 71
+        or not document["image_id"].startswith("sha256:")
+        or any(
+            character not in "0123456789abcdef"
+            for character in document["image_id"][7:]
+        )
+    ):
+        raise IpcError("BROKER_IMAGE_ID")
+    for name in ("yolo_weights_sha256", "grounded_manifest_sha256"):
+        value = document[name]
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            raise IpcError("BROKER_MODEL_HASH")
     config_path = Path(document["config_path"])
     endpoint = Path(document["authority_endpoint"])
     token_path = Path(document["authority_token_path"])
@@ -858,6 +898,12 @@ def build_broker_transport(runtime_spec):
     if config_path.parent != ipc_root or token_path.parent != ipc_root:
         raise IpcError("BROKER_SPEC_PATH")
     config = load_parallel_runtime_config(config_path)
+    if (
+        document["yolo_weights_sha256"] != config.yolo_weights_sha256
+        or document["grounded_manifest_sha256"]
+        != config.grounded_sam_manifest_sha256
+    ):
+        raise IpcError("BROKER_MODEL_HASH_MISMATCH")
     max_frame_bytes = _positive_int("FRAME_LIMIT", document["max_frame_bytes"])
     if max_frame_bytes != config.broker_max_frame_bytes:
         raise IpcError("BROKER_FRAME_LIMIT_MISMATCH")
@@ -873,14 +919,15 @@ def build_broker_transport(runtime_spec):
         endpoint,
         token_path,
         coordinator_epoch=document["coordinator_epoch"],
-        generation=document["broker_generation"],
+        generation=generation,
         deadline_s=float(deadline),
         max_frame_bytes=max_frame_bytes,
     )
     return BrokerTransport(
         ipc_root=ipc_root,
         config=config,
-        generation=document["broker_generation"],
+        generation=generation,
         authority_call=authority_call,
         deadline_s=float(deadline),
+        runtime_identity=document,
     )

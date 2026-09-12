@@ -1224,3 +1224,61 @@ def test_crashed_worker_recovery_terminates_only_exact_recorded_children(tmp_pat
     assert proxy.call("cancel_motion") is False
     assert proxy.call("recover") is True
     assert signals == [(711, signal.SIGINT)]
+
+
+def test_worker_control_proxy_completes_real_authenticated_socket_round_trip(tmp_path):
+    import threading
+    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+    from so101_demo.runtime.parallel_ipc import AuthenticatedUnixServer, WorkerTokenAuthority
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=3)
+    token = authority.issue("worker-01-control", 1)
+    endpoint = authority.ipc_root / "worker-01-control.sock"
+    calls = []
+    server = AuthenticatedUnixServer(
+        endpoint,
+        authority,
+        lambda message: calls.append(message["payload"]["operation"])
+        or {"completed": True},
+        deadline_s=1.0,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        proxy = _WorkerControlProxy(
+            endpoint, token, worker_id="worker-01", generation=1,
+            coordinator_epoch=3, deadline_s=1.0,
+        )
+        for operation in (
+            "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
+        ):
+            assert proxy.call(operation) is True
+        assert calls == [
+            "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
+        ]
+    finally:
+        server.close()
+        thread.join(timeout=1.0)
+
+
+def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _validate_provenance_overlay,
+    )
+
+    repository = tmp_path / "checkout"
+    module = repository / "src/so101_demo_py/src/so101_demo/cli/mujoco_parallel_batch.py"
+    console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
+    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+    for path in (module, console, config, points):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("approved", encoding="utf-8")
+    _validate_provenance_overlay(repository, module, console, config, points)
+
+    foreign = tmp_path / "other/install/so101_parallel_batch"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text("mixed", encoding="utf-8")
+    with pytest.raises(CliError, match="MIXED_OVERLAY"):
+        _validate_provenance_overlay(repository, module, foreign, config, points)

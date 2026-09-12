@@ -509,6 +509,84 @@ def test_broker_cancel_generation_is_lease_optional_and_strict(tmp_path):
     assert authority.authenticate(message)["payload"]["operation"] == "cancel_generation"
 
 
+def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_path, monkeypatch):
+    from so101_demo.runtime import parallel_ipc
+
+    ipc_root = tmp_path / "ipc"
+    ipc_root.mkdir()
+    config = ipc_root / "runtime-config.yaml"
+    config.write_bytes(
+        (Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml").read_bytes()
+    )
+    token = ipc_root / "broker-g1.token"
+    token.write_text("ab" * 32, encoding="ascii")
+    token.chmod(0o600)
+    endpoint = ipc_root / "broker-authority.sock"
+    document = {
+        "schema_version": 1,
+        "kind": "so101_parallel_broker_runtime",
+        "batch_id": "batch-1",
+        "coordinator_epoch": 3,
+        "broker_generation": 1,
+        "run_mode": "plan_only",
+        "image_id": "sha256:" + "b" * 64,
+        "yolo_weights_sha256": "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
+        "grounded_manifest_sha256": "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
+        "config_path": str(config),
+        "authority_endpoint": str(endpoint),
+        "authority_token_path": str(token),
+        "request_deadline_s": 5.0,
+        "max_frame_bytes": 8388608,
+    }
+    spec = tmp_path / "broker-spec.json"
+    spec.write_text(
+        json.dumps(document, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
+    calls = []
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+        def __call__(self, _operation, _payload):
+            return True
+
+    monkeypatch.setattr(
+        parallel_ipc,
+        "_BrokerCoordinatorClient",
+        Client,
+    )
+    transport = parallel_ipc.build_broker_transport(spec)
+    assert transport.generation == 1
+    assert transport.runtime_identity == document
+    assert calls == [
+        (
+            (endpoint, token),
+            {
+                "coordinator_epoch": 3,
+                "generation": 1,
+                "deadline_s": 5.0,
+                "max_frame_bytes": 8388608,
+            },
+        )
+    ]
+    from so101_demo.runtime.parallel_ipc import IpcError
+    invalid_documents = [
+        {**document, "extra": True},
+        {key: value for key, value in document.items() if key != "image_id"},
+        {**document, "broker_generation": "1"},
+        {**document, "run_mode": "dry_run"},
+        {**document, "image_id": "sha256:" + "z" * 64},
+    ]
+    for invalid in invalid_documents:
+        spec.write_text(
+            json.dumps(invalid, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        with pytest.raises(IpcError):
+            parallel_ipc.build_broker_transport(spec)
+
+
 def test_supervisor_rejects_absent_incomplete_and_batch_mismatched_manifest():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,
@@ -572,6 +650,41 @@ def test_supervisor_waits_for_workers_but_keeps_broker_owned_and_healthy():
     supervisor._record_started(worker, poll=worker_poll)
     assert supervisor.wait_for_children(deadline_monotonic_s=time.monotonic() + 1) == (0,)
     assert supervisor.processes == (broker,)
+
+
+def test_supervisor_refuses_to_release_exited_leader_while_exact_pgid_members_survive():
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 2)
+    members = {102: (103,)}
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: None,
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    supervisor._record_started(worker, poll=lambda: 0)
+    with pytest.raises(SupervisorError, match="GROUP_SURVIVORS"):
+        supervisor.wait_for_children(deadline_monotonic_s=time.monotonic() + 1)
+    assert supervisor.processes == (worker,)
+    members[102] = ()
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1
+    ) == (0,)
+
+    members[102] = (103,)
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: worker,
+        signal_group=lambda *_args: None,
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    supervisor._record_started(worker, poll=lambda: None)
+    assert supervisor.shutdown(wait_group=lambda *_args: True) is False
+    assert supervisor.processes == (worker,)
 
 
 def test_supervisor_default_shutdown_requires_poll_and_proc_absence(tmp_path):

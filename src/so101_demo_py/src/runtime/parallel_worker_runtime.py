@@ -142,15 +142,56 @@ class WorkerOwnedProcessTree:
             list(spec.argv), start_new_session=False,
             env=None if environment is None else dict(environment),
         )
-        pgid, cmdline, started = self._identity_probe(int(child.pid))
-        if pgid != os.getpgrp() or not cmdline or not started:
-            raise RuntimeError("nested child escaped the Worker process group")
-        identity = OwnedProcessIdentity(
-            spec.role, int(child.pid), int(pgid), tuple(cmdline), int(started)
-        )
-        self._children.append((identity, child))
-        self._write_manifest()
-        return identity
+        identity = None
+        try:
+            pgid, cmdline, started = self._identity_probe(int(child.pid))
+            if pgid != os.getpgrp() or not cmdline or not started:
+                raise RuntimeError("nested child escaped the Worker process group")
+            identity = OwnedProcessIdentity(
+                spec.role, int(child.pid), int(pgid), tuple(cmdline), int(started)
+            )
+            self._children.append((identity, child))
+            self._write_manifest()
+            return identity
+        except Exception:
+            if identity is not None:
+                self._children = [
+                    item for item in self._children if item[1] is not child
+                ]
+            self._reap_failed_start(child)
+            try:
+                self._write_manifest()
+            except Exception:
+                pass
+            raise
+
+    def _reap_failed_start(self, child):
+        """Terminate only the exact Popen child and always reap it."""
+
+        if child.poll() is not None:
+            try:
+                child.wait(timeout=0)
+            except Exception:
+                pass
+            return
+        terminate = getattr(child, "terminate", None)
+        if callable(terminate):
+            try:
+                terminate()
+            except ProcessLookupError:
+                pass
+        try:
+            child.wait(timeout=self._terminate_timeout_s)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        kill = getattr(child, "kill", None)
+        if callable(kill):
+            try:
+                kill()
+            except ProcessLookupError:
+                pass
+        child.wait(timeout=self._terminate_timeout_s)
 
     def _matches(self, identity):
         try:
@@ -350,6 +391,7 @@ class RosDynamicPlanPrefixAdapter:
         target_resolver: Callable[[Any, Any], Any] | None = None,
         plan_state: Callable[..., Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        owned_context: Any | None = None,
     ) -> None:
         if planner_factory is None:
             from ..ros.dynamic_planner import RosDynamicPlanner
@@ -371,6 +413,9 @@ class RosDynamicPlanPrefixAdapter:
         self._target_resolver = target_resolver
         self._plan_state = plan_state
         self._clock = clock
+        self._owned_node = node if owned_context is not None else None
+        self._owned_context = owned_context
+        self._closed = False
         self._options = DynamicPlanningOptions(
             template.planning_frame,
             template.planning_group,
@@ -417,7 +462,18 @@ class RosDynamicPlanPrefixAdapter:
         return PlanPrefixReceipt(tuple(segments), self._clock())
 
     def close(self) -> None:
-        self._planner.close()
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._planner.close()
+        finally:
+            try:
+                if self._owned_node is not None:
+                    self._owned_node.destroy_node()
+            finally:
+                if self._owned_context is not None:
+                    self._owned_context.shutdown()
 
 
 def headless_task_station_config(resources: WorkerResources) -> PersistentStackConfig:
@@ -547,6 +603,7 @@ class ParallelWorkerRuntime:
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
         rebind_resources: Callable[[WorkerResources], bool] | None = None,
+        close_runtime: Callable[[], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
@@ -582,6 +639,7 @@ class ParallelWorkerRuntime:
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
         self._rebind_resources = rebind_resources or (lambda _resources: True)
+        self._close_runtime = close_runtime or (lambda: None)
         self._monotonic = monotonic
         self._physical_started = False
         self._captured: list[Path] = []
@@ -792,15 +850,6 @@ class ParallelWorkerRuntime:
             raise RuntimeError("reset receipt lacks a source-frame boundary") from error
         if self._reserve_workspace(lease, receipt) is not True:
             raise RuntimeError("point workspace was not durably reserved")
-        initial = self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
-        simulation_time = getattr(receipt, "simulation_time_s", None)
-        if simulation_time is not None and (
-            isinstance(simulation_time, bool)
-            or not isinstance(simulation_time, (int, float))
-            or type(initial.source_stamp_ns) is not int
-            or initial.source_stamp_ns / 1_000_000_000.0 <= float(simulation_time)
-        ):
-            raise RuntimeError("initial camera frame is not newer than reset simulation watermark")
         self._reset_boundaries[key] = boundary
         return receipt
 
@@ -831,6 +880,17 @@ class ParallelWorkerRuntime:
             raise RuntimeError("point gate lacks a reset boundary") from error
         if self._resume_physics(lease, reset_receipt) is not True:
             raise RuntimeError("qualified point boundary did not resume simulation")
+        initial = self._capture_fresh_rgb(lease, "initial-rgb.png", boundary)
+        simulation_time = getattr(reset_receipt, "simulation_time_s", None)
+        if simulation_time is not None and (
+            isinstance(simulation_time, bool)
+            or not isinstance(simulation_time, (int, float))
+            or type(initial.source_stamp_ns) is not int
+            or initial.source_stamp_ns / 1_000_000_000.0 <= float(simulation_time)
+        ):
+            raise RuntimeError(
+                "initial camera frame is not newer than reset simulation watermark"
+            )
         self._capture_inference_rgb(lease, boundary)
         return gate
 
@@ -1118,9 +1178,12 @@ class ParallelWorkerRuntime:
 
     def shutdown_owned(self) -> None:
         try:
-            self._processes.shutdown()
+            self._close_runtime()
         finally:
-            self._physical_started = False
+            try:
+                self._processes.shutdown()
+            finally:
+                self._physical_started = False
 
     def shutdown_control(self, operation: str, *, deadline_monotonic_s: float) -> bool:
         """Perform one exact parent-requested shutdown action inside this Worker."""
