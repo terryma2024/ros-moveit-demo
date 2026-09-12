@@ -4969,12 +4969,14 @@ decision: IMPLEMENT F70 REQUEST-LOCAL BROKEN-PIPE ISOLATION
 
 ```yaml
 experiment_id: EXP-074
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T04:01:00+08:00
   - status: RUNNING
     at: 2026-09-13T04:01:00+08:00
+  - status: VALID
+    at: 2026-09-13T04:07:00+08:00
 prior_experiment: EXP-073
 hypothesis: Request-local disconnect containment preserves the complete two-Worker physical execution contract before another controlled fault run.
 mode: execute; simulation only
@@ -4993,6 +4995,40 @@ provenance:
   config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
   catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
   selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+result: F70 completed all four unique points PASSED in 197.42 seconds with qualification, K=2 scheduling, four recoveries, eight original RGB inspections, numeric detach/contact/upright/retreat gates, YOLO-first inference, coordinator completion, and exact residual cleanup all passing.
+result_report: reports/result-EXP074.json
+visual_report: reports/visual-inspection-EXP074.json
+cleanup_audit: reports/post-074-cleanup-audit.json
+retained: complete live-small-f70 tree and all command, MuJoCo, static, image, smoke, result, visual, cleanup, and prior evidence
+archived: none
+deletion_candidates: registered scratch trees only; no deletion authorized
+```
+
+## EXP-075 — F70 synchronized controlled plan-only fault gate
+
+```yaml
+experiment_id: EXP-075
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T04:07:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T04:07:00+08:00
+prior_experiment: EXP-074
+hypothesis: With reply disconnects contained, exact worker-01 TERM will not kill Broker g1; after Worker recovery is observed, exact Broker g1 TERM will pause grants and recover to a ready healthy g2 without K over-debit.
+mode: plan_only; no trajectory execution or physical action
+lifecycle: ISOLATED_STACK
+batch_id: parallel-fault-plan-20260913-v1-f70
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-fault-f70
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start, cup_test_forward_5cm, sample_05_near_center, sample_14_far_right
+fault_sequence:
+  - wait for Broker g1 ready and worker-01 validation working, inject exact worker-01 TERM
+  - require Broker remains g1 and healthy while worker-01 advances generation, then inject exact Broker g1 TERM
+  - require journal unhealthy/healthy transition and ready broker-g2 before judging
+success_criteria: Exact injectors exit 0; all physical statuses UNRUN; old Worker/request fenced; non-target Worker continues; Broker g1 survives Worker disconnect, explicit g1 TERM leads to healthy ready g2; no double lease or K over-debit; cleanup/residual audit passes.
+provenance: F70 source 86eaa5f7db650b914361cbadddb4a8041b56b87f, source tree 91e99d8d11302b3946b834834f3a1984c247fc2792e200e07a730f18c51e326a, image sha256:16fccaba3c3b679bf78858f1b9b5a15022bdbe0512133a6d1e7c0b00eb857bc7
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
