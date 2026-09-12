@@ -626,6 +626,7 @@ class ParallelWorkerRuntime:
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
         resume_physics: Callable[[Any, Any], bool] | None = None,
+        set_physics_paused: Callable[[Any, bool], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
         rebind_resources: Callable[[WorkerResources], bool] | None = None,
@@ -662,6 +663,9 @@ class ParallelWorkerRuntime:
             lambda _lease: True
         )
         self._resume_physics = resume_physics or (lambda _lease, _reset: True)
+        self._set_physics_paused = set_physics_paused or (
+            lambda _lease, _paused: True
+        )
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
         self._rebind_resources = rebind_resources or (lambda _resources: True)
@@ -1083,14 +1087,21 @@ class ParallelWorkerRuntime:
         argv = self.consumer_argv(reset_epoch, lease)
         if argv is None:
             raise RuntimeError("execute consumer command is unavailable")
-        child = self._processes.start(
-            StackProcessSpec("dynamic-consumer", argv),
-            environment=self.resources.environment,
-        )
-        if self._consumer_ready(child) is not True:
-            raise RuntimeError("dynamic consumer subscription is not ready")
-        if self._publish_pose(admitted) is False:
-            raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+        if self._set_physics_paused(lease, True) is not True:
+            raise RuntimeError("POSE_PUBLICATION_PAUSE_FAILED")
+        try:
+            child = self._processes.start(
+                StackProcessSpec("dynamic-consumer", argv),
+                environment=self.resources.environment,
+            )
+            if self._consumer_ready(child) is not True:
+                raise RuntimeError("dynamic consumer subscription is not ready")
+            if self._publish_pose(admitted) is False:
+                raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
+        finally:
+            resumed = self._set_physics_paused(lease, False) is True
+        if not resumed:
+            raise RuntimeError("POSE_PUBLICATION_RESUME_FAILED")
         self._published_pose_keys.add(key)
         receipt = self._execute_result(lease, admitted, child)
         if type(receipt) is not ExecutionCompletionReceipt:
