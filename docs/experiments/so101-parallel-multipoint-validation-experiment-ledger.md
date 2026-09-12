@@ -5635,12 +5635,14 @@ deletion_candidates: registered pytest/build scratch, invalid smoke and command 
 
 ```yaml
 experiment_id: EXP-083
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:35:25+08:00
   - status: RUNNING
     at: 2026-09-13T05:36:03+08:00
+  - status: VALID
+    at: 2026-09-13T05:44:39+08:00
 prior_experiment: EXP-082
 hypothesis: The corrected invocation of the same F74 runtime will reproduce EXP-081's six PASSED points under the execute-correct acceptance contract.
 single_variable: Correct the image tag typo from jazilho to the immutable registered jazzy tag; all product inputs and acceptance criteria remain EXP-082-identical.
@@ -5668,6 +5670,17 @@ provenance:
 success_criteria: Exit 0; all six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; no initiating TF_UNAVAILABLE, CUP_POSE_TIMEOUT, BROKER_NOT_READY, or controller abort occurs; execution_complete, batch_cleanup_complete, coverage_complete, and qualification_passed are true; execute-mode validation fields remain false and inapplicable; no residual owned state remains.
 failure_rule: Any nonzero exit, FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, applicable qualification false, or residual owned state makes this batch non-qualifying and requires diagnosis before later gates.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: Exit 0 in 278.62 seconds. All six unique points were PASSED; both Workers received exactly K=3 leases and stopped at generation 4; all six recovery receipts succeeded. Aggregate coverage, execution, qualification, and cleanup gates passed. Execute-mode validation fields remained false and inapplicable as required. Fresh original-resolution inspection accepted all 12 RGB images: each initial image showed the upright cup at its distinct catalog position, and every terminal image showed the upright cup inside the red placement target with the gripper open and retreated. No initiating target fault or residual owned state was found.
+aggregate_results_sha256: 8f1f0535af834b825485dd815b9c57d9c88a446fc415a7215549dd93ab7fc630
+command_log_sha256: 4efc866458ac66c59588923a50023da96493afb14bdc36fedbf32bc3c253ac87
+result_report: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/result-EXP083.json
+visual_review: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-review-EXP083.json
+cleanup_audit: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-083-cleanup-audit.json
+mujoco_log: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP083.txt
+retained: EXP-083 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke and command evidence, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+decision: ADVANCE TO NORMAL FOUR-POINT SMALL GATE
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
