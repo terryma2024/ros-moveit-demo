@@ -5521,12 +5521,14 @@ deletion_candidates: registered pytest/build scratch, invalid smoke command evid
 
 ```yaml
 experiment_id: EXP-081
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T05:26:17+08:00
   - status: RUNNING
     at: 2026-09-13T05:26:46+08:00
+  - status: INVALID
+    at: 2026-09-13T05:31:45+08:00
 prior_experiment: EXP-080
 hypothesis: The F74 five-second exact-stamp TF discovery window removes the fresh-stack localization race, allowing F73 pose delivery and F72 controller recovery to complete three execute cycles per Worker.
 mode: execute; simulation only
@@ -5552,6 +5554,37 @@ provenance:
 success_criteria: All six unique points have sealed PASSED attempts; each Worker receives exactly three leases and completes recovery through generation 4; all 12 original RGB images pass fresh original-resolution inspection; numeric, dynamic, recovery, model, provenance, hash, and cleanup gates pass; no initiating TF_UNAVAILABLE, CUP_POSE_TIMEOUT, BROKER_NOT_READY, or controller abort occurs; execution_complete, batch_cleanup_complete, coverage_complete, validation_complete, validation_passed, and qualification_passed are true; no residual owned state remains.
 failure_rule: Any FAILED, INDETERMINATE, UNRUN, INVALID, duplicate or missing point, K violation, evidence or hash mismatch, visual rejection, recovery or cleanup failure, or qualification false makes this batch non-qualifying and requires diagnosis before the small, synchronized-fault, or full-catalog gates.
 retention_rule: Retain all evidence; archive only superseded auditable batches; delete nothing without explicit user authorization.
+result: >-
+  The product batch exited 0 after 271.03 seconds with all six unique points PASSED, exact K=3
+  per Worker, recovery through generation 4, Broker health true, POINTS_COMPLETE, complete execution,
+  coverage, qualification, cleanup, manifest hashes, numeric/dynamic evidence, and 12 accepted
+  original-resolution RGB images. No target runtime fault or residual owned state occurred. The
+  experiment is nevertheless INVALID because its preregistered acceptance mistakenly required
+  validation_complete and validation_passed to be true in execute mode; those fields are correctly
+  false and inapplicable while qualification_passed is true. No product failure is inferred.
+result_report: reports/result-EXP081.json
+visual_review: reports/visual-review-EXP081.json
+cleanup_audit: reports/post-081-cleanup-audit.json
+retained: complete live-diagnostic-execute-f74 tree, command and MuJoCo logs, result, visual review and cleanup reports, and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke command evidence, diagnosis runtime copies, and invalid diagnostic batches; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-081
+last_valid_experiment: EXP-075
+current_hypothesis: F74, F73, and F72 jointly satisfy the six-point runtime target; repeating the identical batch under an execute-correct acceptance contract will make that evidence formally admissible.
+working_tree_status: clean at EXP-081 running commit 9fe841410490b4f875d7ee02716a410361d4c3d0; this closure is the only pending tracked change
+owned_processes: NONE
+confirmed_conclusions:
+  - All six product points PASSED with exact K=3, generation 4, complete recovery, immutable provenance, and clean teardown.
+  - All 12 original RGB images passed fresh original-resolution inspection and all sealed file hashes matched.
+  - Execute mode correctly leaves validation_complete and validation_passed false; qualification_passed is the applicable terminal gate.
+ruling: Preserve EXP-081 as invalid acceptance-authoring evidence, preregister the identical F74 six-point run without the inapplicable validation fields, and rerun under a new batch ID and root before advancing.
+retained: EXP-081 and all prior evidence
+archived: none
+deletion_candidates: registered pytest/build scratch, invalid smoke command evidence, diagnosis runtime copies, and invalid diagnostic evidence; no deletion authorized
+decision: RERUN SIX-POINT F74 AS EXP-082
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
