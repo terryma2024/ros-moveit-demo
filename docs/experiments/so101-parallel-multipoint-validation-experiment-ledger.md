@@ -31,12 +31,13 @@ confirmed_conclusions:
   - F47 binds the already-validated production point-initial facts to all seven exact lease identity fields before the Worker's unchanged authorization check; its complete ordinary gate and rebuilt immutable image passed (CP-027).
   - EXP-044 proved the F47 gate receipt is correct but exposed the complementary production reset-receipt identity omission before ATTEMPT_STARTED; F48 is limited to binding that reset receipt to the same seven exact lease fields (CP-028).
   - F48 binds the production reset receipt to all seven exact lease identity fields while preserving reset and Worker gate semantics; its fresh complete ordinary gate and immutable dual-model image passed (CP-029).
+  - EXP-045 crossed both exact lease-bound reset/gate receipts and durable ATTEMPT_STARTED, then exposed deterministic insecure-mode rejection in Broker input mirror intermediates; F49 preserves the Broker security gate and fixes the producer path modes (CP-030).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-029
-next_experiment: EXP-045 is preregistered with F48 source, image, immutable inputs, and a clean two-Worker preflight
+latest_checkpoint: CP-030
+next_experiment: F49 formal RED/GREEN for exact private Broker input directory creation, followed by a fresh complete gate and immutable image
 ```
 
 Frozen provenance:
@@ -124,6 +125,8 @@ Preflight rulings adopted before Task 1:
 - Ruling F45: Replace impossible whole-graph tuple equality with an exact stable topology predicate that matches the independently observed two-Worker graph and the design's actual stale-node isolation requirement. Require every fixed Worker node exactly once; require the four legitimate fixed internal nodes `/controller_manager`, `/move_group/moveit`, `/moveit_simple_controller_manager`, and `/robotsystem` exactly once; require exactly one node in each runtime-generated category `/move_group_private_<decimal>`, `/moveit_<decimal>`, and `/transform_listener_impl_<lower-hex>`. Reject any missing node, duplicate FQN, second member of a generated category, malformed suffix, or unknown node. Keep stable-graph sampling and all non-node gates unchanged. Cost if wrong: an old in-domain internal node could be admitted; direct tests must cover missing, duplicate-category, malformed, and unknown-node rejection before live execution.
 - Ruling F46: ProcessSupervisor.start may boundedly retry `/proc` identity reads for an alive exact Popen child while its `start_new_session=True` setsid transition is not yet visible. Retry at most eight reads with a 1 ms yield; admit only a complete identity with pgid==pid. If the child exits or never becomes a self-led group, preserve CHILD_IDENTITY, reap the exact Popen child, and never signal a foreign/unverified group. PID reuse, command/start-time identity, manifest durability, and shutdown semantics remain unchanged. Cost if wrong: a foreign group could be signalled; direct RED/GREEN tests must prove transient inherited-PGID success and persistent foreign-PGID no-signal failure.
 - Ruling F47: `ParallelRosRuntime.initial_gate` must bind its already-validated point-initial facts to the exact current lease by copying the seven immutable lease identity fields into the returned gate receipt. It may not synthesize, normalize, or omit identity, and `ParallelWorker._gate_summary` retains exact type-and-value checks against both reset and gate receipts before ATTEMPT_STARTED. Cost if wrong: evidence from another point, generation, or Worker could authorize execution; direct RED/GREEN tests must prove all seven production fields and preserve mismatch rejection.
+- Ruling F48: `ParallelRosRuntime.reset_point` must bind its validated reset boundary to the exact current lease by copying the same seven immutable identity fields into `ResetBoundaryReceipt`. Standalone observation-only receipt construction remains compatible, but production authorization still requires exact type and value on both reset and gate receipts. Cost if wrong: a reset from another lease could authorize inference; direct RED/GREEN tests must exercise the production reset path.
+- Ruling F49: Broker input mirroring must create every directory below the already-private `broker-inputs` root sequentially with exact mode 0700 and verify owner, type, mode, and no symlink before linking the immutable 0400 RGB file. `Path.mkdir(parents=True, mode=0700)` is insufficient because intermediate directories inherit umask-derived 0775 and the Broker correctly rejects them. Do not relax `ParallelPerceptionRuntime._frame` or its read-only/owner/mode/hash checks. Cost if wrong: group-writable path substitution could reach the privileged CUDA Broker; direct RED/GREEN must force umask 0002 and prove every mirrored parent is 0700.
 
 ```yaml
 checkpoint_id: CP-002
@@ -2554,10 +2557,14 @@ decision: RUN EXP-045 with unchanged four points and physical criteria
 
 ```yaml
 experiment_id: EXP-045
-status: PLANNED
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-12T20:18:48+08:00
+  - status: RUNNING
+    at: 2026-09-12T20:22:42+08:00
+  - status: INVALID
+    at: 2026-09-12T20:24:11+08:00
 prior_experiment: EXP-044
 hypothesis: F48 supplies exact current-lease identity on both production reset and gate receipts, allowing two Workers to execute four unique points.
 prediction: Four unique points finish PASSED with qualification_passed=true, each Worker handles at most two points, and every isolation, physical, visual, and cleanup invariant holds.
@@ -2578,9 +2585,62 @@ provenance:
   grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 preflight: reports/preflight-exp045-r3.json; earlier empty preflight-exp045.json and preflight-exp045-r2.json are retained invalid wrapper outputs and are not authorities
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
-retained: preregistration, F48 qualification evidence, preflight-exp045-r3.json, and all prior evidence
+result: >-
+  Command exit was 1 after 88.72 s. Both Workers started, received one distinct lease, reset their
+  points, passed the exact F48 reset/gate identity checks, and durably ACKed ATTEMPT_STARTED. Both
+  immutable initial frames were inspected at original 640x480 resolution and show the commanded cup
+  position, canonical reset arm, clear gripper/cup separation, and no visible penetration. Both
+  first YOLO requests then terminated INVALID/PERCEPTION_INFRA_ERROR before pose admission or any
+  controller command; sealed results independently state physical_action_proven_absent=true. The
+  shared deterministic cause is that capture_rgb used `mkdir(parents=True, mode=0700)` for the
+  Broker mirror: only the leaf received 0700, while every newly created intermediate beneath the
+  pre-existing 0700 broker-inputs root is owner 1000:1000 mode 0775 under host umask 0002. The
+  Broker correctly rejects any group/other-writable parent with INPUT_DIRECTORY_OWNER_MODE. The two
+  ATTEMPT_STARTED records consume one K unit on each Worker; the remaining two points were never
+  leased. Recovery was conservatively unsuccessful; one replacement ros2_control_node also
+  reproduced the known service-response RCLError during shutdown/start overlap, after both
+  perception outcomes, and is not their cause.
+cleanup: >-
+  Exact CID b8e1b205c45df08366c5e11d760680a33b312b049235f1de20a9427a55f2d037
+  was verified against immutable F48 image, exact batch/generation labels, and the four registered
+  mounts, then stopped. The --rm container was removed; post-stop audits found no related owned
+  process, running batch container, GPU compute task, or domain owner. The MuJoCo log was moved
+  without deletion to reports/MUJOCO_LOG-EXP045.txt.
+visual_sha256:
+  cup_test_forward_5cm: fad007b56ded2b87722b56a2c926d8e16612a09d9daeabdca4be3481df382f3d
+  task_start: b2870627e9c2fe521bb8e8204c323dc9e10e7aed8e9919ffaba7bb28946ba05f
+command_exit_sha256: 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+command_log_sha256: 27ac60a1e7e764687daa0eadf7fc4bdfbcb5a99ff2aa7f1d5d0500552bde5f33
+command_time_sha256: df5438fee6f2abc958fb2b0fe4984534e818d1b5c36bca958bcda95975dc2ce0
+aggregate_sha256: a646b1d3e05e4f44fa67c5199fe9b2a06c964f96982e980add3aab32dbd9fe03
+worker_01_result_sha256: 85c5236332e7d1fbe47c921384cf49c1dc89892456dced5829c93cde5130257c
+worker_02_result_sha256: 4b2eb091d2844f41c40732a3671ca32cc81141ea251f956ce0431055de7371ae
+mujoco_log_sha256: 5d3e2ba97e711cd4893244b273b852a9c2fa2097c0e6414d663aa3ba9525766f
+conclusion: INVALID infrastructure result after two durable ATTEMPT_STARTED records; zero physical actions. Keep the Broker security gate strict, create every mirror directory privately under F49, rebuild, and restart the complete four-point validation with a new batch identity.
+retained: complete EXP-045 batch/reports, two visually inspected immutable initial RGB frames, moved MuJoCo log, F48 qualification evidence, preflight-exp045-r3.json, and all prior evidence
 archived: none
 deletion_candidates: p58/p59 and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-030
+last_valid_experiment: EXP-022
+current_hypothesis: Exact 0700 creation of every Broker mirror directory will preserve the security boundary and allow the two authorized YOLO requests to execute.
+working_tree_status: ledger-only EXP-045 result and F49 ruling after clean executable source b7a6e99cf969f1e1ff3bd87a0e44bb7af9376921
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-045 proves F48 in production: both exact reset/gate identities passed and two distinct ATTEMPT_STARTED records were durable.
+  - Both point results are INVALID/PERCEPTION_INFRA_ERROR with physical_action_proven_absent=true; no pose admission, plan, trajectory, or controller action exists.
+  - Every intermediate Broker mirror directory created by pathlib parents=True is mode 0775 under umask 0002, while the input leaf is 0700 and RGB file is owner 1000:1000 mode 0400 with the sealed hash.
+  - ParallelPerceptionRuntime deliberately rejects group/other-writable parents. F49 will fix the producer and retain that security check unchanged.
+  - Both original-resolution initial frames were completely inspected and are visually consistent with the reset point and absence of contact or penetration.
+  - Exact Broker cleanup completed and no related owned process, running batch container, GPU compute task, or domain owner remained.
+open_risks:
+  - Perception, pose admission, planning, and execution have not yet succeeded in a live batch.
+retained: complete EXP-045 evidence, moved MuJoCo log, all F48 evidence, invalid harness outputs, and all prior evidence
+archived: none
+deletion_candidates: direct pytest scratch and p51-p59 after readback; no deletion authorized
+decision: IMPLEMENT F49 WITH FORMAL RED/GREEN
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
