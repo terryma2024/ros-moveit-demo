@@ -31,8 +31,8 @@ disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-022
-next_experiment: EXP-038 is INVALID; F43 bounded node-inventory diagnostics precede EXP-039
+latest_checkpoint: CP-023
+next_experiment: EXP-039 is RUNNING
 ```
 
 Frozen provenance:
@@ -2047,6 +2047,64 @@ conclusion: INVALID; zero countable attempts. Add F43 diagnostic-only bounded ex
 retained: all prior evidence plus complete EXP-038 batch and report artifacts
 archived: none
 deletion_candidates: p51, p52, and direct pytest scratch after readback; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-023
+last_valid_experiment: EXP-022
+current_hypothesis: F43 will expose the exact stable graph difference on both Workers without changing node equality or any authorization predicate.
+working_tree_status: clean at diagnostic source commit f397cd401d66f3324b7f6bbf19c33f77b48a8f58 before this ledger-only pre-run commit
+owned_processes: NONE
+preserved_processes: NONE; EXP-038 exact cleanup and fresh EXP-039 preflight found no related process, container, GPU task, or domain owner.
+confirmed_conclusions:
+  - F43 formal RED pytest-cURIroAy failed on absent node detail; focused GREEN pytest-Pd6981M6 passed and adjacent pytest-EnGgcPzy passed 156 tests.
+  - Node diagnostics are deterministic JSON with sorted expected/missing/unexpected/duplicate arrays, at most 16 entries per array and 96 characters per entry. Exact tuple equality and all other predicates are unchanged.
+  - Fresh p53 symlink build passed in 1.51 seconds; all 2770 ordinary tests passed in 83.67 seconds wall with zero errors, failures, or skips and no benchmark collection.
+  - Source and installed module trees both hash c6973196f107b2e34a17d6f27bf41de924994cb4fa3968def2aaee23a0067564; complete package source hash is 2c4cb5515c3d07ea688b4eb1effe36008d88081006258f1f8b46c2817ad2394c.
+  - Rebuilt image sha256:9e48dfee5c05a1f7c3137b712b631cc740dbe981a54a734c7294adfb132322ca binds the same complete source and passed fresh dual-model CUDA smoke with one QUALIFIED candidate per model.
+  - Fresh EXP-039 preflight found 24 CPUs, 25.517 GiB MemAvailable, 15272 MiB free GPU memory, and no related process/container/GPU/domain owner.
+open_risks:
+  - The exact missing/unexpected/duplicate node set is unknown until EXP-039 runs.
+  - No physical attempt or point has yet been authorized.
+retained: F43 RED/GREEN/adjacent scratch, p53, installed provenance, image build, smoke, EXP-038 evidence, and EXP-039 preflight reports
+archived: none
+deletion_candidates: direct pytest scratch plus p51-p53 after readback; nothing was deleted
+decision: RUN EXP-039 with unchanged source semantics, selection, and physical thresholds
+```
+
+## EXP-039 — Task 14 bounded-node-diagnostic two-Worker execute
+
+```yaml
+experiment_id: EXP-039
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-12T19:13:13+08:00
+  - status: RUNNING
+    at: 2026-09-12T19:13:13+08:00
+prior_experiment: EXP-038
+hypothesis: F43 identifies the complete stable Worker graph difference while preserving the F42 authorization semantics.
+prediction: Either the four points execute and pass, or every node rejection contains bounded deterministic missing/unexpected/duplicate detail with zero countable attempts.
+single_variable: Diagnostic payload only. F42 semantics, complete overlay, selection, configuration, models, N=2, K=2, timeouts, gate conjunction, and physical criteria remain frozen; source/install/image and immutable batch identities advance.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260912-v1-f43
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f43
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete evidence, and clean shutdown.
+diagnostic_criteria: A pre-ATTEMPT_STARTED worker_nodes rejection reports bounded exact differences, remains INVALID, and authorizes no physical conclusion.
+provenance:
+  executable_source_commit: f397cd401d66f3324b7f6bbf19c33f77b48a8f58
+  executable_source_tree: 2c4cb5515c3d07ea688b4eb1effe36008d88081006258f1f8b46c2817ad2394c
+  runtime_head: clean ledger-only pre-run commit containing this record
+  image_id: sha256:9e48dfee5c05a1f7c3137b712b631cc740dbe981a54a734c7294adfb132322ca
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+visual_method: Original-resolution immutable MuJoCo offscreen RGB per authorized point if reached.
+retained: all prior evidence plus complete EXP-039 batch and reports
+archived: none
+deletion_candidates: p53 and direct pytest scratch after readback; no deletion authorized
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
