@@ -4484,12 +4484,14 @@ decision: RUN EXP-067 UNCHANGED FOUR-POINT GATE
 
 ```yaml
 experiment_id: EXP-067
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T02:43:29+08:00
   - status: RUNNING
     at: 2026-09-13T02:43:29+08:00
+  - status: INVALID
+    at: 2026-09-13T02:49:54+08:00
 prior_experiment: EXP-066
 hypothesis: Deferring ListControllers until all required service/action endpoints exist and retaining only one pending request will prevent the controller-manager service-response abort during parallel startup and recovery.
 prediction: Four unique points finish PASSED with qualification_passed=true, every recovery receipt succeeds, cleanup-gates.json reports every component true, and no owned task remains.
@@ -4512,10 +4514,38 @@ preflight: reports/preflight-exp067.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f66 and root live-small-f66.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic, physical, recovery, visual, cleanup, or residual failure remains INVALID.
-result: PENDING
-retained: PENDING
+result: >-
+  INVALID — exit 1 after 210.64 seconds solely at the cleanup qualification boundary. All four
+  unique points PASSED; each Worker executed exactly two points; all four recovery receipts
+  succeeded; and all eight original-resolution 640x480 RGB images passed. F66 eliminated the
+  controller-manager response abort across initial startup and every recovery generation. All
+  cleanup actions and process cleanup passed. Docker stop returned while the exact auto-remove
+  container remained briefly inspectable, so the immediate post-stop inspect raised
+  BROKER_CONTAINER_SURVIVED and coordinator completion was not attempted. Subsequent exact-ID
+  readback proved the container absent, with no related process, GPU task, or domain claim.
+retained: complete live-small-f66 tree, command-067 log/time/exit, visual report, root-cause report, cleanup audit, and all prior evidence
 archived: none
-deletion_candidates: none from this experiment unless separately classified after readback
+deletion_candidates: none from this experiment
+```
+
+```yaml
+checkpoint_id: CP-065
+last_valid_experiment: EXP-022
+current_hypothesis: Docker stop can return before a --rm Broker container disappears from inspect; bounded exact-ID absence polling after the already-validated stop will distinguish this removal lag from a surviving container without weakening ownership checks.
+working_tree_status: clean executable source at 51baa98b6256c05c69c82208d926dfcce115f6b3; ledger-only EXP-067 closure pending bounded F67 TDD
+owned_processes: NONE
+confirmed_conclusions:
+  - F66 is validated at its exact boundary: both Workers completed initial startup plus two recovery startups with no controller-manager RCLError or exit -6.
+  - All four frozen points passed, both Workers respected K=2, all four recovery receipts succeeded, and all eight original-resolution RGB images passed.
+  - Batch terminality was true before cleanup. Qualification remained false only because container_cleanup was false and coordinator completion correctly did not run.
+  - Current retirement performs exactly one immediate inspect after docker stop. That inspect observed the auto-remove container before removal completed and raised BROKER_CONTAINER_SURVIVED; later exact-ID readback proved absence.
+  - Exact pre-stop image, batch label, generation label, runtime mount, input mount, and full container ID validation already passed and must remain unchanged.
+  - No process, container, GPU application, or domain claim remained after the run.
+ruling: TDD one bounded F67 cleanup change. After exact ownership validation and docker stop, poll exact-ID inspect for absence within the existing heartbeat timeout; accept only proven absence, retain STOP_FAILED/SURVIVED fail-closed behavior at deadline, and never broaden container selection.
+retained: EXP-067 runtime, visual, root-cause, cleanup, command, and all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: IMPLEMENT F67 BOUNDED AUTO-REMOVE OBSERVATION WITH TDD
 ```
 
 ## EXP-002 — Task 7 isolated detector package build
