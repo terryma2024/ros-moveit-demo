@@ -3865,12 +3865,14 @@ decision: RUN EXP-059
 
 ```yaml
 experiment_id: EXP-059
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T00:31:52+08:00
   - status: RUNNING
     at: 2026-09-13T00:31:52+08:00
+  - status: INVALID
+    at: 2026-09-13T00:32:48+08:00
 prior_experiment: EXP-058
 hypothesis: Starting and confirming each lease's exact dynamic consumer before its immutable inference snapshot gives both publisher and consumer adequate clock history while preserving the pose-freshness and action-authorization gates.
 prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
@@ -3893,6 +3895,64 @@ preflight: reports/preflight-exp059.json
 visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
 command: >-
   The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f59-r2 and root live-small-f59-r2.
+acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
+result: INVALID — the clean-overlay command still failed closed with PROVENANCE_MIXED_OVERLAY in 0.20 seconds before creating the batch root or starting ROS, Docker, GPU inference, simulation, or any physical action. Source inspection identified the exact remaining transcription error: --points used the external handoff copy, while the product deliberately requires config and catalog paths beneath src/so101_demo_py. The package-local moveit_expert_validation_points_v1.yaml has the exact frozen c7491547 catalog hash.
+cleanup_readback: The intended batch root was absent; no related process, container, GPU compute application, or ROS domain 181-183 claim remained.
+retained: command-059 log/time/exit, source diagnosis, preflight, and all prior evidence
+archived: none
+deletion_candidates: none from this experiment; no deletion authorized
+```
+
+```yaml
+checkpoint_id: CP-052
+last_valid_experiment: EXP-022
+current_hypothesis: The F59 prestarted-consumer hypothesis remains untested because EXP-059 exited at path provenance validation.
+working_tree_status: clean executable source at 158b99df17a5a28b8da0d2780fdc71e06ff0c2ae; ledger-only EXP-060 preregistration follows
+owned_processes: NONE
+confirmed_conclusions:
+  - EXP-059 created no batch root and started no ROS, Docker, GPU inference, simulation, or physical action.
+  - Source readback proves _validate_provenance_overlay requires both config and points beneath src/so101_demo_py. The package-local moveit_expert_validation_points_v1.yaml is byte-for-byte hash-identical to the frozen handoff catalog at c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5.
+  - Fresh EXP-060 preflight found 24 CPUs, 24.994 GiB MemAvailable, 15272 MiB free GPU, no related process/container/GPU task, and all domains unlocked.
+ruling: Repeat the unchanged F59 four-point gate under the clean overlay with the exact-hash package-local catalog path required by the product provenance contract.
+retained: EXP-059 command evidence, catalog path/hash diagnosis, EXP-060 preflight, and all prior evidence
+archived: none
+deletion_candidates: none newly authorized
+decision: RUN EXP-060
+```
+
+## EXP-060 — Task 14 prestarted-consumer pose freshness F59 corrected catalog path
+
+```yaml
+experiment_id: EXP-060
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T00:33:26+08:00
+  - status: RUNNING
+    at: 2026-09-13T00:33:26+08:00
+prior_experiment: EXP-059
+hypothesis: Starting and confirming each lease's exact dynamic consumer before its immutable inference snapshot gives both publisher and consumer adequate clock history while preserving the pose-freshness and action-authorization gates.
+prediction: Four unique points finish PASSED with qualification_passed=true, each slot uses no more than two leases, every dynamic execution receipt is complete, and every recovery diagnostic is all true.
+single_variable: No product or experimental variable differs from EXP-059; only --points is corrected to the package-local catalog copy carrying the exact frozen catalog hash.
+lifecycle: ISOLATED_STACK
+batch_id: parallel-small-20260913-v1-f59-r3
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-small-f59-r3
+success_criteria: Exit 0, POINTS_COMPLETE, qualification_passed=true, four unique PASSED points, K<=2, complete recovery/dynamic receipts, complete evidence, and clean shutdown.
+provenance:
+  executable_source_commit: 158b99df17a5a28b8da0d2780fdc71e06ff0c2ae
+  executable_source_tree: d91ad106d81e5b49a64109771318f0a94a0a26812896954e886973a06911c0aa
+  installed_module_tree: d5040c0402485e96e1fd0a23683c1e0818ba6d82e206ac1505ad9c2e45864751
+  image_id: sha256:000d73c29fc7b77e56e852b755db01a60f74b5a2e85b2150915af8512d5584f2
+  config_sha256: 7baaac4e4113427a262bfef4a081ceb0351920b386d3daff2042338764177478
+  catalog_path: src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  selection_sha256: a474137a29b5044ba0045628f090b0ff38b07058d2efbf1e2500f32393370ce8
+  yolo_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+preflight: reports/preflight-exp060.json
+visual_method: Original-resolution immutable MuJoCo offscreen RGB for every authorized point, followed by complete per-image visual inspection.
+command: >-
+  The exact frozen four-point command under verified libexec PATH and full overlay, with batch parallel-small-20260913-v1-f59-r3, root live-small-f59-r3, and package-local exact-hash catalog.
 acceptance: The complete frozen Task 14 live-small gate; any diagnostic or physical failure remains INVALID.
 result: PENDING
 retained: all prior evidence; runtime evidence pending
