@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: a9e2b27832a892c70f663895ebff6540b411ef49
+current_commit: 29fec8a90d3fdbe6c1790ed67c3f3a6e6cba48fa
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-093
-next_experiment: EXP-107
+latest_checkpoint: CP-094
+next_experiment: EXP-108
 ```
 
 Frozen provenance:
@@ -8158,12 +8158,14 @@ next_command: Preregister EXP-107 with a new batch/root and rerun the otherwise 
 
 ```yaml
 experiment_id: EXP-107
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:47:12+08:00
   - status: RUNNING
     at: 2026-09-13T10:47:12+08:00
+  - status: INVALID
+    at: 2026-09-13T10:50:28+08:00
 prior_experiment: EXP-106
 hypothesis: With the verified ROS/worktree overlay sourced normally, Coordinator unavailability during exact dynamic execution causes Worker-side independent lease revocation, bounded controller cancel-and-confirm, and fencing of all later goals from that lease.
 single_variable: Remove shell nounset from the otherwise identical EXP-106 launch environment and use a new immutable batch/root; product source, install, image, models, config, point and fault sequence remain fixed.
@@ -8187,7 +8189,70 @@ provenance:
   source_commit: a9e2b27832a892c70f663895ebff6540b411ef49
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+observed:
+  - The corrected shell started Broker g1 and Worker g1, but the selected overlay omitted the worktree mujoco_ros2_control, mujoco_ros2_control_plugins and mujoco_3d_lidar prefixes.
+  - The runtime log proves CameraPlugin was absent from the loaded plugin registry. Plugin-loader construction then aborted before SimulationEvidencePlugin initialization, so reset failed closed with initial evidence unavailable.
+  - The command exited 1 in 32.717163 s before any dynamic consumer or controller goal. task_start remained UNRUN; cleanup removed the exact Worker/Broker/ROS/container tree and the corrected residual audit is clean.
+conclusion: INVALID mixed/incomplete overlay; no heartbeat fault was injected and no physical result is inferred.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-107.log sha256=214d4a07d1677d22d3fb2c34790ce62fc5378ffaf154e3221ef81f25cd40d615
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-107.time sha256=c2ce07815c1548b5d50ef1aeb4ab456257b3bb46d37ad686e647fbea23df988e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-107/coordinator/aggregate_results.json sha256=b0aa916e7f941815a297356fbb07cda0bd5dd6d17bba4407cb16978e8e96b07f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-107/workers/worker-01/worker-run-results.json sha256=1b30ecb37b4448727c2ca51e0a653b2e95321ce172e5f72757dfa87887b7358c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-107-cleanup-audit-r2.json sha256=500e9219a69378aba4930a2806370561f0d49018dab2c390f1eb4b2b8e6fac41
+  - post-107-cleanup-audit.json is retained as an invalid self-matching process-filter diagnostic and is not used for cleanup acceptance
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+decision: KEEP_INVALID
+next_experiment: EXP-108
+```
+
+```yaml
+checkpoint_id: CP-094
+last_valid_experiment: EXP-105
+current_hypothesis: The product fault path remains untested; the locally rebuilt controller, camera/lidar plugin and SO-101 packages must all be explicitly sourced before live runtime admission.
+working_tree_status: EXP-107 invalid result is ledger-only; exact cleanup is complete.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Worktree CameraPlugin registry absence, not the reviewed heartbeat implementation, caused EXP-107 to fail closed before execute.
+open_risks:
+  - Execute heartbeat/lease revocation remains pending under the complete explicit overlay.
+next_command: Preregister EXP-108 with a new root and source all worktree controller/plugin and application package prefixes before repeating the fault sequence.
+```
+
+## EXP-108 — Execute heartbeat/lease-revocation fault with complete overlay
+
+```yaml
+experiment_id: EXP-108
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:50:28+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:50:28+08:00
+prior_experiment: EXP-107
+hypothesis: The complete worktree overlay will reach active dynamic execution, after which exact Coordinator suspension will be handled by independent Worker revocation and bounded controller stop before Coordinator resume.
+single_variable: Add only the three omitted worktree controller/plugin package prefixes and use a new batch/root; all product inputs and the EXP-107 fault sequence remain fixed.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v3-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-108
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+overlay_order:
+  - /opt/ros/jazzy
+  - worktree mujoco_ros2_control_msgs, mujoco_ros2_control, mujoco_ros2_control_plugins, mujoco_3d_lidar
+  - worktree so101_mujoco_support, so101_teleop, so101_demo_py
+fault_sequence: Identical to EXP-107, including proof of active execute, exact identity checks, stop longer than heartbeat timeout, pre-resume cancel confirmation, resume, conservative adjudication and cleanup.
+success_criteria: Identical to EXP-107, plus worktree prefix readback for all eight explicitly sourced packages.
+failure_criteria: Identical to EXP-107.
+invalid_criteria: Any incomplete/mixed overlay, pre-existing root, unverified signal target, or missed active-execute window.
+provenance:
+  source_commit: 29fec8a90d3fdbe6c1790ed67c3f3a6e6cba48fa
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-107
+next_experiment: EXP-108
 ```
