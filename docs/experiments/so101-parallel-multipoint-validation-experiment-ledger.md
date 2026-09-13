@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 89b6198612b7003522386ace4a72b8d87c588203
+current_commit: 1a023f3a6be3caf04a6af03d68a518ecb320f9e0
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-096
-next_experiment: EXP-110
+latest_checkpoint: CP-097
+next_experiment: EXP-111
 ```
 
 Frozen provenance:
@@ -8354,12 +8354,14 @@ next_command: Preregister EXP-110; start the minimal batch parent first, then im
 
 ```yaml
 experiment_id: EXP-110
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:58:20+08:00
   - status: RUNNING
     at: 2026-09-13T10:58:20+08:00
+  - status: VALID
+    at: 2026-09-13T11:01:46+08:00
 prior_experiment: EXP-109
 hypothesis: Starting the verified minimal batch parent before attaching a separate 50 ms observer avoids admission self-collision and still injects exact Coordinator SIGSTOP during an active dynamic controller goal.
 single_variable: Move the EXP-109 monitor into a separate process started immediately after the minimal launch process; all product inputs, predicate, signal and evidence criteria remain fixed.
@@ -8378,7 +8380,70 @@ provenance:
   source_commit: 89b6198612b7003522386ace4a72b8d87c588203
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+observed:
+  - The exact Coordinator was stopped in state T at 10:58:59 while controller accepted-goal count 11 exceeded reached-success count 10 and the exact dynamic consumer identity was live.
+  - Before Coordinator resume at 10:59:30, the dynamic consumer still existed and the counts had advanced to accepted 23/reached 22. Thus twelve later goals were accepted after lease heartbeat acknowledgement was unavailable.
+  - Controller cancel appeared only at 10:59:28, after the consumer's MOVEIT_EXECUTION_MONITOR_ABORTED receipt. Source inspection identifies the boundary: ParallelWorkerRuntime.cancel_motion synchronously waits for WorkerOwnedProcessTree.stop, whose SIGINT grace is 20 s, before calling the controller cancellation port; the tracked ros2-run wrapper does not immediately stop its actual console descendant.
+  - Pre-resume controller status arrays had only terminal status 4 entries, but this was too late for the heartbeat bound. Authoritative MuJoCo state showed the cup displaced and elevated at [-0.07799,-0.24724,0.22811], while Planning Scene still attached plastic_cup to gripper. The attempt was conservatively INDETERMINATE, recovery did not complete, command exited 147, and batch qualification/cleanup flags were false.
+  - External RGB-D capture failed because the subsequent authoritative paused snapshot stopped fresh sensor production; the attempt-local initial RGB remains fresh visual evidence, and no false terminal visual was fabricated.
+  - Final exact residual audit is clean despite the batch-level failed cleanup gate.
+conclusion: VALID_RED; the original F1 unit fix does not meet its live safety bound because consumer retirement serially delays controller cancellation and signals a wrapper rather than the actual consumer. This blocks Broker and qualification work until repaired.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-110.log sha256=4f20793f2d232413fae46269643fc3b479fdcbc456a84d31595aadfe0cf26e14
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-stop-110.readback.json sha256=872ab5339360a4d4712f5a4a54aa0d12cee61d785f061063fa328d90d7f4c3fd
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-cont-110.json sha256=14d67f52dc41282bb2d2a25a7dea885c4a0478d064b9cad4434c1c1b0fabaa03
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/controller-arm-status-110.txt sha256=f0e117e574c2127015690165e87b695c706e541a82ea8f0943cf337a9d7d0667
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/controller-execute-status-110.txt sha256=9dde65afde8fbfee37d1fb5cebc5fa4b8e03c907fc92a65b407f261ad5e5c614
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/joint-state-110.txt sha256=43e23dab9516a056fbf87bab1dfb81617bffb7b7e8a1cdad1649337dce43f8a6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/mujoco-physical-110.json sha256=49a8b84cba81f6bf5136ab82ebc3958f7ba2eeb857f5be345c902f8217f95377
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/planning-scene-110.txt sha256=1cecc8f04ce65ba3c3a17fb60c0d889528a844810c8880b6c2e89f17e9058f94
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/rgbd-capture-110.json sha256=bf9e27827b3cc80f7c21d84165c78282d612677779a43f6d1111b15718382541
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-110/coordinator/aggregate_results.json sha256=e15d2319db0f13239048947c89f0aad67506335addcff6c70dd5e3df1dfcfd7d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-110-cleanup-audit.json sha256=eac852a20c5e9c878c3fbddd0d1793c1f33b14e1075156c086a8fffc669ce950
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+decision: FIX_BEFORE_NEXT_LIVE_GATE
+next_experiment: EXP-111
+```
+
+```yaml
+checkpoint_id: CP-097
+last_valid_experiment: EXP-110
+current_hypothesis: The remaining F1 defect is local to serial child-retirement/controller-cancel order plus wrapper process identity; signalling the actual consumer and starting controller cancellation without waiting for child exit should close the live bound.
+working_tree_status: EXP-110 live RED and diagnosis are ledger-only; source is unchanged and residual cleanup is exact.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Live heartbeat loss is conservatively classified, but controller cancellation is delayed beyond five seconds and later goals are not fenced.
+open_risks:
+  - The minimum fix needs deterministic RED/GREEN, package rebuild/image provenance, then another controlled live fault before any Broker or qualification gate.
+next_command: Commit EXP-110/CP-097, preregister EXP-111, add a deterministic blocking-consumer-stop RED and direct-consumer identity contract, then make the smallest local fix.
+```
+
+## EXP-111 — Bound consumer stop and controller cancellation concurrently
+
+```yaml
+experiment_id: EXP-111
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:01:46+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:01:46+08:00
+prior_experiment: EXP-110
+hypothesis: Production cancellation misses the heartbeat bound only because the controller cancellation call is serialized after a 20 s wait on a ros2-run wrapper; direct consumer identity plus concurrent consumer interrupt/controller cancellation will cancel before a blocked stop returns and prevent later goals.
+prediction: A deterministic test that blocks process stop will show controller cancellation absent before release on current code; after the fix it will observe cancellation while stop is still blocked, exact direct module argv, and no subsequent consumer action opportunity.
+single_variable: Change only dynamic consumer process identity and cancellation ordering; do not alter heartbeat, lease, controller APIs, physical evidence classification, recovery policy or Broker gates.
+lifecycle: ISOLATED_STACK
+success_criteria:
+  - deterministic RED fails because controller cancellation waits for blocked consumer stop
+  - GREEN proves controller cancellation begins while consumer stop is blocked and the actual consumer is directly signal-addressable
+  - existing Worker revocation, runtime process ownership, dynamic execution and adjacent tests pass
+failure_criteria: Any stale-generation cancellation, sibling process signal, controller cancellation delay, direct-consumer provenance ambiguity, test regression or weakened conservative classification.
+invalid_criteria: Wrong overlay, reused pytest scratch, test collection failure, or a test that only asserts mocks without exercising ParallelWorkerRuntime.
+provenance:
+  source_commit: 1a023f3a6be3caf04a6af03d68a518ecb320f9e0
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+retention_rule: Retain RED/GREEN/adjacent/package/live evidence and scratch; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-110
+next_experiment: EXP-111
 ```
