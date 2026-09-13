@@ -7,12 +7,13 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 328de1909c6b7ceb19b2d5b6ac9a41e0e7888b69
+current_commit: e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5
+current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
   - The dispatch receipt and frozen plan, design, and point catalog hashes were verified before implementation (CP-001).
   - The canonical checkout remains at the expected base with only its pre-existing .gitignore change (CP-001).
-  - The implementation worktree uses the pinned clean mujoco_ros2_control gitlink 71bc9346cf93d6227a6678fcacf63f3e18acfcba (CP-001).
+  - The implementation worktree initially used the clean mujoco_ros2_control gitlink 71bc9346cf93d6227a6678fcacf63f3e18acfcba at CP-001; the current reviewed and qualified gitlink is c16b5a5fe880b6e1857f56486dab4ae726576969 (EXP-095).
   - The shared detector runtime is review-clean; its content-verified immutable image executed both frozen models successfully on the frozen P01 RGB (CP-008, EXP-007, EXP-008).
   - Isolated Worker resource admission is review-clean; EXP-017 admitted exactly two process-free Worker resource sets and left no owned process, container, or GPU task (CP-009).
   - The Worker state machine is review-clean with deadline-bounded authorization RPCs, mode-specific durable start evidence, local sealing before commit, and atomic deadline-bound recovery/readmission (CP-010).
@@ -41,12 +42,15 @@ confirmed_conclusions:
   - EXP-050 proved F52 Broker readiness and one complete physical PASS, then exposed a `/cup_pose` publication race against the new consumer node's uninitialized simulation clock; F53 synchronizes publication to the accepted source stamp without relaxing pose freshness (CP-039).
   - EXP-046 proves F49 creates the complete production Broker mirror chain as exact 0700, but the unchanged Worker result projection hides the next immediate request-layer exception; F50 adds bounded post-authorization phase diagnostics only (CP-032).
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
+  - EXP-088 validly proved the historical plan-only exact Worker and Broker TERM recovery gate with no lease grant during Broker unhealth and physical action proven absent.
+  - EXP-094 validly passed the final F91 four-point execute qualification, and immutable historical EXP-095 validly passed all 20 frozen points with qualification_passed=true.
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - The reviewed architecture can meet all contract, crash-recovery, isolation, live-small, and 20-point qualification gates on this host.
-latest_checkpoint: CP-039
-next_experiment: F53 source-clock-synchronized pose publication formal RED/GREEN
+  - Astra remediation finding 1 may permit an in-flight expert execution to outlive heartbeat or lease revocation; EXP-096 will verify this deterministically before any production change.
+  - Astra findings 2 through 8 remain pending direct verification against current code and evidence; no disposition is assumed at intake.
+latest_checkpoint: CP-082
+next_experiment: EXP-096
 ```
 
 Frozen provenance:
@@ -7219,4 +7223,78 @@ post_run_domain_183_sha256: 4bae7bccf96b89b60a84a24fd9610fb41f1737c58539d7035695
 retained: stdout, stderr, exit, time, resource tree, and immutable manifest; unlocked host claim records are mutable coordination state and only their time-scoped diagnostics are indexed here
 archived: none
 deletion_candidates: none
+```
+
+## Astra remediation intake — dispatch 290034f0-7026-48b3-ad00-15d84cd37f87
+
+The eight review findings are accepted as hypotheses pending direct code and deterministic evidence,
+not as pre-decided defects. Historical `EXP-088`, `EXP-094`, and `EXP-095` remain immutable. The
+remediation sequence will use new monotonic experiment and checkpoint IDs, preserve the Broker and
+controller safety gates, and require RED before each confirmed behavioral fix. Finding 6 is not a
+design-authority conflict: design section 12 explicitly requires Coordinator restart and replay, so
+the production CLI path must be verified against that frozen requirement. Finding 7 is also an
+advertised conditional capability: the frozen design and config permit at most three Workers only
+with independently verified current two-Worker headroom evidence, so the CLI path must either carry
+that authority securely or fail with an explicit unsupported contract.
+
+```yaml
+checkpoint_id: CP-082
+last_valid_experiment: EXP-095
+current_hypothesis: Astra finding 1 may allow heartbeat or lease revocation to wait behind a blocked expert execution, delaying controller cancellation and allowing later dynamic goals.
+working_tree_status: clean reviewed head e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5 before this ledger and ignored SDD recovery-index update
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; no ROS, MuJoCo, MoveIt, parallel batch, task container, or GPU compute process was active at intake
+confirmed_conclusions:
+  - The dispatch receipt contains exactly 290034f0-7026-48b3-ad00-15d84cd37f87 in 36 bytes with no newline.
+  - The target worktree is the isolated clean branch codex/so101-parallel-multipoint-validation at e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5.
+  - The current clean submodule checkout and gitlink are c16b5a5fe880b6e1857f56486dab4ae726576969.
+  - The installed so101_demo_py prefix resolves inside the target worktree overlay.
+  - Historical EXP-095 is the last valid immutable qualification and remains unchanged.
+disproven_routes:
+  - Treating the stale header current_commit, CP-039, F53 next action, or original 71bc9346 gitlink as the current recovery state.
+open_risks:
+  - All eight Astra review findings still require direct current-code verification and explicit disposition.
+  - Any confirmed runtime safety or recovery defect invalidates reuse of EXP-095 as post-remediation qualification.
+next_command: Run EXP-096 deterministic heartbeat/lease revocation RED against the reviewed current Worker and production runtime adapter before modifying production code.
+```
+
+## EXP-096 — In-flight heartbeat and lease revocation verification
+
+```yaml
+experiment_id: EXP-096
+status: PLANNED
+prior_experiment: EXP-095
+hypothesis: The current watchdog only records its fault while execute_expert holds the normal runtime path, so controller cancellation and confirmation cannot occur until that blocking call returns, and the dynamic consumer lacks the revoked batch lease needed to fence later goals.
+prediction: A deterministic test with execute_expert held in-flight will observe watchdog_faulted=true before release but no cancel-and-confirm call until the block is released; a production-adapter contract test will show no revocation identity reaches the dynamic consumer.
+single_variable: Add only deterministic regression tests around the current Worker/runtime revocation boundary; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - reviewed source commit e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5 and clean c16b5a5fe880b6e1857f56486dab4ae726576969 submodule
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, or task container
+  - exact test Python and fresh NVMe scratch verified before pytest
+success_criteria:
+  - pytest collects the new behavioral tests and fails only at the predicted missing immediate cancellation and revocation propagation boundaries
+  - cancellation timing is asserted while execute_expert remains blocked, not after it is released
+failure_criteria:
+  - the current code already cancels and confirms while blocked and prevents every later goal, disproving the finding
+invalid_criteria:
+  - import or collection failure, wrong overlay, reused scratch, live-stack interference, or failure unrelated to the asserted boundary
+provenance:
+  source_commit: e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runtime_executable: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  ros_domain_id: not_applicable
+  gz_partition: not_applicable
+commands:
+  - command: PENDING fresh-scratch focused pytest for Worker and parallel ROS runtime revocation tests
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/PENDING
+decision: PENDING
+next_experiment: EXP-097
 ```
