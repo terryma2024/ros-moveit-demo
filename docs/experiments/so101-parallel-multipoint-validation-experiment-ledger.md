@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-114
-next_experiment: EXP-128
+latest_checkpoint: CP-115
+next_experiment: EXP-129
 ```
 
 Frozen provenance:
@@ -9573,6 +9573,7 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/cleanup-gates.json sha256=25a86592cf496134f723741a3c7fbdc84bc588de700525dcd829115b8c287622
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/workers/worker-01/worker-run-results.json sha256=7a096054c97c86a99e2c98dedb1ef56850720f19f5b58600dde2ee04ba2c1081
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/workers/worker-02/worker-run-results.json sha256=31fdd4a6deaae46381e1a43f76421fa0cae8df9489e216a86880a40d5ae8ef37
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP127.txt sha256=95c1dcac126cc589337b50354e44e147266ac4e0694753d827c5cbfb66ee2473
 retention_rule: Retain all EXP-127 evidence; delete nothing without explicit authorization.
 decision: FIX_RUNTIME_GENERATION_REBIND
 next_experiment: EXP-128
@@ -9598,7 +9599,14 @@ next_command: Commit CP-114, add a RED proving the perception runner observes ge
 
 ```yaml
 experiment_id: EXP-128
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:33:34+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:34:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:38:55+08:00
 prior_experiment: EXP-127
 hypothesis: A generation-consumer bound to ParallelRosWorkerRuntime, invoked by _WorkerBrokerProxy after strict healthy discovery and before perception-chain entry, synchronizes the runtime policy latch with the exact current Broker generation.
 prediction: The current composition RED observes runtime generation 1 when the proxy has discovered generation 2; after the change it observes 2, returns the generation-2 response and still rejects rollback or a generation change during a request.
@@ -9607,7 +9615,61 @@ lifecycle: ISOLATED_STACK
 success_criteria: Deterministic RED/GREEN at proxy/runner composition; generation 2 is bound before policy construction; invalid/rollback values fail closed; mid-request generation drift remains rejected; adjacent CLI/ROS-runtime tests pass.
 failure_criteria: Worker spec rewrite, unauthenticated generation source, rollback acceptance, removal of pre/post response checks, stale latch or adjacent regression.
 invalid_criteria: Mock bypass of current_broker, wrong overlay/interpreter, reused scratch, tempfile outside registered NVMe root or setup/collection failure.
+observed:
+  - The existing-worker proxy/runner test failed before the fix because _WorkerBrokerProxy had no generation-consumer seam; the live-correlated stale runtime state was therefore unavoidable.
+  - _WorkerBrokerProxy now performs authenticated healthy discovery before entering perception_runner, creates the new endpoint client, invokes a strict generation consumer, and only then updates its own generation/client. Its existing per-request pre/post discovery checks remain unchanged.
+  - ParallelRosRuntimePorts.bind_broker_generation accepts the same or a higher positive integer and rejects rollback, zero, negative, bool, null and string values without changing its current authority.
+  - Production composition passes runtime_ports.bind_broker_generation into the proxy. The focused GREEN passed in 0.17 s; the CLI, IPC and ROS-runtime adjacent suites passed 129 tests in 37.56 s.
+  - The first adjacent run was invalid only because the new test named a nonexistent helper class; it was corrected to the actual ParallelRosRuntimePorts and rerun from a new scratch root.
+conclusion: VALID_GREEN; an existing Worker now binds its policy runtime to the exact authenticated current Broker before constructing the perception latch, with rollback and mid-request drift still fail-closed.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-red.log sha256=5af4c10294708d77097d7431c37479b54d98984f1d268512a97f0b4097895bf0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-red.time sha256=fce5bbffcd92bd7d7e0174fba275e36b92be16a12c8954ef485be71b851390ee
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-green.log sha256=9f48be82c50b3a5920f7a14214eb4b2362de356338cf897ef313eb1f89d80d87
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-green.time sha256=217720bbd2c78c5813702295039eefcab3630261dd6fe2d99876a6c7dbf7f444
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-adjacent.log sha256=00d6c5786a06fc09eee402ee86314d01bbe62272fc9f09e5b7df5f510856f14f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-adjacent.time sha256=8f9bb050309b7cecf5fcdd1952f51cbc0efd2ee754d3a387ef5407df33b21ad3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-adjacent2.log sha256=b1d829de856df45c09631d2d18f152978f40795c77ff83b3522d9312335c7c53
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp128-adjacent2.time sha256=16469968c4fdae9d6a4316d4f0dd67e3e8561a99d40902d1285acad2ab87b4b9
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p128r
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p128g
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p128a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p128a2
 retention_rule: Retain RED/GREEN/adjacent evidence and all scratch; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_114
-next_experiment: EXP-128
+decision: QUALIFY_REBUILT_SOURCE
+next_experiment: EXP-129
+```
+
+```yaml
+checkpoint_id: CP-115
+last_valid_experiment: EXP-128
+current_hypothesis: The runtime-generation binding fix is locally complete; rebuilding the overlay and image and repeating the ordinary package/model/provenance gates will qualify it for the next live F2 repetition.
+working_tree_status: EXP-128 source, tests and ledger result are the only tracked changes.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The proxy and ROS runtime now share the authenticated current Broker generation before policy construction.
+  - Rollback and mid-request drift protections remain explicit.
+open_risks:
+  - Installed code and Broker image do not yet contain EXP-128.
+  - Live continuation after generation replacement remains unproven.
+next_command: Commit CP-115, then repeat the clean four-package build, complete ordinary test, immutable image, dual-model smoke, production provenance and cleanup gates.
+```
+
+## EXP-129 — Rebuilt runtime-generation qualification
+
+```yaml
+experiment_id: EXP-129
+status: PLANNED
+prior_experiment: EXP-128
+hypothesis: The committed runtime-generation binding builds cleanly, preserves all ordinary tests and produces a source-bound immutable image whose two frozen model smokes pass.
+single_variable: Rebuild and qualify only the committed EXP-128 source; retain all frozen package, model, catalog, image-policy and cleanup inputs.
+lifecycle: PROCESS_FREE_THEN_CONTAINER_ONLY
+success_criteria: Four-package build passes; complete so101_demo_py ordinary suite has zero error/failure/skip; exact source/install/image hashes agree; both frozen model smokes are QUALIFIED; no residue remains.
+failure_criteria: Any build/test/provenance/image/model/cleanup failure, stale installed code, mutable identity or mixed overlay.
+invalid_criteria: Reused scratch/root, tempfile outside registered evidence root, wrong overlay/interpreter or pre-existing owned runtime.
+retention_rule: Retain all gate evidence and scratch as deletion candidates; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_115
+next_experiment: EXP-129
 ```

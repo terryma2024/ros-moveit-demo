@@ -733,6 +733,19 @@ class ParallelRosRuntimePorts:
         self._pose_publisher_owner = None
         self._pose_publisher = None
 
+    def bind_broker_generation(self, generation):
+        """Advance the policy authority to an authenticated discovered Broker."""
+        if type(generation) is not int or generation <= 0:
+            raise RuntimeError("BROKER_GENERATION_AUTHORITY")
+        if (
+            type(self.broker_generation) is not int
+            or self.broker_generation <= 0
+            or generation < self.broker_generation
+        ):
+            raise RuntimeError("BROKER_GENERATION_ROLLBACK")
+        self.broker_generation = generation
+        return True
+
     @staticmethod
     def expected_worker_nodes():
         return (
