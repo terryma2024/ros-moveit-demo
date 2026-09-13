@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: d51192a44e355439f857f22c4ba7462538aa7377
+current_commit: 44feaf77c6d29f12c0de15dd7f57ccaea6636683
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-122
-next_experiment: EXP-135
+latest_checkpoint: CP-123
+next_experiment: EXP-136
 ```
 
 Frozen provenance:
@@ -10121,7 +10121,14 @@ next_command: Run the mandatory EXP-045 hash and placeholder gates, commit EXP-1
 
 ```yaml
 experiment_id: EXP-135
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:29:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:35:00+08:00
+  - status: VALID
+    at: 2026-09-13T17:40:00+08:00
 prior_experiment: EXP-134
 hypothesis: The committed EXP-134 verifier/evidence/admission changes build into the isolated overlay and pass the complete ordinary so101_demo_py test gate with exact installed-source provenance.
 single_variable: Rebuild and test the EXP-134 commit; do not change code, motion thresholds, runtime configuration, models or Broker safety policy.
@@ -10132,5 +10139,57 @@ invalid_criteria: Reused scratch, tempfile outside the registered NVMe root, wro
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain build/test/provenance reports and scratch as a deletion candidate; delete nothing without explicit authorization.
 decision: RUN_AFTER_EXP_134_COMMIT
-next_experiment: EXP-135
+observed:
+  - Commit 44feaf77c6d29f12c0de15dd7f57ccaea6636683 rebuilt so101_demo_py successfully in 1.89 s. The five changed installed modules byte-match their source SHA256 values and ros2 pkg prefix resolves to the isolated worktree overlay.
+  - The first ordinary-test invocation was INVALID before collection because the registered Grounded-SAM site-packages binding was omitted, so torch was unavailable; it is retained and not counted as a candidate failure.
+  - The corrected fresh invocation bound both the worktree libexec PATH and /data/work/venvs/so101-grounded-sam Python packages, verified /usr/bin/python3 tempfile resolution under the new NVMe scratch, and passed all 2865 ordinary tests in 92.12 s with four pre-existing fork warnings and no benchmark collection.
+conclusion: VALID; the EXP-134 source is installed and complete-package qualified. The immutable Broker image and both frozen model smokes must now be rebuilt from the same commit before live execute remediation.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-build.log sha256=ef5b521c9418f9ef2ea0a87d00009a7996fbfadb9402964cdfa8d073e40a56a2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-build.time sha256=0f0367ab6b2f08274a48096b7ccc7e5958e4e55bce1b0e334ab4ec3c71ab0c38
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-installed-provenance.log sha256=3da3f51b0fbe939caf6939d1e03cb166811eb23141e15dad70e96f83b55fbc79
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-complete-ordinary.log sha256=995603934ac568d8b71a17d8a3fe8db937c647d37f17f1318e7ac28a2a7375a5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-complete-ordinary.time sha256=1de881e1873a01d0403b82db6a6264d3fc707fa5bddac2854414c5d4e4fd0f3b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-installed-provenance2.log sha256=4811a9c7cf222874371754a8be543fc8d74082e241fefa84550e2cad2dbf4c36
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-complete-ordinary2.log sha256=3dfadbe6554f193edf15c33f1430f9fa85579726afa3944836e201c2f9716c63
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp135-complete-ordinary2.time sha256=0808ca097bee434cd186d3935513e40d94a88f6270ecf6b72e0571b726305d7d
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e135
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e135b
+decision: REBUILD_IMMUTABLE_BROKER_AND_SMOKE_BOTH_MODELS
+next_experiment: EXP-136
+```
+
+```yaml
+checkpoint_id: CP-123
+last_valid_experiment: EXP-135
+current_hypothesis: A source-hash-bound rebuild of the frozen Broker image will preserve both model outputs and bind live runs to commit 44feaf77c without changing model weights, dependency pins or detector thresholds.
+working_tree_status: Only the EXP-135 result and EXP-136 preregistration are uncommitted; source, installed modules and all ordinary tests agree.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The new dynamic semantics, producer receipts and resume namespace admission pass all 2865 ordinary tests.
+  - Installed source provenance is exact for all changed runtime files.
+open_risks:
+  - The currently tagged Broker image still carries pre-EXP-134 source provenance.
+  - Active-goal heartbeat cancellation and post-stop multi-layer evidence remain unproven live.
+next_command: Commit CP-123 after the mandatory EXP-045 hash gate, then build a new immutable Broker image, smoke both frozen models and audit cleanup.
+```
+
+## EXP-136 — Immutable Broker rebuild and dual-model smoke
+
+```yaml
+experiment_id: EXP-136
+status: PLANNED
+prior_experiment: EXP-135
+hypothesis: Rebuilding only the frozen Broker image source layer from commit 44feaf77c will produce a content-verified immutable image whose YOLO and Grounded-SAM smokes remain QUALIFIED.
+single_variable: Replace the image source tree with committed EXP-134; preserve Dockerfile, dependency pins, frozen model artifacts, P01 smoke input and all runtime thresholds.
+lifecycle: CONTAINER_ONLY
+success_criteria: Host/image source SHA256 agree; immutable image ID is read back; both frozen models return QUALIFIED on the retained smoke image; no related running process, container or GPU task remains.
+failure_criteria: Build/provenance/model/cleanup failure, mutable image identity, source mismatch, fallback or model-output regression.
+invalid_criteria: Pre-existing output/root, wrong source commit, changed model/input, GPU admission failure unrelated to candidate or uncontrolled background stack.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain image/provenance/smoke/cleanup evidence and root; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_123
+next_experiment: EXP-136
 ```
