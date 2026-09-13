@@ -47,10 +47,10 @@ confirmed_conclusions:
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - Astra remediation finding 1 may permit an in-flight expert execution to outlive heartbeat or lease revocation; EXP-096 will verify this deterministically before any production change.
-  - Astra findings 2 through 8 remain pending direct verification against current code and evidence; no disposition is assumed at intake.
-latest_checkpoint: CP-082
-next_experiment: EXP-096
+  - EXP-096 confirmed Astra finding 1 and the candidate now performs exact-lease cancel-and-confirm outside the blocked execution lock; post-commit package and live fault evidence remain pending.
+  - Astra findings 2 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
+latest_checkpoint: CP-083
+next_experiment: EXP-097
 ```
 
 Frozen provenance:
@@ -7262,7 +7262,14 @@ next_command: Run EXP-096 deterministic heartbeat/lease revocation RED against t
 
 ```yaml
 experiment_id: EXP-096
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T09:13:52+08:00
+  - status: RUNNING
+    at: 2026-09-13T09:19:00+08:00
+  - status: VALID
+    at: 2026-09-13T09:21:33+08:00
 prior_experiment: EXP-095
 hypothesis: The current watchdog only records its fault while execute_expert holds the normal runtime path, so controller cancellation and confirmation cannot occur until that blocking call returns, and the dynamic consumer lacks the revoked batch lease needed to fence later goals.
 prediction: A deterministic test with execute_expert held in-flight will observe watchdog_faulted=true before release but no cancel-and-confirm call until the block is released; a production-adapter contract test will show no revocation identity reaches the dynamic consumer.
@@ -7286,15 +7293,57 @@ provenance:
   ros_domain_id: not_applicable
   gz_partition: not_applicable
 commands:
-  - command: PENDING fresh-scratch focused pytest for Worker and parallel ROS runtime revocation tests
-    exit_code: PENDING
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-red-ogdqhXfw/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py::test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked src/so101_demo_py/test/test_parallel_worker_runtime.py::test_cancel_motion_retires_exact_dynamic_consumer_before_controller_cancel -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-green-U51xBLsR/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py::test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked src/so101_demo_py/test/test_parallel_worker_runtime.py::test_cancel_motion_retires_exact_dynamic_consumer_before_controller_cancel -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent-H2emCltc/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py src/so101_demo_py/test/test_parallel_worker_runtime.py -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent2-7HmE8ZfJ/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py src/so101_demo_py/test/test_parallel_worker_runtime.py -q
+    exit_code: 0
 observed:
-  - PENDING
+  - RED collected two tests and both failed at the predicted boundaries in 3.48 s wall: the blocked expert saw no cancel/confirm before release, and runtime cancellation left its exact dynamic consumer alive.
+  - Focused GREEN collected the same two tests and passed both in 1.14 s pytest / 1.41 s wall.
+  - The first adjacent gate passed 152 tests in 3.08 s pytest / 3.35 s wall.
+  - After adding direct exact-child/sibling preservation coverage, the final adjacent gate passed 153 tests in 3.14 s pytest / 3.41 s wall.
+  - Two intervening command-harness attempts were INVALID before collection because the overlay environment was omitted; they each stopped at ModuleNotFoundError in 0.33-0.34 s wall and are not counted as behavioral evidence.
 inferred:
   - NONE
-conclusion: PENDING
+conclusion: CONFIRMED_AND_FIXED; watchdog or explicit stop now establishes a global execution fence and starts one idempotent cancel-generation, exact dynamic-consumer stop, controller cancel, and no-active-goal confirmation path without waiting for execute_expert to return. The normal exception path joins the same bounded revocation record rather than duplicating side effects.
 evidence:
-  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/PENDING
-decision: PENDING
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-red-ogdqhXfw
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-green-U51xBLsR
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent-H2emCltc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent2-7HmE8ZfJ
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f1-red-ogdqhXfw.log sha256=be6103629a56cef95e95c96939fafb1950a9b78697a6e28bac1c21456d327cdf
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f1-green-U51xBLsR.log sha256=208e499dc20a394b0939005f44d2c4bd411991470ed5e8126a410c059a73e91e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f1-adjacent-H2emCltc.log sha256=4e877f46cf32aca195b66222370ce5f8c748fe5b29482de8758cbd4791dc3bdc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f1-adjacent2-7HmE8ZfJ.stdout sha256=25eaaaac33c6947427309527f889e31f5fa582b9ba8e38c951e318d4e4a509f3
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-red-ogdqhXfw
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-green-U51xBLsR
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent-H2emCltc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent2-lWuy8a5C
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent2-lqmSnaTC
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f1-adjacent2-7HmE8ZfJ
+decision: KEEP
 next_experiment: EXP-097
+```
+
+```yaml
+checkpoint_id: CP-083
+last_valid_experiment: EXP-096
+current_hypothesis: Astra finding 2 may leave the Coordinator willing to lease new work while the Broker process is alive but reports unhealthy.
+working_tree_status: F1 implementation, regression tests, and ledger disposition are ready for one scoped commit; the ignored SDD index is separately updated.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; no ROS, MuJoCo, MoveIt, Broker, Worker, task container, or GPU compute process was started by EXP-096.
+confirmed_conclusions:
+  - Finding 1 is confirmed and the candidate closes both cancellation timing and exact dynamic-consumer retirement boundaries.
+  - Final adjacent evidence is 153 passed in 3.14 s pytest / 3.41 s wall with the exact Python temporary directory inside fresh NVMe scratch.
+disproven_routes:
+  - Waiting for a blocked execute_expert call to return before canceling the controller or retiring the dynamic consumer.
+open_risks:
+  - F1 still requires the final ordinary package gate, rebuilt-overlay provenance, and live fault-injection qualification after all reviewed fixes land.
+  - Findings 2 through 8 remain pending.
+next_command: Commit the scoped F1 source, tests, and ledger, then start EXP-097 with a deterministic alive-but-unhealthy Broker RED test before modifying production code.
 ```

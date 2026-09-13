@@ -811,6 +811,53 @@ def test_missing_heartbeat_ack_uses_frozen_bound_and_stops_after_block():
     assert ("cancel_generation", "w1", 1) in fake.broker.calls
 
 
+def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
+    """A revoked lease must stop physical work without waiting for execute_expert."""
+
+    fake = Fake(RunMode.EXECUTE)
+    entered = threading.Event()
+    release = threading.Event()
+    original_execute = fake.runtime.execute_expert
+    original_heartbeat = fake.coordinator.heartbeat
+
+    def blocked_execute(*args, **kwargs):
+        entered.set()
+        assert release.wait(3.0)
+        return original_execute(*args, **kwargs)
+
+    def lose_watchdog_heartbeat(lease):
+        if (
+            threading.current_thread().name.startswith(
+                "parallel-worker-heartbeat-rpc-"
+            )
+            and entered.is_set()
+        ):
+            raise RuntimeError("coordinator lost during expert execution")
+        return original_heartbeat(lease)
+
+    fake.runtime.execute_expert = blocked_execute
+    fake.coordinator.heartbeat = lose_watchdog_heartbeat
+    worker = ParallelWorker(fake.ports())
+    result = []
+    run_thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    run_thread.start()
+    assert entered.wait(1.0)
+
+    deadline = time.monotonic() + CONFIG.heartbeat_interval_s + 1.0
+    while "confirm_no_controller_goal" not in fake.runtime.calls:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    assert run_thread.is_alive(), "expert execution was released before cancellation"
+    assert "cancel_motion" in fake.runtime.calls
+    assert ("cancel_generation", "w1", 1) in fake.broker.calls
+
+    release.set()
+    run_thread.join(2.0)
+    assert not run_thread.is_alive()
+    assert result[0].terminal_status is None
+
+
 @pytest.mark.parametrize("mode", [RunMode.EXECUTE, RunMode.PLAN_ONLY, RunMode.DRY_RUN])
 def test_ack_deadlines_use_frozen_values_from_first_entry(mode):
     fake = Fake(mode)

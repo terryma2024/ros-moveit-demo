@@ -2,6 +2,7 @@ from dataclasses import replace
 import hashlib
 import io
 from pathlib import Path
+import signal
 from types import SimpleNamespace
 
 import numpy as np
@@ -96,6 +97,10 @@ class _ProcessGroup:
         if self.on_shutdown is not None:
             self.on_shutdown()
 
+    def stop(self, child):
+        if self.events is not None:
+            self.events.append(("stop", child.pid))
+
 
 def _lease(
     worker="worker-1", *, generation=1, point="P01", attempt="attempt-1"
@@ -153,6 +158,35 @@ def test_stop_control_fences_new_runtime_side_effects(tmp_path):
     assert runtime.stop_requested is True
     with pytest.raises(RuntimeError, match="STOP_REQUESTED"):
         runtime.reset_point(_lease())
+
+
+def test_cancel_motion_retires_exact_dynamic_consumer_before_controller_cancel(
+    tmp_path,
+):
+    """Revocation must prevent the child from submitting a later trajectory goal."""
+
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    events = []
+    processes = _ProcessGroup(events=events)
+    lease = _lease()
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=processes,
+        cancel_motion=lambda current: (
+            events.append(("cancel", current.attempt_id)) or True
+        ),
+    )
+    key = runtime._lease_key(lease)
+    child = SimpleNamespace(pid=417, role="dynamic-consumer")
+    runtime._active_lease = lease
+    runtime._execute_consumers[key] = child
+
+    assert runtime.cancel_motion(lease) is True
+
+    assert events == [("stop", 417), ("cancel", "attempt-1")]
+    assert key not in runtime._execute_consumers
 
 
 def test_inference_rgb_must_be_newer_than_reset_sim_clock_and_same_session(tmp_path):
@@ -1456,6 +1490,30 @@ def test_worker_owned_tree_retries_transient_incomplete_proc_identity(
     assert identity.pgid == 401
     assert identity.start_time_ticks == 7
     assert tree.manifest.processes == (identity,)
+
+
+def test_worker_owned_tree_stops_only_the_exact_owned_child(monkeypatch) -> None:
+    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+
+    children = [_Child(504), _Child(505)]
+    signals = []
+    monkeypatch.setattr("os.getpgrp", lambda: 401)
+    tree = WorkerOwnedProcessTree(
+        popen=lambda *_args, **_kwargs: children.pop(0),
+        identity_probe=lambda pid: (401, (f"child-{pid}",), pid + 10),
+        signal_process=lambda pid, signal_number: signals.append(
+            (pid, signal_number)
+        ),
+    )
+    first = tree.start(
+        SimpleNamespace(role="dynamic-consumer", argv=("child-504",))
+    )
+    second = tree.start(SimpleNamespace(role="task-station", argv=("child-505",)))
+
+    assert tree.stop(first) is True
+
+    assert signals == [(504, signal.SIGINT)]
+    assert tree.manifest.processes == (second,)
 
 
 def test_worker_owned_tree_serializes_concurrent_shutdown_manifest_publication(
