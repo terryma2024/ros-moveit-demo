@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import yaml
@@ -109,3 +110,115 @@ def test_cli_outputs_match_task_point_schema(tmp_path: Path) -> None:
     assert 'data-role="target-center-tolerance"' in svg
     assert 'r="52.0"' in svg
     assert 'r="13.0"' in svg
+
+    root = ET.fromstring(svg)
+    position_points = [
+        element
+        for element in root.iter("{http://www.w3.org/2000/svg}circle")
+        if element.get("data-role") == "position-point"
+    ]
+    assert len(position_points) == 20
+    assert {point.get("r") for point in position_points} == {"10.0"}
+    assert {point.get("data-status") for point in position_points} == {"pending"}
+    assert {
+        (point.get("fill"), point.get("stroke")) for point in position_points
+    } == {("#e3f2fd", "#1976d2")}
+
+
+def test_cli_marks_failed_points_from_an_external_manifest_and_results(
+    tmp_path: Path,
+) -> None:
+    generator = load_generator()
+    geometry = generator.load_geometry(REPOSITORY_ROOT)
+    anchors = generator.load_anchors(REPOSITORY_ROOT)
+    points = generator.generate_positions(anchors, geometry, seed=20260911)
+
+    points_path = tmp_path / "frozen-points.yaml"
+    points_payload = {
+        "schema_version": 1,
+        "points": [
+            {
+                "id": f"case_{index:02d}",
+                "label": f"Case {index:02d}",
+                "cup_position_world_m": [point.x_m, point.y_m, point.z_m],
+            }
+            for index, point in enumerate(points, start=1)
+        ],
+    }
+    points_path.write_text(
+        yaml.safe_dump(points_payload, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    failure_stages = {
+        9: "perception",
+        18: "planning_ik_move_above_object",
+        19: "planning_ik_lift",
+        20: "declared_planning_move_above_object",
+    }
+    results_path = tmp_path / "per-scene.tsv"
+    with results_path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=("order", "id", "success", "first_failure_stage"),
+            delimiter="\t",
+        )
+        writer.writeheader()
+        for index in range(1, 21):
+            writer.writerow(
+                {
+                    "order": index,
+                    "id": f"case_{index:02d}",
+                    "success": str(index not in failure_stages),
+                    "first_failure_stage": failure_stages.get(index, ""),
+                }
+            )
+
+    output_dir = tmp_path / "annotated"
+    assert generator.main(
+        [
+            "--repo-root",
+            str(REPOSITORY_ROOT),
+            "--output-dir",
+            str(output_dir),
+            "--points-yaml",
+            str(points_path),
+            "--results-tsv",
+            str(results_path),
+        ]
+    ) == 0
+
+    svg = (output_dir / "so101-position-top-view.svg").read_text(encoding="utf-8")
+    root = ET.fromstring(svg)
+    position_points = [
+        element
+        for element in root.iter("{http://www.w3.org/2000/svg}circle")
+        if element.get("data-role") == "position-point"
+    ]
+    assert len(position_points) == 20
+    assert {point.get("r") for point in position_points} == {"10.0"}
+
+    points_by_status = {
+        status: [
+            point
+            for point in position_points
+            if point.get("data-status") == status
+        ]
+        for status in ("success", "pending", "failure")
+    }
+    assert len(points_by_status["success"]) == 16
+    assert len(points_by_status["pending"]) == 0
+    assert len(points_by_status["failure"]) == 4
+    assert {
+        (point.get("fill"), point.get("stroke"))
+        for point in points_by_status["success"]
+    } == {("#e8f5e9", "#2e7d32")}
+    assert {
+        (point.get("fill"), point.get("stroke"))
+        for point in points_by_status["failure"]
+    } == {("#fde8e8", "#d32f2f")}
+    assert {
+        point.get("data-point-id") for point in points_by_status["failure"]
+    } == {"P09", "P18", "P19", "P20"}
+    for stage in failure_stages.values():
+        assert stage in svg
