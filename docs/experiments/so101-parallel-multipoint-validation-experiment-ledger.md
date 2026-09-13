@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-116
-next_experiment: EXP-130
+latest_checkpoint: CP-117
+next_experiment: EXP-131
 ```
 
 Frozen provenance:
@@ -9731,7 +9731,14 @@ next_command: Commit CP-116, persist/read back and syntax-check EXP-130 scripts,
 
 ```yaml
 experiment_id: EXP-130
-status: PLANNED
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:44:43+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:47:00+08:00
+  - status: INVALID
+    at: 2026-09-13T12:48:33+08:00
 prior_experiment: EXP-129
 hypothesis: Repeating EXP-127 with the EXP-128/129 runtime will preserve the authenticated pause/replacement sequence and allow generation-2 responses through the rebound Worker policy without BROKER_GENERATION_CHANGED.
 single_variable: Replace only the source/image and unique run identity with EXP-128/129-qualified values and f2-130; preserve four points, N=2/K=3, exact two-mirror corruption and all safety criteria.
@@ -9751,6 +9758,62 @@ provenance:
   broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
   broker_source_sha256: f1737b9dab782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
 retention_rule: Retain all command, observer, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_116
-next_experiment: EXP-130
+observed:
+  - Admission stopped before batch-root creation with ROS_DOMAIN_IN_USE for domains 181 and 182; no Broker, Worker, container, simulation or physical action started.
+  - The conflicting identities were ROS 2 CLI daemons started by this task's own read-only node-list cleanup audit. Stopping those exact daemons restored clean domain admission without changing product source, image or fault semantics.
+  - The empty observer log records that the injection predicate was never reached. The prescribed f2-130 root does not exist.
+conclusion: INVALID_PRE_ROOT; self-created ROS CLI daemon state invalidated admission before the experiment and carries no evidence about the runtime-generation hypothesis.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-130.log sha256=58d3c4da8484a3debe7f021ba566932a459c55f3503c95f317a5bc4255ef0175
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-130.time sha256=67c5cf6d6b7b3bb8b52dcaa440b4e6a9f718b0fc2f89e5a517b09bcf240a9b20
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-130.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-130.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp130.zsh sha256=013cd8a65dd2725b5091f3ee5868a487a89d6f2cb047efa60a8c8b31ca8ac012
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/observe-exp130.bash sha256=d9a8baaf14099d6bf0b032491f769968faf202ff81cab783fa40b58655033bed
+retention_rule: Retain all invalid-attempt evidence; no f2-130 batch root exists; delete nothing without explicit authorization.
+decision: RETRY_UNCHANGED_FROM_CLEAN_DOMAINS
+next_experiment: EXP-131
+```
+
+```yaml
+checkpoint_id: CP-117
+last_valid_experiment: EXP-129
+current_hypothesis: The F2 hypothesis remains untested because EXP-130 stopped before root creation; stopping this task's own ROS CLI daemons and using a fresh identity will allow the otherwise identical fault run to reach injection.
+working_tree_status: EXP-130 invalid result and EXP-131 preregistration are ledger-only; qualified source/install/image remain unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - EXP-130 created no batch root and exercised no product runtime or fault path.
+  - The domain conflict came only from task-created ROS CLI daemons, which have been stopped exactly.
+open_risks:
+  - Live F2 must still prove authenticated pause, generation-2 replacement, runtime rebinding and useful continuation.
+next_command: Commit CP-117, persist/read back and syntax-check fresh EXP-131 scripts, verify clean process/container state without starting ROS CLI daemons, then run the identical fault under f2-131.
+```
+
+## EXP-131 — Clean-domain runtime-rebound Broker recovery
+
+```yaml
+experiment_id: EXP-131
+status: PLANNED
+prior_experiment: EXP-130
+hypothesis: From domains uncontaminated by task-created ROS CLI daemons, the EXP-128/129 runtime will preserve authenticated Broker pause/replacement and allow generation-2 responses through the rebound Worker policy without BROKER_GENERATION_CHANGED.
+single_variable: Replace only the invalid pre-root run identity f2-130 with fresh f2-131 after stopping this task's ROS CLI daemons; preserve source, immutable image, four points, N=2/K=3, exact two-mirror corruption and every safety criterion.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-131
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Exact generation-1 image sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3, batch/runtime/ready/model identity, two Workers and zero pre-pause inputs; exactly two 0400 mirrors while paused.
+success_criteria: INPUT_HASH_CHANGED causes authenticated health=false; no lease while unhealthy; distinct exact generation 2 reaches ready/model admission before health=true; later Worker requests have generation 2 with no BROKER_GENERATION_CHANGED; infrastructure attempts remain non-PASSED; useful remaining work continues within K=3; exact cleanup passes.
+failure_criteria: Missing health event, grant while unhealthy, stale generation acceptance, BROKER_GENERATION_CHANGED after readmission, K overflow, duplicate, unsafe promotion or residue.
+invalid_criteria: Pre-existing root, script/readback/syntax/admission/identity/mode failure before injection or source-age expiry.
+provenance:
+  source_commit: cebdf182b07e8fcf2ea0cb5f288aa0073538bd95
+  broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
+  broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
+retention_rule: Retain all command, observer, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_117
+next_experiment: EXP-131
 ```
