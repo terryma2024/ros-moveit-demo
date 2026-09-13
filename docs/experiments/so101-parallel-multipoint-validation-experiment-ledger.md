@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 147bc0caa26394217bc07827d46439560148f436
+current_commit: cb8cb52778db93fd52f34c62c280ae8700853b28
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -8570,4 +8570,44 @@ confirmed_conclusions:
 open_risks:
   - The fixed F1 path still requires the same controlled live execute fault and physical/MoveIt/controller readback.
 next_command: Commit EXP-112/CP-099, preregister EXP-113 with a fresh batch/root, then repeat the separate exact-identity high-rate heartbeat observer and capture live cancellation before Coordinator resume.
+```
+
+## EXP-113 — Post-fix execute heartbeat/lease-revocation fault
+
+```yaml
+experiment_id: EXP-113
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:15:32+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:15:32+08:00
+prior_experiment: EXP-112
+hypothesis: With direct consumer identity and concurrent controller cancellation, exact Coordinator suspension during an active dynamic controller goal will revoke the lease, stop the consumer and cancel the controller within the heartbeat bound before Coordinator resume.
+single_variable: Replace only the F1 runtime/image qualified by EXP-112; preserve the EXP-110 task_start point, N=1/K=1, complete overlay, exact observer predicate, Coordinator SIGSTOP/SIGCONT and evidence criteria.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v6-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-113
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate:
+  - exact direct so101_demo.cli.dynamic_cup_pick_place process for this root exists
+  - command-log accepted-goal count exceeds terminal reached/cancelled/aborted count
+  - Coordinator PID, start-time and cmdline match the launch receipt
+success_criteria:
+  - exact Coordinator is stopped in state T during an active goal
+  - after more than heartbeat_timeout_s and before SIGCONT, exact dynamic consumer is absent, accepted-goal count does not advance after revocation and all action status arrays contain no active goal
+  - fresh RGB-D, joint, TF, authoritative MuJoCo physical, Planning Scene and process evidence are captured before resume
+  - resumed Coordinator adjudicates the in-flight attempt conservatively, grants no later revoked goal and completes exact residual cleanup
+failure_criteria: Cancellation requires Coordinator resume or exceeds heartbeat bound; any later revoked goal, active controller status, unverifiable identity, unsafe physical promotion, incomplete evidence or residue.
+invalid_criteria: Pre-existing root, incomplete overlay, missed active-goal window, observer timeout, identity mismatch or evidence tool failure before the intended fault.
+provenance:
+  source_commit: cb8cb52778db93fd52f34c62c280ae8700853b28
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
+retention_rule: Retain all command, observer, controller, physical, visual, process, result and cleanup evidence; delete nothing without explicit user authorization.
+decision: RUN
+next_experiment: EXP-113
 ```
