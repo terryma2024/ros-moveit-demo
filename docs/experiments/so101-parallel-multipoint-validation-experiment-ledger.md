@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: cd04f7626bd3996aebc610cb4f828317e87a798f
+current_commit: 89b6198612b7003522386ace4a72b8d87c588203
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-095
-next_experiment: EXP-109
+latest_checkpoint: CP-096
+next_experiment: EXP-110
 ```
 
 Frozen provenance:
@@ -8289,12 +8289,14 @@ next_command: Preregister EXP-109 and run the command plus high-rate exact-ident
 
 ```yaml
 experiment_id: EXP-109
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:54:31+08:00
   - status: RUNNING
     at: 2026-09-13T10:54:31+08:00
+  - status: INVALID
+    at: 2026-09-13T10:58:20+08:00
 prior_experiment: EXP-108
 hypothesis: A 50 ms local observer bound to the exact Coordinator PID/start-time/cmdline can inject SIGSTOP between controller goal acceptance and terminal status, allowing direct proof that Worker revocation cancels while Coordinator and normal execution remain blocked.
 single_variable: Co-locate launch and a 50 ms exact-identity/log-state observer in one shell; overlay, source, image, models, point, N=1/K=1 and fault semantics remain EXP-108-identical.
@@ -8320,7 +8322,63 @@ provenance:
   source_commit: cd04f7626bd3996aebc610cb4f828317e87a798f
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+observed:
+  - The co-located observer made its own long-lived parent shell cmdline contain the dynamic-consumer/root predicates before admission.
+  - Resource admission correctly rejected that live candidate as PROC_METADATA_UNVERIFIABLE. The command exited 1 in 0.541116 s before batch-root allocation, and no Broker, Worker, ROS, controller or physical action started.
+conclusion: INVALID observer composition; admission safety behavior is correct, but no heartbeat fault was exercised.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-109.log sha256=9e267abe23aee925b1892a82f70a7a082262abe8a575809e72b130229b2376ad
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-109.time sha256=8f778e1d6dc0d6aae63dbb106367b2f324a7da829e6d99d4a58ce050e44c2add
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-missed-109.json sha256=f4cc676dad7ff4d71894cebd3855f1eb9bfde9e25453a3aa7cded0c854a5ac90
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP109.txt sha256=936b50eed5623575fe1b1aa692311e2be606cf7591ff8ad3054bb71285300579
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+decision: KEEP_INVALID
+next_experiment: EXP-110
+```
+
+```yaml
+checkpoint_id: CP-096
+last_valid_experiment: EXP-105
+current_hypothesis: Admission must complete under a minimal launch parent before a separate observer containing runtime predicates is introduced; the successful EXP-108 timing leaves ample startup time to attach that observer immediately after root creation.
+working_tree_status: EXP-109 invalid pre-admission evidence is ledger-only; no product process or root exists.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Resource admission correctly rejects an unverified process whose cmdline appears to collide with the task runtime.
+open_risks:
+  - Execute heartbeat/lease revocation is still not live-exercised.
+next_command: Preregister EXP-110; start the minimal batch parent first, then immediately attach a separate high-rate observer after admission begins.
+```
+
+## EXP-110 — Separate high-rate execute heartbeat observer
+
+```yaml
+experiment_id: EXP-110
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:58:20+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:58:20+08:00
+prior_experiment: EXP-109
+hypothesis: Starting the verified minimal batch parent before attaching a separate 50 ms observer avoids admission self-collision and still injects exact Coordinator SIGSTOP during an active dynamic controller goal.
+single_variable: Move the EXP-109 monitor into a separate process started immediately after the minimal launch process; all product inputs, predicate, signal and evidence criteria remain fixed.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v5-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-110
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate: Exact dynamic consumer exists, accepted-goal count exceeds reached-goal count, and Coordinator PID/start-time/cmdline match the launch receipt.
+success_criteria: Exact Coordinator is stopped in state T during active goal; after heartbeat bound and before SIGCONT the consumer is gone and controller goals are inactive; joint/TF/MuJoCo/Planning Scene/visual/process evidence is complete; resume produces conservative adjudication, no later revoked goal, and exact cleanup.
+failure_criteria: Missed active window, late cancellation, later revoked goal, identity mismatch, physical uncertainty without conservative classification, incomplete evidence, or residue.
+invalid_criteria: Admission failure, pre-existing root, observer timeout, or signal predicate/identity failure.
+provenance:
+  source_commit: 89b6198612b7003522386ace4a72b8d87c588203
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-109
+next_experiment: EXP-110
 ```
