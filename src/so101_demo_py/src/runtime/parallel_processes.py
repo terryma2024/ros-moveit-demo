@@ -294,7 +294,8 @@ class ProcessSupervisor:
     def wait_for_children(
         self, *, deadline_monotonic_s: float, role: str = "worker",
         health_role: str | None = "broker",
-        health_recovery: Callable[[OwnedProcess, int], bool] | None = None,
+        health_recovery: Callable[[OwnedProcess, int | None], bool] | None = None,
+        health_probe: Callable[[OwnedProcess], bool] | None = None,
     ) -> tuple[int, ...]:
         """Wait for one role while continuously proving its dependency healthy."""
         if isinstance(deadline_monotonic_s, bool) or not isinstance(
@@ -304,6 +305,39 @@ class ProcessSupervisor:
         if role not in _ROLES or health_role not in _ROLES | {None}:
             raise SupervisorError("UNOWNED_ROLE")
         codes = []
+
+        def recover(expected, code, pid):
+            if health_recovery is None:
+                raise SupervisorError(
+                    f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
+                )
+            try:
+                recovered = health_recovery(expected, code)
+            except Exception as error:
+                raise SupervisorError(
+                    f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
+                ) from error
+            replacements = tuple(
+                item
+                for item in self._owned.values()
+                if item[0].role == health_role
+            )
+            retired = pid not in self._owned
+            if recovered is False and retired and not replacements:
+                return False
+            if (
+                recovered is not True
+                or not retired
+                or len(replacements) != 1
+                or replacements[0][0] == expected
+                or replacements[0][1]() is not None
+            ):
+                raise SupervisorError(
+                    f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
+                )
+            self._confirm_identity(replacements[0][0])
+            return True
+
         while any(item[0].role == role for item in self._owned.values()):
             if time.monotonic() >= deadline_monotonic_s:
                 raise SupervisorError("CHILD_DEADLINE")
@@ -313,34 +347,26 @@ class ProcessSupervisor:
                 if expected.role == health_role:
                     if code is None:
                         code = self._confirm_running_or_repoll_exit(expected, poll)
+                    if code is None and health_probe is not None:
+                        try:
+                            healthy = health_probe(expected)
+                        except Exception as error:
+                            raise SupervisorError(
+                                f"HEALTH_PROBE_FAILED: {expected.role}"
+                            ) from error
+                        if type(healthy) is not bool:
+                            raise SupervisorError(
+                                f"HEALTH_PROBE_FAILED: {expected.role}"
+                            )
+                        if not healthy:
+                            recover(expected, None, pid)
+                            continue
                     if code is not None:
                         if health_recovery is None:
                             raise SupervisorError(
                                 f"EARLY_EXIT: {expected.role}: {code}"
                             )
-                        try:
-                            recovered = health_recovery(expected, int(code))
-                        except Exception as error:
-                            raise SupervisorError(
-                                f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
-                            ) from error
-                        replacements = tuple(
-                            item
-                            for item in self._owned.values()
-                            if item[0].role == health_role
-                        )
-                        retired = pid not in self._owned
-                        if recovered is False and retired and not replacements:
-                            continue
-                        if (recovered is not True
-                                or not retired
-                                or len(replacements) != 1
-                                or replacements[0][0] == expected
-                                or replacements[0][1]() is not None):
-                            raise SupervisorError(
-                                f"HEALTH_RECOVERY_FAILED: {expected.role}: {code}"
-                            )
-                        self._confirm_identity(replacements[0][0])
+                        recover(expected, int(code), pid)
                         continue
                     continue
                 if expected.role != role:

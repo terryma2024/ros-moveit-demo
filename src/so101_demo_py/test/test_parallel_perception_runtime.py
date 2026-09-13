@@ -671,6 +671,43 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
     assert not service.submit(replace(f.req, request_id='next'), f.snapshot).accepted
 
 
+@pytest.mark.parametrize('outcome', [
+    'INFRA_ERROR', 'QUEUE_TIMEOUT', 'INFERENCE_TIMEOUT',
+])
+def test_health_losing_response_reports_one_exact_event(
+        tmp_path, monkeypatch, outcome):
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome, load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import PerceptionService
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    events = []
+    service = PerceptionService(
+        f.runtime,
+        config,
+        generation=7,
+        health_down=lambda event: events.append(event) or True,
+    )
+    response = SimpleNamespace(
+        request=f.req,
+        outcome=ModelOutcome(outcome),
+        reason='deterministic failure',
+    )
+
+    service._response_health(response)
+    service._response_health(response)
+
+    assert events == [{
+        'outcome': outcome,
+        'request_id': f.req.request_id,
+        'reason': 'deterministic failure',
+    }]
+
+
 @pytest.mark.parametrize('bad', ['missing_masks', 'string_mask', 'string_box', 'string_class',
                                'string_conf', 'ragged_box', 'missing_boxes', 'class_mapping',
                                'transfer_oom', 'transfer_type_error'])

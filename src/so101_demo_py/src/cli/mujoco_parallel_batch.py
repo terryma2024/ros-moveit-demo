@@ -758,11 +758,26 @@ def _validate_broker_authority_payload(payload):
     expected = {
         "authenticate_broker_message": {"operation", "message"},
         "authorize_inference": {"operation", "request", "snapshot"},
+        "broker_health_down": {
+            "operation", "outcome", "request_id", "reason",
+        },
     }.get(payload["operation"])
     if expected is None or set(payload) != expected:
         raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
-    if any(type(payload[name]) is not dict for name in expected - {"operation"}):
+    if payload["operation"] in {
+        "authenticate_broker_message", "authorize_inference"
+    } and any(
+        type(payload[name]) is not dict for name in expected - {"operation"}
+    ):
         raise CliError("BROKER_RPC_PAYLOAD_TYPE")
+    if payload["operation"] == "broker_health_down":
+        if payload["outcome"] not in {
+            "INFRA_ERROR", "QUEUE_TIMEOUT", "INFERENCE_TIMEOUT"
+        } or any(
+            not isinstance(payload[name], str) or not payload[name]
+            for name in ("request_id", "reason")
+        ):
+            raise CliError("BROKER_RPC_PAYLOAD_TYPE")
     return payload
 
 
@@ -2112,6 +2127,9 @@ class ProductionBatchComposition:
                 )
                 token_authority.authenticate(inner)
                 return {"authenticated": True}
+            if operation == "broker_health_down":
+                self.coordinator.mark_broker_health(False)
+                return {"accepted": True}
             if operation == "authorize_inference":
                 request = _inference_request(payload.get("request"))
                 snapshot = _snapshot(payload.get("snapshot"))
@@ -2340,6 +2358,9 @@ class ProductionBatchComposition:
                         self._clock() + self.spec.config.batch_hard_timeout_s
                     ),
                     health_recovery=self._recover_broker,
+                    health_probe=lambda _expected: (
+                        self.coordinator.snapshot().broker_healthy
+                    ),
                 )
                 self._worker_children_reaped = True
             failure = any(code != 0 for code in codes)
