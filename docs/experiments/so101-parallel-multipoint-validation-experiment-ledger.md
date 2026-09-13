@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-111
-next_experiment: EXP-125
+latest_checkpoint: CP-112
+next_experiment: EXP-126
 ```
 
 Frozen provenance:
@@ -9375,12 +9375,14 @@ next_command: Commit CP-111, add a deterministic production authority RED, then 
 
 ```yaml
 experiment_id: EXP-125
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T12:10:00+08:00
   - status: RUNNING
     at: 2026-09-13T12:10:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:18:00+08:00
 prior_experiment: EXP-124
 hypothesis: The sole missing production seam is WorkerTokenAuthority's lease_optional allowlist; admitting broker_health_down there lets the exact authenticated generation event pause Coordinator grants while all forged/stale/malformed events remain rejected.
 prediction: A real Broker authority client/server composition currently fails LEASE_REQUIRED; after adding exactly broker_health_down to the allowlist it passes, broker_healthy becomes false, no lease is granted, and stale/forged tests remain green.
@@ -9390,6 +9392,57 @@ success_criteria: Valid RED at actual WorkerTokenAuthority/AuthenticatedUnixServ
 failure_criteria: Any token/generation/payload relaxation, lease-bearing health event requirement, handler bypass, replay weakness or adjacent regression.
 invalid_criteria: Mock-only authority RED, wrong interpreter/overlay, reused scratch, tempfile outside registered NVMe root or collection/setup failure.
 retention_rule: Retain RED/GREEN/adjacent/package/live evidence and all scratch; delete nothing without explicit authorization.
-decision: RUN
-next_experiment: EXP-125
+observed:
+  - A production-composition test now starts the real AuthenticatedUnixServer and sends broker_health_down through _BrokerCoordinatorClient with the real generation token and lease=null.
+  - Before the source change the exact boundary returned IpcError LEASE_REQUIRED: 1 failed in 5.24 s. This is the expected behavioral RED.
+  - Adding only broker_health_down to WorkerTokenAuthority.authenticate's explicit lease_optional set made the same test pass in 5.20 s. The handler set broker_healthy=false, granted no lease and did not debit Worker capacity.
+  - The existing forged-token, stale-generation and malformed-outcome checks remain in the same composition test; the adjacent parallel_ipc and parallel_batch_cli suites passed 99 tests in 36.92 s.
+  - Scratch roots f2-authority-red-125, f2-authority-red2-125, p125, p125r, p125r2, p125r3, p125g, p125g2, p125a and p125a2 are retained deletion candidates. The first three setup attempts were invalid because of a wrong helper import, an overlong Unix socket path, and a missing overlay respectively; only p125r2/p125r3 establish behavioral RED, p125g/p125g2 establish GREEN, and p125a/p125a2 establish the adjacent gate.
+conclusion: VALID_GREEN; the authority now admits only the authenticated generation-bound lease-free Broker health event while preserving all adjacent security checks.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-red.log sha256=e8c0ba3a183e6335d90f2dcd8e32ed5a3c4bc6f3c752f0786026ec7c15d938ca
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-red.time sha256=39cd819f269afb28b90939ceaccc85ddb5e429bafb7de224b6edb3b56c84093e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-green.log sha256=ea0d5a65b141b43a7a277f3323b3bb01a68247e365c6acae79a712f257d9529c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-green.time sha256=f713ff20f66bfde56fbdf01a7e2bf7b0b10d89e15d102076fab15be7a263b54b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-adjacent.log sha256=2f667aa414b7096a28a34b74ffab3e470e96d7eb6cc62be90f398907f9a0fc55
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-exp125-adjacent.time sha256=2dddda7733d89688e56639e0c21a92e267d234693af23edcff8c7e17736347ac
+decision: QUALIFY_REBUILT_SOURCE
+next_experiment: EXP-126
+```
+
+```yaml
+checkpoint_id: CP-112
+last_valid_experiment: EXP-125
+current_hypothesis: The one-operation authority fix is locally complete; a clean affected-package build, complete ordinary package test, immutable Broker image rebuild and dual-model smoke will qualify it for a repeated live F2 fault.
+working_tree_status: EXP-125 contains one production allowlist addition, one real composition regression test and this ledger result.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Real authority/client composition reproduced LEASE_REQUIRED before the change and accepted the same authenticated generation-bound event after it.
+  - Adjacent IPC and CLI tests pass without token, generation, payload, replay or lease-accounting relaxation.
+open_risks:
+  - Installed code and Broker image do not yet contain the EXP-125 source change.
+  - F2 must still prove health pause, exact generation replacement/readmission and continuation live.
+next_command: Commit CP-112, build the affected overlay from that immutable commit, run the complete ordinary package gate, rebuild and inspect the Broker image, then run both frozen model smokes.
+```
+
+## EXP-126 — Rebuilt-source package and Broker image qualification
+
+```yaml
+experiment_id: EXP-126
+status: PLANNED
+prior_experiment: EXP-125
+hypothesis: A clean rebuild from the committed EXP-125 source will pass the complete ordinary package suite and produce one immutable Broker image whose embedded source matches the commit and whose frozen YOLO-Seg and Grounded-SAM smokes both succeed.
+single_variable: Rebuild and qualify the committed EXP-125 source; do not alter product behavior, frozen models, catalog or Broker safety policy.
+lifecycle: PROCESS_FREE_THEN_CONTAINER_ONLY
+success_criteria:
+  - Selected project packages build cleanly into the worktree overlay with no stale-source mismatch.
+  - colcon test for so101_demo_py reports zero failed/error tests using a new registered NVMe scratch root.
+  - The rebuilt immutable image embeds the exact committed Broker source, reports one content-addressed image ID and passes fresh frozen-input YOLO-Seg and Grounded-SAM smoke requests.
+  - Exact container cleanup and post-gate resource checks pass.
+failure_criteria: Build/test failure, stale installed code, source/image mismatch, mutable-only identity, either model smoke failure, residue or unrelated mutation.
+invalid_criteria: Reused scratch/root, tempfile outside registered evidence root, wrong overlay/interpreter, pre-existing owned process/container or evidence loss.
+retention_rule: Retain build, test, image, smoke, provenance and cleanup evidence; retain all scratch as deletion candidates; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_112
+next_experiment: EXP-126
 ```

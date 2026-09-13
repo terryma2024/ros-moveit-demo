@@ -2158,7 +2158,10 @@ def test_authenticated_live_broker_health_down_pauses_without_lease_debit(
         prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import IpcError
+    from so101_demo.runtime.parallel_ipc import (
+        _BrokerCoordinatorClient,
+        IpcError,
+    )
 
     class Probe:
         def snapshot(self):
@@ -2203,7 +2206,18 @@ def test_authenticated_live_broker_health_down_pauses_without_lease_debit(
         "payload": payload,
     }
     try:
-        assert composition._coordinator_handler(message) == {"accepted": True}
+        composition._start_broker_authority_server()
+        broker_client = _BrokerCoordinatorClient(
+            composition.broker_runtime_root / "broker-authority.sock",
+            composition.broker_token_path,
+            coordinator_epoch=composition.journal.coordinator_epoch,
+            generation=1,
+            deadline_s=spec.config.heartbeat_timeout_s,
+            max_frame_bytes=spec.config.broker_max_frame_bytes,
+        )
+        assert broker_client("broker_health_down", {
+            key: value for key, value in payload.items() if key != "operation"
+        }) is True
         snapshot = composition.coordinator.snapshot()
         assert snapshot.broker_healthy is False
         assert composition.coordinator.grant_lease(

@@ -337,7 +337,7 @@ class WorkerTokenAuthority:
                 "register_worker", "grant_lease", "record_recovery",
                 "cancel_generation", "replace_resources",
                 "authenticate_broker_message", "authorize_inference",
-                "health",
+                "broker_health_down", "health",
                 "stop", "cancel_motion", "confirm_no_controller_goal", "recover",
             }
             if message["lease"] is None:
