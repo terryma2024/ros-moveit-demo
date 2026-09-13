@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: c62fa3e37ea01ad7da66517a4a481c05faba9b7f
+current_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -52,10 +52,10 @@ confirmed_conclusions:
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - The uncommitted EXP-154 shared-classifier correction must pass committed rebuild/install provenance and the complete ordinary package gate.
+  - The committed EXP-154 shared-classifier correction must receive a fresh immutable Broker image/model smoke and applicable live qualification because package source provenance changed.
   - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
-latest_checkpoint: CP-143
-next_experiment: EXP-157
+latest_checkpoint: CP-144
+next_experiment: EXP-158
 ```
 
 Frozen provenance:
@@ -65,7 +65,7 @@ Frozen provenance:
 - Catalog SHA256: `c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5`
 - YOLO-Seg weights SHA256: `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`
 - Grounded-SAM bundle manifest SHA256: `0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775`
-- Runtime overlay: `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install` (e30ef1d76 remediation build qualified at EXP-148; EXP-154 correction rebuild pending).
+- Runtime overlay: `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install` (813e8f36 correction build and complete ordinary suite qualified at EXP-157).
 - `ROS_DOMAIN_ID`: production per-worker allocation uses the allowed pool 181–183; retained cleanup audits report it unlocked.
 - `GZ_PARTITION`: `not_applicable` for the MuJoCo-only implementation.
 
@@ -11483,12 +11483,14 @@ next_command: Recompute the six mandatory EXP-045 hashes, reject truncated/inval
 
 ```yaml
 experiment_id: EXP-157
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T19:09:00+08:00
   - status: RUNNING
     at: 2026-09-13T19:10:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:14:00+08:00
 prior_experiment: EXP-156
 hypothesis: The immutable correction commit will build into the isolated overlay, byte-match installed production modules, and pass the complete ordinary suite.
 single_variable: Commit/build/test only the reviewed I1 source/test correction and audit ledger correction; preserve motion policy, catalog, models, Broker safety gates, and prior live evidence.
@@ -11502,6 +11504,58 @@ precommit_evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.time sha256=e8ba6f3eeadc7e71baf4f28a5136ffbcf145c0b41702f07a2fa96909be76ef08
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.tempdir sha256=1ad5e9d5c97f5a2b38846ab90f20e7544afaa2c4201f4a98cb3b40ac56df5bca
-decision: RUN_AFTER_CP_143_COMMIT
-next_experiment: EXP-157
+provenance:
+  source_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+  installed_prefix: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install/so101_demo_py
+observed:
+  - The bounded source/test/ledger correction committed as 813e8f36d39c276d716288702acf6c37ce9a35ee only after all six mandatory EXP-045 hashes, the no-placeholder scan, new-evidence hash readback, recovery index and diff checks passed.
+  - The package rebuilt successfully in 1.63 s. Import and prefix readback resolve to the isolated worktree, and all three changed production modules byte-match their source SHA256 values.
+  - The committed complete ordinary suite passed 2882 tests in 90.25 s with four pre-existing fork warnings and no benchmark collection; external elapsed time was 91.55 s and exact tempfile resolved to scratch/am/tmp.
+conclusion: VALID; immutable committed source, installed production bytes and the complete ordinary package suite agree.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-build.log sha256=ae838d9353500f2ce4ca28ffb01f8a3901bcdb28d7b7c22b7442c0a79d2840c1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-build.time sha256=8001147676525715cd38eeb4bc904195fc218692e17cf143251df69c9ae1fc84
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-build.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-installed-provenance.log sha256=59f36d7c9a93c1d8c14b0f054df4df04caf89aea08b11a53749323b7bd79e5cc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-postcommit-full.log sha256=a3f78686dd4fb0142fa8b20ce922d23f447208dfe273d9256d34a26f4128eef1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-postcommit-full.time sha256=ffa3dd593a3b74b8f7b32a01a9a711d8c5aeb80f73c377c4345753fdac54e9b5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-postcommit-full.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-postcommit-full.tempdir sha256=bd8b792e651cdae8b967a2a9150210d848c39c11ca00f85f39a23b7d95c3070f
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/al
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/am
+decision: REBUILD_IMMUTABLE_BROKER_AND_SMOKE
+next_experiment: EXP-158
+```
+
+```yaml
+checkpoint_id: CP-144
+last_valid_experiment: EXP-157
+current_hypothesis: Rebuilding the immutable Broker image from committed package source will bind subsequent live qualification to the final correction while preserving both frozen CUDA model outcomes.
+working_tree_status: Product source/tests are clean at 813e8f36; EXP-157 result and EXP-158 preregistration are pending ledger commit. MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all evidence, and the e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Committed build, installed bytes and 2882 ordinary tests pass.
+open_risks:
+  - The e30ef1d76 Broker image has stale package source provenance for the final commit and cannot qualify new live gates.
+next_command: After mandatory EXP-045 hash readback and checkpoint commit, rebuild the exact pinned image, read back immutable provenance, smoke both frozen model paths on CUDA, and audit cleanup.
+```
+
+## EXP-158 — Final-source immutable Broker rebuild and dual-model smoke
+
+```yaml
+experiment_id: EXP-158
+status: PLANNED
+prior_experiment: EXP-157
+hypothesis: A source-hash-bound image rebuild from 813e8f36 will execute both frozen model paths on CUDA and leave no owned runtime residue.
+single_variable: Replace only the Broker image package source layer; preserve Dockerfile, dependency lock, model bytes, frozen smoke input and thresholds.
+lifecycle: CONTAINER_ONLY
+success_criteria: Host/image source hashes agree; immutable image ID is read back; both model calls execute on CUDA with QUALIFIED outcomes and candidates; cleanup is exact.
+failure_criteria: Build/provenance/model/cleanup failure, mutable identity, CPU fallback or output regression.
+invalid_criteria: Wrong source commit, changed smoke input/model/config, pre-existing destination root or runtime contamination.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain image, smoke and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_144
+next_experiment: EXP-158
 ```
