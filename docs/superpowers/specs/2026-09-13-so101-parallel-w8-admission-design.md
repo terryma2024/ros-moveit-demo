@@ -153,6 +153,7 @@ controller_state_max_gap_s: 0.05
 controller_deadline_miss_limit: 0
 runtime_metrics_smoke_duration_s: 31.0
 metrics_reset_transition_timeout_s: 20.0
+metrics_recovery_transition_timeout_s: 120.0
 metrics_rebaseline_timeout_s: 5.0
 ```
 
@@ -375,6 +376,27 @@ barrier、`EXECUTING` 或捕帧。begin/commit 超时、reset receipt 不匹配�
 意外改变或同一 epoch 重放都立即 HARD_STOP。新 Worker generation 的 session 变化只在完整
 ready gate 中建立新 measurement epoch，不能借 reset 豁免。
 
+正常 point/canary 结束仍保留 v1 的 FULL_RESTART recovery，不改成轻量 reset。Coordinator 在
+现有 recovery registration 与 120 秒 immutable recovery deadline fsync 后，签发
+`MeasurementRecoveryBegin(old_generation, old_session, target_generation=old+1,
+deadline_monotonic_s)`。外层 Worker 进程在 shutdown/start owned ROS stack 期间继续发送带
+transition ID 的 slot heartbeat；该 slot 暂不计 `slot_healthy`，所以停止发新 lease，但其他已
+开始 attempt 可完成。cgroup/host/GPU/watchdog 监控始终不中断，physics/color/joint-state 停流
+单独记为 `EXPECTED_RECOVERY_GAP`。
+
+新 stack 必须在同一 recovery deadline 内完成 generation/session fencing、ROS graph、paused
+initial gate、resume 回读和完整 `worker_ready_gate`，随后发送
+`MeasurementRecoveryCommit(new_generation, new_session, reset_epoch, transition_id)`。Monitor 在
+5 秒内从三类 production topic 建立新 baseline并返回 `MeasurementBaselineAck` 后，Coordinator
+才把 slot 重新计为 healthy/available 并恢复派发。deadline 到期、外层 slot heartbeat 丢失、
+旧 stack 残留、新 identity 不匹配、topic 未恢复或基线 ACK 缺失均按既有 recovery failure
+fence，并触发容量丢失/受控清理；不能把 recovery gap 当普通缺样，也不能无限延长豁免。
+
+reset 的生产顺序固定为：journal/reset authorization → `MeasurementResetBegin` → reset 与 paused
+initial gate → `resume_physics()` 回读 unpaused → `MeasurementResetCommit` → 5 秒内三 topic
+rebaseline → `MeasurementBaselineAck` → capture/canary barrier。等待基线不能发生在 resume 前，
+也不能在 ACK 前捕帧。
+
 `nvidia-smi`/NVML、MuJoCo realtime factor、controller state deadline counter 或 camera producer FPS
 任一生产接口缺失，PID 归属不完整，或者指标时间轴无法对齐时都拒绝，不把缺测当成零负载。
 任一 SOFT_STOP 先停止新 lease；只有所有指标连续 10 秒低于软门才恢复。30 秒内不能恢复时升级
@@ -564,7 +586,7 @@ deadline miss、cgroup 逃逸或 `MemAvailable < 4 GiB`。正式 attempt 已开�
 | Domain | `DOMAIN_POOL_INCOMPLETE`, `DOMAIN_CLAIM_CONFLICT`, `DOMAIN_PROCESS_UNVERIFIABLE`, `DOMAIN_DISCOVERY_NOT_QUIET` |
 | cgroup | `CGROUP_V2_UNAVAILABLE`, `CGROUP_DELEGATION_UNAVAILABLE`, `CGROUP_ENROLLMENT_FAILED`, `PROCESS_ESCAPED_CGROUP` |
 | 静态资源 | `HOST_RESOURCE_BASELINE_FAILED` |
-| 运行资源 | `MEMORY_HARD_LIMIT`, `GPU_HARD_HEADROOM`, `CPU_PRESSURE_LIMIT` |
+| 运行资源 | `MEMORY_HARD_LIMIT`, `GPU_HARD_HEADROOM`, `CPU_PRESSURE_LIMIT`, `METRICS_TRANSITION_TIMEOUT`, `METRICS_IDENTITY_DRIFT` |
 | 公共依赖 | `BROKER_BACKPRESSURE_LIMIT`, `SIMULATION_REALTIME_LIMIT`, `CONTROLLER_DEADLINE_MISS` |
 | Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `AUTHORITY_EVIDENCE_ACCESS_FAILED`, `PENDING_REVOCATION_UNPROCESSED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
 | Watchdog | `WATCHDOG_UNAVAILABLE`, `QUALIFICATION_CRASHED` |

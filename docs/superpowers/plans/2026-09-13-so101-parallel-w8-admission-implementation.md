@@ -391,6 +391,8 @@ realtime factor；color source/receive stamp 计算 FPS/断帧；100 Hz `/joint_
 三类 runtime topic 允许记 `EXPECTED_RESET_GAP`，但 host/cgroup/GPU 采样不能中断。commit 后
 5 秒内三类 topic 都恢复并建立 baseline，Worker metrics wire sequence 连续，才可进入 barrier/
 EXECUTING。超时、epoch 跳变/重放、session 改变、topic 缺失全部 HARD_STOP。
+生产顺序必须断言为 reset authorization/begin → reset/paused initial gate →
+`resume_physics()` unpaused readback → commit → rebaseline/ACK → capture 或 canary barrier。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -513,6 +515,14 @@ git commit -m "feat: add staged W8 qualification state machine"
 
 canary 走现有 YOLO-first 和物理证据链，结束后必须恢复；projection reducer 对
 `QUALIFICATION_CANARY` 只更新 qualification，不更新正式 point summary。
+
+保留 v1 FULL_RESTART recovery。增加经过真实 `ParallelWorker.run()` → `_recover()` →
+`RosWorkerRuntimePorts.recover()`/`parallel_worker_runtime.py` 生产调用链的无 ROS 子进程集成测试：
+Coordinator 先 fsync 120 秒 recovery deadline 和 `MeasurementRecoveryBegin`；外层 Worker 在
+owned stack shutdown/restart 期间继续 slot heartbeat，三类 topic 只记
+`EXPECTED_RECOVERY_GAP`，全局资源采样不中断。新 generation/session 完成 graph、paused gate、
+resume、ready 后 commit，5 秒内 rebaseline/ACK 才重新 AVAILABLE。覆盖 deadline、旧 stack
+残留、identity 漂移、topic 不恢复和 ACK 缺失；K 不能退款。
 
 - [ ] **Step 5: 运行 GREEN 并提交**
 
