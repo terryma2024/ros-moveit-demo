@@ -2609,6 +2609,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             }
 
     clients = []
+    generation_bindings = []
 
     class Client:
         def __init__(self, path, **_kwargs):
@@ -2638,12 +2639,22 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
     )
     input_path.parent.mkdir(parents=True)
     input_path.write_bytes(b"npy")
+    def perception_runner(
+        lease, execution_kind, snapshot, broker_request,
+    ):
+        assert generation_bindings[-1] == 2
+        return broker_request(
+            "plastic-cup-yolo11n-seg-v1", before_send=lambda _request: None
+        )
+
     proxy = _WorkerBrokerProxy(
         Coordinator(),
         tmp_path / "broker-g1.sock",
         SimpleNamespace(worker_root=worker_root),
         load_parallel_runtime_config(CONFIG),
         broker_generation=1,
+        broker_generation_consumer=generation_bindings.append,
+        perception_runner=perception_runner,
         client_factory=Client,
     )
     response = proxy.request_model(
@@ -2663,9 +2674,11 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
     )
     assert response.broker_generation == 2
     assert proxy.cancel_generation("worker-01", 1) is True
-    assert discoveries == ["current", "current", "current"]
+    assert generation_bindings == [2, 2, 2, 2]
+    assert discoveries == ["current", "current", "current", "current"]
     assert clients == [
         tmp_path / "broker-g1.sock",
+        endpoint,
         endpoint,
         endpoint,
         endpoint,

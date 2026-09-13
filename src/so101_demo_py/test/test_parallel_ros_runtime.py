@@ -38,6 +38,21 @@ def _valid_worker_nodes():
     )))
 
 
+def test_broker_generation_binding_is_monotonic_and_fail_closed():
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    runtime = ParallelRosRuntimePorts(
+        SimpleNamespace(), catalog={}, broker_generation=1
+    )
+
+    assert runtime.bind_broker_generation(2) is True
+    assert runtime.broker_generation == 2
+    for invalid in (1, 0, -1, True, None, "3"):
+        with pytest.raises(RuntimeError, match="BROKER_GENERATION"):
+            runtime.bind_broker_generation(invalid)
+        assert runtime.broker_generation == 2
+
+
 def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkeypatch):
     import rclpy
     from rclpy.qos import qos_profile_action_status_default

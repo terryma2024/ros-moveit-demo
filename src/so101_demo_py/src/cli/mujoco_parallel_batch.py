@@ -1361,7 +1361,8 @@ def _resource_manifest_from_dict(value):
 class _WorkerBrokerProxy:
     def __init__(
         self, coordinator: _CoordinatorRpcProxy, endpoint, resources, config,
-        *, broker_generation, perception_runner=None,
+        *, broker_generation, broker_generation_consumer=None,
+        perception_runner=None,
         client_factory=UnixRpcClient, clock=time.monotonic, sleep=time.sleep,
     ):
         self.coordinator = coordinator
@@ -1375,7 +1376,13 @@ class _WorkerBrokerProxy:
         self.config = config
         if type(broker_generation) is not int or broker_generation <= 0:
             raise CliError("BROKER_GENERATION_AUTHORITY")
+        if (
+            broker_generation_consumer is not None
+            and not callable(broker_generation_consumer)
+        ):
+            raise CliError("BROKER_GENERATION_CONSUMER")
         self.broker_generation = broker_generation
+        self._broker_generation_consumer = broker_generation_consumer
         self.perception_runner = perception_runner
         self._clock = clock
         self._sleep = sleep
@@ -1404,12 +1411,15 @@ class _WorkerBrokerProxy:
                 generation = authority["broker_generation"]
                 if generation < self.broker_generation:
                     raise CliError("BROKER_GENERATION_ROLLBACK")
-                self.broker_generation = generation
-                self.client = self._client_factory(
+                client = self._client_factory(
                     authority["broker_socket_path"],
                     deadline_s=self.config.executing_hard_timeout_s,
                     max_frame_bytes=self.config.broker_max_frame_bytes,
                 )
+                if self._broker_generation_consumer is not None:
+                    self._broker_generation_consumer(generation)
+                self.broker_generation = generation
+                self.client = client
                 return generation
             recovery_deadline = authority["recovery_deadline_monotonic_s"]
             deadline = min(deadline, recovery_deadline)
@@ -1448,6 +1458,7 @@ class _WorkerBrokerProxy:
         reset_epoch,
     ):
         if self.perception_runner is not None:
+            self._refresh_broker(wait_until_healthy=False)
             return self.perception_runner(
                 lease,
                 execution_kind,
@@ -1590,6 +1601,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         broker_proxy = _WorkerBrokerProxy(
             coordinator, document["broker_socket_path"], resources, config,
             broker_generation=document["broker_generation"],
+            broker_generation_consumer=runtime_ports.bind_broker_generation,
             perception_runner=runtime_ports.run_perception_chain,
         )
 
