@@ -21,6 +21,11 @@ from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.workflow import SO101_WORKFLOW
 
 
+EXPECTED_FINAL_CUP_POSE_WORLD = (
+    -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,
+)
+
+
 def identity(validation=False):
     """Build a complete identity from hand-picked generation and epoch values."""
     cls = ValidationIdentity if validation else AttemptIdentity
@@ -398,6 +403,48 @@ def test_seal_rejects_semantically_impossible_done_trace(tmp_path):
         work.seal(required=('attempt-result.json',))
 
 
+def test_seal_rejects_zero_norm_final_orientation(tmp_path):
+    work = complete_execute(tmp_path)
+    path = work.path / 'dynamic/dynamic-execute-manifest.json'
+    document = json.loads(path.read_text(encoding='utf-8'))
+    document['final_samples'][0]['cup_orientation_world_xyzw'] = [0.0] * 4
+    path.write_text(json.dumps(document), encoding='utf-8')
+
+    with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE'):
+        work.seal(required=('attempt-result.json',))
+
+
+def test_coordinator_rejects_producer_defined_final_placement_target(tmp_path):
+    root = tmp_path / 'workers/w1'
+    work = complete_execute(root)
+    path = work.path / 'dynamic/dynamic-execute-manifest.json'
+    document = json.loads(path.read_text(encoding='utf-8'))
+    document['final_samples'][0]['cup_position_world_m'][:2] = [9.0, 9.0]
+    validation = next(
+        item for item in document['state_events']
+        if item['state'] == 'VALIDATE_FINAL_PLACEMENT'
+    )
+    validation['expected_cup_pose_world'][:2] = [9.0, 9.0]
+    path.write_text(json.dumps(document), encoding='utf-8')
+    sealed = work.seal(required=('attempt-result.json',))
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=(-0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0),
+    )
+
+    with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE'):
+        adapter.verify(lease(), str(sealed.path), RunMode.EXECUTE)
+
+
+@pytest.mark.parametrize('target', [None, (0.0,) * 7, (float('nan'),) * 7])
+def test_execute_result_adapter_requires_valid_trusted_final_target(tmp_path, target):
+    with pytest.raises(api.ArtifactError, match='TRUSTED_FINAL_TARGET_REQUIRED'):
+        api.SealedResultAdapter(
+            {'w1': tmp_path}, RunMode.EXECUTE,
+            expected_final_cup_pose_world=target,
+        )
+
+
 def test_plan_only_pass_uses_distinct_verifier_owned_planning_contract(tmp_path):
     """Plan-only PASS requires planning receipts but never execution evidence."""
     sealed = complete_plan(tmp_path).seal(required=('validation-result.json',))
@@ -544,7 +591,10 @@ def test_verifier_rejects_any_lease_identity_mismatch(tmp_path, field, value):
     """Every immutable lease field must match the artifact being committed."""
     root = tmp_path / 'workers/w1'
     sealed = populated(root).seal()
-    adapter = api.SealedResultAdapter({'w1': root}, RunMode.EXECUTE)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     with pytest.raises(api.ArtifactError):
         adapter.verify(replace(lease(), **{field: value}), str(sealed.path), RunMode.EXECUTE)
 
@@ -556,7 +606,10 @@ def test_adapter_verifies_status_and_discovers_only_reserved_sealed_workspace(
     root = tmp_path / 'workers/w1'
     mode = RunMode.PLAN_ONLY if validation else RunMode.EXECUTE
     work = populated(root, validation=validation)
-    adapter = api.SealedResultAdapter({'w1': root}, mode)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, mode,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     assert adapter.discover(lease(), work.path.parent) is None
     sealed = work.seal()
     result = adapter.verify(lease(), str(sealed.path), mode)
@@ -716,7 +769,10 @@ def test_discovery_rejects_corrupted_known_result_and_does_not_scan_neighbors(tm
     root = tmp_path / 'workers/w1'
     work = populated(root)
     sealed = work.seal()
-    adapter = api.SealedResultAdapter({'w1': root}, RunMode.EXECUTE)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     file = sealed.path / 'attempt-result.json'
     file.chmod(0o644)
     file.write_text('{"status":"PASSED"}')
@@ -739,7 +795,10 @@ def test_status_cannot_promote_validation_to_physical_result(tmp_path, validatio
 def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, mode):
     """Real sealed manifests drive disjoint coordinator events and point statuses."""
     root = tmp_path / 'workers/w1'
-    adapter = api.SealedResultAdapter({'w1': root}, mode)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, mode,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
         request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
@@ -851,7 +910,10 @@ def test_adapter_requires_parent_durability_after_rename_failure(
         tmp_path, monkeypatch, mode, access):
     """Visible evidence cannot be accepted until publication-parent fsync succeeds."""
     root = tmp_path / 'workers/w1'
-    adapter = api.SealedResultAdapter({'w1': root}, mode)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, mode,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
         request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
@@ -938,7 +1000,10 @@ def test_adapter_requires_parent_durability_after_rename_failure(
         assert digest_tree(location) == before
         fail_parent = False
         # No in-memory durable flag is retained: a new adapter must sync again.
-        adapter = api.SealedResultAdapter({'w1': root}, mode)
+        adapter = api.SealedResultAdapter(
+            {'w1': root}, mode,
+            expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+        )
         coordinator.result_port = adapter
         result = accept()
         assert result is not None
@@ -958,7 +1023,10 @@ def test_adapter_manifest_digest_read_failure_obeys_result_port_contract(
     root = tmp_path / 'workers/w1'
     work = populated(root)
     sealed = work.seal()
-    adapter = api.SealedResultAdapter({'w1': root}, RunMode.EXECUTE)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
     real_read = Path.read_bytes
 
     def unreadable(path):

@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: b1d0c476a9dac882e28ce5c184a9cb22897107b5
+current_commit: e992f7a429ac44fa1a774406b6ada1b1edd46a7d
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-128
-next_experiment: EXP-141
+latest_checkpoint: CP-134
+next_experiment: EXP-148
 ```
 
 Frozen provenance:
@@ -10285,11 +10285,11 @@ experiment_id: EXP-138
 status: VALID
 status_history:
   - status: PLANNED
-    at: 2026-09-13T18:10:00+08:00
+    at: 2026-09-13T16:28:00+08:00
   - status: RUNNING
-    at: 2026-09-13T18:15:00+08:00
+    at: 2026-09-13T16:29:00+08:00
   - status: VALID
-    at: 2026-09-13T18:25:00+08:00
+    at: 2026-09-13T16:33:00+08:00
 prior_experiment: EXP-137
 hypothesis: Inserting a validated failure event at its policy boundary and persisting exact-lease watchdog/cancel phases will make stage-specific ERROR manifests classifiable and live revocation timing directly auditable without changing motion or Broker safety behavior.
 single_variable: Add only semantic failure-event placement and append-only revocation evidence; preserve workflow, thresholds, timeout values, controller cancellation and Broker fencing.
@@ -10347,11 +10347,11 @@ experiment_id: EXP-139
 status: VALID
 status_history:
   - status: PLANNED
-    at: 2026-09-13T18:25:00+08:00
+    at: 2026-09-13T16:33:00+08:00
   - status: RUNNING
-    at: 2026-09-13T18:30:00+08:00
+    at: 2026-09-13T16:34:00+08:00
   - status: VALID
-    at: 2026-09-13T18:35:00+08:00
+    at: 2026-09-13T16:37:00+08:00
 prior_experiment: EXP-138
 hypothesis: The committed semantic ordering and append-only receipt changes build cleanly and pass the complete ordinary so101_demo_py suite with exact source/install provenance.
 single_variable: Rebuild and test only the EXP-138 commit; do not change runtime policy, fault configuration, models, thresholds or Broker gates.
@@ -10400,11 +10400,11 @@ experiment_id: EXP-140
 status: VALID
 status_history:
   - status: PLANNED
-    at: 2026-09-13T18:35:00+08:00
+    at: 2026-09-13T16:37:00+08:00
   - status: RUNNING
-    at: 2026-09-13T18:40:00+08:00
+    at: 2026-09-13T16:38:00+08:00
   - status: VALID
-    at: 2026-09-13T18:45:00+08:00
+    at: 2026-09-13T16:40:00+08:00
 prior_experiment: EXP-139
 hypothesis: A source-hash-bound rebuild from commit 9a76cb91f will yield an immutable image with both frozen model smokes QUALIFIED and no cleanup residue.
 single_variable: Replace only the image source layer with the final corrective commit; preserve Dockerfile, lock, models, smoke input, thresholds and GPU policy.
@@ -10678,7 +10678,14 @@ next_command: Commit CP-131 after mandatory EXP-045 hash readback, synchronize t
 
 ```yaml
 experiment_id: EXP-144
-status: PLANNED
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:38:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:39:00+08:00
+  - status: INVALID
+    at: 2026-09-13T17:48:00+08:00
 prior_experiment: EXP-143
 hypothesis: Independent high-reasoning review of the full implementation, remediation diff and hash-bound evidence will find no remaining Critical or Important correctness, safety, evidence or scope issue.
 single_variable: Review only; do not change source, runtime artifacts, evidence, models, configuration or safety gates.
@@ -10692,5 +10699,180 @@ review_scope:
   - EXP-138 through EXP-143 source/test/build/image/live/qualification evidence
 retention_rule: Retain reviewer report, prompt/scope, hash readback and final cleanup evidence; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_131
-next_experiment: EXP-144
+observed:
+  - The independent reviewer inspected immutable HEAD e992f7a429ac44fa1a774406b6ada1b1edd46a7d, independently rechecked all 94 cited EXP-134-and-later hashes and all 264 inventoried files from the four-point and twenty-point seals, and made no mutation.
+  - The verdict was NOT APPROVED with zero Critical and five Important findings: synchronous revocation audit could delay cancellation; DONE verification trusted a producer-defined target and accepted zero quaternions; unresolved controller outcomes could be promoted to FAILED; recovery could signal an unrelated leaderless reused PGID; and the committed recovery header was stale.
+  - Minor reporting feedback also identified nonchronological EXP-138 through EXP-140 annotations. The corrected annotations above are bounded by the retained evidence mtimes: EXP-138 RED/GREEN/adjacent at 16:29:38/16:32:14/16:32:46, EXP-139 build/full at 16:34:24/16:36:18, and EXP-140 image/smoke at 16:38:13/16:39:01. No raw evidence was changed.
+conclusion: INVALID for completion because Important findings remain; historical qualification evidence remains retained but cannot qualify remediated source.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-astra-review-2.md sha256=c913edbff1804fbd01cc88ed6401bff2d0547488e1af7412ec48bf1507bb35ab
+decision: REMEDIATE_ALL_FIVE_IMPORTANT_FINDINGS
+next_experiment: EXP-145
+```
+
+```yaml
+checkpoint_id: CP-132
+last_valid_experiment: EXP-143
+last_reviewed_experiment: EXP-144
+current_hypothesis: Capturing revocation timestamps in memory before safety action, deriving trusted placement targets independently, preserving uncertain controller outcomes, and refusing ambiguous leaderless recovery groups closes all five Important findings without weakening Broker fencing.
+working_tree_status: Remediation source and tests are uncommitted against reviewed HEAD e992f7a429ac44fa1a774406b6ada1b1edd46a7d.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and the pre-existing untracked worktree MUJOCO_LOG.TXT; neither is modified or deleted.
+confirmed_conclusions:
+  - EXP-144 is not an approval and cannot close the task.
+  - Historical live evidence remains informative but new source requires fresh applicable qualification.
+open_risks:
+  - Each Important finding needs a production-path RED/GREEN test, followed by committed build, full suite, immutable image/model and applicable live gates.
+next_command: Run focused production-path TDD for all five findings without changing Broker safety gates.
+```
+
+## EXP-145 — Astra Important remediation TDD
+
+```yaml
+experiment_id: EXP-145
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:49:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:50:00+08:00
+  - status: VALID
+    at: 2026-09-13T17:58:00+08:00
+prior_experiment: EXP-144
+hypothesis: The smallest production-path corrections can make cancellation independent of audit I/O, bind DONE to an independently derived unit-quaternion target, retain uncertain controller results as INDETERMINATE, and reject unproved leaderless recovered process groups.
+single_variable: Change only the five reviewed contracts and their direct tests; preserve motion policy, thresholds, Broker fencing, model identities and simulation-only scope.
+lifecycle: PROCESS_FREE_TDD
+success_criteria: Each former unsafe behavior is preserved as a failing RED, focused GREEN covers both revocation phases and all reviewed semantic/recovery cases, and no adjacent contract regresses.
+failure_criteria: Audit I/O can precede cancellation, malformed/wrong target passes, unresolved controller state becomes FAILED, ambiguous recovery emits a signal, or focused/adjacent tests fail.
+invalid_criteria: Wrong interpreter, reused scratch, tempfile outside the verified evidence root or test not reaching production classes.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain all RED/GREEN logs and scratch roots; delete nothing without explicit authorization.
+observed:
+  - RED tests reproduced all reviewed defects, including a deliberately blocked audit writer delaying cancellation and a leaderless recovered group receiving a signal.
+  - Worker revocation now captures audit timestamps in memory, starts Broker fencing and controller cancel/settlement first, exposes the safety completion event, and persists the captured receipts afterward. A separate audit completion event keeps evidence fail-closed without placing fsync on the safety path.
+  - Runtime and artifact verification independently derive the expected final cup pose from the hash-verified dynamic policy, compare the producer claim to it, and require finite unit quaternions. Both normal DONE and INDETERMINATE ERROR artifacts traverse semantic verification.
+  - Only the strictly proven pre-action physical_action_proven_absent shortcut maps ERROR to FAILED; goal/result timeout uncertainty remains INDETERMINATE. Recovery refuses to signal a leaderless persisted group when continuous ownership is absent.
+  - The retained focused GREEN passed 14 tests in 1.28 s; the additional three trusted-target adapter parameter cases passed separately. CLI and adjacent suites passed 71 and 340 tests respectively.
+conclusion: VALID; all five Important findings have direct production-path regression coverage and the Broker safety gate is unchanged.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.log sha256=fe0c5af42b8e3a60d771aac5b883e1545ac60440a4845da30115be616ab6d53a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.time sha256=500e54307adc8865295b7804fa1646f08a1aced9b44d349d0fe19ded4bbc2c25
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.tempdir sha256=b3def3711a11b31a24e1e3cc7492f17dc28b76fdc227c468b0c85959bdab6a94
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused-invalid.log sha256=a6fc53a5cef0fe8278c459c532a5e372bbe2dd65e4c365a7d7757a210299799f
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f145-red-20260913-01
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f145-red-20260913-02
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f145-red-20260913-03
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f145-green-20260913-01
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/q
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/r
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/s
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/t
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/x
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/y
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/z
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/aa
+decision: RUN_PRECOMMIT_COMPLETE_SUITE
+next_experiment: EXP-146
+```
+
+```yaml
+checkpoint_id: CP-133
+last_valid_experiment: EXP-145
+current_hypothesis: The focused fixes preserve the complete ordinary package contract before the immutable source commit is created.
+working_tree_status: Remediation source and tests remain uncommitted; a complete precommit confidence run is allowed but cannot establish committed install provenance.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - Focused production contracts and adjacent suites pass.
+open_risks:
+  - Environment overlays must include both the package install and the frozen torch environment; invalid harness attempts must not be counted.
+next_command: Run the complete ordinary suite with the exact interpreter and verified fresh NVMe tempfile root.
+```
+
+## EXP-146 — Invalid complete-suite environment attempts
+
+```yaml
+experiment_id: EXP-146
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:58:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:59:00+08:00
+  - status: INVALID
+    at: 2026-09-13T18:01:00+08:00
+prior_experiment: EXP-145
+hypothesis: The complete ordinary package suite passes in a fresh verified NVMe scratch.
+single_variable: Test environment only; no source mutation during either attempt.
+lifecycle: PROCESS_FREE_TEST
+invalid_criteria: Missing frozen torch environment or missing required package overlay.
+observed:
+  - The first attempt failed during collection because the explicit system interpreter lacked the frozen torch site-packages.
+  - The second attempt exposed a different incomplete overlay. Both are environment-invalid and are retained but not counted against product behavior.
+conclusion: INVALID; correct the environment and repeat without changing source.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full.log sha256=264110750d7ac848b4354a09519f7bf92d8d63e145a68fdcdc0ccdd2148e2775
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full.time sha256=9bd56dc72eaa23a9af615b6d2fe738225e2798af7c6ba3b74c384adff72ef284
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full.exit sha256=53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full.tempdir sha256=1ab5bbe297d9d6c856a6f9fab436ae4f330087236c76a53695991f8b810a9392
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full2.log sha256=27b0f0d5b0156b037f2b8db96e05b008e791111b1042ce816ada3bc3ccc7978d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full2.time sha256=df616b2b0fda2fbcc52cb4864d479269e0d180aca6a1dd31db9726f785a39fb0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full2.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp146-full2.tempdir sha256=3cde1a948436a3154917a40ccb02ad0483bd2f50935c672c89f57a687404fbe0
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/u
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/v
+decision: REPEAT_WITH_COMPLETE_ENVIRONMENT
+next_experiment: EXP-147
+```
+
+## EXP-147 — Precommit complete ordinary-suite confidence
+
+```yaml
+experiment_id: EXP-147
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:01:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:02:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:04:00+08:00
+prior_experiment: EXP-146
+hypothesis: With the isolated worktree install and frozen torch site-packages both present, the complete ordinary test suite passes from a new verified NVMe scratch.
+single_variable: Correct only the test environment from EXP-146; source remains unchanged.
+lifecycle: PROCESS_FREE_TEST
+success_criteria: Exact /usr/bin/python3 tempfile probe resolves inside the new scratch and all ordinary tests pass without benchmark collection.
+failure_criteria: Any product-attributable failure or benchmark collection.
+invalid_criteria: Reused scratch, wrong interpreter/tempdir/overlay or source mutation during the run.
+observed:
+  - The exact /usr/bin/python3 tempfile probe resolved to /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/w/tmp.
+  - The complete ordinary src/so101_demo_py/test suite passed 2876 tests in 90.29 s with four pre-existing fork warnings and no benchmark collection.
+conclusion: VALID as precommit confidence only; committed build/install/full-suite provenance and all applicable runtime gates remain required.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp147-full.log sha256=55577bd73235d1668f53c1ba24e0ce756582ff79ac7c93792ab6390d5fb7fb18
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp147-full.time sha256=49923339eed64271f6704fdeb5033d955094f8d2d12f98e971d15abfced3f969
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp147-full.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp147-full.tempdir sha256=b50d3a5f2f83c20edca0e4487ccb425a8de15bd5ba3762caddab0127778a2e4c
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/w
+decision: COMMIT_THEN_REBUILD_AND_REQUALIFY
+next_experiment: EXP-148
+```
+
+```yaml
+checkpoint_id: CP-134
+last_valid_experiment: EXP-147
+current_hypothesis: The reviewed defects are fixed and pass all precommit tests; a provenance-bound remediation commit can now be rebuilt and subjected to fresh complete, image/model, active-goal fault, four-point and twenty-point gates.
+working_tree_status: Remediation source, tests and ledger are uncommitted against e992f7a429ac44fa1a774406b6ada1b1edd46a7d; untracked MUJOCO_LOG.TXT is explicitly preserved and excluded.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - All five Astra Important findings have focused regression coverage.
+  - Complete precommit ordinary-suite confidence is 2876 passed.
+open_risks:
+  - No new source may be qualified by historical install, image or live evidence; every applicable gate must be fresh after commit.
+next_command: Recompute and read back all six mandatory EXP-045 hashes, reject placeholders/truncated hashes, run recovery-index and diff checks, commit only scoped files, then start EXP-148 committed requalification.
 ```

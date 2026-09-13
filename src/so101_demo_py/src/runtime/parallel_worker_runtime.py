@@ -1223,7 +1223,15 @@ class ParallelWorkerRuntime:
                 self._execute_consumers.pop(key, None)
         return consumer_stopped and controller_stopped
 
-    def record_revocation(self, lease: Any, phase: str, **details: object) -> bool:
+    def record_revocation(
+        self,
+        lease: Any,
+        phase: str,
+        *,
+        recorded_wall_time_ns: int | None = None,
+        recorded_monotonic_ns: int | None = None,
+        **details: object,
+    ) -> bool:
         """Append one durable, exact-lease revocation phase receipt."""
         if phase not in {
             "WATCHDOG_REVOKED", "CANCEL_REQUESTED",
@@ -1261,12 +1269,23 @@ class ParallelWorkerRuntime:
             "broker_fenced", "motion_stopped", "controllers_confirmed"
         }:
             raise ValueError("cancel result details are incomplete")
+        if recorded_wall_time_ns is None:
+            recorded_wall_time_ns = time.time_ns()
+        if recorded_monotonic_ns is None:
+            recorded_monotonic_ns = time.monotonic_ns()
+        if (
+            type(recorded_wall_time_ns) is not int
+            or recorded_wall_time_ns <= 0
+            or type(recorded_monotonic_ns) is not int
+            or recorded_monotonic_ns <= 0
+        ):
+            raise ValueError("revocation event timestamps are invalid")
         receipt = {
             "schema_version": 1,
             "kind": "SO101_PARALLEL_REVOCATION_EVENT",
             "phase": phase,
-            "wall_time_ns": time.time_ns(),
-            "monotonic_ns": time.monotonic_ns(),
+            "wall_time_ns": recorded_wall_time_ns,
+            "monotonic_ns": recorded_monotonic_ns,
             **identity,
             **details,
         }

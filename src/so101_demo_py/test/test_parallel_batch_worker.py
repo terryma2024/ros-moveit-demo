@@ -862,12 +862,28 @@ def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
         "CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT",
     ]
     assert all(call[2] == "p1-lease-1" for call in receipts)
-    assert receipts[0][3] == {"reason": "COORDINATOR_LOST"}
-    assert receipts[-2][3] == {
+    timestamps = []
+    details = []
+    for call in receipts:
+        current = dict(call[3])
+        timestamps.append((
+            current.pop("recorded_wall_time_ns"),
+            current.pop("recorded_monotonic_ns"),
+        ))
+        details.append(current)
+    assert all(
+        type(value) is int and value > 0
+        for pair in timestamps for value in pair
+    )
+    assert [pair[1] for pair in timestamps] == sorted(
+        pair[1] for pair in timestamps
+    )
+    assert details[0] == {"reason": "COORDINATOR_LOST"}
+    assert details[-2] == {
         "motion_stopped": True,
         "controllers_confirmed": True,
     }
-    assert receipts[-1][3] == {
+    assert details[-1] == {
         "broker_fenced": True,
         "motion_stopped": True,
         "controllers_confirmed": True,
@@ -924,10 +940,82 @@ def test_revocation_does_not_wait_for_blocked_broker_fence_before_motion_cancel(
     ]
     assert revocation == {
         "event": revocation["event"],
+        "audit_event": revocation["audit_event"],
         "fenced": True,
         "stopped": True,
         "confirmed": True,
     }
+
+
+def test_watchdog_revocation_never_waits_for_blocked_audit_before_motion_cancel():
+    """A hung durable recorder must not precede the physical safety actions."""
+
+    fake = Fake(RunMode.EXECUTE)
+    worker = ParallelWorker(fake.ports())
+    lease = fake.coordinator.grant_lease(
+        "w1", generation=1, request_key="lease-for-blocked-audit"
+    )
+    with worker._lease_lock:
+        worker._active_lease = lease
+
+    audit_entered = threading.Event()
+    release_audit = threading.Event()
+    motion_cancelled = threading.Event()
+    original_cancel_motion = fake.runtime.cancel_motion
+
+    def blocked_audit(*_args, **_kwargs):
+        audit_entered.set()
+        assert release_audit.wait(3.0)
+        return True
+
+    def observe_motion_cancel(current):
+        motion_cancelled.set()
+        return original_cancel_motion(current)
+
+    fake.runtime.record_revocation = blocked_audit
+    fake.runtime.cancel_motion = observe_motion_cancel
+    worker._watchdog_revoked(lease, "COORDINATOR_LOST")
+
+    assert motion_cancelled.wait(0.2), "audit I/O delayed motion cancellation"
+    assert audit_entered.wait(1.0)
+    try:
+        assert ("cancel_generation", "w1", 1) in fake.broker.calls
+        assert "confirm_no_controller_goal" in fake.runtime.calls
+    finally:
+        release_audit.set()
+
+
+def test_stop_revocation_never_waits_for_blocked_cancel_request_audit():
+    """The non-watchdog CANCEL_REQUESTED receipt is also after safety actions."""
+
+    fake = Fake(RunMode.EXECUTE)
+    worker = ParallelWorker(fake.ports())
+    lease = fake.coordinator.grant_lease(
+        "w1", generation=1, request_key="lease-for-stop-audit"
+    )
+    with worker._lease_lock:
+        worker._active_lease = lease
+    audit_entered = threading.Event()
+    release_audit = threading.Event()
+    motion_cancelled = threading.Event()
+    original_cancel_motion = fake.runtime.cancel_motion
+
+    def blocked_audit(*_args, **_kwargs):
+        audit_entered.set()
+        assert release_audit.wait(3.0)
+        return True
+
+    def observe_motion_cancel(current):
+        motion_cancelled.set()
+        return original_cancel_motion(current)
+
+    fake.runtime.record_revocation = blocked_audit
+    fake.runtime.cancel_motion = observe_motion_cancel
+    worker.request_stop()
+
+    assert motion_cancelled.wait(0.2), "CANCEL_REQUESTED audit delayed safety"
+    assert audit_entered.wait(1.0)
+    release_audit.set()
 
 
 @pytest.mark.parametrize("mode", [RunMode.EXECUTE, RunMode.PLAN_ONLY, RunMode.DRY_RUN])

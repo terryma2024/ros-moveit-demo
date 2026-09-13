@@ -183,6 +183,36 @@ def test_crash_recovery_manifest_rejects_pid_reuse_without_signalling():
     assert signals == []
 
 
+def test_crash_recovery_rejects_ambiguous_leaderless_group_without_signalling():
+    """A persisted PGID is not ownership proof after its leader disappears."""
+    from dataclasses import asdict
+
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    old = OwnedProcess('batch-1', 'worker', 101, 101, ('old-worker',), 11)
+    signals = []
+    supervisor = ProcessSupervisor(
+        'batch-1',
+        identity_reader=lambda _pid: None,
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+        group_members_reader=lambda _pgid: (303,),
+    )
+    document = {
+        'schema_version': 1,
+        'batch_id': 'batch-1',
+        'processes': [{**asdict(old), 'cmdline': list(old.cmdline)}],
+    }
+
+    with pytest.raises(SupervisorError, match='GROUP_OWNERSHIP_UNPROVEN'):
+        supervisor.retire_manifest(document)
+    assert signals == []
+    assert supervisor.processes == ()
+
+
 def test_retirement_rejects_a_reused_session_leader_before_any_group_signal():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,

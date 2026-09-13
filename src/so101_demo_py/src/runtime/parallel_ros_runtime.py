@@ -1432,6 +1432,26 @@ class ParallelRosRuntimePorts:
         )
         return str(loaded.path), loaded.sha256
 
+    def _trusted_final_cup_pose(self, policy_path, policy_sha256):
+        supplied = self.dependencies.get("expected_final_cup_pose_world")
+        if supplied is not None:
+            return list(supplied())
+        path = Path(policy_path)
+        if hashlib.sha256(path.read_bytes()).hexdigest() != policy_sha256:
+            raise ValueError("DYNAMIC_POLICY_CHANGED")
+        from ..core.dynamic_pick import compose_pose, inverse_pose
+        from ..core.dynamic_pick_policy import load_dynamic_pick_template
+
+        template = load_dynamic_pick_template(
+            path,
+            expected_backend="mujoco",
+            expected_execution_allowed=True,
+        )
+        return list(compose_pose(
+            template.place_tcp_world,
+            inverse_pose(template.cup_to_tcp_grasp),
+        ).values)
+
     def _dynamic_manifest_outcome(self, manifest, lease, admitted, exit_code):
         """Verify one immutable terminal consumer document before classification."""
         descriptor = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW)
@@ -1509,11 +1529,17 @@ class ParallelRosRuntimePorts:
             document,
             expected_status=status,
             expected_reset_epoch=int(reset_epoch[6:]),
+            expected_final_cup_pose_world=self._trusted_final_cup_pose(
+                policy_path, policy_sha256
+            ),
         )
+        if status == "DONE":
+            return AttemptStatus.PASSED, "OK"
+        if document["failure_evidence"]["physical_action_proven_absent"] is True:
+            return AttemptStatus.FAILED, failure
         return (
-            (AttemptStatus.PASSED, "OK")
-            if status == "DONE"
-            else (AttemptStatus.FAILED, failure)
+            AttemptStatus.INDETERMINATE,
+            f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED",
         )
 
     def execute_result(self, lease, admitted, child):

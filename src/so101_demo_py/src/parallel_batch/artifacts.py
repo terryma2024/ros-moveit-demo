@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import stat
 import uuid
@@ -243,7 +244,9 @@ def _verify_pose_and_numeric(root, identity, metadata):
         raise ArtifactError('NUMERIC_EVIDENCE_IDENTITY_MISMATCH')
 
 
-def _verify_dynamic(root, identity, metadata, status):
+def _verify_dynamic(
+    root, identity, metadata, status, *, expected_final_cup_pose_world=None,
+):
     from .dynamic_manifest import validate_dynamic_manifest_semantics
 
     dynamic = _read_json(root / 'dynamic/dynamic-execute-manifest.json')
@@ -262,6 +265,7 @@ def _verify_dynamic(root, identity, metadata, status):
             dynamic,
             expected_status=expected_terminal,
             expected_reset_epoch=reset_number,
+            expected_final_cup_pose_world=expected_final_cup_pose_world,
         )
     except (TypeError, ValueError) as error:
         raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH') from error
@@ -292,7 +296,10 @@ def _verify_planning(root):
         raise ArtifactError('PLANNING_EVIDENCE_INVALID')
 
 
-def _evidence_contract(root, identity, mode, status, names, metadata):
+def _evidence_contract(
+    root, identity, mode, status, names, metadata,
+    *, expected_final_cup_pose_world=None,
+):
     """Compute requirements independently of the producer-owned required list."""
     result_name = _layout(identity)[3]
     required = set(_BASE_EVIDENCE) | {result_name}
@@ -341,9 +348,18 @@ def _evidence_contract(root, identity, mode, status, names, metadata):
         _verify_pose_and_numeric(root, identity, metadata)
     if stage == 'EXECUTION_COMPLETE' or (
         stage == 'EXECUTION_RECEIPT_PRESENT'
-        and status == AttemptStatus.FAILED.value
+        and status in {
+            AttemptStatus.FAILED.value,
+            AttemptStatus.INDETERMINATE.value,
+        }
     ):
-        _verify_dynamic(root, identity, metadata, status)
+        _verify_dynamic(
+            root,
+            identity,
+            metadata,
+            status,
+            expected_final_cup_pose_world=expected_final_cup_pose_world,
+        )
     elif stage in {'PLANNING_COMPLETE', 'PLANNING_RECEIPT_PRESENT'}:
         _verify_planning(root)
     return stage, required
@@ -378,7 +394,7 @@ class SealedValidation(_Sealed):
     """An immutable dry-run or plan-only result."""
 
 
-def _verify(path, identity):
+def _verify(path, identity, *, expected_final_cup_pose_world=None):
     folder, execution_id, manifest_name, result_name = _layout(identity)
     path = _safe_path(Path(path))
     if path.parts[-4:] != (folder, identity.point_id, execution_id, 'sealed'):
@@ -421,7 +437,13 @@ def _verify(path, identity):
         if manifest['status'] != status:
             raise ArtifactError('RESULT_STATUS_MISMATCH')
         stage, verifier_required = _evidence_contract(
-            path, identity, mode, status, names, metadata
+            path,
+            identity,
+            mode,
+            status,
+            names,
+            metadata,
+            expected_final_cup_pose_world=expected_final_cup_pose_world,
         )
         if (
             manifest.get('evidence_stage') != stage
@@ -638,12 +660,42 @@ class SealedResultAdapter:
     recursively scans other workspaces or changes coordinator history.
     """
 
-    def __init__(self, worker_roots: Mapping[str, Path], run_mode: RunMode):
+    def __init__(
+        self,
+        worker_roots: Mapping[str, Path],
+        run_mode: RunMode,
+        *,
+        expected_final_cup_pose_world=None,
+    ):
         """Bind verification to trusted Worker roots and a single batch mode."""
         if not isinstance(run_mode, RunMode):
             raise ArtifactError('WRONG_RUN_MODE')
         self.worker_roots = {key: _safe_path(Path(value)) for key, value in worker_roots.items()}
         self.run_mode = run_mode
+        if run_mode is RunMode.EXECUTE:
+            if (
+                not isinstance(expected_final_cup_pose_world, (tuple, list))
+                or len(expected_final_cup_pose_world) != 7
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    for value in expected_final_cup_pose_world
+                )
+                or not math.isclose(
+                    math.sqrt(sum(
+                        value * value
+                        for value in expected_final_cup_pose_world[3:]
+                    )),
+                    1.0,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                )
+            ):
+                raise ArtifactError('TRUSTED_FINAL_TARGET_REQUIRED')
+            self.expected_final_cup_pose_world = list(expected_final_cup_pose_world)
+        else:
+            self.expected_final_cup_pose_world = None
 
     def _expected(self, lease):
         if not isinstance(lease, LeaseIdentity) or lease.worker_id not in self.worker_roots:
@@ -667,7 +719,11 @@ class SealedResultAdapter:
         path = _safe_path(Path(location))
         if path != parent / 'sealed':
             raise ArtifactError('LEASE_LOCATION_MISMATCH')
-        _verify(path, identity)
+        _verify(
+            path,
+            identity,
+            expected_final_cup_pose_world=self.expected_final_cup_pose_world,
+        )
         manifest_path = path / _layout(identity)[2]
         manifest = _read_json(manifest_path)
         if manifest['run_mode'] != run_mode.value:
