@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e76682158405b743aa272894a1ff0150bd5e5e07
+current_commit: 4c141338805a230cb005e009bf0f9f42ad2bb6bf
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -44,6 +44,7 @@ confirmed_conclusions:
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
   - EXP-088 validly proved the historical plan-only exact Worker and Broker TERM recovery gate with no lease grant during Broker unhealth and physical action proven absent.
   - EXP-094 validly passed the final F91 four-point execute qualification, and immutable historical EXP-095 validly passed all 20 frozen points with qualification_passed=true.
+  - Astra findings 1 through 7 are confirmed and fixed at CP-089; their focused and adjacent gates pass, while rebuilt-overlay and live qualification remain pending.
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
@@ -51,9 +52,9 @@ open_hypotheses:
   - EXP-097 confirmed Astra finding 2 and the candidate now propagates authenticated exact-generation health loss and replaces a live unhealthy Broker; package and live fault evidence remain pending.
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
-  - Astra findings 5 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
-latest_checkpoint: CP-086
-next_experiment: EXP-100
+  - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
+latest_checkpoint: CP-090
+next_experiment: EXP-104
 ```
 
 Frozen provenance:
@@ -7843,4 +7844,80 @@ open_risks:
   - Findings 1 through 7 retain pending final rebuilt-overlay and live gates.
   - Finding 8 and all mandatory final verification remain pending.
 next_command: Re-read and synchronize the ledger header and ignored SDD progress, add the lightweight recovery-index consistency test, verify F7 evidence hashes directly, and commit the scoped F7 fix before F8.
+```
+
+## EXP-103 — Ledger and SDD recovery-index consistency
+
+```yaml
+experiment_id: EXP-103
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:24:30+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:24:30+08:00
+  - status: VALID
+    at: 2026-09-13T10:26:03+08:00
+prior_experiment: EXP-102
+hypothesis: The ledger header and SDD recovery summary can drift behind the monotonically appended body because no automated check binds the header checkpoint and next experiment to the highest body records.
+prediction: A lightweight consistency test will fail against the current stale CP-086/EXP-100 header while the body reaches CP-089/EXP-103 RUNNING.
+single_variable: Add the recovery-index consistency test only before synchronizing the ledger header and SDD state.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 4c141338805a230cb005e009bf0f9f42ad2bb6bf
+  - EXP-102 and CP-089 are durable in the ledger
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process
+success_criteria:
+  - the header latest_checkpoint equals the numerically highest checkpoint in the body
+  - next_experiment equals the highest RUNNING experiment or the successor of the highest terminal experiment
+  - current_commit is a complete 40-hex source commit and SDD identifies the same remediation boundary
+failure_criteria:
+  - the existing header is already consistent and no regression guard is needed
+invalid_criteria:
+  - import/collection failure, wrong overlay, reused scratch, or a test that rewrites the ledger
+provenance:
+  source_commit: 4c141338805a230cb005e009bf0f9f42ad2bb6bf
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+commands:
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8r-hZZPih7m/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_ledger.py -q
+    exit_code: 1
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8g-qTLWh1gI/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_ledger.py -q
+    exit_code: 0
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8a-XveWJTpF/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_ledger.py -q
+    exit_code: 0
+observed:
+  - RED failed exactly because the header advertised CP-086 while the body reached CP-089; the same stale header still advertised EXP-100 while EXP-103 was RUNNING.
+  - GREEN passed after the header identified source commit 4c141338805a230cb005e009bf0f9f42ad2bb6bf, CP-089, and EXP-103, and the ignored SDD recovery summary named the same boundary.
+  - Final terminal-state readback also passed after advancing the header/body together to CP-090 and next EXP-104.
+  - The guard derives the highest checkpoint and highest experiment status from the body, so a terminal experiment requires its successor while PLANNED/RUNNING requires the current experiment.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; the stale ledger/SDD recovery index is synchronized without rewriting any historical record, and the new read-only test prevents checkpoint/next-experiment drift while requiring a full 40-hex source commit.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f8r-hZZPih7m.stdout sha256=18b99761b9b8fe2b5d4ed2e53aaa8f3ffbabccb15aedfea2585e363762387d02
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f8g-qTLWh1gI.stdout sha256=4bcefcc9f6c645923b9993ccf73ad92e6b400ca25458ea14e095857fc2131342
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f8a-XveWJTpF.stdout sha256=4bcefcc9f6c645923b9993ccf73ad92e6b400ca25458ea14e095857fc2131342
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8r-hZZPih7m
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8g-qTLWh1gI
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f8a-XveWJTpF
+decision: KEEP
+next_experiment: EXP-104
+```
+
+```yaml
+checkpoint_id: CP-090
+last_valid_experiment: EXP-103
+current_hypothesis: All eight Astra findings are now dispositioned in code and focused/adjacent tests; the complete affected package suite is the next gate before rebuild, execute fault injection, and fresh qualification.
+working_tree_status: F8 ledger-header guard and synchronized recovery metadata are ready for one scoped commit; ignored SDD progress remains synchronized separately.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-103 was a read-only document consistency test and started no runtime process.
+confirmed_conclusions:
+  - Finding 8 is confirmed and fixed without changing historical experiment facts or hashes.
+  - Findings 1 through 8 have deterministic RED/GREEN and adjacent evidence; none is being claimed runtime-qualified yet.
+disproven_routes:
+  - Manually updating only the ledger body or only the SDD without a header/body consistency guard.
+open_risks:
+  - Complete package, rebuilt overlay/provenance, execute heartbeat fault, execute live-unhealthy Broker fault, fresh four-point, fresh twenty-point, visual inspection, cleanup, and independent Astra high review remain mandatory.
+next_command: Re-run the ledger consistency guard in its terminal CP-090/EXP-104 state, verify all referenced hashes directly, and commit F8 before preregistering the complete package gate as EXP-104.
 ```
