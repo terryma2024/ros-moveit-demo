@@ -1493,76 +1493,28 @@ class ParallelRosRuntimePorts:
             or re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None
         ):
             raise ValueError("DYNAMIC_MANIFEST_POLICY_IDENTITY")
-        trace = document["state_trace"]
-        events = document["state_events"]
-        planning = document["planning_attempts"]
-        samples = document["final_samples"]
-        scene = document["planning_scene_readback"]
-        if (
-            type(trace) is not list
-            or len(trace) < 2
-            or trace[0] != "IDLE"
-            or document["transition_count"] != len(trace) - 1
-            or type(events) is not list
-            or not events
-            or any(type(item) is not dict for item in events)
-            or type(planning) is not list
-            or not planning
-            or any(type(item) is not dict for item in planning)
-            or type(samples) is not list
-            or not samples
-            or any(type(item) is not dict for item in samples)
-            or type(scene) is not dict
-            or type(scene.get("attached_object_ids")) is not list
-            or type(scene.get("world_primitive_counts")) is not dict
-        ):
-            raise ValueError("DYNAMIC_MANIFEST_EVIDENCE")
-        if not any(
-            type(event.get("terminal_joint_positions_rad")) is list
-            and len(event["terminal_joint_positions_rad"]) == 5
-            and type(event.get("terminal_joint_state_source_stamp_ns")) is int
-            and event["terminal_joint_state_source_stamp_ns"] > 0
-            and type(event.get("execution_reconciliations")) is list
-            for event in events
-        ):
-            raise ValueError("DYNAMIC_MANIFEST_CONTROLLER_EVIDENCE")
-        if any(
-            sample.get("reset_epoch") != int(reset_epoch[6:])
-            or type(sample.get("simulation_step")) is not int
-            or sample["simulation_step"] <= 0
-            or type(sample.get("publisher_sequence")) is not int
-            or sample["publisher_sequence"] <= 0
-            or type(sample.get("table_contact")) is not bool
-            for sample in samples
-        ):
-            raise ValueError("DYNAMIC_MANIFEST_PHYSICAL_EVIDENCE")
         status = document["status"]
-        current = document["current_state"]
         failure = document["failure"]
         if status == "DONE":
-            if (
-                exit_code != 0
-                or current != "DONE"
-                or trace[-1] != "DONE"
-                or failure is not None
-                or type(document["release_marker_sequence"]) is not int
-                or document["release_marker_sequence"] <= 0
-                or scene["attached_object_ids"] != []
-                or not any(item.get("accepted") is True for item in planning)
-            ):
+            if exit_code != 0:
                 raise ValueError("DYNAMIC_MANIFEST_DONE")
-            return AttemptStatus.PASSED, "OK"
-        if status == "ERROR":
-            if (
-                exit_code == 0
-                or current != "ERROR"
-                or trace[-1] != "ERROR"
-                or not isinstance(failure, str)
-                or not failure
-            ):
+        elif status == "ERROR":
+            if exit_code == 0:
                 raise ValueError("DYNAMIC_MANIFEST_ERROR")
-            return AttemptStatus.FAILED, failure
-        raise ValueError("DYNAMIC_MANIFEST_STATUS")
+        else:
+            raise ValueError("DYNAMIC_MANIFEST_STATUS")
+        from ..parallel_batch.dynamic_manifest import validate_dynamic_manifest_semantics
+
+        validate_dynamic_manifest_semantics(
+            document,
+            expected_status=status,
+            expected_reset_epoch=int(reset_epoch[6:]),
+        )
+        return (
+            (AttemptStatus.PASSED, "OK")
+            if status == "DONE"
+            else (AttemptStatus.FAILED, failure)
+        )
 
     def execute_result(self, lease, admitted, child):
         call = self.dependencies.get("execute_result")

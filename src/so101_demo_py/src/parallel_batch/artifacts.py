@@ -244,68 +244,27 @@ def _verify_pose_and_numeric(root, identity, metadata):
 
 
 def _verify_dynamic(root, identity, metadata, status):
+    from .dynamic_manifest import validate_dynamic_manifest_semantics
+
     dynamic = _read_json(root / 'dynamic/dynamic-execute-manifest.json')
     source = metadata['source_stamp']
     reset = metadata['reset_epoch']
     reset_number = int(reset[6:]) if reset.startswith('reset-') and reset[6:].isdigit() else None
-    trace = dynamic.get('state_trace')
-    events = dynamic.get('state_events')
-    planning = dynamic.get('planning_attempts')
-    samples = dynamic.get('final_samples')
-    scene = dynamic.get('planning_scene_readback')
     expected_terminal = 'DONE' if status == AttemptStatus.PASSED.value else 'ERROR'
-    terminal_valid = (
-        dynamic.get('failure') is None
-        and type(dynamic.get('release_marker_sequence')) is int
-        and dynamic['release_marker_sequence'] > 0
-        and isinstance(planning, list)
-        and any(
-            isinstance(item, dict) and item.get('accepted') is True
-            for item in planning
-        )
-        if expected_terminal == 'DONE'
-        else isinstance(dynamic.get('failure'), str) and bool(dynamic['failure'])
-    )
     if (
         dynamic.get('parallel_lease_identity') != asdict(identity)
         or dynamic.get('simulation_session_id') != source.get('simulation_session_id')
         or dynamic.get('expected_reset_epoch') != reset_number
-        or dynamic.get('status') != expected_terminal
-        or dynamic.get('current_state') != expected_terminal
-        or not terminal_valid
-        or not isinstance(trace, list)
-        or not trace
-        or trace[-1] != expected_terminal
-        or not isinstance(events, list)
-        or not any(
-            isinstance(event, dict)
-            and isinstance(event.get('terminal_joint_positions_rad'), list)
-            and len(event['terminal_joint_positions_rad']) == 5
-            and type(event.get('terminal_joint_state_source_stamp_ns')) is int
-            and event['terminal_joint_state_source_stamp_ns'] > 0
-            and isinstance(event.get('execution_reconciliations'), list)
-            for event in events
-        )
-        or not isinstance(planning, list)
-        or not planning
-        or not all(isinstance(item, dict) for item in planning)
-        or not isinstance(samples, list)
-        or not samples
-        or not all(
-            isinstance(item, dict)
-            and item.get('reset_epoch') == reset_number
-            and type(item.get('simulation_step')) is int
-            and item['simulation_step'] > 0
-            and type(item.get('publisher_sequence')) is int
-            and item['publisher_sequence'] > 0
-            and type(item.get('table_contact')) is bool
-            for item in samples
-        )
-        or not isinstance(scene, dict)
-        or scene.get('attached_object_ids') != []
-        or not isinstance(scene.get('world_primitive_counts'), dict)
     ):
         raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH')
+    try:
+        validate_dynamic_manifest_semantics(
+            dynamic,
+            expected_status=expected_terminal,
+            expected_reset_epoch=reset_number,
+        )
+    except (TypeError, ValueError) as error:
+        raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH') from error
 
 
 def _verify_planning(root):

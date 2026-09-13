@@ -895,7 +895,60 @@ def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
 
 
 def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
+    from so101_demo.core.domain import State
+    from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
+    from so101_demo.core.workflow import SO101_WORKFLOW
+
     failed = status != "DONE"
+    trace = [State.IDLE]
+    while not failed and trace[-1] not in SO101_WORKFLOW.terminal_states:
+        trace.append(SO101_WORKFLOW.transitions[trace[-1]][0])
+
+    def physical(sequence):
+        return {
+            "reset_epoch": 17,
+            "simulation_step": sequence * 5,
+            "publisher_sequence": sequence,
+            "cup_position_world_m": [-0.08, -0.25, 0.1648],
+            "cup_orientation_world_xyzw": [0.0, 0.0, 0.0, 1.0],
+            "cup_linear_velocity_world_m_s": [0.0, 0.0, 0.0],
+            "cup_angular_velocity_world_rad_s": [0.0, 0.0, 0.0],
+            "left_contact_count": 0,
+            "right_contact_count": 0,
+            "maximum_normal_force_n": 0.2,
+            "table_contact": True,
+        }
+
+    events = []
+    planning = []
+    for index, state in enumerate(trace[:-1]):
+        if state not in SO101_WORKFLOW.action_states:
+            continue
+        item = {
+            "state": state.value,
+            "before": physical(100 + index * 2),
+            "after": physical(101 + index * 2),
+        }
+        if state in DYNAMIC_MOTION_STATES:
+            item.update(
+                terminal_joint_positions_rad=[0.0] * 5,
+                terminal_joint_state_source_stamp_ns=(index + 1) * 1_000_000,
+                execution_reconciliations=[],
+            )
+            planning.append({
+                "kind": "moveit_joint_plan", "state": state.value, "accepted": True,
+            })
+        if state is State.VALIDATE_FINAL_PLACEMENT:
+            item.update(
+                expected_cup_pose_world=[-0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0],
+                final_xy_error_m=0.0,
+                final_upright_tilt_rad=0.0,
+            )
+        events.append(item)
+    scene = {
+        "attached_object_ids": [],
+        "world_primitive_counts": {"plastic_cup": 13},
+    }
     return {
         "schema": "so101-dynamic-mujoco-execute-v1",
         "parallel_lease_identity": {
@@ -914,33 +967,20 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
         "expected_reset_epoch": 17,
         "policy_path": str(policy_path),
         "policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
-        "state_trace": ["IDLE", "MOVE_ABOVE_OBJECT", "ERROR" if failed else "DONE"],
-        "transition_count": 2,
-        "state_events": [{
-            "state": "MOVE_ABOVE_OBJECT",
-            "before": {"reset_epoch": 17},
-            "after": {"reset_epoch": 17},
-            "execution_reconciliations": [],
-            "terminal_joint_positions_rad": [0.0] * 5,
-            "terminal_joint_state_source_stamp_ns": 18,
-        }],
-        "planning_attempts": [{
-            "kind": "moveit_plan_candidate",
-            "state": "MOVE_ABOVE_OBJECT",
-            "accepted": not failed,
-            "failure_code": "MOVEIT_EXECUTION_FAILED" if failed else None,
-        }],
-        "final_samples": [{
-            "reset_epoch": 17,
-            "simulation_step": 20,
-            "publisher_sequence": 21,
-            "table_contact": True,
-        }],
-        "planning_scene_readback": {
-            "attached_object_ids": [],
-            "world_primitive_counts": {"plastic_cup": 1},
-        },
-        "release_marker_sequence": None if failed else 19,
+        "state_trace": ["IDLE", "ERROR"] if failed else [item.value for item in trace],
+        "transition_count": 1 if failed else len(trace) - 1,
+        "state_events": [] if failed else events,
+        "planning_attempts": [] if failed else planning,
+        "final_samples": [] if failed else [physical(1000)],
+        "planning_scene_readback": None if failed else scene,
+        "release_marker_sequence": None if failed else 900,
+        "failure_evidence": ({
+            "failure_boundary_state": "IDLE",
+            "physical_action_proven_absent": True,
+            "terminal_sample": None,
+            "planning_scene_readback": None,
+            "capture_errors": [],
+        } if failed else None),
     }
     reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
     observation = InitialGateObservation(
@@ -1526,3 +1566,43 @@ def test_exact_dynamic_manifest_maps_terminal_business_outcome(
 
     assert receipt.decision.status.value == expected_status
     assert receipt.decision.reason == expected_reason
+
+
+def test_runtime_rejects_semantically_impossible_done_trace(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    lease = _lease()
+    worker_root = tmp_path / "worker-01"
+    manifest_path = (
+        worker_root / "attempts" / lease.point_id / lease.attempt_id
+        / "working" / "dynamic" / "dynamic-execute-manifest.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    policy = tmp_path / "mujoco.yaml"
+    policy.write_bytes(b"policy\n")
+    document = _dynamic_execute_manifest(
+        lease, session_id="session-1", policy_path=policy
+    )
+    document["state_trace"] = ["IDLE", "MOVE_ABOVE_OBJECT", "DONE"]
+    document["transition_count"] = 2
+    manifest_path.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 0))
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+        dependencies={
+            "dynamic_policy_identity": lambda: (
+                str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
+            ),
+        },
+    )
+
+    receipt = ports.execute_result(
+        lease,
+        SimpleNamespace(reset_epoch="reset-17"),
+        SimpleNamespace(pid=417),
+    )
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"

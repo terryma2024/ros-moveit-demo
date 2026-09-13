@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 4a8d51452d8bbe9fb5ca5a393074cb458e48a4a7
+current_commit: d51192a44e355439f857f22c4ba7462538aa7377
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-121
-next_experiment: EXP-134
+latest_checkpoint: CP-122
+next_experiment: EXP-135
 ```
 
 Frozen provenance:
@@ -10047,7 +10047,12 @@ next_command: Commit CP-121, then add deterministic RED cases for semantic DONE/
 
 ```yaml
 experiment_id: EXP-134
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T16:14:00+08:00
+  - status: VALID
+    at: 2026-09-13T17:29:00+08:00
 prior_experiment: EXP-133
 hypothesis: Binding dynamic outcomes to the canonical state-machine trace and stage-appropriate controller/physical/scene receipts will reject impossible DONE evidence and preserve trustworthy ERROR reasons without promoting uncertain physical outcomes.
 single_variable: Replace presence-only dynamic-manifest outcome checks with one shared semantic contract keyed by terminal status and reached stage; do not change motion policy, thresholds, Worker scheduling or artifact publication authority.
@@ -10058,5 +10063,74 @@ invalid_criteria: Import/collection/setup failure, wrong overlay/interpreter, re
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain all RED/GREEN/adjacent evidence and scratch as deletion candidates; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_121
-next_experiment: EXP-134
+observed:
+  - RED reproduced both review defects: the runtime promoted the impossible IDLE→MOVE_ABOVE_OBJECT→DONE trace to PASSED, while an explicitly proven pre-action ERROR remained INDETERMINATE because the old verifier unconditionally demanded release-stage evidence.
+  - A single ROS-free semantic verifier now serves runtime classification and sealed-artifact verification. It validates canonical transitions, all successful action receipts, accepted plans and terminal controller evidence for every reached motion state, exact release ordering, finite stable physical placement against the recorded expected cup pose, and detached world-cup scene representation.
+  - ERROR classification is stage-specific. Only exact IDLE→ERROR with empty action/planning evidence can assert physical_action_proven_absent; every possible post-action failure requires a newly captured terminal MuJoCo sample newer than prior state receipts and the release marker when applicable, plus an exact detached world-cup Planning Scene readback. Capture uncertainty remains INDETERMINATE.
+  - The producer now writes the failure boundary, explicit no-action authority or fresh terminal physical/scene readbacks, and bounded capture errors without masking the original business failure.
+  - Crash-resume adoption now repeats live ROS-domain and IPC-socket collision probes while the exact advisory domain claims are held. Occupied domains, reserved sockets and probe exceptions reject without changing the existing root; clean exact-manifest adoption still succeeds.
+  - All 20 retained EXP-133 DONE manifests passed the stricter semantic contract. The five affected test files passed 291 tests from a fresh NVMe scratch in 2.76 s.
+conclusion: VALID; findings 1, 2 and 4 from Astra review round 1 are repaired with witnessed RED→GREEN coverage and retained-valid compatibility. A fresh build/package/provenance gate is required before live remediation evidence.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-red3-dynamic-semantics.log sha256=423ab66b783828853b980f437fc7ce4f3e6d27236788621f85ee4082a35c7871
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-red-runtime-integration.log sha256=fcf05f371402c58aceb534f7f957c2c9247b761a76fa63b8bb4ea189a8e3c076
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-red-producer-failure-evidence.log sha256=37a82242c7631723106cd61f179f9b71d8564237091a964dc11d91be70abe670
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-green3-dynamic-integration.log sha256=a1eba46184ae0f8a75b861b4cff694e859dfbe5a8eaeb2b23e67bdc5f98933a6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-retained-done-semantic-readback.log sha256=92bdc65ce8f9d69f2dda2b4657628eb82fbeaec43ba1677e420b503440b7b817
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-red4-recovery-collision.log sha256=6426d9459bac636f3205a793a225d7ed1d000f111bdaeaf6cb38eb382cbee981
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-green-recovery-collision.log sha256=0d27ad7a32afcf77b7758b811ac77d48f65626e17fadf754c4c109f97903bfbc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp134-affected-tests-short.log sha256=42e3476f0ddb42897467061296835da873cdf9bd0c1cce4d440eda19a8d5a0e9
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red-dynamic-semantics-20260913T164300
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red2-dynamic-semantics-20260913T164500
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red3-dynamic-semantics-20260913T164700
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-green1-dynamic-semantics-20260913T165000
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red-runtime-integration-20260913T165400
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red-producer-failure-evidence-20260913T165900
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-green2-dynamic-integration-20260913T170300
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-green2b-dynamic-integration-20260913T170700
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-green3-dynamic-integration-20260913T170800
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/exp134-red-recovery-collision-20260913T171300
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134-r2-resume-20260913T1716
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134-r3-resume-20260913T1719
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134-r4-resume-20260913T1722
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134-g-resume-20260913T1725
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134-affected-20260913T1729
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e134a
+decision: BUILD_AND_RUN_COMPLETE_ORDINARY_GATE
+next_experiment: EXP-135
+```
+
+```yaml
+checkpoint_id: CP-122
+last_valid_experiment: EXP-134
+current_hypothesis: The semantic outcome and resume-admission fixes are isolated to verification/evidence and resource admission, so a fresh package build followed by the complete ordinary test gate will establish a new installed provenance without changing motion policy or Broker safety.
+working_tree_status: EXP-134 source, tests and ledger result are uncommitted pending the mandatory EXP-045 hash gate; no owned runtime processes exist.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Impossible DONE evidence and uncertain ERROR evidence no longer promote through either verifier.
+  - Fully proved stage-specific failures retain their business reason, while the producer records fresh post-action evidence.
+  - Resume now repeats live ROS-domain and socket admission without touching unrelated owners on rejection.
+open_risks:
+  - A fresh installed build, complete ordinary package gate, immutable Broker image and applicable live fault/qualification repetitions remain required.
+next_command: Run the mandatory EXP-045 hash and placeholder gates, commit EXP-134, then execute EXP-135 from a fresh NVMe scratch.
+```
+
+## EXP-135 — Fresh build and complete ordinary package gate
+
+```yaml
+experiment_id: EXP-135
+status: PLANNED
+prior_experiment: EXP-134
+hypothesis: The committed EXP-134 verifier/evidence/admission changes build into the isolated overlay and pass the complete ordinary so101_demo_py test gate with exact installed-source provenance.
+single_variable: Rebuild and test the EXP-134 commit; do not change code, motion thresholds, runtime configuration, models or Broker safety policy.
+lifecycle: PROCESS_FREE_BUILD_AND_TEST
+success_criteria: colcon build succeeds; installed files hash-match committed source; the complete ordinary src/so101_demo_py/test suite passes from a new verified NVMe scratch; no benchmark suite is collected.
+failure_criteria: Build, install provenance, collection, test, lint or environment failure attributable to the candidate.
+invalid_criteria: Reused scratch, tempfile outside the registered NVMe root, wrong interpreter/overlay, benchmark collection or contaminated runtime ownership.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain build/test/provenance reports and scratch as a deletion candidate; delete nothing without explicit authorization.
+decision: RUN_AFTER_EXP_134_COMMIT
+next_experiment: EXP-135
 ```
