@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-115
-next_experiment: EXP-129
+latest_checkpoint: CP-116
+next_experiment: EXP-130
 ```
 
 Frozen provenance:
@@ -9661,7 +9661,14 @@ next_command: Commit CP-115, then repeat the clean four-package build, complete 
 
 ```yaml
 experiment_id: EXP-129
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:38:55+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:39:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:44:43+08:00
 prior_experiment: EXP-128
 hypothesis: The committed runtime-generation binding builds cleanly, preserves all ordinary tests and produces a source-bound immutable image whose two frozen model smokes pass.
 single_variable: Rebuild and qualify only the committed EXP-128 source; retain all frozen package, model, catalog, image-policy and cleanup inputs.
@@ -9669,7 +9676,81 @@ lifecycle: PROCESS_FREE_THEN_CONTAINER_ONLY
 success_criteria: Four-package build passes; complete so101_demo_py ordinary suite has zero error/failure/skip; exact source/install/image hashes agree; both frozen model smokes are QUALIFIED; no residue remains.
 failure_criteria: Any build/test/provenance/image/model/cleanup failure, stale installed code, mutable identity or mixed overlay.
 invalid_criteria: Reused scratch/root, tempfile outside registered evidence root, wrong overlay/interpreter or pre-existing owned runtime.
+provenance:
+  source_commit: cebdf182b07e8fcf2ea0cb5f288aa0073538bd95
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
+  broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
+observed:
+  - The fresh four-package build passed in 2.34 s. The complete ordinary so101_demo_py suite passed 2841 tests with zero errors, failures or skips in 91.68 s; benchmark_test was not collected.
+  - Production provenance binds clean source commit cebdf182b07e8fcf2ea0cb5f288aa0073538bd95, equal source/install module-tree hash 8be223de576ea2bc0401a9d3060a2d2cff7dfe66e749a7d37d380484ada46c48 and equal host/image source hash f1737b9dab782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224.
+  - Immutable image sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3 rebuilt in 13.37 s. Frozen P01 YOLO and Grounded-SAM each returned one QUALIFIED candidate in the 9.40 s smoke.
+  - Post-smoke cleanup found no related process, running container or GPU compute application.
+conclusion: VALID; EXP-128 is fully package-, install-, image-, model-, provenance- and cleanup-qualified for live F2 repetition.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-colcon-build.log sha256=48cfe194a7b317202cb61ca825caa1432b6d9c07bb66206b285defae78c98368
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-colcon-build.time sha256=7a3d132da55fcc65414ec74639add8bcb2a5490f71059a2bd50a6fb2db7c36b8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-colcon-test.log sha256=baa421484017a6fe3a1ffc953540345512b7aea7e68c2318dedcb86f0174867f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-colcon-test.time sha256=f550ceefb37c8c9a320d9e8bd166ffec8e145c967daa2a5e106e0bcf4aa36374
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-colcon-test-result.log sha256=245c80f9c6a64f29218ab901fe751aaaaf28681f17f2cde7fa5c8a38b7174ba9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-image-build.log sha256=34485d54fac4ec732c44dd4f1b5f76d6552078e3473a8bf2265f22ebcad70c72
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-image-build.time sha256=9f1d75d36be2b350e7ceb8942639c1304055ac90cfcfd759dc96bdf37bf709f9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-image-build.json sha256=f7e8cbce42f6d8365c49149375fb44235edfac70b323fbeddb985a65ff8ffe76
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-model-smoke.log sha256=6b5e506dd2696c45bff1da261fc602639a6dfded53992214dedab3e8d8a2559e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-model-smoke.time sha256=003d2e2b78c9c425d8f3ab1398374dfbefd1b7ff1894ab7ea1ae0b81257a7b00
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-smoke-admission.json sha256=e444f49722bde61d52570a5c721d61028b00febf6f554dc39bcc03abbf729204
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-production-provenance.json sha256=54af8ddb80ba4d3a1e2923cb6b7581c3cc5865b88541821d94ff3a7743b7fb48
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp129-cleanup-audit.json sha256=27b575ecbbc39d8172d555b9d364e4d44d5bf7f2df740292d288886de61fea3f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-129-smoke/ipc/.model-ready.json sha256=abbffa6b779d4e251d66dec19bbbb1acc8570d40714f0b9eeb74f038e5c9a0e7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-129-smoke/ipc/smoke.json sha256=e1eb8e12b4e62644241a225733737fb8a4adf031d853d486f60f40a60ef0d2b4
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p129b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p129t
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p129i
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p129s
 retention_rule: Retain all gate evidence and scratch as deletion candidates; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_115
-next_experiment: EXP-129
+decision: KEEP
+next_experiment: EXP-130
+```
+
+```yaml
+checkpoint_id: CP-116
+last_valid_experiment: EXP-129
+current_hypothesis: The fully qualified runtime-generation binding will let the same two Workers consume generation-2 responses after exact Broker recovery instead of exhausting K on BROKER_GENERATION_CHANGED.
+working_tree_status: EXP-129 result and EXP-130 preregistration are ledger-only; source/install/image are clean and provenance-bound.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - EXP-128 passes the complete package and immutable dual-model qualification gates.
+open_risks:
+  - Live F2 must still prove post-recovery Worker policy binding and useful continuation.
+next_command: Commit CP-116, persist/read back and syntax-check EXP-130 scripts, then repeat the exact four-point mirror-corruption fault with the EXP-129 image.
+```
+
+## EXP-130 — Runtime-rebound live Broker recovery
+
+```yaml
+experiment_id: EXP-130
+status: PLANNED
+prior_experiment: EXP-129
+hypothesis: Repeating EXP-127 with the EXP-128/129 runtime will preserve the authenticated pause/replacement sequence and allow generation-2 responses through the rebound Worker policy without BROKER_GENERATION_CHANGED.
+single_variable: Replace only the source/image and unique run identity with EXP-128/129-qualified values and f2-130; preserve four points, N=2/K=3, exact two-mirror corruption and all safety criteria.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-130
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-130
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Exact generation-1 image sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3, batch/runtime/ready/model identity, two Workers and zero pre-pause inputs; exactly two 0400 mirrors while paused.
+success_criteria: INPUT_HASH_CHANGED causes authenticated health=false; no lease while unhealthy; distinct exact generation 2 reaches ready/model admission before health=true; later Worker requests have generation 2 with no BROKER_GENERATION_CHANGED; infrastructure attempts remain non-PASSED; useful remaining work continues within K=3; exact cleanup passes.
+failure_criteria: Missing health event, grant while unhealthy, stale generation acceptance, BROKER_GENERATION_CHANGED after readmission, K overflow, duplicate, unsafe promotion or residue.
+invalid_criteria: Pre-existing root, script/readback/syntax/admission/identity/mode failure before injection or source-age expiry.
+provenance:
+  source_commit: cebdf182b07e8fcf2ea0cb5f288aa0073538bd95
+  broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
+  broker_source_sha256: f1737b9dab782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
+retention_rule: Retain all command, observer, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_116
+next_experiment: EXP-130
 ```
