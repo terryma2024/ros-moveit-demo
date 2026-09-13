@@ -199,10 +199,6 @@ class BatchCoordinator:
 
     def _recover_interrupted_leases(self, events):
         """Adjudicate every active lease issued by a previous coordinator epoch."""
-        # Non-physical validation has no motion ambiguity and remains resumable;
-        # Task 12's conservative crash adjudication is the physical ATTEMPT boundary.
-        if self.request.run_mode is not RunMode.EXECUTE:
-            return
         for worker in tuple(deepcopy(self._state['workers']).values()):
             if not worker.get('lease'):
                 continue
@@ -210,7 +206,9 @@ class BatchCoordinator:
             if lease.coordinator_epoch == self.journal.coordinator_epoch:
                 continue
             durable_start = self._event_authorized_start(lease, events)
-            if durable_start:
+            if self.request.run_mode is not RunMode.EXECUTE:
+                started = False
+            elif durable_start:
                 # An injected diagnostic port may add uncertainty but can never
                 # erase the journal's durable authorization boundary.
                 started = True
@@ -221,7 +219,7 @@ class BatchCoordinator:
                 if started not in (True, False, None):
                     raise ValueError('RECOVERY_AUTHORIZATION_PROOF')
             location = None
-            if started is True:
+            if started is True or self.request.run_mode is not RunMode.EXECUTE:
                 try:
                     location = self.result_port.discover(
                         lease, Path(worker['workspace']))

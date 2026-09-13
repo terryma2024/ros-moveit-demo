@@ -115,6 +115,7 @@ class ProcessSupervisor:
         if not isinstance(batch_id, str) or not batch_id:
             raise SupervisorError("BATCH_ID")
         self.batch_id = batch_id
+        self._external_identity_reader = identity_reader
         self._identity_reader = identity_reader or self._read_owned_identity
         self._signal_group = signal_group
         self._popen = popen
@@ -220,15 +221,64 @@ class ProcessSupervisor:
             raise SupervisorError("MANIFEST_INVALID")
         if not isinstance(document["processes"], list):
             raise SupervisorError("MANIFEST_INVALID")
+        processes = []
         for value in document["processes"]:
             try:
                 if type(value) is not dict or set(value) != {
                     "batch_id", "role", "pid", "pgid", "cmdline", "start_time"
                 }:
                     raise TypeError
-                OwnedProcess(**(value | {"cmdline": tuple(value["cmdline"])}))
+                processes.append(
+                    OwnedProcess(**(value | {"cmdline": tuple(value["cmdline"])})
+                ))
             except (TypeError, SupervisorError) as error:
                 raise SupervisorError("MANIFEST_INVALID") from error
+        return tuple(processes)
+
+    def _recovery_identity(self, expected: OwnedProcess) -> OwnedProcess | None:
+        if self._external_identity_reader is not None:
+            return self._external_identity_reader(expected.pid)
+        pgid, cmdline, start_time = _proc_values(expected.pid)
+        if not pgid or not cmdline or not start_time:
+            return None
+        return OwnedProcess(
+            expected.batch_id,
+            expected.role,
+            expected.pid,
+            pgid,
+            cmdline,
+            start_time,
+        )
+
+    def retire_manifest(
+        self,
+        document,
+        *,
+        term_timeout_s: float = 5.0,
+        kill_timeout_s: float = 2.0,
+    ) -> bool:
+        """Fence exact process groups recorded by a crashed prior Coordinator."""
+        processes = self.load_manifest(document)
+        for expected in processes:
+            actual = self._recovery_identity(expected)
+            members = self._group_members_reader(expected.pgid)
+            if actual is None and not members:
+                continue
+            if actual is not None and actual != expected:
+                raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
+
+            def poll(expected=expected):
+                return 0 if self._recovery_identity(expected) is None else None
+
+            self._record_started(expected, poll=poll)
+            if not self.retire_owned(
+                expected,
+                term_timeout_s=term_timeout_s,
+                kill_timeout_s=kill_timeout_s,
+            ):
+                return False
+        self.write_manifest()
+        return True
 
     def write_manifest(self) -> None:
         if self.manifest_path is None:

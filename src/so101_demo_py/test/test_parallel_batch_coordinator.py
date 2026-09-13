@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    BatchRequest, RunMode, WorkerState, load_parallel_runtime_config,
+    BatchRequest, RunMode, ValidationStatus, WorkerState, load_parallel_runtime_config,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 
@@ -941,7 +941,9 @@ def test_validation_start_requires_gate_summary_and_replay_preserves_it(make):
         event = next(event for event in again.replay().events
                      if event.type == 'VALIDATION_STARTED')
         assert event.payload['identity']['gate_summary'] == summary
-        assert restored.snapshot().workers['w1'].state is WorkerState.EXECUTING
+        snapshot = restored.snapshot()
+        assert snapshot.workers['w1'].state is WorkerState.RECOVERING
+        assert snapshot.summary.validation_statuses['p1'] is ValidationStatus.VALIDATION_INVALID
 
 
 @pytest.mark.parametrize(
@@ -1000,4 +1002,6 @@ def test_dry_run_scheduler_summary_is_idempotent_and_replayable(make):
         event = next(event for event in again.replay().events
                      if event.type == 'VALIDATION_STARTED')
         assert event.payload['identity']['gate_summary'] == summary
-        assert restored.snapshot().workers['w1'].state is WorkerState.EXECUTING
+        snapshot = restored.snapshot()
+        assert snapshot.workers['w1'].state is WorkerState.RECOVERING
+        assert snapshot.summary.validation_statuses['p1'] is ValidationStatus.VALIDATION_INVALID

@@ -120,6 +120,69 @@ def test_retirement_never_adopts_a_similar_unowned_identity():
     assert supervisor.processes == (owned,)
 
 
+def test_crash_recovery_retires_only_exact_manifest_identity():
+    """A new Coordinator may fence a recorded old group after exact readback."""
+    from dataclasses import asdict
+
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    old = OwnedProcess('batch-1', 'worker', 101, 101, ('old-worker',), 11)
+    identities = {101: old}
+    members = {101: (101,)}
+    signals = []
+
+    def stop_group(pgid, value):
+        signals.append((pgid, value))
+        identities.pop(pgid, None)
+        members[pgid] = ()
+
+    supervisor = ProcessSupervisor(
+        'batch-1',
+        identity_reader=lambda pid: identities.get(pid),
+        signal_group=stop_group,
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    document = {
+        'schema_version': 1,
+        'batch_id': 'batch-1',
+        'processes': [{**asdict(old), 'cmdline': list(old.cmdline)}],
+    }
+
+    assert supervisor.retire_manifest(document, term_timeout_s=0.01) is True
+    assert signals == [(101, signal.SIGTERM)]
+    assert supervisor.processes == ()
+
+
+def test_crash_recovery_manifest_rejects_pid_reuse_without_signalling():
+    """A matching PID/PGID is not authority when cmdline or start time changed."""
+    from dataclasses import asdict
+
+    from so101_demo.runtime.parallel_processes import (
+        OwnedProcess,
+        ProcessSupervisor,
+        SupervisorError,
+    )
+
+    old = OwnedProcess('batch-1', 'worker', 101, 101, ('old-worker',), 11)
+    reused = OwnedProcess('batch-1', 'worker', 101, 101, ('other',), 12)
+    signals = []
+    supervisor = ProcessSupervisor(
+        'batch-1',
+        identity_reader=lambda _pid: reused,
+        signal_group=lambda pgid, value: signals.append((pgid, value)),
+        group_members_reader=lambda _pgid: (101,),
+    )
+    document = {
+        'schema_version': 1,
+        'batch_id': 'batch-1',
+        'processes': [{**asdict(old), 'cmdline': list(old.cmdline)}],
+    }
+
+    with pytest.raises(SupervisorError, match='PID_REUSE'):
+        supervisor.retire_manifest(document)
+    assert signals == []
+
+
 def test_retirement_rejects_a_reused_session_leader_before_any_group_signal():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,

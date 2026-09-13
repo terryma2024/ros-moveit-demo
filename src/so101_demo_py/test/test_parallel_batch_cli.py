@@ -179,6 +179,105 @@ def test_duplicate_batch_root_rejected_before_provenance_side_effect(tmp_path):
     assert called == []
 
 
+def test_explicit_resume_replays_started_dry_run_and_continues_remaining_point(tmp_path):
+    """A production recovery mode reaches replay without starting physical runtime."""
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition,
+        _write_json,
+        prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+
+        def ros_domain_in_use(self, _domain):
+            return False
+
+        def socket_in_use(self, _path):
+            return False
+
+    scratch = Path(os.environ['TMPDIR']).parent
+    root = scratch / 'r'
+    values = argv(
+        root,
+        worker_count='1',
+        max_points_per_worker='2',
+        point_id=('task_start', 'sample_01_near_left'),
+    )
+    first = prepare_batch(values, provenance_verifier=verified)
+    original = ProductionBatchComposition(
+        first,
+        resource_probe=Probe(),
+        claim_root=scratch / 'rc',
+        worker_launcher=lambda owner, path: owner._run_worker_local(path),
+    )
+    _write_json(root / 'batch_manifest.json', first.manifest)
+    original.coordinator.register_worker('worker-01', generation=1)
+    lease = original.coordinator.grant_lease('worker-01', generation=1)
+    original.coordinator.ack_lease(lease, request_key='crash-ack')
+    original.coordinator.ack_validation_started(
+        lease,
+        request_key='crash-start',
+        gate_summary={
+            'schema_version': 1,
+            'kind': 'SCHEDULER_START',
+            'batch_id': lease.batch_id,
+            'coordinator_epoch': lease.coordinator_epoch,
+            'worker_id': lease.worker_id,
+            'worker_generation': lease.worker_generation,
+            'point_id': lease.point_id,
+            'attempt_id': lease.attempt_id,
+            'lease_generation': lease.lease_generation,
+            'point_gate_applicable': False,
+            'physical_runtime_started': False,
+            'scheduler_only': True,
+        },
+    )
+    original.supervisor.write_manifest()
+    original._release_partial()
+
+    recovered = prepare_batch(values + ['--resume'], provenance_verifier=verified)
+    assert recovered.resume is True
+    resumed = ProductionBatchComposition(
+        recovered,
+        resource_probe=Probe(),
+        claim_root=scratch / 'rc',
+        worker_launcher=lambda owner, path: owner._run_worker_local(path),
+    )
+    assert resumed.journal.coordinator_epoch == 2
+    result = resumed.run()
+    assert result.validation_statuses == {
+        'task_start': ValidationStatus.VALIDATION_INVALID,
+        'sample_01_near_left': ValidationStatus.VALIDATION_PASSED,
+    }
+    assert result.point_statuses == {
+        'task_start': PointStatus.UNRUN,
+        'sample_01_near_left': PointStatus.UNRUN,
+    }
+    assert resumed.resource_manifest.workers[0].generation == 2
+    assert all(
+        b'ATTEMPT_STARTED' not in path.read_bytes()
+        for path in (root / 'coordinator/events').glob('*.journal')
+    )
+
+
+def test_explicit_resume_rejects_changed_frozen_batch_manifest(tmp_path):
+    """Recovery cannot change selection, capacity, mode, root, or provenance."""
+    from so101_demo.cli.mujoco_parallel_batch import CliError, _write_json, prepare_batch
+
+    root = tmp_path / 'batch'
+    prepared = prepare_batch(argv(root), provenance_verifier=verified)
+    root.mkdir(mode=0o700)
+    changed = dict(prepared.manifest)
+    changed['max_points_per_worker'] = 11
+    _write_json(root / 'batch_manifest.json', changed)
+
+    with pytest.raises(CliError, match='RECOVERY_BATCH_MANIFEST_MISMATCH'):
+        prepare_batch(argv(root) + ['--resume'], provenance_verifier=verified)
+
+
 def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
 

@@ -7678,3 +7678,89 @@ open_risks:
   - Findings 6 through 8 remain pending.
 next_command: Commit the scoped F5 artifact contract, CLI planning receipt, tests, and ledger, then start EXP-101 by verifying the production crash-resume design and CLI reachability.
 ```
+
+## EXP-101 — Production Coordinator crash-resume reachability
+
+```yaml
+experiment_id: EXP-101
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:02:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:02:00+08:00
+  - status: VALID
+    at: 2026-09-13T10:13:15+08:00
+prior_experiment: EXP-100
+hypothesis: Journal replay and conservative in-flight adjudication exist, but the production CLI cannot reach them because it rejects an existing evidence root before provenance verification and composition always performs fresh resource allocation.
+prediction: An explicit --resume invocation against an exact frozen two-point dry-run batch will fail at argument/root preparation instead of acquiring a new Coordinator epoch, settling the started lease, rotating the Worker generation, and continuing the remaining point.
+single_variable: Add only an explicit CLI recovery/crash-window test and exact old-process retirement contract; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 1f447581b7ade0de52fc95fbb21c25c05d1ec107
+  - frozen design section 12 explicitly requires Coordinator restart, epoch rotation, journal replay, sealed-result adjudication, and conservative handling of authorized starts
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process
+success_criteria:
+  - fresh mode still rejects every existing evidence root before provenance side effects
+  - explicit resume requires an existing exact batch manifest and current matching frozen inputs/provenance
+  - recovery acquires the original journal lock, fences exact old owned identities, reclaims unchanged resources, rotates credentials/generations, and continues only eligible points
+  - an already STARTED dry-run validation is conservatively settled without any physical runtime, while the untouched second point continues once
+failure_criteria:
+  - production CLI already exposes and completes the explicit safe recovery path
+invalid_criteria:
+  - wrong overlay, reused scratch, malformed synthetic history, or any physical process startup in the dry-run recovery test
+provenance:
+  source_commit: 1f447581b7ade0de52fc95fbb21c25c05d1ec107
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+commands:
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6r-bh42z0fC/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <explicit dry-run resume and exact process-manifest retirement RED> -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-S4n0TZJG/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <six focused fresh/recovery/fencing/replay cases> -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6a-YZdun5pM/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_cli.py src/so101_demo_py/test/test_parallel_batch_coordinator.py src/so101_demo_py/test/test_parallel_batch_resources.py src/so101_demo_py/test/test_parallel_processes.py -q
+    exit_code: 0
+observed:
+  - Valid RED failed both target cases: --resume was not recognized, and ProcessSupervisor exposed no exact prior-manifest retirement operation. Wall time was 0.61 s.
+  - Focused GREEN passed six fresh-root, frozen-manifest, dry-run crash-window, validation replay, exact retirement, and PID-reuse rejection cases in 1.49 s pytest / 1.77 s wall.
+  - Final adjacent CLI, Coordinator, resource allocator, and process supervisor coverage passed 340 tests in 36.65 s pytest / 36.92 s wall.
+  - The dry-run crash window durably STARTED task_start under epoch 1, closed the owner, then resumed under epoch 2. It conservatively recorded task_start VALIDATION_INVALID, rotated worker-01 to generation 2, executed sample_01_near_left exactly once as VALIDATION_PASSED, retained both physical PointStatus values UNRUN, and emitted no ATTEMPT_STARTED event.
+  - Earlier runs with an overlong socket fixture, a syntax typo, a post-close test replay, and two incomplete test expectation updates were INVALID or intermediate and are retained only as deletion candidates.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; the frozen design requires Coordinator restart and the production CLI now exposes it only through explicit --resume. Fresh mode still rejects existing roots before provenance. Resume requires an owner-private existing root, absence of a finalized root aggregate, exact current frozen batch/provenance equality, exclusive journal lock/new epoch, exact prior process fencing, strict resource/environment re-admission, conservative old-lease adjudication, and Worker generation/session/token rotation before eligible work continues. Physical Broker recovery additionally selects a new broker generation and uses the existing exact container identity/label/mount retirement gate. No gate was weakened and the controlled recovery proof was scheduler-only.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f6r-bh42z0fC.stdout sha256=216ec33b840f0634472509f81fe934c093252f195598e7109d89ad9f796146d4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f6g-S4n0TZJG.stdout sha256=9187cef6d5d8364b3a1da07505cbe8ac7279e04991ed4f2120cbad5cbb5e8d1b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f6a-YZdun5pM.stdout sha256=d3358927456977fd781e9b42ecdf3445640fd73b3b661bad5e4d242dfc71843e
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6r-uPeMvVkV
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6r-bh42z0fC
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-QWMJaFya
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-iFAoWwoE
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6a-nIW4TTCj
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6a-Qk1mcgYG
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-e0cTXxis
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-LcZIMlfk
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6g-S4n0TZJG
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f6a-YZdun5pM
+decision: KEEP
+next_experiment: EXP-102
+```
+
+```yaml
+checkpoint_id: CP-088
+last_valid_experiment: EXP-101
+current_hypothesis: Astra finding 7 may advertise supported N=3 while the CLI has no way to provide the mandatory accepted Task-14 live-headroom evidence to the allocator.
+working_tree_status: F6 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-101 used only in-process dry-run fakes and started no ROS, MuJoCo, MoveIt, Broker, Worker child, container, or GPU process.
+confirmed_conclusions:
+  - Finding 6 is confirmed and fixed through an explicit fail-closed recovery entry point rather than weakening duplicate-root rejection.
+  - Exact process identity and frozen input/provenance mismatches prevent recovery before new authorization.
+disproven_routes:
+  - Relying on latent CoordinatorJournal replay while the production CLI remains fresh-root-only.
+open_risks:
+  - Findings 1 through 6 retain pending final rebuilt-overlay and live gates.
+  - Findings 7 and 8 remain pending.
+next_command: Commit the scoped F6 recovery implementation/tests/ledger, then start EXP-102 with the N=3 CLI capability contract.
+```
