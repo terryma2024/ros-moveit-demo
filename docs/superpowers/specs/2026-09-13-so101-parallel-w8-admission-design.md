@@ -221,7 +221,7 @@ Coordinator 收到并复核后，才开放正式 20 点全局队列。八个 Wor
 v2 固定 215–222。qualification 的 final request 是 W8，因此在 `START_1` 前按数值顺序申请
 全部八个 lock；normal N 在启动前原子申请映射表前 N 个，不能边运行边追加。215–222 位于 Linux 推荐的
 非临时端口 Domain 范围，避开 v1 的 181–183；每个 Worker 的 DDS participant 数硬上限为 32。
-只有八个 lock 全部成功，
+只有本次最终请求的全部 lock 成功，
 才写入 `DOMAINS_RESERVED`；任一失败会释放本次刚取得的 lock，并以
 `DOMAIN_POOL_INCOMPLETE` 或 `DOMAIN_CLAIM_CONFLICT` 终止。
 
@@ -453,6 +453,17 @@ qualification 时冻结的完整 catalog identity，并用既有 `--point-id` �
 外部临时负载只拒绝当前运行。若当前主机满足 clean-host 前提却仍低于 accepted profile 的
 余量，画像失效并要求重新 qualification。
 
+normal 启动时，Authority 根据 watchdog 从 preflight 到故障时刻的 0.5 秒 foreign-process、
+GPU process 和系统负载序列签发 `CleanHostWindowReceipt`。使用 accepted profile 的 normal batch
+若触发 OOM、GPU Xid、controller deadline miss、cgroup 逃逸或冻结资源硬门，ResourceMonitor
+把原始 `HardStopEvidence` 交给 watchdog。watchdog 在杀进程前持久化包含 profile ID、batch、
+reason、clean-host receipt SHA256 的 pending failure；Authority 可用时立即裁决，不可用时写入
+root-owned `/var/lib/so101-admission/pending-revocation/`。Authority 每次启动以及处理任何
+register/normal admission 前，必须先消费全部 pending failure。只有 Authority 验证
+`clean_host=true` 且 reason 属于上述 profile-invalidating 集合时，才 fsync `revoke()`；存在未
+处理 pending record 时 fail closed。foreign workload 出现过的运行只拒绝当前 batch，不撤销
+画像。
+
 资源与行为资格分开：
 
 - `resource_profile_accepted=true` 表示 W8 资源和隔离证据有效。
@@ -510,7 +521,7 @@ deadline miss、cgroup 逃逸或 `MemAvailable < 4 GiB`。正式 attempt 已开�
 | 静态资源 | `HOST_RESOURCE_BASELINE_FAILED` |
 | 运行资源 | `MEMORY_HARD_LIMIT`, `GPU_HARD_HEADROOM`, `CPU_PRESSURE_LIMIT` |
 | 公共依赖 | `BROKER_BACKPRESSURE_LIMIT`, `SIMULATION_REALTIME_LIMIT`, `CONTROLLER_DEADLINE_MISS` |
-| Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `AUTHORITY_EVIDENCE_ACCESS_FAILED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
+| Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `AUTHORITY_EVIDENCE_ACCESS_FAILED`, `PENDING_REVOCATION_UNPROCESSED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
 | Watchdog | `WATCHDOG_UNAVAILABLE`, `QUALIFICATION_CRASHED` |
 | Worker 容量 | `SLOT_HEARTBEAT_TIMEOUT`, `W8_CAPACITY_LOST` |
 
@@ -554,7 +565,7 @@ attempt 终态与恢复语义，不能用 qualification 重启覆盖已开始 at
 ```
 
 Coordinator 写 batch 事件和正式点位投影；Worker 只写自己的 canary/attempt/recovery 目录；
-资源监视器只写原始时间序列；Authority 把签名响应副本写回 receipts，权威 acceptance/profile
+资源监视器只写原始时间序列；Coordinator 把 Authority socket 返回的签名响应副本写入 receipts，权威 acceptance/profile
 只写 Authority-owned 路径。所有 sealed 目录继续使用临时目录、文件与目录 fsync、原子 rename、
 候选 writer close、Authority 复制到自有 staging 和只读回读。Authority registry、revocation、
 私钥与权威 acceptance 不放在候选可写 evidence root 内。
@@ -621,8 +632,9 @@ W1–W3 旧命令和 v1 配置不变。
 - canary 必须有三轮和 N Worker 的执行重叠，不能混入正式点位统计。
 - 阶段不能跳过、倒退或在失败后继续扩容。
 - Authority 拒绝自签记录、伪造 accepted 文件、registry 篡改、revoked profile、任意路径、文件替换、缺样、损坏和 provenance 漂移。
+- clean-host normal 硬故障即使碰上 Authority 宕机，也会由 watchdog 持久 pending revocation；服务重启后同 profile 被拒绝。foreign workload 只拒绝当前 batch。
 - W8 丢失 slot 后暂停发新 lease；恢复到八个后继续，超时则 `W8_CAPACITY_LOST`。
-- Broker 对八 Worker 保持有界公平；八路 YOLO、八路 fallback、混合请求和最终帧新鲜度均通过，YOLO-first 和既有失败矩阵不变。
+- Broker 对八 Worker 保持有界公平；真实 Worker/proxy/transport/runtime 链上的八路 YOLO、八路 fallback、混合请求、逐模型重新捕帧和最终帧新鲜度均通过，YOLO-first 和既有失败矩阵不变。
 
 ### 14.2 ai-station qualification
 

@@ -64,6 +64,8 @@
 - `src/so101_demo_py/src/parallel_batch/broker.py`：八 Worker 公平队列和指标快照。
 - `src/so101_demo_py/src/parallel_batch/journal.py`：新增 qualification/admission 事件及重放。
 - `src/so101_demo_py/src/parallel_batch/worker.py`：canary execution kind、barrier 和 cgroup 身份回报。
+- `src/so101_demo_py/src/runtime/parallel_ipc.py`：slot heartbeat 与 Broker ticket/grant/frame wire schema。
+- `src/so101_demo_py/src/runtime/parallel_ros_runtime.py`：按模型重新捕获对齐 RGB-D/TF 和 admission latch。
 - `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`：新增 v2/admission CLI，保持 v1 路径。
 - `src/so101_demo_py/setup.py`：注册 Authority 与 watchdog CLI。
 - `scripts/inject_so101_parallel_fault.py`：增加 v2 阶段和资源故障注入。
@@ -295,6 +297,7 @@ git commit -m "feat: reserve eight ROS domains atomically"
 - Produces: `CgroupLayout.create(batch_id: str, limits: CgroupLimits) -> CgroupLayout`.
 - Produces: `start_coordinator_scope()`, `start_monitor_scope()`, `docker_parent_slice()`, `start_worker_scope(slot)`, `verify_descendants()`, `snapshot()` and `close()`.
 - Produces: `BatchWatchdog`，持有 Domain FD/cgroup ownership，以 pidfd/systemd unit 状态监视 Coordinator、monitor、Authority，执行 root-owned terminal/cleanup。
+- Produces: root-owned pending terminal/pending revocation records，必须在停止 owned leaf 前 fsync。
 - Consumes: topology probe and v2 resource fields.
 
 - [ ] **Step 1: 写伪 cgroup 文件系统 RED tests**
@@ -359,6 +362,7 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 **Interfaces:**
 - Produces: `ResourceMonitor.start()`, `mark_stage(name, phase)`, `snapshot_window(stage)`, `stop()`.
 - Produces: `ResourceDecision(kind: OK | SOFT_STOP | HARD_STOP, reasons: tuple[str, ...])`.
+- Produces: `HardStopEvidence(profile_id, batch_id, reason, clean_host_window_sha256, raw_metrics_sha256)`.
 - Consumes: `CgroupLayout.snapshot()`, NVML probe, Broker metrics and Worker runtime metrics.
 
 - [ ] **Step 1: 写时间序列 RED tests**
@@ -382,6 +386,8 @@ missing count、min/max/p05/p95/p99 的 sealed summary。不能用缺样补零�
 SOFT_STOP 只阻止新 lease；HARD_STOP 先持久化原因，再请求独立 watchdog `abort_batch`，并让
 现有 supervisor 走协作式停止。即使 Coordinator/supervisor 随后死亡，watchdog 仍完成清理。
 保留 attempt 的 `INVALID/INDETERMINATE` 既有裁决。
+normal 使用 accepted profile 时，watchdog 必须在清理前把 `HardStopEvidence` 写入 pending
+failure；不能因 Authority 当时不可用而丢失撤销候选。
 
 - [ ] **Step 5: 运行 GREEN**
 
@@ -499,13 +505,23 @@ git commit -m "feat: isolate W8 canary evidence"
 
 **Files:**
 - Modify: `src/so101_demo_py/src/parallel_batch/broker.py`
+- Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
 - Modify: `src/so101_demo_py/src/cli/parallel_perception_broker.py`
+- Modify: `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_ros_runtime.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_ipc.py`
 - Test: `src/so101_demo_py/test/test_parallel_batch_broker.py`
 - Test: `src/so101_demo_py/test/test_parallel_batch_perception.py`
+- Test: `src/so101_demo_py/test/test_parallel_batch_worker.py`
+- Test: `src/so101_demo_py/test/test_parallel_batch_cli.py`
+- Test: `src/so101_demo_py/test/test_parallel_ros_runtime.py`
+- Test: `src/so101_demo_py/test/test_parallel_ipc.py`
 
 **Interfaces:**
 - Produces: `BrokerMetricsSnapshot` with per-model queue depth、per-worker wait、inference p99 and generation.
-- Consumes: v2 queue capacity 8 and effective queue deadline formula from spec §8.
+- Produces wire types: `BrokerTicketRequest`, `CaptureNowGrant`, `BrokerFrameRequest` and fenced replies.
+- Produces proxy API: `acquire_ticket(model, lease_identity) -> CaptureNowGrant` and `submit_frame(grant, snapshot) -> BrokerResponse`.
+- Consumes: v2 queue capacity 8、10/30 秒 ticket timeout、0.5 秒 capture submit 和 spec §8 的 frame freshness deadline。
 
 - [ ] **Step 1: 写八 Worker 公平性 RED tests**
 
@@ -517,7 +533,7 @@ ticket 并重新 capture，不能复用 YOLO 帧。
 
 - [ ] **Step 2: 运行 RED**
 
-运行 broker/perception tests，确认新增断言失败。
+运行 broker/perception、Worker、CLI、ROS runtime 和 IPC tests，确认新增断言失败。
 
 - [ ] **Step 3: 实现指标和 deadline**
 
@@ -526,17 +542,32 @@ deadline：YOLO/Grounded p99 ceiling 分别为 2.0/4.0 秒，保留 0.25 秒 com
 帧龄严格 `<5.0 s`。把 ticket queue、capture、inference start/end 写入 bounded metrics stream；响应返回前继续检查 lease、
 broker generation 和最终帧龄。专用 Broker canary 产生 fallback 压力，不伪造正式感知失败。
 
+生产调用链必须端到端改造：Worker 不在 ticket 前调用 `inference_snapshot()`；
+`_WorkerBrokerProxy` 不再把一个 snapshot 捕获进两个模型闭包；`run_perception_chain()` 接收按
+模型调用的 capture callback，并为 fallback 重新锁存对齐 RGB-D/TF、stamp 和 hash；
+`BrokerTransport` 实现 ticket/grant/frame 三类 wire schema。v1 仍走原单请求协议。增加经过
+真实 proxy + transport + runtime 的无 ROS 集成测试，证明 YOLO 与 fallback 使用不同 capture
+identity，且 admission latch 对应最终模型的新帧。
+
 - [ ] **Step 4: 运行 GREEN 和 v1 回归**
 
-运行 broker、perception、worker tests。
+运行上述全部测试和 v1 回归。
 
 - [ ] **Step 5: 提交**
 
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/broker.py \
+  src/so101_demo_py/src/parallel_batch/worker.py \
   src/so101_demo_py/src/cli/parallel_perception_broker.py \
+  src/so101_demo_py/src/cli/mujoco_parallel_batch.py \
+  src/so101_demo_py/src/runtime/parallel_ros_runtime.py \
+  src/so101_demo_py/src/runtime/parallel_ipc.py \
   src/so101_demo_py/test/test_parallel_batch_broker.py \
-  src/so101_demo_py/test/test_parallel_batch_perception.py
+  src/so101_demo_py/test/test_parallel_batch_perception.py \
+  src/so101_demo_py/test/test_parallel_batch_worker.py \
+  src/so101_demo_py/test/test_parallel_batch_cli.py \
+  src/so101_demo_py/test/test_parallel_ros_runtime.py \
+  src/so101_demo_py/test/test_parallel_ipc.py
 git commit -m "feat: scale perception broker to eight workers"
 ```
 
@@ -557,6 +588,7 @@ git commit -m "feat: scale perception broker to eight workers"
 - Produces: `AdmissionAuthority.verify_stage(batch_id: str, nonce: str) -> StageAcceptance`，stage 由 Authority 推导；仅 stage=8 返回 `ProvisionalAdmission`.
 - Produces: `AdmissionAuthority.verify_profile(batch_id: str, nonce: str) -> W8AdmissionProfile`.
 - Produces: `AdmissionAuthority.revoke(profile_id: str, reason: str, evidence_sha256: str) -> RevocationReceipt`.
+- Produces: `AdmissionAuthority.consume_pending_failures()` and `CleanHostWindowReceipt`.
 - Produces: `AcceptedProfileRegistry.resolve(profile_id: str) -> AcceptedProfileIdentity`.
 - Produces: `RuntimeContentIdentity.from_allowlist(repo_root) -> RuntimeContentIdentity`.
 - Consumes: registry-owned batch root、sealed stage summaries、runtime provenance 和 frozen thresholds。
@@ -570,6 +602,10 @@ provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时�
 而 Python、launch、Docker input、运行配置、策略或场景任一变化都拒绝。增加两个真实 UID 的
 无 ROS smoke，验证 ACL 读桥、候选不能写 `/var/lib/so101-admission`、Authority 不写 candidate
 root、symlink/inode 替换 fail closed。
+验证 Authority 启动和每次 register/normal admission 前先消费 pending failures；存在无法验证的
+pending record 时返回 `PENDING_REVOCATION_UNPROCESSED`。clean-host normal 的 OOM、GPU Xid、
+controller miss、cgroup escape 或资源硬门必须持久 revoke；检测到 foreign workload 的同类失败
+只拒绝当前 batch，不撤销 profile。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -680,7 +716,7 @@ git commit -m "feat: compose W8 qualification and normal admission"
 - Modify: `src/so101_demo_py/src/parallel_batch/coordinator.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/journal.py`
-- Modify: `src/so101_demo_py/src/parallel_batch/ipc.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_ipc.py`
 - Modify: `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`
 - Test: `src/so101_demo_py/test/test_parallel_qualification.py`
 - Test: `src/so101_demo_py/test/test_parallel_batch_crash_recovery.py`
@@ -720,7 +756,7 @@ generation 和不可重置的已授予 lease counter。
 git add src/so101_demo_py/src/parallel_batch/coordinator.py \
   src/so101_demo_py/src/parallel_batch/worker.py \
   src/so101_demo_py/src/parallel_batch/journal.py \
-  src/so101_demo_py/src/parallel_batch/ipc.py \
+  src/so101_demo_py/src/runtime/parallel_ipc.py \
   src/so101_demo_py/src/cli/mujoco_parallel_batch.py \
   src/so101_demo_py/test/test_parallel_qualification.py \
   src/so101_demo_py/test/test_parallel_batch_crash_recovery.py
@@ -744,6 +780,9 @@ git commit -m "feat: preserve exact W8 runtime capacity"
 崩溃边界全部 non-resumable，同 batch 永久 invalid；逐一 SIGKILL Coordinator、monitor、测试
 Authority 后由 watchdog 完成 pending terminal、owned leaf、Domain 和 slice 清理。hard stop
 发生在正式 attempt 后且结果未知时必须是 `INDETERMINATE`。
+增加完整撤销链集成测试：accepted profile 的 clean-host normal 触发硬故障，同时停止 Authority；
+watchdog 先持久化 pending revocation 并清理。Authority 重启后必须先消费并 revoke，同一 profile
+下一次 normal 返回 `PROFILE_REVOKED`。另测 foreign workload 存在时只拒绝当前 batch。
 
 - [ ] **Step 2: 运行 RED 并实现最小注入点**
 
