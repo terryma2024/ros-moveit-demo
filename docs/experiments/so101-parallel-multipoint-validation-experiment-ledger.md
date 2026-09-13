@@ -7764,3 +7764,83 @@ open_risks:
   - Findings 7 and 8 remain pending.
 next_command: Commit the scoped F6 recovery implementation/tests/ledger, then start EXP-102 with the N=3 CLI capability contract.
 ```
+
+## EXP-102 — Production three-Worker headroom evidence wiring
+
+```yaml
+experiment_id: EXP-102
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:18:12+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:18:12+08:00
+  - status: VALID
+    at: 2026-09-13T10:22:20+08:00
+prior_experiment: EXP-101
+hypothesis: The frozen runtime configuration advertises max_worker_count=3 and the allocator enforces accepted Task-14 headroom, but the production batch CLI cannot supply the candidate, independent controller acceptance, and current provenance inputs to that verifier.
+prediction: A production N=3 invocation cannot compose successfully with valid accepted evidence, while the CLI exposes no fail-closed distinction among absent, stale, and forged evidence.
+single_variable: Add deterministic production-CLI N=3 capability tests only; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 8863cac2233e9f8be8036c5de006220d9b431ec6
+  - config/mujoco/parallel_batch_v1.yaml advertises max_worker_count 3 and three ROS domain IDs
+  - WorkerResourceAllocator requires Task14LiveHeadroomVerifier for N=3 and does not downgrade admission
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker child, container, or GPU process
+success_criteria:
+  - CLI N=3 requires all three independent absolute inputs and binds the verified identity into its frozen batch manifest
+  - valid current accepted evidence reaches real ProductionBatchComposition and allocates exactly three Workers
+  - absent, stale-current-provenance, and forged-controller-acceptance cases fail closed before Worker or Broker startup
+  - N=1/N=2 reject stray headroom arguments and unchanged N=2 behavior remains admitted without Task-14 evidence
+failure_criteria:
+  - production CLI already securely exposes and composes all required Task-14 authorities
+invalid_criteria:
+  - import/collection failure, wrong overlay, reused scratch, synthetic verifier bypass, or any live process startup
+provenance:
+  source_commit: 8863cac2233e9f8be8036c5de006220d9b431ec6
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+commands:
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7r-Mkb3QQZA/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <four production N=3 valid/absent/stale/forged CLI cases> -q
+    exit_code: 1
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7g-rpF1mDtJ/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <four production N=3 valid/absent/stale/forged CLI cases> -q
+    exit_code: 0
+  - command: source the four worktree overlays; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7a-OM6zbIxS/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_cli.py src/so101_demo_py/test/test_parallel_batch_resources.py -q
+    exit_code: 0
+observed:
+  - The valid RED collected all four cases and failed at the predicted boundary: all three authority arguments were unrecognized, while an N=3 request without them passed preparation. Wall time was 0.82 s.
+  - Focused GREEN passed the four real Task-14 verifier cases in 0.22 s pytest / 0.48 s wall.
+  - Final adjacent CLI/resource coverage, including the N=2 unexpected-authority rejection, passed 199 tests in 32.75 s pytest / 33.03 s wall.
+  - One earlier collection attempt without sourcing the worktree overlay exited 2 and is INVALID; it is retained only as a deletion candidate.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; max_worker_count=3 remains an advertised capability, but production now requires all three independent inputs: the sealed Task-14 candidate, controller-owned acceptance outside the candidate tree, and a deterministic eight-file current-provenance root. Preparation verifies and freezes the complete result, composition re-verifies it, and fresh allocation verifies it again before resource creation. Resume re-verifies before exact frozen-manifest comparison. Missing, stale, forged, changed, partial, relative, or N-not-3 unexpected authority fails closed; the allocator admission policy is unchanged.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f7r-Mkb3QQZA.stdout sha256=7feb7f81a7e8cab7cb5e028a707ce9dff033a1978844ddd2af8a8e5175a53f67
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f7g-rpF1mDtJ.stdout sha256=44178be163015033384cffd8b0f0ec02d28cb6648af3d8dbe3121b41f45ca4aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f7a-OM6zbIxS.stdout sha256=cc7fbc2c050a2c370572fb2755e3683ea202a865239d673fd94d369a856d0c2c
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7r-cjQmlxdT
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7r-Mkb3QQZA
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7g-rpF1mDtJ
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f7a-OM6zbIxS
+decision: KEEP
+next_experiment: EXP-103
+```
+
+```yaml
+checkpoint_id: CP-089
+last_valid_experiment: EXP-102
+current_hypothesis: Astra finding 8 remains as a recovery-index consistency defect after the behavioral findings are fixed; the ledger header and SDD summary must identify CP-089/EXP-102 before the final package and runtime qualification sequence.
+working_tree_status: F7 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-102 used only in-process dry-run composition and started no ROS, MuJoCo, MoveIt, Broker child, Worker child, container, or GPU process.
+confirmed_conclusions:
+  - Finding 7 is confirmed and fixed without bypassing Task-14 acceptance, current provenance, resource admission, or resume identity gates.
+  - N=2 rejects rather than silently ignores supplied three-Worker authority.
+disproven_routes:
+  - Treating the allocator's unwired default verifier as a reachable production N=3 capability.
+open_risks:
+  - Findings 1 through 7 retain pending final rebuilt-overlay and live gates.
+  - Finding 8 and all mandatory final verification remain pending.
+next_command: Re-read and synchronize the ledger header and ignored SDD progress, add the lightweight recovery-index consistency test, verify F7 evidence hashes directly, and commit the scoped F7 fix before F8.
+```
