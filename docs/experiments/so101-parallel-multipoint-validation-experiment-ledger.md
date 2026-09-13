@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-106
-next_experiment: EXP-120
+latest_checkpoint: CP-107
+next_experiment: EXP-121
 ```
 
 Frozen provenance:
@@ -9055,12 +9055,14 @@ next_command: Commit CP-106 and launch EXP-120 with only the short root f2-120 a
 
 ```yaml
 experiment_id: EXP-120
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:50:00+08:00
   - status: RUNNING
     at: 2026-09-13T11:50:00+08:00
+  - status: INVALID
+    at: 2026-09-13T11:54:00+08:00
 prior_experiment: EXP-119
 hypothesis: With only the root and batch ID shortened, the EXP-119 exact generation-1 container pause will reach a live in-flight inference, yield authenticated health-down after resume, pause grants, replace/readmit generation 2 and continue without infrastructure K debit.
 single_variable: Shorten only evidence_root and batch_id to satisfy the pre-admission Unix socket bound; all EXP-119 source, image, overlay, models, points, N=2/K=2, injection and success criteria remain unchanged.
@@ -9080,6 +9082,73 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - Generation-1 identity, image, labels, runtime mount and both ready/model receipts matched. The observer detected worker-01's input file and paused the exact container for approximately 23 seconds while Docker continuously reported Running=true and Paused=true, then resumed the same PID/container.
+  - The file-existence predicate was too late for sub-second YOLO inference: both points had already received generation-1 responses. No health-down or Broker generation 2 occurred; both points normally PASSED, K remained 1 per Worker and exact cleanup passed in 102.48 s.
+  - The normal 2/2 physical pass is retained, but it does not exercise F2 and cannot qualify that gate. Exact post-run inspection found no task process, container, GPU process or domain-181/182/183 daemon.
+conclusion: INVALID_MISSED_INFERENCE_WINDOW; pause the ready live Broker before requests arrive, allow queued requests to exceed their frozen deadline, then resume the same live process so its production scheduler emits the health-losing outcome.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-120.log sha256=ffca2d4057973f820f6c9043240ad9c5367083f7286e8ff7d4c3049e94cb2e6f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-120.time sha256=e4995d0b66366299a19d56f78ecac0827668fb837824368c5d60962630a03b25
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-120.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-120.log sha256=0019d220fa8df5975f48bfd6382be42d94ade90a5faa4aa2024f48aca06cbfe3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP120.txt sha256=d7e22b77c6893e8240ec80426154b8574e91f8f49199af281224a3f457145b0b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120/aggregate_results.json sha256=9e536567518dd9e0129799dc5cf6af90fe285c3f393e721081d7feab6d89908b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120/coordinator/aggregate_results.json sha256=a03954746cf300fe5279e35ffeab54b9e3ebd6fa0af7269178b5c93cdfd7cb2d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120/cleanup-gates.json sha256=6f83029001a280b597e0da520f75db1c92e27f15c0de3b81a93ca637a842411e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120/workers/worker-01/worker-run-results.json sha256=c13e24d37ad5e00527728690bb0e25eeec520df378727e8b4af704173547f103
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120/workers/worker-02/worker-run-results.json sha256=fd6f9888ad61ab40fc679fe3ee482d12efeee9f9352a2555e1f23297fc3886f0
+decision: KEEP_INVALID
+next_experiment: EXP-121
+```
+
+```yaml
+checkpoint_id: CP-107
+last_valid_experiment: EXP-118
+current_hypothesis: A pre-request pause after generation-1 is fully ready will cause authenticated requests to wait past queue_deadline_s; resuming that same live process will let the production Broker publish QUEUE_TIMEOUT and health-down before supervision replaces it.
+working_tree_status: EXP-120 invalid result and EXP-121 preregistration are ledger-only; source/install/image unchanged and clean.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - File appearance cannot serve as an in-flight predicate for the sub-second YOLO path.
+  - Docker pause/unpause preserved exact container identity and normal execution/cleanup recovered cleanly when no health event occurred.
+open_risks:
+  - The queued-request deadline path must produce the authenticated health event before the live F2 gate can pass.
+next_command: Commit CP-107 and run EXP-121, pausing exact generation 1 immediately after ready/model-loaded readback and before Worker request arrival.
+```
+
+## EXP-121 — Pre-request live Broker queue-timeout fault
+
+```yaml
+experiment_id: EXP-121
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:54:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:54:00+08:00
+prior_experiment: EXP-120
+hypothesis: Pausing fully admitted generation 1 before its first request, observing both immutable Broker input files while it remains alive/paused beyond the 10-second queue deadline, and resuming the same process will yield authenticated QUEUE_TIMEOUT health-down, lease pause, exact generation replacement and no infrastructure K debit.
+single_variable: Move the unchanged exact-container pause earlier, from post-input observation to immediately after generation-1 ready/model-loaded verification; source, image, overlay, config, points, N=2/K=2 and recovery criteria are unchanged.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-121
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm
+injection_predicate: Exact generation-1 container is running, unpaused, identity-bound to the immutable image/batch/generation/runtime mount, both ready/model receipts validate, and no Broker input exists yet.
+success_criteria:
+  - While generation 1 remains Running=true/Paused=true, both Workers create exact attempt-bound Broker inputs and wait past the frozen 10-second queue deadline; generation 1 is then unpaused without exiting.
+  - Generation 1 emits authenticated QUEUE_TIMEOUT/INFERENCE_TIMEOUT/INFRA_ERROR, Coordinator marks broker_healthy=false before new lease issuance, supervision retires exact generation 1, and generation 2 receives new credentials/socket plus ready and both model-loaded readmission.
+  - Infrastructure failure adds no Worker K debit, no point duplicates, remaining eligible work continues conservatively, and exact process/controller/container/domain cleanup passes.
+failure_criteria: No authenticated health event, lease issuance while unhealthy, wrong generation retirement, premature health restoration, K debit, duplicate, unsafe promotion, residue or unrelated mutation.
+invalid_criteria: Pre-existing root, admission failure, any Broker input before pause, identity/tool failure before injection or generation 1 exits before unpause.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-120
+next_experiment: EXP-121
 ```
