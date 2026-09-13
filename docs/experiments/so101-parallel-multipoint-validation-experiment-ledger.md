@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: b1fde1f258059606a50021a547e9752099a2e3af
+current_commit: a6282d7234d9bb9e75c075555c1bd746834516e7
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-102
-next_experiment: EXP-116
+latest_checkpoint: CP-103
+next_experiment: EXP-117
 ```
 
 Frozen provenance:
@@ -8774,12 +8774,14 @@ next_command: Commit EXP-115/CP-102, add a deterministic RED where Broker cancel
 
 ```yaml
 experiment_id: EXP-116
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:28:01+08:00
   - status: RUNNING
     at: 2026-09-13T11:28:01+08:00
+  - status: VALID
+    at: 2026-09-13T11:31:33+08:00
 prior_experiment: EXP-115
 hypothesis: _start_revocation serializes a potentially two-retry Coordinator discovery inside broker.cancel_generation ahead of runtime.cancel_motion; concurrent exact-generation Broker fencing and exact-lease motion cancellation removes that delay without changing either gate.
 prediction: Current code fails a deterministic test because runtime.cancel_motion is absent while broker.cancel_generation is blocked; the minimum fix makes it observable before Broker release, then waits for both and preserves exact confirmation/results.
@@ -8792,6 +8794,60 @@ provenance:
   source_commit: b1fde1f258059606a50021a547e9752099a2e3af
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
 retention_rule: Retain RED/GREEN/adjacent/package/live evidence and scratch; delete nothing without explicit user authorization.
+observed:
+  - Deterministic RED blocked exact-generation Broker cancellation and failed because exact-lease motion cancellation did not start within 200 ms.
+  - The minimum fix starts the unchanged Broker cancellation in its own daemon thread, performs unchanged runtime.cancel_motion immediately in the revocation thread, preserves controller confirmation, joins the Broker fence before publishing the revocation completion event, and retains the exact lease-key idempotency map.
+  - Focused GREEN passed in 0.03 s. The complete Worker, WorkerRuntime and RosRuntime adjacent set passed 184 tests in 3.51 s.
+  - Mutation evidence is the retained RED: serializing Broker cancellation ahead of motion cancellation fails the new contract. Exact-generation Broker invocation remains asserted exactly once, so the safety gate is not bypassed.
+conclusion: VALID; the second live F1 delay is fixed locally without weakening Broker fencing or controller confirmation.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-broker-fence-red-116.log sha256=3e5bf0c447b0ceb1b989cf2eb4d677aa6deb5c4170a532c6d050185164c8190b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-broker-fence-green-116.log sha256=ae12dae9ffe6af9dfeed71e5e8ead6b69daab68da54f48e44a2f67e6b48a0eed
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-broker-fence-adjacent-116.log sha256=47628e2923fcb098e253faad98f812f18c8d618bf66f5d2e689df6bca611bf6f
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-broker-fence-red-116
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-broker-fence-green-116
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-broker-fence-adjacent-116
+decision: KEEP
+next_experiment: EXP-117
+```
+
+```yaml
+checkpoint_id: CP-103
+last_valid_experiment: EXP-116
+current_hypothesis: Concurrent Broker fencing and motion cancellation pass focused and adjacent contracts; a fresh package build/test plus image/provenance gate is required before another live fault.
+working_tree_status: Worker source, deterministic test and EXP-116 ledger result form one coherent uncommitted change.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Motion cancellation no longer waits for a Coordinator-dependent Broker discovery RPC.
+  - Broker cancellation remains exact-generation, mandatory and joined before revocation completion.
+open_risks:
+  - Complete package/image gates and live F1 retry remain pending.
+next_command: Commit EXP-116/CP-103, then run EXP-117 full build/test, immutable image, dual-model smoke and production provenance before the next live retry.
+```
+
+## EXP-117 — Rebuild/package/image gate for concurrent revocation
+
+```yaml
+experiment_id: EXP-117
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:31:33+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:31:33+08:00
+prior_experiment: EXP-116
+hypothesis: The concurrent revocation fix builds cleanly, preserves the full ordinary package suite, installs exact bytes and produces a source-bound immutable image whose two frozen models smoke successfully.
+single_variable: Replace only the F1 revocation scheduling source from EXP-112; frozen catalog, config, models, image tag and smoke input remain fixed.
+lifecycle: ISOLATED_STACK
+success_criteria: Fresh four-package build; 0-error/failure/skip complete ordinary suite; exact source/install/runtime/image provenance; both model smokes QUALIFIED; exact cleanup.
+failure_criteria: Any build/test/provenance/image/model/cleanup failure or mixed path blocks live retry.
+invalid_criteria: Reused scratch, tempfile outside registered NVMe root, wrong interpreter/overlay, benchmark collection or dirty provenance.
+provenance:
+  preregistration_source_commit: a6282d7234d9bb9e75c075555c1bd746834516e7
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+retention_rule: Retain all evidence and scratch; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-116
+next_experiment: EXP-117
 ```

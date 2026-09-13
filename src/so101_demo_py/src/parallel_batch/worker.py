@@ -262,13 +262,21 @@ class ParallelWorker:
             self._revocations[key] = record
 
         def revoke():
-            try:
+            def fence_broker():
                 try:
                     record["fenced"] = self._broker.cancel_generation(
                         lease.worker_id, lease.worker_generation
                     ) is True
                 except Exception:
                     pass
+
+            broker_thread = threading.Thread(
+                target=fence_broker,
+                name=f"parallel-worker-broker-fence-{lease.worker_id}",
+                daemon=True,
+            )
+            try:
+                broker_thread.start()
                 try:
                     record["stopped"] = self._runtime.cancel_motion(lease) is True
                 except Exception:
@@ -280,6 +288,8 @@ class ParallelWorker:
                 except Exception:
                     pass
             finally:
+                if broker_thread.ident is not None:
+                    broker_thread.join()
                 record["event"].set()
 
         threading.Thread(
