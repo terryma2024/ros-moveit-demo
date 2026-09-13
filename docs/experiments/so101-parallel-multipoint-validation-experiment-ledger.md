@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 29fec8a90d3fdbe6c1790ed67c3f3a6e6cba48fa
+current_commit: cd04f7626bd3996aebc610cb4f828317e87a798f
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-094
-next_experiment: EXP-108
+latest_checkpoint: CP-095
+next_experiment: EXP-109
 ```
 
 Frozen provenance:
@@ -8224,12 +8224,14 @@ next_command: Preregister EXP-108 with a new root and source all worktree contro
 
 ```yaml
 experiment_id: EXP-108
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:50:28+08:00
   - status: RUNNING
     at: 2026-09-13T10:50:28+08:00
+  - status: INVALID
+    at: 2026-09-13T10:54:31+08:00
 prior_experiment: EXP-107
 hypothesis: The complete worktree overlay will reach active dynamic execution, after which exact Coordinator suspension will be handled by independent Worker revocation and bounded controller stop before Coordinator resume.
 single_variable: Add only the three omitted worktree controller/plugin package prefixes and use a new batch/root; all product inputs and the EXP-107 fault sequence remain fixed.
@@ -8252,7 +8254,73 @@ provenance:
   source_commit: 29fec8a90d3fdbe6c1790ed67c3f3a6e6cba48fa
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+observed:
+  - The complete overlay reached dynamic execute and the one-point task_start run physically PASSED in 104.150161 s with a DONE dynamic manifest, generation 2 recovery, qualification true and exact cleanup.
+  - The external observer found an active arm goal, but its separate signal command ran after the short final execute window closed. Exact Coordinator identity verification failed closed because the PID no longer existed, and no signal was sent.
+conclusion: INVALID fault-orchestration evidence despite a valid normal physical pass; no heartbeat fault occurred and the empty failed-observer files are retained but not authoritative.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-108.log sha256=3d9ecb2fbc1c56146f79f634f697c4d6a6760e284163814311e3860d9b3550f7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-108.time sha256=7c93275e62f1d924d815e03f4db343c2a0662d48fdee85cf14393be2bc72b5e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-108/coordinator/aggregate_results.json sha256=90fc79eea6e798fad01139507ee40a72ce70ad1074b486dce353349aaffa763c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-108/workers/worker-01/attempts/task_start/task_start-lease-1/sealed/attempt_result_manifest.json sha256=0475d5be9c464c9a588ba770d8ab607149b541e031346f0ca38a430caf0def2d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-108/workers/worker-01/attempts/task_start/task_start-lease-1/sealed/dynamic/dynamic-execute-manifest.json sha256=385cc4a1ef86af8a6e885000b573357806814da8ce56d5f81150fa0ead730c6e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-108-cleanup-audit.json sha256=d1d2a80cbcd2090b80dd8396d684a1614d69c0f2d1d690407497bfe0a8232032
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+decision: KEEP_INVALID
+next_experiment: EXP-109
+```
+
+```yaml
+checkpoint_id: CP-095
+last_valid_experiment: EXP-105
+current_hypothesis: The complete overlay and normal execute path are live-qualified by EXP-108, but the safety finding still requires an observer that signals inside the approximately one-second controller-goal window.
+working_tree_status: EXP-108 evidence is ledger-only and cleanup is complete.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Complete explicit overlay reaches and passes physical execute.
+  - A sequential human-paced observer is too slow for the active-goal fault window and must be replaced by a local high-rate exact-identity monitor.
+open_risks:
+  - Heartbeat revocation under active execute remains pending.
+next_command: Preregister EXP-109 and run the command plus high-rate exact-identity fault observer in one shell so SIGSTOP occurs while accepted-goal count exceeds terminal-goal count.
+```
+
+## EXP-109 — High-rate execute heartbeat/lease-revocation fault
+
+```yaml
+experiment_id: EXP-109
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:54:31+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:54:31+08:00
+prior_experiment: EXP-108
+hypothesis: A 50 ms local observer bound to the exact Coordinator PID/start-time/cmdline can inject SIGSTOP between controller goal acceptance and terminal status, allowing direct proof that Worker revocation cancels while Coordinator and normal execution remain blocked.
+single_variable: Co-locate launch and a 50 ms exact-identity/log-state observer in one shell; overlay, source, image, models, point, N=1/K=1 and fault semantics remain EXP-108-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v4-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-109
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate:
+  - exact dynamic_cup_pick_place process for this root exists
+  - command log accepted-goal count is greater than completed/cancelled/aborted controller-goal count
+  - Coordinator PID, start-time and cmdline still equal launch identity
+success_criteria:
+  - SIGSTOP readback reports Coordinator state T during an active goal
+  - after more than heartbeat_timeout_s and before SIGCONT, exact dynamic consumer is gone and all action status arrays contain no active goal
+  - joint, TF, authoritative MuJoCo physical, Planning Scene, process and fresh visual evidence are captured
+  - resumed Coordinator adjudicates conservatively, no later goal for the revoked lease appears, and cleanup is exact
+failure_criteria: Signal misses active goal; cancellation requires SIGCONT; any later revoked goal, uncertain physical promotion, stale identity, incomplete evidence or residual state.
+invalid_criteria: Incomplete overlay, pre-existing root, observer timeout before predicate, or exact identity mismatch before signal.
+provenance:
+  source_commit: cd04f7626bd3996aebc610cb4f828317e87a798f
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-108
+next_experiment: EXP-109
 ```
