@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+current_commit: 2a57c41e3a2c90dc76ab9b5c6783eeb287309ebc
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -52,10 +52,10 @@ confirmed_conclusions:
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - The committed EXP-154 shared-classifier correction must receive a fresh immutable Broker image/model smoke and applicable live qualification because package source provenance changed.
+  - The committed correction and fresh immutable Broker image must pass applicable four-point and complete-catalog live qualification.
   - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
-latest_checkpoint: CP-144
-next_experiment: EXP-158
+latest_checkpoint: CP-145
+next_experiment: EXP-159
 ```
 
 Frozen provenance:
@@ -11546,7 +11546,14 @@ next_command: After mandatory EXP-045 hash readback and checkpoint commit, rebui
 
 ```yaml
 experiment_id: EXP-158
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:14:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:16:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:19:00+08:00
 prior_experiment: EXP-157
 hypothesis: A source-hash-bound image rebuild from 813e8f36 will execute both frozen model paths on CUDA and leave no owned runtime residue.
 single_variable: Replace only the Broker image package source layer; preserve Dockerfile, dependency lock, model bytes, frozen smoke input and thresholds.
@@ -11556,6 +11563,71 @@ failure_criteria: Build/provenance/model/cleanup failure, mutable identity, CPU 
 invalid_criteria: Wrong source commit, changed smoke input/model/config, pre-existing destination root or runtime contamination.
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain image, smoke and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_144
-next_experiment: EXP-158
+provenance:
+  source_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+  image_id: sha256:24732e2f0c9bf977682320a3e5f2093797ad4fe36e98fab790a928e9ddfc27ec
+  source_sha256: 23363bc3af157b57463855aefd3b3f1ee9f2976fff8d22b01995102c919bb61f
+observed:
+  - The first host invocation omitted the required container wrapper subcommand and failed at argument parsing before Docker build; it is retained as INVALID.
+  - The corrected build succeeded in 13.44 s. Host, label and in-image source hash agree on 23363bc3af157b57463855aefd3b3f1ee9f2976fff8d22b01995102c919bb61f and immutable image sha256:24732e2f0c9bf977682320a3e5f2093797ad4fe36e98fab790a928e9ddfc27ec.
+  - Both frozen YOLO and Grounded-SAM calls executed on CUDA, returned QUALIFIED and produced one candidate each with exact model identities.
+  - Two cleanup probe harness attempts are retained as INVALID because one altered zsh PATH through a reserved variable and one matched its own command. The corrected ancestry-excluding /proc scan, exact labeled-container scan and GPU compute scan are empty.
+conclusion: VALID; final committed package source has a fresh immutable image, both frozen CUDA model paths qualify, and cleanup is exact.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-pre-build-containers.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-image-build.log sha256=0cf5546320b7d4b5773ad0cf1330cd7fdd65d6dc54d9ea83a34caadd81b74d65
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-image-build2.json sha256=18d124fbeb8013642f613064bd1223928b32817e08f4f6ce1f07e779936f0431
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-image-build2.log sha256=e3570ce55d90390cebc0601e77a630fa2e24df5bb213acbd1abfd77b40f42b75
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-image-build2.time sha256=6c98d7b487d7bac3d64ca34992c6dd897953bb08db88bb32e666a48ade1a35b9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-image-build2.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-smoke-admission.json sha256=65cf86145e4db4881b9bf646a5a00e087226032076cdebe6a2cd132786084099
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-model-smoke.log sha256=37059d616de4bb9b98c676b1c798a4e1a33a6f2c04912c7c36fdcbd6c10b9113
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-model-smoke.time sha256=a29a993182d14465628accb8f7aa4a15ee0b1b20f1150c8b96e909671ff4b556
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-model-smoke.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-model-smoke-summary.json sha256=9d7930ce564e5a342efc91bdef00f05148464c28849e4505fd06deb633beaaba
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task-remediation-158-smoke/ipc/.model-ready.json sha256=db3f02d6a7b9b6d73f229c75e76f189f68274dd341ac73b395e78ea0a2c4fc33
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task-remediation-158-smoke/ipc/smoke.json sha256=cdf7a2948a28909f15949cd622762d2f95b0139c64f7e9b27f9e000b70599af6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-cleanup-audit.log sha256=516cff72379ecf7c5a13967597eeea24d6123372e96243ab00d8b9aa49e204ab
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-cleanup-audit2.log sha256=11b858e9417965c9e8ac01f7c403e036723022f1167a6d7aab590a2daba6d8a5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp158-cleanup-audit3.log sha256=516cff72379ecf7c5a13967597eeea24d6123372e96243ab00d8b9aa49e204ab
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task-remediation-158-smoke
+decision: RUN_FRESH_NORMAL_FOUR_POINT
+next_experiment: EXP-159
+```
+
+```yaml
+checkpoint_id: CP-145
+last_valid_experiment: EXP-158
+current_hypothesis: Removing smoke-only operation while preserving final committed source, image, models, catalog and policies will pass the frozen four-point subset exactly once across two isolated Workers.
+working_tree_status: Product source/tests are clean; EXP-158 result and EXP-159 preregistration are pending ledger commit. MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all evidence, and the e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Final source image provenance and both frozen CUDA model paths are qualified.
+open_risks:
+  - Fresh final-source four-point and complete twenty-point simulation qualification remain required.
+next_command: After mandatory EXP-045 hash readback and checkpoint commit, run EXP-159 from a fresh absent root and verify exact-once results, seals, terminal evidence and cleanup.
+```
+
+## EXP-159 — Final-source fresh normal four-point gate
+
+```yaml
+experiment_id: EXP-159
+status: PLANNED
+prior_experiment: EXP-158
+hypothesis: Final committed source and image will complete the frozen four-point subset exactly once across two isolated Workers with qualification and cleanup true.
+single_variable: Switch from container-only smoke to the frozen four-point N=2/K=2 execute lifecycle; preserve source, image, models, policy, thresholds and Broker fencing.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: normal-159
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+success_criteria: All four points PASSED once; coverage, execution, qualification and cleanup true; distinct Worker identities; all seals and terminal physical/visual evidence valid; no owned residue.
+failure_criteria: Any non-PASSED point, retry, duplicate, isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_145
+next_experiment: EXP-159
 ```
