@@ -324,11 +324,16 @@ class PerceptionService:
     generation; an in-process restart never reloads or reuses unhealthy models.
     """
 
-    def __init__(self, runtime, config, *, generation, clock=None):
+    def __init__(
+        self, runtime, config, *, generation, clock=None,
+        health_down=lambda _event: True,
+    ):
         self.runtime = runtime
         self._snapshots = {}
         self._requests = {}
         self._lock = threading.RLock()
+        self._health_down = health_down
+        self._health_down_reported = False
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
             config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
@@ -395,12 +400,35 @@ class PerceptionService:
         if response is not None:
             with self._lock:
                 self._requests.pop(response.request.request_id, None)
-        if not self.broker.healthy or (response is not None and response.outcome in {
-                ModelOutcome.INFRA_ERROR, ModelOutcome.QUEUE_TIMEOUT, ModelOutcome.INFERENCE_TIMEOUT}):
+        health_losing = response is not None and response.outcome in {
+            ModelOutcome.INFRA_ERROR,
+            ModelOutcome.QUEUE_TIMEOUT,
+            ModelOutcome.INFERENCE_TIMEOUT,
+        }
+        if not self.broker.healthy or health_losing:
             if response is not None:
                 self.runtime.record_failure(
                     kind='broker_response_failure', request=response.request,
                     error_type='BrokerResponse.' + response.outcome.value,
                     reason=response.reason or response.outcome.value)
             self.runtime._unhealthy()
+            report_health_down = False
+            if health_losing:
+                with self._lock:
+                    if not self._health_down_reported:
+                        self._health_down_reported = True
+                        report_health_down = True
+            if report_health_down:
+                try:
+                    confirmed = self._health_down({
+                        'outcome': response.outcome.value,
+                        'request_id': response.request.request_id,
+                        'reason': response.reason or response.outcome.value,
+                    })
+                    if confirmed is not True:
+                        raise RuntimeError('BROKER_HEALTH_DOWN_UNCONFIRMED')
+                except Exception:
+                    with self._lock:
+                        self._health_down_reported = False
+                    raise
         return response

@@ -247,7 +247,7 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         NormalizedInferenceResponseIdentity,
     )
     from so101_demo.runtime.parallel_ipc import (
-        BrokerTransport,
+        BrokerTransport, IpcError,
         UnixRpcClient,
         WorkerTokenAuthority,
     )
@@ -368,6 +368,26 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         "authorize_inference",
     ]
     assert service.mutations == [(inference, snapshot)]
+
+    assert transport.report_health_down({
+        "outcome": "INFERENCE_TIMEOUT",
+        "request_id": inference.request_id,
+        "reason": "deadline exceeded",
+    }) is True
+    assert authority_calls[-1] == (
+        "broker_health_down",
+        {
+            "outcome": "INFERENCE_TIMEOUT",
+            "request_id": inference.request_id,
+            "reason": "deadline exceeded",
+        },
+    )
+    with pytest.raises(IpcError, match="BROKER_HEALTH_DOWN_OUTCOME"):
+        transport.report_health_down({
+            "outcome": "MODEL_ERROR",
+            "request_id": inference.request_id,
+            "reason": "deterministic model result",
+        })
 
     ready = {
         "schema_version": 1,

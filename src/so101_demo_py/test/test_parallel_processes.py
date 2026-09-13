@@ -55,6 +55,48 @@ def test_wait_can_retire_exact_exited_broker_and_continue_with_replacement():
     assert supervisor.processes == ()
 
 
+def test_wait_replaces_an_exact_broker_that_is_alive_but_reports_unhealthy():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    old = OwnedProcess("batch-1", "broker", 101, 101, ("broker-g1",), 11)
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 12)
+    replacement = OwnedProcess("batch-1", "broker", 201, 201, ("broker-g2",), 21)
+    identities = {101: old, 102: worker, 201: replacement}
+    members = {101: (101,), 102: (), 201: (201,)}
+    signals = []
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda pid: identities.get(pid),
+        signal_group=lambda pgid, value: (
+            signals.append((pgid, value)),
+            identities.pop(pgid, None),
+            members.__setitem__(pgid, ()),
+        ),
+        group_members_reader=lambda pgid: members.get(pgid, ()),
+    )
+    supervisor._record_started(
+        old, poll=lambda: None if old.pid in identities else -signal.SIGTERM
+    )
+    supervisor._record_started(worker, poll=lambda: 0)
+    health = {old: False, replacement: True}
+    recovered = []
+
+    def recover(expected, code):
+        recovered.append((expected, code))
+        assert supervisor.retire_owned(expected, term_timeout_s=0.01) is True
+        supervisor._record_started(replacement, poll=lambda: None)
+        return True
+
+    assert supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0,
+        health_recovery=recover,
+        health_probe=lambda expected: health[expected],
+    ) == (0,)
+    assert recovered == [(old, None)]
+    assert signals == [(101, signal.SIGTERM)]
+    assert supervisor.processes == (replacement,)
+
+
 def test_retirement_never_adopts_a_similar_unowned_identity():
     from so101_demo.runtime.parallel_processes import (
         OwnedProcess,

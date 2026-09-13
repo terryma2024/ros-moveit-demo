@@ -701,6 +701,21 @@ class BrokerTransport:
             payload["snapshot"] = self.serialize_snapshot(snapshot)
         return self._authority_call("authorize_inference", payload) is True
 
+    def report_health_down(self, event):
+        """Publish one authenticated health-losing result for this generation."""
+        if type(event) is not dict or set(event) != {
+            "outcome", "request_id", "reason"
+        }:
+            raise IpcError("BROKER_HEALTH_DOWN_FIELDS")
+        if event["outcome"] not in {
+            "INFRA_ERROR", "QUEUE_TIMEOUT", "INFERENCE_TIMEOUT"
+        }:
+            raise IpcError("BROKER_HEALTH_DOWN_OUTCOME")
+        for name in ("request_id", "reason"):
+            if not isinstance(event[name], str) or not event[name]:
+                raise IpcError("BROKER_HEALTH_DOWN_TYPE")
+        return self._authority_call("broker_health_down", event) is True
+
     @staticmethod
     def serialize_request(request):
         from so101_demo.parallel_batch.contracts import InferenceRequest
@@ -783,7 +798,10 @@ class BrokerTransport:
         from so101_demo.runtime.parallel_perception_runtime import PerceptionService
 
         service = PerceptionService(
-            runtime, self.config, generation=self.generation
+            runtime,
+            self.config,
+            generation=self.generation,
+            health_down=self.report_health_down,
         )
         service.start()
         server = self.server(service, endpoint=endpoint)
@@ -852,6 +870,7 @@ class _BrokerCoordinatorClient:
         expected = {
             "authenticate_broker_message": "authenticated",
             "authorize_inference": "authorized",
+            "broker_health_down": "accepted",
         }.get(operation)
         if (
             type(result) is not dict

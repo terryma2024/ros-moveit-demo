@@ -2011,6 +2011,97 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         composition._release_partial()
 
 
+def test_authenticated_live_broker_health_down_pauses_without_lease_debit(
+        tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        ProductionBatchComposition,
+        prepare_batch,
+    )
+    from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.runtime.parallel_ipc import IpcError
+
+    class Probe:
+        def snapshot(self):
+            return ResourceSnapshot(32, 64.0, 16.0)
+
+        def ros_domain_in_use(self, _domain):
+            return False
+
+        def socket_in_use(self, _path):
+            return False
+
+    scratch = Path(os.environ["TMPDIR"]).parent
+    root = scratch / "f2h"
+    spec = prepare_batch(
+        argv(
+            root,
+            worker_count="1",
+            max_points_per_worker="1",
+            point_id=("task_start",),
+            run_mode="plan_only",
+        ),
+        provenance_verifier=lambda value: {
+            **verified(value), "image_id": "sha256:" + "b" * 64,
+        },
+    )
+    composition = ProductionBatchComposition(
+        spec,
+        resource_probe=Probe(),
+        claim_root=scratch / "f2c",
+        broker_command_builder=lambda _owner: ("broker",),
+    )
+    composition.coordinator.register_worker("worker-01", generation=1)
+    payload = {
+        "operation": "broker_health_down",
+        "outcome": "INFERENCE_TIMEOUT",
+        "request_id": "request-1",
+        "reason": "deadline exceeded",
+    }
+    message = {
+        "worker_id": "broker",
+        "worker_generation": 1,
+        "payload": payload,
+    }
+    try:
+        assert composition._coordinator_handler(message) == {"accepted": True}
+        snapshot = composition.coordinator.snapshot()
+        assert snapshot.broker_healthy is False
+        assert composition.coordinator.grant_lease(
+            "worker-01", generation=1
+        ) is None
+        assert composition.coordinator.snapshot().workers[
+            "worker-01"
+        ].lease_count == 0
+
+        with pytest.raises(CliError, match="BROKER_GENERATION"):
+            composition._coordinator_handler({
+                **message, "worker_generation": 0,
+            })
+        with pytest.raises(CliError, match="BROKER_RPC_PAYLOAD"):
+            composition._coordinator_handler({
+                **message,
+                "payload": {**payload, "outcome": "MODEL_ERROR"},
+            })
+
+        authenticated = {
+            "schema_version": 1,
+            "kind": "coordinator_call",
+            "coordinator_epoch": composition.journal.coordinator_epoch,
+            "worker_id": "broker",
+            "worker_generation": 1,
+            "lease": None,
+            "request_id": "broker-health-down-1",
+            "idempotency_key": "broker-health-down-1",
+            "token": "00" * 32,
+            "payload": payload,
+        }
+        with pytest.raises(IpcError, match="TOKEN"):
+            composition.broker_authority.authenticate(authenticated)
+    finally:
+        composition._release_partial()
+
+
 def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path):
     import threading
 

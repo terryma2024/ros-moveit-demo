@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e7c8097c79fd04ea8fdb9f59bd280c862eb4ecd5
+current_commit: e4b5dd293fe3af21ce1dde9fc38abc73c05d6797
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -48,9 +48,10 @@ disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
   - EXP-096 confirmed Astra finding 1 and the candidate now performs exact-lease cancel-and-confirm outside the blocked execution lock; post-commit package and live fault evidence remain pending.
-  - Astra findings 2 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
-latest_checkpoint: CP-083
-next_experiment: EXP-097
+  - EXP-097 confirmed Astra finding 2 and the candidate now propagates authenticated exact-generation health loss and replaces a live unhealthy Broker; package and live fault evidence remain pending.
+  - Astra findings 3 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
+latest_checkpoint: CP-084
+next_experiment: EXP-098
 ```
 
 Frozen provenance:
@@ -7346,4 +7347,91 @@ open_risks:
   - F1 still requires the final ordinary package gate, rebuilt-overlay provenance, and live fault-injection qualification after all reviewed fixes land.
   - Findings 2 through 8 remain pending.
 next_command: Commit the scoped F1 source, tests, and ledger, then start EXP-097 with a deterministic alive-but-unhealthy Broker RED test before modifying production code.
+```
+
+## EXP-097 — Alive-but-unhealthy Broker propagation verification
+
+```yaml
+experiment_id: EXP-097
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T09:24:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T09:28:00+08:00
+  - status: VALID
+    at: 2026-09-13T09:32:13+08:00
+prior_experiment: EXP-096
+hypothesis: A live-serving Broker that returns INFRA_ERROR, QUEUE_TIMEOUT, or INFERENCE_TIMEOUT poisons its local runtime but emits no authenticated generation-bound health-down event, so the Coordinator can remain healthy and issue another lease without triggering exact Broker replacement.
+prediction: Deterministic transport/composition tests will observe a health-losing Broker result while coordinator.broker_healthy remains true; a live unhealthy process will not enter the existing exit-only recovery path, and a subsequent lease grant will debit Worker capacity.
+single_variable: Add only deterministic regression tests for Broker health-down publication, parent authentication/generation fencing, live-process recovery, and no-debit lease pause; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit e4b5dd293fe3af21ce1dde9fc38abc73c05d6797 with only this ledger PLANNED record uncommitted
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, or task container
+  - exact test Python and fresh NVMe scratch must be verified before pytest
+success_criteria:
+  - RED fails only because no authenticated health-down operation reaches the parent and no alive-unhealthy recovery trigger exists
+  - tests freeze accepted health-losing outcomes, stale generation rejection, malformed/forged event rejection, pause-before-recovery, exact generation replacement, and zero lease-count debit while unhealthy
+failure_criteria:
+  - current code already propagates and authenticates all three health-losing outcomes, pauses lease issuance, and replaces a still-live exact Broker generation
+invalid_criteria:
+  - import/collection failure, wrong overlay, reused scratch, or a failure outside the intended health propagation/recovery contract
+provenance:
+  source_commit: e4b5dd293fe3af21ce1dde9fc38abc73c05d6797
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  ros_domain_id: not_applicable
+  gz_partition: not_applicable
+commands:
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2r-5SHsFv78/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_perception_runtime.py::test_health_losing_response_reports_one_exact_event src/so101_demo_py/test/test_parallel_processes.py::test_wait_replaces_an_exact_broker_that_is_alive_but_reports_unhealthy src/so101_demo_py/test/test_parallel_batch_cli.py::test_authenticated_live_broker_health_down_pauses_without_lease_debit -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2g-QmErOwBb/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_perception_runtime.py::test_health_losing_response_reports_one_exact_event src/so101_demo_py/test/test_parallel_processes.py::test_wait_replaces_an_exact_broker_that_is_alive_but_reports_unhealthy src/so101_demo_py/test/test_parallel_batch_cli.py::test_authenticated_live_broker_health_down_pauses_without_lease_debit -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2g-ipc-Wz2S2cBo/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_ipc.py::test_broker_transport_authenticates_with_coordinator_before_real_socket_mutation -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2a-8gCkkOSb/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_perception_runtime.py src/so101_demo_py/test/test_parallel_ipc.py src/so101_demo_py/test/test_parallel_processes.py src/so101_demo_py/test/test_parallel_batch_cli.py -q
+    exit_code: 0
+observed:
+  - Corrected RED collected five tests and all five failed at the intended missing APIs: no PerceptionService health-down callback, no live-process health probe, and no accepted Broker health-down authority operation. Wall time was 0.84 s.
+  - Focused GREEN passed all five behavioral cases in 0.19 s pytest / 0.47 s wall.
+  - The direct Broker transport authentication/mutation contract passed in 0.12 s pytest / 0.38 s wall.
+  - Final adjacent coverage passed all 194 perception runtime, authenticated IPC, process supervision, and production composition tests in 30.90 s pytest / 31.17 s wall.
+  - The first RED harness was INVALID because its long test batch path exceeded the UNIX socket limit after four expected failures; a short fresh scratch produced the authoritative RED. The first GREEN harness was also INVALID because its fake live process never changed poll state after signal; the corrected production-equivalent fake produced the authoritative GREEN. Both invalid scratch trees are retained and classified below.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; each live Broker generation now publishes one authenticated health-down event for INFRA_ERROR, QUEUE_TIMEOUT, or INFERENCE_TIMEOUT. The parent validates exact payload and current generation before setting broker_healthy=false, which pauses new grants without K debit. The supervisor polls that authoritative state even while the exact Broker process is alive, retires only that owned identity, rotates generation authority, and requires the existing ready/model-loaded readmission before marking healthy.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f2r-5SHsFv78.stdout sha256=48f47c1aa2cf484691f349e402fee20c95e8ad1535cb97a349bf0249c76d6057
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f2g-QmErOwBb.stdout sha256=625cd9db075f0d063982baf4c6b8144844ffe79aa412f50047a80fc4dcddb921
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f2g-ipc-Wz2S2cBo.stdout sha256=3be6ffcaecf85b5bd3eef3693ab214b0e7c9eb4e36d117fcf1825652de5eb298
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f2a-8gCkkOSb.stdout sha256=00d0adccd8a3c16e3015d3bb5cd3788e57871b150315905c655702285f4d31bf
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/pytest-remediate-f2-red-WNrcYagX
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2r-5SHsFv78
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2g-k3ncOdJE
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2g-QmErOwBb
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2g-ipc-Wz2S2cBo
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2a-b16RLmlG
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f2a-8gCkkOSb
+decision: KEEP
+next_experiment: EXP-098
+```
+
+```yaml
+checkpoint_id: CP-084
+last_valid_experiment: EXP-097
+current_hypothesis: Astra finding 3 may cause a Worker to exit after successful recovery from an initial-gate failure instead of continuing to lease eligible remaining points.
+working_tree_status: F2 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; no ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU compute process was started by EXP-097.
+confirmed_conclusions:
+  - Finding 2 is confirmed and fixed at the authenticated Broker authority plus exact process-supervision boundary.
+  - Stale generation, forged token, non-health-losing outcome, and malformed event paths are rejected before Coordinator mutation.
+  - broker_healthy becomes false before recovery; lease grant remains paused and Worker lease_count stays zero.
+disproven_routes:
+  - Treating process liveness as sufficient Broker health after an infrastructure-class response.
+open_risks:
+  - Findings 1 and 2 still require the final package/rebuild gate and controlled execute-mode simulation fault injection.
+  - Findings 3 through 8 remain pending.
+next_command: Commit the scoped F2 source, tests, and ledger, then start EXP-098 with a deterministic recovered-initial-gate continuation RED test.
 ```
