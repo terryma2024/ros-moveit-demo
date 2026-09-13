@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: daec04aaaa91825c480d4513d29f93e7c975c303
+current_commit: 727b3d216cb3d1698c3caf781ff5d3f3d7b2720f
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-119
-next_experiment: EXP-133
+latest_checkpoint: CP-120
+next_experiment: INDEPENDENT_ASTRA_HIGH_REVIEW
 ```
 
 Frozen provenance:
@@ -9941,7 +9941,14 @@ next_command: Commit CP-119, persist and read back the EXP-133 complete-catalog 
 
 ```yaml
 experiment_id: EXP-133
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T13:04:49+08:00
+  - status: RUNNING
+    at: 2026-09-13T13:06:00+08:00
+  - status: VALID
+    at: 2026-09-13T15:46:42+08:00
 prior_experiment: EXP-132
 hypothesis: Expanding only the qualified normal selection to all 20 frozen catalog points and K=10 will physically pass each point exactly once across two isolated Workers with complete qualification and cleanup.
 single_variable: Expand EXP-132 from four selected points and K=2 to the complete exact-hash catalog and K=10; preserve source, immutable image, models, config, N=2, lifecycle and execute behavior.
@@ -9961,6 +9968,41 @@ provenance:
   broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
   catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
 retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_119
-next_experiment: EXP-133
+observed:
+  - The immutable execute command exited 0 in 909.59 s. The aggregate contains exactly 20 catalog points, every point is terminal PASSED with attempts=1, and coverage_complete, execution_complete and qualification_passed are true with POINTS_COMPLETE.
+  - Worker-01 and worker-02 each consumed exactly 10 leases and each produced 10 PASSED point results plus the expected terminal NO_POINT record. No Worker result has a failure boundary, message or type.
+  - Direct fresh inspection of all 20 terminal RGB files showed the cup upright inside each red target and the arm clear at terminal state. A 20-entry checksum manifest was independently read back with sha256sum -c and every image returned OK.
+  - Each PASSED seal contains attempt result, workspace identity, initial/terminal RGB, pose acceptance, dynamic execution/reachability and depth/TF/physical evidence. The physical records are unpaused and bind unique simulation-session evidence to their attempts.
+  - Every cleanup-gates component passed. The exact Broker container ID, every recorded owned PID, all full-133 processes and all related running containers were absent on direct readback.
+conclusion: VALID; the current immutable source/image satisfies the final two-Worker complete 20-point physical qualification contract with exact once-only coverage and cleanup.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-133.log sha256=ce2ca4f13d93aa9cbfa82779a0e364b3db959fa0f37b63229c4cdbc4fa849c86
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-133.time sha256=ac55fc55f755a927bc323e452992f2dbe02f01001aa76b502a6a1e4ce9d81ec9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-133.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp133.zsh sha256=891eaef59ac566f8cdd9343a364611e9a7ca79e0a6b936e867bf61b196494323
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP133.txt sha256=097bd1784d1fe5d88e636fae15aa8fac70d5bd3cae58adc36eccdd81d7e6a539
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-133/coordinator/aggregate_results.json sha256=636c452e3aea4841eacce136491f2f77e974f9453a192953f17df8dee270931b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-133/workers/worker-01/worker-run-results.json sha256=dfba98d62e6e46fc2e737b0eaf0929a600834b0bf06a614504da7ff5635029ad
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-133/workers/worker-02/worker-run-results.json sha256=487427f97cebf87628a153638e4b717192256a432671cf068df5a3793acce612
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-133/cleanup-gates.json sha256=ee75c991fb6eb1700d69f21328837cdb03afb2dc0c5c0f65d1631bbc67d9e92d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp133-terminal-rgb.sha256 sha256=8d0ff6cb349cb4d7518675770d017b24dabedf035a46e09cc0386cbdf3c6e97a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp133-terminal-rgb-check.log sha256=9c21cec3d82a7c9148bec6b45b6db5e48092d19ae0751c08c81d69f80200e012
+retention_rule: Retain the complete full-133 root, launcher, MuJoCo log and visual checksum/readback reports; delete nothing without explicit authorization.
+decision: REQUEST_FINAL_INDEPENDENT_REVIEW
+next_experiment: INDEPENDENT_ASTRA_HIGH_REVIEW
+```
+
+```yaml
+checkpoint_id: CP-120
+last_valid_experiment: EXP-133
+current_hypothesis: All remediation and mandatory runtime gates are complete; an independent Astra high review of the final diff and evidence will either confirm completion or identify a concrete remaining Critical/Important issue to repair.
+working_tree_status: EXP-133 result is the only tracked change; all product source changes are committed and the ignored SDD progress file remains to be synchronized.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Package/model/provenance, both execute-mode fault gates, fresh four-point and fresh complete 20-point qualification all pass on the immutable EXP-129 image.
+  - EXP-133 covers every frozen point exactly once with balanced N=2/K=10 scheduling, complete sealed evidence, fresh visual inspection and no owned residue.
+open_risks:
+  - The mandatory independent gpt-6-astra high verdict and final SDD/report synchronization remain outstanding.
+next_command: Commit CP-120 after mandatory EXP-045 hash readback, synchronize SDD progress, then request the independent Astra high review of the final remediation diff and retained evidence.
 ```
