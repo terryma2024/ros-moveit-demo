@@ -14,11 +14,12 @@
 
 - 只支持 MuJoCo；不运行实体机械臂，不扩展 Gazebo。
 - v1 配置和 W1–W3 行为保持不变。v2 必须显式选择。
-- W8 必须满足 `requested_worker_count == allocated_worker_count == started_worker_count == ready_worker_count == 8`，不能降级。
+- v2 normal 的请求 N 必须满足 `requested_worker_count == allocated_worker_count == started_worker_count == ready_worker_count == N`；qualification 只接受 N=8，W8 不能降级。
 - qualification 在同一个 batch 中累积启动 `1, 2, 4, 6, 8`，每级三轮同步 canary。
 - 正式 W8 使用八个完整 Worker，全部允许同时进入 `EXECUTING`；不增加低于八的活动并发令牌。
-- ROS Domain 固定为 181–188，启动第一个 Worker 前一次性原子保留。
+- ROS Domain 固定为 215–222，启动第一个 Worker 前一次性原子保留；v1/v2 共用既有 claim root。
 - `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`，discovery scope 为 localhost。
+- Fast DDS 只使用 UDPv4 loopback，关闭 SHM/Data Sharing；每 Worker 最多 32 个 DDS participant。
 - 控制面保留 4 个逻辑 CPU；八 Worker 共享 20 个逻辑 CPU。
 - batch `memory.max=24 GiB`、`memory.swap.max=0`、主机 RAM 设计保留 6 GiB，`MemAvailable` 硬下限 4 GiB。
 - GPU 保留至少 2 GiB；CPU、RAM、GPU 的 accepted W8 峰值至少有 20% 余量。
@@ -65,7 +66,7 @@
 
 ## ai-station 执行准备
 
-- [ ] **Step 1: 建立隔离 worktree、账本和唯一 evidence root**
+- [ ] **Step 1: 接管已投递 worktree，核验账本和唯一 evidence root**
 
 你当前直接运行在 ai-station 上，不要再次 `ssh ai-station`。先只读检查：
 
@@ -80,16 +81,22 @@ tmux list-sessions 2>/dev/null || true
 pgrep -af 'gz sim|move_group|rviz2|pick_place_state_machine|so101_parallel_batch' || true
 ```
 
-从最新 `main` 创建 `/data/work/ws_moveit/.worktrees/parallel-w8-admission-v2`，分支名
-`codex/parallel-w8-admission-v2`。若路径或分支已存在，停止并先核对所有权，不覆盖。
+调度方会从已审查分支创建 `/data/work/ws_moveit/.worktrees/parallel-w8-admission-v2`，分支名
+`codex/parallel-w8-admission-v2`，并把 handoff 放入唯一 evidence root。先核对 worktree HEAD、
+branch、handoff SHA256/size/receipt；若与 handoff 不一致，停止，不覆盖或重建。
 
-创建唯一 evidence root：
+调度方会预创建唯一 evidence root，只允许已有 dispatch metadata。核验权限和内容后创建其余目录：
 
 ```zsh
 evidence_root=/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01
-test ! -e "$evidence_root"
-install -d -m 700 "$evidence_root"
-install -d -m 700 "$evidence_root/registry" "$evidence_root/authority" "$evidence_root/scratch"
+test -d "$evidence_root"
+test "$(stat -c '%a' "$evidence_root")" = 700
+find "$evidence_root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
+install -d -m 700 "$evidence_root/coordinator" "$evidence_root/qualification" \
+  "$evidence_root/dispatch" "$evidence_root/authority-requests" \
+  "$evidence_root/authority-receipts" "$evidence_root/production" \
+  "$evidence_root/workers" "$evidence_root/broker" \
+  "$evidence_root/metrics" "$evidence_root/scratch"
 ```
 
 建立 `docs/experiments/so101-parallel-w8-admission-experiment-ledger.md`，写入 branch、commit、
@@ -103,6 +110,7 @@ git commit -m "docs: start SO-101 W8 admission ledger"
 后续定向 pytest 统一使用下面的 zsh 函数。每次调用传入从未使用的固定 test run ID：
 
 ```zsh
+set -euo pipefail
 evidence_root=/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01
 test_python=/usr/bin/python3
 run_w8_pytest() {
@@ -112,9 +120,27 @@ run_w8_pytest() {
   test ! -e "$test_tmp" || return 90
   install -d -m 700 "$test_tmp" || return 91
   export TMPDIR="$test_tmp" TMP="$test_tmp" TEMP="$test_tmp"
-  "$test_python" -c 'import tempfile, sys; print(tempfile.gettempdir()); sys.exit(0 if tempfile.gettempdir() == sys.argv[1] else 92)' "$test_tmp" || return
-  PYTHONNOUSERSITE=1 "$test_python" -m pytest -p no:cacheprovider "$@"
+  local resolved_tmp
+  resolved_tmp=$(TMPDIR="$test_tmp" TMP="$test_tmp" TEMP="$test_tmp" \
+    "$test_python" -c 'import tempfile; print(tempfile.gettempdir())') || return 92
+  test "$resolved_tmp" = "$test_tmp" || return 93
+  TMPDIR="$test_tmp" TMP="$test_tmp" TEMP="$test_tmp" PYTHONNOUSERSITE=1 \
+    "$test_python" -m pytest -p no:cacheprovider "$@"
 }
+```
+
+现场命令统一使用这些已知输入，并在任何 live run 前逐项 read-back；文件或 digest 不匹配时
+停止，不自行替换模型：
+
+```zsh
+worktree=/data/work/ws_moveit/.worktrees/parallel-w8-admission-v2
+point_catalog="$worktree/src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+v2_config="$worktree/src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
+broker_image=so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+yolo_weights=/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt
+yolo_sha256=f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+grounded_root=/data/work/so101-models/grounded-sam-v2-scipy-lock
+grounded_sha256=0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
 ```
 
 ### Task 1: 冻结 v2 配置并保持 v1 兼容
@@ -139,7 +165,10 @@ run_w8_pytest() {
 config = load_parallel_runtime_config(V2_CONFIG)
 assert config.schema_version == 2
 assert config.max_worker_count == 8
-assert config.ros_domain_ids == tuple(range(181, 189))
+assert config.ros_domain_ids == tuple(range(215, 223))
+assert config.fastdds_transport == "udp_v4_loopback_only"
+assert config.fastdds_data_sharing is False
+assert config.max_dds_participants_per_worker == 32
 assert config.qualification_worker_stages == (1, 2, 4, 6, 8)
 assert config.qualification_canary_rounds_per_stage == 3
 
@@ -152,7 +181,8 @@ with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
     replace(request, worker_count=9)
 ```
 
-同时加载 v1 并断言 W4 仍返回 `MAX_WORKER_COUNT`。逐字段篡改 v2，断言
+参数化 N=1..8，断言 normal 模式四种 Worker 计数都必须等于请求 N；qualification 对 N!=8
+返回 `EXACT_WORKER_COUNT_REQUIRED`，W8 的任一计数为 7 都拒绝。同时加载 v1 并断言 W4 仍返回 `MAX_WORKER_COUNT`。逐字段篡改 v2，断言
 `FROZEN_RUNTIME_VALUE`。
 
 - [ ] **Step 2: 运行 RED**
@@ -193,6 +223,7 @@ git commit -m "feat: freeze parallel batch v2 contract"
 
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/domain_pool.py`
+- Create: `src/so101_demo_py/config/mujoco/fastdds_parallel_udp_only.xml`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
 - Test: `src/so101_demo_py/test/test_parallel_domain_pool.py`
 - Test: `src/so101_demo_py/test/test_parallel_batch_resources.py`
@@ -204,8 +235,10 @@ git commit -m "feat: freeze parallel batch v2 contract"
 
 - [ ] **Step 1: 写原子性和崩溃竞态 RED tests**
 
-测试八个 lock 全部取得、第四个冲突时前三个回滚、不可读 ROS 候选失败、旧 Worker 持有
-Domain 时拒绝、quiet probe 后按序释放。receipt 必须含 boot ID 和 process start ticks。
+测试使用精确的 v1 root `/run/user/<uid>/so101-parallel-domain-claims/domain-<id>.lock`：八个 lock
+全部取得、第四个冲突时前三个回滚、不可读 ROS 候选失败、旧 Worker 持有 Domain 时拒绝、
+quiet probe 后按序释放。receipt 必须含 boot ID 和 process start ticks。增加 Fast DDS 配置哈希、
+SHM/Data Sharing 禁用、participant=33 拒绝和跨 Domain graph 不可见测试。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -213,7 +246,7 @@ Domain 时拒绝、quiet probe 后按序释放。receipt 必须含 boot ID 和 p
 
 - [ ] **Step 3: 实现 `DomainPool`**
 
-使用 owner-controlled 0700 claim root、0600 regular file、`O_NOFOLLOW` 和 non-blocking
+复用 v1 owner-controlled 0700 claim root 与 lock inode，使用 0600 regular file、`O_NOFOLLOW` 和 non-blocking
 `flock`。先锁全部八个，再执行 `/proc` 与 direct DDS graph probe。任何检查失败都关闭本轮
 已取得 FD。释放前检查 owned process 已停、DDS quiet window 通过。
 
@@ -230,6 +263,7 @@ v1 保留当前前三个 Domain 行为；v2 qualification 总是预留八个，w
 
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/domain_pool.py \
+  src/so101_demo_py/config/mujoco/fastdds_parallel_udp_only.xml \
   src/so101_demo_py/src/parallel_batch/resources.py \
   src/so101_demo_py/test/test_parallel_domain_pool.py \
   src/so101_demo_py/test/test_parallel_batch_resources.py
@@ -240,18 +274,22 @@ git commit -m "feat: reserve eight ROS domains atomically"
 
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/cgroups.py`
+- Create: `scripts/so101-parallel-systemd-cgroup.sh`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
 - Test: `src/so101_demo_py/test/test_parallel_cgroups.py`
 
 **Interfaces:**
+- Produces: `CgroupCapabilityProbe.run() -> CgroupCapabilityReceipt`.
 - Produces: `CgroupLayout.create(batch_id: str, limits: CgroupLimits) -> CgroupLayout`.
-- Produces: `enroll_control(pid)`, `enroll_worker(slot_index, pid)`, `verify_descendants()`, `snapshot()` and `close()`.
+- Produces: `start_coordinator_scope()`, `start_monitor_scope()`, `docker_parent_slice()`, `start_worker_scope(slot)`, `verify_descendants()`, `snapshot()` and `close()`.
 - Consumes: topology probe and v2 resource fields.
 
 - [ ] **Step 1: 写伪 cgroup 文件系统 RED tests**
 
-验证 controller 缺失、委派不可写、20/4 CPU 拆分、24 GiB memory.max、swap=0、八 scope、
-PID enrollment、descendant 逃逸、稳定读回和幂等 close。
+验证 systemd driver、system manager 权限、空 parent slice、leaf scope、Docker parent 不能是 scope、
+no-internal-process、20/4 CPU 拆分、24 GiB memory.max、swap=0、control `MemoryLow=1G`、八 scope、
+PID enrollment、descendant 逃逸、稳定读回和幂等 close。权限不足必须返回
+`CGROUP_DELEGATION_UNAVAILABLE`，不能降级。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -259,14 +297,17 @@ PID enrollment、descendant 逃逸、稳定读回和幂等 close。
 
 - [ ] **Step 3: 实现 cgroup 边界**
 
-把内核文件 IO 封装在可注入 backend 中。CPU 拓扑选择保留四个 SMT 对称逻辑 CPU 给
-control，其余 20 给 workers；实际 CPU 列表写 manifest。所有 PID 必须在副作用前写入
-目标 `cgroup.procs` 并回读。
+把 systemd/Docker/cgroup IO 封装在可注入 backend 中。使用 spec §7 的空 batch/control/
+broker/workers slice 与独立 leaf scope；CPU 拓扑选择保留四个 SMT 对称逻辑 CPU 给 control，
+其余 20 给 workers；实际 CPU 列表写 manifest。先执行无模型/无 ROS capability smoke，所有
+PID 必须在副作用前进入目标 leaf 并回读。
 
 - [ ] **Step 4: 接入 Worker 与 Broker 启动前门**
 
-Worker launcher 在创建 ROS context 前 enroll。Docker Broker 命令增加匹配的 cgroup parent，
-容器 PID 启动后由 allocator 回读。任何失败返回 `CGROUP_ENROLLMENT_FAILED`。
+Worker launcher 在创建 ROS context 前进入 worker scope。Docker Broker 的
+`--cgroup-parent` 指向空 broker slice，不指向有进程的 scope；容器 PID 启动后由 allocator
+回读。Coordinator 与 monitor 分属 leaf，monitor 不进入 broker/worker OOM leaf。任何失败返回
+`CGROUP_ENROLLMENT_FAILED`。
 
 - [ ] **Step 5: 运行 GREEN**
 
@@ -276,6 +317,7 @@ Worker launcher 在创建 ROS context 前 enroll。Docker Broker 命令增加匹
 
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/cgroups.py \
+  scripts/so101-parallel-systemd-cgroup.sh \
   src/so101_demo_py/src/parallel_batch/resources.py \
   src/so101_demo_py/test/test_parallel_cgroups.py
 git commit -m "feat: isolate W8 process trees with cgroup v2"
@@ -286,6 +328,8 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/resource_monitor.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
+- Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
+- Modify: `src/so101_demo_py/src/runtime/mujoco_pick_place_runtime.py`
 - Test: `src/so101_demo_py/test/test_parallel_resource_monitor.py`
 
 **Interfaces:**
@@ -295,9 +339,9 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 
 - [ ] **Step 1: 写时间序列 RED tests**
 
-用 fake monotonic clock 和确定样本验证 0.5 秒采样、缺样失败、CPU/RAM/GPU 20% headroom、
-`MemAvailable < 4 GiB`、swap IO、OOM、Xid、controller deadline 和进程逃逸的硬门；验证
-Broker/CPU pressure 的软门。
+逐项实现 spec §7.4 表格，用 fake monotonic clock 验证来源、单位、窗口、0.5 秒采样、1.0 秒
+最大间隔、缺样失败、CPU/PSI/RAM/GPU、realtime factor p05、render FPS p05、断帧、controller
+deadline、进程逃逸及各自 SOFT/HARD 动作。任何生产指标接口缺失都 fail closed。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -322,6 +366,8 @@ SOFT_STOP 只阻止新 lease；HARD_STOP 调用现有 supervisor 的受控停止
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/resource_monitor.py \
   src/so101_demo_py/src/parallel_batch/resources.py \
+  src/so101_demo_py/src/parallel_batch/worker.py \
+  src/so101_demo_py/src/runtime/mujoco_pick_place_runtime.py \
   src/so101_demo_py/test/test_parallel_resource_monitor.py
 git commit -m "feat: monitor W8 resource envelopes"
 ```
@@ -341,8 +387,9 @@ git commit -m "feat: monitor W8 resource envelopes"
 
 - [ ] **Step 1: 写状态转移 RED tests**
 
-验证不能跳级、倒退、少启动 Worker、少 canary round 或失败后继续。重放 journal 后必须恢复
-到相同 stage/round/barrier 状态。
+验证不能跳级、倒退、少启动 Worker、少 canary round 或失败后继续。qualification 在
+barrier release、stage seal、provisional 和 queue-open 边界崩溃时必须 fence、受控清理并永久
+terminal invalid；同一 batch 不能 resume，重试必须换 batch 并从 stage 1 开始。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -435,7 +482,9 @@ git commit -m "feat: isolate W8 canary evidence"
 - [ ] **Step 1: 写八 Worker 公平性 RED tests**
 
 同时提交八个 YOLO 请求，断言每 Worker 最多一个在途、轮转无饥饿、fenced request 不进入
-pose admission。再覆盖八个 Grounded-SAM 请求和 deadline 计算上下限。
+pose admission。再覆盖八个 Grounded-SAM 请求、YOLO/Grounded 混合队列、每种至少 24 个完成
+样本、缺失 p99、freshness budget 和 pose admission 最终帧龄。fallback 必须重新 capture，不能
+复用 YOLO 帧。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -443,8 +492,10 @@ pose admission。再覆盖八个 Grounded-SAM 请求和 deadline 计算上下限
 
 - [ ] **Step 3: 实现指标和 deadline**
 
-保持模型 outcome 矩阵不变。把 queue enter/dequeue/inference start/end 写入 bounded metrics
-stream；响应返回前继续检查 lease 和 broker generation。
+保持模型 outcome 矩阵不变。实现 spec §8 的 freshness deadline：YOLO/Grounded p99 ceiling
+分别为 2.0/4.0 秒，保留 0.25 秒 commit，pose admission 帧龄严格 `<5.0 s`。把 capture、queue
+enter/dequeue、inference start/end 写入 bounded metrics stream；响应返回前继续检查 lease、
+broker generation 和最终帧龄。专用 Broker canary 产生 fallback 压力，不伪造正式感知失败。
 
 - [ ] **Step 4: 运行 GREEN 和 v1 回归**
 
@@ -465,19 +516,29 @@ git commit -m "feat: scale perception broker to eight workers"
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/admission.py`
 - Create: `src/so101_demo_py/src/cli/parallel_admission_authority.py`
+- Create: `src/so101_demo_py/config/mujoco/so101_admission_authority_ed25519.pub`
+- Create: `deploy/systemd/so101-admission-authority.service`
+- Create: `scripts/install-so101-admission-authority.sh`
+- Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
 - Modify: `src/so101_demo_py/setup.py`
 - Test: `src/so101_demo_py/test/test_parallel_admission.py`
+- Test: `src/so101_demo_py/test/test_parallel_batch_resources.py`
 
 **Interfaces:**
-- Produces: `AdmissionAuthority.verify_stage(batch_id: str, stage: int) -> ProvisionalAdmission`.
-- Produces: `AdmissionAuthority.verify_profile(batch_id: str) -> W8AdmissionProfile`.
+- Produces: `AdmissionAuthority.verify_stage(batch_id: str, nonce: str) -> StageAcceptance`，stage 由 Authority 推导；仅 stage=8 返回 `ProvisionalAdmission`.
+- Produces: `AdmissionAuthority.verify_profile(batch_id: str, nonce: str) -> W8AdmissionProfile`.
+- Produces: `AdmissionAuthority.revoke(profile_id: str, reason: str, evidence_sha256: str) -> RevocationReceipt`.
 - Produces: `AcceptedProfileRegistry.resolve(profile_id: str) -> AcceptedProfileIdentity`.
+- Produces: `RuntimeContentIdentity.from_allowlist(repo_root) -> RuntimeContentIdentity`.
 - Consumes: registry-owned batch root、sealed stage summaries、runtime provenance 和 frozen thresholds。
 
 - [ ] **Step 1: 写不可信输入 RED tests**
 
-验证 Authority 拒绝调用者路径、调用者阈值、自签 acceptance、symlink、inode 替换、缺样、哈希
-不符、八路执行无重叠和 provenance 漂移。验证画像没有时间过期字段或 age gate。
+验证 Authority 拒绝调用者路径、调用者 stage/阈值、自签或伪造 acceptance、registry 篡改、
+错误 peer credential/nonce/Ed25519 signature、symlink、inode 替换、缺样、哈希不符、八路执行无重叠和
+provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时间过期字段或 age gate。
+验证 allowlist 排除 docs/evidence/ledger/profile/registry/Git commit，提交 profile 后 identity 不变，
+而 Python、launch、Docker input、运行配置、策略或场景任一变化都拒绝。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -485,13 +546,21 @@ git commit -m "feat: scale perception broker to eight workers"
 
 - [ ] **Step 3: 实现 secure read 和重新计算**
 
-Authority 只接收 `batch_id`，从 `registry/batches.json` 解析路径；使用 `O_NOFOLLOW`、目录 FD、
-大小上限和前后 stat 读取。由原始样本重新计算分位数和 20% headroom，不信任候选 summary
-中的布尔结果。
+实现 system-managed `so101-admission` 专用用户服务。权威 registry/revocation/acceptance 放在
+`/var/lib/so101-admission/`，候选无写权限；Unix socket 用 `SO_PEERCRED` 和允许组认证，登记时
+生成 nonce。响应使用 Authority-only Ed25519 私钥签名 batch/epoch/nonce/request，客户端只持有
+固定公钥。使用 `O_NOFOLLOW`、目录 FD、大小上限、前后 stat；候选 writer close 后由 Authority
+复制到自有 staging 并 fsync/rename seal。由原始样本重新计算分位数和 headroom，不信任
+候选 summary 中的布尔结果。
+
+安装脚本首次运行时把私钥生成到 root/Authority-only 路径，只导出公钥到仓库路径。公钥经审查
+提交后，脚本再次安装并回读运行 fingerprint；代码只信任 repo 固定公钥。实现固定 runtime
+content allowlist manifest 和 canonical SHA256；`implementation_commit` 只记审计信息。
 
 - [ ] **Step 4: 实现 provisional/final 输出**
 
-provisional 绑定 batch、epoch、stage=8、三轮 canary、config/provenance hash。final profile 绑定
+StageAcceptance 绑定 Authority 推导的 stage；provisional 只允许 stage=8，绑定 batch、epoch、
+三轮 canary、config/runtime-content hash。final profile 绑定
 五级指标、正式结果和 cleanup，但分别输出 `resource_profile_accepted` 与
 `qualification_passed`。
 
@@ -511,8 +580,13 @@ provisional 绑定 batch、epoch、stage=8、三轮 canary、config/provenance h
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/admission.py \
   src/so101_demo_py/src/cli/parallel_admission_authority.py \
+  src/so101_demo_py/config/mujoco/so101_admission_authority_ed25519.pub \
+  deploy/systemd/so101-admission-authority.service \
+  scripts/install-so101-admission-authority.sh \
+  src/so101_demo_py/src/parallel_batch/resources.py \
   src/so101_demo_py/setup.py \
-  src/so101_demo_py/test/test_parallel_admission.py
+  src/so101_demo_py/test/test_parallel_admission.py \
+  src/so101_demo_py/test/test_parallel_batch_resources.py
 git commit -m "feat: verify independent W8 admission profiles"
 ```
 
@@ -530,8 +604,10 @@ git commit -m "feat: verify independent W8 admission profiles"
 
 - [ ] **Step 1: 写 CLI RED tests**
 
-覆盖 v1 不接受 v2 flags、W4–W8 normal 缺 profile、W8 qualification 非 8 请求、请求 8 实际
-只启动 7、阶段跳过、provisional 缺失和 profile drift。错误码必须出现在 stderr 与 summary。
+覆盖 v1 不接受 v2 flags、normal N=1..8 四计数精确相等、W4–W8 normal 缺 profile、W8
+qualification 非 8 请求、请求 8 实际只启动 7、阶段跳过、provisional 缺失、revoked profile
+和 profile drift。实现并测试精确的 `--stop-after CREATE_CGROUPS` 枚举选项；错误码必须进入
+stderr 与 summary。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -544,7 +620,7 @@ composition 和生命周期调用。v1 `_prepare_live_headroom` 三 Worker 路�
 
 - [ ] **Step 4: 实现 normal 快速启动**
 
-normal W8 复核 registry/profile/current provenance，再按 `1,2,4,6,8` 累积启动。每级只做
+normal W8 复核 Authority-owned registry/profile/current provenance，再按 `1,2,4,6,8` 累积启动。每级只做
 10 秒空载稳定检查，不运行 canary；W8 全部 ready 后开放正式队列。
 
 - [ ] **Step 5: 运行 GREEN 和 CLI 全回归**
@@ -576,8 +652,11 @@ git commit -m "feat: compose W8 qualification and normal admission"
 
 - [ ] **Step 1: 写 replacement RED tests**
 
-W8 正式队列中杀掉一个 idle Worker，断言不再发新 lease；旧 generation fenced，replacement
-沿用 Domain 并通过 ready 后恢复。超时则 terminal，不能以七 Worker 继续。
+定义 `slot_healthy` 与 `lease_eligible` 两个独立 predicate。覆盖首波同时八个 lease、20 点尾部
+少于八点、四点 normal、Worker 暂时无点、K 用尽仍 heartbeat 等待 terminal。W8 正式队列中
+杀掉一个 idle Worker，断言不再发新 lease；旧 generation fenced，replacement 沿用 Domain、
+继承 slot 已完成 K 计数并通过 ready 后恢复。超时则 terminal，不能以七 Worker 继续，也不能
+通过 replacement 重置 K。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -585,8 +664,10 @@ W8 正式队列中杀掉一个 idle Worker，断言不再发新 lease；旧 gene
 
 - [ ] **Step 3: 实现暂停、换代和超时**
 
-先持久化容量丢失事件，再暂停 dispatcher。已有 attempt 按原规则完成；replacement 使用
-同 slot resource identity，新 session ID 和递增 generation。
+先持久化容量丢失事件，再暂停 dispatcher。`AVAILABLE/LEASED/INITIALIZING/EXECUTING/FINALIZING`
+且 heartbeat/resource identity 正常都计作健康；只有 AVAILABLE 且 K 未用尽才可领 lease。
+Worker 在 `BATCH_TERMINAL` 前不因空队列或 K 用尽退出。已有 attempt 按原规则完成；replacement
+使用同 slot resource identity、新 session ID、递增 generation和不可重置 K counter。
 
 - [ ] **Step 4: 运行 GREEN 并提交**
 
@@ -607,13 +688,14 @@ git commit -m "feat: preserve exact W8 runtime capacity"
 - Modify: `docs/experiments/so101-parallel-w8-admission-experiment-ledger.md`
 
 **Interfaces:**
-- Produces fault points: `stage_start`, `canary_barrier`, `resource_soft_stop`, `resource_hard_stop`, `authority_before_accept`, `worker_capacity_loss`.
+- Produces fault points: `stage_start`, `canary_barrier_released`, `stage_sealed`, `provisional_written`, `production_queue_opened`, `resource_soft_stop`, `resource_hard_stop`, `authority_before_accept`, `worker_capacity_loss`.
 - Consumes: v2 journal and supervisor ownership manifest.
 
 - [ ] **Step 1: 写故障矩阵 RED tests**
 
-逐项断言错误码、点位统计隔离、Domain/cgroup cleanup 和 crash replay。hard stop 发生在正式
-attempt 后且结果未知时必须是 `INDETERMINATE`。
+逐项断言错误码、点位统计隔离、Domain/cgroup cleanup 和 crash semantics。四个 qualification
+崩溃边界全部 non-resumable，同 batch 永久 invalid；hard stop 发生在正式 attempt 后且结果
+未知时必须是 `INDETERMINATE`。
 
 - [ ] **Step 2: 运行 RED 并实现最小注入点**
 
@@ -622,16 +704,19 @@ attempt 后且结果未知时必须是 `INDETERMINATE`。
 - [ ] **Step 3: 构建并运行完整普通测试门**
 
 ```zsh
+set -euo pipefail
 cd /data/work/ws_moveit/.worktrees/parallel-w8-admission-v2
 source /opt/ros/jazzy/setup.zsh
 colcon build --packages-select so101_demo_py --symlink-install
 source install/setup.zsh
 test_tmp="$evidence_root/scratch/task-11-package/tmp"
-test ! -e "$test_tmp"
+test ! -e "$test_tmp" || exit 90
 install -d -m 700 "$test_tmp"
 export TMPDIR="$test_tmp" TMP="$test_tmp" TEMP="$test_tmp"
 test_python=/usr/bin/python3
-"$test_python" -c 'import tempfile; print(tempfile.gettempdir())'
+resolved_tmp=$(TMPDIR="$test_tmp" TMP="$test_tmp" TEMP="$test_tmp" \
+  "$test_python" -c 'import tempfile; print(tempfile.gettempdir())')
+test "$resolved_tmp" = "$test_tmp" || exit 91
 PYTHONNOUSERSITE=1 "$test_python" -m pytest -p no:cacheprovider \
   src/so101_demo_py/test -q \
   --junitxml="$evidence_root/scratch/task-11-package/so101_demo_py.xml"
@@ -660,12 +745,31 @@ git commit -m "test: cover W8 admission failure boundaries"
 - [ ] **Step 1: 重新 source 并验证安装产物**
 
 记录 commit、dirty status、`ros2 pkg prefix so101_demo_py`、console/module/config SHA256、Docker
-image digest、模型哈希、RMW report 和 cgroup controller。
+image digest、模型哈希、RMW report 和 cgroup controller。通过受审脚本安装/更新
+`so101-admission-authority.service`，回读 unit、专用用户、0660 socket、Authority-owned 路径、
+私钥权限和客户端固定公钥；不能建立该边界时以 `AUTHORITY_UNAVAILABLE` 停止。
 
 - [ ] **Step 2: 运行 W8 dry admission**
 
-以 v2 qualification 模式运行到 `stop-after=CREATE_CGROUPS`。断言八 Domain 都已 claim、cgroup
-20/4 CPU 和 24 GiB/0 swap 回读一致，未启动正式动作。
+先运行 systemd/Docker capability smoke，确认 system cgroup v2、systemd driver、空 slice/leaf
+拓扑、controller、权限与清理均成立。再以 v2 qualification 模式使用已实现并测试的
+`--stop-after CREATE_CGROUPS`，断言八 Domain 都已 claim、Fast DDS UDP-only、32 participant
+上限、cgroup 20/4 CPU 和 24 GiB/0 swap 回读一致，未启动正式动作。另起真实 participants
+执行跨 Domain leak 和端口冲突 smoke。
+
+```zsh
+ros2 run so101_demo_py so101_parallel_batch \
+  --points "$point_catalog" --config "$v2_config" \
+  --batch-id w8-v2-cgroup-smoke-01 --worker-count 8 \
+  --max-points-per-worker 3 --admission-mode qualification \
+  --stop-after CREATE_CGROUPS \
+  --evidence-root "$evidence_root/production/cgroup-smoke" \
+  --broker-image "$broker_image" \
+  --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
+  --grounded-root "$grounded_root" \
+  --grounded-manifest-sha256 "$grounded_sha256" \
+  --run-mode execute
+```
 
 - [ ] **Step 3: 受控清理并回读**
 
@@ -698,6 +802,19 @@ provenance 和 cleanup 责任。然后改为 `RUNNING`。
 使用 spec §13 的命令，固定 `worker-count=8`、`max-points-per-worker=3`、
 `admission-mode=qualification`。命令由专用 tmux session 持有；不复用 Codex pane 承载
 机器人进程。
+
+```zsh
+ros2 run so101_demo_py so101_parallel_batch \
+  --points "$point_catalog" --config "$v2_config" \
+  --batch-id w8-v2-qualification-01 --worker-count 8 \
+  --max-points-per-worker 3 --admission-mode qualification \
+  --evidence-root "$evidence_root/production/qualification" \
+  --broker-image "$broker_image" \
+  --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
+  --grounded-root "$grounded_root" \
+  --grounded-manifest-sha256 "$grounded_sha256" \
+  --run-mode execute
+```
 
 - [ ] **Step 3: 每级做 bounded read-back**
 
@@ -741,7 +858,9 @@ resource_profile_accepted=true
 
 - [ ] **Step 3: 冻结 profile 到仓库**
 
-从 Authority accepted output 复制规范化 JSON 到
+profile 保存 `runtime_content_sha256` 的固定 allowlist manifest；排除 docs、evidence、ledger、
+profile/registry 文件和 Git commit，`implementation_commit` 仅审计。先测试提交 profile/registry
+后 runtime identity 不变，再修改一个 allowlist 内运行文件并断言拒绝。从 Authority accepted output 复制规范化 JSON 到
 `config/mujoco/admission_profiles/ai-station-w8-v1.json`，计算 SHA256 并写入
 `parallel_admission_profiles_v1.yaml`。新增测试篡改 profile 内容，断言 registry 拒绝。
 
@@ -766,14 +885,30 @@ git commit -m "feat: accept ai-station W8 resource profile"
 
 - [ ] **Step 1: 预登记 normal W8 实验**
 
-使用新的 batch ID 和 evidence root 子目录，生命周期仍属于同一个 task root。固定四个既有
-基准点，`worker_count=8`、`max_points_per_worker=1`；容量 8 大于点数 4，允许四个 Worker
-领取，八个 Worker 必须全部 ready。
+使用新的 batch ID 和 evidence root 子目录，生命周期仍属于同一个 task root。继续传入
+qualification 冻结的同一个完整 catalog，并用四个既有基准点的重复 `--point-id` 做 selection，
+不得生成新 catalog。`worker_count=8`、`max_points_per_worker=1`；容量 8 大于点数 4，允许四个 Worker领取，八个 Worker 必须全部 healthy 并持续 heartbeat 到 terminal。
 
 - [ ] **Step 2: 运行 normal 模式**
 
 提供 `--admission-profile-id ai-station-w8-v1`。启动器按 `1,2,4,6,8` 做空载稳定检查，不
 重复 canary。八个 Worker ready 后开放四点队列。
+
+```zsh
+ros2 run so101_demo_py so101_parallel_batch \
+  --points "$point_catalog" \
+  --point-id task_start --point-id cup_test_forward_5cm \
+  --point-id sample_05_near_center --point-id sample_14_far_right \
+  --config "$v2_config" --batch-id w8-v2-normal-reuse-01 \
+  --worker-count 8 --max-points-per-worker 1 \
+  --admission-mode normal --admission-profile-id ai-station-w8-v1 \
+  --evidence-root "$evidence_root/production/normal-reuse" \
+  --broker-image "$broker_image" \
+  --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
+  --grounded-root "$grounded_root" \
+  --grounded-manifest-sha256 "$grounded_sha256" \
+  --run-mode execute
+```
 
 - [ ] **Step 3: 最终 read-back**
 
@@ -803,10 +938,12 @@ git commit -m "docs: record final W8 admission qualification"
 - [ ] qualification 是同一 batch 的 `1,2,4,6,8` 累积启动，每级三轮 canary。
 - [ ] canary 不污染正式 20 点结果。
 - [ ] 八 Domain 在 `START_1` 前原子 claim，崩溃后不会被旧 Worker 与新 batch 双重使用。
+- [ ] v1/v2 共用 claim root；Fast DDS UDP-only、无 SHM/Data Sharing、participant 上限和跨 Domain 隔离均有现场证据。
 - [ ] cgroup 覆盖 Coordinator、Broker、八 Worker 和全部后代进程。
 - [ ] 24 GiB memory.max、0 swap、4 GiB MemAvailable 硬门和 2 GiB GPU 保留均有现场回读。
-- [ ] Authority 不是 Coordinator 自签，profile 无时间过期规则。
+- [ ] Authority 是独立 system service；peer/nonce/Ed25519、Authority-owned registry、持久 revoke 和 profile 无时间过期规则均通过测试。
 - [ ] Worker 丢失时暂停新 lease；不能按 W7/W6 继续。
+- [ ] 首波、20 点尾部、四点 normal 和 K 用尽时八个健康 Worker 不提前退出；replacement 不重置 K。
 - [ ] YOLO-first、Grounded-SAM fallback 和 `INVALID/INDETERMINATE` 语义未漂移。
 - [ ] qualification W8 正式 20 点与 normal W8 profile 复用均有新证据。
 - [ ] 最终报告分别列出 retained、archived 和删除候选，未经授权没有删除证据。

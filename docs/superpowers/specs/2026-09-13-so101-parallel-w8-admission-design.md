@@ -38,6 +38,15 @@ W2 的平均 CPU 负载按比例扩到 W8 约为 9.7 个逻辑核，低于主机
 采样也没有覆盖 W2 运行全过程。因此，v2 不能靠降低 v1 的线性阈值直接放行 W8，必须补齐
 进程树、GPU、Broker 和仿真实时率证据。
 
+实现边界以这些上游文档为准：ROS 2 的 Linux Domain/端口选择规则、Linux cgroup v2 的
+no-internal-process 约束、Docker systemd driver 的 cgroup parent 规则，以及 Fast DDS 的 SHM
+传输行为。
+
+- `https://docs.ros.org/en/lyrical/Concepts/Intermediate/About-Domain-ID.html`
+- `https://kernel.org/doc/html/v5.16/admin-guide/cgroup-v2.html`
+- `https://docs.docker.com/reference/cli/dockerd/`
+- `https://fast-dds.docs.eprosima.com/en/2.x/fastdds/transport/shared_memory/shared_memory.html`
+
 ## 2. 目标与非目标
 
 ### 2.1 目标
@@ -67,12 +76,12 @@ W2 的平均 CPU 负载按比例扩到 W8 约为 9.7 个逻辑核，低于主机
 | 边界 | 决策 |
 | --- | --- |
 | 版本 | 新增 v2；v1 不原地扩容 |
-| W8 语义 | `requested_worker_count == allocated_worker_count == 8` |
+| 请求语义 | 对任意 v2 请求 N，`requested == allocated == started == ready == N`；W8 时 N 必须为 8 |
 | 活动并发 | 八个 Worker 都可同时 `EXECUTING` |
 | qualification 扩容 | 同一批次累积启动 `1, 2, 4, 6, 8` |
 | 阶段负载 | 每一级执行三轮同步 canary |
 | 正式队列 | W8 canary 获得 provisional admission 后才开放 |
-| Domain | 181–188 一次性全量保留，固定映射到 slot 1–8 |
+| Domain | 215–222 一次性全量保留，固定映射到 slot 1–8 |
 | CPU | 为控制面保留 4 个逻辑 CPU，八 Worker 共享其余 20 个 |
 | RAM | 批次最大 24 GiB，主机保留 6 GiB，批次禁用 swap |
 | GPU | 单 Broker，共享 GPU；保留至少 2 GiB 显存 |
@@ -100,9 +109,12 @@ schema_version: 2
 backend: mujoco
 max_worker_count: 8
 max_points_per_worker_upper_bound: 20
-ros_domain_ids: [181, 182, 183, 184, 185, 186, 187, 188]
+ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222]
 rmw_implementation: rmw_fastrtps_cpp
 ros_discovery_scope: localhost
+fastdds_transport: udp_v4_loopback_only
+fastdds_data_sharing: false
+max_dds_participants_per_worker: 32
 domain_allocation_policy: reserve_all_before_start
 qualification_worker_stages: [1, 2, 4, 6, 8]
 qualification_canary_rounds_per_stage: 3
@@ -111,6 +123,10 @@ resource_profile_required_from_worker_count: 4
 w8_admission_profile_id: ai-station-w8-v1
 broker_queue_capacity_per_model: 8
 broker_inflight_per_worker_per_model: 1
+pose_admission_max_frame_age_s: 5.0
+yolo_qualified_inference_p99_ceiling_s: 2.0
+grounded_sam_qualified_inference_p99_ceiling_s: 4.0
+freshness_commit_reserve_s: 0.25
 requested_device: cuda
 allow_cpu_fallback: false
 host_min_logical_cpu_count: 24
@@ -123,6 +139,10 @@ host_reserved_gpu_gib: 2
 required_measured_headroom_ratio: 0.20
 resource_sample_interval_s: 0.5
 stage_idle_stability_window_s: 10.0
+resource_max_sample_gap_s: 1.0
+mujoco_realtime_factor_p05_floor: 0.50
+render_fps_p05_floor: 5.0
+controller_deadline_miss_limit: 0
 ```
 
 已有模型、帧新鲜度、RGB-D/TF skew、lease、heartbeat、attempt ACK、result ACK 和各状态硬
@@ -140,11 +160,11 @@ stage_idle_stability_window_s: 10.0
 
 ### 4.3 请求不变量
 
-- v2 接受 `1 <= worker_count <= 8`，拒绝 W9。
+- v2 normal 接受 `1 <= worker_count <= 8`，拒绝 W9；qualification 只接受最终目标 W8。
 - W4–W8 必须提供匹配的资源画像，或显式使用 `qualification` 模式。
 - `requested_worker_count`、`allocated_worker_count`、`started_worker_count` 和最终
   `ready_worker_count` 分开记录。
-- 正式队列开放时，四者都必须为 8。
+- normal 正式队列开放时，四者必须都等于请求 N；qualification 正式队列开放时四者必须都为 8。
 - 启动器不能修改用户请求数，也不能用 `active_worker_limit` 隐藏并发降级。
 
 ## 5. qualification 状态机
@@ -188,7 +208,9 @@ Coordinator 收到并复核后，才开放正式 20 点全局队列。八个 Wor
 
 ### 6.1 原子保留
 
-v2 固定 181–188，并在 `START_1` 前按数值顺序申请全部八个 lock。只有八个 lock 全部成功，
+v2 固定 215–222，并在 `START_1` 前按数值顺序申请全部八个 lock。215–222 位于 Linux 推荐的
+非临时端口 Domain 范围，避开 v1 的 181–183；每个 Worker 的 DDS participant 数硬上限为 32。
+只有八个 lock 全部成功，
 才写入 `DOMAINS_RESERVED`；任一失败会释放本次刚取得的 lock，并以
 `DOMAIN_POOL_INCOMPLETE` 或 `DOMAIN_CLAIM_CONFLICT` 终止。
 
@@ -196,14 +218,14 @@ slot 映射固定：
 
 | Slot | ROS_DOMAIN_ID |
 | ---: | ---: |
-| 1 | 181 |
-| 2 | 182 |
-| 3 | 183 |
-| 4 | 184 |
-| 5 | 185 |
-| 6 | 186 |
-| 7 | 187 |
-| 8 | 188 |
+| 1 | 215 |
+| 2 | 216 |
+| 3 | 217 |
+| 4 | 218 |
+| 5 | 219 |
+| 6 | 220 |
+| 7 | 221 |
+| 8 | 222 |
 
 Worker replacement 沿用该 slot 的 Domain，只增加 `worker_generation`。进入
 `QUARANTINED` 的 slot 在批次结束前仍保留 Domain，不能让另一个 batch 抢走。
@@ -212,10 +234,13 @@ Worker replacement 沿用该 slot 的 Domain，只增加 `worker_generation`。�
 
 每个 Domain 依次经过：
 
-- 0600、owner-controlled、`O_NOFOLLOW` 的 `flock` claim；
+- 与 v1 共用 `/run/user/<uid>/so101-parallel-domain-claims/domain-<id>.lock`，使用 0700
+  owner-controlled 目录、0600 regular file、`O_NOFOLLOW` 和 `flock` claim；
 - `/proc` 进程身份和环境扫描；
 - 不依赖共享 ROS CLI daemon 的短窗口 DDS graph 探测；
-- `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` 与 localhost discovery 配置回读。
+- `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` 与 localhost discovery 配置回读；
+- 哈希固定的 Fast DDS XML 只启用 UDPv4 loopback，关闭 SHM 与 Data Sharing，并限制每个
+  Worker 最多 32 个 participant。
 
 同 UID 的候选进程环境不可读、跨 UID 的高召回 ROS 候选无法分类、进程身份在扫描期间变化，
 都以 `DOMAIN_PROCESS_UNVERIFIABLE` 拒绝。发现现存 participant、node、service 或 topic 时返回
@@ -230,26 +255,34 @@ claim receipt 至少记录 `domain_id`、`batch_id`、epoch、PID、进程 start
 会释放自己的 FD，但新批次仍要经过进程扫描和 DDS 探测；旧 Worker 未退出时不能重新使用
 Domain。stale claim 文件可以覆盖，活进程和未释放 lock 不能覆盖。
 
-v1 和 v2 共享 181–183，因此两者不能同时运行。后启动的一方必须明确拒绝。这是隔离约束，
-不是需要自动绕过的资源不足。
+v1 和 v2 虽不再共享 Domain，仍必须共用同一 claim root 和 lock inode 规则。现场 smoke 要用
+真实 participant 证明不同 Domain 不串图、215–222 端口无冲突、SHM/Data Sharing 已关闭；任何
+XML 未生效、participant 超限或跨 Domain 可见都拒绝准入。
 
 ## 7. cgroup v2 与资源计量
 
 ### 7.1 层级
 
 ```text
-so101-parallel-<batch>.slice
-├── control.scope        # Coordinator、Authority client、监视器、Broker
-└── workers.slice        # 总 CPU/RAM 边界
-    ├── worker-01.scope
+so101-w8-<batch>.slice                         # 空的 systemd slice，MemoryMax=24G
+├── so101-w8-<batch>-control.slice             # 空 slice，MemoryLow=1G
+│   ├── so101-w8-<batch>-coordinator.scope     # leaf
+│   └── so101-w8-<batch>-monitor.scope         # leaf
+├── so101-w8-<batch>-broker.slice              # 空 slice，Docker cgroup parent
+└── so101-w8-<batch>-workers.slice             # 空 slice，20 CPU 边界
+    ├── so101-w8-<batch>-worker01.scope        # leaf
     ├── ...
-    └── worker-08.scope
+    └── so101-w8-<batch>-worker08.scope        # leaf
 ```
 
-启动前必须确认 cgroup v2 的 `cpu`、`cpuset`、`memory`、`pids` 和必要的 IO 统计可用且已委派。
-每个进程必须先进入对应 cgroup，再允许创建 ROS participant、MuJoCo 实例或模型 context。
-Broker 容器必须通过容器运行时的 cgroup parent 接口进入 `control.scope`。发现后代进程逃逸时
-返回 `PROCESS_ESCAPED_CGROUP`，暂停新动作并受控停止。
+当前 ai-station 的 Docker 使用 systemd cgroup driver，且用户 manager 没有 Delegate。实现因此
+只能使用 system manager 创建空 slice，再把进程放入独立 leaf scope；不得让有进程的 scope
+承担 Docker `--cgroup-parent`，也不得在含进程的 cgroup 上开启子 controller。启动前用一次
+无模型、无 ROS 的 capability smoke 证明 system manager 授权、unit 命名、controller、Docker
+parent 和清理均有效。权限不足时返回 `CGROUP_DELEGATION_UNAVAILABLE`，不能退回无隔离模式。
+每个进程必须先进入对应 leaf scope，再允许创建 ROS participant、MuJoCo 实例或模型 context。
+Broker 容器以空的 broker slice 作为 cgroup parent，容器 init PID 和所有后代必须回读属于该
+slice。发现后代逃逸时返回 `PROCESS_ESCAPED_CGROUP`，暂停新动作并受控停止。
 
 ### 7.2 CPU
 
@@ -257,7 +290,8 @@ Broker 容器必须通过容器运行时的 cgroup parent 接口进入 `control.
 写入 manifest，不硬编码 Linux CPU 编号。八个 worker scope 使用相同 CPU weight，共享这
 20 个 CPU，不设置低于八的并发令牌。
 
-资源监视器固定在控制面 CPU 上，不能与 MoveIt 规划线程争抢到无法发送 heartbeat。阶段验收
+资源监视器固定在独立 monitor scope 和控制面 CPU 上，以 `MemoryLow=1G` 获得保护，不能与
+MoveIt 规划线程或 Broker 同处可能被整体 OOM 的 leaf。阶段验收
 读取 cgroup CPU time、throttling 和 PSI；W8 实测峰值必须相对 20 CPU 预算保留 20% 余量。
 
 ### 7.3 RAM 与 swap
@@ -270,7 +304,7 @@ Broker 容器必须通过容器运行时的 cgroup parent 接口进入 `control.
 任一 `oom`、`oom_kill`、活跃 swap-in/swap-out 或 4 GiB 主机硬下限触发熔断。W8 画像只在
 完整进程树峰值相对 24 GiB 上限仍有至少 20% 余量时接受。
 
-### 7.4 GPU、仿真和采样
+### 7.4 冻结指标、采样与动作
 
 资源监视器每 0.5 秒采集：
 
@@ -280,9 +314,23 @@ Broker 容器必须通过容器运行时的 cgroup parent 接口进入 `control.
 - Broker queue depth、queue wait、inference latency 和 generation；
 - 每个 Worker 的 MuJoCo realtime factor、controller deadline miss 和渲染产帧率。
 
-阶段开始前要求 10 秒稳定窗口，采样不能缺段。GPU 至少保留 2 GiB，且 accepted profile 的
-峰值仍需满足 20% 余量。`nvidia-smi`/NVML 不可用、PID 归属不完整或指标时间轴无法和阶段事件
-对齐时拒绝，不把缺测当成零负载。
+阶段开始前要求 10 秒稳定窗口。下表是 qualification 的硬契约，不由调用者或画像放宽：
+
+| 指标 | 来源与窗口 | 接受阈值 | 动作 |
+| --- | --- | --- | --- |
+| 样本完整性 | 0.5 s monotonic 序列 | 缺样 0，最大间隔 `<=1.0 s` | 超出立即 HARD_STOP |
+| Worker CPU | workers slice，任意 10 s rolling | p99 `<=16.0 CPU`，throttled/usage `<=1%` | p99 `>14 CPU` 或 throttled `>0.5%` 持续 10 s 时 SOFT_STOP；接受阈值超限 HARD_STOP |
+| CPU PSI | workers slice `cpu.pressure`，任意 10 s | `some avg10 <=10%`，`full avg10 <=1%` | some `>8%` 或 full `>0.5%` 时 SOFT_STOP；接受阈值超限 HARD_STOP |
+| Batch RAM | batch slice，全阶段 | peak `<=19.2 GiB`，`oom=oom_kill=0` | 18 GiB SOFT_STOP；超限 HARD_STOP |
+| Host RAM/swap | `/proc/meminfo`、`/proc/vmstat` | `MemAvailable>=4 GiB`，swap-in/out 增量 0 | `<6 GiB` SOFT_STOP；硬门 HARD_STOP |
+| GPU | NVML 整卡与 owned PID，全阶段 | free `>=max(2 GiB, 20% total)`，Xid 0 | free `<max(3 GiB, 25% total)` 时 SOFT_STOP；接受阈值或 Xid 超限 HARD_STOP |
+| MuJoCo | Worker 每 0.5 s 发布 simulated/wall delta | 每 Worker p05 realtime factor `>=0.50` | 连续 10 s `<0.60` SOFT_STOP；阶段失败 HARD_STOP |
+| Render | camera producer 的 fresh-frame 计数 | 每 Worker p05 `>=5.0 FPS`，无 `>1.0 s` 断帧 | 断帧先 SOFT_STOP；超过 1 s HARD_STOP |
+| Controller | controller manager deadline counter | miss 增量 `==0` | 任一 miss HARD_STOP |
+| Broker | Broker 原始事件，全阶段 | queue/inference timeout 0，p99 见 §8 | 接近新鲜度预算 SOFT_STOP；超限 HARD_STOP |
+
+`nvidia-smi`/NVML、MuJoCo realtime factor、controller deadline counter 或 camera producer FPS
+任一生产接口缺失，PID 归属不完整，或者指标时间轴无法对齐时都拒绝，不把缺测当成零负载。
 
 ## 8. PerceptionBroker 扩容
 
@@ -290,17 +338,25 @@ Broker 仍只有一个 GPU 模型服务。YOLO-Seg 始终优先；Grounded-SAM �
 失败边界回退。八个 Worker 可同时各提交一个请求，两个模型队列容量都固定为 8，并继续按
 Worker 轮转。
 
-qualification 没有 accepted profile 时，排队 deadline 使用 v2 冻结上限；normal 模式按画像
-的 p99 推理时间和当前活动 Worker 数计算 deadline，再受冻结上限约束。算法为：
+每次 YOLO 或 Grounded-SAM 请求都携带不可变 capture monotonic timestamp。fallback 必须重新
+采集 RGB-D/TF，不能复用 YOLO 阶段留下的帧。实际 queue 与 inference deadline 同时受模型原始
+v1 timeout 和 5 秒 pose admission 新鲜度预算限制：
 
 ```text
-effective_queue_deadline = min(
-  frozen_queue_deadline_ceiling,
-  max(v1_queue_deadline_floor, 1.5 * accepted_inference_p99 * (active_workers - 1))
-)
+freshness_deadline = capture_monotonic + 5.0
+qualified_inference_ceiling = 2.0  # YOLO; Grounded-SAM 为 4.0
+queue_deadline = min(v1_queue_deadline, freshness_deadline
+                     - qualified_inference_ceiling - 0.25)
+inference_deadline = min(dispatch_monotonic + v1_inference_timeout,
+                         freshness_deadline - 0.25)
 ```
 
-deadline、计算输入和结果写入请求证据。Broker queue 或 inference timeout 仍是
+queue deadline 若在入队时已无正预算，直接拒绝。pose admission 前再次验证帧龄 `<5.0 s`。
+qualification 在 `START_8` 后、三轮 pick-place canary 前增加独立 Broker 子阶段，分别产生八路
+同时 YOLO、八路同时 Grounded-SAM 和混合队列的负载证据；Grounded-SAM 负载由专用 Broker
+canary 触发，不改变正式 pick-place 的 YOLO-first
+失败矩阵。各模型至少 24 个完成样本，缺失 p99 时拒绝；YOLO inference p99 必须 `<=2.0 s`，
+Grounded-SAM 必须 `<=4.0 s`。deadline、计算输入和结果写入请求证据。Broker queue 或 inference timeout 仍是
 `INVALID` 基础设施尝试，不触发 Grounded-SAM 回退。Broker generation 改变时旧响应全部
 fence；公共依赖不健康时暂停新 lease。
 
@@ -322,9 +378,26 @@ QUALIFY_8
 provisional record 只对当前 batch 和 epoch 有效。最终 `ai-station-w8-v1` 才能供 normal W8
 复用。
 
-Authority 使用固定 evidence registry 和 acceptance root。Coordinator 只传 `batch_id`，不能
-传入阈值、任意路径或期望结果。Authority 从 registry 解析 batch root，以安全目录句柄读取
-sealed 文件，复核 SHA256、inode、大小和修改时间，再从原始样本重新计算指标。
+Authority 是由 system manager 管理的 `so101-admission` 专用用户服务，不是 Coordinator 的
+子进程。权威 registry、revocation journal 与 acceptance root 位于 root/Authority-only 可写的
+`/var/lib/so101-admission/`；候选 batch、Coordinator 和 Worker 均无写权限。操作员通过 0660
+Unix socket 请求登记，Authority 用 `SO_PEERCRED` 校验允许组，生成 batch nonce，并把固定
+evidence root 的目录 FD 身份写入权威 registry。后续 RPC 只接受 `batch_id`、nonce 和请求类型；
+当前 stage 由 Authority 从 sealed journal 推导，调用者不能传 stage、阈值、任意路径或期望结果。
+响应由 Authority-only Ed25519 私钥签名，Coordinator 使用安装时固定的公钥验证，只接受当前
+batch/epoch/nonce 的响应；Coordinator 永远拿不到可签发 acceptance 的密钥。
+首次安装在 ai-station 上生成私钥到 root/Authority-only 路径，只把公钥导出到仓库。必须先
+审查并提交公钥，再重装/重启服务并回读运行公钥 fingerprint 与 repo 公钥完全一致，之后才能
+开始 qualification；密钥轮换会令既有 profile 失效并要求重新 qualification。
+
+`verify_stage(batch_id, nonce) -> StageAcceptance` 可为 1/2/4/6/8 阶段出具 acceptance；只有
+Authority 推导出 stage=8 且三轮全通过时，才返回 W8-only `ProvisionalAdmission`。
+`verify_profile(batch_id, nonce) -> W8AdmissionProfile` 在正式结果和 cleanup 后运行。
+`revoke(profile_id, reason, evidence_sha256)` 先 fsync append-only revocation journal，再使 profile
+失效；进程重启后仍必须拒绝 revoked profile。Authority 以安全目录句柄读取 sealed 文件，复核
+SHA256、inode、大小和修改时间，再从原始样本重新计算指标。候选写者关闭文件后，Authority
+从已登记目录 FD 读取并复制到 Authority-owned staging，fsync 后原子 seal；chmod 只读或候选
+目录内的 ownership 标记本身都不构成封存。
 
 ### 9.2 画像内容
 
@@ -333,14 +406,22 @@ sealed 文件，复核 SHA256、inode、大小和修改时间，再从原始样�
 - CPU 型号/拓扑、逻辑核数、总内存、GPU 型号/UUID/显存；
 - Linux 内核、NVIDIA driver、cgroup controller 和容器 runtime；
 - ROS 发行版、RMW 名称/版本、Domain 池和 discovery 配置；
-- source/install、容器、策略、场景、模型、配置和点位清单哈希；
+- runtime content、install、容器、策略、场景、模型、配置和完整点位清单哈希；
 - 五个阶段的窗口、样本数、缺样数、CPU/RAM/GPU/PSI、实时率、渲染和 Broker 分位数；
 - provisional admission、正式点位结果、cleanup 和所有熔断事件。
+
+`runtime_content_sha256` 使用固定 allowlist，只覆盖实际影响执行的 Python/C++、launch、package
+metadata、Docker 构建输入、运行配置、策略、场景和模型身份文件；明确排除 `docs/**`、evidence、
+实验账本、Authority registry、accepted profile JSON/YAML 和 Git commit 对象。完整清单及每个
+文件哈希写入画像。`implementation_commit` 仅供审计，不参与匹配；这样把 accepted profile
+提交到仓库不会自我失效，而任何 allowlist 内运行文件变化都会拒绝。normal 的点位子集仍用
+qualification 时冻结的完整 catalog identity，并用既有 `--point-id` 表示 selection，不能另建
+一个 catalog 冒充 provenance 一致。
 
 画像无固定时间有效期。以下变化立即失效：
 
 - 主机硬件、内核、driver、RMW、cgroup 或容器能力改变；
-- source/install、容器、模型、策略、场景、v2 配置或点位清单哈希改变；
+- runtime content/install、容器、模型、策略、场景、v2 配置或完整点位清单哈希改变；
 - clean-host normal W8 出现 OOM、GPU Xid、controller deadline miss、进程逃逸或资源硬门；
 - sealed evidence 损坏、指标缺样或 acceptance 身份无法验证。
 
@@ -356,13 +437,20 @@ sealed 文件，复核 SHA256、inode、大小和修改时间，再从原始样�
 
 ## 10. Worker 丢失与熔断
 
-正式队列开放后必须维持八个可用 slot。Worker 崩溃、退出或被隔离时：
+正式队列开放后必须维持八个健康 slot。`slot_healthy` 独立于能否领取新 lease：只要 generation
+身份正确、heartbeat 新鲜、资源/cgroup/Domain gate 有效，slot 处于 `AVAILABLE`、`LEASED`、
+`INITIALIZING`、`EXECUTING` 或 `FINALIZING` 都计入健康容量。dispatcher 只从 `AVAILABLE` 且
+未达到 K 的 Worker 发 lease。暂时无点、队列尾部不足八点或达到 K 的 Worker 必须继续 heartbeat
+并等待明确 `BATCH_TERMINAL`，不得自行退出；replacement 继承该 slot 已完成的 K 计数，不能
+通过换代重置配额。
+
+Worker 崩溃、退出或被隔离时：
 
 1. Coordinator 立即停止发放新 lease。
 2. 其他 Worker 可完成已经开始的点，避免主动制造 `INDETERMINATE`。
 3. 故障 slot 的旧 generation 完成 fencing 和进程清理。
 4. replacement 沿用原 Domain，增加 `worker_generation`，通过完整 ready gate。
-5. 重新达到八个 `AVAILABLE` 后才恢复队列。
+5. 重新达到八个 `slot_healthy=true`，且至少一个 Worker 可领取时才恢复队列。
 
 冻结期限内无法恢复时返回 `W8_CAPACITY_LOST`。已完成点保留原裁决，但整个批次不能声明 W8
 资格。不得按七个或更少 Worker 继续派发新点。
@@ -378,24 +466,31 @@ deadline miss、cgroup 逃逸或 `MemAvailable < 4 GiB`。正式 attempt 已开�
 | --- | --- |
 | 配置 | `CONTRACT_V2_MISMATCH`, `EXACT_WORKER_COUNT_REQUIRED` |
 | Domain | `DOMAIN_POOL_INCOMPLETE`, `DOMAIN_CLAIM_CONFLICT`, `DOMAIN_PROCESS_UNVERIFIABLE`, `DOMAIN_DISCOVERY_NOT_QUIET` |
-| cgroup | `CGROUP_V2_UNAVAILABLE`, `CGROUP_ENROLLMENT_FAILED`, `PROCESS_ESCAPED_CGROUP` |
+| cgroup | `CGROUP_V2_UNAVAILABLE`, `CGROUP_DELEGATION_UNAVAILABLE`, `CGROUP_ENROLLMENT_FAILED`, `PROCESS_ESCAPED_CGROUP` |
 | 静态资源 | `HOST_RESOURCE_BASELINE_FAILED` |
 | 运行资源 | `MEMORY_HARD_LIMIT`, `GPU_HARD_HEADROOM`, `CPU_PRESSURE_LIMIT` |
 | 公共依赖 | `BROKER_BACKPRESSURE_LIMIT`, `SIMULATION_REALTIME_LIMIT`, `CONTROLLER_DEADLINE_MISS` |
-| Authority | `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT` |
+| Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
 | Worker 容量 | `W8_CAPACITY_LOST` |
 
 错误码要同时进入事件账本、batch summary 和 CLI stderr。正式队列开放前失败时不创建正式
 point attempt，也不把未执行点放进成功率分母。
 
-## 12. 证据布局与写入权
+## 12. 崩溃边界、证据布局与写入权
+
+v2 qualification 不支持 resume。Coordinator、Authority 或资源监视器在 `PREFLIGHT` 到
+`PROFILE_ACCEPTED` 之间异常退出，watchdog 必须 fence 当前 epoch、停止全部 owned 后代、完成
+Domain/cgroup/socket 清理并写 `QUALIFICATION_CRASHED`；该 batch 永久 terminal invalid。再次
+尝试必须使用新 batch ID，并从 `START_1` 重新完成五级三轮。normal/formal 点位仍沿用 v1 的
+attempt 终态与恢复语义，不能用 qualification 重启覆盖已开始 attempt。
 
 现场 qualification 使用一个已登记的 durable evidence root：
 
 ```text
 /data/work/so101-evidence/parallel-w8-admission/<run-id>/
-├── registry/
-├── authority/
+├── dispatch/
+├── authority-requests/
+├── authority-receipts/       # 只保存已签名响应副本，不是权威 registry
 ├── coordinator/
 ├── qualification/
 │   ├── stage-01/
@@ -411,8 +506,10 @@ point attempt，也不把未执行点放进成功率分母。
 ```
 
 Coordinator 写 batch 事件和正式点位投影；Worker 只写自己的 canary/attempt/recovery 目录；
-资源监视器只写原始时间序列；Authority 只写 acceptance 和 profile。所有 sealed 目录继续使用
-临时目录、文件与目录 fsync、原子 rename 和只读回读。
+资源监视器只写原始时间序列；Authority 把签名响应副本写回 receipts，权威 acceptance/profile
+只写 Authority-owned 路径。所有 sealed 目录继续使用临时目录、文件与目录 fsync、原子 rename、
+候选 writer close、Authority 复制到自有 staging 和只读回读。Authority registry、revocation、
+私钥与权威 acceptance 不放在候选可写 evidence root 内。
 
 ai-station 上 pytest 或 benchmark 的 `TMPDIR`、`TMP`、`TEMP` 必须指向本 evidence root 下从未
 存在的 `scratch/<test-run-id>/tmp`，并由实际测试 Python 回读 `tempfile.gettempdir()`。scratch
@@ -431,11 +528,17 @@ so101_parallel_batch \
   --max-points-per-worker 3 \
   --admission-mode qualification \
   --evidence-root <registered-durable-evidence-root> \
+  --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 \
+  --yolo-weights <absolute-yolo-best.pt> \
+  --yolo-weights-sha256 <sha256> \
+  --grounded-root <absolute-grounded-root> \
+  --grounded-manifest-sha256 <sha256> \
   --run-mode execute
 ```
 
-normal W8 额外提供 accepted profile；CLI 读取 repo-tracked acceptance registry，不能由调用者
-直接传任意 profile SHA：
+normal W8 额外提供 accepted profile ID。repo-tracked profile 只是签名审计副本；CLI 必须向
+Authority-owned live registry 查询签名、revocation 和当前 provenance，不能由调用者直接传
+任意 profile SHA：
 
 ```bash
 so101_parallel_batch \
@@ -447,6 +550,11 @@ so101_parallel_batch \
   --admission-mode normal \
   --admission-profile-id ai-station-w8-v1 \
   --evidence-root <registered-durable-evidence-root> \
+  --broker-image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 \
+  --yolo-weights <absolute-yolo-best.pt> \
+  --yolo-weights-sha256 <sha256> \
+  --grounded-root <absolute-grounded-root> \
+  --grounded-manifest-sha256 <sha256> \
   --run-mode execute
 ```
 
@@ -457,15 +565,16 @@ W1–W3 旧命令和 v1 配置不变。
 ### 14.1 自动化测试
 
 - v1 全部 frozen-value 和行为测试保持通过。
-- v2 接受 W8、拒绝 W9，拒绝配置漂移和任何实际 Worker 数降级。
+- v2 normal 对请求 N 验证四种计数都等于 N；qualification 只接受 W8，拒绝 W9、配置漂移和任何实际 Worker 数降级。
 - 八 Domain 全量原子 claim；部分冲突不留下半套 claim。
-- 协调器崩溃且旧 Worker 存活时，新批次不能抢走 Domain。
+- qualification 在 barrier release、seal、provisional 和 queue-open 边界崩溃时都整批失效、清理且不能 resume。
+- 20 点首波八个 lease、尾部不足八点、四点 normal 和 K 用尽时，八个健康 Worker 都保持存活；replacement 不重置 K。
 - 所有 Worker、Broker 和后代进程都属于预期 cgroup；逃逸会触发硬门。
 - canary 必须有三轮和 N Worker 的执行重叠，不能混入正式点位统计。
 - 阶段不能跳过、倒退或在失败后继续扩容。
-- Authority 拒绝自签记录、任意路径、文件替换、缺样、损坏和 provenance 漂移。
+- Authority 拒绝自签记录、伪造 accepted 文件、registry 篡改、revoked profile、任意路径、文件替换、缺样、损坏和 provenance 漂移。
 - W8 丢失 slot 后暂停发新 lease；恢复到八个后继续，超时则 `W8_CAPACITY_LOST`。
-- Broker 对八 Worker 保持有界公平，YOLO-first 和既有失败矩阵不变。
+- Broker 对八 Worker 保持有界公平；八路 YOLO、八路 fallback、混合请求和最终帧新鲜度均通过，YOLO-first 和既有失败矩阵不变。
 
 ### 14.2 ai-station qualification
 
