@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+current_commit: daec04aaaa91825c480d4513d29f93e7c975c303
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -45,6 +45,7 @@ confirmed_conclusions:
   - EXP-088 validly proved the historical plan-only exact Worker and Broker TERM recovery gate with no lease grant during Broker unhealth and physical action proven absent.
   - EXP-094 validly passed the final F91 four-point execute qualification, and immutable historical EXP-095 validly passed all 20 frozen points with qualification_passed=true.
   - Astra findings 1 through 7 are confirmed and fixed at CP-089; their focused and adjacent gates pass, while rebuilt-overlay and live qualification remain pending.
+  - EXP-118 proves the repaired heartbeat watchdog independently retires the exact direct consumer by the first six-second observation and submits no controller goal after watchdog expiry while Coordinator-dependent Broker fencing remains blocked; the interrupted attempt remains conservatively INDETERMINATE (CP-105).
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
@@ -53,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-104
-next_experiment: EXP-118
+latest_checkpoint: CP-105
+next_experiment: EXP-119
 ```
 
 Frozen provenance:
@@ -8919,12 +8920,14 @@ next_command: Commit CP-104, then run EXP-118 with immediate observer and the re
 
 ```yaml
 experiment_id: EXP-118
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:37:20+08:00
   - status: RUNNING
     at: 2026-09-13T11:37:20+08:00
+  - status: VALID
+    at: 2026-09-13T11:45:00+08:00
 prior_experiment: EXP-117
 hypothesis: Exact Coordinator suspension during an active goal now triggers direct consumer/controller cancellation after the five-second heartbeat timeout without waiting for the blocked exact-generation Broker fence.
 single_variable: Replace only the EXP-115 runtime/image with EXP-117-qualified concurrent revocation; preserve task_start, N=1/K=1, overlay, immediate observer, exact signals and evidence order.
@@ -8944,6 +8947,82 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - The observer verified exact Coordinator PID 2388353, start-time and cmdline plus manifest-owned direct consumer PID 2389266, then sent SIGSTOP during an active controller goal at accepted/reached 18/17; exact Coordinator state read back T.
+  - The direct consumer was absent at both the six- and eight-second observations. Accepted/reached was 21/21 at six seconds and remained exactly 21/21 at eight seconds, proving no controller goal was submitted after watchdog expiry. The three goals completed between injection and the five-second heartbeat deadline are pre-revocation work; Broker fencing remained blocked on the intentionally stopped Coordinator and completed only after SIGCONT.
+  - The controller's durable log contains exactly 21 accepted goals and 21 successful terminal goals, with no active or unmatched goal. The resumed Coordinator preserved the interrupted attempt as INDETERMINATE with TERMINAL_ACK_FAILED; qualification stayed false and no physical result was promoted.
+  - Fresh initial RGB inspection shows the cup on the table in an uncorrupted scene. The attempt-bound initial depth, TF and authoritative MuJoCo physical receipt agree on the fresh reset/session and cup-on-table state. The concurrent external RGB-D, TF, Planning Scene and MuJoCo queries raced the fast runtime teardown and are retained as explicit failed/non-authoritative captures; they are not used for terminal promotion.
+  - cleanup_gates_passed=true with process, controller and container cleanup successful. batch_cleanup_complete=false solely because Coordinator completion was intentionally interrupted; exact post-run readback found no task process, running container, GPU compute process or ROS daemon in domains 181-183. Unrelated stopped containers were preserved.
+  - The launch wrapper first evaluated one harmless malformed LOG assignment containing an extra path token, then assigned the correct command log and ran the batch. The authoritative command receipt is exit 1 in 110.64 s, which is expected for the conservatively INDETERMINATE injected batch.
+conclusion: VALID_GREEN; the live five-second heartbeat boundary no longer waits for Coordinator-dependent Broker fencing. Motion stops independently, there is no post-revocation goal, and conservative result/cleanup semantics are preserved.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-118.log sha256=21a2066e9bf059e1a45bda336a135a95c4075aa4b742f20ad0b6613b2f48f4a0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-118.time sha256=c323e647aca071f46f352f97a8fe6ca1aebd33b5a7cc51688e8f9af77cdc4402
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-118.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-stop-118.readback.json sha256=aacb0650ef512d071253b6bd42bf14c03bc462dcf31cd06219d02080a50c6cf1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-cont-118.json sha256=5a83a93a447ac7366c52fa3337914699b54ae70ae9cbbb6dc3fd2714b022f3aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-snapshot-118-coordinator-stopped.txt sha256=c0e6b5f340057487932bc52186d5dec7fdf52bd3b194f11bcd6458642ba91e20
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/rgbd-capture-118.json sha256=3d321ec7483c420805b7d7792f16f31e52a0ed6f3b4f032ff770139dc3be7841
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP118.txt sha256=b58fac3d796945cdc48644f3a9e60176cb3e6627fa66929970a39701c48b881b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP118.json sha256=37d606ea1d01b79bb7ce4bba21478f53d736472a12444d7e4f205fab46a8f280
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-118-cleanup-audit.json sha256=4f45b9216a4ebe76421226b2f3b4b94aa33c7bf36c2e4c890de89cb675b1c343
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118/aggregate_results.json sha256=b9b39e40be24b7dd3ee85ec68a42e36150acee730798fd6761a98892f1e4f6c5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118/cleanup-gates.json sha256=b0eae316bab755537e868c76e0fdd8ebc775412b9bd28cf72268a8dab09bf011
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118/workers/worker-01/worker-run-results.json sha256=7cc3f15bc08c874532e99be3805d3d1e82e865cd2a1ea045cf17e026e64ba2f4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118/workers/worker-01/attempts/task_start/task_start-lease-1/working/initial-rgb.png sha256=5a772f4ffcd9d4880ae8bb9c49b7df42edee29f9691f69f7bdf083e1fba2dce7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118/workers/worker-01/ros-home/log/ros2_control_node_2388778_1789270776603.log sha256=5739cd93d1b84498741ee119c0bc0193955abce91c70c7cc19660b5796431fba
+decision: KEEP
+next_experiment: EXP-119
+```
+
+```yaml
+checkpoint_id: CP-105
+last_valid_experiment: EXP-118
+current_hypothesis: The authenticated health-down path will pause grants and replace an exact still-live but unresponsive Broker generation without consuming Worker K, after which ready/model-loaded generation 2 will be readmitted and remaining work will continue.
+working_tree_status: EXP-118 result and EXP-119 preregistration are ledger-only; source/install/image remain the EXP-117-qualified clean candidate.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only; no task process or running container remains.
+confirmed_conclusions:
+  - F1 now has deterministic RED/GREEN, complete package/image provenance and a live execute-mode GREEN at the heartbeat boundary.
+  - Broker exact-generation fencing remained mandatory and completed after Coordinator resume; the concurrency change did not bypass it.
+open_risks:
+  - F2 still needs a live-serving Broker that becomes unhealthy without exiting, followed by exact generation replacement/readmission and no-K-debit evidence.
+next_command: Commit CP-105, then run preregistered EXP-119 using an exact identity-verified generation-1 Broker container pause during an in-flight inference request.
+```
+
+## EXP-119 — Alive-but-unhealthy Broker execute fault
+
+```yaml
+experiment_id: EXP-119
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:45:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:45:00+08:00
+prior_experiment: EXP-118
+hypothesis: Pausing the exact generation-1 Broker container after it is live-serving and has accepted an inference request will yield a generation-bound health-down outcome while the process remains alive, pause new leases, retire only generation 1, readmit a model-loaded generation 2 and continue eligible work without charging Worker K for the infrastructure fault.
+single_variable: Inject only Docker pause into the exact verified generation-1 Broker container during an accepted live inference; source, immutable image, complete overlay, models, execute semantics and frozen runtime limits remain EXP-117-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-broker-unhealthy-20260913-v1-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-broker-unhealthy-remediation-119
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm
+injection_predicate: Exact generation-1 container ID, immutable image ID, batch/generation labels and /runtime mount match; ready.json and model-loaded receipts validate; at least one authenticated request is present for generation 1; the container process is running before Docker pause.
+success_criteria:
+  - Generation 1 remains present/alive but unresponsive at injection, an authenticated exact-generation INFRA_ERROR/QUEUE_TIMEOUT/INFERENCE_TIMEOUT event marks Coordinator broker_healthy=false, and no fresh lease is granted during that interval.
+  - Supervision retires only exact generation 1, creates generation 2 with new credentials/socket/runtime root, verifies ready plus both model-loaded receipts, and marks healthy only after readmission.
+  - The infrastructure-fault attempt does not consume an additional Worker K slot; stale-generation and forged health events remain rejected by the already-qualified production boundary; remaining eligible points continue exactly once.
+  - Execute results remain conservative, controller/joint/TF/MuJoCo/Planning Scene/visual evidence is internally consistent, cleanup is exact, and no unrelated process/container is changed.
+failure_criteria: Lease grant while unhealthy, wrong-generation retirement, health restored before ready/model-loaded verification, K debit for the infrastructure fault, duplicate point, unsafe physical promotion, residue or unrelated mutation.
+invalid_criteria: Pre-existing root, incomplete overlay, missed in-flight request, identity mismatch, Docker pause after Broker already exited, observer/tool failure before injection or admission failure.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all command, observer, journal, Broker-generation, model, Worker, physical, visual and cleanup evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-118
+next_experiment: EXP-119
 ```
