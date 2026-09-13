@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e30ef1d76ede6e654a91d3accb7a891d03208d08
+current_commit: 2b1b2a1678fffb3698276a024d31232cec535d32
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-136
-next_experiment: EXP-150
+latest_checkpoint: CP-137
+next_experiment: EXP-151
 ```
 
 Frozen provenance:
@@ -11008,7 +11008,14 @@ next_command: Commit this checkpoint after mandatory EXP-045 hash readback, then
 
 ```yaml
 experiment_id: EXP-150
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:17:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:18:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:21:00+08:00
 prior_experiment: EXP-149
 hypothesis: Stopping the exact Coordinator while an arm goal is EXECUTING will cause the watchdog to revoke the exact lease and begin Broker fencing/controller cancellation without waiting on audit fsync, then persist correlated receipts and leave a fresh safe post-stop scene.
 single_variable: Send SIGSTOP only to the exact Coordinator after an arm goal becomes EXECUTING; preserve production timeout, image, models, point, motion policy, thresholds and Broker fencing.
@@ -11024,5 +11031,80 @@ failure_criteria: Cancellation waits on audit I/O, controller settlement is abse
 invalid_criteria: Missed active-goal window, wrong process identity, missing timestamp/UUID correlation, late observer, evidence only after teardown or unrelated ownership contamination.
 retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_136
-next_experiment: EXP-150
+provenance:
+  source_commit: 2b1b2a1678fffb3698276a024d31232cec535d32
+  implementation_commit: e30ef1d76ede6e654a91d3accb7a891d03208d08
+  broker_image_id: sha256:1dcec97ef9930a925ac0907ec61e603b1826de572bd917ece1953aadcf007464
+  broker_source_sha256: e66e31400e9e030fbf4988ed997ee39aea9d01983a43579dae10a6134f484340
+observed:
+  - The observer saw the arm goal 1fd6e61b6df42c5bcc206fdf87970f0f EXECUTING 0.434 s before the watchdog revocation boundary and then the same UUID transitioned through CANCELING and CANCELED. No successor goal was accepted.
+  - SIGSTOP targeted the unique Coordinator PID 2794289 at process starttime 111470499; state readback was T before the 11.000 s hold and immediately before SIGCONT.
+  - Exact-lease WATCHDOG_REVOKED and CANCEL_REQUESTED timestamps were captured only 4.36 microseconds apart at 5.984 s after injection. Controller cancel confirmation reported controllers_confirmed=true and motion_stopped=true; the final receipt reported broker_fenced=true.
+  - Fresh post-cancel joint, TF, MuJoCo physical, Planning Scene and RGB observations preceded teardown. The cup remained upright on the table, detached from and clear of the arm/gripper, with negligible velocity and no Planning Scene attachment.
+  - The point remained conservatively INDETERMINATE and qualification false. Production cleanup gates passed; independent exact batch process/container/GPU scans were empty and ROS domains 181-183 were unlocked. Aggregate batch_cleanup_complete remains false only because intentional Coordinator suspension prevents its completion acknowledgment.
+conclusion: VALID; the remediation-source active goal was canceled and externally settled without a successor, the in-memory revocation boundary precedes audit persistence while focused blocked-I/O coverage proves nonblocking safety action, post-stop state is safe, and cleanup is exact.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150_run.sh sha256=9ffd416dd8b2df2ac5022a24b2684056700a74c6bb17d52384f83a57da815290
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-command.log sha256=3155b3e1228b20cde8e66a68815f32d5101cef4b00d494450329032c1469fc42
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-command.time sha256=b9466405d684e511598f8319339e413f1dd46e517ff729aff0f323db521367b1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-exits.log sha256=c0db37fd317a60b390e2128680937a7d8fb0fd27705510e1aa53469851879be6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-injection-complete.json sha256=18fe70018cc6e3144f674e5d0bdc4399e4b8ae455237fc8590517d187c5c2b2e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-observer/observer-summary.json sha256=50f4a4d77b0146e235f77e5146a758b1ffa51234531a28adbbd20990572abb82
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-observer/action-transitions.json sha256=e9ff30f178ecc752b8aca68b63558bea16807dc29c1f00201ebd0fb1e4728176
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-observer/action-status-samples.json sha256=413b5ba4c1d93e5a6b6ab1128b51f6da874fe3c730a361b68d5c5846a885581e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-observer/post-stop-rgb.png sha256=86058ffb13ffba19df96551fb8cc51fa96e6c61f7411e5f70bf170bc635e2d26
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-correlation.json sha256=aa6ccb245118d906389b708750ad8db2fe39435ce342e7d36845aa4e19279b7c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-visual-inspection.json sha256=796f87f1088ab8c58cce27e850dd4d6d629628503093bd99092c9f7f907f8e79
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp150-cleanup-audit.json sha256=e7486a7859523d3434623a86f03d2160e445263a5b28cb9d0b7b883a7e03a562
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150/batch_manifest.json sha256=baf1377a1d38dbb4bf2c5a643fa18f4186a233b8ec9099bd12d08a4f06c6c8e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150/workers/worker-01/revocation-events.jsonl sha256=9c2559be54da7bd2fe19fb990a6dc9b209dadaf6c3f7cc13736ce89367639a2a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150/workers/worker-01/worker-run-results.json sha256=7cc3f15bc08c874532e99be3805d3d1e82e865cd2a1ea045cf17e026e64ba2f4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150/coordinator/aggregate_results.json sha256=37eca2a2eafc00f592f9527a9965dad4e56e7065392ce77a1518cdc79f782338
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150/cleanup-gates.json sha256=46058727b23860aef7e64bb584833e32813280fa0154575c5e6fd4c380e4642a
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150
+decision: RUN_FRESH_NORMAL_FOUR_POINT
+next_experiment: EXP-151
+```
+
+```yaml
+checkpoint_id: CP-137
+last_valid_experiment: EXP-150
+current_hypothesis: Removing the fault while preserving committed source, image, models and configuration will pass the frozen four-point subset exactly once across two isolated Workers under the new trusted-target contract.
+working_tree_status: Product source/tests are clean; only EXP-150 result and EXP-151 preregistration are uncommitted. MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - The exact active controller goal around watchdog expiry transitions EXECUTING to CANCELING to CANCELED with no successor.
+  - The point remains conservative and all post-stop and cleanup evidence is safe.
+open_risks:
+  - Fresh post-fault normal four-point and complete twenty-point qualification are still required.
+next_command: Commit this checkpoint after mandatory EXP-045 hash readback, then run EXP-151 from a fresh absent root.
+```
+
+## EXP-151 — Post-remediation fresh normal four-point gate
+
+```yaml
+experiment_id: EXP-151
+status: PLANNED
+prior_experiment: EXP-150
+hypothesis: Removing fault injection while preserving remediation source, image, models and configuration will complete the frozen four-point subset exactly once across two isolated Workers with qualification and cleanup true.
+single_variable: Remove only Coordinator SIGSTOP and the external observer from EXP-150; select the frozen four-point subset and N=2/K=2 normal execute lifecycle.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: normal-151
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-151
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+success_criteria: All four points PASSED once; coverage, execution and qualification true; distinct isolated Worker resources/sessions; complete physical/numeric/visual evidence; exact cleanup and no owned residue.
+failure_criteria: Any non-PASSED point, retry, duplicate, isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+provenance:
+  source_commit: 2b1b2a1678fffb3698276a024d31232cec535d32
+  implementation_commit: e30ef1d76ede6e654a91d3accb7a891d03208d08
+  broker_image_id: sha256:1dcec97ef9930a925ac0907ec61e603b1826de572bd917ece1953aadcf007464
+  broker_source_sha256: e66e31400e9e030fbf4988ed997ee39aea9d01983a43579dae10a6134f484340
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_137
+next_experiment: EXP-151
 ```
