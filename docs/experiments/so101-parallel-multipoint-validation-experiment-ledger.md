@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 1d3de7a074c0c09875ce79e694b7019f3407bb90
+current_commit: e76682158405b743aa272894a1ff0150bd5e5e07
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -50,9 +50,10 @@ open_hypotheses:
   - EXP-096 confirmed Astra finding 1 and the candidate now performs exact-lease cancel-and-confirm outside the blocked execution lock; post-commit package and live fault evidence remain pending.
   - EXP-097 confirmed Astra finding 2 and the candidate now propagates authenticated exact-generation health loss and replaces a live unhealthy Broker; package and live fault evidence remain pending.
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
-  - Astra findings 4 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
-latest_checkpoint: CP-085
-next_experiment: EXP-099
+  - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
+  - Astra findings 5 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
+latest_checkpoint: CP-086
+next_experiment: EXP-100
 ```
 
 Frozen provenance:
@@ -7515,4 +7516,83 @@ open_risks:
   - Findings 1 and 2 retain pending post-remediation package and live fault-injection gates.
   - Findings 4 through 8 remain pending.
 next_command: Commit the scoped F3 source, tests, and ledger, then start EXP-099 with exit-zero malformed/stale/wrong-identity dynamic manifest RED cases derived from the production adapter.
+```
+
+## EXP-099 — Dynamic execution manifest verification
+
+```yaml
+experiment_id: EXP-099
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T09:40:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T09:40:00+08:00
+  - status: VALID
+    at: 2026-09-13T09:45:32+08:00
+prior_experiment: EXP-098
+hypothesis: The production execute_result adapter maps any exit-zero regular manifest path to PASSED without parsing its content or binding it to the exact lease/session/reset/policy and physical-controller-MoveIt evidence.
+prediction: Exit-zero empty, malformed, stale, and wrong-identity files will incorrectly PASS; a complete identity-bound business-failure manifest will be reduced to INDETERMINATE instead of FAILED with its actual reason.
+single_variable: Add deterministic parser, producer-identity, and classification regression tests only; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit e76682158405b743aa272894a1ff0150bd5e5e07
+  - one EXP-095 DONE manifest was read directly and its top-level policy, simulation, state, planning, controller reconciliation, physical sample, and Planning Scene fields were used as the compatibility shape; EXP-095 bytes remain immutable
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process
+success_criteria:
+  - exit-zero empty/malformed/stale/wrong-identity manifests are INDETERMINATE and never PASSED
+  - exact complete DONE maps PASSED; complete authenticated ERROR maps FAILED with its real code
+  - consumer arguments and producer output carry exact batch/coordinator/worker/generation/point/attempt/lease/session/reset identity
+failure_criteria:
+  - current adapter already enforces all identity, provenance, terminal, and reached-stage evidence requirements
+invalid_criteria:
+  - import/collection failure, wrong overlay, reused scratch, or a test fixture incompatible with the directly observed EXP-095 manifest structure
+provenance:
+  source_commit: e76682158405b743aa272894a1ff0150bd5e5e07
+  historical_manifest_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f91
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+commands:
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4r-Px2fxXba/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_ros_runtime.py::test_exit_zero_unverifiable_dynamic_manifest_never_passes src/so101_demo_py/test/test_parallel_ros_runtime.py::test_exact_dynamic_manifest_maps_terminal_business_outcome src/so101_demo_py/test/test_parallel_worker_runtime.py::test_execute_consumer_receives_integer_reset_epoch_not_wire_label -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4g-QTqkOgIf/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_ros_runtime.py::test_exit_zero_unverifiable_dynamic_manifest_never_passes src/so101_demo_py/test/test_parallel_ros_runtime.py::test_exact_dynamic_manifest_maps_terminal_business_outcome src/so101_demo_py/test/test_parallel_worker_runtime.py::test_execute_consumer_receives_integer_reset_epoch_not_wire_label -q
+    exit_code: 0
+  - command: source /opt/ros/jazzy/setup.zsh; source install/mujoco_ros2_control_msgs/share/mujoco_ros2_control_msgs/package.zsh; source install/so101_mujoco_support/share/so101_mujoco_support/package.zsh; source install/so101_demo_py/share/so101_demo_py/package.zsh; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4a-iiJ5vFe4/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_ros_runtime.py src/so101_demo_py/test/test_parallel_worker_runtime.py src/so101_demo_py/test/test_dual_cup_entrypoints.py src/so101_demo_py/test/test_dynamic_scene_sync.py -q
+    exit_code: 0
+observed:
+  - RED collected six cases: the exact DONE control already passed, while exit-zero empty, malformed, and wrong-attempt files incorrectly PASSED; complete ERROR was INDETERMINATE; and the consumer command omitted exact lease fields. Five failed at the predicted boundaries in 0.55 s wall.
+  - Focused GREEN passed all six cases in 0.14 s pytest / 0.42 s wall.
+  - Final adjacent dynamic CLI/producer, ROS adapter, Worker runtime, and scene coverage passed 121 tests in 1.08 s pytest / 1.36 s wall after explicitly sourcing the local message package.
+  - The preceding adjacent attempt passed 120 tests but was INVALID because test collection imported the `/opt/ros` message package rather than the worktree message overlay; it is retained only as a deletion candidate.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; the dynamic consumer now receives and persists all seven exact lease fields. The parent reads a bounded owner-matched regular file through O_NOFOLLOW, rejects mutation during read, and independently binds lease, Worker session, reset epoch, and installed dynamic policy identity. DONE additionally requires coherent exit/state/trace/release, controller/joint, physical reset, planning, and detached Planning Scene evidence. A complete bound ERROR with the same reached-stage evidence maps to FAILED with its real failure code; absent or unverifiable evidence remains INDETERMINATE. The directly observed EXP-095 DONE schema supplied the derived compatibility fixture shape without modifying historical evidence.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f4r-Px2fxXba.stdout sha256=dfdb51d0c53d891bf37015465f08516af9cf904622e8204f431fa6ff1ac06cd0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f4g-QTqkOgIf.stdout sha256=90938eb99f6e9883d2cea26507b9cf7d10939651a834da1233047d54adfdb5a4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f4a-iiJ5vFe4.stdout sha256=53ee2ffb9ffc713914f78d8e370d831996313d1c2467f5d8ff69b84238f189b2
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4r-Px2fxXba
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4g-QTqkOgIf
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4a-Eq2CYrVr
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f4a-iiJ5vFe4
+decision: KEEP
+next_experiment: EXP-100
+```
+
+```yaml
+checkpoint_id: CP-086
+last_valid_experiment: EXP-099
+current_hypothesis: Astra finding 5 may allow a PASSED sealed result to omit verifier-owned reset, initial, pose, execution, controller/TF/joint, MuJoCo, Planning Scene, and visual evidence by declaring only attempt-result.json as required.
+working_tree_status: F4 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-099 started no ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process.
+confirmed_conclusions:
+  - Finding 4 is confirmed and fixed at both producer identity and parent verification/classification boundaries.
+  - Historical EXP-095 remains immutable and is not claimed as post-fix qualification.
+disproven_routes:
+  - Treating process exit zero plus path existence as physical PASS authority.
+open_risks:
+  - F4 requires the final rebuilt overlay and live qualification because historical manifests intentionally lack the new exact lease field.
+  - Findings 5 through 8 remain pending.
+next_command: Commit the scoped F4 producer, parser, tests, and ledger, then start EXP-100 with a self-consistent PASSED seal that omits verifier-owned stage evidence.
 ```

@@ -70,6 +70,26 @@ class RosDynamicMujocoExecution:
             raise ValueError("dynamic execution provenance is incomplete")
         return {"workflow_id": workflow_id, "request_id": request_id}
 
+    @staticmethod
+    def _parallel_identity_fields(identity) -> dict[str, object]:
+        if identity is None:
+            return {}
+        fields = {
+            "batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+            "point_id", "attempt_id", "lease_generation",
+        }
+        if type(identity) is not dict or set(identity) != fields:
+            raise ValueError("dynamic parallel lease identity is incomplete")
+        for name in ("batch_id", "worker_id", "point_id", "attempt_id"):
+            if not isinstance(identity[name], str) or not identity[name]:
+                raise ValueError("dynamic parallel lease identity is invalid")
+        for name in (
+            "coordinator_epoch", "worker_generation", "lease_generation"
+        ):
+            if type(identity[name]) is not int or identity[name] <= 0:
+                raise ValueError("dynamic parallel lease identity is invalid")
+        return {"parallel_lease_identity": dict(identity)}
+
     def __init__(
         self,
         node: Any,
@@ -84,6 +104,7 @@ class RosDynamicMujocoExecution:
         policy_sha256: str,
         workflow_id: str | None = None,
         request_id: str | None = None,
+        parallel_lease_identity: dict[str, object] | None = None,
     ) -> None:
         from control_msgs.action import FollowJointTrajectory
         from moveit_msgs.action import ExecuteTrajectory
@@ -95,6 +116,7 @@ class RosDynamicMujocoExecution:
         from ..backends.mujoco.observer import MujocoWorldObserver
 
         workflow_identity = self._workflow_identity_fields(workflow_id, request_id)
+        parallel_identity = self._parallel_identity_fields(parallel_lease_identity)
         if not session_id or expected_reset_epoch < 0:
             raise ValueError("dynamic execution provenance is incomplete")
         self._node = node
@@ -168,6 +190,7 @@ class RosDynamicMujocoExecution:
             "final_samples": self._final_samples,
         }
         self._document.update(workflow_identity)
+        self._document.update(parallel_identity)
         self._write()
 
     @property
