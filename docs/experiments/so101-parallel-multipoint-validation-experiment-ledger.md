@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 4c141338805a230cb005e009bf0f9f42ad2bb6bf
+current_commit: 01a16914a0580b944b10cd16803f32a7c39cd76f
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -7920,4 +7920,39 @@ disproven_routes:
 open_risks:
   - Complete package, rebuilt overlay/provenance, execute heartbeat fault, execute live-unhealthy Broker fault, fresh four-point, fresh twenty-point, visual inspection, cleanup, and independent Astra high review remain mandatory.
 next_command: Re-run the ledger consistency guard in its terminal CP-090/EXP-104 state, verify all referenced hashes directly, and commit F8 before preregistering the complete package gate as EXP-104.
+```
+
+## EXP-104 — Complete post-remediation package and overlay gate
+
+```yaml
+experiment_id: EXP-104
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:28:54+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:28:54+08:00
+prior_experiment: EXP-103
+hypothesis: The complete remediation through F8 builds in the four-package worktree overlay and passes the full ordinary so101_demo_py package suite with the locked ML dependency path, zero errors, failures, or skips, and no benchmark collection.
+single_variable: Replace the prior F91 source with current remediation source 01a16914a0580b944b10cd16803f32a7c39cd76f; do not start live runtime or change config, catalog, models, or Broker policy.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 01a16914a0580b944b10cd16803f32a7c39cd76f; submodule c16b5a5fe880b6e1857f56486dab4ae726576969
+  - no related ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process
+  - 232 GiB free on /data; fresh short NVMe scratch required for build/test
+success_criteria:
+  - four selected worktree packages build with --symlink-install from the Jazzy underlay
+  - the exact test interpreter resolves tempfile inside the fresh scratch
+  - colcon test and scoped test-result both exit zero with no errors, failures, or skips
+  - no benchmark_test is collected and installed/runtime paths resolve to this worktree
+failure_criteria:
+  - any build/test/test-result failure or stale/mixed installed path blocks live work
+invalid_criteria:
+  - reused/long/non-NVMe scratch, locked ML path injected during build, wrong overlay, or unscoped stale test-result
+provenance:
+  source_commit: 01a16914a0580b944b10cd16803f32a7c39cd76f
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  runner_python: /usr/bin/python3
+  locked_site_packages: /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+decision: PENDING
 ```
