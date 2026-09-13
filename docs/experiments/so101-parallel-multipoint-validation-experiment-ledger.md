@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-113
-next_experiment: EXP-127
+latest_checkpoint: CP-114
+next_experiment: EXP-128
 ```
 
 Frozen provenance:
@@ -9519,7 +9519,14 @@ next_command: Commit CP-113, persist/read back and syntax-check the EXP-127 laun
 
 ```yaml
 experiment_id: EXP-127
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:24:59+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:27:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:33:34+08:00
 prior_experiment: EXP-126
 hypothesis: The exact EXP-124 mirror corruption against the EXP-126-qualified runtime will deliver authenticated broker_health_down, pause new leases, replace/readmit the Broker as generation 2 and allow conservative continuation within K=3.
 single_variable: Replace only the pre-fix source/image and unique run identity from EXP-124 with EXP-125/126-qualified source, image and f2-127; preserve the four points, N=2/K=3, pause/corruption timing, immutable identity checks and Broker safety gate.
@@ -9542,7 +9549,65 @@ provenance:
   source_commit: f71423f47cd5586e7f4589ca7313c5800e62a823
   broker_image_id: sha256:96e8b3d6c5b12af023c513d9e0000ad898ef87080548d92e777c9a33a5a5a9d4
   broker_source_sha256: 52ca8d39fd92d43771bc13c4f7908baf842b246c7fddd5257a3951303a4e726e
-retention_rule: Retain command, observer, original/corrupt hashes, Broker generations, journal, Worker, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_113
-next_experiment: EXP-127
+observed:
+  - The syntax-checked observer proved exact image/batch/generation/runtime identity, two started Workers and zero input mirrors before pausing generation 1. Both exact 0400 mirrors were backed up, changed by one byte, restored to 0400 and generation 1 resumed alive.
+  - Generation 1 recorded INPUT_HASH_CHANGED and BrokerResponse.INFRA_ERROR. The Coordinator journal recorded broker_healthy=false at sequence 48 and broker_healthy=true at sequence 65; no LEASE_GRANTED occurred between those events.
+  - The supervisor retired generation 1 and admitted a distinct generation-2 container with the same immutable image, isolated broker-g2 runtime mount and fresh ready/model receipts. New leases began only at sequence 68.
+  - Both first attempts remained INVALID and no result was promoted. Exact process/container/controller/domain cleanup passed.
+  - The continued Workers then failed attempts 2 and 3 with BROKER_GENERATION_CHANGED and exhausted K=3; the two untouched points remained UNRUN. Source tracing found the second concrete seam: _WorkerBrokerProxy refreshes its own generation/socket, but ParallelRosWorkerRuntime.broker_generation remains the generation-1 value from immutable worker-spec.json. Its PerceptionPolicy/PoseAdmissionLatch therefore reject valid generation-2 responses.
+conclusion: VALID_RED; authenticated health pause and exact Broker replacement are now correct, but the existing Worker's perception runtime is not rebound to the newly discovered Broker generation before constructing its policy latch.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp127.zsh sha256=5dc989eea66c2229012ebd3fa080639e7c80ea5a04ee88a5298c275139c4ad37
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/observe-exp127.bash sha256=a1eb7f8983f0224615e39fda2904a384fa67de68f0e2285c778113c6145abcbe
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-127.log sha256=e029e6b259543995571fc320b1ed346ae2612f4743a88d32bd4f02a1b954ed85
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-127.time sha256=7b340de987a5deea3d4c63b029c27e78ed6424fbac27786ddc8be3b83a630261
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-127.log sha256=065a8bec80dfab060944c18ea5c143fd835b153cd21bef0ef867bd0e7036bce0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/EXP127-original-1.npy sha256=1c707701f66e312fcda88886cc780b02e09eda7d3a49b7ec257879b71931ded9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/EXP127-original-2.npy sha256=ea82661fb6ad8b0443f8f7090f6c537d51404ecdfa7ffc39e431096ab8046f35
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp127-event-summary.json sha256=e5078816583755405c38c11acf6f2b5a8aec49ef3057dd61beef8076e0221832
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/ipc/broker/.failure.json sha256=bcd02746e17aa2f816ed40a744208469562ac052f0252500f2ff660361fb498c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/ipc/broker/ready.json sha256=a80888fe75b9cc5542c6444bc4cd470e716d0ff07fe7f6ccbe0a129c355f715a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/ipc/broker-g2/ready.json sha256=a9c898824230dc2fdcd032ed54df21e74a754c8f571c1eb8c4e3eecf4af1c657
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/ipc/broker-g2/.model-ready.json sha256=d510efde29ae683c871b2d3010f17e7d76b11381a0d7090de5e1275223157f6b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/coordinator/aggregate_results.json sha256=e4d9d89ed938e9845ff387437a8458782d5fa7b6ee088f0fe752a71492953cc8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/cleanup-gates.json sha256=25a86592cf496134f723741a3c7fbdc84bc588de700525dcd829115b8c287622
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/workers/worker-01/worker-run-results.json sha256=7a096054c97c86a99e2c98dedb1ef56850720f19f5b58600dde2ee04ba2c1081
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127/workers/worker-02/worker-run-results.json sha256=31fdd4a6deaae46381e1a43f76421fa0cae8df9489e216a86880a40d5ae8ef37
+retention_rule: Retain all EXP-127 evidence; delete nothing without explicit authorization.
+decision: FIX_RUNTIME_GENERATION_REBIND
+next_experiment: EXP-128
+```
+
+```yaml
+checkpoint_id: CP-114
+last_valid_experiment: EXP-127
+current_hypothesis: Discovering generation 2 before entering the perception chain and monotonically rebinding the Worker's runtime generation will make its policy latch and Broker proxy share one authority value while preserving mid-request generation-change rejection.
+working_tree_status: EXP-127 result and EXP-128 preregistration are ledger-only; product source is clean.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Authenticated health loss pauses all grants and exact generation-2 replacement/readmission succeeds.
+  - Existing Workers discover and call generation 2, but their ROS runtime retains generation 1 and conservatively rejects the responses.
+open_risks:
+  - The runtime rebind must reject rollback/invalid values and happen before PoseAdmissionLatch construction.
+  - Complete package/image and repeated live F2 gates remain required.
+next_command: Commit CP-114, add a RED proving the perception runner observes generation 1 after the proxy discovers generation 2, then add the narrow monotonic runtime-generation binding and rerun adjacent tests.
+```
+
+## EXP-128 — Rebind Worker perception runtime to discovered Broker
+
+```yaml
+experiment_id: EXP-128
+status: PLANNED
+prior_experiment: EXP-127
+hypothesis: A generation-consumer bound to ParallelRosWorkerRuntime, invoked by _WorkerBrokerProxy after strict healthy discovery and before perception-chain entry, synchronizes the runtime policy latch with the exact current Broker generation.
+prediction: The current composition RED observes runtime generation 1 when the proxy has discovered generation 2; after the change it observes 2, returns the generation-2 response and still rejects rollback or a generation change during a request.
+single_variable: Add only a strict monotonic runtime Broker-generation bind plus an upfront proxy refresh before perception_runner; preserve Coordinator authority, endpoint discovery, response-generation checks and all Broker safety gates.
+lifecycle: ISOLATED_STACK
+success_criteria: Deterministic RED/GREEN at proxy/runner composition; generation 2 is bound before policy construction; invalid/rollback values fail closed; mid-request generation drift remains rejected; adjacent CLI/ROS-runtime tests pass.
+failure_criteria: Worker spec rewrite, unauthenticated generation source, rollback acceptance, removal of pre/post response checks, stale latch or adjacent regression.
+invalid_criteria: Mock bypass of current_broker, wrong overlay/interpreter, reused scratch, tempfile outside registered NVMe root or setup/collection failure.
+retention_rule: Retain RED/GREEN/adjacent evidence and all scratch; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_114
+next_experiment: EXP-128
 ```
