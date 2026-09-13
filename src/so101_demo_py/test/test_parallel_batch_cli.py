@@ -93,6 +93,46 @@ def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
         _write_worker_results(resources, (result,))
 
 
+def test_recovered_initial_gate_terminal_is_not_a_worker_process_failure():
+    from so101_demo.cli.mujoco_parallel_batch import _worker_results_failed
+    from so101_demo.parallel_batch.contracts import AttemptStatus, ValidationStatus
+
+    recovered = SimpleNamespace(
+        stopped_reason="INITIAL_GATE_FAILED",
+        terminal_status=AttemptStatus.INVALID,
+        recovered=True,
+    )
+    ordinary = SimpleNamespace(
+        stopped_reason="NO_POINT",
+        terminal_status=None,
+        recovered=False,
+    )
+
+    assert _worker_results_failed((recovered, ordinary)) is False
+    assert _worker_results_failed((
+        SimpleNamespace(
+            stopped_reason="INITIAL_GATE_FAILED",
+            terminal_status=ValidationStatus.VALIDATION_INVALID,
+            recovered=True,
+        ),
+        ordinary,
+    )) is False
+    assert _worker_results_failed((
+        SimpleNamespace(
+            stopped_reason="INITIAL_GATE_FAILED",
+            terminal_status=AttemptStatus.INVALID,
+            recovered=False,
+        ),
+    )) is True
+    assert _worker_results_failed((
+        SimpleNamespace(
+            stopped_reason="INITIAL_GATE_FAILED",
+            terminal_status=None,
+            recovered=True,
+        ),
+    )) is True
+
+
 @pytest.mark.parametrize(
     "changes,error",
     [

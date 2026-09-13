@@ -1018,6 +1018,11 @@ class ParallelWorker:
                 time.sleep(0.01)
                 continue
             results.append(result)
-            if result.stopped_reason != "POINT_TERMINAL" or not result.recovered:
+            if (
+                result.stopped_reason not in {
+                    "POINT_TERMINAL", "INITIAL_GATE_FAILED"
+                }
+                or not result.recovered
+            ):
                 break
         return tuple(results)

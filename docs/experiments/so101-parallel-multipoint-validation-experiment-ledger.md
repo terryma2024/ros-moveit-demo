@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e4b5dd293fe3af21ce1dde9fc38abc73c05d6797
+current_commit: 1d3de7a074c0c09875ce79e694b7019f3407bb90
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -49,9 +49,10 @@ disproven_routes:
 open_hypotheses:
   - EXP-096 confirmed Astra finding 1 and the candidate now performs exact-lease cancel-and-confirm outside the blocked execution lock; post-commit package and live fault evidence remain pending.
   - EXP-097 confirmed Astra finding 2 and the candidate now propagates authenticated exact-generation health loss and replaces a live unhealthy Broker; package and live fault evidence remain pending.
-  - Astra findings 3 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
-latest_checkpoint: CP-084
-next_experiment: EXP-098
+  - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
+  - Astra findings 4 through 8 remain pending direct verification against current code and evidence; no disposition is assumed.
+latest_checkpoint: CP-085
+next_experiment: EXP-099
 ```
 
 Frozen provenance:
@@ -7434,4 +7435,84 @@ open_risks:
   - Findings 1 and 2 still require the final package/rebuild gate and controlled execute-mode simulation fault injection.
   - Findings 3 through 8 remain pending.
 next_command: Commit the scoped F2 source, tests, and ledger, then start EXP-098 with a deterministic recovered-initial-gate continuation RED test.
+```
+
+## EXP-098 — Recovered initial-gate continuation verification
+
+```yaml
+experiment_id: EXP-098
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T09:34:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T09:34:00+08:00
+  - status: VALID
+    at: 2026-09-13T09:37:12+08:00
+prior_experiment: EXP-097
+hypothesis: run() stops on the INITIAL_GATE_FAILED diagnostic even when its INVALID result was durably committed and all recovery/readmission gates succeeded, and the CLI treats that recovered diagnostic as a fatal Worker process result.
+prediction: A two-point fake with only the first point gate failing will return exactly one recovered INITIAL_GATE_FAILED result and make one lease request; the CLI failure predicate will classify that recovered result as failure.
+single_variable: Add only deterministic Worker-loop and CLI-exit regression tests; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit 1d3de7a074c0c09875ce79e694b7019f3407bb90 with only this ledger entry uncommitted before tests
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, task container, or GPU compute process
+  - exact test Python and fresh NVMe scratch verified before pytest
+success_criteria:
+  - a successfully recovered INVALID initial-gate attempt continues to one unique remaining point and then NO_POINT
+  - exactly two leases debit K for the two unique points; the final no-point request does not debit capacity
+  - failed recovery remains quarantined with no second lease
+  - the CLI accepts only a durably terminal recovered initial-gate result, not an unrecovered or statusless diagnostic
+failure_criteria:
+  - current Worker and CLI already satisfy all continuation and exit contracts
+invalid_criteria:
+  - import/collection failure unrelated to the deliberately absent CLI predicate, wrong overlay, reused scratch, or fake behavior that does not match the production recovery state machine
+provenance:
+  source_commit: 1d3de7a074c0c09875ce79e694b7019f3407bb90
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  ros_domain_id: not_applicable
+  gz_partition: not_applicable
+commands:
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3r-pqBFXUst/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py::test_recovered_initial_gate_failure_continues_to_unique_remaining_point src/so101_demo_py/test/test_parallel_batch_cli.py::test_recovered_initial_gate_terminal_is_not_a_worker_process_failure src/so101_demo_py/test/test_parallel_batch_worker.py::test_failed_recovery_quarantines_and_prevents_another_lease -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3g-UbJrnxaa/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py::test_recovered_initial_gate_failure_continues_to_unique_remaining_point src/so101_demo_py/test/test_parallel_batch_cli.py::test_recovered_initial_gate_terminal_is_not_a_worker_process_failure src/so101_demo_py/test/test_parallel_batch_worker.py::test_failed_recovery_quarantines_and_prevents_another_lease -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3a-q1SDoLnu/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_worker.py src/so101_demo_py/test/test_parallel_batch_cli.py -q
+    exit_code: 0
+observed:
+  - RED passed the existing failed-recovery quarantine control and failed both new contracts: run() returned only the recovered INITIAL_GATE_FAILED item, and the production CLI exposed no predicate capable of distinguishing recovered terminal INVALID from a fatal Worker result. Wall time was 0.59 s.
+  - Focused GREEN passed all three continuation, CLI exit, and failed-recovery controls in 0.16 s pytest / 0.47 s wall.
+  - Final adjacent Worker plus production CLI coverage passed 170 tests in 33.40 s pytest / 33.67 s wall.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; Worker.run now continues only when INITIAL_GATE_FAILED has completed successful recovery, while preserving the diagnostic in durable worker-results. The CLI treats that result as nonfatal only when recovered is literal true and terminal_status is the mode-correct INVALID enum. Failed recovery, missing terminal status, and every other abnormal stop remain fatal/quarantined. The two-point test proves unique P1/P2 leasing, two K debits, a final non-debit NO_POINT request, and no duplicate point.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f3r-pqBFXUst.stdout sha256=0067efc321e33ccd83c1f519d32211cb6cb158de368e8ce718856caebdb523a7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f3g-UbJrnxaa.stdout sha256=ed0d6c079627b8413ba6fa1e9b0419bf2bb3f2c7f1917b91d9f908f1f9a678d2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f3a-q1SDoLnu.stdout sha256=460f970aa3bd4b926f09c72cceb0295daa742520f8024fdf114e86fdb98fe48e
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3r-pqBFXUst
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3g-UbJrnxaa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3a-qMtCaD4t
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f3a-q1SDoLnu
+decision: KEEP
+next_experiment: EXP-099
+```
+
+```yaml
+checkpoint_id: CP-085
+last_valid_experiment: EXP-098
+current_hypothesis: Astra finding 4 may accept an exit-zero dynamic consumer manifest solely because the path exists, without parsing or binding its terminal physical result.
+working_tree_status: F3 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-098 started no ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process.
+confirmed_conclusions:
+  - Finding 3 is confirmed and fixed without weakening recovery, terminal status, or CLI failure gates.
+  - Failed recovery still quarantines after exactly one lease request; recovered initial-gate INVALID continues through eligible unique work.
+disproven_routes:
+  - Using POINT_TERMINAL as the only continuable diagnostic even after authoritative recovery/readmission.
+open_risks:
+  - Findings 1 and 2 retain pending post-remediation package and live fault-injection gates.
+  - Findings 4 through 8 remain pending.
+next_command: Commit the scoped F3 source, tests, and ledger, then start EXP-099 with exit-zero malformed/stale/wrong-identity dynamic manifest RED cases derived from the production adapter.
 ```
