@@ -43,9 +43,187 @@ def populated(root, **kwargs):
     result = workspace(root, **kwargs)
     result.write_json('initial_state/reset.json', {'epoch': 'reset-7'})
     validation = kwargs.get('validation', False)
+    mode = kwargs.get('mode', RunMode.PLAN_ONLY if validation else RunMode.EXECUTE)
     result.write_json('validation-result.json' if validation else 'attempt-result.json',
-                      {'status': 'VALIDATION_PASSED' if validation else 'FAILED'})
+                      {'status': ('VALIDATION_PASSED' if mode is RunMode.DRY_RUN
+                                  else 'VALIDATION_FAILED') if validation else 'FAILED'})
     return result
+
+
+def complete_execute(root, *, omit=(), wrong_identity=None):
+    """Build the compact contract shape observed in an EXP-095 PASSED seal."""
+    who = identity()
+    session = 'session-worker-01'
+    work = api.AttemptWorkspace.create(
+        root,
+        who,
+        reset_epoch='reset-7',
+        source_stamp={
+            'reset_completed_monotonic_s': 12.5,
+            'simulation_session_id': session,
+            'simulation_time_s': 31.25,
+        },
+        run_mode=RunMode.EXECUTE,
+    )
+    documents = {
+        'attempt-result.json': {
+            'status': 'PASSED',
+            'reason': 'OK',
+            'physical_action_proven_absent': False,
+        },
+        'pose_accepted.json': {
+            'type': 'POSE_ACCEPTED',
+            'request': {
+                **asdict(who),
+                'execution_kind': 'attempt',
+                'validation_id': None,
+                'reset_epoch': 'reset-7',
+            },
+        },
+        'numeric/depth.json': {
+            'source_stamp_ns': 32_000_000_000,
+            'sha256': 'a' * 64,
+            'byte_count': 1,
+        },
+        'numeric/tf.json': {
+            'source_frame': 'task_camera_frame',
+            'target_frame': 'world',
+            'source_stamp_s': 32.0,
+            'center_world_xyz': [0.0, 0.0, 0.16],
+        },
+        'numeric/physical.json': {
+            'simulation_session_id': session,
+            'reset_epoch': 7,
+            'simulation_step': 1,
+            'publisher_sequence': 1,
+            'paused': False,
+            'object_state': {'position_world': [0.0, 0.0, 0.16]},
+        },
+        'dynamic/dynamic-execute-manifest.json': {
+            'parallel_lease_identity': asdict(who),
+            'simulation_session_id': session,
+            'expected_reset_epoch': 7,
+            'status': 'DONE',
+            'current_state': 'DONE',
+            'failure': None,
+            'state_trace': ['IDLE', 'DONE'],
+            'state_events': [{
+                'terminal_joint_positions_rad': [0.0] * 5,
+                'terminal_joint_state_source_stamp_ns': 1,
+                'execution_reconciliations': [],
+            }],
+            'planning_attempts': [{'accepted': True}],
+            'final_samples': [{
+                'reset_epoch': 7,
+                'simulation_step': 1,
+                'publisher_sequence': 1,
+                'table_contact': True,
+            }],
+            'planning_scene_readback': {
+                'attached_object_ids': [],
+                'world_primitive_counts': {},
+            },
+            'release_marker_sequence': 1,
+        },
+    }
+    if wrong_identity == 'pose':
+        documents['pose_accepted.json']['request']['attempt_id'] = 'other-attempt'
+    if wrong_identity == 'dynamic':
+        documents['dynamic/dynamic-execute-manifest.json'][
+            'parallel_lease_identity'
+        ]['attempt_id'] = 'other-attempt'
+    binaries = {
+        'initial-rgb.png': b'initial-png',
+        'terminal-rgb.png': b'terminal-png',
+        'perception/input/rgb.npy': b'npy',
+    }
+    for name, document in documents.items():
+        if name not in omit:
+            work.write_json(name, document)
+    for name, payload in binaries.items():
+        if name not in omit:
+            path = work.path / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+    return work
+
+
+def complete_plan(root, *, omit=()):
+    """Build a compact plan-only PASS with verifier-owned planning evidence."""
+    who = identity(validation=True)
+    session = 'session-worker-01'
+    work = api.ValidationWorkspace.create(
+        root,
+        who,
+        reset_epoch='reset-7',
+        source_stamp={
+            'reset_completed_monotonic_s': 12.5,
+            'simulation_session_id': session,
+            'simulation_time_s': 31.25,
+        },
+        run_mode=RunMode.PLAN_ONLY,
+    )
+    documents = {
+        'validation-result.json': {
+            'status': 'VALIDATION_PASSED',
+            'reason': 'OK',
+            'physical_action_proven_absent': True,
+        },
+        'pose_accepted.json': {
+            'type': 'POSE_ACCEPTED',
+            'request': {
+                **asdict(who),
+                'execution_kind': 'validation',
+                'attempt_id': None,
+                'reset_epoch': 'reset-7',
+            },
+        },
+        'numeric/depth.json': {
+            'source_stamp_ns': 32_000_000_000,
+            'sha256': 'a' * 64,
+            'byte_count': 1,
+        },
+        'numeric/tf.json': {
+            'source_frame': 'task_camera_frame',
+            'target_frame': 'world',
+            'source_stamp_s': 32.0,
+            'center_world_xyz': [0.0, 0.0, 0.16],
+        },
+        'numeric/physical.json': {
+            'simulation_session_id': session,
+            'reset_epoch': 7,
+            'simulation_step': 1,
+            'publisher_sequence': 1,
+            'paused': False,
+            'object_state': {'position_world': [0.0, 0.0, 0.16]},
+        },
+        'planning/segment-receipts.json': {
+            'schema_version': 1,
+            'segment_count': 1,
+            'segments': [{
+                'state': 'APPROACH',
+                'start_state_present': True,
+                'terminal_state_present': True,
+                'plan_present': True,
+                'before_scene_present': True,
+                'after_scene_present': True,
+            }],
+        },
+    }
+    binaries = {
+        'initial-rgb.png': b'initial-png',
+        'terminal-rgb.png': b'terminal-png',
+        'perception/input/rgb.npy': b'npy',
+    }
+    for name, document in documents.items():
+        if name not in omit:
+            work.write_json(name, document)
+    for name, payload in binaries.items():
+        if name not in omit:
+            path = work.path / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+    return work
 
 
 def digest_tree(root):
@@ -129,6 +307,50 @@ def test_required_artifact_and_result_cannot_be_omitted(tmp_path):
         work.seal(required=('initial_state/reset.json',))
     assert work.path.is_dir()
     assert not (work.path.parent / 'sealed').exists()
+
+
+@pytest.mark.parametrize('missing', [
+    'initial-rgb.png',
+    'terminal-rgb.png',
+    'perception/input/rgb.npy',
+    'pose_accepted.json',
+    'numeric/depth.json',
+    'numeric/tf.json',
+    'numeric/physical.json',
+    'dynamic/dynamic-execute-manifest.json',
+])
+def test_passed_attempt_cannot_omit_verifier_owned_evidence(tmp_path, missing):
+    """A producer-owned required list cannot downgrade a physical PASS."""
+    work = complete_execute(tmp_path, omit=(missing,))
+    with pytest.raises(api.ArtifactError, match='REQUIRED|EVIDENCE'):
+        work.seal(required=('attempt-result.json',))
+
+
+@pytest.mark.parametrize('wrong_identity', ['pose', 'dynamic'])
+def test_passed_attempt_evidence_binds_exact_identity(tmp_path, wrong_identity):
+    """Self-consistent tree hashes do not authenticate evidence for another lease."""
+    work = complete_execute(tmp_path, wrong_identity=wrong_identity)
+    with pytest.raises(api.ArtifactError, match='IDENTITY'):
+        work.seal(required=('attempt-result.json',))
+
+
+def test_complete_passed_attempt_allows_producer_required_superset(tmp_path):
+    """The producer may strengthen, but cannot weaken, verifier requirements."""
+    sealed = complete_execute(tmp_path).seal(
+        required=('attempt-result.json', 'numeric/tf.json')
+    )
+    assert sealed.verify().identity == identity()
+
+
+def test_plan_only_pass_uses_distinct_verifier_owned_planning_contract(tmp_path):
+    """Plan-only PASS requires planning receipts but never execution evidence."""
+    sealed = complete_plan(tmp_path).seal(required=('validation-result.json',))
+    manifest = json.loads((sealed.path / 'validation_result_manifest.json').read_text())
+    assert manifest['evidence_stage'] == 'PLANNING_COMPLETE'
+    assert 'planning/segment-receipts.json' in manifest['required']
+    assert 'dynamic/dynamic-execute-manifest.json' not in manifest['required']
+    with pytest.raises(api.ArtifactError, match='REQUIRED|EVIDENCE'):
+        complete_plan(tmp_path / 'missing', omit=('planning/segment-receipts.json',)).seal()
 
 
 @pytest.mark.parametrize('bad', [
@@ -282,7 +504,7 @@ def test_adapter_verifies_status_and_discovers_only_reserved_sealed_workspace(
     assert adapter.discover(lease(), work.path.parent) is None
     sealed = work.seal()
     result = adapter.verify(lease(), str(sealed.path), mode)
-    assert result['status'] == ('VALIDATION_PASSED' if validation else 'FAILED')
+    assert result['status'] == ('VALIDATION_FAILED' if validation else 'FAILED')
     assert len(result['sha256']) == 64
     assert adapter.discover(lease(), work.path.parent) == str(sealed.path)
     assert adapter.discover(lease(), root) is None
@@ -517,7 +739,10 @@ def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, m
             wrong_commit(granted, sealed.path, request_key='wrong')
         commit = coordinator.commit_validation if validation else coordinator.commit_result
         response = commit(granted, sealed.path, request_key='result')
-        assert response['status'] == ('VALIDATION_PASSED' if validation else 'FAILED')
+        assert response['status'] == (
+            'VALIDATION_PASSED' if mode is RunMode.DRY_RUN
+            else 'VALIDATION_FAILED' if validation else 'FAILED'
+        )
         events = [event.type for event in journal.replay().events]
         assert ('VALIDATION_COMMITTED' if validation else 'RESULT_COMMITTED') in events
         assert ('RESULT_COMMITTED' if validation else 'VALIDATION_COMMITTED') not in events
