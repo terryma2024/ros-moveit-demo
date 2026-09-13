@@ -197,6 +197,49 @@ def complete_execute(root, *, omit=(), wrong_identity=None):
     return work
 
 
+def complete_error_execute(root, *, status, physical_action_proven_absent):
+    """Build a hash-consistent ERROR receipt with a chosen attempt status."""
+    work = complete_execute(root)
+    result_path = work.path / 'attempt-result.json'
+    result = json.loads(result_path.read_text(encoding='utf-8'))
+    result.update(
+        status=status,
+        reason='GRIPPER_GOAL_TIMEOUT',
+        physical_action_proven_absent=physical_action_proven_absent,
+    )
+    result_path.write_text(json.dumps(result), encoding='utf-8')
+    manifest_path = work.path / 'dynamic/dynamic-execute-manifest.json'
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    terminal_sample = manifest['final_samples'][0]
+    detached_scene = manifest['planning_scene_readback']
+    boundary = 'IDLE' if physical_action_proven_absent else 'PREPARE_OPEN_GRIPPER'
+    manifest.update(
+        status='ERROR',
+        current_state='ERROR',
+        failure='GRIPPER_GOAL_TIMEOUT',
+        state_trace=['IDLE', 'ERROR'] if physical_action_proven_absent else [
+            'IDLE', 'PREPARE_OPEN_GRIPPER', 'ERROR',
+        ],
+        transition_count=1 if physical_action_proven_absent else 2,
+        state_events=[],
+        planning_attempts=[],
+        final_samples=[],
+        planning_scene_readback=detached_scene,
+        release_marker_sequence=None,
+        failure_evidence={
+            'failure_boundary_state': boundary,
+            'physical_action_proven_absent': physical_action_proven_absent,
+            'capture_errors': [],
+            **({} if physical_action_proven_absent else {
+                'terminal_sample': terminal_sample,
+                'planning_scene_readback': detached_scene,
+            }),
+        },
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+    return work
+
+
 def complete_plan(root, *, omit=()):
     """Build a compact plan-only PASS with verifier-owned planning evidence."""
     who = identity(validation=True)
@@ -434,6 +477,47 @@ def test_coordinator_rejects_producer_defined_final_placement_target(tmp_path):
 
     with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE'):
         adapter.verify(lease(), str(sealed.path), RunMode.EXECUTE)
+
+
+def test_result_adapter_rejects_uncertain_controller_error_committed_as_failed(
+        tmp_path, monkeypatch):
+    """A hash-consistent producer claim cannot promote controller uncertainty."""
+    root = tmp_path / 'workers/w1'
+    work = complete_error_execute(
+        root, status='FAILED', physical_action_proven_absent=False,
+    )
+    real_verify_dynamic = api._verify_dynamic
+    monkeypatch.setattr(api, '_verify_dynamic', lambda *_args, **_kwargs: None)
+    sealed = work.seal(required=('attempt-result.json',))
+    monkeypatch.setattr(api, '_verify_dynamic', real_verify_dynamic)
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
+
+    with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE_STATUS'):
+        adapter.verify(lease(), str(sealed.path), RunMode.EXECUTE)
+
+
+@pytest.mark.parametrize(
+    'status,physical_action_proven_absent',
+    [('INDETERMINATE', False), ('FAILED', True)],
+)
+def test_result_adapter_accepts_only_classified_error_status(
+        tmp_path, status, physical_action_proven_absent):
+    root = tmp_path / 'workers/w1'
+    work = complete_error_execute(
+        root,
+        status=status,
+        physical_action_proven_absent=physical_action_proven_absent,
+    )
+    sealed = work.seal(required=('attempt-result.json',))
+    adapter = api.SealedResultAdapter(
+        {'w1': root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
+    )
+
+    assert adapter.verify(lease(), str(sealed.path), RunMode.EXECUTE)['status'] == status
 
 
 @pytest.mark.parametrize('target', [None, (0.0,) * 7, (float('nan'),) * 7])

@@ -1525,7 +1525,7 @@ class ParallelRosRuntimePorts:
             raise ValueError("DYNAMIC_MANIFEST_STATUS")
         from ..parallel_batch.dynamic_manifest import validate_dynamic_manifest_semantics
 
-        validate_dynamic_manifest_semantics(
+        outcome = validate_dynamic_manifest_semantics(
             document,
             expected_status=status,
             expected_reset_epoch=int(reset_epoch[6:]),
@@ -1533,14 +1533,11 @@ class ParallelRosRuntimePorts:
                 policy_path, policy_sha256
             ),
         )
-        if status == "DONE":
-            return AttemptStatus.PASSED, "OK"
-        if document["failure_evidence"]["physical_action_proven_absent"] is True:
-            return AttemptStatus.FAILED, failure
-        return (
-            AttemptStatus.INDETERMINATE,
-            f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED",
-        )
+        if outcome is AttemptStatus.PASSED:
+            return outcome, "OK"
+        if outcome is AttemptStatus.FAILED:
+            return outcome, failure
+        return outcome, f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED"
 
     def execute_result(self, lease, admitted, child):
         call = self.dependencies.get("execute_result")

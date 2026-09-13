@@ -15,6 +15,7 @@ from ..application.e2e_acceptance import (
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
 from ..core.workflow import SO101_WORKFLOW
+from .contracts import AttemptStatus
 
 
 def _success_trace() -> tuple[str, ...]:
@@ -280,7 +281,7 @@ def _error_contract(
 def validate_dynamic_manifest_semantics(
     document: Mapping[str, object], *, expected_status: str, expected_reset_epoch: int,
     expected_final_cup_pose_world: list[float] | None = None,
-) -> None:
+) -> AttemptStatus:
     """Reject structurally present but physically or procedurally incoherent results."""
 
     if expected_status not in {"DONE", "ERROR"}:
@@ -304,5 +305,8 @@ def validate_dynamic_manifest_semantics(
             events,
             expected_final_cup_pose_world,
         )
-    else:
-        _error_contract(document, expected_reset_epoch, events, boundary)
+        return AttemptStatus.PASSED
+    _error_contract(document, expected_reset_epoch, events, boundary)
+    if document["failure_evidence"]["physical_action_proven_absent"] is True:
+        return AttemptStatus.FAILED
+    return AttemptStatus.INDETERMINATE
