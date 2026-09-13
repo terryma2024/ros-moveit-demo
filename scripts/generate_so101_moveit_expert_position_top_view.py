@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import NamedTuple, Sequence
+from typing import Mapping, NamedTuple, Sequence
 
 import yaml
 
@@ -23,6 +23,7 @@ MIN_SEPARATION_M = 0.035
 EDGE_MARGIN_M = 0.010
 STRATUM_GAP_M = 0.010
 CANDIDATE_COUNT = 20
+POINT_RADIUS_PX = 10.0
 
 SCENE_PATH = Path("src/so101_demo_py/assets/mujoco/scene.xml")
 ANCHOR_PATH = Path("src/so101_demo_py/config/mujoco/rgbd_task_points.yaml")
@@ -44,6 +45,17 @@ QUOTAS = (
 
 DISTANCE_ZH = {"near": "近", "mid": "中", "far": "远"}
 LATERAL_ZH = {"left": "左", "center": "中", "right": "右"}
+FAILURE_STAGE_ZH = {
+    "perception": "感知失败",
+    "planning_ik_move_above_object": "接近阶段 IK residual 超限",
+    "planning_ik_lift": "抬升阶段 IK residual 超限",
+    "declared_planning_move_above_object": "接近阶段规划拒绝",
+}
+STATUS_STYLE = {
+    "success": ("成功", "#e8f5e9", "#2e7d32"),
+    "pending": ("待执行", "#e3f2fd", "#1976d2"),
+    "failure": ("失败", "#fde8e8", "#d32f2f"),
+}
 
 
 class Geometry(NamedTuple):
@@ -63,6 +75,11 @@ class Point(NamedTuple):
     x_m: float
     y_m: float
     z_m: float
+
+
+class Outcome(NamedTuple):
+    success: bool
+    failure_stage: str
 
 
 def parse_xyz(value: str, *, field: str) -> tuple[float, float, float]:
@@ -230,6 +247,77 @@ def load_anchors(repository_root: Path) -> list[Point]:
     return anchors
 
 
+def load_points_manifest(path: Path) -> list[Point]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw_points = payload.get("points", ()) if isinstance(payload, dict) else ()
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        raise ValueError("external point manifest must use schema version 1")
+    if len(raw_points) != CANDIDATE_COUNT:
+        raise ValueError("external point manifest must contain 20 points")
+
+    points = []
+    for index, raw in enumerate(raw_points, start=1):
+        name = str(raw["id"])
+        position = tuple(float(value) for value in raw["cup_position_world_m"])
+        if len(position) != 3 or not all(math.isfinite(value) for value in position):
+            raise ValueError(f"external point {name} has an invalid world position")
+        parts = name.split("_")
+        if index <= 4:
+            source = "existing"
+            stratum = "anchor"
+        else:
+            source = "generated"
+            distance, lateral = parts[-2:] if len(parts) >= 2 else ("", "")
+            stratum = (
+                f"{distance}-{lateral}"
+                if distance in DISTANCE_ZH and lateral in LATERAL_ZH
+                else "external"
+            )
+        points.append(
+            Point(
+                id=f"P{index:02d}",
+                name=name,
+                source=source,
+                stratum=stratum,
+                x_m=position[0],
+                y_m=position[1],
+                z_m=position[2],
+            )
+        )
+    return points
+
+
+def parse_bool(value: str, *, field: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError(f"{field} must be True or False")
+
+
+def load_outcomes(path: Path, points: Sequence[Point]) -> dict[str, Outcome]:
+    with path.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        required = {"order", "id", "success", "first_failure_stage"}
+        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+            raise ValueError("results TSV is missing required columns")
+        rows = list(reader)
+    if len(rows) != len(points):
+        raise ValueError("results TSV row count must match the point manifest")
+
+    outcomes = {}
+    for index, (point, row) in enumerate(zip(points, rows), start=1):
+        if int(row["order"]) != index or row["id"] != point.name:
+            raise ValueError(f"results TSV row {index} does not match {point.name}")
+        success = parse_bool(row["success"], field=f"results row {index} success")
+        failure_stage = row["first_failure_stage"].strip()
+        if not success and not failure_stage:
+            raise ValueError(f"failed result {point.name} has no failure stage")
+        outcomes[point.name] = Outcome(success=success, failure_stage=failure_stage)
+    return outcomes
+
+
 def sample_bounds(geometry: Geometry) -> tuple[float, float, float, float]:
     table_xmin, table_xmax, table_ymin, _table_ymax = geometry.table_bounds
     _base_xmin, _base_xmax, base_ymin, _base_ymax = geometry.base_bounds
@@ -306,7 +394,12 @@ def generate_positions(
     return points
 
 
-def validate(points: Sequence[Point], geometry: Geometry) -> float:
+def validate(
+    points: Sequence[Point],
+    geometry: Geometry,
+    *,
+    required_minimum_separation_m: float = MIN_SEPARATION_M,
+) -> float:
     if len(points) != CANDIDATE_COUNT:
         raise ValueError(f"expected {CANDIDATE_COUNT} positions, got {len(points)}")
     if [point.id for point in points] != [f"P{index:02d}" for index in range(1, 21)]:
@@ -339,9 +432,10 @@ def validate(points: Sequence[Point], geometry: Geometry) -> float:
         for index, a in enumerate(points)
         for b in points[index + 1 :]
     )
-    if minimum < MIN_SEPARATION_M:
+    if minimum < required_minimum_separation_m:
         raise ValueError(
-            f"minimum point separation {minimum:.9f} m is below {MIN_SEPARATION_M:.3f} m"
+            f"minimum point separation {minimum:.9f} m is below "
+            f"{required_minimum_separation_m:.3f} m"
         )
     return minimum
 
@@ -350,12 +444,21 @@ def esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def point_status(point: Point, outcomes: Mapping[str, Outcome]) -> str:
+    outcome = outcomes.get(point.name)
+    if outcome is None:
+        return "pending"
+    return "success" if outcome.success else "failure"
+
+
 def svg_figure(
     points: Sequence[Point],
     geometry: Geometry,
     minimum_separation: float,
     *,
     seed: int,
+    outcomes: Mapping[str, Outcome] | None = None,
+    manifest_note: str | None = None,
 ) -> str:
     width, height = 1600, 1100
     plot_left, plot_top, scale = 90.0, 115.0, 1300.0
@@ -371,10 +474,18 @@ def svg_figure(
         xmin, xmax, ymin, ymax = bounds
         return px(xmin), py(ymax), (xmax - xmin) * scale, (ymax - ymin) * scale
 
+    outcomes = outcomes or {}
+    failures = [
+        (point, outcomes[point.name])
+        for point in points
+        if point.name in outcomes and not outcomes[point.name].success
+    ]
+    title_suffix = "（失败点标记）" if outcomes else ""
+    subtitle = manifest_note or f"既有 4 点 + seed {seed} 生成 16 点"
     elements = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
-        '<title id="title">SO-101 MoveIt 专家 20 个杯子初始位置俯视图</title>',
-        '<desc id="desc">按世界坐标等比例绘制桌面、方形机械臂底座、移动目标点、4 个既有杯子中心点和 16 个固定种子生成的杯子中心点。</desc>',
+        f'<title id="title">SO-101 MoveIt 专家 20 个杯子初始位置俯视图{title_suffix}</title>',
+        f'<desc id="desc">按世界坐标等比例绘制桌面、方形机械臂底座、移动目标点和 20 个杯子中心点；标出 {len(failures)} 个失败点。</desc>',
         '<rect width="1600" height="1100" fill="#ffffff"/>',
         '<style>',
         'text{font-family:Arial,"PingFang SC","Noto Sans CJK SC",sans-serif;fill:#172033}',
@@ -383,7 +494,7 @@ def svg_figure(
         '.small{font-size:12px;fill:#4a5568}.table-head{font-size:13px;font-weight:700}',
         '.table-cell{font-size:12px}.mono{font-family:"SFMono-Regular",Consolas,monospace}',
         '</style>',
-        '<text x="90" y="48" class="title">SO-101 MoveIt 专家：20 个杯子初始位置（俯视，等比例）</text>',
+        f'<text x="90" y="48" class="title">SO-101 MoveIt 专家：20 个杯子初始位置{title_suffix}</text>',
         f'<text x="90" y="76" class="subtitle">world 坐标；X 向右，Y 向上；负 Y 为机械臂前方。所有杯子中心 Z = {points[0].z_m:.3f} m。</text>',
     ]
 
@@ -456,13 +567,25 @@ def svg_figure(
 
     for point in points:
         x, y = px(point.x_m), py(point.y_m)
-        if point.source == "existing":
-            vertices = f"{x:.1f},{y-11:.1f} {x+11:.1f},{y:.1f} {x:.1f},{y+11:.1f} {x-11:.1f},{y:.1f}"
-            elements.append(f'<polygon points="{vertices}" fill="#ffb84d" stroke="#7a4800" stroke-width="2"/>')
-        else:
-            elements.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="9" fill="#5aa7df" stroke="#164f78" stroke-width="2"/>')
+        outcome = outcomes.get(point.name)
+        status = point_status(point, outcomes)
+        _status_label, status_fill, status_stroke = STATUS_STYLE[status]
+        failure_stage_attribute = (
+            f' data-failure-stage="{esc(outcome.failure_stage)}"'
+            if status == "failure" and outcome is not None
+            else ""
+        )
+        elements.append(
+            f'<circle data-role="position-point" data-point-id="{esc(point.id)}" '
+            f'data-point-name="{esc(point.name)}" data-status="{status}"'
+            f'{failure_stage_attribute} cx="{x:.1f}" cy="{y:.1f}" '
+            f'r="{POINT_RADIUS_PX:.1f}" fill="{status_fill}" '
+            f'stroke="{status_stroke}" stroke-width="3"/>'
+        )
         elements.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="#111827"/>')
-        elements.append(f'<text x="{x+11:.1f}" y="{y-10:.1f}" class="label">{esc(point.id)}</text>')
+        label_style = f' style="fill:{status_stroke}"'
+        label_suffix = " ×" if status == "failure" else ""
+        elements.append(f'<text x="{x+11:.1f}" y="{y-10:.1f}" class="label"{label_style}>{esc(point.id)}{label_suffix}</text>')
 
     arrow_x = px(0.225)
     elements.extend(
@@ -475,30 +598,46 @@ def svg_figure(
 
     panel_x = 825
     elements.append(f'<text x="{panel_x}" y="118" class="title" style="font-size:21px">中心点坐标</text>')
-    elements.append(f'<text x="{panel_x}" y="144" class="subtitle">既有 4 点 + seed {seed} 生成 16 点</text>')
+    elements.append(f'<text x="{panel_x}" y="144" class="subtitle">{esc(subtitle)}</text>')
     columns = ((0, "ID"), (54, "类别"), (178, "X (m)"), (278, "Y (m)"), (378, "Z (m)"))
+    if outcomes:
+        columns += ((458, "结果"),)
     for offset, label in columns:
         elements.append(f'<text x="{panel_x + offset}" y="178" class="table-head">{esc(label)}</text>')
     elements.append(f'<line x1="{panel_x}" y1="188" x2="1515" y2="188" stroke="#aab2bf" stroke-width="1"/>')
     row_y = 214
-    for index, point in enumerate(points):
+    for point in points:
         if point.source == "existing":
             category = "既有锚点"
+        elif point.stratum == "external":
+            category = "外部点"
         else:
             distance, lateral = point.stratum.split("-")
             category = f"生成·{DISTANCE_ZH[distance]}{LATERAL_ZH[lateral]}"
-        values = (
+        values = [
             point.id,
             category,
             f"{point.x_m:+.6f}",
             f"{point.y_m:+.6f}",
             f"{point.z_m:.3f}",
+        ]
+        status = point_status(point, outcomes)
+        status_label, status_fill, status_stroke = STATUS_STYLE[status]
+        if outcomes:
+            values.append(status_label)
+        elements.append(
+            f'<rect data-role="position-row" data-point-id="{esc(point.id)}" '
+            f'data-status="{status}" x="{panel_x-8}" y="{row_y-18}" '
+            f'width="700" height="27" fill="{status_fill}"/>'
         )
-        if index % 2 == 0:
-            elements.append(f'<rect x="{panel_x-8}" y="{row_y-18}" width="700" height="27" fill="#f3f6fa"/>')
         for (offset, _label), value in zip(columns, values):
             class_name = "table-cell mono" if offset >= 178 or offset == 0 else "table-cell"
-            elements.append(f'<text x="{panel_x + offset}" y="{row_y}" class="{class_name}">{esc(value)}</text>')
+            value_style = (
+                f' style="fill:{status_stroke};font-weight:700"'
+                if outcomes and offset == 458
+                else ""
+            )
+            elements.append(f'<text x="{panel_x + offset}" y="{row_y}" class="{class_name}"{value_style}>{esc(value)}</text>')
         row_y += 31
 
     legend_y = 855
@@ -509,25 +648,39 @@ def svg_figure(
     target_depth_mm = (geometry.target_bounds[3] - geometry.target_bounds[2]) * 1000
     elements.extend(
         [
-            f'<polygon points="{panel_x},{legend_y-10} {panel_x+10},{legend_y} {panel_x},{legend_y+10} {panel_x-10},{legend_y}" fill="#ffb84d" stroke="#7a4800" stroke-width="2"/>',
-            f'<circle cx="{panel_x}" cy="{legend_y}" r="2.5" fill="#111827"/>',
-            f'<text x="{panel_x+20}" y="{legend_y+5}" class="small">既有位置 / 杯子中心</text>',
-            f'<circle cx="{panel_x+215}" cy="{legend_y}" r="9" fill="#5aa7df" stroke="#164f78" stroke-width="2"/>',
-            f'<circle cx="{panel_x+215}" cy="{legend_y}" r="2.5" fill="#111827"/>',
-            f'<text x="{panel_x+235}" y="{legend_y+5}" class="small">生成位置 / 杯子中心</text>',
-            f'<rect x="{panel_x+442}" y="{legend_y-9}" width="18" height="18" fill="#ffdddd" stroke="#c62828" stroke-width="2"/>',
-            f'<text x="{panel_x+470}" y="{legend_y+5}" class="small">策略接受框 {target_width_mm:.0f} × {target_depth_mm:.0f} mm</text>',
+            f'<circle cx="{panel_x}" cy="{legend_y}" r="{POINT_RADIUS_PX:.1f}" fill="#e8f5e9" stroke="#2e7d32" stroke-width="3"/>',
+            f'<text x="{panel_x+20}" y="{legend_y+5}" class="small">成功</text>',
+            f'<circle cx="{panel_x+115}" cy="{legend_y}" r="{POINT_RADIUS_PX:.1f}" fill="#e3f2fd" stroke="#1976d2" stroke-width="3"/>',
+            f'<text x="{panel_x+135}" y="{legend_y+5}" class="small">待执行</text>',
+            f'<circle cx="{panel_x+245}" cy="{legend_y}" r="{POINT_RADIUS_PX:.1f}" fill="#fde8e8" stroke="#d32f2f" stroke-width="3"/>',
+            f'<text x="{panel_x+265}" y="{legend_y+5}" class="small">失败</text>',
+            f'<rect x="{panel_x+350}" y="{legend_y-9}" width="18" height="18" fill="#ffdddd" stroke="#c62828" stroke-width="2"/>',
+            f'<text x="{panel_x+378}" y="{legend_y+5}" class="small">策略接受框 {target_width_mm:.0f} × {target_depth_mm:.0f} mm</text>',
             f'<circle cx="{panel_x+5}" cy="890" r="9" fill="none" stroke="#7a4800" stroke-width="2" stroke-dasharray="6 4"/>',
             f'<text x="{panel_x+25}" y="895" class="small">P01 杯底范围 r = {geometry.cup_radius_m*1000:.0f} mm</text>',
             f'<circle cx="{panel_x+275}" cy="890" r="9" fill="none" stroke="#c62828" stroke-width="2" stroke-dasharray="5 4"/>',
             f'<text x="{panel_x+295}" y="895" class="small">目标中心容差圆 r = {geometry.target_tolerance_radius_m*1000:.0f} mm</text>',
             f'<line x1="{panel_x}" y1="920" x2="1515" y2="920" stroke="#aab2bf" stroke-width="1"/>',
-            f'<text x="{panel_x}" y="946" class="small">桌面：{table_width_mm:.0f} × {table_depth_mm:.0f} mm；杯半径：{geometry.cup_radius_m*1000:.0f} mm；底座：{base_width_mm:.0f} × {base_depth_mm:.0f} mm。</text>',
-            f'<text x="{panel_x}" y="970" class="small">生成范围：X [{sample_xmin:.2f}, {sample_xmax:.2f}] m，Y [{sample_ymin:.2f}, {sample_ymax:.2f}] m；近/中/远 × 左/中/右分层。</text>',
-            f'<text x="{panel_x}" y="994" class="small">点间最小距离：{minimum_separation*1000:.1f} mm（阈值 35 mm）；坐标保留至 1 µm。</text>',
-            f'<text x="{panel_x}" y="1018" class="small">注：20 个杯子点表示 20 个独立初始场景，不是同时放置 20 个杯子。</text>',
-            '<text x="90" y="1065" class="small">几何来源：scene.xml、target_landing_tolerance_ring.obj、rgbd_task_points.yaml 与 light_cup_wall_pick/v1/mujoco.yaml。</text>',
         ]
+    )
+    if failures:
+        for index, (point, outcome) in enumerate(failures):
+            failure_label = FAILURE_STAGE_ZH.get(outcome.failure_stage, outcome.failure_stage)
+            elements.append(
+                f'<text x="{panel_x}" y="{946 + index * 24}" class="small" '
+                f'style="fill:#b91c1c;font-weight:700">{esc(point.id)} ×  {esc(failure_label)}</text>'
+            )
+    else:
+        elements.extend(
+            [
+                f'<text x="{panel_x}" y="946" class="small">桌面：{table_width_mm:.0f} × {table_depth_mm:.0f} mm；杯半径：{geometry.cup_radius_m*1000:.0f} mm；底座：{base_width_mm:.0f} × {base_depth_mm:.0f} mm。</text>',
+                f'<text x="{panel_x}" y="970" class="small">生成范围：X [{sample_xmin:.2f}, {sample_xmax:.2f}] m，Y [{sample_ymin:.2f}, {sample_ymax:.2f}] m；近/中/远 × 左/中/右分层。</text>',
+                f'<text x="{panel_x}" y="994" class="small">点间最小距离：{minimum_separation*1000:.1f} mm（阈值 35 mm）；坐标保留至 1 µm。</text>',
+                f'<text x="{panel_x}" y="1018" class="small">注：20 个杯子点表示 20 个独立初始场景，不是同时放置 20 个杯子。</text>',
+            ]
+        )
+    elements.append(
+        '<text x="90" y="1065" class="small">几何来源：scene.xml、target_landing_tolerance_ring.obj、rgbd_task_points.yaml 与 light_cup_wall_pick/v1/mujoco.yaml。</text>'
     )
     elements.append("</svg>")
     return "\n".join(elements) + "\n"
@@ -588,6 +741,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-root", type=Path, default=default_root)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument(
+        "--points-yaml",
+        type=Path,
+        help="render an existing 20-point schema-v1 manifest instead of generating points",
+    )
+    parser.add_argument(
+        "--results-tsv",
+        type=Path,
+        help="annotate outcomes from a matching per-scene TSV",
+    )
     parser.add_argument("--png", action="store_true", help="also render a 1600x1100 PNG")
     return parser.parse_args(argv)
 
@@ -599,15 +762,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     geometry = load_geometry(repository_root)
-    anchors = load_anchors(repository_root)
-    points = generate_positions(anchors, geometry, seed=args.seed)
-    minimum_separation = validate(points, geometry)
+    if args.points_yaml:
+        points = load_points_manifest(args.points_yaml.resolve())
+        minimum_separation = validate(
+            points,
+            geometry,
+            required_minimum_separation_m=0.0,
+        )
+        manifest_note = f"冻结清单：{args.points_yaml.name}"
+    else:
+        anchors = load_anchors(repository_root)
+        points = generate_positions(anchors, geometry, seed=args.seed)
+        minimum_separation = validate(points, geometry)
+        manifest_note = None
+    outcomes = (
+        load_outcomes(args.results_tsv.resolve(), points)
+        if args.results_tsv
+        else {}
+    )
 
     svg_path = output_dir / "so101-position-top-view.svg"
     csv_path = output_dir / "so101-position-manifest.csv"
     yaml_path = output_dir / "so101-position-manifest.yaml"
     svg_path.write_text(
-        svg_figure(points, geometry, minimum_separation, seed=args.seed),
+        svg_figure(
+            points,
+            geometry,
+            minimum_separation,
+            seed=args.seed,
+            outcomes=outcomes,
+            manifest_note=manifest_note,
+        ),
         encoding="utf-8",
     )
     write_csv(csv_path, points)
@@ -623,6 +808,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"POINTS={len(points)}")
     print(f"ANCHORS={sum(point.source == 'existing' for point in points)}")
     print(f"GENERATED={sum(point.source == 'generated' for point in points)}")
+    print(f"FAILURES={sum(not outcome.success for outcome in outcomes.values())}")
     print(f"MIN_SEPARATION_M={minimum_separation:.9f}")
     print(f"SVG={svg_path}")
     print(f"CSV={csv_path}")
