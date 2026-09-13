@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-127
-next_experiment: EXP-140
+latest_checkpoint: CP-128
+next_experiment: EXP-141
 ```
 
 Frozen provenance:
@@ -10397,7 +10397,14 @@ next_command: Commit CP-127 after mandatory hashes, then rebuild the immutable i
 
 ```yaml
 experiment_id: EXP-140
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:35:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:40:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:45:00+08:00
 prior_experiment: EXP-139
 hypothesis: A source-hash-bound rebuild from commit 9a76cb91f will yield an immutable image with both frozen model smokes QUALIFIED and no cleanup residue.
 single_variable: Replace only the image source layer with the final corrective commit; preserve Dockerfile, lock, models, smoke input, thresholds and GPU policy.
@@ -10408,5 +10415,63 @@ invalid_criteria: Wrong source commit, changed input/model/config, pre-existing 
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain all build/smoke/cleanup evidence; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_127
-next_experiment: EXP-140
+observed:
+  - The final source image rebuilt in 12.70 s as sha256:3175421eacb5e9102bd1cf576dc29ad07d27dc815017559f5ebadaf1f72e27a1. Host and in-image source SHA256 agree at 9dc053cf47df9c0690991e7f075390d2f7854b7e87b284f5e0c311f7c7ed5e73.
+  - Two initial smoke invocations were INVALID before container startup: one omitted the required existing root and one pre-populated the exclusive destination. They are retained and not counted. The corrected fresh 140c root preserved the same image, input and models.
+  - The corrected smoke returned QUALIFIED with executed=true, CUDA and one candidate for both frozen YOLO and Grounded-SAM hashes. Cleanup readback was empty for related containers, processes and GPU compute.
+conclusion: VALID; immutable image and both model paths are qualified for the active-goal heartbeat fault.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-pre-build-containers.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-image-build.log sha256=6eca94e34e38729c2671d9e3887e2d5672450e902674975ae2cb8e1292a139a2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-image-build.time sha256=3adf7c01aa63e5fb7e7a45534798227c8d19e54aea84ea8816b28d786de13332
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-image-build.json sha256=099940003d0472c70406c0f9e9e57d0d5a8ab7e79261e2ab2bfcc036588a7292
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-model-smoke3.log sha256=3f2cd24b21b48858bcf9c0146a593a3726c331eded29d0e0b7e4d7b8ccd5cbdf
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-model-smoke3.time sha256=64f3fd68a684834b3c911eb41d729c5aae513993455c67d2676121a847793cbe
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-smoke-admission3.json sha256=3d33bcbfec6888e19c00660538955946404ded8867cbfcfe8442d6cca7a7145f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-model-smoke-summary.json sha256=ee86ca3f72344210e675dd04b8df972dd2b296dd34f6e2a00bd10a5dece5c919
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp140-cleanup-audit.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-140c-smoke/ipc/.model-ready.json sha256=5863d6a2af29d3fa66f5e4507f3a2d921d5ab58e20659eeaffc691110a09f17f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-140c-smoke/ipc/smoke.json sha256=d2a5f8c1264b260fe99b1fdc4ad8a203a226d6e430854f93770ed2a179c61451
+retained_roots:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-140b-smoke
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-140c-smoke
+decision: RUN_IDENTIFIED_ACTIVE_GOAL_FAULT
+next_experiment: EXP-141
+```
+
+```yaml
+checkpoint_id: CP-128
+last_valid_experiment: EXP-140
+current_hypothesis: The final qualified runtime will expose exact internal revocation phases and cancel the controller goal active at watchdog expiry, while a continuous ROS observer captures fresh post-stop evidence before teardown.
+working_tree_status: Only EXP-140 result and EXP-141 preregistration are uncommitted; source/install/image are provenance-bound.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Final immutable image sha256:3175421eacb5e9102bd1cf576dc29ad07d27dc815017559f5ebadaf1f72e27a1 executes both frozen model paths on CUDA.
+open_risks:
+  - Live correlation of Coordinator SIGSTOP, internal watchdog events, action goal IDs and post-stop state remains required.
+next_command: Commit CP-128 after mandatory hashes, then run one isolated N=1/K=1 execute fault with continuous action/joint/TF/physical/scene/visual observation.
+```
+
+## EXP-141 — Exact active-goal heartbeat cancellation and post-stop evidence
+
+```yaml
+experiment_id: EXP-141
+status: PLANNED
+prior_experiment: EXP-140
+hypothesis: Stopping the exact Coordinator when the first arm goal is active will cause the five-second watchdog to revoke the exact lease, cancel the then-active controller goal, admit no later goal, and leave a fresh stable detached-world scene before teardown.
+single_variable: Send SIGSTOP only to the exact Coordinator after an arm goal becomes EXECUTING; preserve production timeout, image, models, point, motion policy, thresholds and Broker fencing.
+lifecycle: ONE_WORKER_ONE_BROKER_SIMULATION_FAULT
+success_criteria: Exact process identity and state-T readback; internal exact-lease revoke/request/controller-result timestamps; external goal UUID status history proving an active goal immediately before cancellation and its terminal state; no later accepted goal; fresh post-stop joint/TF/MuJoCo/Planning Scene/RGB evidence before teardown; conservative attempt result and exact cleanup.
+failure_criteria: No controller cancellation, a post-revocation successor goal, motion after stop window, unsafe physical/scene divergence, non-conservative promotion or cleanup residue.
+invalid_criteria: Missed active-goal window, wrong process identity, missing timestamp/UUID correlation, observer attaches late, evidence only after teardown or unrelated ownership contamination.
+batch_id: parallel-heartbeat-fault-20260913-v10-astra2
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-141
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+mode: execute; simulation only
+retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_128
+next_experiment: EXP-141
 ```
