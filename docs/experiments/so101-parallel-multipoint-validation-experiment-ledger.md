@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: cb8cb52778db93fd52f34c62c280ae8700853b28
+current_commit: e359599db8c2ee7f089a8c103b18b295fb9d540b
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-099
-next_experiment: EXP-113
+latest_checkpoint: CP-100
+next_experiment: EXP-114
 ```
 
 Frozen provenance:
@@ -8576,12 +8576,14 @@ next_command: Commit EXP-112/CP-099, preregister EXP-113 with a fresh batch/root
 
 ```yaml
 experiment_id: EXP-113
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:15:32+08:00
   - status: RUNNING
     at: 2026-09-13T11:15:32+08:00
+  - status: INVALID
+    at: 2026-09-13T11:17:12+08:00
 prior_experiment: EXP-112
 hypothesis: With direct consumer identity and concurrent controller cancellation, exact Coordinator suspension during an active dynamic controller goal will revoke the lease, stop the consumer and cancel the controller within the heartbeat bound before Coordinator resume.
 single_variable: Replace only the F1 runtime/image qualified by EXP-112; preserve the EXP-110 task_start point, N=1/K=1, complete overlay, exact observer predicate, Coordinator SIGSTOP/SIGCONT and evidence criteria.
@@ -8608,6 +8610,63 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
 retention_rule: Retain all command, observer, controller, physical, visual, process, result and cleanup evidence; delete nothing without explicit user authorization.
+observed:
+  - Production resource admission rejected ROS_DOMAIN_IN_USE: 181 in 0.53 s before batch-root creation. No Broker, Worker, MuJoCo, controller, model, GPU or physical action started.
+  - Exact process inspection identified PID 2342902 as the orphaned ROS 2 daemon for domain 181 created during EXP-110. ROS_DOMAIN_ID=181 ros2 daemon stop terminated that exact process, and readback found no daemon in the 181-183 pool.
+conclusion: INVALID pre-admission environment collision; the safety gate behaved correctly and no F1 evidence was collected.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-113.log sha256=01df72b57542ae9f155f5ae2a4fb6ee64d3c874cd1ee46f07f9275cc66e8c38a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-113.time sha256=344606806699741bade58b6e97d99ea7f2ae2ad42ee999f7fd068036ec8750b4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-113.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/ros-domain-181-cleanup-113.log sha256=1f5c226dd0f1d720f7dec91a8cd7384f52e9cd76cfdeb1fb44286b406b540ab7
+decision: KEEP_INVALID
+next_experiment: EXP-114
+```
+
+```yaml
+checkpoint_id: CP-100
+last_valid_experiment: EXP-112
+current_hypothesis: With the stale domain-181 daemon removed, the unchanged EXP-113 fault sequence can pass production resource admission and exercise the fixed live F1 boundary.
+working_tree_status: EXP-113 invalid result and EXP-114 preregistration are ledger-only; source/install/image remain unchanged and clean.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Production admission correctly fails closed on a live ROS daemon and creates no batch root.
+  - The exact stale task-owned daemon was stopped through ros2 daemon stop; domain pool 181-183 is now clear.
+open_risks:
+  - F1 post-fix live cancellation remains unexercised.
+next_command: Commit CP-100 and repeat the unchanged live fault as EXP-114 using a fresh batch ID/root.
+```
+
+## EXP-114 — Clean-pool post-fix execute heartbeat fault
+
+```yaml
+experiment_id: EXP-114
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:17:12+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:17:12+08:00
+prior_experiment: EXP-113
+hypothesis: With the 181-183 domain pool clear, the post-fix runtime will enter active execution and independently revoke, stop and cancel the in-flight lease within the heartbeat bound while Coordinator remains stopped.
+single_variable: Remove only the verified stale domain-181 daemon; all source, image, point, N=1/K=1, complete overlay, exact observer predicate, signals and evidence criteria remain EXP-113-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v7-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-114
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate: Exact direct dynamic module exists, accepted-goal count exceeds terminal count, and exact Coordinator PID/start-time/cmdline match.
+success_criteria: Exact Coordinator state T during the active goal; after heartbeat bound and before resume the dynamic consumer is absent, no active controller goal or later accepted goal exists, complete fresh visual/numeric/MoveIt/process evidence is captured, resumed adjudication is conservative, and residual cleanup is exact.
+failure_criteria: Cancellation requires resume or exceeds bound; later revoked goal, active controller status, unsafe promotion, incomplete evidence or residue.
+invalid_criteria: Admission failure, pre-existing root, missed active window, observer timeout, identity mismatch or evidence tool failure before fault.
+provenance:
+  source_commit: e359599db8c2ee7f089a8c103b18b295fb9d540b
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-113
+next_experiment: EXP-114
 ```
