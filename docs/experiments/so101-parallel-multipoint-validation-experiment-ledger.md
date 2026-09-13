@@ -7596,3 +7596,85 @@ open_risks:
   - Findings 5 through 8 remain pending.
 next_command: Commit the scoped F4 producer, parser, tests, and ledger, then start EXP-100 with a self-consistent PASSED seal that omits verifier-owned stage evidence.
 ```
+
+## EXP-100 — Verifier-owned sealed evidence contract
+
+```yaml
+experiment_id: EXP-100
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T09:50:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T09:50:00+08:00
+  - status: VALID
+    at: 2026-09-13T09:57:21+08:00
+prior_experiment: EXP-099
+hypothesis: A producer can publish a self-consistent PASSED seal with required=[attempt-result.json] while omitting reset-bound initial, pose, numeric, dynamic execution, controller, Planning Scene, and terminal visual evidence, because verification trusts the producer-owned required list.
+prediction: A PASSED seal with a complete inventory but one verifier-required artifact omitted, or with wrong POSE/dynamic lease identity, will be accepted by the current verifier when the producer declares only the result file.
+single_variable: Add deterministic artifact omission and identity-binding regression tests only; do not change production code in the RED phase.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - source commit d91298422a779ca4d27ea07eea87ed5cc730fcaf
+  - EXP-095 attempt manifest was read directly and confirmed to declare only attempt-result.json while retaining richer evidence; its bytes remain immutable
+  - no live ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process
+success_criteria:
+  - PASSED execute and VALIDATION_PASSED plan-only seals use verifier-owned requirements that producer declarations cannot weaken
+  - stage-complete evidence binds exact attempt or validation identity, reset/session, POSE, numeric TF/physical, planning or dynamic controller/physical/Planning Scene content, and initial/terminal visual artifacts
+  - producer-declared supersets remain allowed; incomplete and wrong-identity seals fail closed
+failure_criteria:
+  - current verification already enforces the complete independent contract
+invalid_criteria:
+  - import/collection failure, wrong overlay, reused scratch, or a fixture incompatible with the directly observed EXP-095 schema
+provenance:
+  source_commit: d91298422a779ca4d27ea07eea87ed5cc730fcaf
+  historical_manifest_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-20-f91
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+commands:
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5r-sAIUZ2hs/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <11 focused verifier-owned omission/identity/superset cases> -q
+    exit_code: 1
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5g-X2u8w8Q4/tmp /usr/bin/python3 -m pytest -p no:cacheprovider <12 focused execute and plan-only verifier-owned evidence cases> -q
+    exit_code: 0
+  - command: TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5a-ujOtAZmX/tmp /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_parallel_batch_artifacts.py src/so101_demo_py/test/test_parallel_batch_cli.py -q
+    exit_code: 0
+observed:
+  - The valid RED collected 11 cases. All eight PASSED omission cases and both wrong-identity cases were accepted by the old verifier; only the complete producer-superset control passed. Wall time was 0.66 s.
+  - Focused GREEN passed all 12 execute/plan-only cases in 0.26 s pytest / 0.58 s wall.
+  - Final adjacent artifact and production CLI coverage passed 163 tests in 32.18 s pytest / 32.47 s wall.
+  - An earlier collection-only attempt lacked the worktree overlay and exited 2 before importing so101_demo; it is INVALID and retained only as a deletion candidate.
+inferred:
+  - NONE
+conclusion: CONFIRMED_AND_FIXED; sealing and readback now independently compute a cumulative evidence stage and verifier-owned required set. PASSED execute requires reset-bound initial/inference images, exact POSE identity, depth/TF/session/reset physical evidence, a terminal visual, and an exact dynamic lease receipt with planning, controller/joint, MuJoCo sample, outcome, and detached Planning Scene evidence. Plan-only PASS has a distinct persisted planning-receipt contract; dry-run remains scheduler-only. Producer declarations may add requirements but cannot remove verifier requirements. Historical EXP-095 bytes were not rewritten and are not claimed as post-fix qualification.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f5r-sAIUZ2hs.stdout sha256=170dd7d6deae2426fbc250e880ebc4ce9cae524f05205a965a30b8de7a65a019
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f5g-X2u8w8Q4.stdout sha256=ccc03f184f820f021127453e09e83d55e026e6b17aee2b49425353b0adb000c2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-remediate-f5a-ujOtAZmX.stdout sha256=e09dcd44d901c37b2e20c1a0d198077ac6b9a68fd6db167f17cb9ee4cc184a35
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5r-I65KRMWM
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5r-sAIUZ2hs
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5g-Xl5OmcEt
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5a-gYDlJly5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5a-U1L6uSv5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5g-X2u8w8Q4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f5a-ujOtAZmX
+decision: KEEP
+next_experiment: EXP-101
+```
+
+```yaml
+checkpoint_id: CP-087
+last_valid_experiment: EXP-100
+current_hypothesis: Astra finding 6 may make Coordinator crash recovery unreachable from the production CLI because duplicate-root rejection and fresh allocation occur before journal replay.
+working_tree_status: F5 implementation, tests, and ledger disposition are ready for one scoped commit; ignored SDD progress remains separately synchronized.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; EXP-100 started no ROS, MuJoCo, MoveIt, Broker, Worker, container, or GPU process.
+confirmed_conclusions:
+  - Finding 5 is confirmed and fixed with verifier-owned run-mode/status/stage requirements and exact evidence identity/content binding.
+  - Historical EXP-095 evidence remains byte-for-byte immutable and cannot silently acquire the hardened contract.
+disproven_routes:
+  - Treating a producer-declared required list and a self-consistent tree hash as sufficient evidence for PASSED.
+open_risks:
+  - Findings 1 through 5 retain pending final rebuilt-overlay and live gates.
+  - Findings 6 through 8 remain pending.
+next_command: Commit the scoped F5 artifact contract, CLI planning receipt, tests, and ledger, then start EXP-101 by verifying the production crash-resume design and CLI reachability.
+```

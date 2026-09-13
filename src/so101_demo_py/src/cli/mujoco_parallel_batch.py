@@ -592,6 +592,43 @@ class _ArtifactResults:
                 workspace = self._workspaces[self._key(lease)]
             except KeyError as error:
                 raise CliError("WORKSPACE_NOT_RESERVED") from error
+        if (
+            self.mode is RunMode.PLAN_ONLY
+            and decision.status is ValidationStatus.VALIDATION_PASSED
+        ):
+            segments = getattr(decision, "segment_receipts", None)
+            if not isinstance(segments, tuple) or not segments:
+                raise CliError("PLANNING_EVIDENCE_MISSING")
+            workspace.write_json(
+                "planning/segment-receipts.json",
+                {
+                    "schema_version": 1,
+                    "segment_count": len(segments),
+                    "segments": [
+                        {
+                            "state": getattr(
+                                getattr(segment, "state", None),
+                                "value",
+                                str(getattr(segment, "state", "")),
+                            ),
+                            "start_state_present": getattr(
+                                segment, "start_state", None
+                            ) is not None,
+                            "terminal_state_present": getattr(
+                                segment, "terminal_state", None
+                            ) is not None,
+                            "plan_present": getattr(segment, "plan", None) is not None,
+                            "before_scene_present": getattr(
+                                segment, "before_scene", None
+                            ) is not None,
+                            "after_scene_present": getattr(
+                                segment, "after_scene", None
+                            ) is not None,
+                        }
+                        for segment in segments
+                    ],
+                },
+            )
         name = "attempt-result.json" if self.mode is RunMode.EXECUTE else "validation-result.json"
         workspace.write_json(
             name,

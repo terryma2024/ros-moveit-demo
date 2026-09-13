@@ -1427,17 +1427,17 @@ def test_artifact_workspace_is_reserved_before_runtime_files_and_reused_for_seal
         "simulation_time_s": 31.25,
     }
     (working / "initial-rgb.png").write_bytes(b"png")
-    (working / "perception").mkdir()
-    (working / "perception/rgb.npy").write_bytes(b"npy")
+    (working / "perception/input").mkdir(parents=True)
+    (working / "perception/input/rgb.npy").write_bytes(b"npy")
     decision = SimpleNamespace(
-        status=ValidationStatus.VALIDATION_PASSED,
-        reason="OK",
+        status=ValidationStatus.VALIDATION_FAILED,
+        reason="MODEL_REJECTED",
         physical_action_proven_absent=True,
     )
     sealed = Path(results.seal_validation(lease, decision))
     assert sealed == working.parent / "sealed"
     assert (sealed / "initial-rgb.png").read_bytes() == b"png"
-    assert (sealed / "perception/rgb.npy").read_bytes() == b"npy"
+    assert (sealed / "perception/input/rgb.npy").read_bytes() == b"npy"
 
 
 def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_path):

@@ -32,6 +32,18 @@ _ATTEMPT_MANIFEST = 'attempt_result_manifest.json'
 _VALIDATION_MANIFEST = 'validation_result_manifest.json'
 _WORKSPACE_IDENTITY = 'workspace_identity.json'
 _RESERVED = {_ATTEMPT_MANIFEST, _VALIDATION_MANIFEST, _WORKSPACE_IDENTITY}
+_BASE_EVIDENCE = frozenset({_WORKSPACE_IDENTITY})
+_INITIAL_EVIDENCE = frozenset({'initial-rgb.png', 'perception/input/rgb.npy'})
+_POSE_EVIDENCE = frozenset({
+    'pose_accepted.json', 'numeric/depth.json', 'numeric/tf.json',
+    'numeric/physical.json',
+})
+_EXECUTION_EVIDENCE = frozenset({
+    'dynamic/dynamic-execute-manifest.json', 'terminal-rgb.png',
+})
+_PLANNING_EVIDENCE = frozenset({
+    'planning/segment-receipts.json', 'terminal-rgb.png',
+})
 
 
 def _fault(fault_hook, boundary, phase):
@@ -164,6 +176,220 @@ def _status(root, identity):
         raise ArtifactError('INVALID_RESULT_STATUS') from error
 
 
+def _expected_request_identity(identity):
+    expected = asdict(identity)
+    if type(identity) is AttemptIdentity:
+        expected.update(execution_kind='attempt', validation_id=None)
+    else:
+        expected.update(
+            execution_kind='validation', attempt_id=None,
+        )
+    return expected
+
+
+def _require_nonempty_file(root, relative_path):
+    try:
+        path = _safe_path(root / relative_path)
+        if not stat.S_ISREG(path.stat().st_mode) or path.stat().st_size <= 0:
+            raise ArtifactError(f'INVALID_EVIDENCE: {relative_path}')
+    except OSError as error:
+        raise ArtifactError(f'INVALID_EVIDENCE: {relative_path}') from error
+
+
+def _verify_pose_and_numeric(root, identity, metadata):
+    pose = _read_json(root / 'pose_accepted.json')
+    request = pose.get('request')
+    expected = _expected_request_identity(identity)
+    if (
+        pose.get('type') != 'POSE_ACCEPTED'
+        or not isinstance(request, dict)
+        or any(request.get(name) != value for name, value in expected.items())
+        or request.get('reset_epoch') != metadata['reset_epoch']
+    ):
+        raise ArtifactError('POSE_EVIDENCE_IDENTITY_MISMATCH')
+    depth = _read_json(root / 'numeric/depth.json')
+    transform = _read_json(root / 'numeric/tf.json')
+    physical = _read_json(root / 'numeric/physical.json')
+    source = metadata['source_stamp']
+    session = source.get('simulation_session_id')
+    reset = metadata['reset_epoch']
+    reset_number = int(reset[6:]) if reset.startswith('reset-') and reset[6:].isdigit() else None
+    if (
+        isinstance(depth.get('source_stamp_ns'), bool)
+        or not isinstance(depth.get('source_stamp_ns'), (int, float))
+        or depth['source_stamp_ns'] <= 0
+        or not isinstance(depth.get('sha256'), str)
+        or len(depth['sha256']) != 64
+        or any(character not in '0123456789abcdef' for character in depth['sha256'])
+        or type(depth.get('byte_count')) is not int
+        or depth['byte_count'] <= 0
+        or not isinstance(transform.get('source_frame'), str)
+        or not transform['source_frame']
+        or not isinstance(transform.get('target_frame'), str)
+        or not transform['target_frame']
+        or not isinstance(transform.get('center_world_xyz'), list)
+        or len(transform['center_world_xyz']) != 3
+        or isinstance(transform.get('source_stamp_s'), bool)
+        or not isinstance(transform.get('source_stamp_s'), (int, float))
+        or transform['source_stamp_s'] <= 0
+        or not isinstance(physical.get('object_state'), dict)
+        or type(physical.get('simulation_step')) is not int
+        or physical['simulation_step'] <= 0
+        or type(physical.get('publisher_sequence')) is not int
+        or physical['publisher_sequence'] <= 0
+        or physical.get('simulation_session_id') != session
+        or physical.get('reset_epoch') != reset_number
+    ):
+        raise ArtifactError('NUMERIC_EVIDENCE_IDENTITY_MISMATCH')
+
+
+def _verify_dynamic(root, identity, metadata, status):
+    dynamic = _read_json(root / 'dynamic/dynamic-execute-manifest.json')
+    source = metadata['source_stamp']
+    reset = metadata['reset_epoch']
+    reset_number = int(reset[6:]) if reset.startswith('reset-') and reset[6:].isdigit() else None
+    trace = dynamic.get('state_trace')
+    events = dynamic.get('state_events')
+    planning = dynamic.get('planning_attempts')
+    samples = dynamic.get('final_samples')
+    scene = dynamic.get('planning_scene_readback')
+    expected_terminal = 'DONE' if status == AttemptStatus.PASSED.value else 'ERROR'
+    terminal_valid = (
+        dynamic.get('failure') is None
+        and type(dynamic.get('release_marker_sequence')) is int
+        and dynamic['release_marker_sequence'] > 0
+        and isinstance(planning, list)
+        and any(
+            isinstance(item, dict) and item.get('accepted') is True
+            for item in planning
+        )
+        if expected_terminal == 'DONE'
+        else isinstance(dynamic.get('failure'), str) and bool(dynamic['failure'])
+    )
+    if (
+        dynamic.get('parallel_lease_identity') != asdict(identity)
+        or dynamic.get('simulation_session_id') != source.get('simulation_session_id')
+        or dynamic.get('expected_reset_epoch') != reset_number
+        or dynamic.get('status') != expected_terminal
+        or dynamic.get('current_state') != expected_terminal
+        or not terminal_valid
+        or not isinstance(trace, list)
+        or not trace
+        or trace[-1] != expected_terminal
+        or not isinstance(events, list)
+        or not any(
+            isinstance(event, dict)
+            and isinstance(event.get('terminal_joint_positions_rad'), list)
+            and len(event['terminal_joint_positions_rad']) == 5
+            and type(event.get('terminal_joint_state_source_stamp_ns')) is int
+            and event['terminal_joint_state_source_stamp_ns'] > 0
+            and isinstance(event.get('execution_reconciliations'), list)
+            for event in events
+        )
+        or not isinstance(planning, list)
+        or not planning
+        or not all(isinstance(item, dict) for item in planning)
+        or not isinstance(samples, list)
+        or not samples
+        or not all(
+            isinstance(item, dict)
+            and item.get('reset_epoch') == reset_number
+            and type(item.get('simulation_step')) is int
+            and item['simulation_step'] > 0
+            and type(item.get('publisher_sequence')) is int
+            and item['publisher_sequence'] > 0
+            and type(item.get('table_contact')) is bool
+            for item in samples
+        )
+        or not isinstance(scene, dict)
+        or scene.get('attached_object_ids') != []
+        or not isinstance(scene.get('world_primitive_counts'), dict)
+    ):
+        raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH')
+
+
+def _verify_planning(root):
+    planning = _read_json(root / 'planning/segment-receipts.json')
+    segments = planning.get('segments')
+    if (
+        type(planning.get('schema_version')) is not int
+        or planning['schema_version'] != 1
+        or type(planning.get('segment_count')) is not int
+        or planning['segment_count'] <= 0
+        or not isinstance(segments, list)
+        or len(segments) != planning['segment_count']
+        or not all(
+            isinstance(item, dict)
+            and isinstance(item.get('state'), str)
+            and item['state']
+            and item.get('start_state_present') is True
+            and item.get('terminal_state_present') is True
+            and item.get('plan_present') is True
+            and item.get('before_scene_present') is True
+            and item.get('after_scene_present') is True
+            for item in segments
+        )
+    ):
+        raise ArtifactError('PLANNING_EVIDENCE_INVALID')
+
+
+def _evidence_contract(root, identity, mode, status, names, metadata):
+    """Compute requirements independently of the producer-owned required list."""
+    result_name = _layout(identity)[3]
+    required = set(_BASE_EVIDENCE) | {result_name}
+    if mode is RunMode.DRY_RUN:
+        stage = 'SCHEDULER_ONLY'
+        if status != ValidationStatus.VALIDATION_PASSED.value:
+            stage = 'SCHEDULER_TERMINAL'
+    else:
+        planning_markers = _PLANNING_EVIDENCE & names
+        execution_markers = _EXECUTION_EVIDENCE & names
+        pose_markers = _POSE_EVIDENCE & names
+        initial_markers = _INITIAL_EVIDENCE & names
+        if mode is RunMode.EXECUTE and status == AttemptStatus.PASSED.value:
+            stage = 'EXECUTION_COMPLETE'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE | _EXECUTION_EVIDENCE
+        elif mode is RunMode.EXECUTE and 'dynamic/dynamic-execute-manifest.json' in names:
+            stage = 'EXECUTION_RECEIPT_PRESENT'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE | _EXECUTION_EVIDENCE
+        elif mode is RunMode.EXECUTE and execution_markers:
+            stage = 'EXECUTION_TERMINAL_CAPTURED'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE | {'terminal-rgb.png'}
+        elif (
+            mode is RunMode.PLAN_ONLY
+            and status == ValidationStatus.VALIDATION_PASSED.value
+        ):
+            stage = 'PLANNING_COMPLETE'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE | _PLANNING_EVIDENCE
+        elif mode is RunMode.PLAN_ONLY and planning_markers:
+            stage = 'PLANNING_RECEIPT_PRESENT'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE | _PLANNING_EVIDENCE
+        elif pose_markers:
+            stage = 'POSE_ACCEPTED'
+            required |= _INITIAL_EVIDENCE | _POSE_EVIDENCE
+        elif initial_markers:
+            stage = 'INITIAL_GATE_COMPLETE'
+            required |= _INITIAL_EVIDENCE
+        else:
+            stage = 'RESET_COMPLETE'
+    missing = sorted(required - names)
+    if missing:
+        raise ArtifactError(f'MISSING_VERIFIER_REQUIRED_EVIDENCE: {missing[0]}')
+    for name in _INITIAL_EVIDENCE | ({'terminal-rgb.png'} if 'terminal-rgb.png' in required else set()):
+        if name in required:
+            _require_nonempty_file(root, name)
+    if _POSE_EVIDENCE <= required:
+        _verify_pose_and_numeric(root, identity, metadata)
+    if stage == 'EXECUTION_COMPLETE' or (
+        stage == 'EXECUTION_RECEIPT_PRESENT'
+        and status == AttemptStatus.FAILED.value
+    ):
+        _verify_dynamic(root, identity, metadata, status)
+    elif stage in {'PLANNING_COMPLETE', 'PLANNING_RECEIPT_PRESENT'}:
+        _verify_planning(root)
+    return stage, required
+
+
 @dataclass(frozen=True)
 class _Sealed:
     path: Path
@@ -232,8 +458,17 @@ def _verify(path, identity):
             _relative(name)
             if name not in names:
                 raise ArtifactError('MISSING_REQUIRED_ARTIFACT')
-        if manifest['status'] != _status(path, identity):
+        status = _status(path, identity)
+        if manifest['status'] != status:
             raise ArtifactError('RESULT_STATUS_MISMATCH')
+        stage, verifier_required = _evidence_contract(
+            path, identity, mode, status, names, metadata
+        )
+        if (
+            manifest.get('evidence_stage') != stage
+            or not verifier_required.issubset(required)
+        ):
+            raise ArtifactError('VERIFIER_REQUIRED_EVIDENCE_MISMATCH')
     except (KeyError, TypeError, ValueError, OSError) as error:
         raise ArtifactError(f'INVALID_MANIFEST: {error}') from error
     cls = SealedAttempt if type(identity) is AttemptIdentity else SealedValidation
@@ -330,15 +565,16 @@ def _seal(workspace, required, fault_hook):
     root, identity = workspace.path, workspace.identity
     _fault(fault_hook, 'WORKING_TREE_FSYNC', 'before')
     _, _, manifest_name, result_name = _layout(identity)
-    required = sorted({*required, result_name})
-    for name in required:
+    producer_required = sorted({*required, result_name})
+    for name in producer_required:
         _relative(name)
     sealed = _safe_path(root.parent / 'sealed')
     if sealed.exists():
         result = _verify(sealed, identity)
         if not root.exists():
             manifest = _read_json(sealed / manifest_name)
-            if not set(required).issubset(item['relative_path'] for item in manifest['files']):
+            if not set(producer_required).issubset(
+                    item['relative_path'] for item in manifest['files']):
                 raise ArtifactError('MISSING_REQUIRED_ARTIFACT')
             fsync_directory(root.parent)
             return result
@@ -348,12 +584,18 @@ def _seal(workspace, required, fault_hook):
     files, directories = _inventory(root, manifest_name,
                                     metadata['producer_pid'], metadata['producer_pgid'])
     names = {entry['relative_path'] for entry in files}
-    if not set(required).issubset(names):
+    if not set(producer_required).issubset(names):
         raise ArtifactError('MISSING_REQUIRED_ARTIFACT')
+    status = _status(root, identity)
+    evidence_stage, verifier_required = _evidence_contract(
+        root, identity, RunMode(metadata['run_mode']), status, names, metadata
+    )
+    required = sorted(set(producer_required) | verifier_required)
     manifest = {**metadata, 'schema_version': 1, 'required': required,
+                'evidence_stage': evidence_stage,
                 'files': files, 'directories': directories,
                 'tree_sha256': _tree_hash(files, directories),
-                'status': _status(root, identity)}
+                'status': status}
     manifest_path = root / manifest_name
     if manifest_path.exists():
         if _read_json(manifest_path) != manifest:
