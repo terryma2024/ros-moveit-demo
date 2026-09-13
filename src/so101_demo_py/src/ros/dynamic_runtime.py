@@ -389,6 +389,22 @@ def run_dynamic_execute(
     primary_failure = None
     primary_message = None
     secondary_failures: list[tuple[str, BaseException]] = []
+    lease_names = (
+        "batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+        "point_id", "attempt_id", "lease_generation",
+    )
+    lease_values = {name: getattr(options, name, None) for name in lease_names}
+    if any(value is not None for value in lease_values.values()):
+        if any(value is None for value in lease_values.values()):
+            emit_failure("DYNAMIC_PARALLEL_LEASE_IDENTITY_INCOMPLETE")
+            print(
+                "status=ERROR failure=DYNAMIC_PARALLEL_LEASE_IDENTITY_INCOMPLETE",
+                file=status_stream,
+            )
+            return 1
+        parallel_lease_identity = lease_values
+    else:
+        parallel_lease_identity = None
     try:
         runtime.rclpy.init()
         initialized_here = True
@@ -473,6 +489,7 @@ def run_dynamic_execute(
             policy_sha256=loaded.sha256,
             workflow_id=getattr(options, "workflow_id", None),
             request_id=getattr(options, "request_id", None),
+            parallel_lease_identity=parallel_lease_identity,
         )
         actions = profile_actions(
             runtime.build_actions(execution, targets),

@@ -1605,6 +1605,17 @@ def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: 
     command = runtime.consumer_argv("reset-17", _lease())
     index = command.index("--expected-reset-epoch")
     assert command[index + 1] == "17"
+    lease = _lease()
+    for flag, expected in {
+        "--batch-id": lease.batch_id,
+        "--coordinator-epoch": str(lease.coordinator_epoch),
+        "--worker-id": lease.worker_id,
+        "--worker-generation": str(lease.worker_generation),
+        "--point-id": lease.point_id,
+        "--attempt-id": lease.attempt_id,
+        "--lease-generation": str(lease.lease_generation),
+    }.items():
+        assert command[command.index(flag) + 1] == expected
     with pytest.raises(RuntimeError, match="reset epoch"):
         runtime.consumer_argv("not-an-epoch", _lease())
 

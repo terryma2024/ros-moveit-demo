@@ -23,7 +23,7 @@ from ..application.qualification_stack import ros2_command
 from ..core.detection import DetectionCandidate
 from ..core.task_geometry import Pose7
 from ..parallel_batch.broker import BrokerResponse
-from ..parallel_batch.contracts import ModelOutcome, RunMode
+from ..parallel_batch.contracts import AttemptStatus, ModelOutcome, RunMode
 from ..parallel_batch.perception import (
     AdmissionContext,
     LocalizedPose,
@@ -1406,6 +1406,151 @@ class ParallelRosRuntimePorts:
         self._close_pose_publisher()
         return False
 
+    def _dynamic_policy_identity(self):
+        supplied = self.dependencies.get("dynamic_policy_identity")
+        if supplied is not None:
+            path, sha256 = supplied()
+            return str(path), sha256
+        from ament_index_python.packages import get_package_share_directory
+        from ..core.dynamic_pick_policy import load_dynamic_policy_variant
+
+        loaded = load_dynamic_policy_variant(
+            Path(get_package_share_directory("so101_demo_py")), backend="mujoco"
+        )
+        return str(loaded.path), loaded.sha256
+
+    def _dynamic_manifest_outcome(self, manifest, lease, admitted, exit_code):
+        """Verify one immutable terminal consumer document before classification."""
+        descriptor = os.open(manifest, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_uid != os.getuid()
+                or before.st_size <= 0
+                or before.st_size > 8 * 1024 * 1024
+            ):
+                raise ValueError("DYNAMIC_MANIFEST_FILE")
+            payload = os.read(descriptor, before.st_size + 1)
+            after = os.fstat(descriptor)
+            if (
+                len(payload) != before.st_size
+                or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+            ):
+                raise ValueError("DYNAMIC_MANIFEST_CHANGED")
+        finally:
+            os.close(descriptor)
+        document = json.loads(payload)
+        required = {
+            "schema", "parallel_lease_identity", "status", "current_state",
+            "failure", "simulation_session_id", "expected_reset_epoch",
+            "policy_path", "policy_sha256", "state_trace", "transition_count",
+            "state_events", "planning_attempts", "final_samples",
+            "planning_scene_readback", "release_marker_sequence",
+        }
+        if type(document) is not dict or not required.issubset(document):
+            raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
+        if document["schema"] != "so101-dynamic-mujoco-execute-v1":
+            raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
+        expected_identity = {
+            name: getattr(lease, name)
+            for name in (
+                "batch_id", "coordinator_epoch", "worker_id",
+                "worker_generation", "point_id", "attempt_id",
+                "lease_generation",
+            )
+        }
+        if document["parallel_lease_identity"] != expected_identity:
+            raise ValueError("DYNAMIC_MANIFEST_LEASE_IDENTITY")
+        reset_epoch = getattr(admitted, "reset_epoch", None)
+        if (
+            not isinstance(reset_epoch, str)
+            or not reset_epoch.startswith("reset-")
+            or not reset_epoch[6:].isascii()
+            or not reset_epoch[6:].isdecimal()
+            or document["expected_reset_epoch"] != int(reset_epoch[6:])
+            or document["simulation_session_id"] != self.resources.session_id
+        ):
+            raise ValueError("DYNAMIC_MANIFEST_RUNTIME_IDENTITY")
+        policy_path, policy_sha256 = self._dynamic_policy_identity()
+        if (
+            document["policy_path"] != policy_path
+            or document["policy_sha256"] != policy_sha256
+            or re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None
+        ):
+            raise ValueError("DYNAMIC_MANIFEST_POLICY_IDENTITY")
+        trace = document["state_trace"]
+        events = document["state_events"]
+        planning = document["planning_attempts"]
+        samples = document["final_samples"]
+        scene = document["planning_scene_readback"]
+        if (
+            type(trace) is not list
+            or len(trace) < 2
+            or trace[0] != "IDLE"
+            or document["transition_count"] != len(trace) - 1
+            or type(events) is not list
+            or not events
+            or any(type(item) is not dict for item in events)
+            or type(planning) is not list
+            or not planning
+            or any(type(item) is not dict for item in planning)
+            or type(samples) is not list
+            or not samples
+            or any(type(item) is not dict for item in samples)
+            or type(scene) is not dict
+            or type(scene.get("attached_object_ids")) is not list
+            or type(scene.get("world_primitive_counts")) is not dict
+        ):
+            raise ValueError("DYNAMIC_MANIFEST_EVIDENCE")
+        if not any(
+            type(event.get("terminal_joint_positions_rad")) is list
+            and len(event["terminal_joint_positions_rad"]) == 5
+            and type(event.get("terminal_joint_state_source_stamp_ns")) is int
+            and event["terminal_joint_state_source_stamp_ns"] > 0
+            and type(event.get("execution_reconciliations")) is list
+            for event in events
+        ):
+            raise ValueError("DYNAMIC_MANIFEST_CONTROLLER_EVIDENCE")
+        if any(
+            sample.get("reset_epoch") != int(reset_epoch[6:])
+            or type(sample.get("simulation_step")) is not int
+            or sample["simulation_step"] <= 0
+            or type(sample.get("publisher_sequence")) is not int
+            or sample["publisher_sequence"] <= 0
+            or type(sample.get("table_contact")) is not bool
+            for sample in samples
+        ):
+            raise ValueError("DYNAMIC_MANIFEST_PHYSICAL_EVIDENCE")
+        status = document["status"]
+        current = document["current_state"]
+        failure = document["failure"]
+        if status == "DONE":
+            if (
+                exit_code != 0
+                or current != "DONE"
+                or trace[-1] != "DONE"
+                or failure is not None
+                or type(document["release_marker_sequence"]) is not int
+                or document["release_marker_sequence"] <= 0
+                or scene["attached_object_ids"] != []
+                or not any(item.get("accepted") is True for item in planning)
+            ):
+                raise ValueError("DYNAMIC_MANIFEST_DONE")
+            return AttemptStatus.PASSED, "OK"
+        if status == "ERROR":
+            if (
+                exit_code == 0
+                or current != "ERROR"
+                or trace[-1] != "ERROR"
+                or not isinstance(failure, str)
+                or not failure
+            ):
+                raise ValueError("DYNAMIC_MANIFEST_ERROR")
+            return AttemptStatus.FAILED, failure
+        raise ValueError("DYNAMIC_MANIFEST_STATUS")
+
     def execute_result(self, lease, admitted, child):
         call = self.dependencies.get("execute_result")
         if call is not None:
@@ -1425,10 +1570,16 @@ class ParallelRosRuntimePorts:
         )
         from ..parallel_batch.contracts import AttemptStatus
 
-        passed = status == 0 and manifest.is_file()
+        try:
+            outcome, reason = self._dynamic_manifest_outcome(
+                manifest, lease, admitted, status
+            )
+        except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+            outcome = AttemptStatus.INDETERMINATE
+            reason = "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
         decision = RuntimeDecision(
-            AttemptStatus.PASSED if passed else AttemptStatus.INDETERMINATE,
-            "OK" if passed else "DYNAMIC_EXECUTION_RECEIPT_MISSING",
+            outcome,
+            reason,
             physical_action_proven_absent=False,
         )
         return ExecutionCompletionReceipt(decision, time.monotonic())
