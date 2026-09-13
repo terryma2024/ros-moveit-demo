@@ -1,0 +1,63 @@
+schema_version: 1
+points:
+  - id: task_start
+    label: Task start anchor
+    cup_position_world_m: [0.02, -0.28, 0.165]
+  - id: cup_test_forward_5cm
+    label: Forward 5 cm anchor
+    cup_position_world_m: [0.02, -0.33, 0.165]
+  - id: cup_test_left_5cm
+    label: Left 5 cm anchor
+    cup_position_world_m: [-0.03, -0.28, 0.165]
+  - id: cup_test_right_5cm
+    label: Right 5 cm anchor
+    cup_position_world_m: [0.07, -0.28, 0.165]
+  - id: sample_01_near_left
+    label: Sample 01 near left
+    cup_position_world_m: [-0.020732, -0.249568, 0.165]
+  - id: sample_02_near_center
+    label: Sample 02 near center
+    cup_position_world_m: [0.012943, -0.253631, 0.165]
+  - id: sample_03_near_right
+    label: Sample 03 near right
+    cup_position_world_m: [0.07726, -0.247428, 0.165]
+  - id: sample_04_near_left
+    label: Sample 04 near left
+    cup_position_world_m: [-0.040923, -0.243568, 0.165]
+  - id: sample_05_near_center
+    label: Sample 05 near center
+    cup_position_world_m: [0.021124, -0.240778, 0.165]
+  - id: sample_06_mid_left
+    label: Sample 06 mid left
+    cup_position_world_m: [-0.044253, -0.285035, 0.165]
+  - id: sample_07_mid_center
+    label: Sample 07 mid center
+    cup_position_world_m: [0.030324, -0.303335, 0.165]
+  - id: sample_08_mid_right
+    label: Sample 08 mid right
+    cup_position_world_m: [0.053252, -0.288054, 0.165]
+  - id: sample_09_mid_left
+    label: Sample 09 mid left
+    cup_position_world_m: [-0.024572, -0.294181, 0.165]
+  - id: sample_10_mid_center
+    label: Sample 10 mid center
+    cup_position_world_m: [0.003947, -0.279123, 0.165]
+  - id: sample_11_mid_right
+    label: Sample 11 mid right
+    cup_position_world_m: [0.076749, -0.295132, 0.165]
+  - id: sample_12_far_left
+    label: Sample 12 far left
+    cup_position_world_m: [-0.037607, -0.327555, 0.165]
+  - id: sample_13_far_center
+    label: Sample 13 far center
+    cup_position_world_m: [0.007874, -0.3208, 0.165]
+  - id: sample_14_far_right
+    label: Sample 14 far right
+    cup_position_world_m: [0.051023, -0.339445, 0.165]
+  - id: sample_15_far_center
+    label: Sample 15 far center
+    cup_position_world_m: [0.008183, -0.339434, 0.165]
+  - id: sample_16_far_right
+    label: Sample 16 far right
+    cup_position_world_m: [0.071574, -0.319255, 0.165]
+

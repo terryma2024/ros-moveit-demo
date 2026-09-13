@@ -177,6 +177,19 @@ def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> N
     assert sensor_rendering.default_value[0].perform(LaunchContext()) == "true"
 
 
+def test_task_station_declares_both_headless_profiles_but_keeps_visible_default() -> None:
+    description = launch_composition.build_task_station_launch_description()
+    arguments = {
+        action.name: action
+        for action in description.entities
+        if isinstance(action, DeclareLaunchArgument)
+    }
+
+    assert arguments["headless"].choices == ("true", "false")
+    assert arguments["headless"].default_value[0].perform(LaunchContext()) == "false"
+    assert arguments["sensor_rendering"].choices == ("true",)
+
+
 def test_perception_launch_declares_the_grounded_sam_backend_contract() -> None:
     description = launch_composition.build_perception_pick_place_launch_description()
     arguments = {

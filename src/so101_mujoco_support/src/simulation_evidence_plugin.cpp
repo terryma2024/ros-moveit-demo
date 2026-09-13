@@ -466,7 +466,9 @@ bool SimulationEvidencePlugin::init(
       return false;
     }
     node_ = std::move(node);
-    publisher_ = node_->create_publisher<Evidence>(topic, rclcpp::SensorDataQoS());
+    const auto evidence_qos =
+      rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+    publisher_ = node_->create_publisher<Evidence>(topic, evidence_qos);
     realtime_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<Evidence>>(publisher_);
     const auto chunk_qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
     chunk_publisher_ = node_->create_publisher<EvidenceChunk>(chunk_topic, chunk_qos);

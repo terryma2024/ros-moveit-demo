@@ -70,6 +70,26 @@ class RosDynamicMujocoExecution:
             raise ValueError("dynamic execution provenance is incomplete")
         return {"workflow_id": workflow_id, "request_id": request_id}
 
+    @staticmethod
+    def _parallel_identity_fields(identity) -> dict[str, object]:
+        if identity is None:
+            return {}
+        fields = {
+            "batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+            "point_id", "attempt_id", "lease_generation",
+        }
+        if type(identity) is not dict or set(identity) != fields:
+            raise ValueError("dynamic parallel lease identity is incomplete")
+        for name in ("batch_id", "worker_id", "point_id", "attempt_id"):
+            if not isinstance(identity[name], str) or not identity[name]:
+                raise ValueError("dynamic parallel lease identity is invalid")
+        for name in (
+            "coordinator_epoch", "worker_generation", "lease_generation"
+        ):
+            if type(identity[name]) is not int or identity[name] <= 0:
+                raise ValueError("dynamic parallel lease identity is invalid")
+        return {"parallel_lease_identity": dict(identity)}
+
     def __init__(
         self,
         node: Any,
@@ -84,6 +104,7 @@ class RosDynamicMujocoExecution:
         policy_sha256: str,
         workflow_id: str | None = None,
         request_id: str | None = None,
+        parallel_lease_identity: dict[str, object] | None = None,
     ) -> None:
         from control_msgs.action import FollowJointTrajectory
         from moveit_msgs.action import ExecuteTrajectory
@@ -95,6 +116,7 @@ class RosDynamicMujocoExecution:
         from ..backends.mujoco.observer import MujocoWorldObserver
 
         workflow_identity = self._workflow_identity_fields(workflow_id, request_id)
+        parallel_identity = self._parallel_identity_fields(parallel_lease_identity)
         if not session_id or expected_reset_epoch < 0:
             raise ValueError("dynamic execution provenance is incomplete")
         self._node = node
@@ -168,6 +190,7 @@ class RosDynamicMujocoExecution:
             "final_samples": self._final_samples,
         }
         self._document.update(workflow_identity)
+        self._document.update(parallel_identity)
         self._write()
 
     @property
@@ -184,6 +207,9 @@ class RosDynamicMujocoExecution:
         os.replace(temporary, self._evidence_file)
 
     def finish(self, result) -> None:
+        failure_evidence = None
+        if result.status.value != "DONE":
+            failure_evidence = self._capture_failure_evidence(result)
         self._document.update(
             {
                 "status": "DONE" if result.status.value == "DONE" else "ERROR",
@@ -193,9 +219,70 @@ class RosDynamicMujocoExecution:
                 "failure": None if result.failure is None else result.failure.code,
                 "release_marker_sequence": self._release_marker_sequence,
                 "planning_scene_readback": self._scene_readback,
+                "failure_evidence": failure_evidence,
             }
         )
         self._write()
+
+    @staticmethod
+    def _failure_boundary(state_trace) -> State | None:
+        from ..core.workflow import SO101_WORKFLOW
+
+        for current, following in zip(state_trace, state_trace[1:]):
+            transition = SO101_WORKFLOW.transitions.get(current)
+            if transition is not None and following is transition[1]:
+                return current
+        return None
+
+    def _capture_failure_evidence(self, result) -> dict[str, object]:
+        boundary = self._failure_boundary(result.state_trace)
+        no_action = (
+            tuple(result.state_trace) == (State.IDLE, State.ERROR)
+            and not self._state_events
+            and not self._planning_attempts
+        )
+        evidence: dict[str, object] = {
+            "failure_boundary_state": None if boundary is None else boundary.value,
+            "physical_action_proven_absent": no_action,
+            "terminal_sample": None,
+            "planning_scene_readback": None,
+            "capture_errors": [],
+        }
+        if no_action:
+            return evidence
+        prior_sequences = [
+            value.get("publisher_sequence")
+            for event in self._state_events
+            for value in (event.get("before"), event.get("after"))
+            if isinstance(value, dict)
+            and type(value.get("publisher_sequence")) is int
+        ]
+        freshness_floor = max(
+            [0, *prior_sequences, self._release_marker_sequence or 0]
+        )
+        try:
+            deadline = time.monotonic() + 2.0
+            terminal = self._snapshot()
+            while terminal.publisher_sequence <= freshness_floor:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("DYNAMIC_FAILURE_EVIDENCE_STALE")
+                terminal = self._snapshot()
+            evidence["terminal_sample"] = self._evidence(terminal)
+        except Exception as error:
+            evidence["capture_errors"].append(
+                f"PHYSICAL:{str(error).split(':', 1)[0]}"
+            )
+        try:
+            attached, world = self._scene_membership()
+            evidence["planning_scene_readback"] = {
+                "attached_object_ids": attached,
+                "world_primitive_counts": world,
+            }
+        except Exception as error:
+            evidence["capture_errors"].append(
+                f"SCENE:{str(error).split(':', 1)[0]}"
+            )
+        return evidence
 
     def _progress(self) -> None:
         import rclpy
