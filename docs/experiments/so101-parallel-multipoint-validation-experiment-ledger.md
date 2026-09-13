@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-112
-next_experiment: EXP-126
+latest_checkpoint: CP-113
+next_experiment: EXP-127
 ```
 
 Frozen provenance:
@@ -9430,7 +9430,14 @@ next_command: Commit CP-112, build the affected overlay from that immutable comm
 
 ```yaml
 experiment_id: EXP-126
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:18:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:19:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:24:59+08:00
 prior_experiment: EXP-125
 hypothesis: A clean rebuild from the committed EXP-125 source will pass the complete ordinary package suite and produce one immutable Broker image whose embedded source matches the commit and whose frozen YOLO-Seg and Grounded-SAM smokes both succeed.
 single_variable: Rebuild and qualify the committed EXP-125 source; do not alter product behavior, frozen models, catalog or Broker safety policy.
@@ -9442,7 +9449,100 @@ success_criteria:
   - Exact container cleanup and post-gate resource checks pass.
 failure_criteria: Build/test failure, stale installed code, source/image mismatch, mutable-only identity, either model smoke failure, residue or unrelated mutation.
 invalid_criteria: Reused scratch/root, tempfile outside registered evidence root, wrong overlay/interpreter, pre-existing owned process/container or evidence loss.
+provenance:
+  source_commit: f71423f47cd5586e7f4589ca7313c5800e62a823
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:96e8b3d6c5b12af023c513d9e0000ad898ef87080548d92e777c9a33a5a5a9d4
+  broker_source_sha256: 52ca8d39fd92d43771bc13c4f7908baf842b246c7fddd5257a3951303a4e726e
+commands:
+  - command: fresh four-package symlink colcon build under scratch/p126b/tmp
+    exit_code: 0
+    elapsed_s: 2.28
+  - command: complete ordinary so101_demo_py colcon test under scratch/p126t/tmp and scoped result readback
+    exit_code: 0
+    elapsed_s: 91.72
+  - command: immutable Broker image build under scratch/p126i/tmp
+    exit_code: 0
+    elapsed_s: 13.02
+  - command: frozen P01 dual-model smoke under scratch/p126s/tmp
+    exit_code: 0
+    elapsed_s: 8.63
+  - command: production verify_provenance and exact cleanup readback
+    exit_code: 0
+observed:
+  - The fresh four-package build passed. The complete ordinary package suite passed 2840 tests with zero errors, failures or skips and four known fork warnings; benchmark_test was not collected.
+  - Production provenance binds clean source commit f71423f47cd5586e7f4589ca7313c5800e62a823, equal source/install module-tree hash bf2ad6521db0ed665a5f020137d7075a2af3f8778e9fb9867af9037451b5d600 and equal host/image source hash 52ca8d39fd92d43771bc13c4f7908baf842b246c7fddd5257a3951303a4e726e.
+  - The rebuilt immutable image is sha256:96e8b3d6c5b12af023c513d9e0000ad898ef87080548d92e777c9a33a5a5a9d4. On frozen input 48febb1647afe462099c11079013c573281f8a1eee88425a2bcd4a04bf35124a, YOLO and Grounded-SAM each returned one QUALIFIED candidate.
+  - Post-smoke audit found no related process, running container or GPU compute application.
+conclusion: VALID; the EXP-125 source, overlay, immutable image, both models and cleanup are qualified for live F2 repetition.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-colcon-build.log sha256=f72649cd30e2c0c393df1e9e61eec3641464051b5a2b26d6e1170731fe24e0e2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-colcon-build.time sha256=3449686bfbcfc41f986aae340b9f135a3d22dafd1a93153b28d90ad1b7e2d7e6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-colcon-test.log sha256=faca9e9f203f9f14cea0ac14e5b12df94ed05d776290076cbc85a4448ea702e7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-colcon-test.time sha256=7dfe940181aeb0f6cdb403165e63e00bd0f106f991f6f60a11a717f490b51eb8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-colcon-test-result.log sha256=028c9fa6f6a1d1dd8c4042b6b23381d1a75a4280cf244c9131ff21bc1d13ca3c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-image-build.log sha256=88cbce5f7c89766ab879d45c1506295984cd18626cd6f3a45031440ef7a7c10c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-image-build.time sha256=fdc203a23e72fe82abc3c5cc1b615a8b0a3d915900b54139fb55c944e55f63a9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-image-build.json sha256=c807d9c0753ef5a874e46f352fea123387438179f2c032d6091a5736b9463318
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-model-smoke.log sha256=6008b159cbdab5658c1912cf81039e421f080f7f94550b6bed6c3a898f6a9494
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-model-smoke.time sha256=a107d1b508d26768c58140b76e2a0d0902cea000e7ffb6626e63bca3cf556f9b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-smoke-admission.json sha256=dd01e48e65a58fd9d6ae17c85fe9ec2a0e0a0fd849b691af12ef5dd87eba9a9f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-production-provenance.json sha256=f7542c5303e1ab15c025047a358f89b80e660c23f187a7041b0e643564582010
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp126-cleanup-audit.json sha256=27b575ecbbc39d8172d555b9d364e4d44d5bf7f2df740292d288886de61fea3f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-126-smoke/ipc/.model-ready.json sha256=e5c515dbddc707ec8e0b306b62d4b45b525559fb9016cbddfc14cb1693080910
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-126-smoke/ipc/smoke.json sha256=c156b3c40f8a613eeed85b60b4a9e3a80b759ea282d3af01f17ec8e4e45b74e0
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p126b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p126t
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p126i
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p126s
 retention_rule: Retain build, test, image, smoke, provenance and cleanup evidence; retain all scratch as deletion candidates; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_112
-next_experiment: EXP-126
+decision: KEEP
+next_experiment: EXP-127
+```
+
+```yaml
+checkpoint_id: CP-113
+last_valid_experiment: EXP-126
+current_hypothesis: With broker_health_down admitted at the real authority boundary, repeating the exact EXP-124 input-integrity fault will pause lease grants, retire generation 1, admit generation 2 and continue conservatively without unsafe result promotion.
+working_tree_status: EXP-126 result and EXP-127 preregistration are ledger-only; product source is clean and fully qualified at f71423f47cd5586e7f4589ca7313c5800e62a823.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The EXP-125 fix is package-, image-, model- and provenance-qualified.
+open_risks:
+  - Exact live generation replacement/readmission and no-grant-during-unhealth remain to be observed.
+next_command: Commit CP-113, persist/read back and syntax-check the EXP-127 launcher and observer, then repeat the exact four-point EXP-124 live fault against the EXP-126 image.
+```
+
+## EXP-127 — Post-fix live Broker integrity recovery
+
+```yaml
+experiment_id: EXP-127
+status: PLANNED
+prior_experiment: EXP-126
+hypothesis: The exact EXP-124 mirror corruption against the EXP-126-qualified runtime will deliver authenticated broker_health_down, pause new leases, replace/readmit the Broker as generation 2 and allow conservative continuation within K=3.
+single_variable: Replace only the pre-fix source/image and unique run identity from EXP-124 with EXP-125/126-qualified source, image and f2-127; preserve the four points, N=2/K=3, pause/corruption timing, immutable identity checks and Broker safety gate.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-127
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-127
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Generation-1 container matches image sha256:96e8b3d6c5b12af023c513d9e0000ad898ef87080548d92e777c9a33a5a5a9d4, exact batch/generation/runtime mount and ready/model receipts; exactly two Workers started and zero inputs before pause; exactly two 0400 request mirrors appear while paused.
+success_criteria:
+  - One-byte mirror corruption produces INPUT_HASH_CHANGED and authenticated BrokerResponse.INFRA_ERROR from still-live generation 1.
+  - Coordinator records broker_healthy=false before any later LEASE_GRANTED, retires exact generation 1, starts a distinct generation 2 and requires exact ready/model receipts before broker_healthy=true and further grants.
+  - Infrastructure attempts are never promoted to PASSED; no duplicate point execution occurs; each Worker stays within K=3 and no lease is granted while unhealthy.
+  - Remaining work continues conservatively and exact controller/process/container/domain cleanup gates pass.
+failure_criteria: Missing/rejected authenticated health event, grant while unhealthy, stale generation accepted, replacement/readmission bypass, K overflow, duplicate, unsafe promotion or residue.
+invalid_criteria: Pre-existing root, script syntax/readback failure, admission failure, input before pause, identity/mode/tool failure before injection or source-age expiry.
+provenance:
+  source_commit: f71423f47cd5586e7f4589ca7313c5800e62a823
+  broker_image_id: sha256:96e8b3d6c5b12af023c513d9e0000ad898ef87080548d92e777c9a33a5a5a9d4
+  broker_source_sha256: 52ca8d39fd92d43771bc13c4f7908baf842b246c7fddd5257a3951303a4e726e
+retention_rule: Retain command, observer, original/corrupt hashes, Broker generations, journal, Worker, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_113
+next_experiment: EXP-127
 ```
