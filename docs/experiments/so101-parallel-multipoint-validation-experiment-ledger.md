@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: a6434abd9e9aa9c992c81eed45f28bf015e753c7
+current_commit: a65e96c851ad9b4f5ae10864c701b86672c59862
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-091
-next_experiment: EXP-105
+latest_checkpoint: CP-092
+next_experiment: EXP-106
 ```
 
 Frozen provenance:
@@ -8011,12 +8011,14 @@ next_command: Commit EXP-104/CP-091 ledger state, preregister EXP-105, then gene
 
 ```yaml
 experiment_id: EXP-105
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:37:53+08:00
   - status: RUNNING
     at: 2026-09-13T10:37:53+08:00
+  - status: VALID
+    at: 2026-09-13T10:40:08+08:00
 prior_experiment: EXP-104
 hypothesis: The clean post-remediation checkout and freshly built overlay have exact source/install/entrypoint provenance and can rebuild one immutable Broker image whose internal verified source equals the host source, then execute both frozen models successfully.
 single_variable: Qualify source/install/image bytes from clean remediation source; do not start a Worker, MoveIt, controller, or physical simulation stack.
@@ -8038,5 +8040,44 @@ provenance:
   source_commit: de080f20ed2c09f20a043415aa4fe654d470e89d
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
-decision: PENDING
+commands:
+  - command: source the four worktree overlays; scripts/parallel-perception-container.sh build --image so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1 --output reports/remediation-image-build-105.json
+    exit_code: 0
+  - command: source the four worktree overlays; scripts/parallel-perception-container.sh smoke --image-id sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681 --batch-root task14-remediation-105-smoke --input <frozen smoke image> --yolo-weights <frozen YOLO> --grounded-root <frozen Grounded-SAM> --output reports/remediation-smoke-admission-105.json
+    exit_code: 0
+  - command: production verify_provenance with exact catalog/config/model/image inputs and worktree libexec PATH
+    exit_code: 0
+observed:
+  - The immutable image rebuilt in 13.46 s. Build receipt, Docker labels, and image-internal readback all bind image sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681 to source hash f6195235857c6f956ef28943dda044d9b80ff84ee1eb76132be9f77473167663.
+  - Fresh smoke completed in 9.99 s: plastic-cup-yolo11n-seg-v1 returned one QUALIFIED candidate in 34.7966 ms and Grounded-SAM returned one QUALIFIED candidate in 199.1376 ms.
+  - Production verify_provenance resolved clean source commit a65e96c851ad9b4f5ae10864c701b86672c59862, exact source/image hash f6195235857c6f956ef28943dda044d9b80ff84ee1eb76132be9f77473167663, equal source/install module tree hash 5956958e7a3fa4bebb492ed45ab6f13c39a4fbbbaecf0b49ab301d50c21aa143, and the worktree console/module/config/catalog/model paths.
+  - Post-smoke audit found no related process, running container, or GPU compute application.
+conclusion: VALID; source, install, runtime entrypoint, immutable image, both model executions, and cleanup are qualified for controlled simulation fault injection.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p123-image-build.log sha256=f16edd7ac5c30b4566f8bc56cd5de3237618c67bc9e5276cf92d53df0c5f85f6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p124-model-smoke.log sha256=f80122cfa5f1bdd5c550b15ed7bb1d67b0cd49f3c9d58a6f8a3857895ebda4d6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-production-provenance-105.json sha256=20557c54ae9f1ab59d4585abed9e90ab398c794b993cf8bc57a017461f409e28
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-image-build-105.json sha256=0cc3bee433882d28387c225d18234c4ee2cc0aba2ad2758eda06eb61856cff96
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-smoke-admission-105.json sha256=71e4abed0210452dd2401f6147d0f7554210b4170bb41cd704fbea24f88cb72d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-105-smoke/ipc/smoke.json sha256=e20224b09549d09c1e71363711647f2379b5ca128aedb3eae4bdd7e05054b41e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-105-cleanup-audit.json sha256=27b575ecbbc39d8172d555b9d364e4d44d5bf7f2df740292d288886de61fea3f
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p123
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p124
+decision: KEEP
+next_experiment: EXP-106
+```
+
+```yaml
+checkpoint_id: CP-092
+last_valid_experiment: EXP-105
+current_hypothesis: The rebuilt execute runtime cancels and confirms the exact in-flight controller work while its normal execution call remains blocked after heartbeat/lease revocation, with no subsequent goal and conservative result classification.
+working_tree_status: EXP-105 result and CP-092 are ledger-only; clean source/image provenance is qualified at a65e96c851ad9b4f5ae10864c701b86672c59862.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; smoke container was removed and GPU/process audits are empty.
+confirmed_conclusions:
+  - Static, installed, runtime, image, dual-model, and cleanup gates pass for the current remediation source.
+open_risks:
+  - Execute heartbeat/lease-loss fault, alive-unhealthy Broker fault, fresh four-point/full qualification, visual inspection, cleanup, and final Astra review remain pending.
+next_command: Commit EXP-105/CP-092, preregister EXP-106, and run the controlled execute-mode heartbeat/lease revocation fault with exact controller/joint/TF/MuJoCo/MoveIt/visual/process evidence.
 ```
