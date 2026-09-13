@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-109
-next_experiment: EXP-123
+latest_checkpoint: CP-110
+next_experiment: EXP-124
 ```
 
 Frozen provenance:
@@ -9250,12 +9250,14 @@ next_command: Commit CP-109, start the EXP-123 observer, then launch the exact c
 
 ```yaml
 experiment_id: EXP-123
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T12:01:00+08:00
   - status: RUNNING
     at: 2026-09-13T12:01:00+08:00
+  - status: INVALID
+    at: 2026-09-13T12:03:00+08:00
 prior_experiment: EXP-122
 hypothesis: The corrected launch will exercise EXP-122 exactly: input hash mismatch in a resumed still-live generation 1 will publish authenticated INFRA_ERROR, pause grants, replace/readmit generation 2 and continue remaining points without excess K debit.
 single_variable: Correct only the outer shell spelling and report-root assignment; use new unique batch/root f2-123. All EXP-122 product inputs, four points, N=2/K=3, image, overlay, corruption, timing and criteria remain unchanged.
@@ -9275,6 +9277,60 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - The manually re-entered launch omitted required --run-mode and argument parsing exited before root creation. The waiting observer was interrupted before identity or injection.
+  - No product process, container, ROS graph or simulation started.
+conclusion: INVALID_WRAPPER; persist and read back the next exact command before execution.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-123-invalid-wrapper.txt sha256=fe3799f2f9acc3704e41d55562c3f925106dc73cb6de0e50bdc6680f0dc08033
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-123.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+decision: KEEP_INVALID
+next_experiment: EXP-124
+```
+
+```yaml
+checkpoint_id: CP-110
+last_valid_experiment: EXP-118
+current_hypothesis: A persisted, syntax-checked and read-back launcher removes the remaining outer-wrapper error; the EXP-122 product fault remains untested and unchanged.
+working_tree_status: EXP-123 invalid wrapper result and EXP-124 preregistration are ledger-only; source/install/image unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - EXP-123 performed no product action.
+open_risks:
+  - F2 live health propagation remains pending.
+next_command: Commit CP-110, persist/read back the exact EXP-124 launcher and observer, syntax-check both, then execute them.
+```
+
+## EXP-124 — Persisted-launch live Broker integrity fault
+
+```yaml
+experiment_id: EXP-124
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:03:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:03:00+08:00
+prior_experiment: EXP-123
+hypothesis: Persisting and syntax-checking the launcher will execute the unchanged EXP-122 integrity fault and prove the production live Broker recovery path.
+single_variable: Replace only manual launcher entry with a read-back syntax-checked script and unique f2-124 identity; all product inputs, fault action and criteria remain EXP-122-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-124
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Same as EXP-122 with exact f2-124 identity and syntax-checked launch/observer scripts.
+success_criteria: Same as EXP-122.
+failure_criteria: Same as EXP-122.
+invalid_criteria: Pre-existing root, script syntax/readback failure, admission failure, input before pause, identity/mode/tool failure before injection or source-age expiry.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-123
+next_experiment: EXP-124
 ```
