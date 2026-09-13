@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-124
-next_experiment: EXP-137
+latest_checkpoint: CP-126
+next_experiment: EXP-139
 ```
 
 Frozen provenance:
@@ -10240,7 +10240,12 @@ next_command: Commit CP-124 after the mandatory EXP-045 hash gate, then execute 
 
 ```yaml
 experiment_id: EXP-137
-status: PLANNED
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:00:00+08:00
+  - status: INVALID
+    at: 2026-09-13T18:10:00+08:00
 prior_experiment: EXP-136
 hypothesis: Revoking Coordinator heartbeats while a specifically identified FollowJointTrajectory goal remains EXECUTING will make the Worker cancel that same goal, publish no successor goal and remain physically stationary with detached scene state until evidence capture completes.
 single_variable: Stop only the Coordinator process after the observer identifies an active controller goal; preserve image, models, motion policy, thresholds, Broker safety gates and all other processes.
@@ -10251,5 +10256,104 @@ invalid_criteria: No identified active goal at injection, the goal terminates be
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_124
-next_experiment: EXP-137
+observed:
+  - Preflight source inspection found that the watchdog latches its private reason and starts cancellation, but emits no durable revoke, cancel-request or cancel-result timestamps. External action-status observation can establish controller goal IDs and terminal states but cannot authoritatively timestamp the internal lease-revocation boundary.
+  - Starting a live stack with this observer composition would repeat EXP-118's evidence gap, so no process, container or ROS graph was started and no physical action occurred.
+conclusion: INVALID before execution; retain the hypothesis but add a lease-identity-bound revocation receipt before repeating the fault.
+decision: ADD_REVOCATION_RECEIPT_AND_REPEAT
+next_experiment: EXP-138
+```
+
+```yaml
+checkpoint_id: CP-125
+last_valid_experiment: EXP-136
+current_hypothesis: Durable lease-identity-bound watchdog, cancel-request and cancel-result receipts can provide the missing internal timestamps, while an external action observer supplies exact controller goal IDs and post-stop state.
+working_tree_status: Clean source at 9d434c0a0; EXP-137 was invalidated in preflight before any runtime side effect.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Existing cancellation behavior is covered, but the production path lacks the audit boundary needed to prove a live revocation precisely.
+open_risks:
+  - The semantic verifier also needs a focused check that a failed MICRO_LIFT event remains ordered at its actual failure boundary before recovery events.
+next_command: Preserve deterministic RED tests for failure-event ordering and revocation audit receipts, then make the smallest source-local fixes.
+```
+
+## EXP-138 — Failure-event ordering and revocation audit receipts
+
+```yaml
+experiment_id: EXP-138
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:10:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:15:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:25:00+08:00
+prior_experiment: EXP-137
+hypothesis: Inserting a validated failure event at its policy boundary and persisting exact-lease watchdog/cancel phases will make stage-specific ERROR manifests classifiable and live revocation timing directly auditable without changing motion or Broker safety behavior.
+single_variable: Add only semantic failure-event placement and append-only revocation evidence; preserve workflow, thresholds, timeout values, controller cancellation and Broker fencing.
+lifecycle: PROCESS_FREE_TDD
+success_criteria: RED proves current MICRO_LIFT ordering and missing receipt; GREEN accepts the canonical failed-event position, rejects misplaced events, and records WATCHDOG_REVOKED, CANCEL_REQUESTED and CANCEL_RESULT with exact lease identity and monotonic timestamps while blocked execution is still independently cancelled.
+failure_criteria: A malformed event order passes, receipts can be stale/wrong-lease, cancellation becomes serialized, existing semantic/cancellation tests regress or audit failure can block safety action.
+invalid_criteria: Test does not exercise production classes, scratch reuse, tempfile outside the verified NVMe root or unrelated source changes.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain RED/GREEN logs and scratch roots; delete nothing without explicit authorization.
+decision: RUN_NOW
+observed:
+  - The preserved RED failed both targeted contracts: the semantic verifier rejected an actually ordered failed MICRO_LIFT event, and the blocked-execution watchdog test had no revocation receipts.
+  - GREEN inserts a failed validation event only at the exact failure transition, rejects the former tail placement, and adds fail-open audit recording around the already fail-closed cancellation path.
+  - The production Worker runtime appends fsync-complete mode-0600 JSONL events for WATCHDOG_REVOKED, CANCEL_REQUESTED, CONTROLLER_CANCEL_RESULT and final broker-inclusive CANCEL_RESULT, each bound to the exact batch/epoch/worker/generation/point/attempt/lease identity with wall and monotonic timestamps.
+  - Focused GREEN passed 20 tests in 1.34 s. The complete semantic/Worker/runtime adjacent set passed 173 tests in 3.09 s. An intermediate post-fix run exposed only stale test call-position and SimpleNamespace fixture assumptions; it is retained as invalid harness feedback and was corrected without product changes.
+conclusion: VALID; stage-specific MICRO_LIFT failures remain classifiable, and the live heartbeat fault can now correlate internal revocation/cancellation phases to exact external action goal IDs without changing motion or Broker gates.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-red.log sha256=fbfb6ac65cd0147361f89b69599c997e45747c8761348b65c6df1b91c9fbda1f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-red.time sha256=6d4c43e6b626a7491c324c03b7016536ad508bd7f737669fb721020a5f7b3fd7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-green5.log sha256=0e2cae02aa7c30cfd1447415529b590de3ca18854c837beab7a864b607db6d28
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-green5.time sha256=3041bedc9acd4f0013aefc236336869499d1e9f9e7c1ca1cda177b6a2150dd92
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-adjacent2.log sha256=84e1b9256b1d7d9983e5394362dfc866001dd5fd36480bde467f59d357234273
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp138-adjacent2.time sha256=af2456929e69ae058a0057c8b0910d14fecce1541fb6ca0bdcbcc1dce2763c62
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-red
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-green
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-green2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-green3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-green5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-adjacent
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/e138-adjacent2
+decision: BUILD_AND_RUN_COMPLETE_ORDINARY_GATE
+next_experiment: EXP-139
+```
+
+```yaml
+checkpoint_id: CP-126
+last_valid_experiment: EXP-138
+current_hypothesis: The boundary-local semantic and audit additions will build into the isolated overlay and preserve every ordinary package contract before immutable image and live fault repetition.
+working_tree_status: EXP-138 source, tests and ledger are uncommitted pending the mandatory EXP-045 hash gate.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Revocation audit failure is intentionally swallowed and cannot delay or defeat cancellation.
+  - Exact-lease checks prevent a stale attempt from writing an authoritative receipt.
+open_risks:
+  - Full ordinary-package, installed-source, immutable-image and live fault evidence remain required for the new source.
+next_command: Commit EXP-138 after mandatory hash checks, then rebuild and run the complete ordinary package suite from a fresh verified NVMe scratch.
+```
+
+## EXP-139 — Rebuild and complete package qualification for revocation receipts
+
+```yaml
+experiment_id: EXP-139
+status: PLANNED
+prior_experiment: EXP-138
+hypothesis: The committed semantic ordering and append-only receipt changes build cleanly and pass the complete ordinary so101_demo_py suite with exact source/install provenance.
+single_variable: Rebuild and test only the EXP-138 commit; do not change runtime policy, fault configuration, models, thresholds or Broker gates.
+lifecycle: PROCESS_FREE_BUILD_AND_TEST
+success_criteria: Build succeeds; installed changed files hash-match source; all ordinary tests pass from a new verified NVMe scratch; no benchmark is collected.
+failure_criteria: Build, install-provenance, test, lint or collection failure attributable to the candidate.
+invalid_criteria: Wrong overlay/interpreter, reused scratch, tempfile outside registered NVMe root, benchmark collection or runtime contamination.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain build/test/provenance evidence and scratch; delete nothing without explicit authorization.
+decision: RUN_AFTER_EXP_138_COMMIT
+next_experiment: EXP-139
 ```

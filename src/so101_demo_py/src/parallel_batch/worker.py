@@ -244,7 +244,16 @@ class ParallelWorker:
             if current is None or _lease_key(current) != _lease_key(lease):
                 return
         self._stop_requested.set()
+        self._record_revocation(lease, "WATCHDOG_REVOKED", reason=_reason)
         self._start_revocation(lease)
+
+    def _record_revocation(self, lease, phase, **details) -> None:
+        """Persist audit evidence without ever delaying the safety path on failure."""
+        try:
+            recorder = getattr(self._runtime, "record_revocation")
+            recorder(lease, phase, **details)
+        except Exception:
+            pass
 
     def _start_revocation(self, lease):
         """Start at most one independent cancel-and-confirm path per exact lease."""
@@ -276,6 +285,7 @@ class ParallelWorker:
                 daemon=True,
             )
             try:
+                self._record_revocation(lease, "CANCEL_REQUESTED")
                 broker_thread.start()
                 try:
                     record["stopped"] = self._runtime.cancel_motion(lease) is True
@@ -287,9 +297,22 @@ class ParallelWorker:
                     )
                 except Exception:
                     pass
+                self._record_revocation(
+                    lease,
+                    "CONTROLLER_CANCEL_RESULT",
+                    motion_stopped=record["stopped"] is True,
+                    controllers_confirmed=record["confirmed"] is True,
+                )
             finally:
                 if broker_thread.ident is not None:
                     broker_thread.join()
+                self._record_revocation(
+                    lease,
+                    "CANCEL_RESULT",
+                    broker_fenced=record["fenced"] is True,
+                    motion_stopped=record["stopped"] is True,
+                    controllers_confirmed=record["confirmed"] is True,
+                )
                 record["event"].set()
 
         threading.Thread(

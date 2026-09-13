@@ -122,11 +122,21 @@ def _event_contract(document: Mapping[str, object], states: list[State], boundar
     expected = [state.value for state in _successful_action_states(states)]
     observed = [item.get("state") for item in events]
     if observed != expected:
+        expected_with_failed = []
+        failed_index = None
+        for current, following in zip(states, states[1:]):
+            success, failure = SO101_WORKFLOW.transitions[current]
+            if current in SO101_WORKFLOW.action_states and following == success:
+                expected_with_failed.append(current.value)
+            elif boundary is current and following == failure:
+                failed_index = len(expected_with_failed)
+                expected_with_failed.append(current.value)
         allowed_failed_record = (
             boundary is not None
-            and observed == expected + [boundary.value]
-            and isinstance(events[-1].get("validation_failure"), str)
-            and bool(events[-1]["validation_failure"])
+            and failed_index is not None
+            and observed == expected_with_failed
+            and isinstance(events[failed_index].get("validation_failure"), str)
+            and bool(events[failed_index]["validation_failure"])
         )
         if not allowed_failed_record:
             _fail("STATE_EVENTS")

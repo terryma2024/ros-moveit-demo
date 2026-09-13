@@ -728,6 +728,7 @@ class ParallelWorkerRuntime:
         self._execute_consumers: dict[tuple[object, ...], Any] = {}
         self._active_lease: Any | None = None
         self._stop_requested = threading.Event()
+        self._revocation_receipt_lock = threading.Lock()
 
     @property
     def stop_requested(self) -> bool:
@@ -1221,6 +1222,69 @@ class ParallelWorkerRuntime:
             if consumer_stopped:
                 self._execute_consumers.pop(key, None)
         return consumer_stopped and controller_stopped
+
+    def record_revocation(self, lease: Any, phase: str, **details: object) -> bool:
+        """Append one durable, exact-lease revocation phase receipt."""
+        if phase not in {
+            "WATCHDOG_REVOKED", "CANCEL_REQUESTED",
+            "CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT",
+        }:
+            raise ValueError("revocation phase is not canonical")
+        key = self._lease_key(lease)
+        if key != self._lease_key(self._active_lease):
+            raise RuntimeError("revocation receipt lease is not active")
+        identity = {
+            "batch_id": lease.batch_id,
+            "coordinator_epoch": lease.coordinator_epoch,
+            "worker_id": lease.worker_id,
+            "worker_generation": lease.worker_generation,
+            "point_id": lease.point_id,
+            "attempt_id": lease.attempt_id,
+            "lease_generation": lease.lease_generation,
+        }
+        if any(type(value) is not bool for value in details.values()
+               if phase in {"CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT"}):
+            raise ValueError("cancel result details must be boolean")
+        if phase == "WATCHDOG_REVOKED" and (
+            set(details) != {"reason"}
+            or not isinstance(details["reason"], str)
+            or not details["reason"]
+        ):
+            raise ValueError("watchdog revocation reason is required")
+        if phase == "CANCEL_REQUESTED" and details:
+            raise ValueError("cancel request details are not canonical")
+        if phase == "CONTROLLER_CANCEL_RESULT" and set(details) != {
+            "motion_stopped", "controllers_confirmed"
+        }:
+            raise ValueError("controller cancel result details are incomplete")
+        if phase == "CANCEL_RESULT" and set(details) != {
+            "broker_fenced", "motion_stopped", "controllers_confirmed"
+        }:
+            raise ValueError("cancel result details are incomplete")
+        receipt = {
+            "schema_version": 1,
+            "kind": "SO101_PARALLEL_REVOCATION_EVENT",
+            "phase": phase,
+            "wall_time_ns": time.time_ns(),
+            "monotonic_ns": time.monotonic_ns(),
+            **identity,
+            **details,
+        }
+        payload = (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        path = self.resources.worker_root / "revocation-events.jsonl"
+        with self._revocation_receipt_lock:
+            descriptor = os.open(
+                path,
+                os.O_APPEND | os.O_CREAT | os.O_CLOEXEC | os.O_WRONLY,
+                0o600,
+            )
+            try:
+                if os.write(descriptor, payload) != len(payload):
+                    raise OSError("short revocation receipt write")
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        return True
 
     def confirm_no_controller_goal(self, lease: Any) -> bool:
         return self._confirm_no_controller_goal(lease) is True

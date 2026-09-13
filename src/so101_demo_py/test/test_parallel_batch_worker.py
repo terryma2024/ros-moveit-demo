@@ -444,6 +444,10 @@ class Runtime:
             raise RuntimeError("cancel failed")
         return True
 
+    def record_revocation(self, lease, phase, **details):
+        self.calls.append(("revocation", phase, lease.attempt_id, details))
+        return True
+
     def confirm_no_controller_goal(self, lease):
         self.calls.append("confirm_no_controller_goal")
         return self.goal_confirmed
@@ -851,6 +855,23 @@ def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
     assert run_thread.is_alive(), "expert execution was released before cancellation"
     assert "cancel_motion" in fake.runtime.calls
     assert ("cancel_generation", "w1", 1) in fake.broker.calls
+    receipts = [call for call in fake.runtime.calls if isinstance(call, tuple)
+                and call[0] == "revocation"]
+    assert [call[1] for call in receipts] == [
+        "WATCHDOG_REVOKED", "CANCEL_REQUESTED",
+        "CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT",
+    ]
+    assert all(call[2] == "p1-lease-1" for call in receipts)
+    assert receipts[0][3] == {"reason": "COORDINATOR_LOST"}
+    assert receipts[-2][3] == {
+        "motion_stopped": True,
+        "controllers_confirmed": True,
+    }
+    assert receipts[-1][3] == {
+        "broker_fenced": True,
+        "motion_stopped": True,
+        "controllers_confirmed": True,
+    }
 
     release.set()
     run_thread.join(2.0)
@@ -897,7 +918,8 @@ def test_revocation_does_not_wait_for_blocked_broker_fence_before_motion_cancel(
 
     assert revocation["event"].wait(1.0)
     assert fake.broker.calls.count(("cancel_generation", "w1", 1)) == 1
-    assert fake.runtime.calls[-2:] == [
+    safety_calls = [call for call in fake.runtime.calls if isinstance(call, str)]
+    assert safety_calls[-2:] == [
         "cancel_motion", "confirm_no_controller_goal"
     ]
     assert revocation == {
