@@ -3,6 +3,8 @@ import hashlib
 import io
 from pathlib import Path
 import signal
+import sys
+import threading
 from types import SimpleNamespace
 
 import numpy as np
@@ -160,22 +162,36 @@ def test_stop_control_fences_new_runtime_side_effects(tmp_path):
         runtime.reset_point(_lease())
 
 
-def test_cancel_motion_retires_exact_dynamic_consumer_before_controller_cancel(
+def test_cancel_motion_starts_controller_cancel_while_consumer_stop_is_blocked(
     tmp_path,
 ):
-    """Revocation must prevent the child from submitting a later trajectory goal."""
+    """A slow consumer exit must not delay the safety-critical controller cancel."""
 
     from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 
     events = []
-    processes = _ProcessGroup(events=events)
+    stop_entered = threading.Event()
+    release_stop = threading.Event()
+    controller_cancelled = threading.Event()
+
+    class BlockingProcessGroup(_ProcessGroup):
+        def stop(self, child):
+            events.append(("stop-entered", child.pid))
+            stop_entered.set()
+            assert release_stop.wait(2.0)
+            events.append(("stop-complete", child.pid))
+            return True
+
+    processes = BlockingProcessGroup(events=events)
     lease = _lease()
     runtime = build_worker_runtime(
         _resources(tmp_path, "worker-1", 0, 181),
         RunMode.EXECUTE,
         process_group=processes,
         cancel_motion=lambda current: (
-            events.append(("cancel", current.attempt_id)) or True
+            events.append(("cancel", current.attempt_id))
+            or controller_cancelled.set()
+            or True
         ),
     )
     key = runtime._lease_key(lease)
@@ -183,9 +199,24 @@ def test_cancel_motion_retires_exact_dynamic_consumer_before_controller_cancel(
     runtime._active_lease = lease
     runtime._execute_consumers[key] = child
 
-    assert runtime.cancel_motion(lease) is True
+    results = []
+    call = threading.Thread(target=lambda: results.append(runtime.cancel_motion(lease)))
+    call.start()
+    assert stop_entered.wait(1.0)
 
-    assert events == [("stop", 417), ("cancel", "attempt-1")]
+    assert controller_cancelled.wait(0.2), (
+        "controller cancellation waited for the blocked consumer exit"
+    )
+    assert call.is_alive()
+    release_stop.set()
+    call.join(2.0)
+
+    assert results == [True]
+    assert events == [
+        ("stop-entered", 417),
+        ("cancel", "attempt-1"),
+        ("stop-complete", 417),
+    ]
     assert key not in runtime._execute_consumers
 
 
@@ -786,6 +817,11 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
     consumer = processes.specs[-1]
     assert consumer.role == "dynamic-consumer"
     argv = consumer.argv
+    assert argv[:3] == (
+        sys.executable,
+        "-m",
+        "so101_demo.cli.dynamic_cup_pick_place",
+    )
     backend = argv.index("--backend")
     assert argv[backend : backend + 7] == (
         "--backend",
