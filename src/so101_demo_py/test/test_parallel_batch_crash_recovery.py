@@ -245,7 +245,7 @@ def _attempt_identity(lease):
         ("WORKING_TREE_FSYNC", "before", False, PointStatus.INDETERMINATE),
         ("WORKING_TREE_FSYNC", "after", False, PointStatus.INDETERMINATE),
         ("ATOMIC_SEAL", "before", False, PointStatus.INDETERMINATE),
-        ("ATOMIC_SEAL", "after", True, PointStatus.PASSED),
+        ("ATOMIC_SEAL", "after", True, PointStatus.UNRUN),
     ],
 )
 def test_real_artifact_crash_is_adjudicated_from_fsync_and_seal_state(
@@ -277,7 +277,10 @@ def test_real_artifact_crash_is_adjudicated_from_fsync_and_seal_state(
         source_stamp={"source": "real-crash-matrix"},
         run_mode=RunMode.EXECUTE,
     )
-    work.write_json("attempt-result.json", {"status": "PASSED"})
+    # This matrix exercises publication crash windows, not physical success.
+    # INVALID is a complete reset-stage outcome and therefore needs no forged
+    # execution evidence under the verifier-owned evidence contract.
+    work.write_json("attempt-result.json", {"status": "INVALID"})
 
     def crash(observed_boundary, observed_phase):
         if (observed_boundary, observed_phase) == (boundary, phase):
@@ -303,7 +306,7 @@ def test_real_artifact_crash_is_adjudicated_from_fsync_and_seal_state(
         assert sum(
             event.type == "RESULT_COMMITTED"
             for event in recovered_journal.replay().events
-        ) == (1 if expected_status is PointStatus.PASSED else 0)
+        ) == (1 if sealed_visible else 0)
 
 
 def test_real_prestart_late_seal_is_terminal_and_cannot_be_released_for_retry(
@@ -333,7 +336,7 @@ def test_real_prestart_late_seal_is_terminal_and_cannot_be_released_for_retry(
         source_stamp={"source": "late-real-seal"},
         run_mode=RunMode.EXECUTE,
     )
-    work.write_json("attempt-result.json", {"status": "PASSED"})
+    work.write_json("attempt-result.json", {"status": "INVALID"})
     work.seal()
     journal.close()
 
