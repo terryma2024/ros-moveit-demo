@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 2a57c41e3a2c90dc76ab9b5c6783eeb287309ebc
+current_commit: 7040f59f7109ccab9aae58fa4dd9f67918251991
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -52,10 +52,10 @@ confirmed_conclusions:
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - The committed correction and fresh immutable Broker image must pass applicable four-point and complete-catalog live qualification.
+  - The final-source four-point gate passes; the same immutable source/image must pass the complete twenty-point catalog in one fresh execute batch.
   - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
-latest_checkpoint: CP-145
-next_experiment: EXP-159
+latest_checkpoint: CP-146
+next_experiment: EXP-160
 ```
 
 Frozen provenance:
@@ -11613,7 +11613,14 @@ next_command: After mandatory EXP-045 hash readback and checkpoint commit, run E
 
 ```yaml
 experiment_id: EXP-159
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:19:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:21:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:28:00+08:00
 prior_experiment: EXP-158
 hypothesis: Final committed source and image will complete the frozen four-point subset exactly once across two isolated Workers with qualification and cleanup true.
 single_variable: Switch from container-only smoke to the frozen four-point N=2/K=2 execute lifecycle; preserve source, image, models, policy, thresholds and Broker fencing.
@@ -11628,6 +11635,72 @@ success_criteria: All four points PASSED once; coverage, execution, qualificatio
 failure_criteria: Any non-PASSED point, retry, duplicate, isolation/provenance/model/physical/visual/cleanup failure or residue.
 invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
 retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_145
-next_experiment: EXP-159
+provenance:
+  source_commit: 7040f59f7109ccab9aae58fa4dd9f67918251991
+  implementation_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+  broker_image_id: sha256:24732e2f0c9bf977682320a3e5f2093797ad4fe36e98fab790a928e9ddfc27ec
+  broker_source_sha256: 23363bc3af157b57463855aefd3b3f1ee9f2976fff8d22b01995102c919bb61f
+observed:
+  - The immutable execute command exited zero in 183.22 s. All four selected points are terminal PASSED with attempts=1; coverage_complete, execution_complete, qualification_passed and batch_cleanup_complete are true.
+  - Each Worker consumed exactly two leases. All four seals passed the final-source production verifier with the independently recorded trusted target.
+  - Direct original-resolution inspection of all four terminal RGB frames shows the cup upright inside the red target ring with the open gripper and arm clear; all image hashes read back exactly.
+  - Production cleanup passed; exact ancestry-excluding process, labeled-container and GPU scans are empty, and ROS domain locks 181-183 are unlocked.
+conclusion: VALID; final source/image preserve normal N=2/K=2 physical, semantic, exact-once, visual and cleanup contracts.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp159.zsh sha256=ed5ef323462d557d3c661de75f0b6839a40d0b6818dfc4a8fb1ffad5dc6f9a25
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-159.log sha256=97290330d552c0e1ffd688c17e142b5ef40fd5b816ccd909cc1c7117c56c9eb5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-159.time sha256=a5c682cdd3a171b2af11be78b34f757564f06a504c26713ba30b4c2c7dcdfb0e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-159.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP159.txt sha256=e049ba2741e9a31f88d209be1a694b1412ff7bfa8cb60a55142b673866c4bf88
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-verification.log sha256=e9982f140e18dd9bc3e1e7088a263ef2bc2244a45a2267a3bcdb44f878a822d6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-terminal-rgb.sha256 sha256=224dfcd792a387b86a70d499f89fc2c87234e9c6ccb26bed492685f40d6d6de4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-terminal-rgb-check.log sha256=aee29202beba310d990b6dcc1b07105289ac377c94a4e3b3e5555d6efc557362
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-visual-inspection.json sha256=f2380efd33485cb2691b36e82c17079be9b2a6e833eefe5035fc028f049e0961
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-cleanup-readback.log sha256=87ff46c247c205f3a11cc7cbe20b08c1b4cc13edf9aa9c1b7d198554cc4cd0d5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp159-cleanup-audit.json sha256=64d63df42336d09d992a8db4a4eed2806e6bb08d90199a127ce79871de1f392c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159/batch_manifest.json sha256=cb403a16d47b66f10fafcdfcde1ecbf7760abea2a04f0d3c3b91088306bf209c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159/coordinator/aggregate_results.json sha256=11c5b1621894910a42176a8654a4b0818fc9e43f1bd66451e33f9eadd61cf055
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159/workers/worker-01/worker-run-results.json sha256=3ddf6234df7889ae57de5ccecb47ae807caf17df1a9133640685a5bbf36b8993
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159/workers/worker-02/worker-run-results.json sha256=4736ee09d772814a10db0560fd9db3d358e392e7f1f804fe92fbac4c23a0d920
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159/cleanup-gates.json sha256=63422fe035574987b64bda67de3c11cb65825032ba3b7b2bb56a611d15ff9b27
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-159
+decision: RUN_COMPLETE_CATALOG
+next_experiment: EXP-160
+```
+
+```yaml
+checkpoint_id: CP-146
+last_valid_experiment: EXP-159
+current_hypothesis: Expanding only selection and K from the qualified final-source four-point gate to the complete frozen catalog will pass all twenty points exactly once across two isolated Workers.
+working_tree_status: Product source/tests remain clean; EXP-159 result and EXP-160 preregistration are pending ledger commit. MUJOCO_LOG.TXT is preserved untracked and its EXP-159 snapshot is retained.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all evidence, and the e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Final-source four-point qualification passes with two balanced Workers, four verified seals, direct visual inspection and exact cleanup.
+open_risks:
+  - The complete frozen twenty-point catalog must pass under the same immutable final source/image.
+next_command: After mandatory EXP-045 hash readback and checkpoint commit, execute EXP-160 N=2/K=10 from a fresh absent root and inspect all results, seals, terminal visuals and cleanup gates.
+```
+
+## EXP-160 — Final-source complete frozen twenty-point qualification
+
+```yaml
+experiment_id: EXP-160
+status: PLANNED
+prior_experiment: EXP-159
+hypothesis: Expanding only the qualified selection to all twenty frozen catalog points and K=10 will physically pass each point exactly once across two isolated Workers with complete qualification and cleanup.
+single_variable: Expand EXP-159 from four points and K=2 to the complete exact-hash catalog and K=10; preserve source, image, models, config, N=2, lifecycle and execute behavior.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: full-160
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160
+worker_count: 2
+max_points_per_worker: 10
+selection: COMPLETE_FROZEN_CATALOG
+success_criteria: Exactly twenty points PASSED once; coverage, execution, qualification and cleanup true; each Worker consumes ten leases; every seal and terminal physical/visual result passes; no owned residue.
+failure_criteria: Any missing, repeated, duplicate or non-PASSED point; K overflow; isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_146
+next_experiment: EXP-160
 ```
