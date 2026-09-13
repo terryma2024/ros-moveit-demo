@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-107
-next_experiment: EXP-121
+latest_checkpoint: CP-108
+next_experiment: EXP-122
 ```
 
 Frozen provenance:
@@ -9121,12 +9121,14 @@ next_command: Commit CP-107 and run EXP-121, pausing exact generation 1 immediat
 
 ```yaml
 experiment_id: EXP-121
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:54:00+08:00
   - status: RUNNING
     at: 2026-09-13T11:54:00+08:00
+  - status: INVALID
+    at: 2026-09-13T11:59:00+08:00
 prior_experiment: EXP-120
 hypothesis: Pausing fully admitted generation 1 before its first request, observing both immutable Broker input files while it remains alive/paused beyond the 10-second queue deadline, and resuming the same process will yield authenticated QUEUE_TIMEOUT health-down, lease pause, exact generation replacement and no infrastructure K debit.
 single_variable: Move the unchanged exact-container pause earlier, from post-input observation to immediately after generation-1 ready/model-loaded verification; source, image, overlay, config, points, N=2/K=2 and recovery criteria are unchanged.
@@ -9149,6 +9151,74 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - The observer verified generation-1 ready/model-loaded identity with two Worker processes started and zero Broker inputs, then paused the exact still-running container. Both exact inputs appeared while it remained paused; the same container was unpaused after 12 more seconds.
+  - Code/readback shows queue deadlines begin inside Broker.submit, not while a client waits outside the paused process. On resume both requests therefore ran normally; their now-old source stamps failed closed at POSE_ACCEPTED_PUBLICATION_FAILED and both attempts became INDETERMINATE. No Broker health-down or generation 2 occurred.
+  - Exit 1 in 69.18 s and complete cleanup are expected for those conservative stale-source outcomes. K stayed one per Worker; no unrelated state or residue was found.
+conclusion: INVALID_FAULT_MECHANISM; waiting on a paused socket cannot create a Broker queue timeout because the Broker has not admitted the request. Use an exact post-capture input-integrity fault that production classifies as INFRA_ERROR while the same Broker remains alive.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-121.log sha256=3eb3a44403f3a5c9b5479f3a402853d7582d2f203bf2ff27f30e56c813e8f259
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-121.time sha256=e929ce08c3ccb2bf7d3e7baa0548d1cef31bacf97beaee65c33573253fd7fc10
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-121.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-121.log sha256=2df5895dbcb163eebe0490b1ecd6a8a663835efffc1d0ce361f371cb27587559
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP121.txt sha256=2983615b3ce5b1bd0c058edfcf97c8ee8afd0a06f3e8756afe49ba2e89cb27c7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121/aggregate_results.json sha256=8536697f8769c72b57f05061591a966d0080bdeb00da944547bcc5705fd6aea8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121/coordinator/aggregate_results.json sha256=c413448d3ef89b848d36a463d52d704bd7b882075b58732a9c7174d4ee3073c1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121/cleanup-gates.json sha256=cebd30c3d0a67ed580533c50c781b9675f838d9598d30de702f9c80808c72c9f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121/workers/worker-01/worker-run-results.json sha256=b2dac84eed38785c739e0c555bf1c7b2d186a2e89ade24a90fc7dabb32b15ed0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-121/workers/worker-02/worker-run-results.json sha256=082a01dd3cd0380b5dbe6e3969d27fae8c153a960121f11d86d553c7272f53a9
+decision: KEEP_INVALID
+next_experiment: EXP-122
+```
+
+```yaml
+checkpoint_id: CP-108
+last_valid_experiment: EXP-118
+current_hypothesis: Corrupting exact request mirror bytes while the ready Broker is briefly paused will make the resumed live process detect INPUT_HASH_CHANGED, publish authenticated INFRA_ERROR health-down, and exercise exact generation replacement without source-age drift.
+working_tree_status: EXP-121 invalid result and EXP-122 preregistration are ledger-only; production source/install/image remain unchanged and clean.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Queue/inference deadlines are internal Broker admission deadlines; a whole-process pause before admission is not a valid timeout injector.
+  - Paused transport plus stale source fails closed at pose publication and cleans exactly.
+open_risks:
+  - Live authenticated INFRA_ERROR replacement and no-K-debit continuation remain pending.
+next_command: Commit CP-108 and run EXP-122 with a brief pre-request pause, exact mirror corruption, immediate unpause and four-point continuation surface.
+```
+
+## EXP-122 — Live Broker input-integrity health fault
+
+```yaml
+experiment_id: EXP-122
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:59:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:59:00+08:00
+prior_experiment: EXP-121
+hypothesis: The same ready/live generation-1 Broker will classify an exact request mirror hash mismatch as INFRA_ERROR, authenticate health-down, pause grants, be replaced/readmitted as generation 2, and allow the two remaining points to continue without an extra K debit.
+single_variable: After the EXP-121 early exact-container pause, alter only the two generation-1 Broker input mirror bytes after they appear, preserve their required 0400 mode, and immediately unpause; do not wait into source-age expiry.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-122
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-122
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Exact generation-1 container is running/unpaused with immutable identity and ready/model receipts; two Workers started; zero inputs before pause; exactly two 0400 request mirrors appear while paused and their original hashes are recorded.
+success_criteria:
+  - After one-byte mirror corruption and immediate unpause, the same generation-1 container remains alive long enough to report authenticated BrokerResponse.INFRA_ERROR with INPUT_HASH_CHANGED; Coordinator broker_healthy becomes false and grants pause.
+  - Supervision retires only exact generation 1, creates generation 2 with new token/socket/runtime root, verifies ready and both model-loaded receipts, then restores health.
+  - Each Worker uses no more than two leases for one injected infrastructure result plus one remaining successful point; no additional lease is granted during unhealth, no point duplicates, and K=3 is not exhausted/debited by dependency recovery.
+  - Infrastructure attempts remain conservatively non-PASSED, remaining points continue exactly once, and all controller/process/container/domain cleanup gates pass.
+failure_criteria: No authenticated health event, stale/wrong generation accepted, grant while unhealthy, replacement/readmission bypass, excess K debit, duplicate, unsafe promotion, residue or unrelated mutation.
+invalid_criteria: Pre-existing root, admission failure, input before pause, identity mismatch, failure to preserve exact file mode, source-age expiry before unpause or tool failure before injection.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain original/corrupt hashes, command, Broker, journal, Worker, physical, visual and cleanup evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-121
+next_experiment: EXP-122
 ```
