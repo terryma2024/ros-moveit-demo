@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e992f7a429ac44fa1a774406b6ada1b1edd46a7d
+current_commit: e30ef1d76ede6e654a91d3accb7a891d03208d08
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-134
-next_experiment: EXP-148
+latest_checkpoint: CP-136
+next_experiment: EXP-150
 ```
 
 Frozen provenance:
@@ -10875,4 +10875,154 @@ confirmed_conclusions:
 open_risks:
   - No new source may be qualified by historical install, image or live evidence; every applicable gate must be fresh after commit.
 next_command: Recompute and read back all six mandatory EXP-045 hashes, reject placeholders/truncated hashes, run recovery-index and diff checks, commit only scoped files, then start EXP-148 committed requalification.
+```
+
+## EXP-148 — Committed rebuild and complete ordinary qualification
+
+```yaml
+experiment_id: EXP-148
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:04:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:10:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:14:00+08:00
+prior_experiment: EXP-147
+hypothesis: The committed remediation at e30ef1d76ede6e654a91d3accb7a891d03208d08 builds into the isolated overlay, hash-matches its runtime modules and passes the complete ordinary package suite.
+single_variable: Build and test only the committed remediation; preserve model, runtime and Broker policy.
+lifecycle: PROCESS_FREE_BUILD_AND_TEST
+success_criteria: Recovery index passes; build succeeds; all seven changed runtime modules match installed runtime bytes; package prefix is the isolated worktree; all ordinary tests pass from a new verified NVMe scratch without benchmark collection.
+failure_criteria: Any source/install mismatch, recovery-index/build/test failure or benchmark collection.
+invalid_criteria: Wrong overlay/interpreter, reused scratch or tempfile outside the registered root.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain all build/provenance/test evidence and scratch roots; delete nothing without explicit authorization.
+observed:
+  - The precommit recovery-index audit passed one test, then commit e30ef1d76ede6e654a91d3accb7a891d03208d08 was built successfully in 2.18 s.
+  - A first provenance shell omitted the package-specific environment hook and is retained as invalid. The corrected readback resolves ros2 pkg prefix to the isolated install and byte-matches all seven changed runtime modules to their committed sources.
+  - The exact /usr/bin/python3 tempfile probe resolved to the new scratch/ac/tmp. The complete ordinary suite passed 2879 tests in 89.81 s with four pre-existing fork warnings and no benchmark collection.
+conclusion: VALID; committed source, installed runtime and the full ordinary suite agree.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-recovery-index.log sha256=a71df3ef716cabe43ead70bd8311cda3aeadcb986bea501da0ea9262f31c3925
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-recovery-index.time sha256=78ee04c43cf6c61ba6ed92c4d37acba6579d1884282372d0bc1f8fa947798ece
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-recovery-index.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-recovery-index.tempdir sha256=9882a7d54478cb6e9a0415f836da8e39ab00511e550ee3cb03ac56b696c6038c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-build.log sha256=6ed1e90949f312599ded9a601cdc80947a7ced312098b6e6bac2e2eaad829c4f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-build.time sha256=541a859e4ff204246d01f832c8bc82f65b1b0fec0b694ebfca8b0eeed9891439
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-build.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-installed-provenance.log sha256=89705e9d695df94f9bfcd8df5453a2cef717aa609f8322d98c9f31b26fae3997
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-installed-provenance2.log sha256=908f48254460a504a4065328fa01828bad729d0699bc287fc9811b750f4d0b2a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-full.log sha256=8ed943641d152c62da597ac4a7aced45610f1a34534618ad77148e95c7e552d4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-full.time sha256=06c1e62144ec1361cf1995ed445b75ec682b48b340d55b29720e0da6293ad00c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-full.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp148-full.tempdir sha256=01853abcf09fee5572d46b2007428dc411107402d8272de0fbc17b5a2cf38101
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/ab
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/ac
+decision: REBUILD_IMMUTABLE_BROKER_AND_SMOKE
+next_experiment: EXP-149
+```
+
+```yaml
+checkpoint_id: CP-135
+last_valid_experiment: EXP-148
+current_hypothesis: Rebuilding the immutable Broker source layer from e30ef1d76 will bind subsequent live gates to all five Astra remediations while preserving both frozen CUDA model outcomes.
+working_tree_status: Product source/tests are clean at e30ef1d76; only ledger qualification results are uncommitted and MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - Committed build, installed bytes and 2879 ordinary tests pass.
+open_risks:
+  - The old Broker image is stale and cannot be used for live qualification.
+next_command: Rebuild the immutable image, read back provenance, smoke both frozen model paths on CUDA and audit cleanup.
+```
+
+## EXP-149 — Remediation-source immutable Broker rebuild and smoke
+
+```yaml
+experiment_id: EXP-149
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:14:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:15:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:17:00+08:00
+prior_experiment: EXP-148
+hypothesis: A source-hash-bound image rebuild from e30ef1d76 will execute both frozen model paths on CUDA and leave no owned runtime residue.
+single_variable: Replace only the Broker image source layer; preserve Dockerfile, dependency lock, model bytes, smoke input and thresholds.
+lifecycle: CONTAINER_ONLY
+success_criteria: Host/image source hashes agree; immutable image ID is read back; both model calls execute on CUDA with QUALIFIED outcomes and candidates; cleanup is exact.
+failure_criteria: Build/provenance/model/cleanup failure, mutable identity, fallback or output regression.
+invalid_criteria: Wrong source commit, changed input/model/config, pre-existing destination or runtime contamination.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain image/smoke/cleanup evidence; delete nothing without explicit authorization.
+provenance:
+  source_commit: e30ef1d76ede6e654a91d3accb7a891d03208d08
+  image_id: sha256:1dcec97ef9930a925ac0907ec61e603b1826de572bd917ece1953aadcf007464
+  source_sha256: e66e31400e9e030fbf4988ed997ee39aea9d01983a43579dae10a6134f484340
+observed:
+  - The immutable image rebuilt successfully in 13.33 s, and host, label and in-image source SHA256 agree.
+  - Both frozen YOLO and Grounded-SAM paths executed on CUDA, returned QUALIFIED and produced one candidate each with their exact expected model hashes.
+  - The first post-smoke jq assertion used the obsolete summary-level runtime_device path and returned false; the raw smoke command itself exited zero. The corrected schema-aware assertion passed without rerunning or changing evidence.
+  - Two cleanup probes included their own command line in a broad process match and are retained as invalid audit attempts. The final /proc-based exact Broker scan, labeled Docker scan and GPU compute scan are empty.
+conclusion: VALID; the new immutable image and both frozen CUDA model paths are qualified for fresh live gates.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-image-build.json sha256=02d0e186540cbee34d9b38d9c67f743482a6a50a21d84a0af413f63a61bf1a2e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-image-build.log sha256=7602af772cd22af08bb92969f15a2e4b15abd1d2d1f70751dbca171379b69686
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-image-build.time sha256=410f71122d114665f6fe1354cfad6275e9e5c918b06d1d35353a9d17627d38b2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-image-build.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-pre-build-containers.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-model-smoke.log sha256=c3bd3e9f97e381ca719abb448e0044709215e6d34396bcb7f08d7df34d3b9c3e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-model-smoke.time sha256=78054bd8c8e9c4d66593bb48380593f000630aeea9e670b13951a1e39844a3b5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-model-smoke.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-smoke-admission.json sha256=0caa4297b37d4d1b5ca154fb84bebe41c4c2af91b54325fa3b776e378dc40926
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-model-smoke-summary.json sha256=55dbdd31b7f1e810517df1d43b88a81edff8eb5027163442ab080f5875a6bf50
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-cleanup-audit.log sha256=2f321acc9dd04d20eea027f563c803dca4377a885f0523d6e42f1319a920b824
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-cleanup-audit2.log sha256=d60a8265d023a41ac2d74a7ddbd03621bcd788eead3ff175734f2e5e0326fd61
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp149-cleanup-audit3.log sha256=516cff72379ecf7c5a13967597eeea24d6123372e96243ab00d8b9aa49e204ab
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-149-smoke/ipc/.model-ready.json sha256=913dfd3a0ce634d75c4af2f05b6b26cecdbcd814e01df0b06e319b51b0dfbcf1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-149-smoke/ipc/smoke.json sha256=92253caecc90c4a510edc26e759aa73b8386beb7ccb9bccf1ea3c4e6eb579425
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-149-smoke
+decision: RUN_FRESH_IDENTIFIED_ACTIVE_GOAL_FAULT
+next_experiment: EXP-150
+```
+
+```yaml
+checkpoint_id: CP-136
+last_valid_experiment: EXP-149
+current_hypothesis: The remediation-source image is qualified; a fresh exact active-goal watchdog fault will prove cancellation begins independently of durable audit I/O and still leaves correlated receipts and safe post-stop state.
+working_tree_status: Product source/tests remain clean at e30ef1d76; ledger result/preregistration is pending commit.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - Committed install/full-suite and immutable dual-model gates pass for e30ef1d76.
+open_risks:
+  - Fresh live correlation of exact active goal, in-memory revocation boundary, controller settlement, durable audit and post-stop state remains required.
+next_command: Commit this checkpoint after mandatory EXP-045 hash readback, then run one isolated N=1/K=1 simulation execute fault with continuous observation and exact cleanup.
+```
+
+## EXP-150 — Remediation-source exact active-goal watchdog fault
+
+```yaml
+experiment_id: EXP-150
+status: PLANNED
+prior_experiment: EXP-149
+hypothesis: Stopping the exact Coordinator while an arm goal is EXECUTING will cause the watchdog to revoke the exact lease and begin Broker fencing/controller cancellation without waiting on audit fsync, then persist correlated receipts and leave a fresh safe post-stop scene.
+single_variable: Send SIGSTOP only to the exact Coordinator after an arm goal becomes EXECUTING; preserve production timeout, image, models, point, motion policy, thresholds and Broker fencing.
+lifecycle: ONE_WORKER_ONE_BROKER_SIMULATION_FAULT
+batch_id: parallel-heartbeat-fault-20260913-v11-astra3
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-150
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+mode: execute; simulation only
+success_criteria: Exact process identity and state-T injection; active controller goal transitions to a terminal canceled state with no successor; internal exact-lease timestamps show cancellation starts from the captured revocation boundary; fresh post-stop joint/TF/MuJoCo/Planning Scene/RGB evidence precedes teardown; conservative result and exact cleanup.
+failure_criteria: Cancellation waits on audit I/O, controller settlement is absent, a successor goal appears, motion continues, unsafe state, non-conservative promotion or cleanup residue.
+invalid_criteria: Missed active-goal window, wrong process identity, missing timestamp/UUID correlation, late observer, evidence only after teardown or unrelated ownership contamination.
+retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_136
+next_experiment: EXP-150
 ```
