@@ -59,6 +59,7 @@ pnpm-debug.log*
 
 # Local Git worktrees and machine-specific state
 .worktrees/
+.codex-task/
 .idea/ctestState.xml
 assets/captures
 
