@@ -1064,6 +1064,36 @@ def test_failed_recovery_quarantines_and_prevents_another_lease():
     assert fake.coordinator.recovery[-1]["succeeded"] is False
 
 
+def test_recovered_initial_gate_failure_continues_to_unique_remaining_point():
+    fake = Fake(point_count=2)
+    original_gate = fake.runtime.point_initial_gate
+    gate_calls = 0
+
+    def fail_first_gate(lease, reset):
+        nonlocal gate_calls
+        gate_calls += 1
+        if gate_calls == 1:
+            raise RuntimeError("first point initial gate rejected")
+        return original_gate(lease, reset)
+
+    fake.runtime.point_initial_gate = fail_first_gate
+
+    results = ParallelWorker(fake.ports()).run()
+
+    assert [result.stopped_reason for result in results] == [
+        "INITIAL_GATE_FAILED",
+        "POINT_TERMINAL",
+        "NO_POINT",
+    ]
+    assert [result.point_id for result in results if result.point_id] == ["p1", "p2"]
+    assert results[0].terminal_status is AttemptStatus.INVALID
+    assert results[0].recovered is True
+    assert sum(
+        call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls
+    ) == 3
+    assert fake.coordinator.next_point == 3
+
+
 def test_recovery_deadline_starts_once_and_cannot_be_extended():
     fake = Fake()
     observed = []

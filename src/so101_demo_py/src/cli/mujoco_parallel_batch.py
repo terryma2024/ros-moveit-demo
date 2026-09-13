@@ -32,12 +32,14 @@ from so101_demo.parallel_batch.artifacts import (
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
+    AttemptStatus,
     BatchRequest,
     BatchSummary,
     ContractError,
     LeaseIdentity,
     ParallelRuntimeConfig,
     RunMode,
+    ValidationStatus,
     ValidationIdentity,
     WorkerState,
     ExecutionKind,
@@ -1392,6 +1394,26 @@ def _write_worker_results(resources, results):
     return path
 
 
+def _worker_results_failed(results):
+    """Classify only an unrecovered or nonterminal Worker result as fatal."""
+    if not results:
+        return True
+    for result in results:
+        if result.stopped_reason in {"POINT_TERMINAL", "NO_POINT"}:
+            continue
+        if (
+            result.stopped_reason == "INITIAL_GATE_FAILED"
+            and result.recovered is True
+            and result.terminal_status in {
+                AttemptStatus.INVALID,
+                ValidationStatus.VALIDATION_INVALID,
+            }
+        ):
+            continue
+        return True
+    return False
+
+
 def _run_worker_spec(path, *, runtime_side_effects=None):
     worker, runtime = _build_worker_from_spec(
         path, runtime_side_effects=runtime_side_effects
@@ -1439,13 +1461,7 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     try:
         results = worker.run()
         _write_worker_results(resources, results)
-        return int(
-            not results
-            or any(
-                result.stopped_reason not in {"POINT_TERMINAL", "NO_POINT"}
-                for result in results
-            )
-        )
+        return int(_worker_results_failed(results))
     finally:
         try:
             runtime.shutdown_owned()
