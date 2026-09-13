@@ -197,7 +197,8 @@ with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
 `_FROZEN_RUNTIME_VALUES`。`BatchRequest` 新增末尾默认字段 `schema_version=1`，按 schema
 选择最大 Worker 数。
 
-注册表初始内容只声明 schema 和空的 accepted profiles：
+repo-tracked 文件只是签名 profile 的审计索引，不是 live 授权源。初始内容只声明 schema 和
+空的 accepted profiles：
 
 ```yaml
 schema_version: 1
@@ -235,8 +236,8 @@ git commit -m "feat: freeze parallel batch v2 contract"
 
 - [ ] **Step 1: 写原子性和崩溃竞态 RED tests**
 
-测试使用精确的 v1 root `/run/user/<uid>/so101-parallel-domain-claims/domain-<id>.lock`：八个 lock
-全部取得、第四个冲突时前三个回滚、不可读 ROS 候选失败、旧 Worker 持有 Domain 时拒绝、
+测试使用精确的 v1 root `/run/user/<uid>/so101-parallel-domain-claims/domain-<id>.lock`：
+qualification 取得八个 lock、normal N 取得映射表前 N 个、第四个冲突时前三个回滚、不可读 ROS 候选失败、旧 Worker 持有 Domain 时拒绝、
 quiet probe 后按序释放。receipt 必须含 boot ID 和 process start ticks。增加 Fast DDS 配置哈希、
 SHM/Data Sharing 禁用、participant=33 拒绝和跨 Domain graph 不可见测试。
 
@@ -252,8 +253,9 @@ SHM/Data Sharing 禁用、participant=33 拒绝和跨 Domain graph 不可见测�
 
 - [ ] **Step 4: 接入 `WorkerResourceAllocator`**
 
-v1 保留当前前三个 Domain 行为；v2 qualification 总是预留八个，worker resource manifest
-只按阶段逐步 materialize slot。manifest 保存全部 claim receipt 和当前 started slots。
+v1 保留当前前三个 Domain 行为；v2 qualification 总是预留八个，normal N 在启动前原子预留
+映射表前 N 个，不能在运行中追加。worker resource manifest 只按阶段逐步 materialize slot，
+保存全部 claim receipt 和当前 started slots。
 
 - [ ] **Step 5: 运行 GREEN 和资源回归**
 
@@ -537,7 +539,7 @@ git commit -m "feat: scale perception broker to eight workers"
 验证 Authority 拒绝调用者路径、调用者 stage/阈值、自签或伪造 acceptance、registry 篡改、
 错误 peer credential/nonce/Ed25519 signature、symlink、inode 替换、缺样、哈希不符、八路执行无重叠和
 provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时间过期字段或 age gate。
-验证 allowlist 排除 docs/evidence/ledger/profile/registry/Git commit，提交 profile 后 identity 不变，
+验证 source/install 的同一逻辑 allowlist 排除 docs/evidence/ledger/profile/registry/Git commit，提交 profile 后 identity 不变，
 而 Python、launch、Docker input、运行配置、策略或场景任一变化都拒绝。
 
 - [ ] **Step 2: 运行 RED**
@@ -555,7 +557,8 @@ provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时�
 
 安装脚本首次运行时把私钥生成到 root/Authority-only 路径，只导出公钥到仓库路径。公钥经审查
 提交后，脚本再次安装并回读运行 fingerprint；代码只信任 repo 固定公钥。实现固定 runtime
-content allowlist manifest 和 canonical SHA256；`implementation_commit` 只记审计信息。
+content allowlist manifest 和 canonical SHA256；install space 对映射后的同一 allowlist 计算，
+不哈希整个 install tree；`implementation_commit` 只记审计信息。
 
 - [ ] **Step 4: 实现 provisional/final 输出**
 
@@ -604,8 +607,9 @@ git commit -m "feat: verify independent W8 admission profiles"
 
 - [ ] **Step 1: 写 CLI RED tests**
 
-覆盖 v1 不接受 v2 flags、normal N=1..8 四计数精确相等、W4–W8 normal 缺 profile、W8
-qualification 非 8 请求、请求 8 实际只启动 7、阶段跳过、provisional 缺失、revoked profile
+覆盖 v1 不接受 v2 flags、normal N=1..8 四计数精确相等、qualification 预留 8 Domain、normal
+预留前 N 个 Domain、W4–W8 normal 缺 profile；验证 N=4/5/6/7/8 分别选择 stage
+4/6/6/8/8 envelope。覆盖 W8 qualification 非 8 请求、请求 8 实际只启动 7、阶段跳过、provisional 缺失、revoked profile
 和 profile drift。实现并测试精确的 `--stop-after CREATE_CGROUPS` 枚举选项；错误码必须进入
 stderr 与 summary。
 

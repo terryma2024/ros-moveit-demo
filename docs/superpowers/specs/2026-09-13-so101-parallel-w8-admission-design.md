@@ -115,7 +115,7 @@ ros_discovery_scope: localhost
 fastdds_transport: udp_v4_loopback_only
 fastdds_data_sharing: false
 max_dds_participants_per_worker: 32
-domain_allocation_policy: reserve_all_before_start
+domain_allocation_policy: reserve_final_request_before_start
 qualification_worker_stages: [1, 2, 4, 6, 8]
 qualification_canary_rounds_per_stage: 3
 exact_worker_count_required: true
@@ -161,7 +161,8 @@ controller_deadline_miss_limit: 0
 ### 4.3 请求不变量
 
 - v2 normal 接受 `1 <= worker_count <= 8`，拒绝 W9；qualification 只接受最终目标 W8。
-- W4–W8 必须提供匹配的资源画像，或显式使用 `qualification` 模式。
+- W4–W8 normal 必须提供已接受的 W8 资源画像：N=4 使用 stage-4 envelope，N=5/6 使用
+  stage-6 envelope，N=7/8 使用 stage-8 envelope；W1–W3 可保持 v1 的现有资源门。
 - `requested_worker_count`、`allocated_worker_count`、`started_worker_count` 和最终
   `ready_worker_count` 分开记录。
 - normal 正式队列开放时，四者必须都等于请求 N；qualification 正式队列开放时四者必须都为 8。
@@ -208,7 +209,8 @@ Coordinator 收到并复核后，才开放正式 20 点全局队列。八个 Wor
 
 ### 6.1 原子保留
 
-v2 固定 215–222，并在 `START_1` 前按数值顺序申请全部八个 lock。215–222 位于 Linux 推荐的
+v2 固定 215–222。qualification 的 final request 是 W8，因此在 `START_1` 前按数值顺序申请
+全部八个 lock；normal N 在启动前原子申请映射表前 N 个，不能边运行边追加。215–222 位于 Linux 推荐的
 非临时端口 Domain 范围，避开 v1 的 181–183；每个 Worker 的 DDS participant 数硬上限为 32。
 只有八个 lock 全部成功，
 才写入 `DOMAINS_RESERVED`；任一失败会释放本次刚取得的 lock，并以
@@ -413,7 +415,8 @@ SHA256、inode、大小和修改时间，再从原始样本重新计算指标。
 `runtime_content_sha256` 使用固定 allowlist，只覆盖实际影响执行的 Python/C++、launch、package
 metadata、Docker 构建输入、运行配置、策略、场景和模型身份文件；明确排除 `docs/**`、evidence、
 实验账本、Authority registry、accepted profile JSON/YAML 和 Git commit 对象。完整清单及每个
-文件哈希写入画像。`implementation_commit` 仅供审计，不参与匹配；这样把 accepted profile
+文件哈希写入画像。`installed_runtime_content_sha256` 对 install space 中同一逻辑 allowlist 的
+产物计算，不对整个 install tree 做递归哈希，并采用相同排除项。`implementation_commit` 仅供审计，不参与匹配；这样把 accepted profile
 提交到仓库不会自我失效，而任何 allowlist 内运行文件变化都会拒绝。normal 的点位子集仍用
 qualification 时冻结的完整 catalog identity，并用既有 `--point-id` 表示 selection，不能另建
 一个 catalog 冒充 provenance 一致。
