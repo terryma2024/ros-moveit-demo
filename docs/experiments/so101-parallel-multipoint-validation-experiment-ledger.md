@@ -7954,5 +7954,17 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   runner_python: /usr/bin/python3
   locked_site_packages: /data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages
+intermediate_observed:
+  - The four-package p116 symlink build passed in 2.49 s.
+  - The first complete p117 package test validly collected 2839 tests and exposed four crash-publication fixture regressions after 2835 passes: those fixtures claimed PASSED with only attempt-result.json, which the F5 verifier correctly rejects because no physical execution evidence exists.
+  - The fixtures now use a truthful reset-stage INVALID seal while retaining the same before/after fsync, atomic rename, recovery-discovery, durable RESULT_COMMITTED, and late-result assertions. Focused p119 passed all five cases. The intermediate p118 collection error used the nonexistent PointStatus.INVALID and is INVALID harness evidence only.
+intermediate_evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p117-colcon-test.log sha256=1dc2e10cc9e309b6791f49bfc8aad27554a1c3993d5ed91c3df0c1db863b8633
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p119-crash-fixture-green.stdout sha256=9f5fca75b3047a6b50338570acc3b84d6f91fc01f7616bf565c9c7f9222d4381
+intermediate_deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p116
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p117
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p118
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p119
 decision: PENDING
 ```
