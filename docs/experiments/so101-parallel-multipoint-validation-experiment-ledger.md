@@ -8006,3 +8006,37 @@ open_risks:
   - Static source/install/runtime/image provenance, smoke, both execute fault injections, fresh four-point/full qualification, visual inspection, cleanup, and final Astra review remain pending.
 next_command: Commit EXP-104/CP-091 ledger state, preregister EXP-105, then generate direct source/install/runtime provenance and rebuild/smoke the immutable Broker image.
 ```
+
+## EXP-105 — Post-remediation provenance, immutable image, and model smoke
+
+```yaml
+experiment_id: EXP-105
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:37:53+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:37:53+08:00
+prior_experiment: EXP-104
+hypothesis: The clean post-remediation checkout and freshly built overlay have exact source/install/entrypoint provenance and can rebuild one immutable Broker image whose internal verified source equals the host source, then execute both frozen models successfully.
+single_variable: Qualify source/install/image bytes from clean remediation source; do not start a Worker, MoveIt, controller, or physical simulation stack.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - complete package gate EXP-104 VALID
+  - clean git HEAD de080f20ed2c09f20a043415aa4fe654d470e89d; runtime/test source through a6434abd9e9aa9c992c81eed45f28bf015e753c7
+  - no related process/container/GPU application and exact model input hashes unchanged
+success_criteria:
+  - direct source/install/console/config/catalog/model identities pass production verify_provenance
+  - image build receipt, docker inspect labels, and image-internal provenance agree exactly
+  - YOLO and Grounded-SAM each return one QUALIFIED candidate from the frozen smoke input
+  - smoke container is removed and no GPU/container residue remains
+failure_criteria:
+  - any dirty/mixed overlay, hash mismatch, model failure, mutable image identity, or residual state blocks execute fault tests
+invalid_criteria:
+  - reused output/root, wrong model path, existing container endpoint, or incomplete resource preflight
+provenance:
+  source_commit: de080f20ed2c09f20a043415aa4fe654d470e89d
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image: so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1
+decision: PENDING
+```
