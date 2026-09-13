@@ -55,7 +55,7 @@ open_hypotheses:
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
 latest_checkpoint: CP-120
-next_experiment: INDEPENDENT_ASTRA_HIGH_REVIEW
+next_experiment: EXP-134
 ```
 
 Frozen provenance:
@@ -9989,20 +9989,29 @@ evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp133-terminal-rgb-check.log sha256=9c21cec3d82a7c9148bec6b45b6db5e48092d19ae0751c08c81d69f80200e012
 retention_rule: Retain the complete full-133 root, launcher, MuJoCo log and visual checksum/readback reports; delete nothing without explicit authorization.
 decision: REQUEST_FINAL_INDEPENDENT_REVIEW
-next_experiment: INDEPENDENT_ASTRA_HIGH_REVIEW
+next_experiment: EXP-134
 ```
 
 ```yaml
 checkpoint_id: CP-120
 last_valid_experiment: EXP-133
 current_hypothesis: All remediation and mandatory runtime gates are complete; an independent Astra high review of the final diff and evidence will either confirm completion or identify a concrete remaining Critical/Important issue to repair.
-working_tree_status: EXP-133 result is the only tracked change; all product source changes are committed and the ignored SDD progress file remains to be synchronized.
+working_tree_status: Only the numeric next-experiment correction and its final ledger-audit evidence remain uncommitted; all product source and EXP-133 result changes are committed, and ignored SDD progress is synchronized through CP-120.
 owned_processes: NONE
 preserved_processes: Existing unrelated stopped containers only.
 confirmed_conclusions:
   - Package/model/provenance, both execute-mode fault gates, fresh four-point and fresh complete 20-point qualification all pass on the immutable EXP-129 image.
   - EXP-133 covers every frozen point exactly once with balanced N=2/K=10 scheduling, complete sealed evidence, fresh visual inspection and no owned residue.
+  - The first final recovery-index audit correctly rejected the nonnumeric review action used as next_experiment; changing only that header/result field to reserved EXP-134 made the fresh rerun pass 1 test in 0.01 s.
+audit_evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-ledger-audit.log sha256=d021017c7de69a9926ba696b9c3f33c85fccf09de56c96877994454e2b410532
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-ledger-audit.time sha256=ecada759377a8cafba3356b4d23dcf2ee5811431894e777975364c87bd8f0b0f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-ledger-audit2.log sha256=4bcefcc9f6c645923b9993ccf73ad92e6b400ca25458ea14e095857fc2131342
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-ledger-audit2.time sha256=76b43cae5b5cb7c3523932d8f2df83181ddd308418fcd89f1da73a5a0a4a01b6
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/final-ledger-audit
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/final-ledger-audit2
 open_risks:
-  - The mandatory independent gpt-6-astra high verdict and final SDD/report synchronization remain outstanding.
-next_command: Commit CP-120 after mandatory EXP-045 hash readback, synchronize SDD progress, then request the independent Astra high review of the final remediation diff and retained evidence.
+  - The mandatory independent gpt-6-astra high verdict and final durable report remain outstanding.
+next_command: Commit the numeric recovery-index correction after mandatory EXP-045 hash readback, then consume the independent Astra high review and persist the final durable report.
 ```
