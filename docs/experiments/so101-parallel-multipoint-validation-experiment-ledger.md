@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: d9b141bedcc73d7975f1fae1a4722653e532eeba
+current_commit: a9e2b27832a892c70f663895ebff6540b411ef49
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-092
-next_experiment: EXP-106
+latest_checkpoint: CP-093
+next_experiment: EXP-107
 ```
 
 Frozen provenance:
@@ -8086,12 +8086,14 @@ next_command: Commit EXP-105/CP-092, preregister EXP-106, and run the controlled
 
 ```yaml
 experiment_id: EXP-106
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:44:27+08:00
   - status: RUNNING
     at: 2026-09-13T10:44:27+08:00
+  - status: INVALID
+    at: 2026-09-13T10:47:12+08:00
 prior_experiment: EXP-105
 hypothesis: When the Coordinator becomes unavailable while the exact dynamic consumer is executing, the Worker watchdog independently revokes that lease, fences later goals, cancels and confirms the current controller goal within the heartbeat bound, and leaves MuJoCo and Planning Scene conservatively recoverable.
 prediction: Suspending only the exact manifest-owned Coordinator process after a dynamic execute consumer appears will block heartbeat acknowledgement while leaving the Worker alive; before Coordinator resume, the exact consumer/controller work will be stopped, and after resume no later goal from the revoked lease will be submitted.
@@ -8124,7 +8126,68 @@ provenance:
   source_commit: d9b141bedcc73d7975f1fae1a4722653e532eeba
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+observed:
+  - The launch shell enabled nounset before sourcing ROS setup files. Those setup files legitimately read unset tracing/prefix variables, so the overlay did not populate the package metadata path.
+  - The console process exited 1 in 0.128845 s with PackageNotFoundError before allocating the batch root; no Broker, Worker, ROS, MuJoCo, MoveIt, controller, container, GPU process, lease or physical action existed.
+conclusion: INVALID orchestration environment; this is not heartbeat-fault or product evidence, and its experiment and batch IDs will not be reused.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-106.log
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-106.time
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-106.exit
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/coordinator-identity-106.json
 retention_rule: Retain all fault, command, runtime, numeric, visual and cleanup evidence; delete nothing without explicit user authorization.
+decision: KEEP_INVALID
+next_experiment: EXP-107
+```
+
+```yaml
+checkpoint_id: CP-093
+last_valid_experiment: EXP-105
+current_hypothesis: The heartbeat fault hypothesis remains untested because EXP-106 failed before product startup; removing only shell nounset and using a new root should reach the preregistered in-flight fault window.
+working_tree_status: EXP-106 invalid launch evidence is ledger-only; no runtime root or product-owned process was created.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - EXP-106 is an orchestration invalid caused by overlay setup under nounset, not a product result.
+open_risks:
+  - The complete execute heartbeat/lease-loss fault gate remains pending.
+next_command: Preregister EXP-107 with a new batch/root and rerun the otherwise identical fault sequence without shell nounset.
+```
+
+## EXP-107 — Execute heartbeat/lease-revocation fault injection retry
+
+```yaml
+experiment_id: EXP-107
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:47:12+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:47:12+08:00
+prior_experiment: EXP-106
+hypothesis: With the verified ROS/worktree overlay sourced normally, Coordinator unavailability during exact dynamic execution causes Worker-side independent lease revocation, bounded controller cancel-and-confirm, and fencing of all later goals from that lease.
+single_variable: Remove shell nounset from the otherwise identical EXP-106 launch environment and use a new immutable batch/root; product source, install, image, models, config, point and fault sequence remain fixed.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v2-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-107
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+fault_sequence:
+  - wait for exact Worker-owned dynamic consumer and active controller evidence
+  - verify and record Coordinator, Worker and consumer identities
+  - SIGSTOP exact Coordinator for longer than heartbeat_timeout_s
+  - capture controller/joint/TF/MuJoCo/Planning Scene/process state and require consumer/controller stop before Coordinator resume
+  - SIGCONT the same Coordinator and require conservative adjudication, no later revoked goal and exact cleanup
+success_criteria: All EXP-106 success criteria, with the injection demonstrably inside active execute and cancellation complete before SIGCONT.
+failure_criteria: Any missed fault window, identity drift, late cancellation, later revoked goal, uncertain physical classification, incomplete evidence, or residual state.
+invalid_criteria: Wrong overlay, pre-existing root, signal to an unverified identity, or an injection before active execute.
+provenance:
+  source_commit: a9e2b27832a892c70f663895ebff6540b411ef49
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-106
+next_experiment: EXP-107
 ```
