@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-110
-next_experiment: EXP-124
+latest_checkpoint: CP-111
+next_experiment: EXP-125
 ```
 
 Frozen provenance:
@@ -9306,12 +9306,14 @@ next_command: Commit CP-110, persist/read back the exact EXP-124 launcher and ob
 
 ```yaml
 experiment_id: EXP-124
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T12:03:00+08:00
   - status: RUNNING
     at: 2026-09-13T12:03:00+08:00
+  - status: VALID
+    at: 2026-09-13T12:10:00+08:00
 prior_experiment: EXP-123
 hypothesis: Persisting and syntax-checking the launcher will execute the unchanged EXP-122 integrity fault and prove the production live Broker recovery path.
 single_variable: Replace only manual launcher entry with a read-back syntax-checked script and unique f2-124 identity; all product inputs, fault action and criteria remain EXP-122-identical.
@@ -9331,6 +9333,63 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - Syntax-checked scripts verified immutable generation-1 identity, both ready/model receipts, two started Workers and zero inputs, then paused the exact container. Both 0400 request mirrors were copied with original hashes, changed by one byte, restored to 0400 and generation 1 resumed alive.
+  - Production Broker recorded runtime_inference_failure ValueError INPUT_HASH_CHANGED and BrokerResponse.INFRA_ERROR while remaining alive. The sibling request received BROKER_NOT_READY.
+  - Coordinator never recorded BROKER_HEALTH_CHANGED, remained broker_healthy=true, never created generation 2, and granted both Workers three leases each until CAPACITY_EXHAUSTED. Four points ended UNRUN; exit 1 in 118.24 s. Exact cleanup nevertheless passed and residue is empty.
+  - Source tracing identifies the concrete integration defect: _BrokerCoordinatorClient sends broker_health_down with lease=null, but WorkerTokenAuthority.authenticate omits broker_health_down from its lease_optional operations, so the real authority rejects the event as LEASE_REQUIRED. Existing tests exercised the handler or mocked authority and missed the production composition.
+conclusion: VALID_RED; Astra F2 remains live-broken despite the earlier unit candidate. The authenticated Broker event is rejected before the Coordinator handler, so grants continue and K is exhausted.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp124.zsh sha256=f951fe9637eaf229413f867aac49ff20bf38b52854228d5ea9843500ef594f90
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/observe-exp124.bash sha256=c50000948ee4da0a5b74f9151d1ac37457d64aa94f0d6491e85280357b2b09ae
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-124.log sha256=720a7392f4aa141f3d1cc537fec461878e2d89bc65494a0a5c22b7b292be0fdc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-124.time sha256=b5f423eb12182c80060fa87b27a6573f2462525af57f466a054d998efec516e7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-124.log sha256=449ca97d3c323be9cb0e9a8d93f969960f71ffdbbb217442af014edcc27702b9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/EXP124-original-1.npy sha256=113cdeeb94c0d598b322b95aa747e9352eb60dd97d8acabe96d9363fd9c3531e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/EXP124-original-2.npy sha256=f592708592d8eb1930bff677966f330c77231300e32caf4ab355a7d01db82db5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124/ipc/broker/.failure.json sha256=422cd572e24e940759c2f726549923c4656d2b74e63e26c1c74804614ec6452d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124/coordinator/aggregate_results.json sha256=2c085cc38815bc4eb41fb170b7f068fee224c930be0308beb20c95ce7c740c03
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124/cleanup-gates.json sha256=18d939a979fc57f4b99935fc71dd0ec5ad5a24f14195b63696696e94c74cf306
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124/workers/worker-01/worker-run-results.json sha256=76a9090285b83f8b9993b94a0e4bd585672e29ceaacd13024d2fb39f2096b40a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-124/workers/worker-02/worker-run-results.json sha256=af63432913a3bc0b73bf290678eb405058300ac15004f755a5d19095960eead4
+decision: FIX_BEFORE_NEXT_LIVE_GATE
+next_experiment: EXP-125
+```
+
+```yaml
+checkpoint_id: CP-111
+last_valid_experiment: EXP-124
+current_hypothesis: Adding broker_health_down to the authority's explicit lease-optional allowlist will let only authenticated generation-bound Broker health events reach the already-strict handler; stale/forged rejection remains unchanged.
+working_tree_status: EXP-124 live RED and EXP-125 preregistration are ledger-only; production source not yet changed.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The production Broker correctly detects and labels INPUT_HASH_CHANGED as INFRA_ERROR.
+  - The actual authority boundary rejects the legitimate lease-free Broker event with LEASE_REQUIRED, preventing health pause/recovery.
+open_risks:
+  - The minimum allowlist fix needs production-composition RED/GREEN, adjacent IPC/CLI tests, full rebuild/image gate and a repeated live F2 fault.
+next_command: Commit CP-111, add a deterministic production authority RED, then make the one-operation allowlist fix.
+```
+
+## EXP-125 — Admit authenticated lease-free Broker health event
+
+```yaml
+experiment_id: EXP-125
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:10:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:10:00+08:00
+prior_experiment: EXP-124
+hypothesis: The sole missing production seam is WorkerTokenAuthority's lease_optional allowlist; admitting broker_health_down there lets the exact authenticated generation event pause Coordinator grants while all forged/stale/malformed events remain rejected.
+prediction: A real Broker authority client/server composition currently fails LEASE_REQUIRED; after adding exactly broker_health_down to the allowlist it passes, broker_healthy becomes false, no lease is granted, and stale/forged tests remain green.
+single_variable: Add only broker_health_down to the existing explicit lease-optional operation set plus a production-composition regression test; do not weaken token, generation, payload, idempotency or handler validation.
+lifecycle: ISOLATED_STACK
+success_criteria: Valid RED at actual WorkerTokenAuthority/AuthenticatedUnixServer/_BrokerCoordinatorClient boundary; GREEN proves health false and zero K/lease; existing stale-generation, forged-token, malformed-outcome and adjacent IPC/CLI suites pass.
+failure_criteria: Any token/generation/payload relaxation, lease-bearing health event requirement, handler bypass, replay weakness or adjacent regression.
+invalid_criteria: Mock-only authority RED, wrong interpreter/overlay, reused scratch, tempfile outside registered NVMe root or collection/setup failure.
+retention_rule: Retain RED/GREEN/adjacent/package/live evidence and all scratch; delete nothing without explicit authorization.
 decision: RUN
-next_experiment: EXP-124
+next_experiment: EXP-125
 ```
