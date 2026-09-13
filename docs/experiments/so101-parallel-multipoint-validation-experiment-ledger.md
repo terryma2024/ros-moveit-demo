@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 727b3d216cb3d1698c3caf781ff5d3f3d7b2720f
+current_commit: 4a8d51452d8bbe9fb5ca5a393074cb458e48a4a7
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -54,7 +54,7 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-120
+latest_checkpoint: CP-121
 next_experiment: EXP-134
 ```
 
@@ -10014,4 +10014,49 @@ deletion_candidates:
 open_risks:
   - The mandatory independent gpt-6-astra high verdict and final durable report remain outstanding.
 next_command: Commit the numeric recovery-index correction after mandatory EXP-045 hash readback, then consume the independent Astra high review and persist the final durable report.
+```
+
+```yaml
+checkpoint_id: CP-121
+last_valid_experiment: EXP-133
+review: INDEPENDENT_GPT_6_ASTRA_HIGH_ROUND_1
+review_verdict: NOT_APPROVED
+review_findings:
+  - severity: Important
+    disposition: CONFIRMED
+    boundary: DONE dynamic manifests can pass both runtime and Coordinator verification with an incomplete trace, stale/physically false final sample and absent world cup.
+  - severity: Important
+    disposition: CONFIRMED
+    boundary: Pre-release ERROR manifests are forced through successful-release evidence and lose trustworthy stage-specific business failures as INDETERMINATE.
+  - severity: Important
+    disposition: CONFIRMED
+    boundary: EXP-118 proves bounded consumer retirement but not cancellation of an identified active goal at watchdog expiry and lacks fresh post-stop physical/scene/visual evidence.
+  - severity: Important
+    disposition: CONFIRMED
+    boundary: Crash resume omits live ROS-domain and socket collision probes after exact old-owner fencing.
+review_evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-astra-review-1.md sha256=02a1a310d5e5ff429e12078deae15bcc92c433548f484117d7da0d0936d83ec3
+confirmed_conclusions:
+  - All 283 reviewed cited evidence hashes matched; EXP-131/132/133 outcomes and cleanup facts remain valid under the current contract.
+  - EXP-118 must be retained only as consumer-retirement and conservative-adjudication evidence, not as complete live active-goal cancellation qualification.
+  - Completion is blocked on source fixes, fresh package/provenance and applicable live/qualification repetition, not on external authority.
+next_command: Commit CP-121, then add deterministic RED cases for semantic DONE/ERROR verification before changing the implementation.
+```
+
+## EXP-134 — Semantic dynamic outcome verification
+
+```yaml
+experiment_id: EXP-134
+status: PLANNED
+prior_experiment: EXP-133
+hypothesis: Binding dynamic outcomes to the canonical state-machine trace and stage-appropriate controller/physical/scene receipts will reject impossible DONE evidence and preserve trustworthy ERROR reasons without promoting uncertain physical outcomes.
+single_variable: Replace presence-only dynamic-manifest outcome checks with one shared semantic contract keyed by terminal status and reached stage; do not change motion policy, thresholds, Worker scheduling or artifact publication authority.
+lifecycle: PROCESS_FREE_TEST_ONLY
+success_criteria: Deterministic RED reproduces impossible-DONE acceptance and pre-release ERROR loss; GREEN rejects omission/contradiction/stale sample/invalid trace/wrong policy, accepts retained valid DONE compatibility cases, maps fully evidenced stage-specific ERROR to FAILED with its real reason, and keeps incomplete/uncertain ERROR INDETERMINATE in runtime composition.
+failure_criteria: Weakened identity/provenance checks, exit-code trust, inferred physical absence, success without complete policy/physical/scene/controller proof, or loss of a fully proven business failure.
+invalid_criteria: Import/collection/setup failure, wrong overlay/interpreter, reused scratch or tempfile outside the registered NVMe root.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain all RED/GREEN/adjacent evidence and scratch as deletion candidates; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_121
+next_experiment: EXP-134
 ```
