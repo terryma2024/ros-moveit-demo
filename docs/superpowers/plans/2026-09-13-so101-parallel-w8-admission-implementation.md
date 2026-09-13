@@ -386,6 +386,11 @@ deadline、进程逃逸及各自 SOFT/HARD 动作。验证所有指标连续 10 
 realtime factor；color source/receive stamp 计算 FPS/断帧；100 Hz `/joint_states` 在非 pause/reset
 窗口出现 `>0.05 s` source 或 receive gap 时累计 miss。验证 worker control IPC 的身份、sequence、
 断线和旧 generation fencing。
+增加真实消息 callback + reset 生命周期测试：已 journal 的当前 attempt 发送
+`MeasurementResetBegin` 后，20 秒内匹配的 `ResetReceipt(reset_epoch=previous+1)` 才能 commit；
+三类 runtime topic 允许记 `EXPECTED_RESET_GAP`，但 host/cgroup/GPU 采样不能中断。commit 后
+5 秒内三类 topic 都恢复并建立 baseline，Worker metrics wire sequence 连续，才可进入 barrier/
+EXECUTING。超时、epoch 跳变/重放、session 改变、topic 缺失全部 HARD_STOP。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -867,13 +872,36 @@ git commit -m "test: cover W8 admission failure boundaries"
 
 - [ ] **Step 1: 重新 source 并验证安装产物**
 
-先 source `/opt/ros/jazzy/setup.zsh`，再 source 已验证的 `/data/work/ws_moveit/install/setup.zsh`；
+在不继承交互 overlay 的 fresh non-interactive zsh 中，先 source `/opt/ros/jazzy/setup.zsh`，再
+source 已验证的 `/data/work/ws_moveit/install/setup.zsh`，最后必须 source
+`/data/work/ws_moveit/.worktrees/parallel-w8-admission-v2/install/setup.zsh`；
 回读 `mujoco_ros2_control`、`so101_mujoco_support` 和其余 package.xml 依赖的 prefix/realpath/hash，
 并把 underlay identity 纳入 runtime profile。禁止继承未记录的交互 shell overlay。随后记录
-commit、dirty status、`ros2 pkg prefix so101_demo_py`、console/module/config SHA256、Docker
+commit、dirty status，断言 `ros2 pkg prefix so101_demo_py` 和 console script 位于 feature
+worktree install，Python module `realpath` 位于该 worktree source/install 映射，installed v2
+config SHA256 等于 source config；再记录 console/module/config SHA256、Docker
 image digest、模型哈希、RMW report 和 cgroup controller。通过受审的 Authority 与 cgroup 脚本安装/更新
 `so101-admission-authority.service` 与 `so101-parallel-watchdog@.service`，回读 unit、专用用户、0660 socket、Authority-owned 路径、
 私钥权限和客户端固定公钥；不能建立该边界时以 `AUTHORITY_UNAVAILABLE` 停止。
+
+```zsh
+source /opt/ros/jazzy/setup.zsh
+source /data/work/ws_moveit/install/setup.zsh
+source "$worktree/install/setup.zsh"
+resolved_prefix=$(realpath "$(ros2 pkg prefix so101_demo_py)")
+expected_prefix=$(realpath "$worktree/install/so101_demo_py")
+test "$resolved_prefix" = "$expected_prefix"
+console_bin="$resolved_prefix/lib/so101_demo_py/so101_parallel_batch"
+test -x "$console_bin"
+module_file=$(/usr/bin/python3 -c 'import pathlib, so101_demo; print(pathlib.Path(so101_demo.__file__).resolve())')
+case "$module_file" in
+  "$worktree"/*) ;;
+  *) exit 94 ;;
+esac
+installed_v2="$resolved_prefix/share/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
+test "$(sha256sum "$installed_v2" | cut -d ' ' -f 1)" = \
+  "$(sha256sum "$v2_config" | cut -d ' ' -f 1)"
+```
 
 - [ ] **Step 2: 运行 W8 dry admission**
 

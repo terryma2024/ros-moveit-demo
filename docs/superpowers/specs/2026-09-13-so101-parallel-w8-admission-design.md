@@ -152,6 +152,8 @@ controller_state_expected_hz: 100.0
 controller_state_max_gap_s: 0.05
 controller_deadline_miss_limit: 0
 runtime_metrics_smoke_duration_s: 31.0
+metrics_reset_transition_timeout_s: 20.0
+metrics_rebaseline_timeout_s: 5.0
 ```
 
 已有模型、帧新鲜度、RGB-D/TF skew、lease、heartbeat、attempt ACK、result ACK 和各状态硬
@@ -348,7 +350,7 @@ MoveIt 规划线程或 Broker 同处可能被整体 OOM 的 leaf。阶段验收
 
 - 订阅 `so101_mujoco_support/msg/PhysicsStepEvidenceChunk` 的
   `/so101/simulation/physics_step_chunks`，用连续 chunk 的 simulation-time delta / 本地 monotonic
-  receive delta 计算 realtime factor；`evidence_loss=true` 或 reset/session 不连续即缺测。
+  receive delta 计算 realtime factor；`evidence_loss=true` 或未经授权的 reset/session 不连续即缺测。
 - 订阅 `sensor_msgs/msg/Image` 的 `/task_camera/color`，用 source stamp 和本地 monotonic receive
   序列计算 0.5 秒窗口 FPS 与最大断帧。
 - 订阅 `sensor_msgs/msg/JointState` 的 `/joint_states`。冻结的 broadcaster rate 为 100 Hz；非
@@ -360,6 +362,18 @@ Probe 每 0.5 秒通过已有 worker control socket 发送带 batch/epoch/worker
 身份的 `WorkerRuntimeMetricsSample`。`parallel_worker_runtime.py` 负责轮询和发送，
 `parallel_ipc.py` 固定 wire schema，ResourceMonitor 只接收身份匹配且 sequence 连续的样本。
 这些是生产接口，不是只在测试中注入的 fake。
+
+正常 point/canary reset 通过有界 measurement epoch 转换处理。Worker 在调用 reset 前，先用已
+fsync 的 point/canary identity、当前 lease 和 20 秒固定 deadline 发送
+`MeasurementResetBegin`；Monitor 只接受当前 generation/session 的 begin。转换期间 cgroup、
+host RAM/swap、GPU/Xid、进程逃逸和 watchdog 继续按 0.5 秒监控，只有 physics chunk、color 和
+joint-state 的断流记为 `EXPECTED_RESET_GAP`，不计普通 missing。reset 成功后，现有
+`ResetReceipt` 必须证明同一 simulation session、`reset_epoch=previous+1`；Worker 发送
+`MeasurementResetCommit`，而 Worker metrics wire sequence 本身不能重置。Monitor 在 5 秒内
+重新收到三类 topic，并建立新 source/receive baseline 后才结束转换；此前不得进入 canary
+barrier、`EXECUTING` 或捕帧。begin/commit 超时、reset receipt 不匹配、topic 未恢复、session
+意外改变或同一 epoch 重放都立即 HARD_STOP。新 Worker generation 的 session 变化只在完整
+ready gate 中建立新 measurement epoch，不能借 reset 豁免。
 
 `nvidia-smi`/NVML、MuJoCo realtime factor、controller state deadline counter 或 camera producer FPS
 任一生产接口缺失，PID 归属不完整，或者指标时间轴无法对齐时都拒绝，不把缺测当成零负载。
@@ -511,7 +525,7 @@ register/normal admission 前，必须先消费全部 pending failure。只有 A
 `INITIALIZING`、`EXECUTING` 或 `FINALIZING` 都计入健康容量。dispatcher 只从 `AVAILABLE` 且
 未达到 K 的 Worker 发 lease。暂时无点、队列尾部不足 N 点或达到 K 的 Worker 必须继续 slot
 heartbeat 并等待明确 `BATCH_TERMINAL`，不得自行退出；replacement 继承该 slot 持久化的
-`lease_count`，它在 `LEASE_GRANTED` 时扣减，包含未完成、`INVALID` 和 `INDETERMINATE`，不能
+`lease_count`，它在 `LEASE_GRANTED` 时增加 1、使剩余配额减少 1；已授予计数包含未完成、`INVALID` 和 `INDETERMINATE`，不能
 退款或通过换代重置配额。
 
 slot heartbeat 是与 active lease 无关的独立 RPC：
