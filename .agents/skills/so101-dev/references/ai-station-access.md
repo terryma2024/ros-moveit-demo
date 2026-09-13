@@ -6,6 +6,7 @@
 - [先判定当前执行主机](#先判定当前执行主机)
 - [向 tmux 中的 Codex 投递任务](#向-tmux-中的-codex-投递任务)
 - [shell 与 overlay](#shell-与-overlay)
+- [Git push 与 LFS 例外](#git-push-与-lfs-例外)
 - [GUI 进程](#gui-进程)
 - [RViz 与 Gazebo 左右 50% 分屏](#rviz-与-gazebo-左右-50-分屏)
 - [`codex-cua` 会话](#codex-cua-会话)
@@ -190,6 +191,37 @@ source install/setup.zsh
 ```
 
 不要在 zsh 里改用 `setup.bash`。每次 build 后重新 source。使用 `ros2 pkg prefix so101_gazebo_demo_cpp` 验证当前 overlay。
+
+## Git push 与 LFS 例外
+
+`GIT_LFS_SKIP_PUSH=1` 只跳过 Git LFS 的 pre-push hook，不会上传 LFS 对象，也不会从历史或
+服务端删除对象。默认禁止使用；不得写入 shell profile、Git config 或其他持久环境。只有用户在
+当前任务中明确授权了具体 remote/ref，才可对该次 push 临时设置。
+
+使用前必须完成以下检查：
+
+1. fetch 并回读远端 ref，记录本地提交、远端旧 SHA 和预期更新方式。
+2. 用 `git lfs status` 和可达历史检查待推送的 LFS pointer。若待推历史仍引用远端缺失的对象，
+   停止；修复 LFS 服务，或另行取得重写历史和 force-push 的明确授权。不得用 skip 发布残缺历史。
+3. 若用户授权删除历史路径，在独立克隆中改写；先保存可恢复 bundle，再校验改写前后 `HEAD^{tree}`
+   一致，并确认 `git rev-list --objects --all` 不再包含目标路径。
+
+普通 push 的一次性写法：
+
+```bash
+GIT_LFS_SKIP_PUSH=1 git push origin main
+```
+
+历史改写后的 ref 只能在明确 force-push 授权下更新，并绑定刚刚回读的旧 SHA：
+
+```bash
+GIT_LFS_SKIP_PUSH=1 git push \
+  --force-with-lease=refs/heads/main:<verified-old-sha> origin main
+```
+
+push 后必须用 `git ls-remote <remote> refs/heads/main` 回读并精确匹配本地 SHA。若两个远端映射为
+同一条主线，分别验证；一个远端成功不能代替另一个。服务端可能继续保留已不可达的 LFS 对象，
+删除可达引用不等于服务端物理清除，需要彻底清除时走托管平台的 GC 或支持流程。
 
 ## GUI 进程
 
