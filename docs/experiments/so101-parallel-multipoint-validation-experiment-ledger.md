@@ -10604,7 +10604,14 @@ next_command: Commit CP-130 after mandatory EXP-045 hash readback, then execute 
 
 ```yaml
 experiment_id: EXP-143
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:20:11+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:22:00+08:00
+  - status: VALID
+    at: 2026-09-13T17:37:54+08:00
 prior_experiment: EXP-142
 hypothesis: Expanding only the qualified normal selection to all 20 frozen catalog points and K=10 will physically pass each point exactly once across two isolated Workers with complete qualification and cleanup.
 single_variable: Expand EXP-142 from four selected points and K=2 to the complete exact-hash catalog and K=10; preserve source, immutable image, models, config, N=2, lifecycle and execute behavior.
@@ -10624,6 +10631,66 @@ provenance:
   broker_source_sha256: 9dc053cf47df9c0690991e7f075390d2f7854b7e87b284f5e0c311f7c7ed5e73
   catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
 retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_130
-next_experiment: EXP-143
+observed:
+  - The immutable execute command exited 0 in 848.99 s. The aggregate contains exactly all 20 frozen catalog points, every point is terminal PASSED with attempts=1, and coverage_complete, execution_complete, qualification_passed and batch_cleanup_complete are true with POINTS_COMPLETE.
+  - worker-01 and worker-02 each consumed exactly 10 leases and produced exactly 10 successful point results plus the expected terminal NO_POINT result. No Worker result has a failure boundary, message or type, and K was not exceeded.
+  - The source-backed production artifact verifier passed all 20 immutable sealed attempts. Every dynamic manifest is DONE, every terminal MuJoCo sample has table_contact=true with negligible linear velocity, and each attempt is bound to its exact Worker/point/lease/session identity.
+  - Direct original-resolution inspection of all 20 fresh terminal RGB frames shows the cup upright inside the red target ring and the open gripper and arm clear. A 20-entry sha256sum manifest was independently read back and every image returned OK.
+  - Every production cleanup component passed. Independent readback finds no exact full-143 process, container or GPU compute process, and ROS domain claims 181-183 are unlocked.
+conclusion: VALID; the final source and immutable image satisfy the complete two-Worker 20-point physical qualification contract with exact-once coverage, balanced K=10 scheduling, complete artifacts, fresh visual proof and exact cleanup.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp143.zsh sha256=94d4957eaf162480875dd78b5e8acf8ab2ac27f3dd4c894de115fc7535d95be1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-143.log sha256=1c24c00b9164cb220f66f7154d799b59d7f55fd6d47800edf2db5301de4f491e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-143.time sha256=7f4f33f2ab8bab480ed132f2fcb796cd056035136175c21a2bbbbe15bc23404a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-143.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP143.txt sha256=b2c2bdc9065edca4cf1271d56de0c32f7fac65b8fbb1fcf4f7fb3aff2d2a1b73
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp143-verification.log sha256=9ef9b8b6c90b4d8b7f3deeb4674498c694eb33bbb7e5c705a472fca1a87f36ca
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp143-terminal-rgb.sha256 sha256=e2d74b313c70493ac2384769885a7f6f27f297de25fda96bebfa78d607c9d675
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp143-terminal-rgb-check.log sha256=3a803afb8349a4cb18395d21f49c799e44036414a3a7565a2e4cc196282b0828
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp143-visual-inspection.json sha256=ec7fb500f8ed1ed46dfee1b1db6e5bd30d4af3bc91240ec3913aa12810af0a9c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp143-cleanup-audit.json sha256=71c6bc7a4ebae76d70507ad11f72fbf3f4f8ceb1dc01bbe8622083d0259d7e85
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-143/coordinator/aggregate_results.json sha256=e91ed1b4282f22ee9468c71878549a67d5e8c58aa1f7864918e1e64840460913
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-143/workers/worker-01/worker-run-results.json sha256=96878dbc350ad8b22a2c9acb7588e0927bbe63cc153f12485d182126aea448dc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-143/workers/worker-02/worker-run-results.json sha256=f4b880849f350489524f2a54786d32acca1d03a98f1593ece647e9ad0da9aea6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-143/cleanup-gates.json sha256=d4edd8d6200b24ece0e7fea9493dd3c4b2243d38884372386ac0348bb63a320c
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-143
+decision: REQUEST_FINAL_INDEPENDENT_ASTRA_HIGH_REVIEW
+next_experiment: EXP-144
+```
+
+```yaml
+checkpoint_id: CP-131
+last_valid_experiment: EXP-143
+current_hypothesis: All confirmed round-one Important findings now have source fixes, complete package/image provenance and applicable fresh live/four-point/20-point evidence; an independent Astra high review will confirm completion or identify a concrete remaining issue.
+working_tree_status: Only EXP-143 result and final-review preregistration are ledger-only; product source, tests, install and immutable image remain qualified and unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The final source passes 2867 ordinary tests and immutable CUDA smokes for both frozen models.
+  - The active goal at watchdog expiry is externally proven CANCELED with exact internal revocation timing, fresh post-stop state and unchanged Broker fencing.
+  - A post-remediation normal four-point gate and complete 20-point catalog gate pass exactly once across two balanced Workers with complete artifact, visual and cleanup verification.
+open_risks:
+  - Final independent gpt-6-astra high review and durable verdict remain required.
+next_command: Commit CP-131 after mandatory EXP-045 hash readback, synchronize the ignored SDD progress ledger, then request the final independent Astra high review of the complete diff and evidence.
+```
+
+## EXP-144 — Final independent Astra high review
+
+```yaml
+experiment_id: EXP-144
+status: PLANNED
+prior_experiment: EXP-143
+hypothesis: Independent high-reasoning review of the full implementation, remediation diff and hash-bound evidence will find no remaining Critical or Important correctness, safety, evidence or scope issue.
+single_variable: Review only; do not change source, runtime artifacts, evidence, models, configuration or safety gates.
+success_criteria: Reviewer explicitly APPROVES with no Critical or Important finding; cited evidence hashes and final repository state read back exactly.
+failure_criteria: Any confirmed Critical or Important finding, hash mismatch, missing applicable evidence, unreviewed source or unsafe/incomplete completion claim.
+invalid_criteria: Non-independent reviewer, wrong model/reasoning level, incomplete diff/evidence scope, mutable review input or missing durable report.
+reviewer: independent gpt-6-astra high
+review_scope:
+  - complete branch diff from base 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5 through CP-131
+  - round-one report and all four Important remediations
+  - EXP-138 through EXP-143 source/test/build/image/live/qualification evidence
+retention_rule: Retain reviewer report, prompt/scope, hash readback and final cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_131
+next_experiment: EXP-144
 ```
