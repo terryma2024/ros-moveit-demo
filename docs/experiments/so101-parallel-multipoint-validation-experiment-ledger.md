@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e93fcb05354b9943de7de3690d68bbb8e27454fc
+current_commit: b1fde1f258059606a50021a547e9752099a2e3af
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-101
-next_experiment: EXP-115
+latest_checkpoint: CP-102
+next_experiment: EXP-116
 ```
 
 Frozen provenance:
@@ -8702,12 +8702,14 @@ next_command: Commit CP-101, start EXP-115 minimal launch, and attach the exact 
 
 ```yaml
 experiment_id: EXP-115
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:20:40+08:00
   - status: RUNNING
     at: 2026-09-13T11:20:40+08:00
+  - status: VALID
+    at: 2026-09-13T11:28:01+08:00
 prior_experiment: EXP-114
 hypothesis: Immediate automatic attachment after batch-root admission will inject exact Coordinator SIGSTOP during an active goal and prove the post-fix Worker stops the direct consumer and controller before resume.
 single_variable: Remove only the manual readback delay between resource_manifest creation and observer start; source, image, point, N=1/K=1, overlay, predicate, signals and evidence criteria remain EXP-114-identical.
@@ -8727,6 +8729,69 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - The observer verified exact Coordinator PID/start-time/cmdline and manifest-owned direct dynamic module identity, then stopped Coordinator in state T during an active goal at accepted/reached 16/15.
+  - Eight seconds after SIGSTOP, the exact direct consumer PID was still live. Before SIGCONT, accepted/reached rose to 25/24 and cancellation indicators appeared only after roughly 16 s. The arm status snapshot was terminal by then, but the five-second heartbeat bound had already been violated by nine later accepted goals.
+  - Source-backed timing explains the live delay: the watchdog detects missing ACK after five seconds, but _start_revocation synchronously calls broker.cancel_generation before runtime.cancel_motion. Production Broker cancellation first calls the stopped Coordinator's current_broker RPC; its retry-safe proxy makes two five-second attempts before controller cancellation can begin.
+  - The result is conservatively INDETERMINATE with TERMINAL_ACK_FAILED and qualification false. Visual inspection shows the initial cup on the table and terminal cup elevated beside the gripper; no safe terminal promotion is possible. Fresh external RGB-D and concurrent numeric capture became unavailable while the runtime entered recovery, so those files are retained as failed/non-authoritative evidence.
+  - Batch-level cleanup flag is false, but the exact external residual audit is clean after stopping the task-owned ROS daemon.
+conclusion: VALID_RED; direct process identity and local cancel ordering fixed the previous boundary, but serialized Broker fencing still delays motion cancellation beyond the five-second heartbeat safety contract.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-115.log sha256=ab84084c14379244f14b8080ea31bb15cd29c48b34178a08f6ec0eca8fac271f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-115.time sha256=5d7c91eafe43d3a45b13bcffe0154a489b17c4420e49b7feba7aada20621665c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-stop-115.readback.json sha256=fd343eabddfb43f859c29f0e8c42aaaf09e97d528c3318dbf44ae2cc61a56f5b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-cont-115.json sha256=c9460ad298e3d92cff5e046f4d16da7266c801af5ba63bdfe315e6717ad33219
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/process-snapshot-115-coordinator-stopped.txt sha256=c89c6586d7615f15e6970af917961cada536d75d1605221d434dc186d44cdadb
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/controller-arm-status-115.txt sha256=186a37f8cca439f21f9160fdfe9d53e1670b3f3b4a9e7f6baf94beda5fdda655
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/planning-scene-115.txt sha256=506b875b2f1f55967be9882f3a65f94791fbf31ce9506d1313f3b43c11773829
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP115.txt sha256=29aea7c998a3e301023084a63f03b0db8092444a7a5a1472ee50a978fa0e945b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/visual-inspection-EXP115.json sha256=1c1b37d868a6e6490dc931ab5fa436da39be995b54fa4901b1dbf542b6c1bc9f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-115-cleanup-audit.json sha256=5f0c99fd474390ef79fe36e57f1213050966b964bb0effa2f77f3f73fcf95d60
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-115/aggregate_results.json sha256=b9b39e40be24b7dd3ee85ec68a42e36150acee730798fd6761a98892f1e4f6c5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-115/workers/worker-01/worker-run-results.json sha256=7cc3f15bc08c874532e99be3805d3d1e82e865cd2a1ea045cf17e026e64ba2f4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-115/workers/worker-01/attempts/task_start/task_start-lease-1/sealed/initial-rgb.png sha256=5415400052e363f19e321b5f5746913b4d7e8715c8cdb7153def70a91e38a17b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-115/workers/worker-01/attempts/task_start/task_start-lease-1/sealed/terminal-rgb.png sha256=26ef42a5b1d7b2d2e17f94fb292fe30028678377a4e448d9cbd1f70ef0ea934e
+decision: FIX_BEFORE_NEXT_LIVE_GATE
+next_experiment: EXP-116
+```
+
+```yaml
+checkpoint_id: CP-102
+last_valid_experiment: EXP-115
+current_hypothesis: The remaining F1 delay is caused by serial Broker-generation fencing before motion cancellation; starting the two independent safety actions concurrently will preserve the Broker fence while allowing controller stop immediately after watchdog expiry.
+working_tree_status: EXP-115 live RED and diagnosis are ledger-only; source is unchanged and external cleanup is exact.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - The direct consumer is now signal-addressable, but Broker cancellation's Coordinator discovery retry adds ten seconds ahead of that signal.
+  - No Broker safety gate may be removed or weakened; only independent cancellation scheduling is in scope.
+open_risks:
+  - Concurrent safety actions need a deterministic blocking-Broker RED/GREEN plus adjacent regression and another full provenance/live retry.
+next_command: Commit EXP-115/CP-102, add a deterministic RED where Broker cancellation blocks while runtime cancellation must start, then implement the minimum concurrency fix.
+```
+
+## EXP-116 — Run Broker fence and motion cancellation concurrently
+
+```yaml
+experiment_id: EXP-116
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:28:01+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:28:01+08:00
+prior_experiment: EXP-115
+hypothesis: _start_revocation serializes a potentially two-retry Coordinator discovery inside broker.cancel_generation ahead of runtime.cancel_motion; concurrent exact-generation Broker fencing and exact-lease motion cancellation removes that delay without changing either gate.
+prediction: Current code fails a deterministic test because runtime.cancel_motion is absent while broker.cancel_generation is blocked; the minimum fix makes it observable before Broker release, then waits for both and preserves exact confirmation/results.
+single_variable: Change only _start_revocation scheduling so Broker fence and motion cancellation execute concurrently; keep exact lease keys, generation-bound cancellation, result fields and controller confirmation unchanged.
+lifecycle: ISOLATED_STACK
+success_criteria: Valid RED at the production ParallelWorker boundary; GREEN proves motion cancellation begins while Broker cancellation remains blocked, Broker fence is still called once for the exact generation, stale lease rejection is unchanged, and adjacent Worker/runtime tests pass.
+failure_criteria: Broker gate bypass, missing exact-generation cancellation, controller confirmation before stop completion, duplicate revocation, stale-lease action or regression.
+invalid_criteria: Reused pytest scratch, wrong interpreter/overlay, mock-only test outside ParallelWorker, or mutation that does not fail the new assertion.
+provenance:
+  source_commit: b1fde1f258059606a50021a547e9752099a2e3af
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+retention_rule: Retain RED/GREEN/adjacent/package/live evidence and scratch; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-115
+next_experiment: EXP-116
 ```
