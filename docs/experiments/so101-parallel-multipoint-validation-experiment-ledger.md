@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-108
-next_experiment: EXP-122
+latest_checkpoint: CP-109
+next_experiment: EXP-123
 ```
 
 Frozen provenance:
@@ -9190,12 +9190,14 @@ next_command: Commit CP-108 and run EXP-122 with a brief pre-request pause, exac
 
 ```yaml
 experiment_id: EXP-122
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:59:00+08:00
   - status: RUNNING
     at: 2026-09-13T11:59:00+08:00
+  - status: INVALID
+    at: 2026-09-13T12:01:00+08:00
 prior_experiment: EXP-121
 hypothesis: The same ready/live generation-1 Broker will classify an exact request mirror hash mismatch as INFRA_ERROR, authenticate health-down, pause grants, be replaced/readmitted as generation 2, and allow the two remaining points to continue without an extra K debit.
 single_variable: After the EXP-121 early exact-container pause, alter only the two generation-1 Broker input mirror bytes after they appear, preserve their required 0400 mode, and immediately unpause; do not wait into source-age expiry.
@@ -9219,6 +9221,60 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain original/corrupt hashes, command, Broker, journal, Worker, physical, visual and cleanup evidence; delete nothing without explicit user authorization.
+observed:
+  - The launch wrapper contained a mistyped ROS setup path and executable plus an unset report root. It exited before batch-root creation; the waiting observer was interrupted before identity checks or injection.
+  - No Broker, Worker, ROS, MuJoCo, controller, container, GPU or physical action started. Domains 181-183 remained clear.
+conclusion: INVALID_WRAPPER; correct only the launch command text and repeat the identical registered input-integrity fault.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-122-invalid-wrapper.txt sha256=91dd46a3151e7a1a91d6fd93a718c305e13ff831fd594b0afd798cf12c4783ae
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-122.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+decision: KEEP_INVALID
+next_experiment: EXP-123
+```
+
+```yaml
+checkpoint_id: CP-109
+last_valid_experiment: EXP-118
+current_hypothesis: The EXP-122 fault design remains untested because only its outer shell was malformed; an exact corrected launch can exercise it without any product change.
+working_tree_status: EXP-122 invalid wrapper result and EXP-123 preregistration are ledger-only; source/install/image clean and unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - EXP-122 performed no product action or injection.
+open_risks:
+  - F2 live health propagation remains pending.
+next_command: Commit CP-109, start the EXP-123 observer, then launch the exact corrected full-overlay four-point command.
+```
+
+## EXP-123 — Corrected live Broker input-integrity health fault
+
+```yaml
+experiment_id: EXP-123
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:01:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:01:00+08:00
+prior_experiment: EXP-122
+hypothesis: The corrected launch will exercise EXP-122 exactly: input hash mismatch in a resumed still-live generation 1 will publish authenticated INFRA_ERROR, pause grants, replace/readmit generation 2 and continue remaining points without excess K debit.
+single_variable: Correct only the outer shell spelling and report-root assignment; use new unique batch/root f2-123. All EXP-122 product inputs, four points, N=2/K=3, image, overlay, corruption, timing and criteria remain unchanged.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-123
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-123
+worker_count: 2
+max_points_per_worker: 3
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+injection_predicate: Same as EXP-122 with exact f2-123 identity.
+success_criteria: Same as EXP-122: authenticated live generation-1 INFRA health loss, lease pause, exact generation-2 ready/model readmission, no excess K debit, unique continuation and exact cleanup.
+failure_criteria: Same as EXP-122.
+invalid_criteria: Pre-existing root, admission failure, input before pause, identity/mode/tool failure before injection or source-age expiry before unpause.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-122
+next_experiment: EXP-123
 ```
