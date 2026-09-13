@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-117
-next_experiment: EXP-131
+latest_checkpoint: CP-118
+next_experiment: EXP-132
 ```
 
 Frozen provenance:
@@ -9794,7 +9794,14 @@ next_command: Commit CP-117, persist/read back and syntax-check fresh EXP-131 sc
 
 ```yaml
 experiment_id: EXP-131
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:48:33+08:00
+  - status: RUNNING
+    at: 2026-09-13T12:51:58+08:00
+  - status: VALID
+    at: 2026-09-13T12:58:40+08:00
 prior_experiment: EXP-130
 hypothesis: From domains uncontaminated by task-created ROS CLI daemons, the EXP-128/129 runtime will preserve authenticated Broker pause/replacement and allow generation-2 responses through the rebound Worker policy without BROKER_GENERATION_CHANGED.
 single_variable: Replace only the invalid pre-root run identity f2-130 with fresh f2-131 after stopping this task's ROS CLI daemons; preserve source, immutable image, four points, N=2/K=3, exact two-mirror corruption and every safety criterion.
@@ -9814,6 +9821,75 @@ provenance:
   broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
   broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
 retention_rule: Retain all command, observer, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_117
-next_experiment: EXP-131
+observed:
+  - The observer admitted exact generation 1 with two Workers and zero input mirrors, paused that exact container, preserved both original 0400 RGB inputs and changed one byte in each mirror while retaining mode 0400.
+  - Journal-integrity readback validated all 449 frames and 448 contiguous events. Broker health changed false at sequence 37 and true at sequence 54, with no LEASE_GRANTED event between them.
+  - Exact generation 2 used a distinct container ID, the same immutable image and the independent broker-g2 runtime. Both Workers then received generation-2 leases; no BROKER_GENERATION_CHANGED appears anywhere in command, Coordinator or Worker evidence.
+  - The two injected attempts committed INVALID, never PASSED. Their generation-2 retries passed physically, and each Worker then consumed one remaining point within K=3; all four points reached PASSED and qualification_passed=true.
+  - Direct visual inspection of all four terminal RGB files showed the simulated arm clear of the cup and the cup upright within the red target marker. Numeric evidence records the exact four final positions, stable near-zero velocities, table contact and unpaused unique simulation sessions.
+  - The command exited 0 in 237.55 s. Every cleanup-gates component passed; both exact Broker container IDs, all owned PIDs and all f2-131 processes/containers were absent on readback.
+conclusion: VALID; F2 now proves authenticated health-loss pause, exact generation-2 Broker replacement, runtime generation rebinding and useful physical continuation without weakening the Broker safety gate.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-131.log sha256=996b4fcc9147957d89b67e3fd9876c8e1918a74ead5b95e2f75403f0d411007b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-131.time sha256=16d0d4bd7c12714e641e575ba6609d586ac2d2610191e1dc2adca966cb426017
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-131.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/broker-fault-observer-131.log sha256=82fd9175c3f58ae8c32ec55c81bf2ee5cc9370cff55d273106df94e8af4c53af
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp131.zsh sha256=db63cac48329fc14ec36189f8ca2088e7a1ec448cc06acb378864049f91b9907
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/observe-exp131.bash sha256=cb8c6ce9562a76109fdcad05b341b75f3f4eb73dc598691b6eb17c69018f944b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp131-event-summary.json sha256=85cbda327ffa5359b3cfb54897f731d38c8b66bfcad010279c372f95cfccd2a6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP131.txt sha256=abb2762773bb782796e74cdae1a33f20db0176af58c3614c319943f449caa231
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/coordinator/events/segment-00000000000000000001.journal sha256=4afcff3aa078bb333658354d0962d138d2127bae083c4d252b698fa4f4f7e2fa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/coordinator/aggregate_results.json sha256=cd3d64cac40630107ba1f7c038bc933aa7297ac1e684bcbceda493d84336eaf0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-01/worker-run-results.json sha256=a343ecec203853662af2562191cb0add760fb995d68b6c538b5c39decfbec7e8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-02/worker-run-results.json sha256=815a1865ce0629ed5d021452697ef924958b954279aada1ab3c1fa935a549693
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/cleanup-gates.json sha256=4842de7db5291b7cee04ebdffc644c18e6263b92efb696e12e0bef95a17761cf
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-01/attempts/task_start/task_start-lease-2/sealed/terminal-rgb.png sha256=639525efdc1b8f087d9ed31d30a7c8fdac0f5fc1e8f1dff7b5d105b85e45a3c7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-02/attempts/cup_test_forward_5cm/cup_test_forward_5cm-lease-2/sealed/terminal-rgb.png sha256=79c03789e3dd702383b4a2230e0b8148663362ea7a9f9db9087ef2b8b408c5c8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-02/attempts/cup_test_left_5cm/cup_test_left_5cm-lease-1/sealed/terminal-rgb.png sha256=3593d0473119f4c256a90283285533c1fd35a68245c80d675c8c397fc6875c8a
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-131/workers/worker-01/attempts/cup_test_right_5cm/cup_test_right_5cm-lease-1/sealed/terminal-rgb.png sha256=628e4ac2501e48ca9516aee676efcd9fa6d481a919924e13e52ebed606d35fb0
+retention_rule: Retain the complete f2-131 root, scripts, observer, injected-input backups and derived journal summary; delete nothing without explicit authorization.
+decision: RUN_FRESH_NORMAL_FOUR_POINT
+next_experiment: EXP-132
+```
+
+```yaml
+checkpoint_id: CP-118
+last_valid_experiment: EXP-131
+current_hypothesis: With both controlled fault gates accepted and no remaining runtime-generation defect, the qualified immutable runtime will repeat the normal four-point two-Worker physical gate without injected failures.
+working_tree_status: EXP-131 result and EXP-132 preregistration are ledger-only; source/install/image remain unchanged and qualified.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - F2 health loss blocks leasing until exact generation-2 admission.
+  - Existing Workers bind generation 2 before policy construction and complete all four points within K=3.
+open_risks:
+  - A fresh non-fault four-point run and complete 20-point qualification remain mandatory.
+next_command: Commit CP-118, persist and read back the normal EXP-132 launcher, then run the four-point N=2/K=2 execute gate from clean state.
+```
+
+## EXP-132 — Fresh normal four-point regression gate
+
+```yaml
+experiment_id: EXP-132
+status: PLANNED
+prior_experiment: EXP-131
+hypothesis: The immutable F2-qualified runtime completes the frozen four-point subset normally with two isolated Workers, one lease per point, physical/visual PASS and exact cleanup.
+single_variable: Remove the EXP-131 fault injection and return K from recovery capacity 3 to the frozen normal-case 2; preserve qualified source/image, points, models, config, N=2 and execute behavior.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: normal-132
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+success_criteria: All four points PASSED once; coverage/execution/qualification true; distinct isolated Worker resources and sessions; physical/numeric/visual evidence passes; exact cleanup leaves no owned residue.
+failure_criteria: Any non-PASSED point, retry, duplicate, isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+provenance:
+  source_commit: cebdf182b07e8fcf2ea0cb5f288aa0073538bd95
+  broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
+  broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_118
+next_experiment: EXP-132
 ```
