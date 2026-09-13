@@ -519,6 +519,153 @@ def accepted_task14_verifier(acceptance_path, provenance_probe):
     )
 
 
+def production_batch_argv(
+    root,
+    *,
+    worker_count='3',
+    evidence=None,
+    acceptance=None,
+    current_provenance_root=None,
+):
+    points = PACKAGE / 'config/mujoco/moveit_expert_validation_points_v1.yaml'
+    values = [
+        '--points', str(points),
+        '--config', str(CONFIG_PATH),
+        '--batch-id', 'three-worker-headroom-test',
+        '--worker-count', worker_count,
+        '--max-points-per-worker', '7',
+        '--evidence-root', str(root),
+        '--broker-image', 'so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1',
+        '--yolo-weights', '/models/yolo.pt',
+        '--yolo-weights-sha256',
+        'f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781',
+        '--grounded-root', '/models/grounded',
+        '--grounded-manifest-sha256',
+        '0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775',
+        '--run-mode', 'dry_run',
+    ]
+    if evidence is not None:
+        values.extend(('--live-headroom-evidence', str(evidence)))
+    if acceptance is not None:
+        values.extend(('--live-headroom-acceptance', str(acceptance)))
+    if current_provenance_root is not None:
+        values.extend((
+            '--live-headroom-current-provenance-root',
+            str(current_provenance_root),
+        ))
+    return values
+
+
+def test_production_cli_composes_three_workers_with_current_accepted_headroom(
+    tmp_path, config,
+):
+    from so101_demo.cli.mujoco_parallel_batch import (
+        ProductionBatchComposition,
+        prepare_batch,
+    )
+
+    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
+    root = resource_root(tmp_path, 'cli-three-valid')
+    prepared = prepare_batch(
+        production_batch_argv(
+            root,
+            evidence=evidence,
+            acceptance=acceptance,
+            current_provenance_root=next(
+                iter(provenance_probe.current_paths.values())
+            ).parent,
+        ),
+        provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+    )
+    composition = ProductionBatchComposition(
+        prepared,
+        resource_probe=FakeProbe(),
+        claim_root=claim_root(),
+    )
+    try:
+        assert composition.resource_manifest.worker_count == 3
+        assert composition.resource_manifest.requested_worker_count == 3
+        assert composition.resource_manifest.live_headroom_evidence[
+            'accepted_batch_id'
+        ] == 'accepted-two-worker-live-001'
+    finally:
+        composition._release_partial()
+
+
+def test_production_cli_rejects_absent_three_worker_headroom(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_REQUIRED'):
+        prepare_batch(
+            production_batch_argv(resource_root(tmp_path, 'cli-three-absent')),
+            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+        )
+
+
+def test_production_cli_rejects_headroom_authority_for_two_workers(
+    tmp_path, config,
+):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
+    with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
+        prepare_batch(
+            production_batch_argv(
+                resource_root(tmp_path, 'cli-two-unexpected'),
+                worker_count='2',
+                evidence=evidence,
+                acceptance=acceptance,
+                current_provenance_root=next(
+                    iter(provenance_probe.current_paths.values())
+                ).parent,
+            ),
+            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+        )
+
+
+def test_production_cli_rejects_stale_three_worker_current_provenance(
+    tmp_path, config,
+):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
+    stale = provenance_probe.current_paths['scene_sha256']
+    stale.chmod(0o600)
+    stale.write_text('{}', encoding='utf-8')
+    stale.chmod(0o400)
+    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        prepare_batch(
+            production_batch_argv(
+                resource_root(tmp_path, 'cli-three-stale'),
+                evidence=evidence,
+                acceptance=acceptance,
+                current_provenance_root=stale.parent,
+            ),
+            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+        )
+
+
+def test_production_cli_rejects_forged_three_worker_acceptance(tmp_path, config):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    evidence, acceptance, provenance_probe = accepted_live_evidence(tmp_path, config)
+    document = json.loads(acceptance.read_text(encoding='utf-8'))
+    document['candidate_manifest_sha256'] = '0' * 64
+    acceptance.write_text(json.dumps(document), encoding='utf-8')
+    with pytest.raises(CliError, match='THREE_WORKER_LIVE_EVIDENCE_INVALID'):
+        prepare_batch(
+            production_batch_argv(
+                resource_root(tmp_path, 'cli-three-forged'),
+                evidence=evidence,
+                acceptance=acceptance,
+                current_provenance_root=next(
+                    iter(provenance_probe.current_paths.values())
+                ).parent,
+            ),
+            provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
+        )
+
+
 def rewrite_accepted_artifact(evidence, acceptance_path, name, **changes):
     sealed = evidence.parent
     artifacts_root = sealed / 'artifacts'

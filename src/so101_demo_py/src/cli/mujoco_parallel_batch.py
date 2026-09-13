@@ -51,10 +51,13 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
+    CurrentRuntimeProvenanceProbe,
     ResourceAdmission,
     ResourceManifest,
     ResourceSnapshot,
     ResourceThresholds,
+    Task14AcceptanceProvider,
+    Task14LiveHeadroomVerifier,
     WorkerResourceAllocator,
     WorkerResources,
 )
@@ -77,6 +80,16 @@ from so101_demo.runtime.task_stack import OwnedProcessIdentity
 
 _CATALOG_SHA256 = "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
 _BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
+_CURRENT_PROVENANCE_FILES = {
+    "source_tree_sha256": "source_tree_sha256.json",
+    "install_tree_sha256": "install_tree_sha256.json",
+    "runtime_config_sha256": "runtime_config.json",
+    "policy_sha256": "policy_sha256.json",
+    "scene_sha256": "scene_sha256.json",
+    "models_sha256": "models_sha256.json",
+    "container_sha256": "container_sha256.json",
+    "catalog_sha256": "catalog_sha256.json",
+}
 
 
 class CliError(RuntimeError):
@@ -106,6 +119,10 @@ class PreparedBatch:
     manifest: Mapping[str, object]
     provenance_inputs: Mapping[str, object]
     provenance_verifier: Callable[[Mapping[str, object]], Mapping[str, object]]
+    live_headroom_evidence: Path | None
+    live_headroom_acceptance: Path | None
+    live_headroom_current_provenance: Mapping[str, Path]
+    live_headroom_verification: Mapping[str, object] | None
     resume: bool
 
 
@@ -124,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grounded-root", type=Path, required=True)
     parser.add_argument("--grounded-manifest-sha256", required=True)
     parser.add_argument("--run-mode", required=True)
+    parser.add_argument("--live-headroom-evidence", type=Path)
+    parser.add_argument("--live-headroom-acceptance", type=Path)
+    parser.add_argument("--live-headroom-current-provenance-root", type=Path)
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -153,6 +173,51 @@ def _absolute(name: str, path: Path) -> Path:
     if not path.is_absolute() or "\0" in raw or any(part in {".", ".."} for part in raw.split("/")):
         raise CliError(f"ABSOLUTE_PATH_REQUIRED: {name}")
     return path
+
+
+def _live_headroom_verifier(
+    acceptance_path: Path,
+    current_provenance: Mapping[str, Path],
+) -> Task14LiveHeadroomVerifier:
+    return Task14LiveHeadroomVerifier(
+        acceptance_provider=Task14AcceptanceProvider(
+            acceptance_path=acceptance_path,
+        ),
+        provenance_probe=CurrentRuntimeProvenanceProbe(
+            current_paths=current_provenance,
+        ),
+    )
+
+
+def _prepare_live_headroom(options, config, worker_count):
+    supplied = (
+        options.live_headroom_evidence,
+        options.live_headroom_acceptance,
+        options.live_headroom_current_provenance_root,
+    )
+    if worker_count != 3:
+        if any(value is not None for value in supplied):
+            raise CliError("LIVE_HEADROOM_EVIDENCE_UNEXPECTED")
+        return None, None, {}, None
+    if any(value is None for value in supplied):
+        raise CliError("THREE_WORKER_LIVE_EVIDENCE_REQUIRED")
+    evidence = _absolute("live_headroom_evidence", supplied[0])
+    acceptance = _absolute("live_headroom_acceptance", supplied[1])
+    current_root = _absolute(
+        "live_headroom_current_provenance_root", supplied[2]
+    )
+    current_provenance = {
+        name: current_root / filename
+        for name, filename in _CURRENT_PROVENANCE_FILES.items()
+    }
+    verifier = _live_headroom_verifier(acceptance, current_provenance)
+    try:
+        verified = verifier.verify(evidence, config=config)
+    except Exception as error:
+        raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
+    if not isinstance(verified, Mapping):
+        raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID")
+    return evidence, acceptance, current_provenance, dict(verified)
 
 
 def _read_existing_json(path: Path, *, label: str) -> Mapping[str, object]:
@@ -502,6 +567,12 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     selection_sha = hashlib.sha256(selection_payload).hexdigest()
     config_path = options.config.resolve()
     config = load_parallel_runtime_config(config_path)
+    (
+        live_headroom_evidence,
+        live_headroom_acceptance,
+        live_headroom_current_provenance,
+        live_headroom_verification,
+    ) = _prepare_live_headroom(options, config, worker_count)
     if options.yolo_weights_sha256 != config.yolo_weights_sha256:
         raise CliError("YOLO_HASH_MISMATCH")
     if options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256:
@@ -551,6 +622,21 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "max_points_per_worker": max_points,
         "evidence_root": str(evidence_root),
         "provenance": dict(provenance),
+        "live_headroom": (
+            None
+            if live_headroom_verification is None
+            else {
+                "evidence_path": str(live_headroom_evidence),
+                "acceptance_path": str(live_headroom_acceptance),
+                "current_provenance_paths": {
+                    name: str(path)
+                    for name, path in sorted(
+                        live_headroom_current_provenance.items()
+                    )
+                },
+                "verification": dict(live_headroom_verification),
+            }
+        ),
     }
     if options.resume:
         existing = _read_existing_json(
@@ -575,6 +661,10 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         manifest,
         dict(inputs),
         provenance_verifier,
+        live_headroom_evidence,
+        live_headroom_acceptance,
+        dict(live_headroom_current_provenance),
+        live_headroom_verification,
         options.resume,
     )
 
@@ -1662,11 +1752,34 @@ class ProductionBatchComposition:
         self._container_runner = container_runner
         self._uses_production_broker_container = broker_command_builder is None
         self.journal = None
+        live_headroom_verifier = None
+        if spec.request.worker_count == 3:
+            if (
+                spec.live_headroom_evidence is None
+                or spec.live_headroom_acceptance is None
+                or spec.live_headroom_verification is None
+            ):
+                raise CliError("THREE_WORKER_LIVE_EVIDENCE_REQUIRED")
+            live_headroom_verifier = _live_headroom_verifier(
+                spec.live_headroom_acceptance,
+                spec.live_headroom_current_provenance,
+            )
+            try:
+                current_headroom = live_headroom_verifier.verify(
+                    spec.live_headroom_evidence,
+                    config=spec.config,
+                )
+            except Exception as error:
+                raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
+            if dict(current_headroom) != dict(spec.live_headroom_verification):
+                raise CliError("THREE_WORKER_LIVE_EVIDENCE_CHANGED")
         self.allocator = WorkerResourceAllocator(
             spec.config,
             spec.request.evidence_root,
             probe=resource_probe,
             claim_root=claim_root,
+            live_headroom_evidence=spec.live_headroom_evidence,
+            live_headroom_verifier=live_headroom_verifier,
             batch_id=spec.request.batch_id,
         )
         if spec.resume:
