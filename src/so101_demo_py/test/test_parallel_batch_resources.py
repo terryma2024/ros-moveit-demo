@@ -2501,6 +2501,98 @@ def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, con
     assert not resource_allocator.evidence_root.exists()
 
 
+@pytest.mark.parametrize('collision', ['domain', 'socket'])
+def test_recovery_reprobes_live_namespace_and_preserves_existing_root(
+    tmp_path, config, collision, monkeypatch
+):
+    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
+    original = allocator(tmp_path, config)
+    manifest = original.allocate(worker_count=1)
+    original.close()
+    marker = original.evidence_root / 'unrelated-owner-marker'
+    marker.write_bytes(b'preserve-me')
+    before = (marker.stat().st_ino, marker.read_bytes())
+    socket_path = original._paths(1)['socket_path']
+    probe = FakeProbe(
+        domains=(181,) if collision == 'domain' else (),
+        sockets=(socket_path,) if collision == 'socket' else (),
+    )
+    recovered = WorkerResourceAllocator(
+        config,
+        original.evidence_root,
+        probe=probe,
+        base_environment={},
+        claim_root=claim_root(),
+    )
+    expected = 'ROS_DOMAIN_IN_USE: 181' if collision == 'domain' else 'SOCKET_CONFLICT'
+
+    try:
+        with pytest.raises(ResourceAllocationError, match=expected):
+            recovered.adopt_existing(manifest)
+    finally:
+        recovered.close()
+
+    assert (marker.stat().st_ino, marker.read_bytes()) == before
+    assert recovered.manifest is None
+    assert probe.domain_calls == [181]
+    if collision == 'socket':
+        assert probe.socket_calls == [socket_path]
+
+
+def test_recovery_probe_failure_is_closed_without_touching_existing_root(
+    tmp_path, config, monkeypatch
+):
+    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
+    original = allocator(tmp_path, config)
+    manifest = original.allocate(worker_count=1)
+    original.close()
+    marker = original.evidence_root / 'unrelated-owner-marker'
+    marker.write_bytes(b'preserve-me')
+
+    class BrokenProbe(FakeProbe):
+        def ros_domain_in_use(self, _domain_id):
+            raise OSError('probe unavailable')
+
+    recovered = WorkerResourceAllocator(
+        config,
+        original.evidence_root,
+        probe=BrokenProbe(),
+        base_environment={},
+        claim_root=claim_root(),
+    )
+    try:
+        with pytest.raises(ResourceAllocationError, match='PROBE_FAILED'):
+            recovered.adopt_existing(manifest)
+    finally:
+        recovered.close()
+    assert marker.read_bytes() == b'preserve-me'
+    assert recovered.manifest is None
+
+
+def test_recovery_clean_namespace_probe_allows_exact_manifest_adoption(
+    tmp_path, config, monkeypatch
+):
+    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
+    original = allocator(tmp_path, config)
+    manifest = original.allocate(worker_count=1)
+    original.close()
+    probe = FakeProbe()
+    recovered = WorkerResourceAllocator(
+        config,
+        original.evidence_root,
+        probe=probe,
+        base_environment={},
+        claim_root=claim_root(),
+    )
+
+    adopted = recovered.adopt_existing(manifest)
+
+    assert adopted.workers == manifest.workers
+    assert probe.domain_calls == [181]
+    assert probe.socket_calls == [original._paths(1)['socket_path']]
+    recovered.close()
+
+
 def test_existing_evidence_or_worker_directory_fails_closed(tmp_path, config):
     root = resource_root(tmp_path)
     root.mkdir()

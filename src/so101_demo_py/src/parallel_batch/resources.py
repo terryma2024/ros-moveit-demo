@@ -1059,7 +1059,9 @@ class WorkerResourceAllocator:
                         or stat.S_IMODE(info.st_mode) != 0o700
                     ):
                         raise ResourceAllocationError('RECOVERY_RESOURCE_DIRECTORY')
-            self._claim_domains(tuple(worker.ros_domain_id for worker in manifest.workers))
+            domains = tuple(worker.ros_domain_id for worker in manifest.workers)
+            self._claim_domains(domains)
+            self._probe_namespace_collisions(expected_paths, domains)
             scan_report = getattr(self.probe, 'process_scan_report', None)
             if callable(scan_report):
                 self._process_scan = scan_report()
@@ -1294,10 +1296,20 @@ class WorkerResourceAllocator:
             assert isinstance(socket_path, Path)
             if len(os.fsencode(socket_path)) > _UNIX_SOCKET_PATH_MAX_BYTES:
                 raise ResourceAllocationError(f'UNIX_SOCKET_PATH_TOO_LONG: {socket_path}')
+        self._probe_namespace_collisions(
+            paths, self.config.ros_domain_ids[: len(paths)]
+        )
+
+    def _probe_namespace_collisions(
+        self,
+        paths: tuple[dict[str, Path | str | int], ...],
+        domains: tuple[int, ...],
+    ) -> None:
+        """Recheck live ROS and IPC ownership after the advisory claim is held."""
         try:
             domain_conflicts = [
                 domain_id
-                for domain_id in self.config.ros_domain_ids[: len(paths)]
+                for domain_id in domains
                 if self.probe.ros_domain_in_use(domain_id)
             ]
             socket_conflicts = [

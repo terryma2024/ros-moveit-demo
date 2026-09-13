@@ -16,6 +16,9 @@ from so101_demo.parallel_batch.contracts import (
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
+from so101_demo.core.domain import State
+from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
+from so101_demo.core.workflow import SO101_WORKFLOW
 
 
 def identity(validation=False):
@@ -48,6 +51,72 @@ def populated(root, **kwargs):
                       {'status': ('VALIDATION_PASSED' if mode is RunMode.DRY_RUN
                                   else 'VALIDATION_FAILED') if validation else 'FAILED'})
     return result
+
+
+def valid_dynamic_manifest(who, session):
+    trace = [State.IDLE]
+    while trace[-1] not in SO101_WORKFLOW.terminal_states:
+        trace.append(SO101_WORKFLOW.transitions[trace[-1]][0])
+
+    def physical(sequence):
+        return {
+            'reset_epoch': 7,
+            'simulation_step': sequence * 5,
+            'publisher_sequence': sequence,
+            'cup_position_world_m': [-0.08, -0.25, 0.1648],
+            'cup_orientation_world_xyzw': [0.0, 0.0, 0.0, 1.0],
+            'cup_linear_velocity_world_m_s': [0.0, 0.0, 0.0],
+            'cup_angular_velocity_world_rad_s': [0.0, 0.0, 0.0],
+            'left_contact_count': 0,
+            'right_contact_count': 0,
+            'maximum_normal_force_n': 0.2,
+            'table_contact': True,
+        }
+
+    events = []
+    planning = []
+    for index, state in enumerate(trace[:-1]):
+        if state not in SO101_WORKFLOW.action_states:
+            continue
+        item = {
+            'state': state.value,
+            'before': physical(100 + index * 2),
+            'after': physical(101 + index * 2),
+        }
+        if state in DYNAMIC_MOTION_STATES:
+            item.update(
+                terminal_joint_positions_rad=[0.0] * 5,
+                terminal_joint_state_source_stamp_ns=(index + 1) * 1_000_000,
+                execution_reconciliations=[],
+            )
+            planning.append({
+                'kind': 'moveit_joint_plan', 'state': state.value, 'accepted': True,
+            })
+        if state is State.VALIDATE_FINAL_PLACEMENT:
+            item.update(
+                expected_cup_pose_world=[-0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0],
+                final_xy_error_m=0.0,
+                final_upright_tilt_rad=0.0,
+            )
+        events.append(item)
+    return {
+        'parallel_lease_identity': asdict(who),
+        'simulation_session_id': session,
+        'expected_reset_epoch': 7,
+        'status': 'DONE',
+        'current_state': 'DONE',
+        'failure': None,
+        'state_trace': [state.value for state in trace],
+        'transition_count': len(trace) - 1,
+        'state_events': events,
+        'planning_attempts': planning,
+        'final_samples': [physical(1000)],
+        'planning_scene_readback': {
+            'attached_object_ids': [],
+            'world_primitive_counts': {'plastic_cup': 13},
+        },
+        'release_marker_sequence': 900,
+    }
 
 
 def complete_execute(root, *, omit=(), wrong_identity=None):
@@ -99,32 +168,7 @@ def complete_execute(root, *, omit=(), wrong_identity=None):
             'paused': False,
             'object_state': {'position_world': [0.0, 0.0, 0.16]},
         },
-        'dynamic/dynamic-execute-manifest.json': {
-            'parallel_lease_identity': asdict(who),
-            'simulation_session_id': session,
-            'expected_reset_epoch': 7,
-            'status': 'DONE',
-            'current_state': 'DONE',
-            'failure': None,
-            'state_trace': ['IDLE', 'DONE'],
-            'state_events': [{
-                'terminal_joint_positions_rad': [0.0] * 5,
-                'terminal_joint_state_source_stamp_ns': 1,
-                'execution_reconciliations': [],
-            }],
-            'planning_attempts': [{'accepted': True}],
-            'final_samples': [{
-                'reset_epoch': 7,
-                'simulation_step': 1,
-                'publisher_sequence': 1,
-                'table_contact': True,
-            }],
-            'planning_scene_readback': {
-                'attached_object_ids': [],
-                'world_primitive_counts': {},
-            },
-            'release_marker_sequence': 1,
-        },
+        'dynamic/dynamic-execute-manifest.json': valid_dynamic_manifest(who, session),
     }
     if wrong_identity == 'pose':
         documents['pose_accepted.json']['request']['attempt_id'] = 'other-attempt'
@@ -340,6 +384,18 @@ def test_complete_passed_attempt_allows_producer_required_superset(tmp_path):
         required=('attempt-result.json', 'numeric/tf.json')
     )
     assert sealed.verify().identity == identity()
+
+
+def test_seal_rejects_semantically_impossible_done_trace(tmp_path):
+    work = complete_execute(tmp_path)
+    path = work.path / 'dynamic/dynamic-execute-manifest.json'
+    document = json.loads(path.read_text(encoding='utf-8'))
+    document['state_trace'] = ['IDLE', 'MOVE_ABOVE_OBJECT', 'DONE']
+    document['transition_count'] = 2
+    path.write_text(json.dumps(document), encoding='utf-8')
+
+    with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE'):
+        work.seal(required=('attempt-result.json',))
 
 
 def test_plan_only_pass_uses_distinct_verifier_owned_planning_contract(tmp_path):

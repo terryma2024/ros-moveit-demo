@@ -207,6 +207,9 @@ class RosDynamicMujocoExecution:
         os.replace(temporary, self._evidence_file)
 
     def finish(self, result) -> None:
+        failure_evidence = None
+        if result.status.value != "DONE":
+            failure_evidence = self._capture_failure_evidence(result)
         self._document.update(
             {
                 "status": "DONE" if result.status.value == "DONE" else "ERROR",
@@ -216,9 +219,70 @@ class RosDynamicMujocoExecution:
                 "failure": None if result.failure is None else result.failure.code,
                 "release_marker_sequence": self._release_marker_sequence,
                 "planning_scene_readback": self._scene_readback,
+                "failure_evidence": failure_evidence,
             }
         )
         self._write()
+
+    @staticmethod
+    def _failure_boundary(state_trace) -> State | None:
+        from ..core.workflow import SO101_WORKFLOW
+
+        for current, following in zip(state_trace, state_trace[1:]):
+            transition = SO101_WORKFLOW.transitions.get(current)
+            if transition is not None and following is transition[1]:
+                return current
+        return None
+
+    def _capture_failure_evidence(self, result) -> dict[str, object]:
+        boundary = self._failure_boundary(result.state_trace)
+        no_action = (
+            tuple(result.state_trace) == (State.IDLE, State.ERROR)
+            and not self._state_events
+            and not self._planning_attempts
+        )
+        evidence: dict[str, object] = {
+            "failure_boundary_state": None if boundary is None else boundary.value,
+            "physical_action_proven_absent": no_action,
+            "terminal_sample": None,
+            "planning_scene_readback": None,
+            "capture_errors": [],
+        }
+        if no_action:
+            return evidence
+        prior_sequences = [
+            value.get("publisher_sequence")
+            for event in self._state_events
+            for value in (event.get("before"), event.get("after"))
+            if isinstance(value, dict)
+            and type(value.get("publisher_sequence")) is int
+        ]
+        freshness_floor = max(
+            [0, *prior_sequences, self._release_marker_sequence or 0]
+        )
+        try:
+            deadline = time.monotonic() + 2.0
+            terminal = self._snapshot()
+            while terminal.publisher_sequence <= freshness_floor:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("DYNAMIC_FAILURE_EVIDENCE_STALE")
+                terminal = self._snapshot()
+            evidence["terminal_sample"] = self._evidence(terminal)
+        except Exception as error:
+            evidence["capture_errors"].append(
+                f"PHYSICAL:{str(error).split(':', 1)[0]}"
+            )
+        try:
+            attached, world = self._scene_membership()
+            evidence["planning_scene_readback"] = {
+                "attached_object_ids": attached,
+                "world_primitive_counts": world,
+            }
+        except Exception as error:
+            evidence["capture_errors"].append(
+                f"SCENE:{str(error).split(':', 1)[0]}"
+            )
+        return evidence
 
     def _progress(self) -> None:
         import rclpy

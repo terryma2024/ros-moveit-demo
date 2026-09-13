@@ -100,6 +100,80 @@ def _joint_message(positions: tuple[float, ...], stamp_ns: int) -> SimpleNamespa
     )
 
 
+def _finish_adapter():
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    adapter._document = {}
+    adapter._state_events = []
+    adapter._planning_attempts = []
+    adapter._final_samples = []
+    adapter._release_marker_sequence = None
+    adapter._scene_readback = None
+    adapter._expected_reset_epoch = 0
+    adapter._write = lambda: None
+    return adapter
+
+
+def test_finish_records_explicit_no_action_authority_for_idle_failure():
+    adapter = _finish_adapter()
+    adapter._snapshot = lambda: pytest.fail("pre-action failure must not require physics")
+    adapter._scene_membership = lambda: pytest.fail("pre-action failure must not require scene")
+    result = SimpleNamespace(
+        status=SimpleNamespace(value="ERROR"),
+        current_state=State.ERROR,
+        transition_count=1,
+        state_trace=(State.IDLE, State.ERROR),
+        failure=Failure(FailureCategory.EXECUTION, "EARLY_FAILURE", "injected"),
+    )
+
+    adapter.finish(result)
+
+    assert adapter._document["failure_evidence"] == {
+        "failure_boundary_state": "IDLE",
+        "physical_action_proven_absent": True,
+        "terminal_sample": None,
+        "planning_scene_readback": None,
+        "capture_errors": [],
+    }
+
+
+def test_finish_captures_fresh_physics_and_scene_after_possible_motion():
+    adapter = _finish_adapter()
+    adapter._state_events.append({
+        "state": "PREPARE_OPEN_GRIPPER",
+        "before": RosDynamicMujocoExecution._evidence(
+            _mujoco_sample(sequence=10, step=10, cup_z_m=0.1648, table_contact=True)
+        ),
+        "after": RosDynamicMujocoExecution._evidence(
+            _mujoco_sample(sequence=11, step=11, cup_z_m=0.1648, table_contact=True)
+        ),
+    })
+    terminal = _mujoco_sample(sequence=12, step=12, cup_z_m=0.1648, table_contact=True)
+    adapter._snapshot = lambda: terminal
+    adapter._scene_membership = lambda: ([], {"plastic_cup": 13})
+    result = SimpleNamespace(
+        status=SimpleNamespace(value="ERROR"),
+        current_state=State.ERROR,
+        transition_count=4,
+        state_trace=(
+            State.IDLE, State.PREPARE_OPEN_GRIPPER,
+            State.MOVE_ABOVE_OBJECT, State.RECOVER_RETREAT, State.ERROR,
+        ),
+        failure=Failure(FailureCategory.EXECUTION, "PLAN_FAILED", "injected"),
+    )
+
+    adapter.finish(result)
+
+    evidence = adapter._document["failure_evidence"]
+    assert evidence["failure_boundary_state"] == "MOVE_ABOVE_OBJECT"
+    assert evidence["physical_action_proven_absent"] is False
+    assert evidence["terminal_sample"]["publisher_sequence"] == 12
+    assert evidence["planning_scene_readback"] == {
+        "attached_object_ids": [],
+        "world_primitive_counts": {"plastic_cup": 13},
+    }
+    assert evidence["capture_errors"] == []
+
+
 def test_dynamic_execute_uses_shared_workflow_and_topic_resolved_motion_targets() -> None:
     port = RecordingExecutionPort()
     targets = Targets()
