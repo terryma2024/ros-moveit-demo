@@ -4,7 +4,7 @@
 
 **Goal:** 在当前 ai-station 上实现八个完整 MuJoCo MoveIt 专家 Worker 的冻结准入、同批次 `1 → 2 → 4 → 6 → 8` qualification、资源画像和 W8 正式 20 点回归。
 
-**Architecture:** 保留 v1 的 W1–W3 契约，新增显式 v2 配置。v2 在启动第一个 Worker 前原子保留八个 ROS Domain，以 cgroup v2 约束完整进程树，由独立资源监视器和 AdmissionAuthority 审核五级 canary；W8 获得 provisional admission 后才开放正式动态队列。
+**Architecture:** 保留 v1 的 W1–W3 契约，新增显式 v2 配置。v2 在启动第一个 Worker 前原子保留最终请求的 ROS Domain，以 cgroup v2 约束完整进程树；system-managed watchdog 独立持有 Domain/cgroup 生命周期，资源监视器和 AdmissionAuthority 审核五级 canary；W8 获得 provisional admission 后才开放正式动态队列。
 
 **Tech Stack:** Python 3.12、ROS 2 Jazzy、`rmw_fastrtps_cpp`、MuJoCo、MoveIt 2、cgroup v2、Docker、NVML/`nvidia-smi`、pytest、colcon、YAML/JSON、fsync 事件账本。
 
@@ -24,6 +24,7 @@
 - batch `memory.max=24 GiB`、`memory.swap.max=0`、主机 RAM 设计保留 6 GiB，`MemAvailable` 硬下限 4 GiB。
 - GPU 保留至少 2 GiB；CPU、RAM、GPU 的 accepted W8 峰值至少有 20% 余量。
 - PerceptionBroker 每模型队列容量为 8，每 Worker/模型最多一个在途请求；YOLO-Seg 优先，Grounded-SAM 只按现有感知失败矩阵回退。
+- v2 Broker 先排不含图像的 ticket，收到 `CAPTURE_NOW` 后才捕帧；YOLO/Grounded ticket timeout 分别为 10/30 秒，capture submit 为 0.5 秒。
 - accepted profile 不按时间过期；只因硬件、运行 provenance、能力或运行硬故障漂移而失效。
 - 现场任务只使用 `/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01` 作为 durable evidence root。
 - ai-station 上每次 pytest/colcon 临时目录必须是上述 evidence root 下从未存在的 task-specific `scratch/*/tmp`；先用实际 Python 回读 `tempfile.gettempdir()`，完成后只列为删除候选。
@@ -37,16 +38,19 @@
 新增文件：
 
 - `src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml`：冻结 v2 配置。
-- `src/so101_demo_py/config/mujoco/parallel_admission_profiles_v1.yaml`：repo-tracked accepted profile 哈希注册表。
+- `src/so101_demo_py/config/mujoco/parallel_admission_profiles_v1.yaml`：repo-tracked 签名 profile 审计索引；不是 live 授权源。
 - `src/so101_demo_py/src/parallel_batch/domain_pool.py`：八 Domain 原子 claim、进程/DDS 探测和释放。
 - `src/so101_demo_py/src/parallel_batch/cgroups.py`：cgroup v2 层级、进程 enrollment 和完整后代验证。
+- `src/so101_demo_py/src/parallel_batch/watchdog.py`：独立持有 Domain/cgroup 生命周期并处理异常清理。
 - `src/so101_demo_py/src/parallel_batch/resource_monitor.py`：0.5 秒采样、阶段窗口和熔断判定。
 - `src/so101_demo_py/src/parallel_batch/qualification.py`：`1,2,4,6,8` 状态机、barrier 和 canary 账本。
 - `src/so101_demo_py/src/parallel_batch/admission.py`：provisional/final profile schema 与验证。
 - `src/so101_demo_py/src/cli/parallel_admission_authority.py`：独立 Authority CLI/Unix RPC 入口。
+- `src/so101_demo_py/src/cli/parallel_batch_watchdog.py`：systemd batch watchdog 入口。
 - `src/so101_demo_py/test/test_parallel_batch_v2_contracts.py`：v1/v2 兼容和不降级契约。
 - `src/so101_demo_py/test/test_parallel_domain_pool.py`：Domain claim、冲突、崩溃和释放测试。
 - `src/so101_demo_py/test/test_parallel_cgroups.py`：cgroup 文件系统和后代归属测试。
+- `src/so101_demo_py/test/test_parallel_watchdog.py`：组件死亡、pending terminal 与清理集成测试。
 - `src/so101_demo_py/test/test_parallel_resource_monitor.py`：采样、headroom 和熔断测试。
 - `src/so101_demo_py/test/test_parallel_qualification.py`：扩容状态机、canary 和 Worker replacement 测试。
 - `src/so101_demo_py/test/test_parallel_admission.py`：Authority、profile 和 drift 测试。
@@ -61,7 +65,7 @@
 - `src/so101_demo_py/src/parallel_batch/journal.py`：新增 qualification/admission 事件及重放。
 - `src/so101_demo_py/src/parallel_batch/worker.py`：canary execution kind、barrier 和 cgroup 身份回报。
 - `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`：新增 v2/admission CLI，保持 v1 路径。
-- `src/so101_demo_py/setup.py`：注册 Authority CLI。
+- `src/so101_demo_py/setup.py`：注册 Authority 与 watchdog CLI。
 - `scripts/inject_so101_parallel_fault.py`：增加 v2 阶段和资源故障注入。
 
 ## ai-station 执行准备
@@ -248,8 +252,9 @@ SHM/Data Sharing 禁用、participant=33 拒绝和跨 Domain graph 不可见测�
 - [ ] **Step 3: 实现 `DomainPool`**
 
 复用 v1 owner-controlled 0700 claim root 与 lock inode，使用 0600 regular file、`O_NOFOLLOW` 和 non-blocking
-`flock`。先锁全部八个，再执行 `/proc` 与 direct DDS graph probe。任何检查失败都关闭本轮
-已取得 FD。释放前检查 owned process 已停、DDS quiet window 通过。
+`flock`。先锁全部请求 Domain，再执行 `/proc` 与 direct DDS graph probe。任何检查失败都关闭
+本轮已取得 FD。qualification 的 reservation handle 由独立 watchdog 进程持有，而非
+Coordinator；释放前检查 owned process 已停、DDS quiet window 通过。
 
 - [ ] **Step 4: 接入 `WorkerResourceAllocator`**
 
@@ -276,14 +281,20 @@ git commit -m "feat: reserve eight ROS domains atomically"
 
 **Files:**
 - Create: `src/so101_demo_py/src/parallel_batch/cgroups.py`
+- Create: `src/so101_demo_py/src/parallel_batch/watchdog.py`
+- Create: `src/so101_demo_py/src/cli/parallel_batch_watchdog.py`
 - Create: `scripts/so101-parallel-systemd-cgroup.sh`
+- Create: `deploy/systemd/so101-parallel-watchdog@.service`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
+- Modify: `src/so101_demo_py/setup.py`
 - Test: `src/so101_demo_py/test/test_parallel_cgroups.py`
+- Test: `src/so101_demo_py/test/test_parallel_watchdog.py`
 
 **Interfaces:**
 - Produces: `CgroupCapabilityProbe.run() -> CgroupCapabilityReceipt`.
 - Produces: `CgroupLayout.create(batch_id: str, limits: CgroupLimits) -> CgroupLayout`.
 - Produces: `start_coordinator_scope()`, `start_monitor_scope()`, `docker_parent_slice()`, `start_worker_scope(slot)`, `verify_descendants()`, `snapshot()` and `close()`.
+- Produces: `BatchWatchdog`，持有 Domain FD/cgroup ownership，以 pidfd/systemd unit 状态监视 Coordinator、monitor、Authority，执行 root-owned terminal/cleanup。
 - Consumes: topology probe and v2 resource fields.
 
 - [ ] **Step 1: 写伪 cgroup 文件系统 RED tests**
@@ -292,6 +303,8 @@ git commit -m "feat: reserve eight ROS domains atomically"
 no-internal-process、20/4 CPU 拆分、24 GiB memory.max、swap=0、control `MemoryLow=1G`、八 scope、
 PID enrollment、descendant 逃逸、稳定读回和幂等 close。权限不足必须返回
 `CGROUP_DELEGATION_UNAVAILABLE`，不能降级。
+验证 watchdog 而非 Coordinator 持有 Domain FD 与 slice 生命周期；Coordinator、monitor、
+Authority 任一死亡都会写 pending terminal、终止 owned leaf、quiet-check、释放 Domain 并清理 slice。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -311,6 +324,10 @@ Worker launcher 在创建 ROS context 前进入 worker scope。Docker Broker 的
 回读。Coordinator 与 monitor 分属 leaf，monitor 不进入 broker/worker OOM leaf。任何失败返回
 `CGROUP_ENROLLMENT_FAILED`。
 
+在 `setup.py` 注册 `so101_parallel_batch_watchdog =
+so101_demo.cli.parallel_batch_watchdog:main`。systemd template 只调用 install space 的该入口，不
+从 source tree 直接 import。
+
 - [ ] **Step 5: 运行 GREEN**
 
 运行 `test_parallel_cgroups.py` 和资源测试，要求全通过。
@@ -319,9 +336,14 @@ Worker launcher 在创建 ROS context 前进入 worker scope。Docker Broker 的
 
 ```zsh
 git add src/so101_demo_py/src/parallel_batch/cgroups.py \
+  src/so101_demo_py/src/parallel_batch/watchdog.py \
+  src/so101_demo_py/src/cli/parallel_batch_watchdog.py \
   scripts/so101-parallel-systemd-cgroup.sh \
+  deploy/systemd/so101-parallel-watchdog@.service \
   src/so101_demo_py/src/parallel_batch/resources.py \
-  src/so101_demo_py/test/test_parallel_cgroups.py
+  src/so101_demo_py/setup.py \
+  src/so101_demo_py/test/test_parallel_cgroups.py \
+  src/so101_demo_py/test/test_parallel_watchdog.py
 git commit -m "feat: isolate W8 process trees with cgroup v2"
 ```
 
@@ -343,7 +365,8 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 
 逐项实现 spec §7.4 表格，用 fake monotonic clock 验证来源、单位、窗口、0.5 秒采样、1.0 秒
 最大间隔、缺样失败、CPU/PSI/RAM/GPU、realtime factor p05、render FPS p05、断帧、controller
-deadline、进程逃逸及各自 SOFT/HARD 动作。任何生产指标接口缺失都 fail closed。
+deadline、进程逃逸及各自 SOFT/HARD 动作。验证所有指标连续 10 秒低于软门才恢复，30 秒不能
+恢复则 HARD_STOP。任何生产指标接口缺失都 fail closed。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -356,8 +379,9 @@ missing count、min/max/p05/p95/p99 的 sealed summary。不能用缺样补零�
 
 - [ ] **Step 4: 接入 fail-closed callback**
 
-SOFT_STOP 只阻止新 lease；HARD_STOP 调用现有 supervisor 的受控停止接口，并把原因持久化后
-再通知 Coordinator。保留 attempt 的 `INVALID/INDETERMINATE` 既有裁决。
+SOFT_STOP 只阻止新 lease；HARD_STOP 先持久化原因，再请求独立 watchdog `abort_batch`，并让
+现有 supervisor 走协作式停止。即使 Coordinator/supervisor 随后死亡，watchdog 仍完成清理。
+保留 attempt 的 `INVALID/INDETERMINATE` 既有裁决。
 
 - [ ] **Step 5: 运行 GREEN**
 
@@ -389,9 +413,11 @@ git commit -m "feat: monitor W8 resource envelopes"
 
 - [ ] **Step 1: 写状态转移 RED tests**
 
-验证不能跳级、倒退、少启动 Worker、少 canary round 或失败后继续。qualification 在
+验证不能跳级、倒退、少启动 Worker、少 canary round 或失败后继续。使用真实子进程逐一
+SIGKILL Coordinator、monitor 和测试 Authority。qualification 在
 barrier release、stage seal、provisional 和 queue-open 边界崩溃时必须 fence、受控清理并永久
-terminal invalid；同一 batch 不能 resume，重试必须换 batch 并从 stage 1 开始。
+terminal invalid；断言 watchdog 的 pending terminal、子进程归零、cgroup/Domain 释放；同一
+batch 不能 resume，重试必须换 batch 并从 stage 1 开始。这些集成测试不启动 ROS/MuJoCo。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -483,10 +509,11 @@ git commit -m "feat: isolate W8 canary evidence"
 
 - [ ] **Step 1: 写八 Worker 公平性 RED tests**
 
-同时提交八个 YOLO 请求，断言每 Worker 最多一个在途、轮转无饥饿、fenced request 不进入
-pose admission。再覆盖八个 Grounded-SAM 请求、YOLO/Grounded 混合队列、每种至少 24 个完成
-样本、缺失 p99、freshness budget 和 pose admission 最终帧龄。fallback 必须重新 capture，不能
-复用 YOLO 帧。
+同时提交八个不含图像的 YOLO ticket，断言每 Worker 最多一个在途、轮转无饥饿、只有当前
+`CAPTURE_NOW` 可在 0.5 秒内提交 frame、fenced ticket/frame 不进入 pose admission。再覆盖八个
+Grounded-SAM ticket、YOLO/Grounded 混合队列、10/30 秒 ticket timeout、每种至少 24 个完成
+样本、缺失 p99、capture 后 freshness budget 和 pose admission 最终帧龄。fallback 必须新建
+ticket 并重新 capture，不能复用 YOLO 帧。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -494,9 +521,9 @@ pose admission。再覆盖八个 Grounded-SAM 请求、YOLO/Grounded 混合队�
 
 - [ ] **Step 3: 实现指标和 deadline**
 
-保持模型 outcome 矩阵不变。实现 spec §8 的 freshness deadline：YOLO/Grounded p99 ceiling
-分别为 2.0/4.0 秒，保留 0.25 秒 commit，pose admission 帧龄严格 `<5.0 s`。把 capture、queue
-enter/dequeue、inference start/end 写入 bounded metrics stream；响应返回前继续检查 lease、
+保持模型 outcome 矩阵不变。实现 spec §8 的两阶段 ticket/CAPTURE_NOW 协议与 freshness
+deadline：YOLO/Grounded p99 ceiling 分别为 2.0/4.0 秒，保留 0.25 秒 commit，pose admission
+帧龄严格 `<5.0 s`。把 ticket queue、capture、inference start/end 写入 bounded metrics stream；响应返回前继续检查 lease、
 broker generation 和最终帧龄。专用 Broker canary 产生 fallback 压力，不伪造正式感知失败。
 
 - [ ] **Step 4: 运行 GREEN 和 v1 回归**
@@ -540,7 +567,9 @@ git commit -m "feat: scale perception broker to eight workers"
 错误 peer credential/nonce/Ed25519 signature、symlink、inode 替换、缺样、哈希不符、八路执行无重叠和
 provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时间过期字段或 age gate。
 验证 source/install 的同一逻辑 allowlist 排除 docs/evidence/ledger/profile/registry/Git commit，提交 profile 后 identity 不变，
-而 Python、launch、Docker input、运行配置、策略或场景任一变化都拒绝。
+而 Python、launch、Docker input、运行配置、策略或场景任一变化都拒绝。增加两个真实 UID 的
+无 ROS smoke，验证 ACL 读桥、候选不能写 `/var/lib/so101-admission`、Authority 不写 candidate
+root、symlink/inode 替换 fail closed。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -550,7 +579,9 @@ provenance 漂移。验证 revoke 在服务重启后仍拒绝，画像没有时�
 
 实现 system-managed `so101-admission` 专用用户服务。权威 registry/revocation/acceptance 放在
 `/var/lib/so101-admission/`，候选无写权限；Unix socket 用 `SO_PEERCRED` 和允许组认证，登记时
-生成 nonce。响应使用 Authority-only Ed25519 私钥签名 batch/epoch/nonce/request，客户端只持有
+生成 nonce。evidence root/目录保持操作员 0700；对固定路径目录只授予 Authority `--x` ACL，
+对 writer 已关闭的 regular file 只授予 `r--` ACL。Authority 不列举目录、不写 candidate root，
+而是复制到自有 staging；socket 响应由 Coordinator 写入 receipts。响应使用 Authority-only Ed25519 私钥签名 batch/epoch/nonce/request，客户端只持有
 固定公钥。使用 `O_NOFOLLOW`、目录 FD、大小上限、前后 stat；候选 writer close 后由 Authority
 复制到自有 staging 并 fsync/rename seal。由原始样本重新计算分位数和 headroom，不信任
 候选 summary 中的布尔结果。
@@ -624,8 +655,10 @@ composition 和生命周期调用。v1 `_prepare_live_headroom` 三 Worker 路�
 
 - [ ] **Step 4: 实现 normal 快速启动**
 
-normal W8 复核 Authority-owned registry/profile/current provenance，再按 `1,2,4,6,8` 累积启动。每级只做
-10 秒空载稳定检查，不运行 canary；W8 全部 ready 后开放正式队列。
+normal N 复核 Authority-owned registry/profile/current provenance，按
+`startup_stages(N)=[s in (1,2,4,6) if s<N]+[N]` 累积启动；明确测试 N=3/5/7 分别为
+`1,2,3`、`1,2,4,5`、`1,2,4,6,7`。每级只做 10 秒空载稳定检查，不运行 canary；N 个 Worker
+全部 ready 后开放正式队列。
 
 - [ ] **Step 5: 运行 GREEN 和 CLI 全回归**
 
@@ -647,20 +680,27 @@ git commit -m "feat: compose W8 qualification and normal admission"
 - Modify: `src/so101_demo_py/src/parallel_batch/coordinator.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/journal.py`
+- Modify: `src/so101_demo_py/src/parallel_batch/ipc.py`
+- Modify: `src/so101_demo_py/src/cli/mujoco_parallel_batch.py`
 - Test: `src/so101_demo_py/test/test_parallel_qualification.py`
 - Test: `src/so101_demo_py/test/test_parallel_batch_crash_recovery.py`
 
 **Interfaces:**
 - Produces: `pause_reason=W8_CAPACITY_LOST_PENDING_REPLACEMENT` and terminal `W8_CAPACITY_LOST`.
+- Produces: `SlotHeartbeat`/`SlotHeartbeatAck` RPC，独立于 LeaseIdentity，1 秒发送、5 秒超时，只证明 slot 存活。
 - Consumes: existing `worker_generation` fencing、Domain reservation 和 ready gate。
 
 - [ ] **Step 1: 写 replacement RED tests**
 
-定义 `slot_healthy` 与 `lease_eligible` 两个独立 predicate。覆盖首波同时八个 lease、20 点尾部
+定义 `slot_healthy` 与 `lease_eligible` 两个独立 predicate。覆盖首次领点前、K 用尽后、active
+lease 同时发两类 heartbeat，以及旧 epoch/generation/session/sequence 被 fence；slot heartbeat
+不得创建或续租 lease、授权动作或改变 K。覆盖首波同时八个 lease、20 点尾部
 少于八点、四点 normal、Worker 暂时无点、K 用尽仍 heartbeat 等待 terminal。W8 正式队列中
 杀掉一个 idle Worker，断言不再发新 lease；旧 generation fenced，replacement 沿用 Domain、
-继承 slot 已完成 K 计数并通过 ready 后恢复。超时则 terminal，不能以七 Worker 继续，也不能
-通过 replacement 重置 K。
+继承 slot 在 `LEASE_GRANTED` 已持久化的 `lease_count` 并通过 ready 后恢复；初始门失败、ACK
+丢失、执行中崩溃、INVALID/INDETERMINATE 都不能退款。超时则 terminal，不能以七 Worker
+继续，也不能通过 replacement 重置 K。normal N=3/5/7 分别丢失一个 slot 时只恢复至 N，不能
+无条件启动八个。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -668,10 +708,11 @@ git commit -m "feat: compose W8 qualification and normal admission"
 
 - [ ] **Step 3: 实现暂停、换代和超时**
 
-先持久化容量丢失事件，再暂停 dispatcher。`AVAILABLE/LEASED/INITIALIZING/EXECUTING/FINALIZING`
+先设置 `required_healthy_slots=requested_worker_count` 并持久化容量丢失事件，再暂停 dispatcher。`AVAILABLE/LEASED/INITIALIZING/EXECUTING/FINALIZING`
 且 heartbeat/resource identity 正常都计作健康；只有 AVAILABLE 且 K 未用尽才可领 lease。
-Worker 在 `BATCH_TERMINAL` 前不因空队列或 K 用尽退出。已有 attempt 按原规则完成；replacement
-使用同 slot resource identity、新 session ID、递增 generation和不可重置 K counter。
+Worker 在 `BATCH_TERMINAL` 前不因空队列或 K 用尽退出，走独立 slot heartbeat IPC。已有
+attempt 按原规则完成；replacement 使用同 slot resource identity、新 session ID、递增
+generation 和不可重置的已授予 lease counter。
 
 - [ ] **Step 4: 运行 GREEN 并提交**
 
@@ -679,6 +720,8 @@ Worker 在 `BATCH_TERMINAL` 前不因空队列或 K 用尽退出。已有 attemp
 git add src/so101_demo_py/src/parallel_batch/coordinator.py \
   src/so101_demo_py/src/parallel_batch/worker.py \
   src/so101_demo_py/src/parallel_batch/journal.py \
+  src/so101_demo_py/src/parallel_batch/ipc.py \
+  src/so101_demo_py/src/cli/mujoco_parallel_batch.py \
   src/so101_demo_py/test/test_parallel_qualification.py \
   src/so101_demo_py/test/test_parallel_batch_crash_recovery.py
 git commit -m "feat: preserve exact W8 runtime capacity"
@@ -698,8 +741,9 @@ git commit -m "feat: preserve exact W8 runtime capacity"
 - [ ] **Step 1: 写故障矩阵 RED tests**
 
 逐项断言错误码、点位统计隔离、Domain/cgroup cleanup 和 crash semantics。四个 qualification
-崩溃边界全部 non-resumable，同 batch 永久 invalid；hard stop 发生在正式 attempt 后且结果
-未知时必须是 `INDETERMINATE`。
+崩溃边界全部 non-resumable，同 batch 永久 invalid；逐一 SIGKILL Coordinator、monitor、测试
+Authority 后由 watchdog 完成 pending terminal、owned leaf、Domain 和 slice 清理。hard stop
+发生在正式 attempt 后且结果未知时必须是 `INDETERMINATE`。
 
 - [ ] **Step 2: 运行 RED 并实现最小注入点**
 
@@ -749,8 +793,8 @@ git commit -m "test: cover W8 admission failure boundaries"
 - [ ] **Step 1: 重新 source 并验证安装产物**
 
 记录 commit、dirty status、`ros2 pkg prefix so101_demo_py`、console/module/config SHA256、Docker
-image digest、模型哈希、RMW report 和 cgroup controller。通过受审脚本安装/更新
-`so101-admission-authority.service`，回读 unit、专用用户、0660 socket、Authority-owned 路径、
+image digest、模型哈希、RMW report 和 cgroup controller。通过受审的 Authority 与 cgroup 脚本安装/更新
+`so101-admission-authority.service` 与 `so101-parallel-watchdog@.service`，回读 unit、专用用户、0660 socket、Authority-owned 路径、
 私钥权限和客户端固定公钥；不能建立该边界时以 `AUTHORITY_UNAVAILABLE` 停止。
 
 - [ ] **Step 2: 运行 W8 dry admission**

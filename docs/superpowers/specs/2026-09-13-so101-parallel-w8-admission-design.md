@@ -123,6 +123,9 @@ resource_profile_required_from_worker_count: 4
 w8_admission_profile_id: ai-station-w8-v1
 broker_queue_capacity_per_model: 8
 broker_inflight_per_worker_per_model: 1
+v2_yolo_ticket_queue_timeout_s: 10.0
+v2_grounded_sam_ticket_queue_timeout_s: 30.0
+broker_capture_submit_timeout_s: 0.5
 pose_admission_max_frame_age_s: 5.0
 yolo_qualified_inference_p99_ceiling_s: 2.0
 grounded_sam_qualified_inference_p99_ceiling_s: 4.0
@@ -140,6 +143,8 @@ required_measured_headroom_ratio: 0.20
 resource_sample_interval_s: 0.5
 stage_idle_stability_window_s: 10.0
 resource_max_sample_gap_s: 1.0
+resource_soft_stop_recovery_window_s: 10.0
+resource_soft_stop_hard_timeout_s: 30.0
 mujoco_realtime_factor_p05_floor: 0.50
 render_fps_p05_floor: 5.0
 controller_deadline_miss_limit: 0
@@ -167,6 +172,10 @@ controller_deadline_miss_limit: 0
   `ready_worker_count` 分开记录。
 - normal 正式队列开放时，四者必须都等于请求 N；qualification 正式队列开放时四者必须都为 8。
 - 启动器不能修改用户请求数，也不能用 `active_worker_limit` 隐藏并发降级。
+
+normal N 的累计启动序列为 `startup_stages(N) = [s ∈ (1,2,4,6) where s < N] + [N]`，去重并
+保持升序。例如 N=3 是 `1,2,3`，N=5 是 `1,2,4,5`，N=7 是 `1,2,4,6,7`，N=8 才是
+`1,2,4,6,8`。每一级只做 10 秒空载稳定检查，不运行 qualification canary。
 
 ## 5. qualification 状态机
 
@@ -333,6 +342,8 @@ MoveIt 规划线程或 Broker 同处可能被整体 OOM 的 leaf。阶段验收
 
 `nvidia-smi`/NVML、MuJoCo realtime factor、controller deadline counter 或 camera producer FPS
 任一生产接口缺失，PID 归属不完整，或者指标时间轴无法对齐时都拒绝，不把缺测当成零负载。
+任一 SOFT_STOP 先停止新 lease；只有所有指标连续 10 秒低于软门才恢复。30 秒内不能恢复时升级
+为 HARD_STOP。这两个窗口由 v2 配置冻结，不能由画像或调用者延长。
 
 ## 8. PerceptionBroker 扩容
 
@@ -340,20 +351,23 @@ Broker 仍只有一个 GPU 模型服务。YOLO-Seg 始终优先；Grounded-SAM �
 失败边界回退。八个 Worker 可同时各提交一个请求，两个模型队列容量都固定为 8，并继续按
 Worker 轮转。
 
-每次 YOLO 或 Grounded-SAM 请求都携带不可变 capture monotonic timestamp。fallback 必须重新
-采集 RGB-D/TF，不能复用 YOLO 阶段留下的帧。实际 queue 与 inference deadline 同时受模型原始
-v1 timeout 和 5 秒 pose admission 新鲜度预算限制：
+v2 使用两阶段 Broker 协议，避免 GPU 排队直接耗尽帧龄。Worker 先提交不含图像的
+`BrokerTicket`；Broker 轮到该 ticket 时返回绑定 lease、worker generation、broker generation
+和 ticket nonce 的 `CAPTURE_NOW`。Worker 必须在 0.5 秒内采集并提交新 RGB-D/TF。YOLO ticket
+queue timeout 为 10 秒，Grounded-SAM 为 30 秒；这只延长未捕帧等待，不延长任何已有帧的
+新鲜度。fallback 创建新的 ticket 并重新捕帧，不能复用 YOLO 阶段留下的帧。
+
+收到 frame 后，inference deadline 受模型原始 v1 timeout 和 5 秒 pose admission 新鲜度预算限制：
 
 ```text
 freshness_deadline = capture_monotonic + 5.0
 qualified_inference_ceiling = 2.0  # YOLO; Grounded-SAM 为 4.0
-queue_deadline = min(v1_queue_deadline, freshness_deadline
-                     - qualified_inference_ceiling - 0.25)
 inference_deadline = min(dispatch_monotonic + v1_inference_timeout,
                          freshness_deadline - 0.25)
 ```
 
-queue deadline 若在入队时已无正预算，直接拒绝。pose admission 前再次验证帧龄 `<5.0 s`。
+过期、重复或错 generation 的 `CAPTURE_NOW`/frame 一律 fence，ticket 不能授权机器人动作或延长
+lease。pose admission 前再次验证帧龄 `<5.0 s`。
 qualification 在 `START_8` 后、三轮 pick-place canary 前增加独立 Broker 子阶段，分别产生八路
 同时 YOLO、八路同时 Grounded-SAM 和混合队列的负载证据；Grounded-SAM 负载由专用 Broker
 canary 触发，不改变正式 pick-place 的 YOLO-first
@@ -401,6 +415,14 @@ SHA256、inode、大小和修改时间，再从原始样本重新计算指标。
 从已登记目录 FD 读取并复制到 Authority-owned staging，fsync 后原子 seal；chmod 只读或候选
 目录内的 ownership 标记本身都不构成封存。
 
+evidence root 和普通子目录继续保持操作员 0700。对每个待封存目录只增加
+`u:so101-admission:--x` ACL，对已经关闭的固定 regular file 增加
+`u:so101-admission:r--` ACL；不授予目录列举或写权限。Authority 只通过已登记 root FD 和固定
+相对路径打开文件，复制完成后即可移除该文件 ACL。Authority 通过 socket 返回签名 bytes，
+Coordinator 负责把不具权威性的副本写入 `authority-receipts/`；Authority 不需要写 candidate
+evidence root。以两个真实 UID 的无 ROS smoke 验证读取桥、候选不能写权威目录、symlink 与
+inode 替换仍被拒绝。
+
 ### 9.2 画像内容
 
 画像绑定：
@@ -440,12 +462,27 @@ qualification 时冻结的完整 catalog identity，并用既有 `--point-id` �
 
 ## 10. Worker 丢失与熔断
 
-正式队列开放后必须维持八个健康 slot。`slot_healthy` 独立于能否领取新 lease：只要 generation
+正式队列开放后必须维持 `required_healthy_slots=requested_worker_count`；qualification 的正式
+阶段请求固定为 8，因此必须维持八个，normal N 只维持 N，绝不额外启动到 8。
+`slot_healthy` 独立于能否领取新 lease：只要 generation
 身份正确、heartbeat 新鲜、资源/cgroup/Domain gate 有效，slot 处于 `AVAILABLE`、`LEASED`、
 `INITIALIZING`、`EXECUTING` 或 `FINALIZING` 都计入健康容量。dispatcher 只从 `AVAILABLE` 且
-未达到 K 的 Worker 发 lease。暂时无点、队列尾部不足八点或达到 K 的 Worker 必须继续 heartbeat
-并等待明确 `BATCH_TERMINAL`，不得自行退出；replacement 继承该 slot 已完成的 K 计数，不能
-通过换代重置配额。
+未达到 K 的 Worker 发 lease。暂时无点、队列尾部不足 N 点或达到 K 的 Worker 必须继续 slot
+heartbeat 并等待明确 `BATCH_TERMINAL`，不得自行退出；replacement 继承该 slot 持久化的
+`lease_count`，它在 `LEASE_GRANTED` 时扣减，包含未完成、`INVALID` 和 `INDETERMINATE`，不能
+退款或通过换代重置配额。
+
+slot heartbeat 是与 active lease 无关的独立 RPC：
+
+```text
+SlotHeartbeat(batch_id, coordinator_epoch, worker_id, worker_generation,
+              worker_session_id, sequence)
+SlotHeartbeatAck(accepted, coordinator_epoch, next_deadline_monotonic_s)
+```
+
+Worker 从首次 ready 到 `BATCH_TERMINAL` 每 1 秒发送；Coordinator 按自身 monotonic clock 固定
+5 秒 deadline。它只能证明 slot 存活，不能创建/续租 lease、授权动作或改变 K。epoch、generation、
+session、sequence 任一旧值都 fence；active Worker 同时发送既有 lease heartbeat 和 slot heartbeat。
 
 Worker 崩溃、退出或被隔离时：
 
@@ -453,7 +490,7 @@ Worker 崩溃、退出或被隔离时：
 2. 其他 Worker 可完成已经开始的点，避免主动制造 `INDETERMINATE`。
 3. 故障 slot 的旧 generation 完成 fencing 和进程清理。
 4. replacement 沿用原 Domain，增加 `worker_generation`，通过完整 ready gate。
-5. 重新达到八个 `slot_healthy=true`，且至少一个 Worker 可领取时才恢复队列。
+5. 重新达到 `required_healthy_slots` 个 `slot_healthy=true`，且至少一个 Worker 可领取时才恢复队列。
 
 冻结期限内无法恢复时返回 `W8_CAPACITY_LOST`。已完成点保留原裁决，但整个批次不能声明 W8
 资格。不得按七个或更少 Worker 继续派发新点。
@@ -473,17 +510,25 @@ deadline miss、cgroup 逃逸或 `MemAvailable < 4 GiB`。正式 attempt 已开�
 | 静态资源 | `HOST_RESOURCE_BASELINE_FAILED` |
 | 运行资源 | `MEMORY_HARD_LIMIT`, `GPU_HARD_HEADROOM`, `CPU_PRESSURE_LIMIT` |
 | 公共依赖 | `BROKER_BACKPRESSURE_LIMIT`, `SIMULATION_REALTIME_LIMIT`, `CONTROLLER_DEADLINE_MISS` |
-| Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
-| Worker 容量 | `W8_CAPACITY_LOST` |
+| Authority | `AUTHORITY_UNAVAILABLE`, `AUTHORITY_AUTHENTICATION_FAILED`, `AUTHORITY_EVIDENCE_ACCESS_FAILED`, `PROVISIONAL_ADMISSION_DENIED`, `PROFILE_PROVENANCE_DRIFT`, `PROFILE_REVOKED` |
+| Watchdog | `WATCHDOG_UNAVAILABLE`, `QUALIFICATION_CRASHED` |
+| Worker 容量 | `SLOT_HEARTBEAT_TIMEOUT`, `W8_CAPACITY_LOST` |
 
 错误码要同时进入事件账本、batch summary 和 CLI stderr。正式队列开放前失败时不创建正式
 point attempt，也不把未执行点放进成功率分母。
 
 ## 12. 崩溃边界、证据布局与写入权
 
-v2 qualification 不支持 resume。Coordinator、Authority 或资源监视器在 `PREFLIGHT` 到
-`PROFILE_ACCEPTED` 之间异常退出，watchdog 必须 fence 当前 epoch、停止全部 owned 后代、完成
-Domain/cgroup/socket 清理并写 `QUALIFICATION_CRASHED`；该 batch 永久 terminal invalid。再次
+v2 qualification 不支持 resume。每个 batch 由 system manager 启动独立
+`so101-parallel-watchdog@<batch>.service`。watchdog 在启动 Coordinator 前原子持有全部 Domain
+claim FD、创建并拥有 batch slices，使用 pidfd/systemd unit 状态监视 Coordinator 与 monitor，
+并监视长期 Authority service。Coordinator、Authority 或资源监视器在 `PREFLIGHT` 到
+`PROFILE_ACCEPTED` 之间异常退出时，watchdog 先把 root-owned terminal record fsync 到
+`/var/lib/so101-admission/pending-terminal/`（root 写、Authority 只读），再冻结 batch slice、TERM/KILL 全部 owned leaf、
+验证 DDS quiet、关闭 claim FD并移除 slice/socket。Authority 可用时立即吸收该记录；Authority
+自身宕机时必须在重启后先吸收 pending record，之后才接受任何 register/verify RPC。
+
+该流程 fence 当前 epoch、完成清理并写 `QUALIFICATION_CRASHED`；该 batch 永久 terminal invalid。再次
 尝试必须使用新 batch ID，并从 `START_1` 重新完成五级三轮。normal/formal 点位仍沿用 v1 的
 attempt 终态与恢复语义，不能用 qualification 重启覆盖已开始 attempt。
 
