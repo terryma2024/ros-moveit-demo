@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: e359599db8c2ee7f089a8c103b18b295fb9d540b
+current_commit: e93fcb05354b9943de7de3690d68bbb8e27454fc
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-100
-next_experiment: EXP-114
+latest_checkpoint: CP-101
+next_experiment: EXP-115
 ```
 
 Frozen provenance:
@@ -8642,12 +8642,14 @@ next_command: Commit CP-100 and repeat the unchanged live fault as EXP-114 using
 
 ```yaml
 experiment_id: EXP-114
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:17:12+08:00
   - status: RUNNING
     at: 2026-09-13T11:17:12+08:00
+  - status: INVALID
+    at: 2026-09-13T11:20:40+08:00
 prior_experiment: EXP-113
 hypothesis: With the 181-183 domain pool clear, the post-fix runtime will enter active execution and independently revoke, stop and cancel the in-flight lease within the heartbeat bound while Coordinator remains stopped.
 single_variable: Remove only the verified stale domain-181 daemon; all source, image, point, N=1/K=1, complete overlay, exact observer predicate, signals and evidence criteria remain EXP-113-identical.
@@ -8667,6 +8669,64 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
 retention_rule: Retain all evidence; delete nothing without explicit user authorization.
+observed:
+  - The clean pool passed production admission and the unchanged task_start batch physically PASSED with qualification_passed=true and batch_cleanup_complete=true in 90.59 s.
+  - Coordinator identity was captured, but manual readback before starting the observer consumed the remaining execute window. The observer found the exact Coordinator already exited and correctly wrote injected=false without sending a signal.
+conclusion: INVALID fault orchestration due late observer attachment; the normal post-fix physical pass is retained but supplies no heartbeat-fault result.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-114.log sha256=6df10cfa9c09a93e12539fe7ba9eebda47f5b04a17274b36fae9dbd95d8f5f67
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-114.time sha256=3a69d903d57084799b39796db3b8f5455e3e2e7e58cd8f950f3f087f8009f8c0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/fault-heartbeat-missed-114.json sha256=de553e43d590fcbbdaabcb808545a8335d1231cfa0e4cdc3a2249f6ed0d68d78
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-114/aggregate_results.json sha256=e1c4822d7adce5fba41cfe45fda4b7cca0f0e594d9dc2c554214c697743c5af6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-114/cleanup-gates.json sha256=f5572b60d545967c045c8188b3cf60289f6baa28d613a84e55a4b4cb0c3aa517
+decision: KEEP_INVALID
+next_experiment: EXP-115
+```
+
+```yaml
+checkpoint_id: CP-101
+last_valid_experiment: EXP-112
+current_hypothesis: Starting the observer automatically as soon as resource_manifest.json appears will preserve the unchanged clean-pool run while eliminating the manual attachment delay.
+working_tree_status: EXP-114 invalid fault result and EXP-115 preregistration are ledger-only; source/install/image unchanged.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - The post-fix runtime completes a normal task_start physical qualification and exact cleanup.
+  - The EXP-114 observer sent no signal and therefore did not test F1.
+open_risks:
+  - F1 still requires an automatically attached active-goal observer.
+next_command: Commit CP-101, start EXP-115 minimal launch, and attach the exact observer immediately after root creation with no intervening inspection.
+```
+
+## EXP-115 — Immediate-observer post-fix execute heartbeat fault
+
+```yaml
+experiment_id: EXP-115
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:20:40+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:20:40+08:00
+prior_experiment: EXP-114
+hypothesis: Immediate automatic attachment after batch-root admission will inject exact Coordinator SIGSTOP during an active goal and prove the post-fix Worker stops the direct consumer and controller before resume.
+single_variable: Remove only the manual readback delay between resource_manifest creation and observer start; source, image, point, N=1/K=1, overlay, predicate, signals and evidence criteria remain EXP-114-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v8-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-115
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate: Manifest-owned direct dynamic module is live; accepted-goal count exceeds terminal count; exact Coordinator PID/start-time/cmdline match.
+success_criteria: Coordinator state T during active goal; after heartbeat bound and before resume exact consumer is absent, accepted count is unchanged and controller statuses are terminal; complete fresh evidence, conservative adjudication and exact cleanup.
+failure_criteria: Late/absent cancellation, later revoked goal, active controller status, unsafe promotion, incomplete evidence or residue.
+invalid_criteria: Admission failure, pre-existing root, missed window, identity mismatch or pre-fault evidence failure.
+provenance:
+  source_commit: e93fcb05354b9943de7de3690d68bbb8e27454fc
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f0d4c07d6a93f563218824452df5765eddeddf3cf6b65252899255159053d406
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-114
+next_experiment: EXP-115
 ```
