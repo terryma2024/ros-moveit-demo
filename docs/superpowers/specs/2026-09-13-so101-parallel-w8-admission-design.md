@@ -115,6 +115,7 @@ ros_discovery_scope: localhost
 fastdds_transport: udp_v4_loopback_only
 fastdds_data_sharing: false
 max_dds_participants_per_worker: 32
+max_unix_socket_path_bytes: 107
 domain_allocation_policy: reserve_final_request_before_start
 qualification_worker_stages: [1, 2, 4, 6, 8]
 qualification_canary_rounds_per_stage: 3
@@ -147,7 +148,10 @@ resource_soft_stop_recovery_window_s: 10.0
 resource_soft_stop_hard_timeout_s: 30.0
 mujoco_realtime_factor_p05_floor: 0.50
 render_fps_p05_floor: 5.0
+controller_state_expected_hz: 100.0
+controller_state_max_gap_s: 0.05
 controller_deadline_miss_limit: 0
+runtime_metrics_smoke_duration_s: 31.0
 ```
 
 已有模型、帧新鲜度、RGB-D/TF skew、lease、heartbeat、attempt ACK、result ACK 和各状态硬
@@ -340,7 +344,24 @@ MoveIt 规划线程或 Broker 同处可能被整体 OOM 的 leaf。阶段验收
 | Controller | controller manager deadline counter | miss 增量 `==0` | 任一 miss HARD_STOP |
 | Broker | Broker 原始事件，全阶段 | queue/inference timeout 0，p99 见 §8 | 接近新鲜度预算 SOFT_STOP；超限 HARD_STOP |
 
-`nvidia-smi`/NVML、MuJoCo realtime factor、controller deadline counter 或 camera producer FPS
+每个 Worker 的 `ParallelRuntimeMetricsProbe` 使用该 Worker 自己的 ROS Domain：
+
+- 订阅 `so101_mujoco_support/msg/PhysicsStepEvidenceChunk` 的
+  `/so101/simulation/physics_step_chunks`，用连续 chunk 的 simulation-time delta / 本地 monotonic
+  receive delta 计算 realtime factor；`evidence_loss=true` 或 reset/session 不连续即缺测。
+- 订阅 `sensor_msgs/msg/Image` 的 `/task_camera/color`，用 source stamp 和本地 monotonic receive
+  序列计算 0.5 秒窗口 FPS 与最大断帧。
+- 订阅 `sensor_msgs/msg/JointState` 的 `/joint_states`。冻结的 broadcaster rate 为 100 Hz；非
+  paused、非 reset 窗口内 source stamp 或 receive monotonic gap `>0.05 s` 就增加
+  `controller_state_deadline_miss_count`。这项明确衡量 controller state 发布链，不宣称是内核
+  scheduler 的控制环 deadline。
+
+Probe 每 0.5 秒通过已有 worker control socket 发送带 batch/epoch/worker/generation/session/reset
+身份的 `WorkerRuntimeMetricsSample`。`parallel_worker_runtime.py` 负责轮询和发送，
+`parallel_ipc.py` 固定 wire schema，ResourceMonitor 只接收身份匹配且 sequence 连续的样本。
+这些是生产接口，不是只在测试中注入的 fake。
+
+`nvidia-smi`/NVML、MuJoCo realtime factor、controller state deadline counter 或 camera producer FPS
 任一生产接口缺失，PID 归属不完整，或者指标时间轴无法对齐时都拒绝，不把缺测当成零负载。
 任一 SOFT_STOP 先停止新 lease；只有所有指标连续 10 秒低于软门才恢复。30 秒内不能恢复时升级
 为 HARD_STOP。这两个窗口由 v2 配置冻结，不能由画像或调用者延长。
@@ -405,6 +426,16 @@ batch/epoch/nonce 的响应；Coordinator 永远拿不到可签发 acceptance �
 首次安装在 ai-station 上生成私钥到 root/Authority-only 路径，只把公钥导出到仓库。必须先
 审查并提交公钥，再重装/重启服务并回读运行公钥 fingerprint 与 repo 公钥完全一致，之后才能
 开始 qualification；密钥轮换会令既有 profile 失效并要求重新 qualification。
+
+Authority 与 watchdog 不能从操作员可写 worktree、editable install 或 `--symlink-install` 加载。
+部署脚本从已审查 commit 构建 wheel，并安装到
+`/opt/so101-w8-admission/releases/<runtime_content_sha256>/venv`；整个 release、解释器、依赖、
+unit 和配置由 root 拥有，目录 0755、不可变文件 0444/可执行文件 0555，且 import tree 无
+symlink。systemd 使用该 release 的绝对 Python 路径与 `-I -s`，`WorkingDirectory=/`，清空
+`PYTHONPATH` 并禁用 user site；启动时输出所有受信模块 `__file__` 与 release manifest hash，
+任何路径越界或 hash 漂移都拒绝。Worker/开发 overlay 可以继续 symlink install，但不能进入
+Authority/watchdog 的 `sys.path`。候选 UID 必须无法修改 release、unit、私钥、registry 和
+pending records。
 
 `verify_stage(batch_id, nonce) -> StageAcceptance` 可为 1/2/4/6/8 阶段出具 acceptance；只有
 Authority 推导出 stage=8 且三轮全通过时，才返回 W8-only `ProvisionalAdmission`。
@@ -515,7 +546,7 @@ deadline miss、cgroup 逃逸或 `MemAvailable < 4 GiB`。正式 attempt 已开�
 
 | 边界 | 错误码 |
 | --- | --- |
-| 配置 | `CONTRACT_V2_MISMATCH`, `EXACT_WORKER_COUNT_REQUIRED` |
+| 配置 | `CONTRACT_V2_MISMATCH`, `EXACT_WORKER_COUNT_REQUIRED`, `UNIX_SOCKET_PATH_TOO_LONG` |
 | Domain | `DOMAIN_POOL_INCOMPLETE`, `DOMAIN_CLAIM_CONFLICT`, `DOMAIN_PROCESS_UNVERIFIABLE`, `DOMAIN_DISCOVERY_NOT_QUIET` |
 | cgroup | `CGROUP_V2_UNAVAILABLE`, `CGROUP_DELEGATION_UNAVAILABLE`, `CGROUP_ENROLLMENT_FAILED`, `PROCESS_ESCAPED_CGROUP` |
 | 静态资源 | `HOST_RESOURCE_BASELINE_FAILED` |
@@ -543,10 +574,16 @@ claim FD、创建并拥有 batch slices，使用 pidfd/systemd unit 状态监视
 尝试必须使用新 batch ID，并从 `START_1` 重新完成五级三轮。normal/formal 点位仍沿用 v1 的
 attempt 终态与恢复语义，不能用 qualification 重启覆盖已开始 attempt。
 
+AF_UNIX 地址在任何副作用前统一做完整模板预算。冻结上限为 107 bytes，必须枚举 allocator
+占位 `ipc/<slot>/s`、`worker-NN.sock`、`worker-NN-control.sock`、Broker perception/authority、
+Authority、watchdog 以及 replacement 复用路径；任一路径超限就返回
+`UNIX_SOCKET_PATH_TOO_LONG`。现场 task root 与 batch 目录固定使用短路径，不能把长的人类描述
+拼进 socket namespace。
+
 现场 qualification 使用一个已登记的 durable evidence root：
 
 ```text
-/data/work/so101-evidence/parallel-w8-admission/<run-id>/
+/data/work/so101-evidence/parallel-w8/<short-run-id>/
 ├── dispatch/
 ├── authority-requests/
 ├── authority-receipts/       # 只保存已签名响应副本，不是权威 registry
@@ -561,6 +598,11 @@ attempt 终态与恢复语义，不能用 qualification 重启覆盖已开始 at
 ├── workers/
 ├── broker/
 ├── metrics/
+├── b/
+│   ├── s/                 # cgroup smoke batch
+│   ├── m/                 # one-Worker runtime metrics smoke
+│   ├── q/                 # qualification batch
+│   └── n/                 # normal reuse batch
 └── scratch/
 ```
 

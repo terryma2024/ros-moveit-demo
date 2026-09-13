@@ -26,7 +26,7 @@
 - PerceptionBroker 每模型队列容量为 8，每 Worker/模型最多一个在途请求；YOLO-Seg 优先，Grounded-SAM 只按现有感知失败矩阵回退。
 - v2 Broker 先排不含图像的 ticket，收到 `CAPTURE_NOW` 后才捕帧；YOLO/Grounded ticket timeout 分别为 10/30 秒，capture submit 为 0.5 秒。
 - accepted profile 不按时间过期；只因硬件、运行 provenance、能力或运行硬故障漂移而失效。
-- 现场任务只使用 `/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01` 作为 durable evidence root。
+- 现场任务只使用 `/data/work/so101-evidence/parallel-w8/20260913-q01` 作为 durable evidence root；batch 只用 `b/s`、`b/q`、`b/n` 短路径。
 - ai-station 上每次 pytest/colcon 临时目录必须是上述 evidence root 下从未存在的 task-specific `scratch/*/tmp`；先用实际 Python 回读 `tempfile.gettempdir()`，完成后只列为删除候选。
 - 不删除旧证据，不停止非本任务进程，不使用宽泛 `pkill`，不运行 `ament_uncrustify --reformat`。
 - 每项代码改动遵循 RED → GREEN，并在任务边界创建独立提交。
@@ -94,7 +94,7 @@ branch、handoff SHA256/size/receipt；若与 handoff 不一致，停止，不�
 调度方会预创建唯一 evidence root，只允许已有 dispatch metadata。核验权限和内容后创建其余目录：
 
 ```zsh
-evidence_root=/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01
+evidence_root=/data/work/so101-evidence/parallel-w8/20260913-q01
 test -d "$evidence_root"
 test "$(stat -c '%a' "$evidence_root")" = 700
 find "$evidence_root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort
@@ -102,7 +102,7 @@ install -d -m 700 "$evidence_root/coordinator" "$evidence_root/qualification" \
   "$evidence_root/dispatch" "$evidence_root/authority-requests" \
   "$evidence_root/authority-receipts" "$evidence_root/production" \
   "$evidence_root/workers" "$evidence_root/broker" \
-  "$evidence_root/metrics" "$evidence_root/scratch"
+  "$evidence_root/metrics" "$evidence_root/b" "$evidence_root/scratch"
 ```
 
 建立 `docs/experiments/so101-parallel-w8-admission-experiment-ledger.md`，写入 branch、commit、
@@ -117,7 +117,7 @@ git commit -m "docs: start SO-101 W8 admission ledger"
 
 ```zsh
 set -euo pipefail
-evidence_root=/data/work/so101-evidence/parallel-w8-admission/20260913-w8-v2-qualification-01
+evidence_root=/data/work/so101-evidence/parallel-w8/20260913-q01
 test_python=/usr/bin/python3
 run_w8_pytest() {
   local test_run_id="$1"
@@ -175,6 +175,7 @@ assert config.ros_domain_ids == tuple(range(215, 223))
 assert config.fastdds_transport == "udp_v4_loopback_only"
 assert config.fastdds_data_sharing is False
 assert config.max_dds_participants_per_worker == 32
+assert config.max_unix_socket_path_bytes == 107
 assert config.qualification_worker_stages == (1, 2, 4, 6, 8)
 assert config.qualification_canary_rounds_per_stage == 3
 
@@ -246,6 +247,9 @@ git commit -m "feat: freeze parallel batch v2 contract"
 qualification 取得八个 lock、normal N 取得映射表前 N 个、第四个冲突时前三个回滚、不可读 ROS 候选失败、旧 Worker 持有 Domain 时拒绝、
 quiet probe 后按序释放。receipt 必须含 boot ID 和 process start ticks。增加 Fast DDS 配置哈希、
 SHM/Data Sharing 禁用、participant=33 拒绝和跨 Domain graph 不可见测试。
+用固定现场 root 分别枚举 `b/s`、`b/q`、`b/n` 的 allocator `ipc/<slot>/s`、worker、control、
+Broker perception/authority、Authority、watchdog 和 replacement 全部真实 socket template，断言
+最长 UTF-8 路径 `<=107` bytes；构造 108-byte 路径必须在创建目录或进程前拒绝。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -356,14 +360,21 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 - Create: `src/so101_demo_py/src/parallel_batch/resource_monitor.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/resources.py`
 - Modify: `src/so101_demo_py/src/parallel_batch/worker.py`
-- Modify: `src/so101_demo_py/src/runtime/mujoco_pick_place_runtime.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_worker_runtime.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_ros_runtime.py`
+- Modify: `src/so101_demo_py/src/runtime/parallel_ipc.py`
 - Test: `src/so101_demo_py/test/test_parallel_resource_monitor.py`
+- Test: `src/so101_demo_py/test/test_parallel_worker_runtime.py`
+- Test: `src/so101_demo_py/test/test_parallel_ros_runtime.py`
+- Test: `src/so101_demo_py/test/test_parallel_ipc.py`
 
 **Interfaces:**
 - Produces: `ResourceMonitor.start()`, `mark_stage(name, phase)`, `snapshot_window(stage)`, `stop()`.
 - Produces: `ResourceDecision(kind: OK | SOFT_STOP | HARD_STOP, reasons: tuple[str, ...])`.
 - Produces: `HardStopEvidence(profile_id, batch_id, reason, clean_host_window_sha256, raw_metrics_sha256)`.
+- Produces: `ParallelRuntimeMetricsProbe` and `WorkerRuntimeMetricsSample` wire message.
 - Consumes: `CgroupLayout.snapshot()`, NVML probe, Broker metrics and Worker runtime metrics.
+- Consumes production topics: `/so101/simulation/physics_step_chunks`, `/task_camera/color`, `/joint_states`.
 
 - [ ] **Step 1: 写时间序列 RED tests**
 
@@ -371,6 +382,10 @@ git commit -m "feat: isolate W8 process trees with cgroup v2"
 最大间隔、缺样失败、CPU/PSI/RAM/GPU、realtime factor p05、render FPS p05、断帧、controller
 deadline、进程逃逸及各自 SOFT/HARD 动作。验证所有指标连续 10 秒低于软门才恢复，30 秒不能
 恢复则 HARD_STOP。任何生产指标接口缺失都 fail closed。
+用真实 ROS message 类型的 deterministic callbacks 验证：physics chunk 计算 simulation/wall
+realtime factor；color source/receive stamp 计算 FPS/断帧；100 Hz `/joint_states` 在非 pause/reset
+窗口出现 `>0.05 s` source 或 receive gap 时累计 miss。验证 worker control IPC 的身份、sequence、
+断线和旧 generation fencing。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -399,8 +414,13 @@ failure；不能因 Authority 当时不可用而丢失撤销候选。
 git add src/so101_demo_py/src/parallel_batch/resource_monitor.py \
   src/so101_demo_py/src/parallel_batch/resources.py \
   src/so101_demo_py/src/parallel_batch/worker.py \
-  src/so101_demo_py/src/runtime/mujoco_pick_place_runtime.py \
-  src/so101_demo_py/test/test_parallel_resource_monitor.py
+  src/so101_demo_py/src/runtime/parallel_worker_runtime.py \
+  src/so101_demo_py/src/runtime/parallel_ros_runtime.py \
+  src/so101_demo_py/src/runtime/parallel_ipc.py \
+  src/so101_demo_py/test/test_parallel_resource_monitor.py \
+  src/so101_demo_py/test/test_parallel_worker_runtime.py \
+  src/so101_demo_py/test/test_parallel_ros_runtime.py \
+  src/so101_demo_py/test/test_parallel_ipc.py
 git commit -m "feat: monitor W8 resource envelopes"
 ```
 
@@ -627,6 +647,13 @@ controller miss、cgroup escape 或资源硬门必须持久 revoke；检测到 f
 content allowlist manifest 和 canonical SHA256；install space 对映射后的同一 allowlist 计算，
 不哈希整个 install tree；`implementation_commit` 只记审计信息。
 
+Authority/watchdog 服务必须从已审查 commit 构建 wheel，非 editable、非 symlink 地安装到
+`/opt/so101-w8-admission/releases/<runtime_content_sha256>/venv`。root 拥有 release、解释器、
+依赖、unit 和配置；systemd 用绝对解释器加 `-I -s`、`WorkingDirectory=/`、空 `PYTHONPATH`、
+禁用 user site。安装测试枚举实际 module `__file__`，要求全部位于 root-owned release、无
+symlink 且 candidate UID 不可写；候选还不能改 unit/key/registry/pending。服务启动时复核
+release manifest hash，失败则 `AUTHORITY_UNAVAILABLE`/`WATCHDOG_UNAVAILABLE`。
+
 - [ ] **Step 4: 实现 provisional/final 输出**
 
 StageAcceptance 绑定 Authority 推导的 stage；provisional 只允许 stage=8，绑定 batch、epoch、
@@ -677,8 +704,9 @@ git commit -m "feat: verify independent W8 admission profiles"
 覆盖 v1 不接受 v2 flags、normal N=1..8 四计数精确相等、qualification 预留 8 Domain、normal
 预留前 N 个 Domain、W4–W8 normal 缺 profile；验证 N=4/5/6/7/8 分别选择 stage
 4/6/6/8/8 envelope。覆盖 W8 qualification 非 8 请求、请求 8 实际只启动 7、阶段跳过、provisional 缺失、revoked profile
-和 profile drift。实现并测试精确的 `--stop-after CREATE_CGROUPS` 枚举选项；错误码必须进入
-stderr 与 summary。
+和 profile drift。实现并测试精确的
+`--stop-after {CREATE_CGROUPS,METRICS_READY_1}` 枚举选项；后者在 W1 runtime 连续采集 31 秒
+生产指标后受控清理，二者都不创建正式 point attempt。错误码必须进入 stderr 与 summary。
 
 - [ ] **Step 2: 运行 RED**
 
@@ -794,7 +822,15 @@ watchdog 先持久化 pending revocation 并清理。Authority 重启后必须�
 set -euo pipefail
 cd /data/work/ws_moveit/.worktrees/parallel-w8-admission-v2
 source /opt/ros/jazzy/setup.zsh
-colcon build --packages-select so101_demo_py --symlink-install
+underlay=/data/work/ws_moveit/install
+test -f "$underlay/setup.zsh"
+source "$underlay/setup.zsh"
+for pkg in mujoco_ros2_control so101_mujoco_support; do
+  prefix=$(ros2 pkg prefix "$pkg")
+  test -n "$prefix"
+  realpath "$prefix"
+done
+colcon build --packages-up-to so101_demo_py --symlink-install
 source install/setup.zsh
 test_tmp="$evidence_root/scratch/task-11-package/tmp"
 test ! -e "$test_tmp" || exit 90
@@ -831,7 +867,10 @@ git commit -m "test: cover W8 admission failure boundaries"
 
 - [ ] **Step 1: 重新 source 并验证安装产物**
 
-记录 commit、dirty status、`ros2 pkg prefix so101_demo_py`、console/module/config SHA256、Docker
+先 source `/opt/ros/jazzy/setup.zsh`，再 source 已验证的 `/data/work/ws_moveit/install/setup.zsh`；
+回读 `mujoco_ros2_control`、`so101_mujoco_support` 和其余 package.xml 依赖的 prefix/realpath/hash，
+并把 underlay identity 纳入 runtime profile。禁止继承未记录的交互 shell overlay。随后记录
+commit、dirty status、`ros2 pkg prefix so101_demo_py`、console/module/config SHA256、Docker
 image digest、模型哈希、RMW report 和 cgroup controller。通过受审的 Authority 与 cgroup 脚本安装/更新
 `so101-admission-authority.service` 与 `so101-parallel-watchdog@.service`，回读 unit、专用用户、0660 socket、Authority-owned 路径、
 私钥权限和客户端固定公钥；不能建立该边界时以 `AUTHORITY_UNAVAILABLE` 停止。
@@ -850,7 +889,26 @@ ros2 run so101_demo_py so101_parallel_batch \
   --batch-id w8-v2-cgroup-smoke-01 --worker-count 8 \
   --max-points-per-worker 3 --admission-mode qualification \
   --stop-after CREATE_CGROUPS \
-  --evidence-root "$evidence_root/production/cgroup-smoke" \
+  --evidence-root "$evidence_root/b/s" \
+  --broker-image "$broker_image" \
+  --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
+  --grounded-root "$grounded_root" \
+  --grounded-manifest-sha256 "$grounded_sha256" \
+  --run-mode execute
+```
+
+随后用同一组冻结输入运行 `--stop-after METRICS_READY_1`，只启动第一个隔离 Worker，连续 31 秒
+采集真实 `/so101/simulation/physics_step_chunks`、`/task_camera/color` 和 `/joint_states`。要求每类
+至少 60 个 0.5 秒样本、identity/sequence 连续、RTF/FPS 可计算、controller-state miss 为 0，
+然后受控清理；任何缺 topic、缺样或 fake-only producer 都以 `INVALID` 停止。
+
+```zsh
+ros2 run so101_demo_py so101_parallel_batch \
+  --points "$point_catalog" --config "$v2_config" \
+  --batch-id w8-v2-metrics-smoke-01 --worker-count 8 \
+  --max-points-per-worker 3 --admission-mode qualification \
+  --stop-after METRICS_READY_1 \
+  --evidence-root "$evidence_root/b/m" \
   --broker-image "$broker_image" \
   --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
   --grounded-root "$grounded_root" \
@@ -895,7 +953,7 @@ ros2 run so101_demo_py so101_parallel_batch \
   --points "$point_catalog" --config "$v2_config" \
   --batch-id w8-v2-qualification-01 --worker-count 8 \
   --max-points-per-worker 3 --admission-mode qualification \
-  --evidence-root "$evidence_root/production/qualification" \
+  --evidence-root "$evidence_root/b/q" \
   --broker-image "$broker_image" \
   --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
   --grounded-root "$grounded_root" \
@@ -989,7 +1047,7 @@ ros2 run so101_demo_py so101_parallel_batch \
   --config "$v2_config" --batch-id w8-v2-normal-reuse-01 \
   --worker-count 8 --max-points-per-worker 1 \
   --admission-mode normal --admission-profile-id ai-station-w8-v1 \
-  --evidence-root "$evidence_root/production/normal-reuse" \
+  --evidence-root "$evidence_root/b/n" \
   --broker-image "$broker_image" \
   --yolo-weights "$yolo_weights" --yolo-weights-sha256 "$yolo_sha256" \
   --grounded-root "$grounded_root" \
