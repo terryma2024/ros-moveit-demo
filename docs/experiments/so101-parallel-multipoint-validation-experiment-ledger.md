@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 27cef04941709a7e7ade44ad832229d86619afde
+current_commit: 99c8a8df6d136e6f63c0a7bab6c5fbf04ed35f22
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -44,18 +44,18 @@ confirmed_conclusions:
   - F49 creates and verifies every Broker input mirror directory as an exact owner-only 0700 directory; its complete ordinary gate and rebuilt immutable dual-model image passed (CP-031).
   - EXP-088 validly proved the historical plan-only exact Worker and Broker TERM recovery gate with no lease grant during Broker unhealth and physical action proven absent.
   - EXP-094 validly passed the final F91 four-point execute qualification, and immutable historical EXP-095 validly passed all 20 frozen points with qualification_passed=true.
-  - Astra findings 1 through 7 are confirmed and fixed at CP-089; their focused and adjacent gates pass, while rebuilt-overlay and live qualification remain pending.
+  - Historical CP-089 state: Astra findings 1 through 7 were confirmed and fixed; their focused and adjacent gates passed, while rebuilt-overlay and live qualification were still pending at that checkpoint.
   - EXP-118 proves the repaired heartbeat watchdog independently retires the exact direct consumer by the first six-second observation and submits no controller goal after watchdog expiry while Coordinator-dependent Broker fencing remains blocked; the interrupted attempt remains conservatively INDETERMINATE (CP-105).
   - EXP-150 through EXP-152 qualify the round-two remediation with exact active-goal cancellation evidence, a four-point normal gate, and one complete twenty-point immutable execute batch.
   - EXP-153 is a retained NOT APPROVED review with two Important findings; it is historical review evidence, not task approval.
   - EXP-154 shares conservative ERROR classification between runtime and artifact acceptance, and EXP-155 supplies explicitly retrospective RED evidence against immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d without claiming recovery of missing original transcripts.
   - EXP-157 through EXP-160 qualify final implementation 813e8f36 with a committed build and 2882-test ordinary suite, immutable dual-model CUDA image, fresh four-point gate, and one complete twenty-point execute batch.
+  - EXP-161 independently APPROVES the simulation-only completion scope with zero Critical and zero Important findings; its sole non-blocking Minor historical-wording note is clarified in this final ledger-only checkpoint.
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
-open_hypotheses:
-  - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
-latest_checkpoint: CP-147
-next_experiment: EXP-161
+open_hypotheses: []
+latest_checkpoint: CP-148
+next_experiment: EXP-162
 ```
 
 Frozen provenance:
@@ -11763,7 +11763,12 @@ next_command: After mandatory EXP-045 hash readback, recovery-index/evidence has
 
 ```yaml
 experiment_id: EXP-161
-status: PLANNED
+status: APPROVED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:46:00+08:00
+  - status: APPROVED
+    at: 2026-09-13T19:57:00+08:00
 prior_experiment: EXP-160
 hypothesis: Independent high-reasoning review of the immutable final correction and complete evidence chain will return APPROVED with zero Critical and Important findings.
 single_variable: Review only; do not change source, tests, runtime artifacts, evidence, models, configuration or safety gates.
@@ -11776,6 +11781,36 @@ review_scope:
   - round-three report I1/I2/M1 and exact implementation/ledger remediations
   - EXP-154 through EXP-160 RED/GREEN, retrospective baseline, build/test/image/model/four-point/twenty-point evidence
 retention_rule: Retain reviewer report, scope, hash readback and final cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_147
-next_experiment: EXP-161
+observed:
+  - The independent gpt-6-astra high reviewer inspected immutable reviewed HEAD 99c8a8df6d136e6f63c0a7bab6c5fbf04ed35f22 and returned APPROVED with zero Critical, zero Important and one non-blocking Minor finding.
+  - The reviewer recomputed 98 unique EXP-154 through EXP-160 ledger-cited hashes with zero mismatch or missing file; it independently checked final source/install/image provenance, all 24 final terminal images and seals, exact-once coverage, cleanup and conservative artifact classification.
+  - The Minor finding concerns one historical CP-089 header sentence whose present-tense wording could appear current. This final ledger-only checkpoint labels that sentence explicitly as historical without altering raw evidence or reviewed product source.
+  - The review authorizes recording its report and hash but does not authorize push, merge, evidence deletion, N=3 qualification or physical-robot operation.
+conclusion: APPROVED; the complete simulation-only scope satisfies the frozen success contract with no Critical or Important review remainder.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-astra-review-4.md sha256=46cd677ab59657fa35059ec6354f99593324c1e9a51377003c230b5a18a1f726
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp161-final-ledger-validation.log sha256=756806991ad27f5b76890a1987cbc4d6b96330071f2a5ea69a26b164bfab8c67
+reviewed_head: 99c8a8df6d136e6f63c0a7bab6c5fbf04ed35f22
+implementation_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+decision: COMPLETE_SIMULATION_ONLY_SCOPE
+next_experiment: EXP-162
+```
+
+```yaml
+checkpoint_id: CP-148
+last_valid_experiment: EXP-161
+last_approved_experiment: EXP-161
+current_hypothesis: NONE; the frozen simulation-only success contract is complete and independently approved.
+working_tree_status: Product source/tests remain clean; this final review result and checkpoint are pending one ledger-only commit. MUJOCO_LOG.TXT remains preserved untracked and exactly matches its retained EXP-160 snapshot.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all retained evidence, and the e992 retrospective evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Independent Astra high completion review APPROVED reviewed HEAD 99c8a8df6 with zero Critical and zero Important findings.
+  - Final implementation commit 813e8f36 is qualified by committed build/source-install identity, 2882 ordinary tests, immutable dual-model CUDA inference and fresh four-point/twenty-point simulation execution.
+  - All twenty frozen catalog points passed exactly once in the final complete batch; both Workers consumed ten leases, every seal and terminal image was independently rechecked, and cleanup completed without owned residue.
+open_risks:
+  - Scope remains simulation-only with N=2; no N=3 or physical-robot qualification is claimed.
+  - Retained scratch trees, including scratch/cp148-final-ledger, are deletion candidates only and must not be removed without explicit user authorization.
+decision: COMPLETE
+next_command: NONE; preserve evidence and await explicit user direction for any push, merge, deletion, broader worker-count qualification or physical-robot operation.
 ```
