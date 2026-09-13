@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: dcbf474b84b1963dafe83bf003713df5d3ce9f88
+current_commit: c62fa3e37ea01ad7da66517a4a481c05faba9b7f
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -46,16 +46,16 @@ confirmed_conclusions:
   - EXP-094 validly passed the final F91 four-point execute qualification, and immutable historical EXP-095 validly passed all 20 frozen points with qualification_passed=true.
   - Astra findings 1 through 7 are confirmed and fixed at CP-089; their focused and adjacent gates pass, while rebuilt-overlay and live qualification remain pending.
   - EXP-118 proves the repaired heartbeat watchdog independently retires the exact direct consumer by the first six-second observation and submits no controller goal after watchdog expiry while Coordinator-dependent Broker fencing remains blocked; the interrupted attempt remains conservatively INDETERMINATE (CP-105).
+  - EXP-150 through EXP-152 qualify the round-two remediation with exact active-goal cancellation evidence, a four-point normal gate, and one complete twenty-point immutable execute batch.
+  - EXP-153 is a retained NOT APPROVED review with two Important findings; it is historical review evidence, not task approval.
+  - EXP-154 shares conservative ERROR classification between runtime and artifact acceptance, and EXP-155 supplies explicitly retrospective RED evidence against immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d without claiming recovery of missing original transcripts.
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - EXP-096 confirmed Astra finding 1 and the candidate now performs exact-lease cancel-and-confirm outside the blocked execution lock; post-commit package and live fault evidence remain pending.
-  - EXP-097 confirmed Astra finding 2 and the candidate now propagates authenticated exact-generation health loss and replaces a live unhealthy Broker; package and live fault evidence remain pending.
-  - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
-  - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
-  - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-139
-next_experiment: EXP-153
+  - The uncommitted EXP-154 shared-classifier correction must pass committed rebuild/install provenance and the complete ordinary package gate.
+  - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
+latest_checkpoint: CP-143
+next_experiment: EXP-157
 ```
 
 Frozen provenance:
@@ -65,8 +65,8 @@ Frozen provenance:
 - Catalog SHA256: `c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5`
 - YOLO-Seg weights SHA256: `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`
 - Grounded-SAM bundle manifest SHA256: `0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775`
-- Runtime overlay: `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install` (fresh build pending)
-- `ROS_DOMAIN_ID`: per-worker allocation pending; allowed pool is 181–183.
+- Runtime overlay: `/data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install` (e30ef1d76 remediation build qualified at EXP-148; EXP-154 correction rebuild pending).
+- `ROS_DOMAIN_ID`: production per-worker allocation uses the allowed pool 181–183; retained cleanup audits report it unlocked.
 - `GZ_PARTITION`: `not_applicable` for the MuJoCo-only implementation.
 
 ```yaml
@@ -10746,14 +10746,14 @@ success_criteria: Each former unsafe behavior is preserved as a failing RED, foc
 failure_criteria: Audit I/O can precede cancellation, malformed/wrong target passes, unresolved controller state becomes FAILED, ambiguous recovery emits a signal, or focused/adjacent tests fail.
 invalid_criteria: Wrong interpreter, reused scratch, tempfile outside the verified evidence root or test not reaching production classes.
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
-retention_rule: Retain all RED/GREEN logs and scratch roots; delete nothing without explicit authorization.
+retention_rule: Retain all available test logs and scratch roots; direct original RED stdout/exit transcripts were not retained, and no later evidence may be described as recovered originals. Delete nothing without explicit authorization.
 observed:
-  - RED tests reproduced all reviewed defects, including a deliberately blocked audit writer delaying cancellation and a leaderless recovered group receiving a signal.
+  - Audit correction recorded after EXP-153: direct stdout/exit transcripts for the original RED invocations were not durably retained. The existing scratch remnants and later GREEN logs do not substantiate the former stronger RED-retention claim. EXP-155 later recreates explicitly retrospective baseline RED checks against immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d; those are not recovered EXP-145 transcripts.
   - Worker revocation now captures audit timestamps in memory, starts Broker fencing and controller cancel/settlement first, exposes the safety completion event, and persists the captured receipts afterward. A separate audit completion event keeps evidence fail-closed without placing fsync on the safety path.
   - Runtime and artifact verification independently derive the expected final cup pose from the hash-verified dynamic policy, compare the producer claim to it, and require finite unit quaternions. Both normal DONE and INDETERMINATE ERROR artifacts traverse semantic verification.
   - Only the strictly proven pre-action physical_action_proven_absent shortcut maps ERROR to FAILED; goal/result timeout uncertainty remains INDETERMINATE. Recovery refuses to signal a leaderless persisted group when continuous ownership is absent.
   - The retained focused GREEN passed 14 tests in 1.28 s; the additional three trusted-target adapter parameter cases passed separately. CLI and adjacent suites passed 71 and 340 tests respectively.
-conclusion: VALID; all five Important findings have direct production-path regression coverage and the Broker safety gate is unchanged.
+conclusion: VALID only as retained focused GREEN and implementation evidence; the original audited RED-transcript claim is withdrawn. EXP-155 separately closes the evidence gap with newly executed retrospective baseline checks. The Broker safety gate is unchanged.
 evidence:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.log sha256=fe0c5af42b8e3a60d771aac5b883e1545ac60440a4845da30115be616ab6d53a
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp145-focused.time sha256=500e54307adc8865295b7804fa1646f08a1aced9b44d349d0fe19ded4bbc2c25
@@ -11237,7 +11237,14 @@ next_command: Commit CP-139 after mandatory EXP-045 hash readback and recovery-i
 
 ```yaml
 experiment_id: EXP-153
-status: PLANNED
+status: VALID_NOT_APPROVED
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:45:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:47:00+08:00
+  - status: VALID_NOT_APPROVED
+    at: 2026-09-13T18:56:00+08:00
 prior_experiment: EXP-152
 hypothesis: Independent high-reasoning review of the complete implementation, five finding remediations and hash-bound fresh evidence will find no remaining Critical or Important correctness, safety, evidence or scope issue.
 single_variable: Review only; do not change source, runtime artifacts, evidence, models, configuration or safety gates.
@@ -11250,6 +11257,251 @@ review_scope:
   - round-two report and all five Important remediations
   - EXP-145 through EXP-152 TDD/build/image/fault/four-point/twenty-point evidence
 retention_rule: Retain reviewer report, prompt/scope, hash readback and final cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_139
-next_experiment: EXP-153
+observed:
+  - The independent reviewer returned NOT APPROVED with zero Critical, two Important, and one Minor finding.
+  - I1 showed that Coordinator artifact acceptance could promote an unresolved controller ERROR to FAILED even though runtime classification was conservative.
+  - I2 found that EXP-145's direct original RED stdout/exit transcripts were never retained; the ledger must withdraw that claim and create honest retrospective checks against immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d.
+  - M1 identified stale current-snapshot header prose. The numeric recovery index, 93 cited hashes, 24 seals, 24 terminal images, committed suite, image provenance and cleanup evidence otherwise passed independent readback.
+conclusion: VALID review evidence but NOT APPROVED; task completion remains open until both Important findings are remediated and independently approved.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/final-astra-review-3.md sha256=66509dcca4441ce33c4183264797bc06c811d5a61169a3c2382e547040dd4306
+decision: REMEDIATE_I1_I2_AND_M1
+next_experiment: EXP-154
+```
+
+```yaml
+checkpoint_id: CP-140
+last_valid_experiment: EXP-153
+last_approved_experiment: EXP-152
+current_hypothesis: A shared semantic classifier can prevent Coordinator artifact acceptance from promoting controller-uncertain ERROR evidence to FAILED without changing runtime motion policy or Broker fencing.
+working_tree_status: Tracked source is clean at c62fa3e37; EXP-153 review result and bounded remediation are pending.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers and untracked MUJOCO_LOG.TXT.
+confirmed_conclusions:
+  - Round-three review is valid but NOT APPROVED with two Important findings.
+open_risks:
+  - Artifact acceptance must independently enforce conservative ERROR classification.
+  - The missing original EXP-145 RED transcripts require an honest retrospective baseline, not a rewritten historical claim.
+next_command: Add a failing producer-forged-seal adapter test, share the semantic classifier with runtime, and retain RED/GREEN evidence in fresh verified NVMe scratch roots.
+```
+
+## EXP-154 — Shared ERROR classification at artifact acceptance
+
+```yaml
+experiment_id: EXP-154
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T18:57:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T18:58:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:01:00+08:00
+prior_experiment: EXP-153
+hypothesis: Returning one AttemptStatus from dynamic semantic validation and enforcing it at both runtime and sealed-result acceptance will reject possible-action ERROR committed as FAILED while retaining valid INDETERMINATE and strictly pre-action FAILED cases.
+single_variable: Share and enforce ERROR classification only; preserve state/evidence validation, motion policy, thresholds, and Broker safety gates.
+lifecycle: PROCESS_FREE_TDD
+success_criteria: The adapter regression is RED before implementation; after implementation it rejects uncertain-as-FAILED, accepts uncertain-as-INDETERMINATE and proven-pre-action FAILED, and runtime timeout behavior remains INDETERMINATE.
+failure_criteria: Any uncertain controller outcome is accepted as FAILED, valid conservative evidence is rejected, or runtime and artifact classification diverge.
+invalid_criteria: Wrong selector, missing source overlay, reused scratch, tempfile outside the registered evidence root, or test not reaching the intended production path.
+observed:
+  - The pre-implementation adapter test reached a hash-consistent forged seal and failed because no ArtifactError was raised, directly reproducing I1.
+  - Dynamic semantic validation now returns PASSED, FAILED only when physical_action_proven_absent is exactly true, otherwise INDETERMINATE. Runtime consumes that return value and the Coordinator verifier rejects any sealed result status that disagrees.
+  - The final focused run passed five cases: the forged-seal rejection, two accepted classified ERROR cases, and both GRIPPER_GOAL_TIMEOUT and GRIPPER_RESULT_TIMEOUT runtime cases.
+  - Earlier GREEN attempts are retained as INVALID: one nonexistent selector, two missing source-overlay collections, and one real semantic run that exposed exception over-wrapping before the final bounded correction.
+conclusion: VALID; I1 is closed in focused production-path TDD, with Broker fencing and motion policy unchanged.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-red-current.log sha256=1d4522a3e97ecc3db6872f57937893aae0ddfe8d779b816579c73d5f2ebd6a19
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-red-current.time sha256=002d6f16214beef57f060ec37b523ee16af5387455152751109652b7cebbd710
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-red-current.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-red-current.tempdir sha256=928310cd415d72b353c45e8b47ce20d7d6dd4c8da7b69e3ed46819e6714de9ac
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green.log sha256=666cca4147d7bc648bc165ef885ff92aca588be404e50e5b659aa41e91febe40
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green2.log sha256=e6c756f2c7d26b38ec08bd9860ec6b71bfcfb2ca88c681264299a7e0f7c54815
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green3.log sha256=e6c756f2c7d26b38ec08bd9860ec6b71bfcfb2ca88c681264299a7e0f7c54815
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green4.log sha256=ff9b40b9f7cd0cc67931339916240e71cd492d55cd47710b546aafd5dabd1701
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green5.log sha256=9f5fca75b3047a6b50338570acc3b84d6f91fc01f7616bf565c9c7f9222d4381
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green5.time sha256=d927324996eb46bf56a6c05c066a8d867e7fbe35921ab148ad357630fffcf281
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green5.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp154-green5.tempdir sha256=543cbdb9490f2056671a5bb270fa8e9f84f5b52d7c838303765bb7593ab410d4
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-red-current
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-green
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-green2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-green3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-green4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f154-green5
+decision: RECREATE_RETROSPECTIVE_BASELINE
+next_experiment: EXP-155
+```
+
+```yaml
+checkpoint_id: CP-141
+last_valid_experiment: EXP-154
+current_hypothesis: Current regression definitions executed against an isolated immutable e992f7a baseline can provide the missing audited RED evidence while remaining explicitly distinct from the lost original EXP-145 invocations.
+working_tree_status: Shared-classifier source/tests and ledger are uncommitted; no runtime process was started.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, and all historical evidence.
+confirmed_conclusions:
+  - Coordinator artifact acceptance and runtime now share conservative ERROR classification in focused GREEN.
+open_risks:
+  - Exact old-source import provenance and old-API-compatible direct behavior evidence remain required.
+next_command: Create a detached evidence worktree at immutable e992f7a, verify exact imports and current test hashes, and execute the reviewed contracts from fresh NVMe scratch.
+```
+
+## EXP-155 — Retrospective immutable e992 baseline RED and current GREEN
+
+```yaml
+experiment_id: EXP-155
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:01:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:02:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:05:00+08:00
+prior_experiment: EXP-154
+hypothesis: The current direct regression contracts will fail against immutable pre-fix e992f7a and pass against the corrected current implementation, reproducing the reviewed defects without claiming recovery of original EXP-145 transcripts.
+single_variable: Switch only imported production source between immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d and the current correction; test definitions remain hash-bound.
+lifecycle: PROCESS_FREE_RETROSPECTIVE_TDD
+source_baseline: e992f7a429ac44fa1a774406b6ada1b1edd46a7d
+source_worktree: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/retrospective-red-e992
+source_bootstrap: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/retrospective-bootstrap-e992
+success_criteria: Exact old source/import and current test hashes are recorded; direct contracts fail for the reviewed old behaviors; old-API-compatible target/status checks fail by accepting invalid claims; the same current regression selection passes.
+failure_criteria: Wrong imported source, non-behavioral collection failure for a required contract, unexpected old-source pass, or any current-source failure.
+invalid_criteria: Reused scratch, unverified tempfile, mutable baseline checkout, or retrospective evidence described as an original historical transcript.
+observed:
+  - The detached worktree and imported package both resolve to exact e992f7a429ac44fa1a774406b6ada1b1edd46a7d; four current test files are independently SHA256-bound in the provenance record.
+  - The first baseline run produced ten expected failures. Six directly demonstrate blocked audit delaying cancellation, leaderless PGID signaling authority, zero-quaternion acceptance, and two controller timeout promotions. Four newer adapter cases fail at the absent trusted-target API boundary and are not counted as direct behavioral proof.
+  - A separate evidence-only old-API-compatible module directly demonstrates that e992 accepts both a producer-self-consistent forged placement target and a hash-consistent possible-action ERROR committed as FAILED; both required rejection assertions fail.
+  - The same eight current node selections expand to ten parameter cases and pass 10/10 against the corrected source.
+conclusion: VALID retrospective baseline evidence; all reviewed unsafe baseline behaviors have direct RED evidence against immutable e992 and corresponding current GREEN. These are newly executed EXP-155 checks, not recovered EXP-145 logs.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1-command.txt sha256=3d0f21f0da134b8a70d827a40185fa5c1357b69ac358cb064bb87ccff9b1df2f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1.provenance sha256=319cbf8eb5647062d30a5a749989fbe9af89c7a29c9520f1d6ad1ff68924a01f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1.log sha256=193ba25849a7a5e457851a1f69bea819d2f99a73cc0cb185e91a928d091d01fe
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1.time sha256=6c904f3831198378a7430eb88c09bc5a36ddce06a6279323faba3171f7cb0a30
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1.exit sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red1.tempdir sha256=7b17fd87ff446f86bbdcf76f53b0856780c7dbee3e4b2276f3fde7c5411ac40b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155_retrospective_contract_tests.py sha256=b2122017d5738d417c979499f4b9abeafffe28c15a6a72dfbc5f1e42e9643172
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red2.provenance sha256=32da892984538ac759db13dcec158c48e115c319ba3ab0e01ad65f70a06b776e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red2.log sha256=de85496ef326b450fe6482e585557781e1de61595bf3fbbfa5a46d80b1979ab9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red2.time sha256=55b7d2cd0830c8656aff9e5ac2898270b76d834e7d488bcdf27bf2fc5592de0b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red2.exit sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-retrospective-red2.tempdir sha256=4c68603f094544dc0bd50d915e5355f61850cfe6ee7bcbcc5995564982e06ed0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green-command.txt sha256=8ec0921d7b8366f026ee9ee432404508076946b68c6a19e5c15494c8e0f071ae
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green.provenance sha256=26e2574582c3bd362943cbc8a1ee499b61abc7061c94b11c4cf66db3b13bdd56
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green.log sha256=0b26df06618a210a79303b81bebf22dab6fab3639b69ea4b1dd1172bcf0ef28f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green.time sha256=aee54e98940de124d5ba03fa05ae3f85c15a94619cff5ad5990106950a9980b6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp155-current-green.tempdir sha256=59676f4d9b4417e0ef0c925694760c4856e2d8485a3955db397f368351014466
+retained_roots:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/retrospective-red-e992
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/retrospective-bootstrap-e992
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f155-retro-red1
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f155-retro-red2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f155-current-green
+decision: RUN_COMPLETE_PRECOMMIT_SUITE
+next_experiment: EXP-156
+```
+
+```yaml
+checkpoint_id: CP-142
+last_valid_experiment: EXP-155
+current_hypothesis: The bounded I1 correction and evidence-only I2 remediation preserve the complete ordinary package contract before the immutable correction commit.
+working_tree_status: Three production modules, one test module and ledger are modified; MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, and the retained e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Retrospective baseline RED and corresponding current GREEN are now hash-bound and explicit about chronology.
+open_risks:
+  - The complete ordinary suite and committed build/install provenance remain required.
+next_command: Run src/so101_demo_py/test only, with the exact interpreter and a short fresh NVMe tempfile path so Unix socket tests remain within platform limits.
+```
+
+## EXP-156 — Precommit complete ordinary-suite confidence
+
+```yaml
+experiment_id: EXP-156
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:05:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:06:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:09:00+08:00
+prior_experiment: EXP-155
+hypothesis: The current correction passes the complete ordinary package suite in the qualified overlay and frozen dependency environment.
+single_variable: Complete ordinary test scope only; no production source changed during the valid run.
+lifecycle: PROCESS_FREE_TEST
+success_criteria: Exact /usr/bin/python3 tempdir resolves under a fresh short evidence scratch; all ordinary tests pass without benchmark collection.
+failure_criteria: Any product-attributable test failure or benchmark collection.
+invalid_criteria: Socket path exceeds platform limits, incomplete overlay/dependencies, command transcription error, reused scratch, or wrong tempfile.
+observed:
+  - A long scratch name caused 31 expected production UNIX_SOCKET_PATH_TOO_LONG rejections after 2851 passes; this is retained as harness INVALID and does not indicate a product regression.
+  - Subsequent setup attempts are retained as INVALID: two command/setup transcription failures and one incomplete overlay that failed collection for missing installed ROS message bindings.
+  - With the worktree overlay, frozen torch dependency path, exact interpreter and fresh short scratch/ak/tmp, the complete ordinary suite passed 2882 tests in 89.57 s with four pre-existing fork warnings and no benchmark collection. External elapsed time was 90.79 s.
+conclusion: VALID precommit confidence; current source passes the entire ordinary package suite.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full.log sha256=4f81f0ce15be3c56c574fb5a063963ffc7c2baf92fc748c29cd6b5eda1b4157c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full.time sha256=24db025a7102412dfb4bebe75a490861a62ae07c67d66fe7b397c0a0fb1795a3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full.exit sha256=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full4.log sha256=afb18e7bb63c6f3575688330071e13f80c13a1148f05edbbcb91d6ecdde6c111
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full5.log sha256=2bc1d18fe7463af0ba926184342f8c5aef5f982fa1360429f87efaf396b11c02
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full5.time sha256=67ff5801b99bc6da7473e4b58d87c369c651090ea90e1d4c5a61e10a4ccc44db
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full5.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp156-precommit-full5.tempdir sha256=b6b50a8bc69d431d15251e3b8b116c7f1c36d6b2d190f8d2518e5ebf90740463
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f156-precommit-full
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/ag
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/ai
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/aj
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/ak
+decision: COMMIT_AND_REBUILD
+next_experiment: EXP-157
+```
+
+```yaml
+checkpoint_id: CP-143
+last_valid_experiment: EXP-156
+current_hypothesis: Focused and complete precommit gates pass; after mandatory EXP-045 hash readback, the bounded correction can be committed and rebuilt into the worktree overlay for immutable provenance verification.
+working_tree_status: Shared-classifier production/test changes and corrected ledger are uncommitted; MUJOCO_LOG.TXT remains preserved untracked.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all evidence, and the e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - I1 has direct RED/GREEN coverage and the complete ordinary suite passes 2882 tests.
+  - I2 is corrected transparently with retrospective immutable-baseline evidence, not invented original transcripts.
+  - M1 current-snapshot header prose is reconciled while historical checkpoint narratives remain unchanged.
+open_risks:
+  - Committed build/install hashes and complete postcommit suite remain required before independent final review.
+next_command: Recompute the six mandatory EXP-045 hashes, reject truncated/invalid ledger hashes, run diff/recovery checks, commit only scoped tracked files, then execute EXP-157.
+```
+
+## EXP-157 — Committed correction rebuild and complete qualification
+
+```yaml
+experiment_id: EXP-157
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:09:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:10:00+08:00
+prior_experiment: EXP-156
+hypothesis: The immutable correction commit will build into the isolated overlay, byte-match installed production modules, and pass the complete ordinary suite.
+single_variable: Commit/build/test only the reviewed I1 source/test correction and audit ledger correction; preserve motion policy, catalog, models, Broker safety gates, and prior live evidence.
+lifecycle: PROCESS_FREE_BUILD_AND_TEST
+success_criteria: Mandatory EXP-045 hashes and ledger integrity checks pass before commit; build succeeds; installed bytes match committed source; all ordinary tests pass in fresh verified NVMe scratch without benchmark collection.
+failure_criteria: Any hash, build, source/install, test, scope, recovery-index or repository-state failure.
+invalid_criteria: Wrong overlay/interpreter, reused scratch, stale installed module or tempfile outside the registered evidence root.
+retention_rule: Retain all build, provenance, test, hash-readback and scratch evidence; delete nothing without explicit authorization.
+precommit_evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.log sha256=a71df3ef716cabe43ead70bd8311cda3aeadcb986bea501da0ea9262f31c3925
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.time sha256=e8ba6f3eeadc7e71baf4f28a5136ffbcf145c0b41702f07a2fa96909be76ef08
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.exit sha256=5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp157-recovery-index-precommit.tempdir sha256=1ad5e9d5c97f5a2b38846ab90f20e7544afaa2c4201f4a98cb3b40ac56df5bca
+decision: RUN_AFTER_CP_143_COMMIT
+next_experiment: EXP-157
 ```

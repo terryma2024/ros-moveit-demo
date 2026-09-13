@@ -261,7 +261,7 @@ def _verify_dynamic(
     ):
         raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH')
     try:
-        validate_dynamic_manifest_semantics(
+        classified_status = validate_dynamic_manifest_semantics(
             dynamic,
             expected_status=expected_terminal,
             expected_reset_epoch=reset_number,
@@ -269,6 +269,8 @@ def _verify_dynamic(
         )
     except (TypeError, ValueError) as error:
         raise ArtifactError('DYNAMIC_EVIDENCE_IDENTITY_MISMATCH') from error
+    if classified_status.value != status:
+        raise ArtifactError('DYNAMIC_EVIDENCE_STATUS_MISMATCH')
 
 
 def _verify_planning(root):
