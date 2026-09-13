@@ -50,7 +50,14 @@ from so101_demo.parallel_batch.contracts import (
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.parallel_batch.resources import WorkerResourceAllocator, WorkerResources
+from so101_demo.parallel_batch.resources import (
+    ResourceAdmission,
+    ResourceManifest,
+    ResourceSnapshot,
+    ResourceThresholds,
+    WorkerResourceAllocator,
+    WorkerResources,
+)
 from so101_demo.parallel_batch.worker import LeaseGrantPaused, ParallelWorker
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
@@ -99,6 +106,7 @@ class PreparedBatch:
     manifest: Mapping[str, object]
     provenance_inputs: Mapping[str, object]
     provenance_verifier: Callable[[Mapping[str, object]], Mapping[str, object]]
+    resume: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,6 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--grounded-root", type=Path, required=True)
     parser.add_argument("--grounded-manifest-sha256", required=True)
     parser.add_argument("--run-mode", required=True)
+    parser.add_argument("--resume", action="store_true")
     return parser
 
 
@@ -144,6 +153,43 @@ def _absolute(name: str, path: Path) -> Path:
     if not path.is_absolute() or "\0" in raw or any(part in {".", ".."} for part in raw.split("/")):
         raise CliError(f"ABSOLUTE_PATH_REQUIRED: {name}")
     return path
+
+
+def _read_existing_json(path: Path, *, label: str) -> Mapping[str, object]:
+    """Read one bounded owner-controlled recovery authority without following links."""
+    try:
+        before = path.lstat()
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as error:
+        raise CliError(f"RECOVERY_{label}_MISSING") from error
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or not stat.S_ISREG(opened.st_mode)
+            or before.st_uid != os.getuid()
+            or opened.st_uid != os.getuid()
+            or (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino)
+            or opened.st_size <= 0
+            or opened.st_size > 8 * 1024 * 1024
+        ):
+            raise CliError(f"RECOVERY_{label}_INVALID")
+        payload = os.read(descriptor, opened.st_size + 1)
+        after = os.fstat(descriptor)
+        if (
+            len(payload) != opened.st_size
+            or (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+        ):
+            raise CliError(f"RECOVERY_{label}_CHANGED")
+        document = json.loads(payload.decode("utf-8", errors="strict"))
+        if type(document) is not dict:
+            raise CliError(f"RECOVERY_{label}_INVALID")
+        return document
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise CliError(f"RECOVERY_{label}_INVALID") from error
+    finally:
+        os.close(descriptor)
 
 
 def _catalog(path: Path) -> tuple[dict[str, Mapping[str, object]], str]:
@@ -422,7 +468,21 @@ if __name__ == '__main__':
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
     options = build_parser().parse_args(argv)
     evidence_root = _absolute("evidence_root", options.evidence_root)
-    if evidence_root.exists() or evidence_root.is_symlink():
+    if options.resume:
+        try:
+            root_info = evidence_root.lstat()
+        except OSError as error:
+            raise CliError("RECOVERY_BATCH_EVIDENCE_ROOT_MISSING") from error
+        if (
+            evidence_root.is_symlink()
+            or not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != os.getuid()
+            or stat.S_IMODE(root_info.st_mode) != 0o700
+        ):
+            raise CliError("RECOVERY_BATCH_EVIDENCE_ROOT_INVALID")
+        if (evidence_root / "aggregate_results.json").exists():
+            raise CliError("RECOVERY_BATCH_ALREADY_FINALIZED")
+    elif evidence_root.exists() or evidence_root.is_symlink():
         raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
     try:
         mode = RunMode(options.run_mode)
@@ -492,6 +552,12 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "evidence_root": str(evidence_root),
         "provenance": dict(provenance),
     }
+    if options.resume:
+        existing = _read_existing_json(
+            evidence_root / "batch_manifest.json", label="BATCH_MANIFEST"
+        )
+        if existing != manifest:
+            raise CliError("RECOVERY_BATCH_MANIFEST_MISMATCH")
     return PreparedBatch(
         request,
         config,
@@ -509,6 +575,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         manifest,
         dict(inputs),
         provenance_verifier,
+        options.resume,
     )
 
 
@@ -1159,6 +1226,48 @@ def _resource_from_dict(value):
     return WorkerResources(**normalized)
 
 
+def _resource_manifest_from_dict(value):
+    fields = {
+        "schema_version", "mode", "backend", "evidence_root",
+        "requested_worker_count", "worker_count", "admission",
+        "domain_claim_scope", "domain_claims", "process_scan",
+        "live_headroom_evidence", "workers",
+    }
+    if type(value) is not dict or set(value) != fields:
+        raise CliError("RECOVERY_RESOURCE_MANIFEST_SCHEMA")
+    admission = value["admission"]
+    if type(admission) is not dict or set(admission) != {
+        "admitted", "observed", "required", "required_live_headroom_ratio", "failures",
+    }:
+        raise CliError("RECOVERY_RESOURCE_MANIFEST_SCHEMA")
+    try:
+        observed = ResourceSnapshot(**admission["observed"])
+        required = ResourceThresholds(**admission["required"])
+        restored_admission = ResourceAdmission(
+            admission["admitted"],
+            observed,
+            required,
+            admission["required_live_headroom_ratio"],
+            tuple(admission["failures"]),
+        )
+        return ResourceManifest(
+            schema_version=value["schema_version"],
+            mode=value["mode"],
+            backend=value["backend"],
+            evidence_root=Path(value["evidence_root"]),
+            requested_worker_count=value["requested_worker_count"],
+            worker_count=value["worker_count"],
+            admission=restored_admission,
+            domain_claim_scope=value["domain_claim_scope"],
+            domain_claims=tuple(value["domain_claims"]),
+            process_scan=value["process_scan"],
+            live_headroom_evidence=value["live_headroom_evidence"],
+            workers=tuple(_resource_from_dict(item) for item in value["workers"]),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise CliError("RECOVERY_RESOURCE_MANIFEST_SCHEMA") from error
+
+
 class _WorkerBrokerProxy:
     def __init__(
         self, coordinator: _CoordinatorRpcProxy, endpoint, resources, config,
@@ -1546,6 +1655,13 @@ class ProductionBatchComposition:
         self.spec = spec
         self._clock = clock
         self._sleep = sleep
+        self.supervisor = supervisor or ProcessSupervisor(
+            spec.request.batch_id,
+            manifest_path=spec.request.evidence_root / "owned-processes.json",
+        )
+        self._container_runner = container_runner
+        self._uses_production_broker_container = broker_command_builder is None
+        self.journal = None
         self.allocator = WorkerResourceAllocator(
             spec.config,
             spec.request.evidence_root,
@@ -1553,15 +1669,35 @@ class ProductionBatchComposition:
             claim_root=claim_root,
             batch_id=spec.request.batch_id,
         )
-        self.resource_manifest = self.allocator.allocate(spec.request.worker_count)
-        self.allocator.write_manifest()
+        if spec.resume:
+            self.journal = CoordinatorJournal.create(
+                spec.request.evidence_root / "coordinator", spec.request.batch_id
+            )
+            prior_processes = _read_existing_json(
+                spec.request.evidence_root / "owned-processes.json",
+                label="PROCESS_MANIFEST",
+            )
+            retire = getattr(self.supervisor, "retire_manifest", None)
+            if not callable(retire) or retire(prior_processes) is not True:
+                raise CliError("RECOVERY_PROCESS_FENCE_FAILED")
+            resource_document = _read_existing_json(
+                spec.request.evidence_root / "resource_manifest.json",
+                label="RESOURCE_MANIFEST",
+            )
+            prior_manifest = _resource_manifest_from_dict(resource_document)
+            self.resource_manifest = self.allocator.adopt_existing(prior_manifest)
+            self._remove_stale_worker_sockets()
+        else:
+            self.resource_manifest = self.allocator.allocate(spec.request.worker_count)
+            self.allocator.write_manifest()
         worker_roots = {
             worker.worker_id: worker.worker_root for worker in self.resource_manifest.workers
         }
         self.result_verifier = SealedResultAdapter(worker_roots, spec.request.run_mode)
-        self.journal = CoordinatorJournal.create(
-            spec.request.evidence_root / "coordinator", spec.request.batch_id
-        )
+        if self.journal is None:
+            self.journal = CoordinatorJournal.create(
+                spec.request.evidence_root / "coordinator", spec.request.batch_id
+            )
         self.coordinator = BatchCoordinator(
             self.journal,
             spec.request,
@@ -1570,12 +1706,12 @@ class ProductionBatchComposition:
             clock=clock,
         )
         self.results = _ArtifactResults(worker_roots, spec.request.run_mode)
+        self._recovered_worker_ids = None
+        if spec.resume:
+            self._recovered_worker_ids = self._readmit_recovered_slots()
+            self.resource_manifest = self.allocator.manifest
         if broker_request_model is not None:
             raise CliError("IN_PROCESS_BROKER_FORBIDDEN")
-        self.supervisor = supervisor or ProcessSupervisor(
-            spec.request.batch_id,
-            manifest_path=spec.request.evidence_root / "owned-processes.json",
-        )
         self._worker_children_reaped = False
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
@@ -1583,8 +1719,6 @@ class ProductionBatchComposition:
         )
         self._broker_command_builder = broker_command_builder
         self._broker_health_client_factory = broker_health_client_factory
-        self._container_runner = container_runner
-        self._uses_production_broker_container = broker_command_builder is None
         self._provenance_revalidator = (
             spec.provenance_verifier
             if provenance_revalidator is None
@@ -1593,19 +1727,38 @@ class ProductionBatchComposition:
         self.broker_spec_path = None
         self.broker_authority_server = None
         self._broker_authority_thread = None
-        self.broker_generation = 0
+        self.broker_generation = (
+            self._prior_broker_generation() if spec.resume else 0
+        )
         self.broker_runtime_root = self.authority.ipc_root / "broker"
         self.broker_input_root = spec.request.evidence_root / "broker-inputs"
         self.broker_authority = None
         self.broker_socket_path = self.broker_runtime_root / "perception.sock"
         if spec.request.run_mode is not RunMode.DRY_RUN:
-            self.broker_input_root.mkdir(mode=0o700)
-            self._prepare_broker_generation(1)
+            if spec.resume:
+                if not self.broker_input_root.is_dir() or self.broker_input_root.is_symlink():
+                    raise CliError("RECOVERY_BROKER_INPUT_ROOT")
+                prior_root = self._broker_runtime_for_generation(self.broker_generation)
+                if (prior_root / "container.cid").exists():
+                    self.broker_runtime_root = prior_root
+                    self.broker_spec_path = prior_root / "broker-spec.json"
+                    self._retire_broker_container(
+                        runtime_root=prior_root,
+                        generation=self.broker_generation,
+                    )
+            else:
+                self.broker_input_root.mkdir(mode=0o700)
+            self._prepare_broker_generation(self.broker_generation + 1)
         self.worker_specs = []
         self.worker_controls = []
         self._runtime_side_effects_factory = runtime_side_effects_factory
         self._worker_launcher = worker_launcher
         for resources in self.resource_manifest.workers:
+            if (
+                self._recovered_worker_ids is not None
+                and resources.worker_id not in self._recovered_worker_ids
+            ):
+                continue
             token_path = self.authority.issue(resources.worker_id, resources.generation)
             control_id = f"{resources.worker_id}-control"
             control_token_path = self.authority.issue(control_id, resources.generation)
@@ -1638,7 +1791,10 @@ class ProductionBatchComposition:
                 },
                 "resources": resources.to_dict(),
             }
-            worker_path = resources.worker_root / "worker-spec.json"
+            worker_path = resources.worker_root / (
+                "worker-spec.json" if not spec.resume
+                else f"worker-spec-e{self.journal.coordinator_epoch}-g{resources.generation}.json"
+            )
             _write_json(worker_path, worker_spec)
             self.worker_specs.append(worker_path)
             self.worker_servers.append(server)
@@ -1651,6 +1807,109 @@ class ProductionBatchComposition:
                 deadline_s=spec.config.heartbeat_timeout_s,
                 orphan_manifest=resources.worker_root / "owned-runtime-processes.json",
             ))
+
+    def _remove_stale_worker_sockets(self):
+        """Remove only prior generation sockets after exact process fencing."""
+        ipc_root = self.spec.request.evidence_root / "ipc"
+        for worker in self.resource_manifest.workers:
+            for name in (f"{worker.worker_id}.sock", f"{worker.worker_id}-control.sock"):
+                path = ipc_root / name
+                try:
+                    info = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if (
+                    not stat.S_ISSOCK(info.st_mode)
+                    or info.st_uid != os.getuid()
+                ):
+                    raise CliError("RECOVERY_STALE_SOCKET_INVALID")
+                path.unlink()
+
+    def _readmit_recovered_slots(self):
+        """Rotate every reusable slot after replay has adjudicated old leases."""
+        snapshot = self.coordinator.tick()
+        admitted = set()
+        for base in self.resource_manifest.workers:
+            prior = snapshot.workers.get(base.worker_id)
+            prior_generation = base.generation if prior is None else prior.generation
+            if prior_generation < base.generation:
+                raise CliError("RECOVERY_WORKER_GENERATION_ROLLBACK")
+            current = base
+            while current.generation < prior_generation + 1:
+                current = self.allocator.replace(
+                    current.worker_id, expected_generation=current.generation
+                )
+            if prior is None:
+                self.coordinator.register_worker(
+                    current.worker_id, generation=current.generation
+                )
+                admitted.add(current.worker_id)
+                continue
+            if prior.lease is not None:
+                raise CliError("RECOVERY_ACTIVE_LEASE_NOT_ADJUDICATED")
+            if prior.state is WorkerState.RECOVERING:
+                deadline = prior.recovery_deadline_monotonic_s
+                if deadline is None or self._clock() >= deadline:
+                    self.coordinator.tick()
+                    continue
+                self.coordinator.register_worker(
+                    current.worker_id,
+                    generation=current.generation,
+                    recovery_deadline_monotonic_s=deadline,
+                )
+                final = self.coordinator.record_recovery(
+                    current.worker_id,
+                    generation=current.generation,
+                    succeeded=True,
+                    fenced=True,
+                    owned_processes_stopped=True,
+                    controllers_stopped=True,
+                    readmitted=True,
+                    recovery_deadline_monotonic_s=deadline,
+                )
+                if final.state is not WorkerState.AVAILABLE:
+                    raise CliError("RECOVERY_WORKER_READMISSION_FAILED")
+                admitted.add(current.worker_id)
+            elif prior.state is WorkerState.AVAILABLE:
+                final = self.coordinator.register_worker(
+                    current.worker_id, generation=current.generation
+                )
+                if final.state is not WorkerState.AVAILABLE:
+                    raise CliError("RECOVERY_WORKER_READMISSION_FAILED")
+                admitted.add(current.worker_id)
+            elif prior.state not in {WorkerState.QUARANTINED, WorkerState.STOPPED}:
+                raise CliError("RECOVERY_WORKER_STATE")
+        return frozenset(admitted)
+
+    def _broker_runtime_for_generation(self, generation):
+        if generation == 1:
+            return self.authority.ipc_root / "broker"
+        return self.authority.ipc_root / f"broker-g{generation}"
+
+    def _prior_broker_generation(self):
+        if self.spec.request.run_mode is RunMode.DRY_RUN:
+            return 0
+        generations = []
+        ipc_root = self.spec.request.evidence_root / "ipc"
+        for path in ipc_root.glob("broker*/broker-spec.json"):
+            document = _read_existing_json(path, label="BROKER_SPEC")
+            generation = document.get("broker_generation")
+            if (
+                document.get("batch_id") != self.spec.request.batch_id
+                or type(generation) is not int
+                or generation <= 0
+            ):
+                raise CliError("RECOVERY_BROKER_SPEC_IDENTITY")
+            expected_root = (
+                ipc_root / "broker" if generation == 1
+                else ipc_root / f"broker-g{generation}"
+            )
+            if path.parent != expected_root:
+                raise CliError("RECOVERY_BROKER_SPEC_IDENTITY")
+            generations.append(generation)
+        if not generations or len(generations) != len(set(generations)):
+            raise CliError("RECOVERY_BROKER_SPEC_MISSING")
+        return max(generations)
 
     def _prepare_broker_generation(self, generation):
         if type(generation) is not int or generation != self.broker_generation + 1:
@@ -2629,7 +2888,8 @@ def run_cli(
         root = spec.request.evidence_root
         if not root.exists():
             root.mkdir(parents=True, mode=0o700)
-        _write_json(root / "batch_manifest.json", spec.manifest)
+        if not spec.resume:
+            _write_json(root / "batch_manifest.json", spec.manifest)
         summary = _run_with_shutdown_signals(composition.run)
         code, document = outcome_document(summary)
         aggregate = root / "aggregate_results.json"
