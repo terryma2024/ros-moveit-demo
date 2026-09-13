@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-118
-next_experiment: EXP-132
+latest_checkpoint: CP-119
+next_experiment: EXP-133
 ```
 
 Frozen provenance:
@@ -9871,7 +9871,14 @@ next_command: Commit CP-118, persist and read back the normal EXP-132 launcher, 
 
 ```yaml
 experiment_id: EXP-132
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T12:58:40+08:00
+  - status: RUNNING
+    at: 2026-09-13T13:00:02+08:00
+  - status: VALID
+    at: 2026-09-13T13:04:49+08:00
 prior_experiment: EXP-131
 hypothesis: The immutable F2-qualified runtime completes the frozen four-point subset normally with two isolated Workers, one lease per point, physical/visual PASS and exact cleanup.
 single_variable: Remove the EXP-131 fault injection and return K from recovery capacity 3 to the frozen normal-case 2; preserve qualified source/image, points, models, config, N=2 and execute behavior.
@@ -9890,6 +9897,70 @@ provenance:
   broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
   broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
 retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_118
-next_experiment: EXP-132
+observed:
+  - The command exited 0 in 194.37 s. All four points reached terminal PASSED exactly once; coverage_complete, execution_complete and qualification_passed are true with POINTS_COMPLETE.
+  - Both Workers consumed exactly two leases, recovered after each point, used distinct isolated simulation sessions and stopped cleanly. Worker results contain no failure boundary, message or type.
+  - Direct inspection of all four terminal RGB files showed the arm clear and the cup upright within the point-specific red target. The corresponding numeric evidence is unpaused and records stable final cup poses.
+  - Every cleanup component passed; the exact Broker container ID, all owned PIDs and all normal-132 processes/containers were absent on readback.
+conclusion: VALID; the fault-qualified runtime preserves the normal N=2/K=2 four-point physical, visual, scheduling and cleanup contract without retries.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-132.log sha256=7a1537d56c22075bfd302609b19ccfb456b022172618738e8d4821ab824ef0f5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-132.time sha256=5624e20b2c9c9291414cf1a7e4fca0cff19e2ea58ff020e4dcc8818b432b571f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-132.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp132.zsh sha256=e24f2a0addcec11b9d5a59d4b829da6dc67293a159a5423ba30c5f295b3be8e2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP132.txt sha256=261884669a3b99b842d98e0464f4749c4f7544752dfc1c3ab26a36447ff0d4b4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/coordinator/aggregate_results.json sha256=724690a5f35f2e30302cc3a960d370b2fb539799d73dcb85f8d57c940974fb07
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-01/worker-run-results.json sha256=ff5a980ab9c04f07d2fe732bb13547fedbe49652668eb53ee94bf0812dbefc6d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-02/worker-run-results.json sha256=d5661de513be8c563008a7c5aadceed3ffa84dc9c449884c9f59f988f6840b4d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/cleanup-gates.json sha256=ecf54ca5ed3353990c5d4edaebe6bc4aa9495e9b4f649def0ff2ea1c0f443a1b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-01/attempts/task_start/task_start-lease-1/sealed/terminal-rgb.png sha256=4f8cc232dda9f94fadbc5b52d3426115aef021b4571c53239cf8e0788e34c9dc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-02/attempts/cup_test_forward_5cm/cup_test_forward_5cm-lease-1/sealed/terminal-rgb.png sha256=bda34c30187ac11f909cec1e94b26296f7558d480560c06f20299dfd86f1115e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-01/attempts/cup_test_left_5cm/cup_test_left_5cm-lease-1/sealed/terminal-rgb.png sha256=7442c68263d3acb8c21b80b97e90b1fc438bab7adc80b41fca9184d6f4c1efe0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-132/workers/worker-02/attempts/cup_test_right_5cm/cup_test_right_5cm-lease-1/sealed/terminal-rgb.png sha256=7f49dfea29f829151b0c8f21b764815d928e0f8dc4374f2cee71ee4ebe4b4105
+retention_rule: Retain the complete normal-132 root and associated reports; delete nothing without explicit authorization.
+decision: RUN_COMPLETE_CATALOG
+next_experiment: EXP-133
+```
+
+```yaml
+checkpoint_id: CP-119
+last_valid_experiment: EXP-132
+current_hypothesis: The immutable runtime has passed package/model/provenance gates, both controlled fault gates and a fresh normal four-point gate; expanding only the selection to the complete frozen catalog and K to 10 will satisfy the final physical qualification contract.
+working_tree_status: EXP-132 result and EXP-133 preregistration are ledger-only; source/install/image remain unchanged and qualified.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Four normal points pass exactly once across two balanced Workers with clean recovery and cleanup.
+  - Both controlled fault gates are accepted without relaxing the Broker safety boundary.
+open_risks:
+  - The complete 20-point catalog must still pass once in a fresh immutable execute batch.
+next_command: Commit CP-119, persist and read back the EXP-133 complete-catalog launcher, then run N=2/K=10 with no fault injection and inspect every result, visual artifact and cleanup gate.
+```
+
+## EXP-133 — Complete frozen 20-point qualification
+
+```yaml
+experiment_id: EXP-133
+status: PLANNED
+prior_experiment: EXP-132
+hypothesis: Expanding only the qualified normal selection to all 20 frozen catalog points and K=10 will physically pass each point exactly once across two isolated Workers with complete qualification and cleanup.
+single_variable: Expand EXP-132 from four selected points and K=2 to the complete exact-hash catalog and K=10; preserve source, immutable image, models, config, N=2, lifecycle and execute behavior.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: full-133
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-133
+worker_count: 2
+max_points_per_worker: 10
+selection: COMPLETE_FROZEN_CATALOG
+success_criteria: Exactly all 20 catalog points PASSED once; coverage/execution/qualification true; each Worker consumes 10 leases; physical/numeric/visual evidence passes for every point; exact cleanup leaves no owned residue.
+failure_criteria: Any missing, repeated, duplicate or non-PASSED point; K overflow; isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+provenance:
+  source_commit: cebdf182b07e8fcf2ea0cb5f288aa0073538bd95
+  broker_image_id: sha256:946ef501ea8a398dcfa1c2eb33c7264859d94a71931c42bc3d74b215e81ca9d3
+  broker_source_sha256: f1737b9dabb782e99fa458006b05fba978157459f5b487a52c5da56d32c5e5224
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_119
+next_experiment: EXP-133
 ```
