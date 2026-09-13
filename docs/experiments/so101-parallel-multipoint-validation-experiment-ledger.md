@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-123
-next_experiment: EXP-136
+latest_checkpoint: CP-124
+next_experiment: EXP-137
 ```
 
 Frozen provenance:
@@ -10180,7 +10180,14 @@ next_command: Commit CP-123 after the mandatory EXP-045 hash gate, then build a 
 
 ```yaml
 experiment_id: EXP-136
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T17:40:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T17:55:00+08:00
+  - status: VALID
+    at: 2026-09-13T18:00:00+08:00
 prior_experiment: EXP-135
 hypothesis: Rebuilding only the frozen Broker image source layer from commit 44feaf77c will produce a content-verified immutable image whose YOLO and Grounded-SAM smokes remain QUALIFIED.
 single_variable: Replace the image source tree with committed EXP-134; preserve Dockerfile, dependency pins, frozen model artifacts, P01 smoke input and all runtime thresholds.
@@ -10191,5 +10198,58 @@ invalid_criteria: Pre-existing output/root, wrong source commit, changed model/i
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 retention_rule: Retain image/provenance/smoke/cleanup evidence and root; delete nothing without explicit authorization.
 decision: RUN_AFTER_CP_123
-next_experiment: EXP-136
+observed:
+  - The source-hash-bound image rebuilt in 12.96 s as immutable image sha256:0a1733e27dced9ed5137a0b5d42822254e59c02604529d7a2789147350acc0eb. Host and image source SHA256 both equal e5a4715b2b08caacbbdabebeb3162602b6821e162cd16fa1ad39c5f3dd9c6ca2.
+  - The retained P01 smoke image exercised both frozen models through the Broker container. YOLO and Grounded-SAM each returned QUALIFIED with executed=true, one CUDA candidate and their expected immutable model hashes.
+  - The final cleanup audit found no related running container, host process or GPU compute process.
+conclusion: VALID; the rebuilt immutable Broker image is source-bound to the EXP-134 implementation and both frozen model paths remain qualified. Active-goal heartbeat cancellation is the remaining live fault gate before fresh normal execute repetitions.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-pre-build-containers.log sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-image-build.log sha256=c7e44f065557b733441d5dc4c018839c61dffe36f22181117dccaa468060cc69
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-image-build.time sha256=2a528b56e9af0fb3a6230769caefea957114c07ec75c775e7961a832d6717bf2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-image-build.json sha256=20326d56cb438a2f7e382b218f4f031ca98de2b31470f9836a48d77d7e53c0e4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-model-smoke.log sha256=b5c3cdac47e5bf799b512f3493108ca2e81b0a7681860939199b74ae27a2b601
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-model-smoke.time sha256=086e0e24e526dd73ffa257fa7f37053e3d7d1706abb57d63c6cae1a5b9bf1006
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-smoke-admission.json sha256=007b30ec569e566cfe46862011d5d9577702f85d60f7fbf2a03733bae86fc94e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-model-smoke-summary.json sha256=c222938ee967f531d8269354c7798b2ffb00c78c8af5dc1f1aa9aa586fc03bdc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp136-cleanup-audit.log sha256=96579f1d63dacd4a4b6d1bfe2a1e97f9ceb8dec1b4fb54de01fe5f7bb27bfa1d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-136-smoke/ipc/.model-ready.json sha256=3c6c65031ed83dd0fbe5b049e243af7608165955dad5233556e2736f52ee9dc6
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-136-smoke/ipc/smoke.json sha256=ab9798c48ed72546f43a35ff3b932e74255ddb74cb8326e47460bc675e1755f8
+retained_roots:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-136-smoke
+decision: PROVE_ACTIVE_GOAL_HEARTBEAT_CANCELLATION
+next_experiment: EXP-137
+```
+
+```yaml
+checkpoint_id: CP-124
+last_valid_experiment: EXP-136
+current_hypothesis: A coordinator heartbeat revocation while an identified controller goal remains active will cause the Worker to cancel that same goal before admitting any successor, after which fresh joint, TF, physical, scene and visual evidence can establish a safe stopped state before teardown.
+working_tree_status: Only the EXP-136 result and EXP-137 preregistration are uncommitted; no source change has occurred since the qualified build and immutable image.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Immutable image sha256:0a1733e27dced9ed5137a0b5d42822254e59c02604529d7a2789147350acc0eb contains the exact qualified source tree.
+  - Both frozen perception models remain QUALIFIED on the retained P01 smoke input.
+open_risks:
+  - EXP-118 proved consumer retirement but did not bind revocation to an identified active goal or capture fresh multi-layer post-stop evidence before teardown.
+next_command: Commit CP-124 after the mandatory EXP-045 hash gate, then execute an isolated active-goal heartbeat fault with action-status and post-stop observers.
+```
+
+## EXP-137 — Identified active-goal heartbeat cancellation
+
+```yaml
+experiment_id: EXP-137
+status: PLANNED
+prior_experiment: EXP-136
+hypothesis: Revoking Coordinator heartbeats while a specifically identified FollowJointTrajectory goal remains EXECUTING will make the Worker cancel that same goal, publish no successor goal and remain physically stationary with detached scene state until evidence capture completes.
+single_variable: Stop only the Coordinator process after the observer identifies an active controller goal; preserve image, models, motion policy, thresholds, Broker safety gates and all other processes.
+lifecycle: ONE_WORKER_ONE_BROKER_SIMULATION_FAULT
+success_criteria: Evidence binds injection, heartbeat expiry, cancel request and terminal result to timestamps and goal IDs; the identified goal is active through revocation and reaches CANCELED or a documented safe terminal result; no later goal is accepted; fresh post-stop joint/TF, MuJoCo physical, Planning Scene and visual evidence is captured before teardown; cleanup leaves no owned resources.
+failure_criteria: The Worker admits a successor after revocation, the active goal continues uncontrolled, physical motion persists after the stop window, scene/physical state diverges, or cleanup fails.
+invalid_criteria: No identified active goal at injection, the goal terminates before heartbeat expiry, timestamps or IDs cannot be correlated, evidence is captured only after teardown, or unrelated process ownership contaminates the run.
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
+retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_124
+next_experiment: EXP-137
 ```
