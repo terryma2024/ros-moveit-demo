@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 9a76cb91fa2ceed45655ea56eddeed9e59d4ba4d
+current_commit: b1d0c476a9dac882e28ce5c184a9cb22897107b5
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -10457,7 +10457,14 @@ next_command: Commit CP-128 after mandatory hashes, then run one isolated N=1/K=
 
 ```yaml
 experiment_id: EXP-141
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T16:40:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T16:42:00+08:00
+  - status: VALID
+    at: 2026-09-13T17:12:30+08:00
 prior_experiment: EXP-140
 hypothesis: Stopping the exact Coordinator when the first arm goal is active will cause the five-second watchdog to revoke the exact lease, cancel the then-active controller goal, admit no later goal, and leave a fresh stable detached-world scene before teardown.
 single_variable: Send SIGSTOP only to the exact Coordinator after an arm goal becomes EXECUTING; preserve production timeout, image, models, point, motion policy, thresholds and Broker fencing.
@@ -10465,13 +10472,86 @@ lifecycle: ONE_WORKER_ONE_BROKER_SIMULATION_FAULT
 success_criteria: Exact process identity and state-T readback; internal exact-lease revoke/request/controller-result timestamps; external goal UUID status history proving an active goal immediately before cancellation and its terminal state; no later accepted goal; fresh post-stop joint/TF/MuJoCo/Planning Scene/RGB evidence before teardown; conservative attempt result and exact cleanup.
 failure_criteria: No controller cancellation, a post-revocation successor goal, motion after stop window, unsafe physical/scene divergence, non-conservative promotion or cleanup residue.
 invalid_criteria: Missed active-goal window, wrong process identity, missing timestamp/UUID correlation, observer attaches late, evidence only after teardown or unrelated ownership contamination.
-batch_id: parallel-heartbeat-fault-20260913-v10-astra2
-evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-141
+batch_id: parallel-heartbeat-fault-20260913-v10i-astra2
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141i
 worker_count: 1
 max_points_per_worker: 1
 selection: task_start
 mode: execute; simulation only
 retention_rule: Retain all fault, observer, post-stop and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_128
-next_experiment: EXP-141
+observed:
+  - Attempts 141, 141b, 141c, 141d, 141e, 141f, 141g and 141h are retained as INVALID orchestration diagnostics: respectively an observer/domain admission collision, overlong socket path, missed Coordinator match, late stale injection, pre-admission shell setup failure, observer presence during the initial node gate, cancellation racing a nearly complete goal and repetition without the intended offset. None is counted as fault qualification.
+  - In the fresh 141i root the observer joined only after the exact attempt inference snapshot existed, so it did not contaminate the point-initial graph gate. SIGSTOP was sent to the unique Coordinator PID 2707006 with process starttime 111054265 while the first arm goal was still EXECUTING; process state read back T and remained T until exact SIGCONT 11.000603886 seconds later.
+  - The exact lease emitted the ordered durable phases WATCHDOG_REVOKED, CANCEL_REQUESTED, CONTROLLER_CANCEL_RESULT and CANCEL_RESULT. Watchdog revocation occurred 5.771781207 seconds after SIGSTOP; all four rows carry identical batch/epoch/worker/generation/point/attempt/lease identity. Controller confirmation and motion-stopped are true, and the unchanged Broker fence completed true after Coordinator resume.
+  - External action status proves goal 63c4eee65ef3b5fa1deeeae1c8196fc3 was EXECUTING immediately before watchdog expiry, then CANCELING and CANCELED. No successor goal was accepted after cancellation.
+  - Fresh post-stop evidence contains finite joint and TF values, near-zero maximum joint velocity 1.1655078108672826e-06, an upright table-contact cup with negligible velocity, a detached Planning Scene world cup with 13 primitives, and a 640x480 RGB frame. Direct visual inspection agrees: the open gripper is clear and the upright cup has no visible penetration or unsafe contact.
+  - The resumed Coordinator conservatively records task_start INDETERMINATE, qualification_passed=false and TERMINAL_ACK_FAILED. Production cancellation, recovery, process and container cleanup gates pass; independent readback finds no exact task process, container or GPU compute process, and domains 181-183 are unlocked. batch_cleanup_complete remains false only because Coordinator completion was intentionally interrupted and therefore unattempted.
+conclusion: VALID_GREEN; the exact goal active at watchdog expiry is externally proven CANCELED, internal lease-bound revocation phases are durable and ordered, post-stop physical/scene/visual state is fresh and safe, no successor goal exists, adjudication is conservative and Broker fencing is unchanged.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-command.log sha256=558b02907c1fce4cc1c6cda52f7aee081356d4de7a00b42bd1469c8d19336448
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-command.time sha256=2e5c9a8702516f129afce8cc41f4a16a56f34f725f3e468856d12203f3b2337c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-injection.json sha256=6ae90ef34bad9824640bcd00145bcb7d262e5de843a23bb463294eb311e28974
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-injection-complete.json sha256=86a5aff75c8ba9dc51b20a65f5fe77cb25c674598c3180f08ed2b752ca994476
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-observer/observer-summary.json sha256=9e092789838c13ad79fd289c7da64b58e5a6e6e3832193283f3b640c56385cf9
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-observer/action-transitions.json sha256=8835a672f15ab2c60be7c2a0091aac7cb2369b50c2e90ae9b01b927fe8dd9c1b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-observer/action-status-samples.json sha256=ab29a43a53f083c06b521c3e0423ebf45734769b2f826915ba80abb1e7aa4dfd
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-observer/post-stop-rgb.png sha256=628b656bd934322fc76118131bb37b92f7dc33bdf5971d222098ceca1dd257a3
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-correlation.json sha256=cd57808f1178f5a365b65366dbadee5d987eaa8e392406f90326b4946b022a53
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-visual-inspection.json sha256=9d77ba4723a9fcf2739e2ba88c316ef8199a90cea97b318e6659f8c325cf86af
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp141i-cleanup-audit.json sha256=c31e216b3b42b6f7a961bad0284e6c74b32a39fae622e8c4b8e45045867d08b0
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141i/workers/worker-01/revocation-events.jsonl sha256=3d4b936608e9e5c07d0b5eac3fa1c4aa4318e7725f5f11840df0c34e3ba5e6aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141i/workers/worker-01/worker-run-results.json sha256=7cc3f15bc08c874532e99be3805d3d1e82e865cd2a1ea045cf17e026e64ba2f4
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141i/coordinator/aggregate_results.json sha256=4e2bb34a60db76c9d8ad069ef97aaa8464fadcc6660d9bf2e08165fa5922625e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141i/cleanup-gates.json sha256=bbbc15fd7751528915269bea50c87498b2d89886b3e5615f0f9e814e7167c687
+retained_invalid_roots:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-141
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141g
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-hb-141h
+decision: RUN_FRESH_NORMAL_FOUR_POINT
+next_experiment: EXP-142
+```
+
+```yaml
+checkpoint_id: CP-129
+last_valid_experiment: EXP-141
+current_hypothesis: The final runtime now passes the active-goal heartbeat safety gate; removing the fault and selecting the frozen four-point subset will preserve normal N=2/K=2 physical success, exact-once leasing and cleanup.
+working_tree_status: EXP-141 result and EXP-142 preregistration are ledger-only; source, install and immutable image remain unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - The goal active at watchdog expiry transitions externally through EXECUTING, CANCELING and CANCELED with no successor.
+  - Internal revocation is exact-lease bound, motion stop is confirmed, the Broker fence remains mandatory and the result is conservatively INDETERMINATE.
+open_risks:
+  - Fresh post-fault normal four-point and complete 20-point qualification remain required.
+next_command: Commit CP-129 after mandatory EXP-045 hash readback, then run EXP-142 from a fresh absent root.
+```
+
+## EXP-142 — Post-remediation fresh normal four-point gate
+
+```yaml
+experiment_id: EXP-142
+status: PLANNED
+prior_experiment: EXP-141
+hypothesis: Removing fault injection while preserving final source, image, models and configuration will complete the frozen four-point subset exactly once across two isolated Workers with qualification and cleanup true.
+single_variable: Remove only the Coordinator SIGSTOP and external observer from EXP-141; select the frozen four-point subset and N=2/K=2 normal execute lifecycle.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: normal-142
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/normal-142
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm,cup_test_left_5cm,cup_test_right_5cm
+success_criteria: All four points PASSED once; coverage, execution and qualification true; distinct isolated Worker resources/sessions; complete physical/numeric/visual evidence; exact cleanup and no owned residue.
+failure_criteria: Any non-PASSED point, retry, duplicate, isolation/provenance/model/physical/visual/cleanup failure or residue.
+invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
+provenance:
+  source_commit: 9a76cb91fa2ceed45655ea56eddeed9e59d4ba4d
+  broker_image_id: sha256:3175421eacb5e9102bd1cf576dc29ad07d27dc815017559f5ebadaf1f72e27a1
+  broker_source_sha256: 9dc053cf47df9c0690991e7f075390d2f7854b7e87b284f5e0c311f7c7ed5e73
+retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_129
+next_experiment: EXP-142
 ```
