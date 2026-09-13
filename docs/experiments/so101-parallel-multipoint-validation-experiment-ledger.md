@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 01a16914a0580b944b10cd16803f32a7c39cd76f
+current_commit: a6434abd9e9aa9c992c81eed45f28bf015e753c7
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-090
-next_experiment: EXP-104
+latest_checkpoint: CP-091
+next_experiment: EXP-105
 ```
 
 Frozen provenance:
@@ -7926,12 +7926,14 @@ next_command: Re-run the ledger consistency guard in its terminal CP-090/EXP-104
 
 ```yaml
 experiment_id: EXP-104
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T10:28:54+08:00
   - status: RUNNING
     at: 2026-09-13T10:28:54+08:00
+  - status: VALID
+    at: 2026-09-13T10:36:35+08:00
 prior_experiment: EXP-103
 hypothesis: The complete remediation through F8 builds in the four-package worktree overlay and passes the full ordinary so101_demo_py package suite with the locked ML dependency path, zero errors, failures, or skips, and no benchmark collection.
 single_variable: Replace the prior F91 source with current remediation source 01a16914a0580b944b10cd16803f32a7c39cd76f; do not start live runtime or change config, catalog, models, or Broker policy.
@@ -7966,5 +7968,41 @@ intermediate_deletion_candidates:
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p117
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p118
   - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p119
-decision: PENDING
+commands:
+  - command: source /opt/ros/jazzy/setup.zsh; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p120/tmp /usr/bin/python3 -m colcon build --packages-select mujoco_ros2_control_msgs so101_mujoco_support so101_teleop so101_demo_py --symlink-install
+    exit_code: 0
+  - command: source the four worktree overlays; prepend locked ML site-packages; TMPDIR=/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p121/tmp /usr/bin/python3 -m colcon test --packages-select so101_demo_py --event-handlers console_direct+ --return-code-on-test-failure
+    exit_code: 0
+  - command: /usr/bin/python3 -m colcon test-result --test-result-base build/so101_demo_py --all --verbose
+    exit_code: 0
+observed:
+  - Fresh source commit a6434abd9e9aa9c992c81eed45f28bf015e753c7 built all four selected packages with --symlink-install in 2.48 s.
+  - The exact /usr/bin/python3 test interpreter resolved tempfile to p121/tmp and imported torch 2.13.0+cu130, MuJoCo 3.12.0, ROS Jazzy, and so101_demo from this worktree build.
+  - The complete ordinary package suite passed 2839 tests in 84.73 s pytest / 86.44 s wall; scoped test-result reports 0 errors, 0 failures, and 0 skips. The two names containing the word benchmark are partition/config contract tests; no benchmark runner was collected.
+conclusion: VALID; the complete affected overlay and ordinary package gate pass after correcting the nonphysical crash fixture. No runtime stack or container was started by this experiment.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p120-colcon-build.log sha256=6520ac31c2e864f989333a593b7a1047c6115bc328c5a4fd64decd70cf342e5c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p121-colcon-test.log sha256=fc3f8d74930de6a6151acbf2fffe6276352c89d41b8c6e2ad8d0dc76a5b7272e
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p121-colcon-test-result.log sha256=4b625d83a538e183a2d37077cb94c17199f640f53922904ccaff238841bac644
+  - /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/build/so101_demo_py/pytest.xml sha256=9e308d15cd968ac906dfb69efcfc343694fe0bd6b05060b579138f355733cff3
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p120
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p121
+decision: KEEP
+next_experiment: EXP-105
+```
+
+```yaml
+checkpoint_id: CP-091
+last_valid_experiment: EXP-104
+current_hypothesis: The passing rebuilt overlay can produce source/install/runtime/image provenance and a fresh dual-model smoke before live execute fault injection.
+working_tree_status: EXP-104 result and CP-091 are ledger-only; runtime source is clean at a6434abd9e9aa9c992c81eed45f28bf015e753c7 and ignored SDD progress is synchronized separately.
+owned_processes: NONE
+preserved_processes: tmux session codex belongs to the active coding task; package tests left no live runtime process or container.
+confirmed_conclusions:
+  - Complete four-package build and 2839-test ordinary suite pass with zero errors/failures/skips.
+  - Hardened verifier contract remains unchanged; only a test fixture stopped fabricating unsupported PASSED evidence.
+open_risks:
+  - Static source/install/runtime/image provenance, smoke, both execute fault injections, fresh four-point/full qualification, visual inspection, cleanup, and final Astra review remain pending.
+next_command: Commit EXP-104/CP-091 ledger state, preregister EXP-105, then generate direct source/install/runtime provenance and rebuild/smoke the immutable Broker image.
 ```
