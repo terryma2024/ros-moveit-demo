@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: a65e96c851ad9b4f5ae10864c701b86672c59862
+current_commit: d9b141bedcc73d7975f1fae1a4722653e532eeba
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -8080,4 +8080,51 @@ confirmed_conclusions:
 open_risks:
   - Execute heartbeat/lease-loss fault, alive-unhealthy Broker fault, fresh four-point/full qualification, visual inspection, cleanup, and final Astra review remain pending.
 next_command: Commit EXP-105/CP-092, preregister EXP-106, and run the controlled execute-mode heartbeat/lease revocation fault with exact controller/joint/TF/MuJoCo/MoveIt/visual/process evidence.
+```
+
+## EXP-106 — Execute heartbeat/lease-revocation fault injection
+
+```yaml
+experiment_id: EXP-106
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T10:44:27+08:00
+  - status: RUNNING
+    at: 2026-09-13T10:44:27+08:00
+prior_experiment: EXP-105
+hypothesis: When the Coordinator becomes unavailable while the exact dynamic consumer is executing, the Worker watchdog independently revokes that lease, fences later goals, cancels and confirms the current controller goal within the heartbeat bound, and leaves MuJoCo and Planning Scene conservatively recoverable.
+prediction: Suspending only the exact manifest-owned Coordinator process after a dynamic execute consumer appears will block heartbeat acknowledgement while leaving the Worker alive; before Coordinator resume, the exact consumer/controller work will be stopped, and after resume no later goal from the revoked lease will be submitted.
+single_variable: Suspend and resume only the exact Coordinator process during one execute attempt; source, install, immutable image, models, config, catalog point, and safety gates remain EXP-105-identical.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v1-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-106
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+fault_sequence:
+  - wait for the exact Worker-owned dynamic consumer and an in-flight controller action
+  - capture exact Coordinator/Worker/consumer/controller identity plus pre-fault joint, TF, MuJoCo and Planning Scene state
+  - SIGSTOP only the exact Coordinator identity for longer than heartbeat_timeout_s
+  - require Worker-side revocation, exact consumer termination, controller cancellation and no active goal before SIGCONT
+  - resume the same Coordinator identity and require conservative adjudication, cleanup and no subsequent revoked-lease goal
+success_criteria:
+  - exact identity checks pass before both signals
+  - cancellation and no-active-goal evidence is produced while the Coordinator and normal execution path remain blocked
+  - no later goal is submitted for the revoked lease
+  - controller/joint/TF, MuJoCo physical, Planning Scene, process ownership and fresh visual evidence are complete and internally consistent
+  - exact cleanup leaves no owned process, task container, GPU process or active controller goal
+failure_criteria:
+  - cancellation waits for Coordinator resume or dynamic execution return
+  - a stale/different identity is signalled, a later revoked goal appears, physical state is uncertain without conservative failure, or cleanup/evidence is incomplete
+invalid_criteria:
+  - the fault misses the active dynamic execute window, the Coordinator identity changes before signal, the root exists before launch, or source/install/image provenance is mixed
+provenance:
+  source_commit: d9b141bedcc73d7975f1fae1a4722653e532eeba
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:beae4e2cfdf5e971c8be078b0ee36af1232a414b027e1cd1971f609ea1869681
+retention_rule: Retain all fault, command, runtime, numeric, visual and cleanup evidence; delete nothing without explicit user authorization.
+decision: RUN
+next_experiment: EXP-106
 ```
