@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: a6282d7234d9bb9e75c075555c1bd746834516e7
+current_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-103
-next_experiment: EXP-117
+latest_checkpoint: CP-104
+next_experiment: EXP-118
 ```
 
 Frozen provenance:
@@ -8831,12 +8831,14 @@ next_command: Commit EXP-116/CP-103, then run EXP-117 full build/test, immutable
 
 ```yaml
 experiment_id: EXP-117
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:31:33+08:00
   - status: RUNNING
     at: 2026-09-13T11:31:33+08:00
+  - status: VALID
+    at: 2026-09-13T11:37:20+08:00
 prior_experiment: EXP-116
 hypothesis: The concurrent revocation fix builds cleanly, preserves the full ordinary package suite, installs exact bytes and produces a source-bound immutable image whose two frozen models smoke successfully.
 single_variable: Replace only the F1 revocation scheduling source from EXP-112; frozen catalog, config, models, image tag and smoke input remain fixed.
@@ -8846,8 +8848,102 @@ failure_criteria: Any build/test/provenance/image/model/cleanup failure or mixed
 invalid_criteria: Reused scratch, tempfile outside registered NVMe root, wrong interpreter/overlay, benchmark collection or dirty provenance.
 provenance:
   preregistration_source_commit: a6282d7234d9bb9e75c075555c1bd746834516e7
+  qualified_source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+  broker_source_sha256: 1b49da7f93167923398d52611e06f01f25bfb140f238be4829183bfbe75f4ef2
+commands:
+  - command: fresh four-package colcon build under scratch/p133/tmp
+    exit_code: 0
+    elapsed_s: 2.38
+  - command: complete ordinary so101_demo_py colcon test under scratch/p134/tmp
+    exit_code: 0
+    elapsed_s: 87.11
+  - command: p134 test-result invocation containing an accidental extra token
+    exit_code: 2
+    classification: INVALID_WRAPPER_ONLY
+  - command: corrected scoped colcon test-result p134b
+    exit_code: 0
+  - command: immutable Broker image build under scratch/p135/tmp
+    exit_code: 0
+    elapsed_s: 13.32
+  - command: dual-model smoke under scratch/p136/tmp
+    exit_code: 0
+    elapsed_s: 9.61
+  - command: production verify_provenance with exact frozen inputs
+    exit_code: 0
+observed:
+  - Fresh build passed four packages. The complete ordinary suite collected and passed 2840 tests with zero errors, failures or skips and four known warnings; benchmark_test was not collected. Corrected scoped result readback reports 2840/0/0/0.
+  - The first test-result-only wrapper included one accidental non-option token and was rejected without running or altering tests; p134b is the authoritative result readback.
+  - Immutable image sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867 binds source hash 1b49da7f93167923398d52611e06f01f25bfb140f238be4829183bfbe75f4ef2. The build command succeeded; its auxiliary exit file contains the harmless wrapper text `0 staff`, so image receipt, Docker inspect/provenance and command session are authoritative rather than that malformed helper file.
+  - Both YOLO and Grounded-SAM returned QUALIFIED. Production provenance binds clean commit 902f373c239ee7ba1447806791ae5f077bdefcb1, exact worktree module/console/config/model paths, equal source/install module tree hash 840a67bf9f932728d76289b377746de7bd88cf610dc7140171dfbe82bb36e09c, and the same image source hash.
+  - Post-smoke audit found no related process, running container or GPU compute application.
+conclusion: VALID; the concurrent revocation source is package-, install-, image-, model- and cleanup-qualified for live F1 retry.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p133-colcon-build.log sha256=25c671a8df2573639edbfc787bda650b89e55c0145e1109c8c01dcca5f0ba831
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p134-colcon-test.log sha256=1ed8c282235771e28527bcef1b8837d9d6766e7c577446d2ddb9077475f87efb
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p134b-colcon-test-result.log sha256=028c9fa6f6a1d1dd8c4042b6b23381d1a75a4280cf244c9131ff21bc1d13ca3c
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p135-image-build.log sha256=3d329273e7e63eb8ea782b72367060cd68200bc04808ff95d83b41ecaba95b20
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-image-build-117.json sha256=00fc6f90ab38f929b69089bc91384f9172f4ce43c2479276ee61bf732c7844b5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/p136-model-smoke.log sha256=f5925fb7a3bef1d967c35a96d6db3aed8ad6d90d7f0f92477f8f158fe17d23a2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-smoke-admission-117.json sha256=752c1ad99e0e15563ffea8ece50a0d98fbdc13301112325c1e357cb14dedca7b
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/task14-remediation-117-smoke/ipc/smoke.json sha256=e303678d72cefe21f95b2d88ad01ceb54b2f5124cb4a9e80b649fcc7b2e87628
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/remediation-production-provenance-117.json sha256=0c6545e52fc7b18c80e397ad7c4b76233397d6d76c34ca9bc0c641a8cae75698
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/post-117-cleanup-audit.json sha256=27b575ecbbc39d8172d555b9d364e4d44d5bf7f2df740292d288886de61fea3f
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p133
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p134
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p135
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/p136
 retention_rule: Retain all evidence and scratch; delete nothing without explicit user authorization.
+decision: KEEP
+next_experiment: EXP-118
+```
+
+```yaml
+checkpoint_id: CP-104
+last_valid_experiment: EXP-117
+current_hypothesis: The fully rebuilt concurrent-revocation runtime should cancel the direct consumer/controller near heartbeat expiry even though Coordinator-dependent Broker fencing remains blocked until resume.
+working_tree_status: EXP-117 result and EXP-118 preregistration are ledger-only; source/install/image are clean and provenance-bound.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Complete 2840-test and immutable dual-model gates pass after the second F1 repair.
+  - Broker fencing remains mandatory while no longer serializing controller cancellation.
+open_risks:
+  - The post-fix live heartbeat timing, physical/MoveIt consistency and cleanup require repeat evidence.
+next_command: Commit CP-104, then run EXP-118 with immediate observer and the rebuilt immutable image.
+```
+
+## EXP-118 — Concurrent-revocation live heartbeat fault
+
+```yaml
+experiment_id: EXP-118
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:37:20+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:37:20+08:00
+prior_experiment: EXP-117
+hypothesis: Exact Coordinator suspension during an active goal now triggers direct consumer/controller cancellation after the five-second heartbeat timeout without waiting for the blocked exact-generation Broker fence.
+single_variable: Replace only the EXP-115 runtime/image with EXP-117-qualified concurrent revocation; preserve task_start, N=1/K=1, overlay, immediate observer, exact signals and evidence order.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: parallel-heartbeat-fault-20260913-v9-remediation
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/live-heartbeat-remediation-118
+worker_count: 1
+max_points_per_worker: 1
+selection: task_start
+injection_predicate: Manifest-owned direct dynamic module is live, accepted-goal count exceeds terminal count, and exact Coordinator identity matches.
+success_criteria: Coordinator state T during active goal; after eight seconds the exact direct consumer is absent, accepted count has not advanced beyond at most the in-flight goal and controller statuses are terminal; complete fresh visual/numeric/MoveIt/process evidence; resumed conservative adjudication; exact cleanup.
+failure_criteria: Cancellation exceeds heartbeat bound, later revoked goals, active controller status, Broker fence bypass, unsafe promotion, incomplete evidence or residue.
+invalid_criteria: Admission failure, pre-existing root, missed window, identity mismatch or pre-fault evidence failure.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-117
+next_experiment: EXP-118
 ```
