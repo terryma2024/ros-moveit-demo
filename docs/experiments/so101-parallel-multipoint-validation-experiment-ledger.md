@@ -54,8 +54,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-105
-next_experiment: EXP-119
+latest_checkpoint: CP-106
+next_experiment: EXP-120
 ```
 
 Frozen provenance:
@@ -8994,12 +8994,14 @@ next_command: Commit CP-105, then run preregistered EXP-119 using an exact ident
 
 ```yaml
 experiment_id: EXP-119
-status: RUNNING
+status: INVALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:45:00+08:00
   - status: RUNNING
     at: 2026-09-13T11:45:00+08:00
+  - status: INVALID
+    at: 2026-09-13T11:50:00+08:00
 prior_experiment: EXP-118
 hypothesis: Pausing the exact generation-1 Broker container after it is live-serving and has accepted an inference request will yield a generation-bound health-down outcome while the process remains alive, pause new leases, retire only generation 1, readmit a model-loaded generation 2 and continue eligible work without charging Worker K for the infrastructure fault.
 single_variable: Inject only Docker pause into the exact verified generation-1 Broker container during an accepted live inference; source, immutable image, complete overlay, models, execute semantics and frozen runtime limits remain EXP-117-identical.
@@ -9023,6 +9025,61 @@ provenance:
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
   broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
 retention_rule: Retain all command, observer, journal, Broker-generation, model, Worker, physical, visual and cleanup evidence; delete nothing without explicit user authorization.
+observed:
+  - Production admission rejected the preregistered root before creating it because its Worker socket path exceeded the Unix-domain path bound.
+  - Exit 1 occurred in 0.11 s with UNIX_SOCKET_PATH_TOO_LONG. No Broker, Worker, ROS, MuJoCo, controller, container, GPU or physical action started; domains 181-183 remained clear.
+conclusion: INVALID_PRE_ADMISSION naming error; shorten only the batch and evidence-root names and repeat the unchanged fault design.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-119.log sha256=ebb4040e9b7a601b2c346bdb5f6a47cc29cfe8c8dffcc40a4d2d2f4f7fd6e262
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-119.time sha256=be4076be4bb20af3e69b733b1bb06e3066802b4c44d9296cc5c9bd4d5d4cead7
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-119.exit sha256=4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865
+decision: KEEP_INVALID
+next_experiment: EXP-120
+```
+
+```yaml
+checkpoint_id: CP-106
+last_valid_experiment: EXP-118
+current_hypothesis: EXP-119 was rejected solely by the Unix socket path-length gate; the unchanged F2 injection can reach production with a short registered root and batch ID.
+working_tree_status: EXP-119 invalid result and EXP-120 preregistration are ledger-only; source/install/image remain clean and unchanged.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers only.
+confirmed_conclusions:
+  - Production path validation failed closed before root creation or any side effect.
+open_risks:
+  - F2 remains unexercised live.
+next_command: Commit CP-106 and launch EXP-120 with only the short root f2-120 and batch ID f2-120 changed.
+```
+
+## EXP-120 — Short-root alive-but-unhealthy Broker execute fault
+
+```yaml
+experiment_id: EXP-120
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:50:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:50:00+08:00
+prior_experiment: EXP-119
+hypothesis: With only the root and batch ID shortened, the EXP-119 exact generation-1 container pause will reach a live in-flight inference, yield authenticated health-down after resume, pause grants, replace/readmit generation 2 and continue without infrastructure K debit.
+single_variable: Shorten only evidence_root and batch_id to satisfy the pre-admission Unix socket bound; all EXP-119 source, image, overlay, models, points, N=2/K=2, injection and success criteria remain unchanged.
+mode: execute; simulation only
+lifecycle: ISOLATED_STACK
+batch_id: f2-120
+evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/f2-120
+worker_count: 2
+max_points_per_worker: 2
+selection: task_start,cup_test_forward_5cm
+injection_predicate: Exact generation-1 container ID, immutable image, batch/generation labels and /runtime mount match; ready/model-loaded receipts validate; a generation-1 Broker input exists; container is running and not paused.
+success_criteria: Same as EXP-119: live non-exit health-down, no lease while unhealthy, exact generation-1 retirement, generation-2 ready/model-loaded readmission, no infrastructure K debit, unique continuation, conservative physical evidence and exact cleanup.
+failure_criteria: Same as EXP-119.
+invalid_criteria: Pre-existing root, incomplete overlay, missed in-flight request, identity mismatch, container already exited, observer/tool failure before injection or admission failure.
+provenance:
+  source_commit: 902f373c239ee7ba1447806791ae5f077bdefcb1
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+  broker_image_id: sha256:f06ef37ea0c48036cc657e139371783da72d5e1173ee1e182ed3287c21a0e867
+retention_rule: Retain all evidence; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-119
+next_experiment: EXP-120
 ```
