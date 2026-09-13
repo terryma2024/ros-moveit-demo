@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 7040f59f7109ccab9aae58fa4dd9f67918251991
+current_commit: 27cef04941709a7e7ade44ad832229d86619afde
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -49,13 +49,13 @@ confirmed_conclusions:
   - EXP-150 through EXP-152 qualify the round-two remediation with exact active-goal cancellation evidence, a four-point normal gate, and one complete twenty-point immutable execute batch.
   - EXP-153 is a retained NOT APPROVED review with two Important findings; it is historical review evidence, not task approval.
   - EXP-154 shares conservative ERROR classification between runtime and artifact acceptance, and EXP-155 supplies explicitly retrospective RED evidence against immutable e992f7a429ac44fa1a774406b6ada1b1edd46a7d without claiming recovery of missing original transcripts.
+  - EXP-157 through EXP-160 qualify final implementation 813e8f36 with a committed build and 2882-test ordinary suite, immutable dual-model CUDA image, fresh four-point gate, and one complete twenty-point execute batch.
 disproven_routes:
   - The canonical install overlay is not usable for this task because setup.zsh references stale external overlays (CP-001).
 open_hypotheses:
-  - The final-source four-point gate passes; the same immutable source/image must pass the complete twenty-point catalog in one fresh execute batch.
   - Independent Astra high review of the final immutable correction must return APPROVED with zero Critical and Important findings.
-latest_checkpoint: CP-146
-next_experiment: EXP-160
+latest_checkpoint: CP-147
+next_experiment: EXP-161
 ```
 
 Frozen provenance:
@@ -11686,7 +11686,14 @@ next_command: After mandatory EXP-045 hash readback and checkpoint commit, execu
 
 ```yaml
 experiment_id: EXP-160
-status: PLANNED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T19:28:00+08:00
+  - status: RUNNING
+    at: 2026-09-13T19:30:00+08:00
+  - status: VALID
+    at: 2026-09-13T19:46:00+08:00
 prior_experiment: EXP-159
 hypothesis: Expanding only the qualified selection to all twenty frozen catalog points and K=10 will physically pass each point exactly once across two isolated Workers with complete qualification and cleanup.
 single_variable: Expand EXP-159 from four points and K=2 to the complete exact-hash catalog and K=10; preserve source, image, models, config, N=2, lifecycle and execute behavior.
@@ -11701,6 +11708,74 @@ success_criteria: Exactly twenty points PASSED once; coverage, execution, qualif
 failure_criteria: Any missing, repeated, duplicate or non-PASSED point; K overflow; isolation/provenance/model/physical/visual/cleanup failure or residue.
 invalid_criteria: Pre-existing root, wrong overlay/image/catalog/config/model identity, contaminated admission or source-age expiry.
 retention_rule: Retain all command, Broker, Worker, journal, physical, visual and cleanup evidence; delete nothing without explicit authorization.
-decision: RUN_AFTER_CP_146
-next_experiment: EXP-160
+provenance:
+  source_commit: 27cef04941709a7e7ade44ad832229d86619afde
+  implementation_commit: 813e8f36d39c276d716288702acf6c37ce9a35ee
+  broker_image_id: sha256:24732e2f0c9bf977682320a3e5f2093797ad4fe36e98fab790a928e9ddfc27ec
+  broker_source_sha256: 23363bc3af157b57463855aefd3b3f1ee9f2976fff8d22b01995102c919bb61f
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+observed:
+  - The immutable execute command exited zero in 843.62 s. The aggregate contains exactly all twenty frozen catalog points, every point is PASSED with attempts=1, and coverage_complete, execution_complete, qualification_passed and batch_cleanup_complete are true.
+  - worker-01 and worker-02 each consumed exactly ten leases and produced ten successful point results plus one terminal NO_POINT result; K was not exceeded.
+  - The final-source production verifier independently rechecked all twenty seals against the trusted final target. Every inventory, hash, DONE semantic manifest, unit quaternion and physical/numeric contract passed.
+  - Direct original-resolution inspection of all twenty terminal RGB frames shows the cup upright inside the red target ring with the open gripper and arm clear. The twenty-entry image hash manifest reads back exactly.
+  - Production cleanup passed; exact ancestry-excluding process, labeled-container and GPU scans are empty, and ROS domain locks 181-183 are unlocked.
+conclusion: VALID; final source and immutable image satisfy the complete two-Worker twenty-point physical qualification contract with exact-once coverage, balanced K=10 scheduling, conservative trusted artifacts, fresh visual proof and exact cleanup.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/run-exp160.zsh sha256=a57d8a8c581dc2ff61f742aa6f771e0456daee433a8eac061da499430538375d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-160.log sha256=6d483e7a9bf985090ad015d581a4657c6575978cb8d2dde024893e3cc5ba792f
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-160.time sha256=659930e6881eef244e81033b8dac6871dcee5abab4c4af32cbba57e515ce27ee
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/command-160.exit sha256=9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/MUJOCO_LOG-EXP160.txt sha256=88a5b0d217a588a78c918ec5e500d1ad2480e4238b472b5cdb4612584f5688e5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-verification.log sha256=8190beefb533b1d2693dd9df9b424c5fd6b42bb3689d1783a6799371d30452f8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-terminal-rgb.sha256 sha256=abf276be375b38a65e7b91bef177b4e16971c51469cd02b434fef53188739a4d
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-terminal-rgb-check.log sha256=a2b181a469f92ab4ada857f6ccce4702ac9518075f298c9571d8e8fc0dbb06b2
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-visual-inspection.json sha256=519f3963f132151cf5527b6e35fb9d986e8e09c616215447165a95e4b6b8c0c5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-cleanup-readback.log sha256=87ff46c247c205f3a11cc7cbe20b08c1b4cc13edf9aa9c1b7d198554cc4cd0d5
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/exp160-cleanup-audit.json sha256=251283440a4c33c02c9b988f8f51b3c84d07edab7a20b9ed185e993b546fb5c8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160/batch_manifest.json sha256=4faf1ca469485eec130225a72245f3cb36bc3fe4e10ccff6d6280a81eccec115
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160/coordinator/aggregate_results.json sha256=ac7f3338634436ddc2c458f2d96d662d942d74073c947b10d8afb80dd3bf64cc
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160/workers/worker-01/worker-run-results.json sha256=daba4ba32fc569edc91f2894984bbfd4e11da9722b664a708e65ad7d5664c367
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160/workers/worker-02/worker-run-results.json sha256=e4d4c1fcdd1bd653d9e3ba9fb6da3fe3d118c1fd23d9ba29fbbd5d315fa8ec83
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160/cleanup-gates.json sha256=5fc1ea8eeca7ed407bafb370d1430c5a446b9d51cceded2a616eddd69057c099
+retained_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/full-160
+decision: REQUEST_FINAL_INDEPENDENT_ASTRA_HIGH_REVIEW
+next_experiment: EXP-161
+```
+
+```yaml
+checkpoint_id: CP-147
+last_valid_experiment: EXP-160
+current_hypothesis: Both round-three Important findings are remediated with committed source/tests, honest retrospective evidence, a 2882-test postcommit gate, immutable dual-model image, and fresh four-point/twenty-point physical qualification; independent Astra high review will confirm completion or identify a concrete remaining issue.
+working_tree_status: Product source/tests are clean; only EXP-160 result and final-review preregistration are uncommitted. MUJOCO_LOG.TXT remains preserved untracked with its EXP-159/160 snapshots retained.
+owned_processes: NONE
+preserved_processes: Existing unrelated stopped containers, untracked MUJOCO_LOG.TXT, all evidence, and the e992 evidence worktree/bootstrap.
+confirmed_conclusions:
+  - Final implementation commit 813e8f36 passes focused RED/GREEN, committed rebuild/source-install byte identity, and 2882 ordinary tests.
+  - Final immutable image 24732e2f executes both frozen models on CUDA with qualified candidates.
+  - Fresh final-source four-point and complete twenty-point batches pass exactly once with balanced scheduling, all seals, all terminal visuals and exact cleanup verified.
+open_risks:
+  - A durable independent gpt-6-astra high APPROVED verdict with zero Critical and Important findings remains mandatory.
+next_command: After mandatory EXP-045 hash readback, recovery-index/evidence hash audit and checkpoint commit, reactivate the independent Astra high reviewer for EXP-161 against the immutable final HEAD and all remediation evidence.
+```
+
+## EXP-161 — Final independent Astra high completion review
+
+```yaml
+experiment_id: EXP-161
+status: PLANNED
+prior_experiment: EXP-160
+hypothesis: Independent high-reasoning review of the immutable final correction and complete evidence chain will return APPROVED with zero Critical and Important findings.
+single_variable: Review only; do not change source, tests, runtime artifacts, evidence, models, configuration or safety gates.
+success_criteria: Reviewer explicitly APPROVES with zero Critical and Important findings; cited hashes, final repository state, conservative artifact classification, retrospective chronology, fresh qualification and cleanup read back exactly.
+failure_criteria: Any confirmed Critical or Important finding, hash mismatch, inaccurate chronology, missing applicable evidence, unreviewed source or unsafe/incomplete completion claim.
+invalid_criteria: Non-independent reviewer, wrong model/reasoning level, incomplete diff/evidence scope, mutable review input or missing durable report.
+reviewer: independent gpt-6-astra high
+review_scope:
+  - complete branch diff from base 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5 through the immutable CP-147 commit
+  - round-three report I1/I2/M1 and exact implementation/ledger remediations
+  - EXP-154 through EXP-160 RED/GREEN, retrospective baseline, build/test/image/model/four-point/twenty-point evidence
+retention_rule: Retain reviewer report, scope, hash readback and final cleanup evidence; delete nothing without explicit authorization.
+decision: RUN_AFTER_CP_147
+next_experiment: EXP-161
 ```
