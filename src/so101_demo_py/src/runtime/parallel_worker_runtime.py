@@ -13,6 +13,7 @@ import re
 import signal
 import stat
 import subprocess
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -1083,10 +1084,10 @@ class ParallelWorkerRuntime:
             raise RuntimeError("execute consumer command requires a lease identity")
         _key, point_root = self._point_root(lease)
         return tuple(
-            ros2_command(
-                "run",
-                "so101_demo_py",
-                "dynamic_cup_pick_place",
+            (
+                sys.executable,
+                "-m",
+                "so101_demo.cli.dynamic_cup_pick_place",
                 "--backend",
                 "mujoco",
                 "--mode",
@@ -1197,14 +1198,28 @@ class ParallelWorkerRuntime:
             return False
         child = self._execute_consumers.get(key)
         consumer_stopped = True
+        stop_thread = None
         if child is not None:
-            try:
-                consumer_stopped = self._processes.stop(child) is not False
-            except Exception:
-                consumer_stopped = False
+            consumer_stopped = False
+
+            def stop_consumer():
+                nonlocal consumer_stopped
+                try:
+                    consumer_stopped = self._processes.stop(child) is not False
+                except Exception:
+                    consumer_stopped = False
+
+            stop_thread = threading.Thread(
+                target=stop_consumer,
+                name=f"parallel-consumer-stop-{self.resources.worker_id}",
+                daemon=True,
+            )
+            stop_thread.start()
+        controller_stopped = self._cancel_motion(lease) is True
+        if stop_thread is not None:
+            stop_thread.join()
             if consumer_stopped:
                 self._execute_consumers.pop(key, None)
-        controller_stopped = self._cancel_motion(lease) is True
         return consumer_stopped and controller_stopped
 
     def confirm_no_controller_goal(self, lease: Any) -> bool:

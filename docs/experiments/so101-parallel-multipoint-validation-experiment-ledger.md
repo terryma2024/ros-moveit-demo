@@ -7,7 +7,7 @@ success_contract: One immutable execute batch physically passes all 20 catalog p
 worktree: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1
 branch: codex/so101-parallel-multipoint-validation
 base_commit: 5bfc5dbe7a7a92448f6e89a9a262b82117dec0a5
-current_commit: 1a023f3a6be3caf04a6af03d68a518ecb320f9e0
+current_commit: 918ddc0985fd70f19a3b9dceb2feeae6e940d8a8
 current_submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
 evidence_root: /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1
 confirmed_conclusions:
@@ -53,8 +53,8 @@ open_hypotheses:
   - EXP-098 confirmed Astra finding 3 and the candidate now continues after a durably committed, successfully recovered initial-gate INVALID without hiding its diagnostic.
   - EXP-099 confirmed Astra finding 4 and the candidate now verifies exact dynamic terminal identity and reached-stage evidence before classifying PASSED or FAILED.
   - Astra finding 8 is confirmed by the stale recovery header and is being synchronized under EXP-103; final package and live qualification remain pending.
-latest_checkpoint: CP-097
-next_experiment: EXP-111
+latest_checkpoint: CP-098
+next_experiment: EXP-112
 ```
 
 Frozen provenance:
@@ -8423,12 +8423,14 @@ next_command: Commit EXP-110/CP-097, preregister EXP-111, add a deterministic bl
 
 ```yaml
 experiment_id: EXP-111
-status: RUNNING
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-13T11:01:46+08:00
   - status: RUNNING
     at: 2026-09-13T11:01:46+08:00
+  - status: VALID
+    at: 2026-09-13T11:06:12+08:00
 prior_experiment: EXP-110
 hypothesis: Production cancellation misses the heartbeat bound only because the controller cancellation call is serialized after a 20 s wait on a ros2-run wrapper; direct consumer identity plus concurrent consumer interrupt/controller cancellation will cancel before a blocked stop returns and prevent later goals.
 prediction: A deterministic test that blocks process stop will show controller cancellation absent before release on current code; after the fix it will observe cancellation while stop is still blocked, exact direct module argv, and no subsequent consumer action opportunity.
@@ -8443,7 +8445,61 @@ invalid_criteria: Wrong overlay, reused pytest scratch, test collection failure,
 provenance:
   source_commit: 1a023f3a6be3caf04a6af03d68a518ecb320f9e0
   install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+observed:
+  - Deterministic RED failed both intended contracts: controller cancellation was absent while process stop was blocked, and the consumer argv began with ros2 run rather than the directly signal-addressable Python module.
+  - The minimum fix starts exact consumer retirement in its own thread, invokes controller cancellation immediately, then joins retirement before reporting completion. It also launches the dynamic CLI directly as sys.executable -m so101_demo.cli.dynamic_cup_pick_place, so the manifest-owned PID is the actual consumer rather than a ros2-run wrapper.
+  - Focused GREEN passed 2 tests in 0.11 s. Adjacent ParallelWorkerRuntime, ParallelRosRuntime and ParallelWorker suites passed 183 tests in 3.56 s.
+  - Mutation check: serializing _cancel_motion after stop makes the blocking test fail; restoring ros2 run makes the argv contract fail; wrong-lease cancellation remains rejected by unchanged exact lease-key checks.
+conclusion: VALID; the live RED boundary is fixed locally with direct consumer identity and concurrent consumer interrupt/controller cancellation, without altering heartbeat, lease, recovery, evidence or Broker policy.
+evidence:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-live-red-111.log sha256=ac274dee707bf8750955d4a9e7c2588df17a17bc89f99b054656b912b8b1a2a8
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-live-green-111.log sha256=b57b02970107870af2f2fe4f1342cd9fefa6624e5e0fdf6496a25980da0b4bbb
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/reports/pytest-f1-live-adjacent-111.log sha256=dcd8bb7511bc5b032c4058c350852cee679ad6437d1b6b6ca002a0b84dc4ab87
+deletion_candidates:
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-live-red-111
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-live-green-111
+  - /data/work/so101-evidence/parallel-multipoint-validation/20260912-v1/scratch/f1-live-adjacent-111
 retention_rule: Retain RED/GREEN/adjacent/package/live evidence and scratch; delete nothing without explicit user authorization.
+decision: KEEP
+next_experiment: EXP-112
+```
+
+```yaml
+checkpoint_id: CP-098
+last_valid_experiment: EXP-111
+current_hypothesis: The local F1 live-bound fix passes focused and adjacent tests; a fresh affected-package build/test and rebuilt image/provenance gate is required before repeating live fault injection.
+working_tree_status: Runtime, test and ledger changes form one coherent verified F1 follow-up fix; ignored SDD progress is synchronized separately.
+owned_processes: NONE
+preserved_processes: NONE beyond the active coding session.
+confirmed_conclusions:
+  - Controller cancellation no longer waits behind slow consumer retirement in the runtime orchestration contract.
+  - The exact process manifest now owns the actual dynamic Python module process.
+open_risks:
+  - Full package/build/image gate and repeated live heartbeat fault remain pending.
+next_command: Commit EXP-111/CP-098, then run EXP-112 complete package build/test and immutable image/provenance smoke before any new live action.
+```
+
+## EXP-112 — Rebuild/package/image gate for live heartbeat fix
+
+```yaml
+experiment_id: EXP-112
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-13T11:06:12+08:00
+  - status: RUNNING
+    at: 2026-09-13T11:06:12+08:00
+prior_experiment: EXP-111
+hypothesis: The direct-consumer/concurrent-cancel fix builds cleanly, preserves the complete ordinary package suite, installs the exact module, and produces a provenance-bound immutable image and dual-model smoke suitable for the next live fault.
+single_variable: Replace only the F1 follow-up source from EXP-105; catalog, config, models, build type, image tag and smoke input remain frozen.
+lifecycle: ISOLATED_STACK
+success_criteria: Fresh four-package symlink build passes; complete ordinary so101_demo_py suite has zero errors/failures/skips; source/install runtime trees and console paths match; rebuilt immutable image and both model smokes pass; cleanup is exact.
+failure_criteria: Any build/test/provenance/image/model/cleanup failure or mixed path blocks live fault retry.
+invalid_criteria: Reused scratch, tempfile outside registered NVMe scratch, wrong interpreter/overlay, benchmark collection, or dirty provenance.
+provenance:
+  preregistration_source_commit: 918ddc0985fd70f19a3b9dceb2feeae6e940d8a8
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-multipoint-v1/install
+retention_rule: Retain all build/test/image/smoke evidence and scratch; delete nothing without explicit user authorization.
 decision: RUN
-next_experiment: EXP-111
+next_experiment: EXP-112
 ```
