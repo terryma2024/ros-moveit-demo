@@ -108,6 +108,7 @@ class _HeartbeatWatchdog:
         if not self._fault.is_set():
             self._reason = reason
             self._fault.set()
+            self._owner._watchdog_revoked(self._lease, reason)
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -203,6 +204,8 @@ class ParallelWorker:
         self._quarantined = False
         self._local_seals = {}
         self._lease_request_sequence = 0
+        self._revocation_lock = threading.Lock()
+        self._revocations = {}
 
     def _fault(self, boundary, phase):
         if self._fault_hook is not None:
@@ -228,7 +231,63 @@ class ParallelWorker:
     def request_stop(self) -> None:
         """Atomically fence all later lease renewal and execution boundaries."""
         self._stop_requested.set()
+        with self._lease_lock:
+            lease = self._active_lease
+        if lease is not None:
+            self._start_revocation(lease)
         self._stop_watchdog()
+
+    def _watchdog_revoked(self, lease, _reason) -> None:
+        """Fence first, then stop an exact in-flight lease off the execution lock."""
+        with self._lease_lock:
+            current = self._active_lease
+            if current is None or _lease_key(current) != _lease_key(lease):
+                return
+        self._stop_requested.set()
+        self._start_revocation(lease)
+
+    def _start_revocation(self, lease):
+        """Start at most one independent cancel-and-confirm path per exact lease."""
+        key = _lease_key(lease)
+        with self._revocation_lock:
+            existing = self._revocations.get(key)
+            if existing is not None:
+                return existing
+            record = {
+                "event": threading.Event(),
+                "fenced": False,
+                "stopped": False,
+                "confirmed": False,
+            }
+            self._revocations[key] = record
+
+        def revoke():
+            try:
+                try:
+                    record["fenced"] = self._broker.cancel_generation(
+                        lease.worker_id, lease.worker_generation
+                    ) is True
+                except Exception:
+                    pass
+                try:
+                    record["stopped"] = self._runtime.cancel_motion(lease) is True
+                except Exception:
+                    pass
+                try:
+                    record["confirmed"] = (
+                        self._runtime.confirm_no_controller_goal(lease) is True
+                    )
+                except Exception:
+                    pass
+            finally:
+                record["event"].set()
+
+        threading.Thread(
+            target=revoke,
+            name=f"parallel-worker-revocation-{lease.worker_id}",
+            daemon=True,
+        ).start()
+        return record
 
     def _assert_running(self) -> None:
         if self._stop_requested.is_set():
@@ -458,21 +517,12 @@ class ParallelWorker:
         return decision
 
     def _safe_stop(self, lease, *, action_may_have_started):
-        fenced = stopped = confirmed = False
+        record = self._start_revocation(lease)
+        record["event"].wait(self._config.heartbeat_timeout_s)
+        fenced = record["fenced"] is True
+        stopped = record["stopped"] is True
+        confirmed = record["confirmed"] is True
         absence_proven = not action_may_have_started
-        try:
-            fenced = self._broker.cancel_generation(
-                self._worker_id, lease.worker_generation) is True
-        except Exception:
-            pass
-        try:
-            stopped = self._runtime.cancel_motion(lease) is True
-        except Exception:
-            pass
-        try:
-            confirmed = self._runtime.confirm_no_controller_goal(lease) is True
-        except Exception:
-            pass
         if action_may_have_started:
             try:
                 absence_proven = (

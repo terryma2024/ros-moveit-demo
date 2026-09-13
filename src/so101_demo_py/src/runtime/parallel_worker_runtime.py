@@ -237,6 +237,32 @@ class WorkerOwnedProcessTree:
         with self._lock:
             self._shutdown_locked()
 
+    def stop(self, expected):
+        """Retire one exact owned child without signalling its Worker siblings."""
+        with self._lock:
+            matches = [item for item in self._children if item[0] == expected]
+            if not matches:
+                return True
+            identity, child = matches[0]
+            if child.poll() is None:
+                if not self._matches(identity):
+                    raise RuntimeError(f"{identity.role}: identity changed")
+                try:
+                    self._signal_process(identity.pid, signal.SIGINT)
+                    child.wait(timeout=self._interrupt_timeout_s)
+                except subprocess.TimeoutExpired:
+                    if not self._matches(identity):
+                        raise RuntimeError(f"{identity.role}: identity changed")
+                    self._signal_process(identity.pid, signal.SIGTERM)
+                    child.wait(timeout=self._terminate_timeout_s)
+                except ProcessLookupError:
+                    pass
+            self._children = [
+                item for item in self._children if item[0] != identity
+            ]
+            self._write_manifest_locked()
+            return True
+
     def _shutdown_locked(self):
         failures = []
         for identity, child in reversed(self._children):
@@ -1151,7 +1177,21 @@ class ParallelWorkerRuntime:
         return (capture.path,)
 
     def cancel_motion(self, lease: Any) -> bool:
-        return self._cancel_motion(lease) is True
+        key = self._lease_key(lease)
+        active = self._active_lease
+        if active is None or self._lease_key(active) != key:
+            return False
+        child = self._execute_consumers.get(key)
+        consumer_stopped = True
+        if child is not None:
+            try:
+                consumer_stopped = self._processes.stop(child) is not False
+            except Exception:
+                consumer_stopped = False
+            if consumer_stopped:
+                self._execute_consumers.pop(key, None)
+        controller_stopped = self._cancel_motion(lease) is True
+        return consumer_stopped and controller_stopped
 
     def confirm_no_controller_goal(self, lease: Any) -> bool:
         return self._confirm_no_controller_goal(lease) is True
