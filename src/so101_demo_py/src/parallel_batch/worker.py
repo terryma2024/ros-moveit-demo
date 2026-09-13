@@ -241,11 +241,10 @@ class ParallelWorker:
         """Fence first, then stop an exact in-flight lease off the execution lock."""
         with self._lease_lock:
             current = self._active_lease
-            if current is None or _lease_key(current) != _lease_key(lease):
-                return
+        if current is None or _lease_key(current) != _lease_key(lease):
+            return
         self._stop_requested.set()
-        self._record_revocation(lease, "WATCHDOG_REVOKED", reason=_reason)
-        self._start_revocation(lease)
+        self._start_revocation(lease, watchdog_reason=_reason)
 
     def _record_revocation(self, lease, phase, **details) -> None:
         """Persist audit evidence without ever delaying the safety path on failure."""
@@ -255,7 +254,7 @@ class ParallelWorker:
         except Exception:
             pass
 
-    def _start_revocation(self, lease):
+    def _start_revocation(self, lease, *, watchdog_reason=None):
         """Start at most one independent cancel-and-confirm path per exact lease."""
         key = _lease_key(lease)
         with self._revocation_lock:
@@ -264,6 +263,7 @@ class ParallelWorker:
                 return existing
             record = {
                 "event": threading.Event(),
+                "audit_event": threading.Event(),
                 "fenced": False,
                 "stopped": False,
                 "confirmed": False,
@@ -271,6 +271,18 @@ class ParallelWorker:
             self._revocations[key] = record
 
         def revoke():
+            audit = []
+
+            def note(phase, **details):
+                audit.append((
+                    phase,
+                    {
+                        "recorded_wall_time_ns": time.time_ns(),
+                        "recorded_monotonic_ns": time.monotonic_ns(),
+                        **details,
+                    },
+                ))
+
             def fence_broker():
                 try:
                     record["fenced"] = self._broker.cancel_generation(
@@ -285,7 +297,9 @@ class ParallelWorker:
                 daemon=True,
             )
             try:
-                self._record_revocation(lease, "CANCEL_REQUESTED")
+                if watchdog_reason is not None:
+                    note("WATCHDOG_REVOKED", reason=watchdog_reason)
+                note("CANCEL_REQUESTED")
                 broker_thread.start()
                 try:
                     record["stopped"] = self._runtime.cancel_motion(lease) is True
@@ -297,8 +311,7 @@ class ParallelWorker:
                     )
                 except Exception:
                     pass
-                self._record_revocation(
-                    lease,
+                note(
                     "CONTROLLER_CANCEL_RESULT",
                     motion_stopped=record["stopped"] is True,
                     controllers_confirmed=record["confirmed"] is True,
@@ -306,14 +319,21 @@ class ParallelWorker:
             finally:
                 if broker_thread.ident is not None:
                     broker_thread.join()
-                self._record_revocation(
-                    lease,
+                note(
                     "CANCEL_RESULT",
                     broker_fenced=record["fenced"] is True,
                     motion_stopped=record["stopped"] is True,
                     controllers_confirmed=record["confirmed"] is True,
                 )
+                # Safety completion is observable before any durable audit I/O.
+                # Missing audit receipts fail later evidence gates closed, but a
+                # blocked recorder can never delay controller cancellation.
                 record["event"].set()
+                try:
+                    for phase, details in audit:
+                        self._record_revocation(lease, phase, **details)
+                finally:
+                    record["audit_event"].set()
 
         threading.Thread(
             target=revoke,
@@ -552,6 +572,7 @@ class ParallelWorker:
     def _safe_stop(self, lease, *, action_may_have_started):
         record = self._start_revocation(lease)
         record["event"].wait(self._config.heartbeat_timeout_s)
+        record["audit_event"].wait(self._config.heartbeat_timeout_s)
         fenced = record["fenced"] is True
         stopped = record["stopped"] is True
         confirmed = record["confirmed"] is True

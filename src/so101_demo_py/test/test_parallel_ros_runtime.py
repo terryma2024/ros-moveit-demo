@@ -12,6 +12,9 @@ import pytest
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
+EXPECTED_FINAL_CUP_POSE_WORLD = (
+    -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,
+)
 
 
 def _lease():
@@ -892,6 +895,35 @@ def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
     observed = (*expected[:-1], "/zeta", "/alpha", "/alpha", *(
         f"/unknown_{index:02d}_" + "x" * 180 for index in range(24)
     ))
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
+    observation = InitialGateObservation(
+        reset_epoch="reset-2", simulation_session_id="session-1",
+        source_frame_monotonic_s=11.0, joint_positions=(0.0,) * 6,
+        active_controller_goal_ids=(), moveit_attached_object_ids=(),
+        has_contact=False, worker_node_fqns=observed,
+    )
+    ports = ParallelRosRuntimePorts.for_test(
+        resources=SimpleNamespace(session_id="session-1"),
+        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
+        observe_initial=lambda _boundary: observation,
+    )
+
+    with pytest.raises(RuntimeError) as rejected_error:
+        ports.initial_gate(_lease(), reset)
+    rejection, node_payload = str(rejected_error.value).split(";worker_nodes=", 1)
+    assert rejection == "POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes"
+    diagnostic = json.loads(node_payload)
+    assert diagnostic["missing"] == [expected[-1]]
+    assert diagnostic["duplicates"] == ["/alpha"]
+    ordered_unexpected = [
+        node[:96] for node in sorted(set(observed) - set(expected))
+    ]
+    assert diagnostic["unexpected"]
+    assert diagnostic["unexpected"] == ordered_unexpected[:len(diagnostic["unexpected"])]
+    assert len(diagnostic["unexpected"]) <= 16
+    assert diagnostic["truncated"] is True
+    assert len(node_payload.encode()) <= 320
+    assert _bounded_failure_message(rejected_error.value) == str(rejected_error.value)
 
 
 def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
@@ -982,37 +1014,6 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
             "capture_errors": [],
         } if failed else None),
     }
-    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
-    observation = InitialGateObservation(
-        reset_epoch="reset-2", simulation_session_id="session-1",
-        source_frame_monotonic_s=11.0, joint_positions=(0.0,) * 6,
-        active_controller_goal_ids=(), moveit_attached_object_ids=(),
-        has_contact=False, worker_node_fqns=observed,
-    )
-    ports = ParallelRosRuntimePorts.for_test(
-        resources=SimpleNamespace(session_id="session-1"),
-        catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
-        observe_initial=lambda _boundary: observation,
-    )
-
-    with pytest.raises(RuntimeError) as rejected_error:
-        ports.initial_gate(_lease(), reset)
-    rejection, node_payload = str(rejected_error.value).split(";worker_nodes=", 1)
-    assert rejection == "POINT_INITIAL_GATE_OBSERVATION_REJECTED:worker_nodes"
-    diagnostic = json.loads(node_payload)
-    assert diagnostic["missing"] == [expected[-1]]
-    assert diagnostic["duplicates"] == ["/alpha"]
-    ordered_unexpected = [
-        node[:96] for node in sorted(set(observed) - set(expected))
-    ]
-    assert diagnostic["unexpected"]
-    assert diagnostic["unexpected"] == ordered_unexpected[:len(diagnostic["unexpected"])]
-    assert len(diagnostic["unexpected"]) <= 16
-    assert diagnostic["truncated"] is True
-    assert len(node_payload.encode()) <= 320
-    assert _bounded_failure_message(rejected_error.value) == str(rejected_error.value)
-
-
 def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     from so101_demo.application.object_pose import LocalizationError
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
@@ -1507,6 +1508,7 @@ def test_exit_zero_unverifiable_dynamic_manifest_never_passes(
             "dynamic_policy_identity": lambda: (
                 str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
             ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
         },
     )
 
@@ -1555,6 +1557,7 @@ def test_exact_dynamic_manifest_maps_terminal_business_outcome(
             "dynamic_policy_identity": lambda: (
                 str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
             ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
         },
     )
 
@@ -1566,6 +1569,85 @@ def test_exact_dynamic_manifest_maps_terminal_business_outcome(
 
     assert receipt.decision.status.value == expected_status
     assert receipt.decision.reason == expected_reason
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["GRIPPER_GOAL_TIMEOUT", "GRIPPER_RESULT_TIMEOUT"],
+)
+def test_post_submission_error_without_controller_settlement_is_indeterminate(
+        tmp_path, monkeypatch, failure):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    lease = _lease()
+    worker_root = tmp_path / "worker-01"
+    manifest_path = (
+        worker_root / "attempts" / lease.point_id / lease.attempt_id
+        / "working" / "dynamic" / "dynamic-execute-manifest.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    policy = tmp_path / "mujoco.yaml"
+    policy.write_bytes(b"policy\n")
+    document = _dynamic_execute_manifest(
+        lease, session_id="session-1", policy_path=policy, status="ERROR"
+    )
+    terminal = {
+        "reset_epoch": 17,
+        "simulation_step": 5000,
+        "publisher_sequence": 1000,
+        "cup_position_world_m": [-0.08, -0.25, 0.1648],
+        "cup_orientation_world_xyzw": [0.0, 0.0, 0.0, 1.0],
+        "cup_linear_velocity_world_m_s": [0.0, 0.0, 0.0],
+        "cup_angular_velocity_world_rad_s": [0.0, 0.0, 0.0],
+        "left_contact_count": 0,
+        "right_contact_count": 0,
+        "maximum_normal_force_n": 0.2,
+        "table_contact": True,
+    }
+    scene = {
+        "attached_object_ids": [],
+        "world_primitive_counts": {"plastic_cup": 13},
+    }
+    document.update(
+        failure=failure,
+        state_trace=["IDLE", "PREPARE_OPEN_GRIPPER", "ERROR"],
+        transition_count=2,
+        state_events=[{
+            "state": "PREPARE_OPEN_GRIPPER",
+            "before": {**terminal, "publisher_sequence": 10},
+            "after": {**terminal, "publisher_sequence": 11},
+            "validation_failure": failure,
+        }],
+        failure_evidence={
+            "failure_boundary_state": "PREPARE_OPEN_GRIPPER",
+            "physical_action_proven_absent": False,
+            "terminal_sample": terminal,
+            "planning_scene_readback": scene,
+            "capture_errors": [],
+        },
+    )
+    manifest_path.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 256))
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+        dependencies={
+            "dynamic_policy_identity": lambda: (
+                str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
+            ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
+        },
+    )
+
+    receipt = ports.execute_result(
+        lease,
+        SimpleNamespace(reset_epoch="reset-17"),
+        SimpleNamespace(pid=417),
+    )
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED"
 
 
 def test_runtime_rejects_semantically_impossible_done_trace(tmp_path, monkeypatch):
@@ -1595,6 +1677,57 @@ def test_runtime_rejects_semantically_impossible_done_trace(tmp_path, monkeypatc
             "dynamic_policy_identity": lambda: (
                 str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
             ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
+        },
+    )
+
+    receipt = ports.execute_result(
+        lease,
+        SimpleNamespace(reset_epoch="reset-17"),
+        SimpleNamespace(pid=417),
+    )
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+@pytest.mark.parametrize("corruption", ["producer_target", "zero_quaternion"])
+def test_runtime_rejects_untrusted_final_pose_claims(
+        tmp_path, monkeypatch, corruption):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    lease = _lease()
+    worker_root = tmp_path / "worker-01"
+    manifest_path = (
+        worker_root / "attempts" / lease.point_id / lease.attempt_id
+        / "working" / "dynamic" / "dynamic-execute-manifest.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    policy = tmp_path / "mujoco.yaml"
+    policy.write_bytes(b"policy\n")
+    document = _dynamic_execute_manifest(
+        lease, session_id="session-1", policy_path=policy
+    )
+    if corruption == "producer_target":
+        document["final_samples"][0]["cup_position_world_m"][:2] = [9.0, 9.0]
+        validation = next(
+            item for item in document["state_events"]
+            if item["state"] == "VALIDATE_FINAL_PLACEMENT"
+        )
+        validation["expected_cup_pose_world"][:2] = [9.0, 9.0]
+    else:
+        document["final_samples"][0]["cup_orientation_world_xyzw"] = [0.0] * 4
+    manifest_path.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 0))
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+        dependencies={
+            "dynamic_policy_identity": lambda: (
+                str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
+            ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
         },
     )
 

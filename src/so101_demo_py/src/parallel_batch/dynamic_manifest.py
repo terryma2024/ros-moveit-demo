@@ -43,6 +43,18 @@ def _finite_vector(value: object, length: int) -> bool:
     )
 
 
+def _unit_quaternion(value: object) -> bool:
+    return (
+        _finite_vector(value, 4)
+        and math.isclose(
+            math.sqrt(sum(component * component for component in value)),
+            1.0,
+            rel_tol=1e-6,
+            abs_tol=1e-6,
+        )
+    )
+
+
 def _physical_sample(sample: object, reset_epoch: int) -> bool:
     if type(sample) is not dict:
         return False
@@ -53,7 +65,7 @@ def _physical_sample(sample: object, reset_epoch: int) -> bool:
         and type(sample.get("publisher_sequence")) is int
         and sample["publisher_sequence"] > 0
         and _finite_vector(sample.get("cup_position_world_m"), 3)
-        and _finite_vector(sample.get("cup_orientation_world_xyzw"), 4)
+        and _unit_quaternion(sample.get("cup_orientation_world_xyzw"))
         and _finite_vector(sample.get("cup_linear_velocity_world_m_s"), 3)
         and _finite_vector(sample.get("cup_angular_velocity_world_rad_s"), 3)
         and type(sample.get("left_contact_count")) is int
@@ -173,7 +185,12 @@ def _upright_tilt(orientation: list[float]) -> float:
     return math.acos(cosine)
 
 
-def _done_contract(document: Mapping[str, object], reset_epoch: int, events) -> None:
+def _done_contract(
+    document: Mapping[str, object],
+    reset_epoch: int,
+    events,
+    expected_final_cup_pose_world: object,
+) -> None:
     if document.get("failure") is not None:
         _fail("DONE")
     release = document.get("release_marker_sequence")
@@ -191,8 +208,19 @@ def _done_contract(document: Mapping[str, object], reset_epoch: int, events) -> 
         (item for item in events if item.get("state") == "VALIDATE_FINAL_PLACEMENT"), None
     )
     expected = None if validation is None else validation.get("expected_cup_pose_world")
-    if not _finite_vector(expected, 7):
+    if not _finite_vector(expected, 7) or not _unit_quaternion(expected[3:]):
         _fail("FINAL_PHYSICAL")
+    trusted = expected_final_cup_pose_world
+    if trusted is not None:
+        if not _finite_vector(trusted, 7) or not _unit_quaternion(trusted[3:]):
+            _fail("TRUSTED_FINAL_TARGET")
+        position_error = math.dist(expected[:3], trusted[:3])
+        orientation_alignment = abs(sum(
+            left * right for left, right in zip(expected[3:], trusted[3:])
+        ))
+        if position_error > 1e-9 or 1.0 - orientation_alignment > 1e-9:
+            _fail("TRUSTED_FINAL_TARGET")
+        expected = trusted
     position = final["cup_position_world_m"]
     linear = final["cup_linear_velocity_world_m_s"]
     angular = final["cup_angular_velocity_world_rad_s"]
@@ -250,7 +278,8 @@ def _error_contract(
 
 
 def validate_dynamic_manifest_semantics(
-    document: Mapping[str, object], *, expected_status: str, expected_reset_epoch: int
+    document: Mapping[str, object], *, expected_status: str, expected_reset_epoch: int,
+    expected_final_cup_pose_world: list[float] | None = None,
 ) -> None:
     """Reject structurally present but physically or procedurally incoherent results."""
 
@@ -269,6 +298,11 @@ def validate_dynamic_manifest_semantics(
     events = _event_contract(document, states, boundary)
     _planning_contract(document, states)
     if expected_status == "DONE":
-        _done_contract(document, expected_reset_epoch, events)
+        _done_contract(
+            document,
+            expected_reset_epoch,
+            events,
+            expected_final_cup_pose_world,
+        )
     else:
         _error_contract(document, expected_reset_epoch, events, boundary)

@@ -108,6 +108,7 @@ class PreparedBatch:
     config_path: Path
     points_path: Path
     catalog: Mapping[str, Mapping[str, object]]
+    expected_final_cup_pose_world: tuple[float, ...]
     catalog_sha256: str
     selection_sha256: str
     broker_image: str
@@ -611,6 +612,18 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         raise CliError("PROVENANCE_VERIFICATION_FAILED") from error
     if not isinstance(provenance, Mapping) or not provenance:
         raise CliError("PROVENANCE_VERIFICATION_FAILED")
+    try:
+        from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
+        from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
+
+        package_root = Path(__file__).resolve().parents[2]
+        loaded_policy = load_dynamic_policy_variant(package_root, backend="mujoco")
+        expected_final_cup_pose_world = compose_pose(
+            loaded_policy.template.place_tcp_world,
+            inverse_pose(loaded_policy.template.cup_to_tcp_grasp),
+        ).values
+    except Exception as error:
+        raise CliError("TRUSTED_FINAL_TARGET_INVALID") from error
     manifest = {
         "schema_version": 1,
         "batch_id": request.batch_id,
@@ -618,6 +631,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "selected_point_ids": list(selected),
         "selection_sha256": selection_sha,
         "catalog_sha256": catalog_sha,
+        "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
         "worker_count": worker_count,
         "max_points_per_worker": max_points,
         "evidence_root": str(evidence_root),
@@ -650,6 +664,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         config_path,
         options.points.resolve(),
         catalog,
+        tuple(expected_final_cup_pose_world),
         catalog_sha,
         selection_sha,
         options.broker_image,
@@ -1818,7 +1833,11 @@ class ProductionBatchComposition:
         worker_roots = {
             worker.worker_id: worker.worker_root for worker in self.resource_manifest.workers
         }
-        self.result_verifier = SealedResultAdapter(worker_roots, spec.request.run_mode)
+        self.result_verifier = SealedResultAdapter(
+            worker_roots,
+            spec.request.run_mode,
+            expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
+        )
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id

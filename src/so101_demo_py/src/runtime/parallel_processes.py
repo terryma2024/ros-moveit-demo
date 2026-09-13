@@ -264,6 +264,11 @@ class ProcessSupervisor:
             members = self._group_members_reader(expected.pgid)
             if actual is None and not members:
                 continue
+            if actual is None:
+                # A persisted numeric PGID cannot prove continuous ownership
+                # after the recorded leader has disappeared. The entire group
+                # may have exited and the number may now name unrelated work.
+                raise SupervisorError("RECOVERY_GROUP_OWNERSHIP_UNPROVEN")
             if actual is not None and actual != expected:
                 raise SupervisorError("PID_REUSE_OR_IDENTITY_MISMATCH")
 

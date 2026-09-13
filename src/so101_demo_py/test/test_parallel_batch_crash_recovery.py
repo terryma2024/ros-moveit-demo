@@ -23,6 +23,9 @@ from so101_demo.parallel_batch.journal import CoordinatorJournal
 CONFIG = load_parallel_runtime_config(
     Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v1.yaml"
 )
+EXPECTED_FINAL_CUP_POSE_WORLD = (
+    -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,
+)
 
 
 class Clock:
@@ -255,7 +258,8 @@ def test_real_artifact_crash_is_adjudicated_from_fsync_and_seal_state(
     clock = Clock()
     worker_root = tmp_path / "workers/worker-01"
     result_port = artifacts.SealedResultAdapter(
-        {"worker-01": worker_root}, RunMode.EXECUTE
+        {"worker-01": worker_root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
     )
     request = BatchRequest(
         "batch-real-seal", RunMode.EXECUTE, ("p1",), 1, 1, tmp_path
@@ -315,7 +319,8 @@ def test_real_prestart_late_seal_is_terminal_and_cannot_be_released_for_retry(
     clock = Clock()
     worker_root = tmp_path / "workers/worker-01"
     result_port = artifacts.SealedResultAdapter(
-        {"worker-01": worker_root}, RunMode.EXECUTE
+        {"worker-01": worker_root}, RunMode.EXECUTE,
+        expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
     )
     request = BatchRequest(
         "batch-real-late", RunMode.EXECUTE, ("p1", "p2"), 1, 2, tmp_path
