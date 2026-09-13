@@ -858,6 +858,56 @@ def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
     assert result[0].terminal_status is None
 
 
+def test_revocation_does_not_wait_for_blocked_broker_fence_before_motion_cancel():
+    """A slow Broker fence must not delay exact-lease controller cancellation."""
+
+    fake = Fake(RunMode.EXECUTE)
+    worker = ParallelWorker(fake.ports())
+    lease = fake.coordinator.grant_lease(
+        "w1", generation=1, request_key="lease-for-revocation"
+    )
+    with worker._lease_lock:
+        worker._active_lease = lease
+
+    broker_entered = threading.Event()
+    release_broker = threading.Event()
+    motion_cancelled = threading.Event()
+    original_cancel_motion = fake.runtime.cancel_motion
+
+    def blocked_broker_fence(worker_id, generation):
+        fake.broker.calls.append(("cancel_generation", worker_id, generation))
+        broker_entered.set()
+        assert release_broker.wait(3.0)
+        return True
+
+    def observe_motion_cancel(current):
+        motion_cancelled.set()
+        return original_cancel_motion(current)
+
+    fake.broker.cancel_generation = blocked_broker_fence
+    fake.runtime.cancel_motion = observe_motion_cancel
+    revocation = worker._start_revocation(lease)
+    assert broker_entered.wait(1.0)
+    try:
+        assert motion_cancelled.wait(0.2), (
+            "motion cancellation was serialized behind Broker fencing"
+        )
+    finally:
+        release_broker.set()
+
+    assert revocation["event"].wait(1.0)
+    assert fake.broker.calls.count(("cancel_generation", "w1", 1)) == 1
+    assert fake.runtime.calls[-2:] == [
+        "cancel_motion", "confirm_no_controller_goal"
+    ]
+    assert revocation == {
+        "event": revocation["event"],
+        "fenced": True,
+        "stopped": True,
+        "confirmed": True,
+    }
+
+
 @pytest.mark.parametrize("mode", [RunMode.EXECUTE, RunMode.PLAN_ONLY, RunMode.DRY_RUN])
 def test_ack_deadlines_use_frozen_values_from_first_entry(mode):
     fake = Fake(mode)
