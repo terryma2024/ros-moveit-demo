@@ -71,3 +71,6 @@ assets/captures
 **/blob-report/
 
 .envrc
+
+# Local Codex task state
+.codex-task/
