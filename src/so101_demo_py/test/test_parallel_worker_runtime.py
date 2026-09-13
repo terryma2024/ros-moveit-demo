@@ -1,6 +1,7 @@
 from dataclasses import replace
 import hashlib
 import io
+import json
 from pathlib import Path
 import signal
 import sys
@@ -218,6 +219,54 @@ def test_cancel_motion_starts_controller_cancel_while_consumer_stop_is_blocked(
         ("stop-complete", 417),
     ]
     assert key not in runtime._execute_consumers
+
+
+def test_revocation_receipts_are_durable_exact_lease_events(tmp_path):
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=_ProcessGroup(),
+    )
+    lease = _lease()
+    runtime._active_lease = lease
+
+    assert runtime.record_revocation(
+        lease, "WATCHDOG_REVOKED", reason="COORDINATOR_LOST"
+    ) is True
+    assert runtime.record_revocation(lease, "CANCEL_REQUESTED") is True
+    assert runtime.record_revocation(
+        lease,
+        "CONTROLLER_CANCEL_RESULT",
+        motion_stopped=True,
+        controllers_confirmed=True,
+    ) is True
+    assert runtime.record_revocation(
+        lease,
+        "CANCEL_RESULT",
+        broker_fenced=True,
+        motion_stopped=True,
+        controllers_confirmed=True,
+    ) is True
+
+    path = runtime.resources.worker_root / "revocation-events.jsonl"
+    assert path.stat().st_mode & 0o777 == 0o600
+    receipts = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [value["phase"] for value in receipts] == [
+        "WATCHDOG_REVOKED", "CANCEL_REQUESTED",
+        "CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT",
+    ]
+    assert all(value["attempt_id"] == lease.attempt_id for value in receipts)
+    assert all(value["worker_generation"] == lease.worker_generation for value in receipts)
+    assert all(type(value["monotonic_ns"]) is int for value in receipts)
+
+    with pytest.raises(RuntimeError, match="not active"):
+        runtime.record_revocation(
+            SimpleNamespace(**{**vars(lease), "attempt_id": "stale-attempt"}),
+            "WATCHDOG_REVOKED",
+            reason="COORDINATOR_LOST",
+        )
 
 
 def test_inference_rgb_must_be_newer_than_reset_sim_clock_and_same_session(tmp_path):

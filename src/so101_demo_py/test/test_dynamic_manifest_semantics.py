@@ -159,6 +159,24 @@ def test_stage_specific_business_failures_remain_classifiable(trace):
     validate(manifest(trace, status="ERROR"), "ERROR")
 
 
+def test_failed_micro_lift_event_is_ordered_at_failure_boundary_before_recovery():
+    trace = DONE_TRACE[:6] + [
+        "MICRO_LIFT", "RECOVER_OPEN_GRIPPER", "RECOVER_DETACH_GAZEBO",
+        "RECOVER_DETACH_MOVEIT", "RECOVER_SYNC_WORLD_OBJECT",
+        "RECOVER_RETREAT", "ERROR",
+    ]
+    document = manifest(trace, status="ERROR")
+    failed = event("MICRO_LIFT", 500)
+    failed["validation_failure"] = "DYNAMIC_MICRO_LIFT_NOT_PROVED"
+    document["state_events"].insert(5, failed)
+
+    validate(document, "ERROR")
+
+    document["state_events"].append(document["state_events"].pop(5))
+    with pytest.raises(ValueError, match="STATE_EVENTS"):
+        validate(document, "ERROR")
+
+
 def test_pre_action_failure_requires_explicit_no_action_authority():
     document = manifest(["IDLE", "ERROR"], status="ERROR")
     document["state_events"] = []
