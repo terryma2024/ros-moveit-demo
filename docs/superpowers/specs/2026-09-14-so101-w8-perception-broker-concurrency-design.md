@@ -165,8 +165,10 @@ W8 的 YOLO 队列容量设为 8，覆盖每个 Worker 的一个在途 YOLO 请�
 1. reset 和 `point_initial_gate` 通过。
 2. 等待该 Worker 的 ROS clock 大于 0。
 3. 建立 `/cup_pose` subscription 并取得 subscription-ready receipt。
-4. 冻结当前 attempt 的 ROS 起始时间、lease identity、reset epoch 和 frame watermark。
-5. 只接受严格晚于这些边界且 identity 一致的 pose。
+4. 清空 clock-ready 之前暂存的 pose，并冻结当前 attempt 的 ROS 起始时间、单调时钟接收边界、
+   lease identity、reset epoch 和 frame watermark。
+5. 只接受接收单调时间严格晚于 READY、source stamp 不早于 READY 时 ROS 时间、且 identity 一致
+   的 pose。仿真冻结期间 ROS 时间可以保持不变，因此 source stamp 允许与 READY 时刻相等。
 
 旧消息、未来时间戳、前一 attempt 的 retransmission 和时钟回退继续拒绝。实现不增加 future-skew
 容差；如果 ROS clock 在已进入 READY 后归零或回退，本 attempt 记为基础设施中断并走现有恢复。
