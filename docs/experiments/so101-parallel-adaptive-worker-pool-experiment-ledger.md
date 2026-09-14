@@ -7,7 +7,7 @@ success_contract: Complete all 13 implementation tasks, automated gates, two liv
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
+current_commit: 62cd8e9424a47e25fe5a9e9729268294ee2a13b9
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -22,13 +22,14 @@ confirmed_conclusions:
   - Task 7 per-model adaptive perception queues passed 367 Broker, runtime, IPC, and spec tests; commit a50aae938.
   - Task 8 first-failure convergence, verified persistent-claim release, exact external cleanup, adaptive aggregate output, and wrapper supervision passed the focused and specified regression gates; evidence is in task-08/failure-and-cleanup.md.
   - Task 10 exact startup and active-attempt fault injections each produced one W8-to-W6 transition, preserved task-external sentinels, completed every assigned point, and reported complete cleanup; accepted runs su09 and mr08.
+  - Task 11 uninjected adaptive execute regression completed all 20 points as PASSED at levels W8 and W6, with complete cleanup and fresh terminal visual evidence; accepted run e2001.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
 open_hypotheses:
   - the lightweight contracts and factory boundary can extend W1-W8 while preserving frozen v1 W1-W3 behavior and serialized bytes.
   - exact cleanup and persistent Domain markers are sufficient for safe fallback without broad process discovery.
 latest_checkpoint: CP-003
-next_experiment: EXP-003
+next_experiment: EXP-004
 ```
 
 ## Evidence policy
@@ -218,31 +219,80 @@ decision: Accept EXP-002B and proceed to the uninjected 20-point adaptive regres
 next_experiment: EXP-003
 ```
 
-## CP-003 — Fault-injection acceptance
+## EXP-003 — Full adaptive execute regression
+
+```yaml
+experiment_id: EXP-003
+status: VALID
+prior_experiment: EXP-002B
+hypothesis: The qualified adaptive ladder can complete the full 20-point catalog without injected faults while preserving each point's initial-state and sealed-evidence contracts.
+prediction: Every point passes, the final Worker level is one of W8, W6, W4, W2, or W1, all accepted attempts have fresh initial gates and complete evidence, terminal images agree with the batch result, and cleanup succeeds.
+single_variable: Remove fault injection and increase initial-points-per-worker from 1 to 3 for the full execute regression.
+lifecycle: ISOLATED_STACK
+batch_id: e2001
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/e2001
+provenance:
+  source_commit: 62cd8e9424a47e25fe5a9e9729268294ee2a13b9
+  package_source_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
+  install_prefix: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install/so101_demo_py
+  runtime_executable: /usr/bin/python3
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+  broker_image_id: sha256:3b1a6661a87359729b848cb92807c0e45f618ae2dec0e20a1f534e51f6148a79
+  broker_source_sha256: 286b5d9f4e994e897c1c01bb75c79d399dbbeaba573a7779424e4a498146a37e
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  grounded_manifest_sha256: 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+configuration:
+  initial_worker_count: 8
+  fallback_worker_counts: [6, 4, 2, 1]
+  initial_points_per_worker: 3
+  worker_start_timeout_s: 120
+  max_infra_attempts_per_point: 5
+  ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222]
+observed:
+  - W8 passed readiness and imported eight PASSED first-wave points. A later active attempt became invalid or indeterminate, so the runner retained those terminal results, interrupted the other 12 points, and performed one W8-to-W6 recovery.
+  - W6 passed readiness and committed all 12 unfinished points. The batch finished COMPLETED in 456.1064693250228 seconds with levels_used [8, 6], final_worker_count 6, and batch_cleanup_complete true.
+  - The accepted load was one point on each W8 Worker and two points on each W6 Worker.
+  - All 20 imported results were PASSED and had a valid POINT_INITIAL_GATE, a YOLO-first POSE_ACCEPTED receipt, DONE dynamic execution, empty final attached_object_ids, stable table support without fingertip contact, and a verified sealed hash tree. Grounded-SAM was not needed.
+  - All 20 terminal RGB images were opened in a contact sheet. P01, P09, P18, P19, and P20 were also opened at original resolution. Each frame shows the cup upright inside the red target ring and the open gripper retreated clear of the cup.
+  - The generated top-view state chart shows all P01 through P20 as successful and agrees with the aggregate result.
+  - Both generation owned-process manifests are empty. The cleanup receipt released Domains 215 through 220, no broker container remained, and the wrapper exited 0.
+visual_evidence:
+  terminal_contact_sheet: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-11/e2001-terminal-rgb-contact-sheet.png
+  terminal_contact_sheet_sha256: 55bdafb29999de2abb513b666a49a7ded61a766d2c1be1574666c8c6bc572434
+  top_view_png: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-11/e2001-top-view/so101-position-top-view.png
+  top_view_png_sha256: e2c2c3eceff87f952af4c41a9313b3f718fe1f01e44d1c17b2885ed14b5dba6b
+conclusion: The adaptive execute path completed the full catalog with 20 PASSED results and exact cleanup. Its allowed recovery preserved the eight W8 terminal points and completed the remaining 12 at W6.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/e2001
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-11
+decision: Accept EXP-003 and proceed to no-fallback performance samples for W1, W2, W4, W6, and W8.
+next_experiment: EXP-004
+```
+
+## CP-003 — Full execute acceptance
 
 ```yaml
 checkpoint_id: CP-003
-last_valid_experiment: EXP-002B
-current_hypothesis: The same qualified W8-to-W1 ladder can complete the 20-point catalog without injection and with every point passing its fresh initial-state gate.
-working_tree_status: clean at 3d35cb017caddcb7ffecc667f031fde25a162903 before this ledger update
-source_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
-accepted_batches: [su09, mr08]
-owned_processes: current Codex session only; accepted batch manifests are empty and the dedicated sentinel process groups were stopped after exact identity checks
+last_valid_experiment: EXP-003
+current_hypothesis: Each fixed Worker level can complete the same 20-point catalog without fallback and provide a comparable elapsed-time sample.
+working_tree_status: clean at 62cd8e9424a47e25fe5a9e9729268294ee2a13b9 before this ledger update
+source_commit: 62cd8e9424a47e25fe5a9e9729268294ee2a13b9
+accepted_batches: [su09, mr08, e2001]
+owned_processes: current Codex session only; e2001 generation manifests are empty and its task-owned tmux session exited
 preserved_processes: pre-existing process groups 3835752, 3835753, 3882463, and 3882464; tmux sessions codex and codex-task-so101-adaptive-worker-pool
 confirmed_conclusions:
-  - startup Worker loss before readiness grants no W8 lease and falls back once to W6.
-  - active-attempt Worker loss preserves eight W8 terminal results and sends only unfinished work to W6.
-  - both accepted batches released their Domains, sockets, broker container, and manifest-owned processes.
-  - exact task-external sentinel identities survived both fault injections.
+  - startup and active-attempt fault injection both converge through exact W8-to-W6 fallback without touching sentinels.
+  - the uninjected full execute regression passes all 20 points and all evidence-layer checks after one allowed W8-to-W6 recovery.
+  - e2001 terminal images and the top-view state chart agree with the 20/20 aggregate result.
+  - e2001 released its Domains, sockets, broker container, and manifest-owned processes.
 retained_runs:
-  - accepted: r/su09 and r/mr08
+  - accepted: r/su09, r/mr08, and r/e2001
   - diagnostic_or_invalid: r/su01 through r/su08 and r/mr01 through r/mr07
 archived_runs: []
 deletion_candidates:
   - all scratch trees under scratch/r31 through scratch/r39 after their recorded readback
   - no candidate may be deleted without explicit user authorization
 open_risks:
-  - uninjected 20-point execution and visual readback have not yet been qualified.
   - W1, W2, W4, W6, and W8 no-fallback performance samples have not yet been collected.
-next_command: run EXP-003 as batch e2001 with initial-points-per-worker 3
+next_command: implement and dry-run check scripts/run_so101_adaptive_worker_scaling.zsh
 ```
