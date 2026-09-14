@@ -59,7 +59,7 @@ typeset config="$repo_root/src/so101_demo_py/config/mujoco/parallel_batch_v1.yam
 typeset adaptive_config="$repo_root/src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml"
 typeset yolo_weights="/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt"
 typeset grounded_root="/data/work/so101-models/grounded-sam-v2-scipy-lock"
-typeset -A batch_ids=(1 ws101 2 ws201 4 ws401 6 ws601 8 ws801)
+typeset -A batch_ids=(1 wt101 2 wt201 4 wt401 6 wt601 8 wt801)
 
 function batch_command() {
   typeset requested_count="$1"
@@ -139,8 +139,8 @@ for count in $counts; do
 
   typeset elapsed_s
   elapsed_s=$(awk '$1 == "real" {print $2}' "$timing")
-  typeset status
-  status=$(jq -r '.status' "$aggregate")
+  typeset batch_status
+  batch_status=$(jq -r '.status' "$aggregate")
   integer point_passed
   point_passed=$(jq '[.point_statuses[] | select(. == "PASSED")] | length' "$aggregate")
   integer point_failed
@@ -150,7 +150,7 @@ for count in $counts; do
   typeset expected_levels="[$count]"
   typeset valid=false
   if (( exit_code == 0 && point_passed == 20 && point_failed == 0 )) \
-    && [[ "$status" == COMPLETED ]] \
+    && [[ "$batch_status" == COMPLETED ]] \
     && [[ "$levels_json" == "$expected_levels" ]] \
     && [[ $(jq -r '.batch_cleanup_complete' "$aggregate") == true ]]; then
     valid=true
