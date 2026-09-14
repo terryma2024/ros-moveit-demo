@@ -59,7 +59,7 @@ typeset config="$repo_root/src/so101_demo_py/config/mujoco/parallel_batch_v1.yam
 typeset adaptive_config="$repo_root/src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml"
 typeset yolo_weights="/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt"
 typeset grounded_root="/data/work/so101-models/grounded-sam-v2-scipy-lock"
-typeset -A batch_ids=(1 wx101 2 wx201 4 wx401 6 wx601 8 wx801)
+typeset -A batch_ids=(1 wy101 2 wy201 4 wy401 6 wy601 8 wy801)
 
 function batch_command() {
   typeset requested_count="$1"
