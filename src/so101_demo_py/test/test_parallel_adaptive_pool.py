@@ -364,6 +364,21 @@ def test_production_adapter_cleanup_false_is_infrastructure(tmp_path):
     assert result.cleanup_complete is False
 
 
+def test_nonzero_worker_can_degrade_after_verified_adaptive_cleanup(tmp_path):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.UNRUN}, cleanup=True),
+        worker_exit_codes=(17,),
+        adaptive_cleanup_complete=True,
+    )
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert result.infrastructure_failure.kind.value == "PROCESS_EXIT"
+    assert result.cleanup_complete is True
+
+
 def test_production_adapter_imports_only_fsync_located_terminal_results(tmp_path):
     pool = production_pool(
         tmp_path,

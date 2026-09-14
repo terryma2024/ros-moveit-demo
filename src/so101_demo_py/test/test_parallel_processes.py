@@ -282,6 +282,31 @@ def test_wait_repolls_worker_that_exits_between_poll_and_identity_readback():
     assert supervisor.processes == ()
 
 
+def test_adaptive_wait_reports_only_the_first_nonzero_and_returns_for_cleanup():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    failed = OwnedProcess("batch-1", "worker", 101, 101, ("failed",), 11)
+    running = OwnedProcess("batch-1", "worker", 102, 102, ("running",), 12)
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda pid: running if pid == running.pid else None,
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(failed, poll=lambda: 17)
+    supervisor._record_started(running, poll=lambda: None)
+    failures = []
+
+    codes = supervisor.wait_for_children(
+        deadline_monotonic_s=time.monotonic() + 1.0,
+        stop_on_nonzero=True,
+        on_nonzero=lambda process, code: failures.append((process, code)),
+    )
+
+    assert codes == (17,)
+    assert failures == [(failed, 17)]
+    assert supervisor.processes == (running,)
+
+
 def test_wait_boundedly_repolls_until_absent_child_becomes_waitable():
     from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
 

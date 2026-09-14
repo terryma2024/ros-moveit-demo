@@ -1334,6 +1334,40 @@ class WorkerResourceAllocator:
             released.append(value)
         self._domain_claims = tuple(released)
 
+    def release_persistent_claims(self, *, cleanup_verified: bool) -> bool:
+        """Publish RELEASED only while holding claims after exact cleanup readback."""
+
+        if type(cleanup_verified) is not bool or not cleanup_verified:
+            raise ResourceAllocationError('CLEANUP_NOT_VERIFIED')
+        if self._closed or self._manifest is None:
+            raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
+        if not self.allocation_policy.persistent_cleanup_claims:
+            return True
+        for worker in self._manifest.workers:
+            if self.probe.socket_in_use(worker.socket_path):
+                raise ResourceAllocationError('CLEANUP_SOCKET_ACTIVE')
+            if self.probe.ros_domain_in_use(worker.ros_domain_id):
+                raise ResourceAllocationError('CLEANUP_ROS_DOMAIN_ACTIVE')
+        released = []
+        for record in self._domain_claims:
+            value = dict(record)
+            if value.get('claim_state') == 'RELEASED':
+                released.append(value)
+                continue
+            descriptor = self._claim_fds.get(value.get('domain_id'))
+            if (
+                descriptor is None
+                or value.get('claim_state') != 'ACTIVE'
+                or value.get('batch_id') != self.batch_id
+                or value.get('evidence_root') != str(self.evidence_root)
+            ):
+                raise ResourceAllocationError('ROS_DOMAIN_CLAIM_RELEASE')
+            value.update(claim_state='RELEASED', cleanup_verified=True)
+            _replace_fd_contents(descriptor, _json_bytes(value) + b'\n')
+            released.append(value)
+        self._domain_claims = tuple(released)
+        return True
+
     def _probe_snapshot(self) -> ResourceSnapshot:
         try:
             snapshot = self.probe.snapshot()

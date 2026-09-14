@@ -31,14 +31,22 @@ from so101_demo.parallel_batch.artifacts import (
 )
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchRequest,
+    AdaptiveBatchSummary,
     AdaptiveWorkerOptions,
+    BatchTerminalStatus,
     PoolRequest,
     load_adaptive_worker_options,
 )
 from so101_demo.parallel_batch.adaptive_pool import (
     AdaptivePoolContext,
+    ProductionAdaptivePoolFactory,
     WorkerReadinessReceipt,
     WorkerStartGate,
+    adaptive_socket_paths,
+)
+from so101_demo.parallel_batch.adaptive_runner import (
+    AdaptiveBatchRunner,
+    AdaptiveRunnerError,
 )
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
@@ -2096,6 +2104,7 @@ class ProductionBatchComposition:
         self.adaptive_attempt_statuses = {}
         self.adaptive_result_locations = {}
         self.adaptive_cleanup_complete = False
+        self.adaptive_diagnostics = []
         self._clock = clock
         self._sleep = sleep
         self.supervisor = supervisor or ProcessSupervisor(
@@ -3221,6 +3230,39 @@ class ProductionBatchComposition:
         self.adaptive_attempt_statuses = statuses
         self.adaptive_result_locations = locations
 
+    def _record_adaptive_infrastructure_failure(self, process, code):
+        if self.adaptive_context is None:
+            raise CliError("ADAPTIVE_POOL_CONTEXT")
+        role = getattr(process, "role", "unknown")
+        self.adaptive_diagnostics.append(f"FIRST_INFRA:{role}:{code}")
+        self.coordinator.request_stop(reason="ADAPTIVE_INFRASTRUCTURE_FAILURE")
+
+    def _release_adaptive_resources(self, cleanup_verified):
+        if self.adaptive_context is None:
+            return True
+        if cleanup_verified is not True:
+            return False
+        try:
+            for path in adaptive_socket_paths(
+                self.spec.request.evidence_root,
+                self.spec.request.worker_count,
+            ):
+                try:
+                    identity = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISSOCK(identity.st_mode) or identity.st_uid != os.getuid():
+                    raise CliError("ADAPTIVE_SOCKET_CLEANUP_IDENTITY")
+                path.unlink()
+            return self.allocator.release_persistent_claims(
+                cleanup_verified=True
+            )
+        except Exception as error:
+            self.adaptive_diagnostics.append(
+                f"CLEANUP:{type(error).__name__}:{error}"
+            )
+            return False
+
     def run(self) -> BatchSummary:
         failure = False
         cleanup = False
@@ -3254,18 +3296,26 @@ class ProductionBatchComposition:
                 codes = [self._worker_launcher(self, path) for path in self.worker_specs]
             else:
                 self._start_workers()
-                codes = self.supervisor.wait_for_children(
-                    deadline_monotonic_s=(
+                wait_kwargs = {
+                    "deadline_monotonic_s": (
                         self._clock() + self.spec.config.batch_hard_timeout_s
                     ),
-                    health_recovery=(
+                    "health_recovery": (
                         None
                         if self.adaptive_context is not None
                         else self._recover_broker
                     ),
-                    health_probe=lambda _expected: (
+                    "health_probe": lambda _expected: (
                         self.coordinator.snapshot().broker_healthy
                     ),
+                }
+                if self.adaptive_context is not None:
+                    wait_kwargs.update(
+                        stop_on_nonzero=True,
+                        on_nonzero=self._record_adaptive_infrastructure_failure,
+                    )
+                codes = self.supervisor.wait_for_children(
+                    **wait_kwargs,
                 )
                 self._worker_children_reaped = True
             self.worker_exit_codes = tuple(codes)
@@ -3322,11 +3372,14 @@ class ProductionBatchComposition:
                 }
                 cleanup = process_cleanup and container_cleanup
                 snapshot = self.coordinator.snapshot()
-                completion_attempted = bool(
-                    snapshot.terminal_reason and cleanup and not failure
+                completion_allowed = bool(
+                    snapshot.terminal_reason
+                    and cleanup
+                    and (not failure or self.adaptive_context is not None)
                 )
+                completion_attempted = completion_allowed
                 completion_error = None
-                if snapshot.terminal_reason and cleanup and not failure:
+                if completion_allowed:
                     try:
                         snapshot = self.coordinator.complete_cleanup(
                             owned_processes_stopped=True, controllers_stopped=True
@@ -3334,9 +3387,6 @@ class ProductionBatchComposition:
                     except Exception as error:
                         cleanup = False
                         completion_error = error
-                self.adaptive_cleanup_complete = bool(
-                    cleanup and snapshot.summary.batch_cleanup_complete
-                )
                 self._capture_adaptive_results()
                 _write_json(
                     self.spec.request.evidence_root / "cleanup-gates.json",
@@ -3374,6 +3424,12 @@ class ProductionBatchComposition:
                     raise completion_error
             finally:
                 self._stop_servers()
+                adaptive_released = self._release_adaptive_resources(cleanup)
+                self.adaptive_cleanup_complete = bool(
+                    cleanup
+                    and adaptive_released
+                    and snapshot.summary.batch_cleanup_complete
+                )
                 self.journal.close()
                 self.allocator.close()
         return snapshot.summary
@@ -3401,6 +3457,57 @@ def outcome_document(summary: BatchSummary) -> tuple[int, dict[str, object]]:
     else:
         passed = summary.validation_passed and summary.batch_cleanup_complete
     return (0 if passed else 1), document
+
+
+def adaptive_outcome_document(
+    summary: AdaptiveBatchSummary, *, elapsed_s: float
+) -> tuple[int, dict[str, object]]:
+    """Return the stable top-level projection for an adaptive batch."""
+
+    if not isinstance(summary, AdaptiveBatchSummary):
+        raise CliError("ADAPTIVE_BATCH_SUMMARY_REQUIRED")
+    if (
+        isinstance(elapsed_s, bool)
+        or not isinstance(elapsed_s, (int, float))
+        or not 0.0 <= float(elapsed_s) < float("inf")
+    ):
+        raise CliError("ADAPTIVE_ELAPSED_INVALID")
+    document = {
+        "schema_version": 1,
+        "mode": "adaptive_workers",
+        "status": summary.status.value,
+        "initial_worker_count": summary.initial_worker_count,
+        "final_worker_count": summary.final_worker_count,
+        "levels_used": list(summary.levels_used),
+        "fallback_transitions": [
+            {
+                "generation": transition.generation,
+                "from_count": transition.from_count,
+                "to_count": transition.to_count,
+                "failure": {
+                    "kind": transition.failure.kind.value,
+                    "generation": transition.failure.generation,
+                    "worker_count": transition.failure.worker_count,
+                    "detail": transition.failure.detail,
+                },
+            }
+            for transition in summary.transitions
+        ],
+        "point_statuses": {
+            result.point_id: result.status.value
+            for result in summary.point_results
+        },
+        "infra_attempts": {
+            result.point_id: result.infra_attempts
+            for result in summary.point_results
+        },
+        "batch_cleanup_complete": summary.cleanup_complete,
+        "elapsed_s": float(elapsed_s),
+    }
+    return (
+        0 if summary.status is BatchTerminalStatus.COMPLETED else 1,
+        document,
+    )
 
 
 def _write_json(path: Path, document: Mapping[str, object]) -> None:
@@ -3482,6 +3589,29 @@ def run_cli(
 ) -> int:
     try:
         spec = prepare_batch(argv, provenance_verifier=provenance_verifier)
+        if spec.adaptive_request is not None:
+            root = spec.adaptive_request.evidence_root
+            root.mkdir(parents=True, mode=0o700)
+            _write_json(root / "batch_manifest.json", spec.manifest)
+            runner = AdaptiveBatchRunner(
+                spec.adaptive_request,
+                ProductionAdaptivePoolFactory(
+                    spec,
+                    composition_factory=composition_factory,
+                ),
+            )
+            started = time.monotonic()
+            try:
+                summary = _run_with_shutdown_signals(runner.run)
+            finally:
+                runner.close()
+            code, document = adaptive_outcome_document(
+                summary,
+                elapsed_s=time.monotonic() - started,
+            )
+            _write_json(root / "aggregate_results.json", document)
+            print(json.dumps(document, sort_keys=True))
+            return code
         composition = composition_factory(spec)
         root = spec.request.evidence_root
         if not root.exists():
@@ -3494,7 +3624,13 @@ def run_cli(
         _write_json(aggregate, document)
         print(json.dumps(document, sort_keys=True))
         return code
-    except (CliError, ContractError, OSError, ValueError) as error:
+    except (
+        AdaptiveRunnerError,
+        CliError,
+        ContractError,
+        OSError,
+        ValueError,
+    ) as error:
         print(json.dumps({"status": "ERROR", "message": str(error)}, sort_keys=True), file=sys.stderr)
         return 1
 

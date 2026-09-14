@@ -257,7 +257,11 @@ class ProductionAdaptivePool:
                 InfrastructureFailureKind.PROCESS_EXIT,
                 f"worker process exited nonzero: {exit_codes}",
             )
-        if failure is None and not summary.batch_cleanup_complete:
+        cleanup_complete = bool(
+            summary.batch_cleanup_complete
+            and getattr(composition, "adaptive_cleanup_complete", True)
+        )
+        if failure is None and not cleanup_complete:
             failure = self._failure(
                 InfrastructureFailureKind.CLEANUP,
                 "pool cleanup did not complete",
@@ -266,7 +270,8 @@ class ProductionAdaptivePool:
             tuple(terminal_results),
             interrupted if failure is not None else (),
             failure,
-            summary.batch_cleanup_complete,
+            cleanup_complete,
+            tuple(getattr(composition, "adaptive_diagnostics", ())),
         )
 
     def run(self) -> PoolExecutionResult:
@@ -312,6 +317,7 @@ class ProductionAdaptivePool:
                 interrupted,
                 self._failure(kind, f"{type(error).__name__}: {message}"),
                 cleanup,
+                tuple(getattr(composition, "adaptive_diagnostics", ())),
             )
 
 

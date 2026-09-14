@@ -47,6 +47,8 @@ setup(
     entry_points={
         "console_scripts": [
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
+            "so101_parallel_batch_cleanup = "
+            "so101_demo.cli.parallel_batch_cleanup:main",
             "so101_parallel_perception_broker = so101_demo.cli.parallel_perception_broker:main",
             "fixed_cup_pick_place = so101_demo.cli.fixed_cup_pick_place:main",
             "dynamic_cup_pick_place = so101_demo.cli.dynamic_cup_pick_place:main",

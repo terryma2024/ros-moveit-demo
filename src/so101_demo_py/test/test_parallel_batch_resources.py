@@ -176,6 +176,32 @@ def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
         second.allocate(1)
 
 
+def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
+    tmp_path, config
+):
+    policy = AllocationPolicy(1, (215,), False, True)
+    claims = Path(os.environ['TMPDIR']).parent / 'verified-release-claims'
+    first = WorkerResourceAllocator(
+        config, resource_root(tmp_path, 'release-first'), probe=FakeProbe(),
+        claim_root=claims, allocation_policy=policy, batch_id='a001-g01-w01',
+    )
+    first.allocate(1)
+
+    assert first.release_persistent_claims(cleanup_verified=True) is True
+    first.close()
+    record = json.loads((claims / 'domain-215.lock').read_text(encoding='utf-8'))
+    assert record['claim_state'] == 'RELEASED'
+    assert record['cleanup_verified'] is True
+
+    retry = WorkerResourceAllocator(
+        config, resource_root(tmp_path, 'release-second'), probe=FakeProbe(),
+        claim_root=claims, allocation_policy=policy, batch_id='a002-g02-w01',
+    )
+    assert retry.allocate(1).worker_count == 1
+    retry.release_persistent_claims(cleanup_verified=True)
+    retry.close()
+
+
 def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config):
     policy = AllocationPolicy(1, (215,), False, True)
     target = resource_root(tmp_path, 'prelaunch-failure')
