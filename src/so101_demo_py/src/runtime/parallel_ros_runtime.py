@@ -1343,7 +1343,10 @@ class ParallelRosRuntimePorts:
             # retransmitting the identical admitted pose while its exact
             # subscription remains present; the consumer removes that
             # subscription as soon as it accepts one valid sample.
-            for _attempt in range(50):
+            # The consumer's absolute receive deadline is 5 seconds.  Cover
+            # that whole interval so a subscription discovered while its
+            # process is still starting cannot outlive the retransmission.
+            for _attempt in range(300):
                 publisher.publish(message)
                 spin_once(0.02)
                 if publisher.get_subscription_count() < 1:

@@ -1360,7 +1360,7 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
     class Publisher:
         @staticmethod
         def get_subscription_count():
-            return 0 if len(published) >= 3 else 1
+            return 0 if len(published) >= 75 else 1
 
         @staticmethod
         def publish(message):
@@ -1392,7 +1392,7 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
     assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
         admitted
     ) is True
-    assert len(published) == 3
+    assert len(published) == 75
 
 
 def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
