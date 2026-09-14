@@ -20,6 +20,7 @@ from so101_demo.parallel_batch.contracts import (
 PACKAGE = Path(__file__).resolve().parents[1]
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
 
@@ -42,6 +43,33 @@ def argv(root: Path, **changes):
     values.update(changes)
     result = []
     for key, value in values.items():
+        if key == "point_id":
+            for item in value:
+                result += ["--point-id", item]
+        else:
+            result += ["--" + key.replace("_", "-"), str(value)]
+    return result
+
+
+def adaptive_argv(root: Path, **changes):
+    values = {
+        "points": str(POINTS),
+        "config": str(CONFIG),
+        "adaptive_config": str(ADAPTIVE_CONFIG),
+        "batch_id": "a001",
+        "evidence_root": str(root),
+        "broker_image": "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1",
+        "yolo_weights": "/models/yolo.pt",
+        "yolo_weights_sha256": YOLO_SHA,
+        "grounded_root": "/models/grounded",
+        "grounded_manifest_sha256": GROUNDED_SHA,
+        "run_mode": "dry_run",
+    }
+    values.update(changes)
+    result = ["--adaptive-workers"]
+    for key, value in values.items():
+        if value is None:
+            continue
         if key == "point_id":
             for item in value:
                 result += ["--point-id", item]
@@ -1603,6 +1631,128 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
     assert prepared.request.max_points_per_worker == 10
     assert prepared.manifest["worker_count"] == 2
     assert prepared.manifest["max_points_per_worker"] == 10
+
+
+def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / "adaptive"), provenance_verifier=verified
+    )
+
+    assert prepared.request is None
+    assert prepared.adaptive_request is not None
+    assert prepared.adaptive_request.options.levels == (8, 6, 4, 2, 1)
+    assert prepared.adaptive_request.options.initial_points_per_worker == 3
+    assert prepared.adaptive_config_path == ADAPTIVE_CONFIG.resolve()
+    assert "max_points_per_worker" not in prepared.manifest
+
+
+def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="ADAPTIVE_MAX_POINTS_CONFLICT"):
+        prepare_batch(
+            adaptive_argv(tmp_path / "adaptive")
+            + ["--max-points-per-worker", "3"],
+            provenance_verifier=verified,
+        )
+
+
+def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(
+            tmp_path / "adaptive",
+            worker_count="6",
+            fallback_worker_counts="4,2,1",
+            initial_points_per_worker="2",
+            worker_start_timeout_s="45.5",
+            max_infra_attempts_per_point="4",
+        ),
+        provenance_verifier=verified,
+    )
+
+    options = prepared.adaptive_request.options
+    assert options.levels == (6, 4, 2, 1)
+    assert options.initial_points_per_worker == 2
+    assert options.worker_start_timeout_s == 45.5
+    assert options.max_infra_attempts_per_point == 4
+    assert prepared.manifest["adaptive_worker_options"] == {
+        "worker_count": 6,
+        "fallback_worker_counts": [4, 2, 1],
+        "initial_points_per_worker": 2,
+        "worker_start_timeout_s": 45.5,
+        "max_infra_attempts_per_point": 4,
+        "ros_domain_ids": list(range(215, 223)),
+    }
+
+
+@pytest.mark.parametrize(
+    ("worker_count", "levels"),
+    [("6", (6, 4, 2, 1)), ("1", (1,))],
+)
+def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
+    tmp_path, worker_count, levels
+):
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / worker_count, worker_count=worker_count),
+        provenance_verifier=verified,
+    )
+
+    assert prepared.adaptive_request.options.levels == levels
+
+
+@pytest.mark.parametrize("fallbacks", ["6,4", "8,4", "4,6", "4,4", "4,,2"])
+def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="FALLBACK_WORKER_COUNTS"):
+        prepare_batch(
+            adaptive_argv(
+                tmp_path / "adaptive",
+                worker_count="6",
+                fallback_worker_counts=fallbacks,
+            ),
+            provenance_verifier=verified,
+        )
+
+
+@pytest.mark.parametrize(
+    ("changes", "extra", "error"),
+    [
+        ({"adaptive_config": None}, (), "ADAPTIVE_CONFIG_REQUIRED"),
+        ({}, ("--resume",), "ADAPTIVE_RESUME_CONFLICT"),
+        (
+            {"live_headroom_evidence": "/tmp/headroom"},
+            (),
+            "ADAPTIVE_LIVE_HEADROOM_CONFLICT",
+        ),
+    ],
+)
+def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
+    tmp_path, changes, extra, error
+):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match=error):
+        prepare_batch(
+            adaptive_argv(tmp_path / "adaptive", **changes) + list(extra),
+            provenance_verifier=verified,
+        )
+
+
+def test_legacy_w4_remains_rejected_by_the_v1_contract(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="MAX_WORKER_COUNT"):
+        prepare_batch(
+            argv(tmp_path / "legacy", worker_count="4"),
+            provenance_verifier=verified,
+        )
 
 
 def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):

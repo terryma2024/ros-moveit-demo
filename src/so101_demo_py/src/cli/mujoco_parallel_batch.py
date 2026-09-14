@@ -29,6 +29,11 @@ from so101_demo.parallel_batch.artifacts import (
     ValidationWorkspace,
     write_recovery_receipt,
 )
+from so101_demo.parallel_batch.adaptive_contracts import (
+    AdaptiveBatchRequest,
+    AdaptiveWorkerOptions,
+    load_adaptive_worker_options,
+)
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
@@ -103,9 +108,11 @@ class _Parser(argparse.ArgumentParser):
 
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    request: BatchRequest
+    request: BatchRequest | None
+    adaptive_request: AdaptiveBatchRequest | None
     config: ParallelRuntimeConfig
     config_path: Path
+    adaptive_config_path: Path | None
     points_path: Path
     catalog: Mapping[str, Mapping[str, object]]
     expected_final_cup_pose_world: tuple[float, ...]
@@ -133,8 +140,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id", action="append", default=[])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--batch-id", required=True)
-    parser.add_argument("--worker-count", default="2")
-    parser.add_argument("--max-points-per-worker", default="10")
+    parser.add_argument("--worker-count")
+    parser.add_argument("--max-points-per-worker")
+    parser.add_argument("--adaptive-workers", action="store_true")
+    parser.add_argument("--adaptive-config", type=Path)
+    parser.add_argument("--fallback-worker-counts")
+    parser.add_argument("--initial-points-per-worker")
+    parser.add_argument("--worker-start-timeout-s")
+    parser.add_argument("--max-infra-attempts-per-point")
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--broker-image", required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
@@ -156,6 +169,79 @@ def _integer(name: str, value: str) -> int:
     if result <= 0:
         raise CliError(f"MALFORMED_INTEGER: {name}")
     return result
+
+
+def _positive_float(name: str, value: str) -> float:
+    if not isinstance(value, str) or not value.isascii():
+        raise CliError(f"MALFORMED_NUMBER: {name}")
+    try:
+        result = float(value)
+    except ValueError as error:
+        raise CliError(f"MALFORMED_NUMBER: {name}") from error
+    if not (result > 0.0 and result < float("inf")):
+        raise CliError(f"MALFORMED_NUMBER: {name}")
+    return result
+
+
+def _adaptive_options(options) -> tuple[AdaptiveWorkerOptions, Path]:
+    if options.adaptive_config is None:
+        raise CliError("ADAPTIVE_CONFIG_REQUIRED")
+    adaptive_config_path = _absolute("adaptive_config", options.adaptive_config)
+    try:
+        defaults = load_adaptive_worker_options(adaptive_config_path)
+    except ContractError as error:
+        raise CliError(str(error)) from error
+    worker_count = (
+        defaults.worker_count
+        if options.worker_count is None
+        else _integer("worker_count", options.worker_count)
+    )
+    if options.fallback_worker_counts is None:
+        fallback_worker_counts = tuple(
+            count for count in defaults.fallback_worker_counts if count < worker_count
+        )
+    else:
+        try:
+            fallback_worker_counts = tuple(
+                _integer("fallback_worker_count", value)
+                for value in options.fallback_worker_counts.split(",")
+            )
+        except CliError as error:
+            raise CliError("FALLBACK_WORKER_COUNTS") from error
+    initial_points_per_worker = (
+        defaults.initial_points_per_worker
+        if options.initial_points_per_worker is None
+        else _integer(
+            "initial_points_per_worker", options.initial_points_per_worker
+        )
+    )
+    worker_start_timeout_s = (
+        defaults.worker_start_timeout_s
+        if options.worker_start_timeout_s is None
+        else _positive_float(
+            "worker_start_timeout_s", options.worker_start_timeout_s
+        )
+    )
+    max_infra_attempts_per_point = (
+        defaults.max_infra_attempts_per_point
+        if options.max_infra_attempts_per_point is None
+        else _integer(
+            "max_infra_attempts_per_point",
+            options.max_infra_attempts_per_point,
+        )
+    )
+    try:
+        adaptive = AdaptiveWorkerOptions(
+            worker_count=worker_count,
+            fallback_worker_counts=fallback_worker_counts,
+            initial_points_per_worker=initial_points_per_worker,
+            worker_start_timeout_s=worker_start_timeout_s,
+            max_infra_attempts_per_point=max_infra_attempts_per_point,
+            ros_domain_ids=defaults.ros_domain_ids,
+        )
+    except ContractError as error:
+        raise CliError(str(error)) from error
+    return adaptive, adaptive_config_path
 
 
 def _sha256(path: Path) -> str:
@@ -533,6 +619,39 @@ if __name__ == '__main__':
 
 def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> PreparedBatch:
     options = build_parser().parse_args(argv)
+    adaptive_only = (
+        options.adaptive_config,
+        options.fallback_worker_counts,
+        options.initial_points_per_worker,
+        options.worker_start_timeout_s,
+        options.max_infra_attempts_per_point,
+    )
+    if options.adaptive_workers:
+        if options.resume:
+            raise CliError("ADAPTIVE_RESUME_CONFLICT")
+        if options.max_points_per_worker is not None:
+            raise CliError("ADAPTIVE_MAX_POINTS_CONFLICT")
+        if any(
+            value is not None
+            for value in (
+                options.live_headroom_evidence,
+                options.live_headroom_acceptance,
+                options.live_headroom_current_provenance_root,
+            )
+        ):
+            raise CliError("ADAPTIVE_LIVE_HEADROOM_CONFLICT")
+        adaptive_worker_options, adaptive_config_path = _adaptive_options(options)
+        worker_count = adaptive_worker_options.worker_count
+        max_points = None
+    else:
+        if any(value is not None for value in adaptive_only):
+            raise CliError("ADAPTIVE_OPTIONS_REQUIRE_FLAG")
+        adaptive_worker_options = None
+        adaptive_config_path = None
+        worker_count = _integer("worker_count", options.worker_count or "2")
+        max_points = _integer(
+            "max_points_per_worker", options.max_points_per_worker or "10"
+        )
     evidence_root = _absolute("evidence_root", options.evidence_root)
     if options.resume:
         try:
@@ -554,8 +673,6 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         mode = RunMode(options.run_mode)
     except ValueError as error:
         raise CliError("UNKNOWN_RUN_MODE") from error
-    worker_count = _integer("worker_count", options.worker_count)
-    max_points = _integer("max_points_per_worker", options.max_points_per_worker)
     catalog, catalog_sha = _catalog(options.points)
     supplied = tuple(options.point_id)
     if len(supplied) != len(set(supplied)):
@@ -568,12 +685,18 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     selection_sha = hashlib.sha256(selection_payload).hexdigest()
     config_path = options.config.resolve()
     config = load_parallel_runtime_config(config_path)
-    (
-        live_headroom_evidence,
-        live_headroom_acceptance,
-        live_headroom_current_provenance,
-        live_headroom_verification,
-    ) = _prepare_live_headroom(options, config, worker_count)
+    if options.adaptive_workers:
+        live_headroom_evidence = None
+        live_headroom_acceptance = None
+        live_headroom_current_provenance = {}
+        live_headroom_verification = None
+    else:
+        (
+            live_headroom_evidence,
+            live_headroom_acceptance,
+            live_headroom_current_provenance,
+            live_headroom_verification,
+        ) = _prepare_live_headroom(options, config, worker_count)
     if options.yolo_weights_sha256 != config.yolo_weights_sha256:
         raise CliError("YOLO_HASH_MISMATCH")
     if options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256:
@@ -581,14 +704,25 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
     if options.broker_image != _BROKER_IMAGE:
         raise CliError("BROKER_IMAGE_MISMATCH")
     try:
-        request = BatchRequest(
-            options.batch_id,
-            mode,
-            selected,
-            worker_count,
-            max_points,
-            evidence_root,
-        )
+        if options.adaptive_workers:
+            request = None
+            adaptive_request = AdaptiveBatchRequest(
+                options.batch_id,
+                mode,
+                selected,
+                adaptive_worker_options,
+                evidence_root,
+            )
+        else:
+            request = BatchRequest(
+                options.batch_id,
+                mode,
+                selected,
+                worker_count,
+                max_points,
+                evidence_root,
+            )
+            adaptive_request = None
     except ContractError as error:
         message = str(error)
         if "INSUFFICIENT_CAPACITY" in message:
@@ -604,6 +738,8 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         "grounded_root": options.grounded_root,
         "grounded_manifest_sha256": options.grounded_manifest_sha256,
     }
+    if adaptive_config_path is not None:
+        inputs["adaptive_config"] = adaptive_config_path
     try:
         provenance = provenance_verifier(inputs)
     except CliError:
@@ -624,34 +760,64 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         ).values
     except Exception as error:
         raise CliError("TRUSTED_FINAL_TARGET_INVALID") from error
-    manifest = {
-        "schema_version": 1,
-        "batch_id": request.batch_id,
-        "run_mode": request.run_mode.value,
-        "selected_point_ids": list(selected),
-        "selection_sha256": selection_sha,
-        "catalog_sha256": catalog_sha,
-        "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
-        "worker_count": worker_count,
-        "max_points_per_worker": max_points,
-        "evidence_root": str(evidence_root),
-        "provenance": dict(provenance),
-        "live_headroom": (
-            None
-            if live_headroom_verification is None
-            else {
-                "evidence_path": str(live_headroom_evidence),
-                "acceptance_path": str(live_headroom_acceptance),
-                "current_provenance_paths": {
-                    name: str(path)
-                    for name, path in sorted(
-                        live_headroom_current_provenance.items()
-                    )
-                },
-                "verification": dict(live_headroom_verification),
-            }
-        ),
-    }
+    if adaptive_request is not None:
+        manifest = {
+            "schema_version": 1,
+            "batch_id": adaptive_request.batch_id,
+            "run_mode": adaptive_request.run_mode.value,
+            "selected_point_ids": list(selected),
+            "selection_sha256": selection_sha,
+            "catalog_sha256": catalog_sha,
+            "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
+            "evidence_root": str(evidence_root),
+            "provenance": dict(provenance),
+            "adaptive_config_path": str(adaptive_config_path),
+            "adaptive_worker_options": {
+                "worker_count": adaptive_worker_options.worker_count,
+                "fallback_worker_counts": list(
+                    adaptive_worker_options.fallback_worker_counts
+                ),
+                "initial_points_per_worker": (
+                    adaptive_worker_options.initial_points_per_worker
+                ),
+                "worker_start_timeout_s": (
+                    adaptive_worker_options.worker_start_timeout_s
+                ),
+                "max_infra_attempts_per_point": (
+                    adaptive_worker_options.max_infra_attempts_per_point
+                ),
+                "ros_domain_ids": list(adaptive_worker_options.ros_domain_ids),
+            },
+        }
+    else:
+        manifest = {
+            "schema_version": 1,
+            "batch_id": request.batch_id,
+            "run_mode": request.run_mode.value,
+            "selected_point_ids": list(selected),
+            "selection_sha256": selection_sha,
+            "catalog_sha256": catalog_sha,
+            "expected_final_cup_pose_world": list(expected_final_cup_pose_world),
+            "worker_count": worker_count,
+            "max_points_per_worker": max_points,
+            "evidence_root": str(evidence_root),
+            "provenance": dict(provenance),
+            "live_headroom": (
+                None
+                if live_headroom_verification is None
+                else {
+                    "evidence_path": str(live_headroom_evidence),
+                    "acceptance_path": str(live_headroom_acceptance),
+                    "current_provenance_paths": {
+                        name: str(path)
+                        for name, path in sorted(
+                            live_headroom_current_provenance.items()
+                        )
+                    },
+                    "verification": dict(live_headroom_verification),
+                }
+            ),
+        }
     if options.resume:
         existing = _read_existing_json(
             evidence_root / "batch_manifest.json", label="BATCH_MANIFEST"
@@ -659,28 +825,30 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         if existing != manifest:
             raise CliError("RECOVERY_BATCH_MANIFEST_MISMATCH")
     return PreparedBatch(
-        request,
-        config,
-        config_path,
-        options.points.resolve(),
-        catalog,
-        tuple(expected_final_cup_pose_world),
-        catalog_sha,
-        selection_sha,
-        options.broker_image,
-        options.yolo_weights,
-        options.yolo_weights_sha256,
-        options.grounded_root,
-        options.grounded_manifest_sha256,
-        dict(provenance),
-        manifest,
-        dict(inputs),
-        provenance_verifier,
-        live_headroom_evidence,
-        live_headroom_acceptance,
-        dict(live_headroom_current_provenance),
-        live_headroom_verification,
-        options.resume,
+        request=request,
+        adaptive_request=adaptive_request,
+        config=config,
+        config_path=config_path,
+        adaptive_config_path=adaptive_config_path,
+        points_path=options.points.resolve(),
+        catalog=catalog,
+        expected_final_cup_pose_world=tuple(expected_final_cup_pose_world),
+        catalog_sha256=catalog_sha,
+        selection_sha256=selection_sha,
+        broker_image=options.broker_image,
+        yolo_weights=options.yolo_weights,
+        yolo_weights_sha256=options.yolo_weights_sha256,
+        grounded_root=options.grounded_root,
+        grounded_manifest_sha256=options.grounded_manifest_sha256,
+        provenance=dict(provenance),
+        manifest=manifest,
+        provenance_inputs=dict(inputs),
+        provenance_verifier=provenance_verifier,
+        live_headroom_evidence=live_headroom_evidence,
+        live_headroom_acceptance=live_headroom_acceptance,
+        live_headroom_current_provenance=dict(live_headroom_current_provenance),
+        live_headroom_verification=live_headroom_verification,
+        resume=options.resume,
     )
 
 
