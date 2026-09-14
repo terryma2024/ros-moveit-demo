@@ -1350,6 +1350,51 @@ def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkey
     ) == admitted.pose_world.values
 
 
+def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 0 if len(published) >= 3 else 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=200_000_000)
+            )
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
+    monkeypatch.setattr(rclpy, "spin_once", lambda *_args, **_kwargs: None)
+    admitted = SimpleNamespace(
+        source_stamp_ns=100_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+
+    assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
+        admitted
+    ) is True
+    assert len(published) == 3
+
+
 def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
     from so101_demo.core.task_geometry import Pose7
     from so101_demo.runtime import parallel_ros_runtime as runtime_module
@@ -1362,7 +1407,7 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
     class Publisher:
         @staticmethod
         def get_subscription_count():
-            return 1
+            return 0 if published else 1
 
         @staticmethod
         def publish(message):

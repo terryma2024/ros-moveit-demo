@@ -1337,8 +1337,17 @@ class ParallelRosRuntimePorts:
                 spin_once(0.02)
             if publisher.get_subscription_count() < 1:
                 return False
-            publisher.publish(message)
-            spin_once(0.05)
+            # The consumer and this publisher receive /clock independently.
+            # Under multi-stack startup load the consumer can momentarily lag
+            # and reject the first source-stamped pose as future data.  Keep
+            # retransmitting the identical admitted pose while its exact
+            # subscription remains present; the consumer removes that
+            # subscription as soon as it accepts one valid sample.
+            for _attempt in range(50):
+                publisher.publish(message)
+                spin_once(0.02)
+                if publisher.get_subscription_count() < 1:
+                    break
             return True
         finally:
             if not retained:
