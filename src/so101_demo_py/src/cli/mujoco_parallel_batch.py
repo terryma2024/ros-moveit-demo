@@ -34,6 +34,11 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveWorkerOptions,
     load_adaptive_worker_options,
 )
+from so101_demo.parallel_batch.adaptive_pool import (
+    AdaptivePoolContext,
+    WorkerReadinessReceipt,
+    WorkerStartGate,
+)
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
@@ -56,6 +61,7 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.resources import (
+    AllocationPolicy,
     CurrentRuntimeProvenanceProbe,
     ResourceAdmission,
     ResourceManifest,
@@ -1385,6 +1391,51 @@ class _WorkerControlProxy:
         self._signal_process = signal_process
         self._sequence = 0
 
+    def _startup_call(self, operation):
+        if operation not in {"readiness", "release_start"}:
+            raise CliError("WORKER_CONTROL_OPERATION")
+        try:
+            socket_info = self.socket_path.lstat()
+        except FileNotFoundError:
+            return None
+        if (
+            not stat.S_ISSOCK(socket_info.st_mode)
+            or socket_info.st_uid != os.getuid()
+            or stat.S_IMODE(socket_info.st_mode) != 0o600
+        ):
+            raise CliError("WORKER_CONTROL_SOCKET_INVALID")
+        self._sequence += 1
+        message = {
+            "schema_version": 1,
+            "kind": "worker_call",
+            "coordinator_epoch": self.coordinator_epoch,
+            "worker_id": f"{self.worker_id}-control",
+            "worker_generation": self.generation,
+            "lease": None,
+            "request_id": f"control-{self.worker_id}-{self._sequence}",
+            "idempotency_key": f"control-{operation}-{self._sequence}",
+            "token": self.token,
+            "payload": {"operation": operation},
+        }
+        return self.client.call(message)["payload"]
+
+    def readiness(self):
+        value = self._startup_call("readiness")
+        if value is None:
+            return None
+        if type(value) is not dict or set(value) != {"ready", "receipt"}:
+            raise CliError("WORKER_READINESS_SCHEMA")
+        if value["ready"] is not True or type(value["receipt"]) is not dict:
+            return None
+        try:
+            return WorkerReadinessReceipt(**value["receipt"])
+        except (TypeError, ValueError) as error:
+            raise CliError("WORKER_READINESS_SCHEMA") from error
+
+    def release_start(self):
+        value = self._startup_call("release_start")
+        return type(value) is dict and value == {"completed": True}
+
     def _orphan_identities(self):
         path = self.orphan_manifest
         if path is None or not path.exists():
@@ -1741,12 +1792,20 @@ class _WorkerBrokerProxy:
 
 def _build_worker_from_spec(path, *, runtime_side_effects=None):
     document = json.loads(Path(path).read_text(encoding="utf-8"))
-    if type(document) is not dict or set(document) != {
+    required_fields = {
         "schema_version", "batch_id", "run_mode", "config_path", "socket_path",
         "token_path", "coordinator_epoch", "resources", "broker_socket_path",
         "broker_generation", "catalog", "control_token_path",
         "control_socket_path", "shutdown_deadline_s", "max_frame_bytes",
-    } or document["schema_version"] != 1:
+    }
+    optional_fields = {"start_paused", "worker_start_timeout_s"}
+    if (
+        type(document) is not dict
+        or set(document) not in (required_fields, required_fields | optional_fields)
+        or document["schema_version"] != 1
+        or (("start_paused" in document) != ("worker_start_timeout_s" in document))
+        or ("start_paused" in document and document["start_paused"] is not True)
+    ):
         raise CliError("WORKER_SPEC_INVALID")
     if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
         raise CliError("WORKER_SPEC_BROKER_GENERATION")
@@ -1860,6 +1919,48 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_authority.load_token(
         control_id, resources.generation, Path(document["control_token_path"])
     )
+    start_gate = (
+        WorkerStartGate(
+            expected_worker_id=resources.worker_id,
+            generation=resources.generation,
+        )
+        if document.get("start_paused") is True
+        else None
+    )
+
+    if start_gate is not None and worker.prepare_for_start() is not True:
+        return 1
+
+    def current_readiness():
+        if start_gate is None:
+            raise CliError("WORKER_READINESS_NOT_ADAPTIVE")
+        try:
+            from so101_demo.runtime.task_stack import _linux_process_identity
+
+            process_start_ticks = _linux_process_identity(os.getpid())[2]
+            runtime_ready = runtime.worker_ready_gate() is True
+            if document["run_mode"] == RunMode.DRY_RUN.value:
+                broker_generation = document["broker_generation"]
+                broker_ready = True
+            else:
+                broker_generation = worker._broker._refresh_broker(
+                    wait_until_healthy=False
+                )
+                broker_ready = broker_generation == document["broker_generation"]
+            receipt = WorkerReadinessReceipt(
+                worker_id=resources.worker_id,
+                generation=resources.generation,
+                process_start_ticks=process_start_ticks,
+                coordinator_registered=worker._registered is True,
+                runtime_ready=runtime_ready,
+                broker_ready=broker_ready,
+                broker_generation=broker_generation,
+                observed_monotonic_s=time.monotonic(),
+            )
+            start_gate.record_readiness(receipt)
+            return receipt
+        except Exception:
+            return None
 
     def control_handler(message):
         if message.get("kind") != "worker_call":
@@ -1868,6 +1969,17 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
         if type(payload) is not dict or set(payload) != {"operation"}:
             raise CliError("WORKER_CONTROL_SCHEMA")
         operation = payload["operation"]
+        if operation == "readiness":
+            receipt = current_readiness()
+            return {
+                "ready": receipt is not None,
+                "receipt": None if receipt is None else _jsonable(receipt),
+            }
+        if operation == "release_start":
+            if start_gate is None:
+                raise CliError("WORKER_READINESS_NOT_ADAPTIVE")
+            start_gate.release(resources.worker_id, resources.generation)
+            return {"completed": True}
         if operation not in {
             "stop", "cancel_motion", "confirm_no_controller_goal", "recover"
         }:
@@ -1890,6 +2002,10 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
     control_thread = threading.Thread(target=control_server.serve_forever, daemon=True)
     control_thread.start()
     try:
+        if start_gate is not None and not start_gate.wait_released(
+            document["worker_start_timeout_s"]
+        ):
+            return 1
         results = worker.run()
         _write_worker_results(resources, results)
         return int(_worker_results_failed(results))
@@ -1936,8 +2052,21 @@ class ProductionBatchComposition:
         container_runner=subprocess.run,
         clock=time.monotonic,
         sleep=time.sleep,
+        adaptive_context: AdaptivePoolContext | None = None,
+        pool_running_recorder=None,
     ):
+        if spec.request is None:
+            raise CliError("POOL_REQUEST_REQUIRED")
+        if adaptive_context is not None:
+            if (
+                not isinstance(adaptive_context, AdaptivePoolContext)
+                or adaptive_context.request != spec.request
+                or not callable(pool_running_recorder)
+            ):
+                raise CliError("ADAPTIVE_POOL_CONTEXT")
         self.spec = spec
+        self.adaptive_context = adaptive_context
+        self._pool_running_recorder = pool_running_recorder
         self._clock = clock
         self._sleep = sleep
         self.supervisor = supervisor or ProcessSupervisor(
@@ -1976,6 +2105,16 @@ class ProductionBatchComposition:
             live_headroom_evidence=spec.live_headroom_evidence,
             live_headroom_verifier=live_headroom_verifier,
             batch_id=spec.request.batch_id,
+            allocation_policy=(
+                None
+                if adaptive_context is None
+                else AllocationPolicy(
+                    max_worker_count=adaptive_context.options.worker_count,
+                    ros_domain_ids=adaptive_context.options.ros_domain_ids,
+                    enforce_resource_thresholds=False,
+                    persistent_cleanup_claims=True,
+                )
+            ),
         )
         if spec.resume:
             self.journal = CoordinatorJournal.create(
@@ -2016,6 +2155,9 @@ class ProductionBatchComposition:
             config=spec.config,
             result_port=self.result_verifier,
             clock=clock,
+            point_selector=(
+                None if adaptive_context is None else adaptive_context.selector.choose
+            ),
         )
         self.results = _ArtifactResults(worker_roots, spec.request.run_mode)
         self._recovered_worker_ids = None
@@ -2103,6 +2245,13 @@ class ProductionBatchComposition:
                 },
                 "resources": resources.to_dict(),
             }
+            if adaptive_context is not None:
+                worker_spec.update(
+                    start_paused=True,
+                    worker_start_timeout_s=(
+                        adaptive_context.options.worker_start_timeout_s
+                    ),
+                )
             worker_path = resources.worker_root / (
                 "worker-spec.json" if not spec.resume
                 else f"worker-spec-e{self.journal.coordinator_epoch}-g{resources.generation}.json"
@@ -2660,6 +2809,7 @@ class ProductionBatchComposition:
         return self._worker_control("recover")
 
     def _start_workers(self):
+        adaptive_processes = {}
         for path, resources in zip(
             self.worker_specs, self.resource_manifest.workers, strict=True
         ):
@@ -2667,9 +2817,15 @@ class ProductionBatchComposition:
                 sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
                 "--internal-worker", str(path),
             )
-            self.supervisor.start(
+            process = self.supervisor.start(
                 "worker", command, environment=dict(resources.environment)
             )
+            if self.adaptive_context is not None:
+                adaptive_processes[resources.worker_id] = process
+        if self.adaptive_context is not None:
+            self._adaptive_worker_processes = adaptive_processes
+            self._release_adaptive_workers()
+            return
         if not callable(getattr(self.supervisor, "assert_healthy", None)):
             return
         deadline = time.monotonic() + self.spec.config.heartbeat_timeout_s
@@ -2684,6 +2840,57 @@ class ProductionBatchComposition:
                 return
             time.sleep(0.01)
         raise CliError("WORKER_CONTROL_READY_TIMEOUT")
+
+    def _release_adaptive_workers(self):
+        """Collect fresh readiness, durably linearize, then release every Worker."""
+
+        if not callable(getattr(self.supervisor, "assert_healthy", None)):
+            raise CliError("WORKER_HEALTH_PROBE_REQUIRED")
+        deadline = self._clock() + (
+            self.adaptive_context.options.worker_start_timeout_s
+        )
+        receipts = {}
+        while self._clock() < deadline:
+            self.supervisor.assert_healthy()
+            for control in self.worker_controls:
+                if control.worker_id not in receipts:
+                    receipt = control.readiness()
+                    if receipt is not None:
+                        receipts[control.worker_id] = receipt
+            if len(receipts) == len(self.worker_controls):
+                break
+            self._sleep(min(0.01, max(0.0, deadline - self._clock())))
+        if len(receipts) != len(self.worker_controls):
+            raise CliError("WORKER_READY_TIMEOUT")
+        final_receipts = []
+        for control in self.worker_controls:
+            self.supervisor.assert_healthy()
+            receipt = control.readiness()
+            now = self._clock()
+            process = self._adaptive_worker_processes.get(control.worker_id)
+            if (
+                receipt is None
+                or receipt.worker_id != control.worker_id
+                or receipt.generation != control.generation
+                or not receipt.coordinator_registered
+                or not receipt.runtime_ready
+                or not receipt.broker_ready
+                or receipt.broker_generation != (self.broker_generation or 1)
+                or process is None
+                or receipt.process_start_ticks
+                != getattr(process, "start_time", None)
+                or receipt.observed_monotonic_s > now
+                or now - receipt.observed_monotonic_s > 1.0
+                or now >= deadline
+            ):
+                raise CliError("WORKER_READINESS_INVALID")
+            final_receipts.append(receipt)
+        self._pool_running_recorder(tuple(final_receipts))
+        for control in self.worker_controls:
+            if self._clock() >= deadline:
+                raise CliError("POOL_RUNTIME_RELEASE_FAILED")
+            if control.release_start() is not True:
+                raise CliError("POOL_RUNTIME_RELEASE_FAILED")
 
     def _active_lease(self, message):
         worker = self.coordinator.snapshot().workers.get(message["worker_id"])

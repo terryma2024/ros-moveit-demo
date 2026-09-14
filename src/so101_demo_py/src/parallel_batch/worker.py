@@ -199,6 +199,7 @@ class ParallelWorker:
         self._active_lease = None
         self._watchdog = None
         self._registered = False
+        self._prepared_for_start = False
         self._runtime_started = False
         self._ready_after_recovery = False
         self._quarantined = False
@@ -480,6 +481,19 @@ class ParallelWorker:
             return self._runtime.worker_ready_gate() is True
         except Exception:
             return False
+
+    def prepare_for_start(self) -> bool:
+        """Register and prove runtime readiness without requesting a lease."""
+
+        with self._execution_lock:
+            if self._prepared_for_start:
+                return True
+            if self._stop_requested.is_set() or self._quarantined:
+                return False
+            if not self._register_locked() or not self._ready():
+                return False
+            self._prepared_for_start = True
+            return True
 
     @staticmethod
     def _gate_summary(lease, reset, gate):

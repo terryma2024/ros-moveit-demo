@@ -520,6 +520,16 @@ def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
 
 
+def test_prepare_for_start_is_idempotent_and_never_requests_a_lease():
+    fake = Fake(RunMode.PLAN_ONLY)
+    worker = ParallelWorker(fake.ports())
+
+    assert worker.prepare_for_start() is True
+    assert worker.prepare_for_start() is True
+    assert fake.coordinator.calls == [("register_worker", "w1", 1)]
+    assert fake.runtime.calls == ["worker_ready_gate"]
+
+
 @pytest.mark.parametrize(
     "boundary,message",
     [

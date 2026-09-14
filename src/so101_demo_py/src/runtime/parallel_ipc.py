@@ -339,6 +339,7 @@ class WorkerTokenAuthority:
                 "authenticate_broker_message", "authorize_inference",
                 "broker_health_down", "health",
                 "stop", "cancel_motion", "confirm_no_controller_goal", "recover",
+                "readiness", "release_start",
             }
             if message["lease"] is None:
                 if not lease_optional:

@@ -652,6 +652,69 @@ def test_broker_cancel_generation_is_lease_optional_and_strict(tmp_path):
     assert authority.authenticate(message)["payload"]["operation"] == "cancel_generation"
 
 
+@pytest.mark.parametrize("operation", ["readiness", "release_start"])
+def test_adaptive_start_control_operations_are_lease_optional(tmp_path, operation):
+    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 1, bytes.fromhex("ab" * 32))
+    message = request(
+        worker_generation=1,
+        lease=None,
+        payload={"operation": operation},
+    )
+
+    assert authority.authenticate(message)["payload"]["operation"] == operation
+
+
+def test_unlisted_worker_control_operation_still_requires_a_lease(tmp_path):
+    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 1, bytes.fromhex("ab" * 32))
+
+    with pytest.raises(IpcError, match="LEASE_REQUIRED"):
+        authority.authenticate(
+            request(
+                worker_generation=1,
+                lease=None,
+                payload={"operation": "run_point"},
+            )
+        )
+
+
+def test_authenticated_readiness_control_round_trip_without_a_lease(tmp_path):
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+    )
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 1, bytes.fromhex("ab" * 32))
+    message = request(
+        worker_generation=1,
+        lease=None,
+        payload={"operation": "readiness"},
+    )
+    server = AuthenticatedUnixServer(
+        tmp_path / "ipc/readiness.sock",
+        authority,
+        lambda authenticated: {
+            "seen": authenticated["payload"]["operation"]
+        },
+        deadline_s=1.0,
+    )
+    thread = threading.Thread(target=server.serve_once)
+    thread.start()
+
+    response = UnixRpcClient(server.path, deadline_s=1.0).call(message)
+
+    thread.join(timeout=2.0)
+    server.close()
+    assert response["payload"] == {"seen": "readiness"}
+
+
 def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_path, monkeypatch):
     from so101_demo.runtime import parallel_ipc
 

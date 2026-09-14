@@ -1659,6 +1659,26 @@ def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
         )
 
 
+def test_adaptive_readiness_probe_does_not_treat_a_missing_socket_as_success(
+    tmp_path
+):
+    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+
+    token = tmp_path / "control.token"
+    token.write_text("ab" * 32, encoding="ascii")
+    control = _WorkerControlProxy(
+        tmp_path / "missing.sock",
+        token,
+        worker_id="worker-01",
+        generation=1,
+        coordinator_epoch=1,
+        deadline_s=1.0,
+    )
+
+    assert control.readiness() is None
+    assert control.release_start() is False
+
+
 def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
 

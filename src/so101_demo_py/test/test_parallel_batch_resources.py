@@ -24,6 +24,7 @@ import pytest
 from so101_demo.parallel_batch import resources as resources_api
 from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
 from so101_demo.parallel_batch.resources import (
+    AllocationPolicy,
     main,
     ResourceAllocationError,
     ResourceSnapshot,
@@ -119,6 +120,78 @@ def resource_root(tmp_path, suffix='batch'):
 
 def claim_root():
     return Path(os.environ['TMPDIR']).parent / 'claims'
+
+
+def test_observational_policy_allocates_eight_without_headroom_rejection(
+    tmp_path, config
+):
+    policy = AllocationPolicy(
+        max_worker_count=8,
+        ros_domain_ids=tuple(range(215, 223)),
+        enforce_resource_thresholds=False,
+        persistent_cleanup_claims=True,
+    )
+    target = resource_root(tmp_path, 'adaptive-eight')
+    allocator = WorkerResourceAllocator(
+        config, target, probe=FakeProbe(cpu=1, ram=0.0, gpu=0.0),
+        claim_root=Path(os.environ['TMPDIR']).parent / 'adaptive-claims',
+        allocation_policy=policy, batch_id='a001',
+    )
+
+    manifest = allocator.allocate(8)
+
+    assert len(manifest.workers) == 8
+    assert tuple(worker.ros_domain_id for worker in manifest.workers) == tuple(
+        range(215, 223)
+    )
+    assert manifest.admission.admitted is True
+    assert manifest.admission.failures == ()
+    assert manifest.admission.required.to_dict() == {
+        'logical_cpu_count': 0,
+        'available_ram_gib': 0.0,
+        'gpu_free_gib': 0.0,
+    }
+    assert manifest.admission.observed == ResourceSnapshot(1, 0.0, 0.0)
+    assert all(record['claim_state'] == 'ACTIVE' for record in manifest.domain_claims)
+    allocator.close()
+
+
+def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
+    tmp_path, config
+):
+    policy = AllocationPolicy(1, (215,), False, True)
+    claims = Path(os.environ['TMPDIR']).parent / 'persistent-claims'
+    first = WorkerResourceAllocator(
+        config, resource_root(tmp_path, 'first-active'), probe=FakeProbe(),
+        claim_root=claims, allocation_policy=policy, batch_id='a001',
+    )
+    first.allocate(1)
+    first.close()
+    second = WorkerResourceAllocator(
+        config, resource_root(tmp_path, 'second-active'), probe=FakeProbe(),
+        claim_root=claims, allocation_policy=policy, batch_id='a002',
+    )
+
+    with pytest.raises(ResourceAllocationError, match='ROS_DOMAIN_UNCLEAN'):
+        second.allocate(1)
+
+
+def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config):
+    policy = AllocationPolicy(1, (215,), False, True)
+    target = resource_root(tmp_path, 'prelaunch-failure')
+    claims = Path(os.environ['TMPDIR']).parent / 'rollback-claims'
+    socket_path = target / 'ipc/1/s'
+    failing = WorkerResourceAllocator(
+        config, target, probe=FakeProbe(sockets=(socket_path,)),
+        claim_root=claims, allocation_policy=policy, batch_id='a001',
+    )
+
+    with pytest.raises(ResourceAllocationError, match='SOCKET_CONFLICT'):
+        failing.allocate(1)
+
+    record = json.loads((claims / 'domain-215.lock').read_text(encoding='utf-8'))
+    assert record['claim_state'] == 'RELEASED'
+    assert record['no_processes_started'] is True
 
 
 def live_evidence(tmp_path, config, **changes):
