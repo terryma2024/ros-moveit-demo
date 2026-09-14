@@ -686,6 +686,19 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
             raise CliError("RECOVERY_BATCH_EVIDENCE_ROOT_INVALID")
         if (evidence_root / "aggregate_results.json").exists():
             raise CliError("RECOVERY_BATCH_ALREADY_FINALIZED")
+    elif options.adaptive_workers:
+        runtime_root = evidence_root / "r" / options.batch_id
+        if runtime_root.exists() or runtime_root.is_symlink():
+            raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
+        if evidence_root.exists() or evidence_root.is_symlink():
+            root_info = evidence_root.lstat()
+            if (
+                evidence_root.is_symlink()
+                or not stat.S_ISDIR(root_info.st_mode)
+                or root_info.st_uid != os.getuid()
+                or stat.S_IMODE(root_info.st_mode) != 0o700
+            ):
+                raise CliError("ADAPTIVE_EVIDENCE_ROOT_INVALID")
     elif evidence_root.exists() or evidence_root.is_symlink():
         raise CliError("DUPLICATE_BATCH_EVIDENCE_ROOT")
     try:
@@ -3590,9 +3603,8 @@ def run_cli(
     try:
         spec = prepare_batch(argv, provenance_verifier=provenance_verifier)
         if spec.adaptive_request is not None:
-            root = spec.adaptive_request.evidence_root
-            root.mkdir(parents=True, mode=0o700)
-            _write_json(root / "batch_manifest.json", spec.manifest)
+            task_root = spec.adaptive_request.evidence_root
+            task_root.mkdir(parents=True, mode=0o700, exist_ok=True)
             runner = AdaptiveBatchRunner(
                 spec.adaptive_request,
                 ProductionAdaptivePoolFactory(
@@ -3600,8 +3612,10 @@ def run_cli(
                     composition_factory=composition_factory,
                 ),
             )
+            root = spec.adaptive_request.runtime_root
             started = time.monotonic()
             try:
+                _write_json(root / "batch_manifest.json", spec.manifest)
                 summary = _run_with_shutdown_signals(runner.run)
             finally:
                 runner.close()

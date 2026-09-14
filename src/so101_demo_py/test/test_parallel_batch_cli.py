@@ -1681,6 +1681,22 @@ def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
     assert "max_points_per_worker" not in prepared.manifest
 
 
+def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    root = tmp_path / "registered"
+    root.mkdir(mode=0o700)
+    (root / "experiment-ledger.md").write_text("retained", encoding="utf-8")
+
+    prepared = prepare_batch(adaptive_argv(root), provenance_verifier=verified)
+
+    assert prepared.adaptive_request.evidence_root == root
+    assert prepared.adaptive_request.runtime_root == root / "r/a001"
+    (root / "r/a001").mkdir(parents=True, mode=0o700)
+    with pytest.raises(CliError, match="DUPLICATE_BATCH"):
+        prepare_batch(adaptive_argv(root), provenance_verifier=verified)
+
+
 def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 

@@ -58,7 +58,8 @@ def test_run_cli_writes_adaptive_aggregate(monkeypatch, tmp_path, capsys):
     )
 
     root = tmp_path / "adaptive-output"
-    request = SimpleNamespace(evidence_root=root)
+    runtime_root = root / "r/a001"
+    request = SimpleNamespace(evidence_root=root, runtime_root=runtime_root)
     prepared = SimpleNamespace(
         adaptive_request=request,
         request=None,
@@ -73,6 +74,7 @@ def test_run_cli_writes_adaptive_aggregate(monkeypatch, tmp_path, capsys):
         def __init__(self, supplied_request, pool_factory):
             assert supplied_request is request
             assert pool_factory == "pool-factory"
+            runtime_root.mkdir(parents=True, mode=0o700)
 
         def run(self):
             return summary
@@ -91,7 +93,7 @@ def test_run_cli_writes_adaptive_aggregate(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "AdaptiveBatchRunner", FakeRunner)
 
     assert cli.run_cli([], composition_factory=object()) == 0
-    document = json.loads((root / "aggregate_results.json").read_text())
+    document = json.loads((runtime_root / "aggregate_results.json").read_text())
     assert document["mode"] == "adaptive_workers"
     assert document["status"] == "COMPLETED"
     assert document["batch_cleanup_complete"] is True
@@ -106,7 +108,8 @@ def test_run_cli_reports_adaptive_runner_error_and_closes(
     from so101_demo.parallel_batch.adaptive_runner import AdaptiveRunnerError
 
     root = tmp_path / "adaptive-error"
-    request = SimpleNamespace(evidence_root=root)
+    runtime_root = root / "r/a001"
+    request = SimpleNamespace(evidence_root=root, runtime_root=runtime_root)
     prepared = SimpleNamespace(
         adaptive_request=request,
         request=None,
@@ -116,7 +119,7 @@ def test_run_cli_reports_adaptive_runner_error_and_closes(
 
     class FailingRunner:
         def __init__(self, *_args, **_kwargs):
-            pass
+            runtime_root.mkdir(parents=True, mode=0o700)
 
         def run(self):
             raise AdaptiveRunnerError("RUNNER_FAILED")
