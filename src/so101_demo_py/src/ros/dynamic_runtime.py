@@ -413,6 +413,7 @@ def run_dynamic_execute(
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
         source = runtime.cup_pose_source(node, loaded.template)
+        source.arm(min(5.0, options.cup_pose_timeout_s))
         if event_emitter is not None:
             ready_payload = {
                 "session_id": options.session_id,

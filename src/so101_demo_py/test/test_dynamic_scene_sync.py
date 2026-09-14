@@ -380,6 +380,11 @@ class _FakeSource:
         self._events = events
         self._sample = sample
 
+    def arm(self, timeout_s: float):
+        assert timeout_s == 2.0
+        self._events.append("source.arm")
+        return SimpleNamespace(ready_ros_ns=1, ready_monotonic_s=1.0)
+
     def get_one(self, timeout_s: float):
         assert timeout_s == 2.0
         self._events.append("sample.acquire")
@@ -578,6 +583,7 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
         "ros.init",
         "node.create",
         "source.create",
+        "source.arm",
         "sample.acquire",
         "truth.create",
         "truth.observe",
@@ -639,7 +645,8 @@ def test_run_dynamic_execute_emits_ready_after_subscription_before_pose_wait(
         _options(tmp_path), event_emitter=emitter, _runtime=runtime
     ) == 0
 
-    assert events.index("source.create") < events.index("workflow.RUNTIME_READY")
+    assert events.index("source.create") < events.index("source.arm")
+    assert events.index("source.arm") < events.index("workflow.RUNTIME_READY")
     assert events.index("workflow.RUNTIME_READY") < events.index("sample.acquire")
     assert events.index("ros.shutdown") < events.index("workflow.RUNTIME_COMPLETED")
     decoded = EventDecoder("w1", frozenset({"dynamic_runtime"})).feed(
