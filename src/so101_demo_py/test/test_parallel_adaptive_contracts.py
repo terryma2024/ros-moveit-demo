@@ -21,6 +21,7 @@ def test_default_options_form_the_frozen_fallback_ladder():
     assert options.worker_start_timeout_s == 120.0
     assert options.max_infra_attempts_per_point == 5
     assert options.ros_domain_ids == tuple(range(215, 223))
+    assert options.yolo_executor_count == 2
 
 
 def test_initial_chunk_is_not_a_capacity_gate(tmp_path):
@@ -108,6 +109,25 @@ def test_options_allow_w1_without_a_fallback():
     assert options.levels == (1,)
 
 
+@pytest.mark.parametrize("value", [True, 0, 3, 8])
+def test_options_reject_invalid_yolo_executor_count(value):
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        AdaptiveWorkerOptions,
+        ContractError,
+    )
+
+    with pytest.raises(ContractError, match="YOLO_EXECUTOR_COUNT"):
+        AdaptiveWorkerOptions(
+            8,
+            (6, 4, 2, 1),
+            3,
+            120.0,
+            5,
+            tuple(range(215, 223)),
+            yolo_executor_count=value,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "error"),
     [
@@ -139,6 +159,7 @@ def test_options_reject_boolean_and_zero_values_at_each_numeric_boundary(
         "worker_start_timeout_s": 120.0,
         "max_infra_attempts_per_point": 5,
         "ros_domain_ids": tuple(range(215, 223)),
+        "yolo_executor_count": 2,
     }
     values[field] = value
 

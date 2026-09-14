@@ -32,6 +32,7 @@ _FROZEN_ADAPTIVE_VALUES = {
     "worker_start_timeout_s": 120.0,
     "max_infra_attempts_per_point": 5,
     "ros_domain_ids": tuple(range(215, 223)),
+    "yolo_executor_count": 2,
 }
 
 
@@ -93,6 +94,7 @@ class AdaptiveWorkerOptions:
     worker_start_timeout_s: float
     max_infra_attempts_per_point: int
     ros_domain_ids: tuple[int, ...]
+    yolo_executor_count: int = 2
 
     def __post_init__(self) -> None:
         worker_count = _require_positive_int("worker_count", self.worker_count)
@@ -133,6 +135,11 @@ class AdaptiveWorkerOptions:
         object.__setattr__(
             self, "ros_domain_ids", _require_domain_ids(self.ros_domain_ids, worker_count)
         )
+        if (
+            type(self.yolo_executor_count) is not int
+            or self.yolo_executor_count not in {1, 2, 4}
+        ):
+            raise ContractError("YOLO_EXECUTOR_COUNT")
 
     @property
     def levels(self) -> tuple[int, ...]:
@@ -395,6 +402,7 @@ def load_adaptive_worker_options(path: Path) -> AdaptiveWorkerOptions:
         worker_start_timeout_s=document["worker_start_timeout_s"],
         max_infra_attempts_per_point=document["max_infra_attempts_per_point"],
         ros_domain_ids=document["ros_domain_ids"],
+        yolo_executor_count=document["yolo_executor_count"],
     )
     values = {
         "schema_version": schema_version,
@@ -405,6 +413,7 @@ def load_adaptive_worker_options(path: Path) -> AdaptiveWorkerOptions:
         "worker_start_timeout_s": options.worker_start_timeout_s,
         "max_infra_attempts_per_point": options.max_infra_attempts_per_point,
         "ros_domain_ids": options.ros_domain_ids,
+        "yolo_executor_count": options.yolo_executor_count,
     }
     for name, expected_value in _FROZEN_ADAPTIVE_VALUES.items():
         if values[name] != expected_value:

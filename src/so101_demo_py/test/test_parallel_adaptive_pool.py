@@ -461,7 +461,13 @@ def test_adaptive_socket_paths_freeze_the_107_byte_boundary():
     assert all("broker-authority.sock" not in str(path) for path in paths)
 
 
-def test_adaptive_broker_spec_carries_current_pool_capacity(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("worker_count", "yolo_executor_count"),
+    [(8, 2), (1, 1)],
+)
+def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
+    tmp_path, monkeypatch, worker_count, yolo_executor_count
+):
     from so101_demo.cli import mujoco_parallel_batch as cli
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
 
@@ -478,7 +484,8 @@ def test_adaptive_broker_spec_carries_current_pool_capacity(tmp_path, monkeypatc
     owner._broker_authority_thread = None
     owner.broker_generation = 0
     owner.adaptive_context = SimpleNamespace(
-        request=SimpleNamespace(worker_count=8)
+        request=SimpleNamespace(worker_count=worker_count),
+        options=SimpleNamespace(yolo_executor_count=2),
     )
     owner.journal = SimpleNamespace(coordinator_epoch=3)
     owner.spec = SimpleNamespace(
@@ -504,6 +511,16 @@ def test_adaptive_broker_spec_carries_current_pool_capacity(tmp_path, monkeypatc
     owner._prepare_broker_generation(1)
 
     document = json.loads(owner.broker_spec_path.read_text(encoding="utf-8"))
-    assert document["queue_capacity_per_model"] == 8
+    expected_deadline = max(
+        config.yolo_queue_timeout_s + config.yolo_inference_timeout_s,
+        config.grounded_sam_queue_timeout_s
+        + config.grounded_sam_inference_timeout_s,
+    ) + config.heartbeat_timeout_s
+    assert expected_deadline == 75.0
+    assert document["queue_capacity_per_model"] == worker_count
+    assert document["connection_handler_count"] == worker_count
+    assert document["yolo_executor_count"] == yolo_executor_count
+    assert document["grounded_sam_executor_count"] == 1
+    assert document["request_deadline_s"] == expected_deadline
     assert document["authority_endpoint"] == "/runtime/authority.sock"
     assert owner.broker_authority_server.path.name == "authority.sock"

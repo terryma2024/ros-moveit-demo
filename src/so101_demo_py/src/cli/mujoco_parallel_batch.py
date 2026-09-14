@@ -168,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--initial-points-per-worker")
     parser.add_argument("--worker-start-timeout-s")
     parser.add_argument("--max-infra-attempts-per-point")
+    parser.add_argument("--yolo-executor-count")
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--broker-image", required=True)
     parser.add_argument("--yolo-weights", type=Path, required=True)
@@ -250,6 +251,11 @@ def _adaptive_options(options) -> tuple[AdaptiveWorkerOptions, Path]:
             options.max_infra_attempts_per_point,
         )
     )
+    yolo_executor_count = (
+        defaults.yolo_executor_count
+        if options.yolo_executor_count is None
+        else _integer("yolo_executor_count", options.yolo_executor_count)
+    )
     try:
         adaptive = AdaptiveWorkerOptions(
             worker_count=worker_count,
@@ -258,6 +264,7 @@ def _adaptive_options(options) -> tuple[AdaptiveWorkerOptions, Path]:
             worker_start_timeout_s=worker_start_timeout_s,
             max_infra_attempts_per_point=max_infra_attempts_per_point,
             ros_domain_ids=defaults.ros_domain_ids,
+            yolo_executor_count=yolo_executor_count,
         )
     except ContractError as error:
         raise CliError(str(error)) from error
@@ -645,6 +652,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
         options.initial_points_per_worker,
         options.worker_start_timeout_s,
         options.max_infra_attempts_per_point,
+        options.yolo_executor_count,
     )
     if options.adaptive_workers:
         if options.resume:
@@ -820,6 +828,7 @@ def prepare_batch(argv=None, *, provenance_verifier=verify_provenance) -> Prepar
                     adaptive_worker_options.max_infra_attempts_per_point
                 ),
                 "ros_domain_ids": list(adaptive_worker_options.ros_domain_ids),
+                "yolo_executor_count": adaptive_worker_options.yolo_executor_count,
             },
         }
     else:
@@ -2501,8 +2510,24 @@ class ProductionBatchComposition:
             "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
         }
         if self.adaptive_context is not None:
-            broker_document["queue_capacity_per_model"] = (
-                self.adaptive_context.request.worker_count
+            worker_count = self.adaptive_context.request.worker_count
+            broker_document.update(
+                {
+                    "queue_capacity_per_model": worker_count,
+                    "connection_handler_count": worker_count,
+                    "yolo_executor_count": min(
+                        self.adaptive_context.options.yolo_executor_count,
+                        worker_count,
+                    ),
+                    "grounded_sam_executor_count": 1,
+                    "request_deadline_s": max(
+                        self.spec.config.yolo_queue_timeout_s
+                        + self.spec.config.yolo_inference_timeout_s,
+                        self.spec.config.grounded_sam_queue_timeout_s
+                        + self.spec.config.grounded_sam_inference_timeout_s,
+                    )
+                    + self.spec.config.heartbeat_timeout_s,
+                }
             )
         _write_json(spec_path, broker_document)
         self.broker_generation = generation

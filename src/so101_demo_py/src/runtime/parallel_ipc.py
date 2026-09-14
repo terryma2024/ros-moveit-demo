@@ -1037,8 +1037,14 @@ def build_broker_transport(runtime_spec):
         "request_deadline_s",
         "max_frame_bytes",
     }
+    adaptive_fields = {
+        "queue_capacity_per_model",
+        "connection_handler_count",
+        "yolo_executor_count",
+        "grounded_sam_executor_count",
+    }
     if (
-        set(document) not in (fields, fields | {"queue_capacity_per_model"})
+        set(document) not in (fields, fields | adaptive_fields)
         or type(document["schema_version"]) is not int
         or document["schema_version"] != 1
         or document["kind"] != "so101_parallel_broker_runtime"
@@ -1047,12 +1053,27 @@ def build_broker_transport(runtime_spec):
     _identifier("BATCH_ID", document["batch_id"])
     _positive_int("EPOCH", document["coordinator_epoch"])
     generation = _positive_int("BROKER_GENERATION", document["broker_generation"])
-    if "queue_capacity_per_model" in document:
+    if adaptive_fields.issubset(document):
         capacity = _positive_int(
             "QUEUE_CAPACITY", document["queue_capacity_per_model"]
         )
         if capacity > 8:
             raise IpcError("BROKER_QUEUE_CAPACITY")
+        handlers = _positive_int(
+            "CONNECTION_HANDLER_COUNT", document["connection_handler_count"]
+        )
+        if handlers > 8:
+            raise IpcError("BROKER_CONNECTION_HANDLER_COUNT")
+        yolo_executors = _positive_int(
+            "YOLO_EXECUTOR_COUNT", document["yolo_executor_count"]
+        )
+        if yolo_executors not in {1, 2, 4}:
+            raise IpcError("BROKER_YOLO_EXECUTOR_COUNT")
+        if (
+            document["grounded_sam_executor_count"] != 1
+            or type(document["grounded_sam_executor_count"]) is not int
+        ):
+            raise IpcError("BROKER_GROUNDED_SAM_EXECUTOR_COUNT")
     if document["run_mode"] not in {"plan_only", "execute"}:
         raise IpcError("BROKER_RUN_MODE")
     if (
@@ -1099,6 +1120,18 @@ def build_broker_transport(runtime_spec):
         or deadline > config.batch_hard_timeout_s
     ):
         raise IpcError("BROKER_DEADLINE")
+    if adaptive_fields.issubset(document):
+        expected_deadline = max(
+            config.yolo_queue_timeout_s + config.yolo_inference_timeout_s,
+            config.grounded_sam_queue_timeout_s
+            + config.grounded_sam_inference_timeout_s,
+        ) + config.heartbeat_timeout_s
+        if (
+            capacity != handlers
+            or yolo_executors > handlers
+            or float(deadline) != expected_deadline
+        ):
+            raise IpcError("BROKER_ADAPTIVE_CONCURRENCY")
     authority_call = _BrokerCoordinatorClient(
         endpoint,
         token_path,

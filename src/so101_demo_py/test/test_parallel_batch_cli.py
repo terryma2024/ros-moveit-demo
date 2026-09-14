@@ -1705,6 +1705,7 @@ def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
     assert prepared.adaptive_request is not None
     assert prepared.adaptive_request.options.levels == (8, 6, 4, 2, 1)
     assert prepared.adaptive_request.options.initial_points_per_worker == 3
+    assert prepared.adaptive_request.options.yolo_executor_count == 2
     assert prepared.adaptive_config_path == ADAPTIVE_CONFIG.resolve()
     assert "max_points_per_worker" not in prepared.manifest
 
@@ -1767,6 +1768,7 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
             initial_points_per_worker="2",
             worker_start_timeout_s="45.5",
             max_infra_attempts_per_point="4",
+            yolo_executor_count="4",
         ),
         provenance_verifier=verified,
     )
@@ -1776,6 +1778,7 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
     assert options.initial_points_per_worker == 2
     assert options.worker_start_timeout_s == 45.5
     assert options.max_infra_attempts_per_point == 4
+    assert options.yolo_executor_count == 4
     assert prepared.manifest["adaptive_worker_options"] == {
         "worker_count": 6,
         "fallback_worker_counts": [4, 2, 1],
@@ -1783,7 +1786,32 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
         "worker_start_timeout_s": 45.5,
         "max_infra_attempts_per_point": 4,
         "ros_domain_ids": list(range(215, 223)),
+        "yolo_executor_count": 4,
     }
+
+
+@pytest.mark.parametrize("value", ["0", "3", "8", "true"])
+def test_adaptive_cli_rejects_invalid_yolo_executor_count(tmp_path, value):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="YOLO_EXECUTOR_COUNT|MALFORMED_INTEGER"):
+        prepare_batch(
+            adaptive_argv(
+                tmp_path / "adaptive",
+                yolo_executor_count=value,
+            ),
+            provenance_verifier=verified,
+        )
+
+
+def test_nonadaptive_cli_rejects_yolo_executor_count(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    with pytest.raises(CliError, match="ADAPTIVE_OPTIONS_REQUIRE_FLAG"):
+        prepare_batch(
+            argv(tmp_path / "ordinary") + ["--yolo-executor-count", "2"],
+            provenance_verifier=verified,
+        )
 
 
 @pytest.mark.parametrize(

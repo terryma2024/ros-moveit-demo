@@ -334,9 +334,13 @@ def main(argv=None, *, transport=None, authorize=None):
             "grounded_manifest_sha256", "config_path", "authority_endpoint",
             "authority_token_path", "request_deadline_s", "max_frame_bytes",
         }
+        adaptive = {
+            "queue_capacity_per_model", "connection_handler_count",
+            "yolo_executor_count", "grounded_sam_executor_count",
+        }
         if type(spec) is not dict or set(spec) not in (
             required,
-            required | {"queue_capacity_per_model"},
+            required | adaptive,
         ):
             raise ValueError("BROKER_RUNTIME_SPEC_SCHEMA")
         capacity = spec.get("queue_capacity_per_model")
@@ -344,6 +348,21 @@ def main(argv=None, *, transport=None, authorize=None):
             type(capacity) is not int or not 1 <= capacity <= 8
         ):
             raise ValueError("BROKER_RUNTIME_QUEUE_CAPACITY")
+        if adaptive.issubset(spec):
+            handlers = spec["connection_handler_count"]
+            yolo_executors = spec["yolo_executor_count"]
+            grounded_executors = spec["grounded_sam_executor_count"]
+            if (
+                type(handlers) is not int
+                or not 1 <= handlers <= 8
+                or type(yolo_executors) is not int
+                or yolo_executors not in {1, 2, 4}
+                or yolo_executors > handlers
+                or type(grounded_executors) is not int
+                or grounded_executors != 1
+                or capacity != handlers
+            ):
+                raise ValueError("BROKER_RUNTIME_CONCURRENCY")
         model_receipt = json.loads(model_ready_path.read_text(encoding="utf-8"))
         if model_receipt.get("ready") is not True or set(runtime.detectors) != {
             YOLO_ID, "grounded-sam"

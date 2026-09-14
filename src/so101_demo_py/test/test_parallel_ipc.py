@@ -1099,7 +1099,14 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
             },
         )
     ]
-    adaptive_document = {**document, "queue_capacity_per_model": 8}
+    adaptive_document = {
+        **document,
+        "queue_capacity_per_model": 8,
+        "connection_handler_count": 8,
+        "yolo_executor_count": 2,
+        "grounded_sam_executor_count": 1,
+        "request_deadline_s": 75.0,
+    }
     spec.write_text(
         json.dumps(adaptive_document, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
@@ -1142,6 +1149,12 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         {**document, "image_id": "sha256:" + "z" * 64},
         {**document, "queue_capacity_per_model": True},
         {**document, "queue_capacity_per_model": 9},
+        {**adaptive_document, "connection_handler_count": True},
+        {**adaptive_document, "connection_handler_count": 0},
+        {**adaptive_document, "connection_handler_count": 9},
+        {**adaptive_document, "yolo_executor_count": True},
+        {**adaptive_document, "yolo_executor_count": 3},
+        {**adaptive_document, "grounded_sam_executor_count": 2},
     ]
     for invalid in invalid_documents:
         spec.write_text(
