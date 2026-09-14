@@ -597,7 +597,14 @@ class ProcessSupervisor:
                 cleanup_ok = False
         stopped_pids = []
         for expected, poll in tuple(self._owned.values()):
-            if poll() is not None:
+            code = poll()
+            if code is None:
+                try:
+                    code = self._confirm_running_or_repoll_exit(expected, poll)
+                except (OSError, SupervisorError):
+                    cleanup_ok = False
+                    continue
+            if code is not None:
                 try:
                     first_signal = (
                         signal.SIGINT if expected.role == "worker" else signal.SIGTERM

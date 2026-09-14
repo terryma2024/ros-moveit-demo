@@ -954,6 +954,22 @@ def test_shutdown_signals_exact_owned_group_after_leader_is_reaped():
     assert supervisor.processes == ()
 
 
+def test_shutdown_repolls_worker_that_exits_before_identity_confirmation():
+    from so101_demo.runtime.parallel_processes import OwnedProcess, ProcessSupervisor
+
+    worker = OwnedProcess("batch-1", "worker", 102, 102, ("worker",), 2)
+    polls = iter((None, 0))
+    supervisor = ProcessSupervisor(
+        "batch-1",
+        identity_reader=lambda _pid: None,
+        group_members_reader=lambda _pgid: (),
+    )
+    supervisor._record_started(worker, poll=lambda: next(polls, 0))
+
+    assert supervisor.shutdown(interrupt_timeout_s=0.01) is True
+    assert supervisor.processes == ()
+
+
 def test_supervisor_default_shutdown_requires_poll_and_proc_absence(tmp_path):
     from so101_demo.runtime.parallel_processes import ProcessSupervisor
 
