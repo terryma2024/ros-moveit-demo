@@ -15,6 +15,7 @@ from pathlib import Path
 import stat
 import sys
 import threading
+import time
 
 import numpy as np
 
@@ -369,6 +370,12 @@ class PerceptionService:
         self._lock = threading.RLock()
         self._health_down = health_down
         self._health_down_reported = False
+        self._started = False
+        self._closed = threading.Event()
+        self._work_available = threading.Event()
+        self._response_condition = threading.Condition(self._lock)
+        self._executor_threads = []
+        self._watchdog_thread = None
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
             config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
@@ -392,13 +399,39 @@ class PerceptionService:
         except StartAuthorizationRejected:
             return False
 
-    def _detect(self, request):
+    def _detect(self, request, *, executor_index=0):
         with self._lock:
             snapshot = self._snapshots[request.request_id]
-        return self.runtime.infer(request, snapshot)
+        return self.runtime.infer(
+            request,
+            snapshot,
+            executor_index=executor_index,
+        )
 
     def start(self):
         self.runtime.start()
+        with self._lock:
+            if self._started:
+                return
+            self._started = True
+            for model_id in (YOLO_ID, GROUNDED_ID):
+                for executor_index in range(
+                    self.runtime.executor_counts[model_id]
+                ):
+                    thread = threading.Thread(
+                        target=self._executor_loop,
+                        args=(model_id, executor_index),
+                        name=f'perception-{model_id}-{executor_index}',
+                        daemon=True,
+                    )
+                    self._executor_threads.append(thread)
+                    thread.start()
+            self._watchdog_thread = threading.Thread(
+                target=self._watchdog_loop,
+                name='perception-watchdog',
+                daemon=True,
+            )
+            self._watchdog_thread.start()
 
     def submit(self, request, snapshot):
         self._sync_health()
@@ -411,14 +444,103 @@ class PerceptionService:
         with self._lock:
             self._requests.setdefault(request.request_id, request)
         self._response_health(submission.response)
+        if submission.accepted and submission.response is None:
+            self._work_available.set()
+        with self._response_condition:
+            self._response_condition.notify_all()
         return submission
+
+    def _executor_loop(self, model_id, executor_index):
+        while not self._closed.is_set():
+            request = self.broker.next_ready_request(model_id)
+            if request is None:
+                self._work_available.wait(0.02)
+                self._work_available.clear()
+                continue
+            try:
+                result = self._detect(
+                    request,
+                    executor_index=executor_index,
+                )
+            except Exception as error:
+                result = ModelResult(
+                    ModelOutcome.INFRA_ERROR,
+                    reason=f'DETECTOR_RUNTIME_ERROR: {error}',
+                )
+            response = self.broker.complete(request, result)
+            self._response_health(response)
+            with self._response_condition:
+                self._response_condition.notify_all()
+
+    def _watchdog_loop(self):
+        while not self._closed.wait(0.02):
+            try:
+                self._sync_health()
+            finally:
+                with self._response_condition:
+                    self._response_condition.notify_all()
+
+    def wait_response(self, request, timeout_s):
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or timeout_s <= 0
+        ):
+            raise ValueError('WAIT_RESPONSE_TIMEOUT')
+        deadline = time.monotonic() + float(timeout_s)
+        while True:
+            response = self.poll_response(request)
+            if response is not None:
+                return response
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            with self._response_condition:
+                self._response_condition.wait(min(remaining, 0.02))
+
+    def close(self, timeout_s):
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or timeout_s < 0
+        ):
+            raise ValueError('SERVICE_CLOSE_TIMEOUT')
+        self._closed.set()
+        with self._lock:
+            outstanding = tuple(self._requests.values())
+        for worker_id, generation in {
+            (request.worker_id, request.worker_generation)
+            for request in outstanding
+        }:
+            self.broker.cancel_generation(worker_id, generation)
+        self.runtime._unhealthy()
+        self._work_available.set()
+        with self._response_condition:
+            self._response_condition.notify_all()
+        deadline = time.monotonic() + float(timeout_s)
+        threads = [*self._executor_threads]
+        if self._watchdog_thread is not None:
+            threads.append(self._watchdog_thread)
+        for thread in threads:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            thread.join(remaining)
+        return all(not thread.is_alive() for thread in threads)
 
     def run_next(self):
         self._sync_health()
         response = self.broker.run_next()
         self._sync_health()
-        return self._response_health(self.broker.poll_response(response.request)
-                                     if response is not None else None)
+        if response is not None:
+            return self._response_health(
+                self.broker.poll_response(response.request)
+            )
+        with self._lock:
+            pending = tuple(self._requests.values())
+        if len(pending) == 1:
+            return self.wait_response(pending[0], timeout_s=1.0)
+        return None
 
     def poll_response(self, request):
         self._sync_health()
@@ -436,6 +558,8 @@ class PerceptionService:
         if response is not None:
             with self._lock:
                 self._requests.pop(response.request.request_id, None)
+            with self._response_condition:
+                self._response_condition.notify_all()
         health_losing = response is not None and response.outcome in {
             ModelOutcome.INFRA_ERROR,
             ModelOutcome.QUEUE_TIMEOUT,

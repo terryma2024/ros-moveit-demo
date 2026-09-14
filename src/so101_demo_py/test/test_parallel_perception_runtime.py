@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import threading
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -414,6 +416,167 @@ def test_service_drives_real_broker_and_fences_late_ack(tmp_path, monkeypatch):
     f.runtime.authorize = lambda request, snapshot: False
     assert service.run_next() is None
     assert service.broker.poll_response(grounded).outcome is ModelOutcome.CANCELLED
+
+
+def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
+        tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    release = threading.Event()
+    state_lock = threading.Lock()
+    active = {YOLO_ID: 0, GROUNDED_ID: 0}
+    peaks = {YOLO_ID: 0, GROUNDED_ID: 0}
+    calls = {YOLO_ID: [], GROUNDED_ID: []}
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 2, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def _authorized(self, _request, _snapshot):
+            return True
+
+        def infer(self, request, _snapshot, *, executor_index):
+            with state_lock:
+                active[request.model_id] += 1
+                peaks[request.model_id] = max(
+                    peaks[request.model_id], active[request.model_id]
+                )
+                calls[request.model_id].append(executor_index)
+            try:
+                assert release.wait(timeout=2.0)
+                return ModelResult(ModelOutcome.NORMAL_REJECTION)
+            finally:
+                with state_lock:
+                    active[request.model_id] -= 1
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    runtime = Runtime()
+    service = PerceptionService(runtime, config, generation=1)
+    service.start()
+    requests = [
+        replace(f.req, request_id=f'yolo-{index}', worker_id=f'y{index}')
+        for index in range(3)
+    ] + [
+        replace(
+            f.req,
+            request_id=f'grounded-{index}',
+            worker_id=f'g{index}',
+            model_id=GROUNDED_ID,
+        )
+        for index in range(2)
+    ]
+    for request in requests:
+        assert service.submit(request, f.snapshot).accepted
+
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        with state_lock:
+            if len(calls[YOLO_ID]) == 2 and len(calls[GROUNDED_ID]) == 1:
+                break
+        time.sleep(0.005)
+    with state_lock:
+        assert len(calls[YOLO_ID]) == 2
+        assert len(calls[GROUNDED_ID]) == 1
+        assert peaks == {YOLO_ID: 2, GROUNDED_ID: 1}
+    release.set()
+    responses = [service.wait_response(request, timeout_s=2.0) for request in requests]
+
+    assert all(response.outcome is ModelOutcome.NORMAL_REJECTION for response in responses)
+    assert len(calls[YOLO_ID]) == 3
+    assert len(calls[GROUNDED_ID]) == 2
+    assert service.close(timeout_s=1.0) is True
+
+
+def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+    now = [1.0]
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def _authorized(self, _request, _snapshot):
+            return True
+
+        def infer(self, _request, _snapshot, *, executor_index):
+            assert executor_index == 0
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return ModelResult(ModelOutcome.NORMAL_REJECTION)
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    runtime = Runtime()
+    service = PerceptionService(
+        runtime,
+        config,
+        generation=1,
+        clock=lambda: now[0],
+    )
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert entered.wait(timeout=1.0)
+    now[0] += config.yolo_inference_timeout_s
+
+    response = service.wait_response(f.req, timeout_s=1.0)
+
+    assert response.outcome is ModelOutcome.INFERENCE_TIMEOUT
+    assert response.reason == 'INFERENCE_DEADLINE_EXCEEDED'
+    assert not service.broker.healthy
+    assert not runtime.healthy
+    assert service.close(timeout_s=0.01) is False
+    release.set()
+    assert service.close(timeout_s=1.0) is True
 
 
 def test_service_preserves_initiating_runtime_failure_before_health_fanout(

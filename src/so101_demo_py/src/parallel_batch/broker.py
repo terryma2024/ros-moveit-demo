@@ -320,17 +320,25 @@ class PerceptionBroker:
                 return BrokerSubmission(False, response.reason, response)
             return BrokerSubmission(entry.admission.accepted, entry.admission.reason, response)
 
-    def next_ready_request(self):
+    def next_ready_request(self, model_id=None):
         """Dispatch in model/Worker round-robin, after fresh lease/deadline checks."""
         with self._lock:
+            if model_id is not None:
+                _require_id('model_id', model_id)
+                if model_id not in self._models:
+                    raise BrokerError('UNKNOWN_MODEL')
             for entry in tuple(self._entries.values()):
                 if entry.response is None:
                     self._guard(entry)
             if not self.healthy:
                 return None
-            for _ in self._models:
-                model = self._model_turns[0]
-                self._model_turns.rotate(-1)
+            models = self._models if model_id is None else (model_id,)
+            for _ in models:
+                if model_id is None:
+                    model = self._model_turns[0]
+                    self._model_turns.rotate(-1)
+                else:
+                    model = model_id
                 workers = self._workers[model]
                 while workers:
                     worker = workers[0]

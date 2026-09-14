@@ -86,6 +86,16 @@ def test_model_round_robin_allows_grounded_before_yolo_refill():
     assert broker.next_ready_request() == grounded
 
 
+def test_model_specific_dequeue_never_takes_another_models_request():
+    broker, _ = harness()
+    yolo = enqueue(broker, req())
+    grounded = enqueue(broker, req('worker-02', 'g', model=GROUNDED))
+
+    assert broker.next_ready_request(GROUNDED) == grounded
+    assert broker.next_ready_request(GROUNDED) is None
+    assert broker.next_ready_request(YOLO) == yolo
+
+
 @pytest.mark.parametrize('running', [False, True])
 def test_queued_and_running_each_block_same_worker_model(running):
     broker, _ = harness()
