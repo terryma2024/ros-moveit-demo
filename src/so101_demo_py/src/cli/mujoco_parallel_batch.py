@@ -89,6 +89,7 @@ from so101_demo.parallel_batch.worker import (
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
     BrokerTransport,
+    IpcError,
     UnixRpcClient,
     WorkerTokenAuthority,
     _inference_request,
@@ -2925,11 +2926,24 @@ class ProductionBatchComposition:
             self.adaptive_context.options.worker_start_timeout_s
         )
         receipts = {}
+
+        def readiness_or_none(control):
+            try:
+                return control.readiness()
+            except IpcError as error:
+                if str(error) not in {
+                    "DEADLINE_EXCEEDED", "HANDLER_DEADLINE_EXCEEDED"
+                }:
+                    raise
+                return None
+            except TimeoutError:
+                return None
+
         while self._clock() < deadline:
             self.supervisor.assert_healthy()
             for control in self.worker_controls:
                 if control.worker_id not in receipts:
-                    receipt = control.readiness()
+                    receipt = readiness_or_none(control)
                     if receipt is not None:
                         receipts[control.worker_id] = receipt
             if len(receipts) == len(self.worker_controls):
@@ -2939,13 +2953,16 @@ class ProductionBatchComposition:
             raise CliError("WORKER_READY_TIMEOUT")
         final_receipts = []
         for control in self.worker_controls:
-            self.supervisor.assert_healthy()
-            receipt = control.readiness()
+            receipt = None
+            while receipt is None and self._clock() < deadline:
+                self.supervisor.assert_healthy()
+                receipt = readiness_or_none(control)
+                if receipt is None:
+                    self._sleep(min(0.01, max(0.0, deadline - self._clock())))
             now = self._clock()
             process = self._adaptive_worker_processes.get(control.worker_id)
-            if (
-                receipt is None
-                or receipt.worker_id != control.worker_id
+            if receipt is None or (
+                receipt.worker_id != control.worker_id
                 or receipt.generation != control.generation
                 or not receipt.coordinator_registered
                 or not receipt.runtime_ready

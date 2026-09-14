@@ -139,6 +139,37 @@ def test_control_socket_appearing_after_six_seconds_uses_shared_120_second_deadl
     assert len(recorded) == 1
 
 
+def test_transient_readiness_transport_timeout_is_retried_before_shared_deadline():
+    from so101_demo.runtime.parallel_ipc import IpcError
+
+    clock = FakeClock()
+
+    class Control:
+        worker_id = "w1"
+        generation = 1
+
+        def __init__(self):
+            self.readiness_calls = 0
+
+        def readiness(self):
+            self.readiness_calls += 1
+            if self.readiness_calls == 1:
+                raise IpcError("DEADLINE_EXCEEDED")
+            return valid_receipt(observed=clock.now)
+
+        def release_start(self):
+            return True
+
+    control = Control()
+    recorded = []
+    composition = startup_composition(clock, [control], recorded.append)
+
+    composition._release_adaptive_workers()
+
+    assert control.readiness_calls == 3
+    assert len(recorded) == 1
+
+
 def test_worker_ready_timeout_occurs_without_release_or_pool_running_record():
     clock = FakeClock()
 
