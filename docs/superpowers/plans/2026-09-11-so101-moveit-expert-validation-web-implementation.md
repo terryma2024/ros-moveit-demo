@@ -2,13 +2,29 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 Teleop Web 中交付一个独立的 MoveIt 专家随机点位验证页面，支持 4 至 20 个确定性点位、实时俯视状态、证据查看，以及失败点的串行 `FULL_RESTART` 重试。
+**Goal:** 在 Teleop Web 中交付一个独立的 MoveIt 专家随机点位验证页面，支持固定顺序、
+固定并发和显式自适应 Worker 池三种模式、4 至 20 个确定性点位、实时 Worker/分代/俯视
+状态、证据查看，以及业务失败点的串行 `FULL_RESTART` 重试。
 
-**Architecture:** 长生命周期的 validation server 位于所有 MuJoCo stack 之外。它持久化 campaign、lease、命令幂等、进程所有权与安全回执，并通过 supervisor-owned process broker 启动 stack、batch 和逐点 worker。现有 `so101_demo_py` batch 保留任务状态机所有权，但通过新端口上报持久进度、检查取消、安全关栈，不再直接拥有验证模式下的子进程。
+**Architecture:** 长生命周期的 validation server 位于所有 MuJoCo stack 之外。它只持久化
+Web lease、命令幂等、campaign-to-upstream binding、顶层执行 owner 和 retry queue。固定
+`SEQUENTIAL`/`PARALLEL` 由 `ParallelBatchCoordinator` 权威执行；显式 `ADAPTIVE` 由生产
+wrapper 持有 `AdaptiveBatchRunner`，Runner 跨 pool generation 保持唯一顶层 journal 和结果
+权威，每个 generation 复用 coordinator。失败点重试仍是新的固定 N=1/K=1 coordinator batch。
 
 **Tech Stack:** Python 3.12、ROS 2 Jazzy、MuJoCo、MoveIt 2、FastAPI、Pydantic、SQLite、React、TypeScript、SVG、Bun、Vitest、Playwright。
 
 **Spec:** [SO-101 MoveIt expert random-position validation Web design](../specs/2026-09-11-so101-moveit-expert-validation-web-design.md)。执行者必须先完整阅读设计和本计划；设计是行为契约，本计划只拆解实现顺序。
+
+**Upstream dependencies:**
+
+- `docs/superpowers/specs/2026-09-11-so101-parallel-multipoint-validation-design.md` and
+  `docs/superpowers/plans/2026-09-12-so101-parallel-multipoint-validation-implementation.md`;
+- `docs/superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md` and
+  `docs/superpowers/plans/2026-09-14-so101-adaptive-worker-pool-implementation.md`.
+
+本计划从两个上游计划的已验收产物开始，不复制 coordinator、Runner、wrapper、journal、
+Worker、PerceptionBroker、精确 cleanup、资源观测或故障恢复实现。
 
 ## Global Constraints
 
@@ -17,11 +33,40 @@
 - API、event log、store、process ownership 和 retry command 一律使用 manifest 中不可变的 canonical `point.id`，例如 `task_start` 或 `sample_05_near_center`。`P01` 至 `P20` 只作为 `display_id` 出现在页面、图例和无障碍标签中；转换只能通过当前 manifest 完成。
 - 默认 profile 是 `ai_station_baseline_v1`。`seed=20260911`、20 个点、15 mm 最小中心距、六位小数舍入、10,000 次拒绝上限和历史坐标必须逐项一致。
 - 现有 35 mm geometry sampler 保留为独立 profile `geometry_v2`。不得静默修改任一 profile 的结果。
-- 首轮 campaign 使用一个 fresh stack，并在点之间执行 `RESET_WORLD`。失败点重试时，每个点独占一个 fresh stack 和一个 `FULL_RESTART` attempt。
-- retry 不能覆盖首轮结果，也不能改变首轮成功率分母。`INVALID`、`NOT_RUN` 和 `BLOCKED` 不具备失败重试资格。
-- validation server、stack、batch、每个 point worker 使用分别登记的进程所有权。禁止 broad `pkill`、`killall` 和进程名匹配。
-- 未取得新鲜 `ShutdownSafetyReceipt` 时，不得 signal stack、reset、开夹爪或启动下一次执行；状态进入 `NEEDS_OPERATOR_RECOVERY`。
-- event log 是进度提交权威。snapshot 只是缓存；HTTP/WebSocket 只能发布 supervisor journal 已接受的 sequence。
+- `SEQUENTIAL` 强制 `worker_count=1`；`PARALLEL` 只接受 2–3 个 Worker。两者都使用上游
+  动态 lease，不做固定分片。K 是正整数且不大于 20，`N × K < total_points` 时拒绝启动。
+- `ADAPTIVE` 必须显式选择，默认 preferred W8、fallback W6/W4/W2/W1、
+  `initial_points_per_worker=3`、`worker_start_timeout_s=120`、
+  `max_infra_attempts_per_point=5`。它禁止 K；initial affinity 不是容量上限。
+- 页面默认顺序模式。固定并发必须通过上游 resource admission；自适应 preflight 只把
+  CPU/RAM/GPU/pressure/RTF 记为 observation，不能据此拒绝、选 tier 或静默降级。自适应只
+  根据真实 startup/process/OOM/RPC/Broker/cleanup 结果沿冻结 ladder 降级。
+- 首轮点位状态使用上游 `PASSED | FAILED | INDETERMINATE | UNRUN`；`INVALID` 是 attempt
+  状态，不得折叠成普通产品失败。`coverage_complete`、`execution_complete`、
+  `batch_cleanup_complete` 和 `qualification_passed` 直接取 coordinator 结果。
+- 自适应点位工作状态使用 Runner 的 `UNRUN | LEASED | RUNNING | INFRA_INTERRUPTED |
+  PASSED | FAILED`。`PASSED`/`FAILED` 跨 generation 不可变；可能已开始的基础设施中断尝试
+  保留 attempt-level `INDETERMINATE`，完成旧 generation 精确 cleanup 和 fresh initial gate
+  后才可重跑。Web 不自行推导固定模式的四个 qualification flags。
+- retry 不能覆盖首轮结果，也不能改变首轮成功率分母。固定模式安全终态或 adaptive
+  `COMPLETED_WITH_FAILURES` 且 cleanup complete 后，只有业务 `FAILED` 具备 retry 资格；
+  `INDETERMINATE`、`INFRA_INTERRUPTED`、`UNRUN`、`INFRA_FAILED` 和 unresolved `INVALID`
+  不可重试。
+- 每个人工 retry 是新的固定 `SEQUENTIAL` N=1/K=1 coordinator batch，使用 fresh Worker stack、batch/attempt ID、
+  coordinator epoch、ROS domain、session 和 evidence child。
+- 固定模式下 validation server 只拥有 coordinator identity；自适应模式下只拥有 wrapper
+  的精确 PID identity。Wrapper 拥有 Runner child，Runner 拥有 generations，generation
+  coordinator 独占 Broker/Worker/ROS/MuJoCo/MoveIt/controller。Web 不 signal wrapper PGID、
+  Runner、Worker 或 Broker。所有层都禁止 broad `pkill`、`killall` 和进程名匹配。
+- 未取得 mode-specific upstream 的 `batch_cleanup_complete=true` 和可验证 cleanup receipt
+  时，Web supervisor 不得回收 fixed coordinator、结束 adaptive owner、启动下一次执行或推进
+  retry queue；状态进入
+  `NEEDS_OPERATOR_RECOVERY`。
+- 固定 coordinator journal 或 adaptive Runner 顶层 journal 是执行进度提交权威。Generation
+  journal 只作为 Runner 引用的嵌套证据。Web snapshot 只是缓存；HTTP/WebSocket
+  只能发布已验证 journal frame 和 sealed manifest 的投影。
+- 共享 Broker 保持 YOLO-first、Grounded-SAM 受限回退、generation fencing、有界公平队列
+  和公共依赖暂停。Web 不发布共享 `/cup_pose`，也不重新判断模型结果。
 - 浏览器只提交类型化意图。它不生成 shell、状态机 transition、关节目标或高频控制命令。
 - MoveIt expert、ACT collection、ACT rollout 使用不同 executor/operation 和统计口径。MoveIt 成功点不能自动获得 ACT 数据资格。
 - Web 依赖、测试和一次性 CLI 统一使用 Bun 与现有 `bun.lock`，不用 npm、npx 或 `package-lock.json`。
@@ -33,9 +78,23 @@
 
 ## 执行前准备与证据门
 
-编写本计划时，本地是 detached `6e816d66b8aa109a7bf84d4276d0c918cd19cd7a`，设计文档有未提交修改。ai-station 是 `main@ea0215180ed8cc0a90d6683a5e80d475987b5bc0`，存在另一任务的 MoveIt expert 优化改动和 attached `codex-19`。执行时把这些内容视为用户工作，禁止覆盖、stash、clean 或混入提交。
+本次 2026-09-14 兼容修订编写时，目标 worktree 是 detached
+`97e75940db51f67809213d70adfa599a70975f4c`；adaptive 设计输入来自 clean canonical checkout
+`main@bd708bd94e9f69c705ccef3b0439b899fcb6b40c`。ai-station 只读快照中 adaptive 实现位于
+`codex/parallel-adaptive-worker-pool@4c777fa722586be92a0b357b861ab4ce460a06ab`，对应 tmux 任务
+仍归原执行者所有。本计划不得复制、清理、提交或控制该运行任务；正式实施前必须重新核对
+所有可变 commit、dirty state、tmux、进程和上游验收状态。
 
-- [ ] 使用 `superpowers:using-git-worktrees` 创建实现 worktree。起点必须是同时包含已批准设计与本计划的 commit；不要从当前未提交状态猜测基线。
+- [ ] 先完成并验收上游并发实施计划 Task 1–15。实现 worktree 必须包含已提交的并发
+  设计/计划、`so101_demo.parallel_batch.*`、`so101_parallel_batch`、combined Broker
+  image、package gate 与双 Worker live evidence；任一缺失时本计划停止，不写兼容 shim。
+- [ ] 完成并验收上游 adaptive Worker-pool 计划。必须具备 `--adaptive-workers`、
+  `AdaptiveBatchRunner`、`scripts/run_so101_adaptive_batch.zsh`、
+  `so101_parallel_batch_cleanup`、Runner 顶层 journal、W8 startup/mid-run failure 到 W6、
+  20 点 adaptive run 及 W1/W2/W4/W6/W8 性能证据。缺失时只将 `ADAPTIVE` 标为 unavailable，
+  不改变固定模式。
+- [ ] 使用 `superpowers:using-git-worktrees` 创建 Web 实现 worktree。起点必须同时包含
+  已批准的并发实现、Web 设计与本计划；不要从未提交输入猜测基线。
 - [ ] 读取根 `AGENTS.md`、`so101-dev`、`ai-station-access.md`、`so101-system-map.md`、`debug-evidence.md`、`test-and-acceptance.md` 和 `experiment-ledger.md`。
 - [ ] 创建 `docs/experiments/so101-moveit-expert-validation-web-experiment-ledger.md`，并在任何代码或 live run 之前写入 base commit、worktree、dirty files、进程清单与第一个 `PLANNED` 条目。
 - [ ] 为整个执行任务只建立一个 evidence root。macOS 使用 `/tmp`；ai-station 使用 `/data` durable root：
@@ -95,145 +154,113 @@ validation_web() {
 
 | 单元 | 文件 | 责任 |
 |---|---|---|
-| 采样与几何 | `so101_teleop/expert_validation/sampler.py`, `projection.py`, `config/expert_validation/*` | 冻结 sampler profile、manifest、geometry 和共享投影 fixture |
-| Batch 协议 | `so101_demo/application/task_batch.py`, `runtime/task_progress.py`, `runtime/task_batch_runtime.py` | 进度事件、完整点位终态、取消检查和安全回执 |
-| 进程控制 | `so101_demo/runtime/process_owner.py`, `so101_teleop/expert_validation/process_owner.py` | supervisor-owned stack/batch/worker PGID 和本地 IPC |
-| 持久化 | `so101_teleop/expert_validation/store.py` | SQLite journal、命令幂等、lease generation、accepted sequence 和恢复事务 |
-| 监督器 | `so101_teleop/expert_validation/supervisor.py`, `service.py` | 首轮、重试、清理、恢复与统计状态机 |
+| Catalog 与几何 | `so101_teleop/expert_validation/catalog.py`, `projection.py`, `config/expert_validation/*` | 上游冻结 catalog 的 selection manifest、geometry 和共享投影 fixture |
+| 上游执行 | `so101_demo.parallel_batch.*`, adaptive Runner/wrapper, `runtime/parallel_*.py`, `cli/mujoco_parallel_batch.py` | 固定 queue/lease/K 和 adaptive generations/fallback、journal、Worker、Broker、sealed result、recovery 和 terminal authority；本计划只消费 |
+| Execution bridge | `so101_teleop/expert_validation/coordinator.py`, `adaptive.py`, `process_owner.py` | 固定 coordinator 或 adaptive wrapper 的 typed 启动/重连、顶层 journal cursor 和精确 owner identity |
+| 持久化 | `so101_teleop/expert_validation/store.py` | SQLite Web command、service lease、campaign/upstream binding、tagged execution config、accepted top-level cursor、generation/fallback cache 和 retry queue |
+| 监督器 | `so101_teleop/expert_validation/supervisor.py`, `service.py` | 三模式 preflight、首轮 binding、串行 retry、恢复与 mode-specific 只读统计投影 |
 | API | `so101_teleop/expert_validation/api.py`, `main.py` | 独立 FastAPI 入口、lease、manifest、campaign、artifact 与 WebSocket |
-| 截图 | `so101_teleop/expert_validation/capture.py`, `so101_demo/runtime/viewer_capture.py` | GNOME/macOS adapter 与新鲜截图回执 |
-| Web | `web/src/expert-validation-app.tsx`, `api/expert-validation-*`, `components/expert-validation/*` | 表单、地图、进度、证据和 FULL_RESTART 操作 |
-| 验收 | `docs/experiments/so101-moveit-expert-validation-web-experiment-ledger.md` | source/install/runtime、4 点 smoke、20 点首轮和重试证据 |
+| 证据适配 | `so101_teleop/expert_validation/artifacts.py` | 上游 opaque artifact 注册、Worker/attempt/recovery/Broker 证据只读映射 |
+| Web | `web/src/expert-validation-app.tsx`, `api/expert-validation-*`, `components/expert-validation/*` | mode-specific setup、地图、Worker/generation/fallback、Broker、证据和 FULL_RESTART 操作 |
+| 验收 | `docs/experiments/so101-moveit-expert-validation-web-experiment-ledger.md` | source/install/runtime、固定 4 点 smoke、adaptive 20 点首轮和重试证据 |
 
 ## 批次 A：冻结点位与 batch 协议
 
-### Task 1: 冻结 sampler profiles 和 20 点兼容 fixture
+### Task 1: 复用上游冻结 catalog，并生成确定性 selection manifest
 
 **Files:**
 
 - Create: `src/so101_teleop/so101_teleop/expert_validation/__init__.py`
-- Create: `src/so101_teleop/so101_teleop/expert_validation/sampler.py`
-- Create: `src/so101_teleop/config/expert_validation/ai_station_baseline_v1.yaml`
-- Create: `src/so101_teleop/config/expert_validation/ai_station_baseline_v1_points.yaml`
-- Create: `src/so101_teleop/config/expert_validation/geometry_v2.yaml`
-- Create: `src/so101_teleop/test/teleop/test_expert_validation_sampler.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/catalog.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_catalog.py`
 - Modify: `scripts/generate_so101_moveit_expert_position_top_view.py`
 
 **Interfaces:**
 
-- Consumes: four canonical anchors and versioned scene/policy/anchor hashes.
-- Produces: `SamplerProfile`, `ManifestPoint`, `GeneratedManifest`, `load_sampler_profile(path: Path) -> SamplerProfile`, and `generate_manifest(profile: SamplerProfile, total_points: int, seed: int, geometry: dict[str, object]) -> GeneratedManifest`.
+- Consumes: installed
+  `so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml`, frozen SHA256
+  `c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5`, and the
+  coordinator's canonical point parser.
+- Produces: `CatalogPoint`, `PointSelection`,
+  `load_baseline_catalog() -> tuple[CatalogPoint, ...]`,
+  `select_catalog_points(total_points: int) -> PointSelection`, and
+  `selection_sha256(point_ids: Sequence[str]) -> str`.
 
-- [ ] **Step 1: 写 sampler RED tests。**
+- [ ] **Step 1: 写 catalog/selection RED tests。**
 
 ```python
-def test_baseline_profile_reproduces_frozen_twenty_points(profile, geometry):
-    manifest = generate_manifest(profile, 20, 20260911, geometry)
-    assert [p.display_id for p in manifest.points[:4]] == ["P01", "P02", "P03", "P04"]
-    assert [p.id for p in manifest.points[:4]] == [
+def test_baseline_catalog_is_shared_with_parallel_runtime():
+    points = load_baseline_catalog()
+    assert [p.id for p in points[:4]] == [
         "task_start", "cup_test_forward_5cm",
         "cup_test_left_5cm", "cup_test_right_5cm",
     ]
-    assert manifest.points[4].display_id == "P05"
-    assert manifest.points[4].id == "sample_01_near_left"
-    assert manifest.points[4].position_world_m == (-0.020732, -0.249568, 0.165)
-    assert manifest.points[-1].display_id == "P20"
-    assert manifest.points[-1].id == "sample_16_far_right"
-    assert manifest.points[-1].position_world_m == (0.071574, -0.319255, 0.165)
-    assert manifest.profile_id == "ai_station_baseline_v1"
+    assert points[4].position_world_m == (-0.020732, -0.249568, 0.165)
+    assert points[-1].id == "sample_16_far_right"
+    assert points[-1].position_world_m == (0.071574, -0.319255, 0.165)
 
-def test_geometry_profile_cannot_replace_baseline(profile_v2, geometry):
-    with pytest.raises(SamplerError, match="FIXTURE_PROFILE_MISMATCH"):
-        verify_baseline_fixture(generate_manifest(profile_v2, 20, 20260911, geometry))
+def test_selection_is_stable_and_uses_only_catalog_ids():
+    selection = select_catalog_points(total_points=9)
+    assert len(selection.points) == 9
+    assert [p.display_id for p in selection.points[:4]] == ["P01", "P02", "P03", "P04"]
+    assert selection.catalog_seed == 20260911
+    assert selection.selection_sha256 == selection_sha256([p.id for p in selection.points])
 ```
+
+补测 3/21、catalog 字节哈希漂移、重复 ID、非有限坐标、四锚点顺序错误、selection
+largest-remainder tie break、display ID 连续性，以及 selection 中每个 canonical ID 在上游
+catalog 中恰好出现一次。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_sampler.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_catalog.py -q
 ```
 
-预期因 `so101_teleop.expert_validation.sampler` 不存在而失败。
+- [ ] **Step 3: 实现严格 catalog adapter。** 通过
+  `ament_index_python.get_package_share_directory("so101_demo_py")` 定位 installed catalog，
+  复用上游 parser，逐字节核对 SHA256。4–20 点 selection 按设计中的 nine-strata
+  largest-remainder 规则从 catalog 选择，不重新运行随机数生成器，不复制另一份 YAML。
+  `PointSelection` 保存 `catalog_id`、`catalog_seed=20260911`、catalog hash、有序 canonical
+  IDs、selection hash 和连续 display IDs。
 
-- [ ] **Step 3: 写入精确 profile 和采样器。**
-
-```yaml
-schema_version: 1
-profile_id: ai_station_baseline_v1
-profile_version: 1
-seed_default: 20260911
-total_points_min: 4
-total_points_max: 20
-z_m: 0.165
-minimum_pairwise_center_distance_m: 0.015
-table_edge_margin_beyond_cup_radius_m: 0.010
-rejection_limit_per_point: 10000
-x_bands_m:
-  left: [-0.045, -0.015]
-  center: [-0.005, 0.035]
-  right: [0.045, 0.080]
-y_bands_m:
-  near: [-0.255, -0.240]
-  mid: [-0.305, -0.275]
-  far: [-0.340, -0.315]
-strata_order:
-  - [near, left]
-  - [near, center]
-  - [near, right]
-  - [near, left]
-  - [near, center]
-  - [mid, left]
-  - [mid, center]
-  - [mid, right]
-  - [mid, left]
-  - [mid, center]
-  - [mid, right]
-  - [far, left]
-  - [far, center]
-  - [far, right]
-  - [far, center]
-  - [far, right]
-source_commit: ea0215180ed8cc0a90d6683a5e80d475987b5bc0
-source_manifest_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
-source_sampler_sha256: 81063ca943fd616d01c8e338c1f3d5b7c1bd091b8e79c538cce5c7bb69badccb
-```
-
-实现必须使用 `random.Random(seed).uniform()`，坐标先 `round(value, 6)` 再检查距离。小于 20 点时先生成完整 16 点 pool，再按 largest remainder 分配并恢复原 pool 顺序。拒绝 NaN、Inf、越界、间距不足、edge clearance 不足和超出 rejection cap。`geometry_v2` 保留当前 35 mm 规则。
-
-- [ ] **Step 4: 把维护脚本改成 profile consumer。**
+- [ ] **Step 4: 把维护脚本改成 catalog selection consumer。**
 
 ```python
 parser.add_argument(
-    "--sampler-profile",
+    "--catalog-profile",
     choices=("ai_station_baseline_v1", "geometry_v2"),
     default="ai_station_baseline_v1",
 )
 ```
 
-脚本继续生成 SVG/PNG/CSV/YAML，但点位来源只调用 `generate_manifest()`；删除脚本内第二套随机算法。通过 `ament_index_python` 查 installed config，源码模式只接受显式 `--repository-root`。
+脚本继续生成 SVG/PNG/CSV/YAML。baseline execute 图只调用
+`select_catalog_points(total_points)`；`geometry_v2` 保留为明确标注的 preview-only profile，
+不得提交给 campaign API。通过 `ament_index_python` 查 installed config，源码模式只接受
+显式 `--repository-root`。
 
 - [ ] **Step 5: 运行 GREEN 和脚本 readback。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_sampler.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_catalog.py -q
 "$VALIDATION_PYTHON" scripts/generate_so101_moveit_expert_position_top_view.py \
   --repository-root "$PWD" \
-  --sampler-profile ai_station_baseline_v1 \
-  --seed 20260911 \
+  --catalog-profile ai_station_baseline_v1 \
+  --total-points 20 \
   --output-dir "$VALIDATION_EVIDENCE/top-view-fixture"
 sha256sum "$VALIDATION_EVIDENCE/top-view-fixture"/*
 ```
 
-预期 20 个坐标与 fixture 逐项一致，最小间距为 `0.015116191120781703` m。
+预期 20 个坐标与上游 catalog 逐项一致，selection hash 可重复，最小间距为
+`0.015116191120781703` m。
 
 - [ ] **Step 6: Commit。**
 
 ```zsh
 git add src/so101_teleop/so101_teleop/expert_validation \
-  src/so101_teleop/config/expert_validation \
-  src/so101_teleop/test/teleop/test_expert_validation_sampler.py \
+  src/so101_teleop/test/teleop/test_expert_validation_catalog.py \
   scripts/generate_so101_moveit_expert_position_top_view.py
-git commit -m "feat: freeze expert validation point sampler"
+git commit -m "feat: select parallel validation catalog points"
 ```
 
 ### Task 2: 建立共享 world-to-SVG 投影契约
@@ -247,7 +274,8 @@ git commit -m "feat: freeze expert validation point sampler"
 
 **Interfaces:**
 
-- Consumes: `GeneratedManifest.geometry` and point status values.
+- Consumes: `PointSelection`, geometry, coordinator point status, active Worker stage, and blocking
+  invalid-attempt state.
 - Produces: `Projection(width_px: int, height_px: int, bounds_m: tuple[float, float, float, float])`, `project_xy(projection, x_m, y_m) -> tuple[float, float]`, `marker_style(status: str) -> MarkerStyle`, and one JSON golden fixture for React tests.
 
 - [ ] **Step 1: 写投影与样式 RED tests。**
@@ -257,12 +285,13 @@ def test_projection_uses_equal_xy_scale_and_equal_marker_radius(fixture):
     projection = Projection.from_geometry(fixture["geometry"], 1200, 900)
     assert projection.pixels_per_m_x == projection.pixels_per_m_y
     assert project_xy(projection, 0.02, -0.28) == pytest.approx(tuple(fixture["p01_px"]))
-    assert marker_style("SUCCEEDED").radius_px == marker_style("FAILED").radius_px
+    assert marker_style("PASSED").radius_px == marker_style("FAILED").radius_px
 
 @pytest.mark.parametrize("state,color", [
-    ("PENDING", "blue"), ("RUNNING", "blue"),
-    ("SUCCEEDED", "green"), ("FAILED", "red"),
-    ("INVALID", "red"), ("NOT_RUN", "red"), ("BLOCKED", "red"),
+    ("ELIGIBLE_UNRUN", "blue"), ("LEASED", "blue"), ("EXECUTING", "blue"),
+    ("PASSED", "green"), ("FAILED", "red"),
+    ("INDETERMINATE", "red"), ("TERMINAL_UNRUN", "red"),
+    ("INVALID_BLOCKED", "red"),
 ])
 def test_status_palette_is_fixed(state, color):
     assert marker_style(state).semantic_color == color
@@ -301,13 +330,15 @@ def project_xy(value: Projection, x_m: float, y_m: float) -> tuple[float, float]
     )
 ```
 
-fixture 必须包含 table/base/target/P01/20 点投影、cup footprint radius、target tolerance radius、marker radius和 palette。P01 杯底与 target tolerance 使用虚线；selection 只增加外圈。
+fixture 必须包含 table/base/target/P01/20 点投影、cup footprint radius、target tolerance
+radius、marker radius 和 palette。P01 杯底与 target tolerance 使用虚线；selection 只增加
+外圈。终态还要提供 shape/icon 和无障碍 label fixture，不能只靠颜色。
 
 - [ ] **Step 4: 运行 GREEN，并核对 Python 输出仍使用新投影。**
 
 ```zsh
 validation_pytest src/so101_teleop/test/teleop/test_expert_validation_projection.py -q
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_sampler.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_catalog.py -q
 ```
 
 - [ ] **Step 5: Commit。**
@@ -320,160 +351,165 @@ git add src/so101_teleop/so101_teleop/expert_validation/projection.py \
 git commit -m "feat: share expert validation map projection"
 ```
 
-### Task 3: 把 batch 进度写成 authoritative append-only event log
+### Task 3: 建立 fixed coordinator / adaptive Runner 顶层 journal 的只读事件桥
 
 **Files:**
 
-- Create: `src/so101_demo_py/src/runtime/task_progress.py`
-- Create: `src/so101_demo_py/test/test_task_progress.py`
-- Modify: `src/so101_demo_py/src/application/task_batch.py`
-- Modify: `src/so101_demo_py/src/cli/mujoco_rgbd_batch.py`
-- Modify: `src/so101_demo_py/test/test_task_batch.py`
-- Modify: `src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/coordinator_events.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/adaptive_events.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_coordinator_events.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_adaptive_events.py`
 
 **Interfaces:**
 
-- Consumes: `campaign_id`, `attempt_id`, batch callbacks and installed result manifests.
-- Produces: `ProgressEvent`, `ProgressWriter.append(kind: str, payload: dict[str, object], referenced_manifest: Path | None = None) -> ProgressEvent`, and CLI options `--campaign-id`, `--attempt-id`, `--progress-log`.
+- Consumes: upstream `CoordinatorJournal.replay()` or the `AdaptiveBatchRunner` top-level journal
+  replay API, immutable
+  tagged `CampaignUpstreamBinding`, sealed manifests, and stored top-level cursor.
+- Produces: `CoordinatorEventReader`, `AdaptiveEventReader`, mode-specific event views, and
+  `verify_event_binding(event, binding) -> None`. Adaptive generation journals are never read as an
+  independent second truth; only Runner references are exposed.
 
-- [ ] **Step 1: 写 durability RED tests。**
+- [ ] **Step 1: 写 journal relay RED tests。**
 
 ```python
-def test_point_finished_installs_manifest_before_fsynced_event(tmp_path, recorder):
-    writer = ProgressWriter(tmp_path / "progress.ndjson", fsync=recorder.fsync)
-    manifest = atomic_result(tmp_path / "point-result.json", {"status": "SUCCEEDED"})
-    event = writer.append("POINT_FINISHED", {"point_id": "task_start"}, manifest)
-    assert recorder.order == ["manifest", "manifest_dir", "event_log"]
-    assert event.sequence == 1
+def test_reader_accepts_only_bound_batch_and_contiguous_chain(reader, binding):
+    batch = reader.read_after(AcceptedCoordinatorCursor.initial(binding))
+    assert [event.type for event in batch.events[:3]] == [
+        "BATCH_STARTED", "LEASE_GRANTED", "ATTEMPT_STARTED",
+    ]
+    assert all(event.batch_id == binding.batch_id for event in batch.events)
+    assert batch.next_cursor.previous_frame_sha256 == batch.events[-1].frame_sha256
 
-def test_reader_buffers_live_partial_tail(tmp_path):
-    path = tmp_path / "progress.ndjson"
-    path.write_bytes(b'{"sequence":1')
-    assert ProgressReader(path).read_complete(writer_alive=True) == []
-    with pytest.raises(ProgressIntegrityError, match="TORN_TERMINAL_EVENT"):
-        ProgressReader(path).read_complete(writer_alive=False)
+def test_result_is_not_visible_before_coordinator_commit(reader, sealed_attempt):
+    sealed_attempt.install()
+    assert "PASSED" not in reader.read_after(reader.cursor).projected_point_states
+    reader.journal.append("RESULT_COMMITTED", "result-p01", sealed_attempt.reference())
+    assert reader.read_after(reader.cursor).projected_point_states["task_start"] == "PASSED"
+
+def test_adaptive_reader_projects_runner_generations_not_nested_journal_directly(reader):
+    view = reader.read_after(runner_cursor()).projection
+    assert view.current_level == 6
+    assert view.levels_used == (8, 6)
+    assert view.fallbacks[0].transition == "W8_TO_W6"
+    assert view.points["task_start"].status == "INFRA_INTERRUPTED"
 ```
+
+补测 coordinator epoch、batch ID、event chain、lease/attempt identity、manifest hash、重复 result、
+完整 frame checksum 错误、中段损坏、Web cursor 超前、Runner generation identity、terminal
+result import、READY barrier、fallback transaction 和旧 generation 的迟到事件。EOF torn tail
+由上游 journal recovery 裁决；Web 不能自行忽略或修补。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_task_progress.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_coordinator_events.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_events.py -q
 ```
 
-- [ ] **Step 3: 实现 canonical NDJSON。**
+- [ ] **Step 3: 实现 mode-specific 只读 adapter。** 直接调用上游 replay/verification API，不复制 frame parser。
+  reader 只接受当前 `campaign_id -> batch_id/coordinator_epoch/journal_root` binding；先验证
+  contiguous chain 和 referenced sealed manifest，再返回 immutable event views。任何冲突抛
+  `CoordinatorProjectionError`，由 supervisor 转为 `NEEDS_OPERATOR_RECOVERY`。Adaptive reader
+  只接受 Runner 顶层 batch/generation/hash chain，展示其 nested coordinator references、
+  `levels_used`、fallback、infra attempt 和 cleanup；不得自行合并 generation journal。
 
-```python
-@dataclass(frozen=True)
-class ProgressEvent:
-    schema_version: int
-    campaign_id: str
-    attempt_id: str
-    sequence: int
-    kind: str
-    payload_sha256: str
-    payload: dict[str, object]
-    timestamp_ns: int
-```
-
-每条完整 record 以单个 `os.write(O_APPEND)` 写入并带换行，随后 `fsync`。`POINT_FINISHED` 和 `BATCH_FINISHED` 只能引用已 atomic replace、fsync 文件并 fsync parent directory 的 manifest。禁止通过解析日志推断 phase。
-
-- [ ] **Step 4: 在 batch 边界发事件。**
-
-依次发送 `BATCH_STARTED`、`POINT_REACHABILITY`、`POINT_STARTED`、每个 `ARTIFACT_REGISTERED`、`POINT_FINISHED`、`BATCH_FINISHED`。现有无 progress writer 的 CLI 行为保持兼容；validation supervisor 启动时三个新参数必填。
-
-- [ ] **Step 5: 运行 GREEN。**
+- [ ] **Step 4: GREEN，并运行上游 journal regression。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_task_progress.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_coordinator_events.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_events.py \
+  src/so101_demo_py/test/test_parallel_batch_journal.py \
+  src/so101_demo_py/test/test_parallel_batch_artifacts.py -q
 ```
 
-- [ ] **Step 6: Commit。**
+- [ ] **Step 5: Commit。**
 
 ```zsh
-git add src/so101_demo_py/src/runtime/task_progress.py \
-  src/so101_demo_py/src/application/task_batch.py \
-  src/so101_demo_py/src/cli/mujoco_rgbd_batch.py \
-  src/so101_demo_py/test/test_task_progress.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py
-git commit -m "feat: persist task batch progress events"
+git add src/so101_teleop/so101_teleop/expert_validation/coordinator_events.py \
+  src/so101_teleop/so101_teleop/expert_validation/adaptive_events.py \
+  src/so101_teleop/test/teleop/test_expert_validation_coordinator_events.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_events.py
+git commit -m "feat: project validation upstream events"
 ```
 
 ### Task 4: 补齐点位终态和统计口径
 
 **Files:**
 
-- Modify: `src/so101_demo_py/src/application/task_batch.py`
-- Modify: `src/so101_demo_py/test/test_task_batch.py`
 - Create: `src/so101_teleop/so101_teleop/expert_validation/statistics.py`
 - Create: `src/so101_teleop/test/teleop/test_expert_validation_statistics.py`
 
 **Interfaces:**
 
-- Consumes: accepted progress events.
-- Produces: `PointProjection`, `FirstPassQualification`, terminal states `SUCCEEDED | FAILED | SKIPPED_UNREACHABLE | INVALID | NOT_RUN | BLOCKED`, and `summarize_first_pass(points: Sequence[PointProjection], qualification: FirstPassQualification) -> FirstPassStatistics`.
+- Consumes: upstream fixed `BatchSummary` or adaptive `AdaptiveBatchSummary`, point/attempt/Worker
+  projections, and accepted top-level events.
+- Produces: `PointProjection`, `WorkerProjection`, `BrokerProjection`,
+  `FixedFirstPassStatistics | AdaptiveFirstPassStatistics`, and mode-specific summary functions.
 
-- [ ] **Step 1: 写 unreachable 与中断 RED tests。**
+- [ ] **Step 1: 写状态与统计 RED tests。**
 
 ```python
 def test_unreachable_is_evaluated_failure_not_unexecuted():
-    summary = summarize_first_pass([
-        point("task_start", "SKIPPED_UNREACHABLE", evaluated=True, execution_started=False),
-    ], qualification=qualified())
-    assert summary.evaluated == 1
-    assert summary.execution_started == 0
-    assert summary.valid_failed == 1
-    assert summary.not_executed == 0
-
-def test_started_point_without_terminal_receipt_is_invalid():
-    result = reconcile_terminal(point_events("task_start", "POINT_STARTED"), "OWNER_LOST")
-    assert result.status == "INVALID"
-    assert result.reason == "OWNER_LOST"
-
-def test_shutdown_qualification_changes_rate_without_changing_point_counts():
-    points = [point("task_start", "SUCCEEDED", evaluated=True, execution_started=True)]
-    safe = summarize_first_pass(points, qualification=qualified())
-    unresolved = summarize_first_pass(
-        points,
-        qualification=FirstPassQualification(False, False, "SHUTDOWN_SAFETY_UNRESOLVED"),
+    view = summarize_first_pass(
+        batch_summary(coverage_complete=True, qualification_passed=False),
+        [point("task_start", "FAILED", reason="UNREACHABLE",
+               evaluated=True, execution_started=False)],
     )
-    assert safe.valid_succeeded == unresolved.valid_succeeded == 1
-    assert safe.qualified_success_rate == 1.0
-    assert unresolved.qualified_success_rate is None
+    assert view.valid_failed == 1
+    assert view.not_executed == 0
+
+def test_indeterminate_is_not_product_failure_or_retry_candidate():
+    view = summarize_first_pass(
+        batch_summary(execution_complete=True),
+        [point("task_start", "INDETERMINATE", reason="OWNER_LOST")],
+    )
+    assert view.indeterminate == 1
+    assert view.valid_failed == 0
+    assert not view.points[0].retry_eligible
+
+def test_web_never_upgrades_coordinator_qualification():
+    view = summarize_first_pass(
+        batch_summary(batch_cleanup_complete=False, qualification_passed=False),
+        [point("task_start", "PASSED")],
+    )
+    assert view.valid_succeeded == 1
+    assert view.qualified_success_rate is None
+    assert view.qualification_passed is False
+
+def test_adaptive_summary_preserves_attempt_history_and_runner_terminal():
+    view = summarize_adaptive_first_pass(adaptive_summary(status="COMPLETED"))
+    assert view.status == "COMPLETED"
+    assert view.levels_used == (8, 6)
+    assert view.points[0].status == "PASSED"
+    assert view.points[0].attempts[0].status == "INDETERMINATE"
 ```
 
-补充 `UNKNOWN` reachability、reachability 后 owner loss、shared failure 后 untouched、cancel 后 untouched、receipt integrity failure，以及 terminal campaign 不得含 `PENDING/RUNNING` 的测试。
+补测多 Worker 同时 active、`INVALID -> 新 attempt -> PASSED`、`FAILED`、terminal `UNRUN`、
+capacity exhausted、Broker unavailable、Worker quarantine、最后一点恢复失败，以及 terminal
+batch 不得有 active lease。Adaptive 补测 business `FAILED` 不触发降级、
+`INFRA_INTERRUPTED` 可重排、`PASSED`/`FAILED` immutable、`COMPLETED`、
+`COMPLETED_WITH_FAILURES`、`INFRA_FAILED` 和 W1 failure。Web 的计数必须等于 upstream
+summary；不一致时 fail closed。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_task_batch.py \
+validation_pytest src/so101_demo_py/test/test_parallel_batch_coordinator.py \
   src/so101_teleop/test/teleop/test_expert_validation_statistics.py -q
 ```
 
-- [ ] **Step 3: 实现 reconciliation table 与公式。**
+- [ ] **Step 3: 实现只读 projection 与公式。**
 
 ```python
 @dataclass(frozen=True)
 class PointProjection:
     point_id: str
-    status: Literal[
-        "SUCCEEDED", "FAILED", "SKIPPED_UNREACHABLE",
-        "INVALID", "NOT_RUN", "BLOCKED",
-    ]
+    status: Literal["UNRUN", "PASSED", "FAILED", "INDETERMINATE"]
     evaluated: bool
     execution_started: bool
-    receipt_integrity_valid: bool
-    reason: str | None = None
-
-@dataclass(frozen=True)
-class FirstPassQualification:
-    shutdown_safety_confirmed: bool
-    receipt_integrity_complete: bool
+    active_worker_id: str | None
+    invalid_attempts: int
+    retry_eligible: bool
     reason: str | None = None
 
 @dataclass(frozen=True)
@@ -483,150 +519,156 @@ class FirstPassStatistics:
     execution_started: int
     valid_succeeded: int
     valid_failed: int
-    invalid: int
+    indeterminate: int
+    invalid_attempts: int
     not_executed: int
     evaluation_coverage: float
     execution_coverage: float
     qualified_success_rate: float | None
+    coverage_complete: bool
+    execution_complete: bool
+    batch_cleanup_complete: bool
+    qualification_passed: bool
 ```
 
-先验证 point receipt integrity，再应用产品状态。receipt 失效优先成为 `INVALID`；后续 campaign 级失败不能覆盖仍然有效的 point receipt。`qualification.shutdown_safety_confirmed` 或 `receipt_integrity_complete` 为 false 时保留计数，但 `qualified_success_rate=None`。
+以 `BatchSummary` 的四个布尔值为权威。display counters 可从 accepted events 计算，但必须与
+summary 相等。`FAILED` 才可 retry；`INDETERMINATE`、`UNRUN` 和 active point 不可 retry。
+eligible `UNRUN` 在 active batch 投影为蓝色 pending，terminal `UNRUN` 投影为红色并显示原因。
+Adaptive 使用独立 tagged summary：只接受 Runner 的 terminal status、final points、
+`batch_cleanup_complete`、levels/fallbacks/generations、infra attempts 和 resource observations，
+不生成 fixed 四 flags。`INFRA_INTERRUPTED` 在可继续时为蓝色；Runner `INFRA_FAILED` 后仍未
+完成的点为红色。只有 `COMPLETED_WITH_FAILURES` 且 cleanup complete 的 business `FAILED`
+允许人工 retry。
 
 - [ ] **Step 4: 运行 GREEN。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_task_batch.py \
+validation_pytest src/so101_demo_py/test/test_parallel_batch_coordinator.py \
   src/so101_teleop/test/teleop/test_expert_validation_statistics.py -q
 ```
 
 - [ ] **Step 5: Commit。**
 
 ```zsh
-git add src/so101_demo_py/src/application/task_batch.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_teleop/so101_teleop/expert_validation/statistics.py \
+git add src/so101_teleop/so101_teleop/expert_validation/statistics.py \
   src/so101_teleop/test/teleop/test_expert_validation_statistics.py
-git commit -m "feat: reconcile expert validation point outcomes"
+git commit -m "feat: project parallel validation outcomes"
 ```
 
 ## 批次 B：进程、安全、持久化与服务
 
-### Task 5: 建立 supervisor-owned process broker
+### Task 5: 建立 fixed coordinator / adaptive wrapper 顶层进程桥
 
 **Files:**
 
-- Create: `src/so101_demo_py/src/runtime/process_owner.py`
-- Create: `src/so101_demo_py/test/test_process_owner.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/coordinator.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/adaptive.py`
 - Create: `src/so101_teleop/so101_teleop/expert_validation/process_owner.py`
 - Create: `src/so101_teleop/test/teleop/test_expert_validation_process_owner.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_adaptive_owner.py`
 - Create: `src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py`
 - Create: `src/so101_teleop/test/fixtures/process_tree_helper.py`
-- Modify: `src/so101_demo_py/src/runtime/task_batch_runtime.py`
-- Modify: `src/so101_demo_py/src/cli/mujoco_rgbd_batch.py`
-- Modify: `src/so101_demo_py/test/test_task_batch_runtime.py`
-- Modify: `src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py`
 
 **Interfaces:**
 
-- Consumes: argv arrays, attempt token, role `stack | batch | point_worker`, and supervisor journal callback.
-- Produces: `OwnedProcess`, `CommandResult`, `ProcessOwnerPort.spawn()`, `run()`, `poll()`, `stop()`, `BrokeredPointProcesses`, `BrokeredCommandRunner`, and Unix socket RPC with canonical JSON frames.
+- Consumes: exact installed `so101_parallel_batch` executable, exact production
+  `scripts/run_so101_adaptive_batch.zsh`, frozen fixed/adaptive start requests, Web store callbacks,
+  fixed control/status socket, and Runner identity/journal handshake.
+- Produces: tagged `OwnedExecution = OwnedCoordinator | OwnedAdaptiveWrapper`, mode-specific
+  `spawn()`, `reconnect()`, `poll()`, `request_cancel()`, `request_status()`, and cleanup gating.
 
-- [ ] **Step 1: 写独立 PGID RED tests。**
+- [ ] **Step 1: 写所有权与重连 RED tests。**
 
 ```python
-def test_two_points_stop_worker_groups_without_stopping_batch(owner, batch):
-    first = owner.spawn(worker_request("task_start", "perception"))
-    owner.stop(first.worker_id, safety_receipt_id="safe-p01")
-    assert owner.group_is_gone(first.pgid)
-    assert batch.poll() is None
-    second = owner.spawn(worker_request("cup_test_forward_5cm", "perception"))
-    assert second.pgid != first.pgid
+def test_owner_reconnects_only_to_exact_recorded_coordinator(owner, store):
+    running = owner.spawn(start_request(batch_id="batch-a"))
+    store.acknowledge_coordinator(running)
+    assert owner.reconnect(store.binding("batch-a")) == running
+    store.replace_started_ticks(running.started_ticks + 1)
+    with pytest.raises(CoordinatorOwnershipError, match="PROCESS_IDENTITY_MISMATCH"):
+        owner.reconnect(store.binding("batch-a"))
 
-def test_group_leader_exit_does_not_hide_descendant(owner):
-    process = owner.spawn(worker_with_descendant())
-    process.leader.exit()
-    assert owner.cleanup(process.worker_id).status == "DESCENDANT_REMAINS"
+def test_web_owner_never_signals_worker_groups(owner, upstream):
+    running = owner.spawn(start_request(batch_id="batch-a"))
+    upstream.cleanup_complete = False
+    with pytest.raises(CoordinatorOwnershipError, match="CLEANUP_NOT_CONFIRMED"):
+        owner.stop_after_cleanup(running)
+    assert upstream.worker_signal_calls == []
 
-def test_validation_runtime_cannot_bypass_broker(monkeypatch, brokered_runtime):
-    monkeypatch.setattr(subprocess, "Popen", forbidden("Popen"))
-    monkeypatch.setattr(subprocess, "run", forbidden("run"))
-    monkeypatch.setattr(os, "killpg", forbidden("killpg"))
-    brokered_runtime.check_declared(task_start())
-    brokered_runtime.reset_point(task_start())
-    brokered_runtime.start_consumer(point_root(), 1)
+def test_adaptive_cancel_targets_exact_wrapper_pid_only(owner, wrapper):
+    running = owner.spawn(adaptive_start_request(batch_id="a20"))
+    owner.request_cancel(running)
+    assert wrapper.signals == [(running.pid, "SIGINT")]
+    assert wrapper.process_group_signals == []
 ```
 
-再覆盖 batch dies after spawn intent、missing child acknowledgement、unknown descendant、attempt token mismatch、one-shot timeout 和 bounded stdout/stderr。迁移清单必须覆盖 `OwnedPointProcesses.start/stop_all`、`RosGraphProbe.subscription_count`、`RosTaskBatchRuntime._run` 中的 reachability/reset，以及 validation capture 调用；validation mode 下这些路径都只能使用 broker。
+补测 spawn intent 前/后崩溃、exec barrier ACK 丢失、socket owner/mode/token 错误、PID
+复用、leader 退出而 descendant 留存、coordinator 返回码与 journal terminal 冲突、bounded
+stdout/stderr、wrapper PID reuse、Runner binding mismatch、Runner crash cleanup、wrapper
+SIGKILL 后 ACTIVE domain claim fail-closed，以及两个 campaign 不能同时拥有 execution owner。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_process_owner.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py \
-  src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py -q
 ```
 
-- [ ] **Step 3: 实现类型与 broker。**
+- [ ] **Step 3: 实现 tagged execution owner。**
 
 ```python
 @dataclass(frozen=True)
-class SpawnRequest:
-    attempt_id: str
-    role: Literal["stack", "batch", "point_worker"]
+class CoordinatorStartRequest:
+    campaign_id: str
+    batch_id: str
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL"]
+    worker_count: int
+    max_points_per_worker: int
     argv: tuple[str, ...]
     environment: Mapping[str, str]
-    evidence_root: Path
+    batch_root: Path
+    control_socket: Path
+    control_token_sha256: str
 
 @dataclass(frozen=True)
-class RunRequest:
-    attempt_id: str
-    role: Literal["ros_probe", "reachability", "reset", "capture"]
-    argv: tuple[str, ...]
-    environment: Mapping[str, str]
-    evidence_root: Path
-    timeout_s: float
-
-@dataclass(frozen=True)
-class OwnedProcess:
-    worker_id: str
-    attempt_id: str
-    role: str
+class OwnedCoordinator:
+    campaign_id: str
+    batch_id: str
     pid: int
     pgid: int
     started_ticks: int
     argv_sha256: str
     environment_sha256: str
-
-@dataclass(frozen=True)
-class CleanupReceipt:
-    worker_id: str
-    safety_receipt_id: str
-    descendants_gone: bool
-    stopped_at_monotonic_ns: int
-
-@dataclass(frozen=True)
-class CommandResult:
-    worker_id: str
-    returncode: int
-    stdout: str
-    stderr: str
-    timed_out: bool
-    cleanup_receipt_id: str
-
-class ProcessOwnerPort(Protocol):
-    def spawn(self, request: SpawnRequest) -> OwnedProcess: ...
-    def run(self, request: RunRequest) -> CommandResult: ...
-    def poll(self, worker_id: str) -> int | None: ...
-    def stop(self, worker_id: str, safety_receipt_id: str) -> CleanupReceipt: ...
+    control_socket: Path
+    coordinator_epoch: int
 ```
 
-supervisor 在 child exec barrier 前持久化 `SPAWN_INTENT`，收到 PID/PGID/start-time acknowledgement 后写 `RUNNING` 并放行。每个 point worker 和 one-shot command 使用独立 PGID；one-shot 输出有字节上限并在 timeout 后走同一安全清理协议。`mujoco_rgbd_batch.py` 新增 `--process-owner-socket` 与 `--process-owner-token`；两者必须同时出现。validation mode 将 `BrokeredPointProcesses` 注入 point workers，将 `BrokeredCommandRunner` 同时注入 `RosGraphProbe` 和 `RosTaskBatchRuntime`。validation mode 下 batch 本地不得调用 `Popen`、`subprocess.run`、`start_new_session` 或 `killpg`；无 broker 参数的旧 CLI 仍可使用 `LocalPointProcesses` 和本地 runner。
+另定义 `AdaptiveStartRequest`，冻结 1–5 字符 ASCII batch ID、
+`<evidence-root>/r/<batch-id>`、preferred/fallback tiers、initial affinity、startup timeout、infra
+attempt limit、adaptive config/model/Broker hashes；它必须拒绝 K。`OwnedAdaptiveWrapper` 只记录
+wrapper PID/start ticks/argv/env hash、Runner PID/batch handshake 和 Runner journal root，不把
+Runner 或 generation descendants 变成 Web-owned process。
+
+owner 在 coordinator exec barrier 前调用 Web store 写 `COORDINATOR_SPAWN_INTENT`，收到
+PID/PGID/start-time/socket/coordinator-epoch ACK 后写 `COORDINATOR_RUNNING` 并放行。argv
+必须从 typed request 构造，精确传递 catalog、repeatable point IDs、config、batch ID、N/K、
+batch root、Broker image/model hashes 和 `--run-mode execute`；浏览器不能提供 argv。
+Worker/Broker process ownership 完全留在上游 coordinator。
+
+Adaptive argv 必须调用生产 wrapper 并显式传 `--adaptive-workers`；wrapper 负责 Runner child
+和 `so101_parallel_batch_cleanup`，Runner 负责 generations。浏览器不能提供 argv。Web cancel
+只向身份复核后的 wrapper PID 发请求，不用 `killpg`；无 ACK 或 cleanup 不明时进入
+`NEEDS_OPERATOR_RECOVERY`。Web server 可重连仍存活的 wrapper/Runner；Runner crash 不自动
+resume，wrapper cleanup 成功投影 `INFRA_FAILED`。
 
 - [ ] **Step 4: 写并运行真实 OS process integration gate。**
 
-`process_tree_helper.py` 只创建无 ROS 的短生命周期父子进程。测试必须使用真实 PID/PGID 和一个 fsync 的 test journal callback，覆盖 leader 先退出而 descendant 留存、exec barrier 前崩溃、ack 丢失、两个点共用同一 batch、两个 retry 的 fresh group，以及 cleanup receipt 写入后才能启动下一组。测试不能 monkeypatch `Popen`、`killpg` 或 `/proc` 读取。Task 7 再把同一 broker 接到 `SupervisorStore` 并验证关闭后重开恢复。
+`process_tree_helper.py` 只创建无 ROS 的短生命周期 coordinator/descendant 进程。测试使用
+真实 PID/PGID、0600 control socket、adaptive wrapper/Runner helper 和 fsync store callback，覆盖 leader 先退出、exec
+barrier 前崩溃、ACK 丢失、server restart 重连、cleanup receipt 前拒绝 signal，以及 cleanup
+后只停止 fixed coordinator group，以及 adaptive cancel 仅命中 wrapper PID。测试不能
+monkeypatch `Popen`、`killpg` 或 `/proc` 读取。
 
 ```zsh
 validation_pytest \
@@ -636,160 +678,133 @@ validation_pytest \
 - [ ] **Step 5: 运行 GREEN。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_process_owner.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py \
-  src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py -q
 ```
 
 - [ ] **Step 6: Commit。**
 
 ```zsh
-git add src/so101_demo_py/src/runtime/process_owner.py \
-  src/so101_demo_py/src/runtime/task_batch_runtime.py \
-  src/so101_demo_py/src/cli/mujoco_rgbd_batch.py \
-  src/so101_demo_py/test/test_process_owner.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py \
+git add src/so101_teleop/so101_teleop/expert_validation/coordinator.py \
+  src/so101_teleop/so101_teleop/expert_validation/adaptive.py \
   src/so101_teleop/so101_teleop/expert_validation/process_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
+  src/so101_teleop/test/teleop/test_expert_validation_adaptive_owner.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner_integration.py \
   src/so101_teleop/test/fixtures/process_tree_helper.py
-git commit -m "feat: broker expert validation processes"
+git commit -m "feat: own validation execution wrappers"
 ```
 
-### Task 6: 分离 execution outcome、取消和 shutdown safety
+### Task 6: 接入 mode-specific control 和 cleanup 门
 
 **Files:**
 
-- Create: `src/so101_demo_py/src/application/shutdown_safety.py`
-- Create: `src/so101_demo_py/src/runtime/shutdown_safety_probe.py`
-- Create: `src/so101_demo_py/src/cli/task_shutdown_safety.py`
-- Create: `src/so101_demo_py/config/expert_validation/shutdown_safety_v1.yaml`
-- Create: `src/so101_demo_py/test/test_shutdown_safety.py`
-- Create: `src/so101_demo_py/test/test_task_shutdown_safety_cli.py`
-- Modify: `src/so101_demo_py/src/application/task_batch.py`
-- Modify: `src/so101_demo_py/src/runtime/task_batch_runtime.py`
-- Modify: `src/so101_demo_py/src/runtime/process_owner.py`
-- Modify: `src/so101_demo_py/test/test_task_batch.py`
-- Modify: `src/so101_demo_py/test/test_task_batch_runtime.py`
-- Modify: `src/so101_demo_py/setup.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/control.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_control.py`
+- Modify: `src/so101_teleop/so101_teleop/expert_validation/coordinator.py`
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/process_owner.py`
 
 **Interfaces:**
 
-- Consumes: session/epoch-bound MuJoCo evidence, arm/gripper joint feedback, controller action state, brokered shutdown-probe command, and cancellation checkpoint RPC.
-- Produces: `ShutdownSafetyReceipt`, `ShutdownSafetyProbePort.probe()`, `TaskBatchRuntime.probe_shutdown_safety(reason: str)`, CLI `task_shutdown_safety`, and `ControlPort.checkpoint(name: str) -> CancelDecision`.
+- Consumes: Web command identity, tagged upstream binding, fixed coordinator epoch/token/replies or
+  adaptive wrapper/Runner status, Worker/generation recovery receipts, and mode-specific terminal
+  summary.
+- Produces: fixed `CoordinatorControlClient`, adaptive `AdaptiveWrapperControl`, tagged cleanup
+  authorization, and owner-specific stop/cancel gates.
 
-- [ ] **Step 1: 写所有 exit path 的 RED tests。**
+- [ ] **Step 1: 写取消、失联和 cleanup RED tests。**
 
 ```python
-@pytest.mark.parametrize("exit_reason", [
-    "SUCCESS", "PRODUCT_FAILURE", "SHARED_FAILURE", "TIMEOUT",
-    "CANCELLED", "CORRUPT_PROGRESS", "OWNER_DIED",
-])
-def test_every_exit_requires_fresh_shutdown_receipt(exit_reason, runtime):
-    runtime.receipt = None
-    result = finalize_attempt(runtime, exit_reason)
-    assert result.status == "NEEDS_OPERATOR_RECOVERY"
-    assert result.shutdown_safe is False
+def test_cancel_goes_to_coordinator_not_worker_groups(control, owner):
+    control.cancel(command_id="cancel-1", binding=binding("campaign-a", "batch-a", epoch=4))
+    assert control.sent_messages[-1]["operation"] == "CANCEL_BATCH"
+    assert owner.signal_calls == []
 
-def test_stale_epoch_never_authorizes_signal(runtime):
-    runtime.receipt = safe_receipt(session="sim-a", epoch=7)
-    result = authorize_signal(runtime.receipt, expected_session="sim-a", expected_epoch=8)
-    assert result.allowed is False
+def test_coordinator_stop_requires_terminal_cleanup(control, owner):
+    control.reply = terminal_summary(batch_cleanup_complete=False)
+    with pytest.raises(CleanupNotAuthorized, match="BATCH_CLEANUP_INCOMPLETE"):
+        authorize_coordinator_stop(control.status(), binding("campaign-a", "batch-a", epoch=4))
+    assert owner.signal_calls == []
 
-def test_height_and_contact_count_cannot_substitute_for_authentic_hold_evidence(probe):
-    probe.physics = physical_sample(cup_z_m=0.24, authenticity=False)
-    receipt = probe.probe(shutdown_request())
-    assert receipt.safe_to_shutdown is False
-    assert receipt.reason_code == "PHYSICAL_EVIDENCE_NOT_AUTHENTIC"
+def test_stale_epoch_reply_is_rejected(control):
+    control.reply = status_reply(batch_id="batch-a", coordinator_epoch=3)
+    with pytest.raises(ControlProtocolError, match="COORDINATOR_EPOCH_MISMATCH"):
+        control.status(binding("campaign-a", "batch-a", epoch=4))
 
-def test_unsupported_held_cup_is_held_without_opening_gripper(probe):
-    probe.physics = physical_sample(cup_held=True, support_confirmed=False)
-    receipt = probe.probe(shutdown_request())
-    assert probe.gripper_open_requests == 0
-    assert receipt.robot_hold_confirmed is True
-    assert receipt.safe_to_shutdown is False
+def test_adaptive_cleanup_failure_never_starts_next_generation(control):
+    control.reply = adaptive_status(state="DEGRADING", cleanup_complete=False)
+    with pytest.raises(CleanupNotAuthorized):
+        control.await_next_generation()
 ```
+
+补测 token/schema/command ID 错误、partial/oversized frame、ACK timeout、coordinator socket
+断开、Web lease expiry、parallel active Workers、Broker recovery、Worker quarantine、cancel 后
+terminal `UNRUN`、adaptive wrapper PID mismatch、Runner loss、generation cleanup failure、
+surviving descendant 和 owner 已退出但 top-level journal 非 terminal。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_shutdown_safety.py \
-  src/so101_demo_py/test/test_task_shutdown_safety_cli.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py -q
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_control.py \
+  src/so101_teleop/test/teleop/test_expert_validation_process_owner.py -q
 ```
 
-- [ ] **Step 3: 实现独立安全回执。**
+- [ ] **Step 3: 实现闭合 control schema。**
 
 ```python
 @dataclass(frozen=True)
-class ShutdownSafetyReceipt:
-    receipt_id: str
+class CoordinatorControlRequest:
+    schema_version: int
+    command_id: str
     campaign_id: str
-    attempt_id: str
-    simulation_session_id: str
-    epoch: int
-    observed_at_ns: int
-    freshness_limit_ns: int
-    cup_held: bool
-    support_confirmed: bool
-    robot_hold_requested: bool
-    robot_hold_confirmed: bool
-    controller_stop_confirmed: bool
-    safe_to_shutdown: bool
-    reason_code: str | None
-    artifact_ids: tuple[str, ...]
+    batch_id: str
+    coordinator_epoch: int
+    operation: Literal["STATUS", "CANCEL_BATCH"]
+    request_sha256: str
 
-class ShutdownSafetyProbePort(Protocol):
-    def probe(
-        self,
-        campaign_id: str,
-        attempt_id: str,
-        simulation_session_id: str,
-        reset_or_release_epoch: int,
-        reason: str,
-    ) -> ShutdownSafetyReceipt: ...
+@dataclass(frozen=True)
+class BatchCleanupAuthorization:
+    batch_id: str
+    coordinator_epoch: int
+    batch_cleanup_complete: bool
+    owned_descendants_gone: bool
+    assigned_ros_domains_clear: bool
+    receipt_sha256: str
 ```
 
-移除 `wait_point_result()` 中硬编码的 `SafetyReceipt(True, False, None)`，并删除当前以杯高加接触数量推断 held 的 fallback。共享失败也必须探测安全。`task_shutdown_safety` 由 broker 启动，使用 authentic `SimulationEvidence` 读取 simulation session、reset/release epoch、双侧指尖接触和桌面支撑接触；读取 arm/gripper `/joint_states`，向现有 FollowJointTrajectory control boundary 发送“保持当前关节位置”的 bounded hold goal，随后验证 action result、没有 active motion goal、连续静止窗口内关节速度小于阈值。它不发 reset，也不打开夹爪。
+control socket 必须位于绑定的 batch root，目录 0700、socket 0600，校验 peer token、batch ID
+和 coordinator epoch。Web lease expiry 与 operator cancel 都发送幂等 `CANCEL_BATCH`；coordinator
+负责停止新 lease、fence、controller cancel/confirm、Worker recovery 和点位终态。
+Web 从不向 Worker/Broker socket 发消息。
 
-`shutdown_safety_v1.yaml` 固定 `physical_evidence_max_age_s: 0.5`、`joint_state_max_age_s: 0.5`、`hold_timeout_s: 5.0`、`stationary_window_s: 0.5` 和 `max_abs_joint_velocity_rad_s: 0.02`。`safe_to_shutdown` 只在 session/epoch、两类 freshness、authentic evidence、not-held-or-supported、hold acknowledgement 和 controller stationary 均满足时成立；任何 timeout、缺 topic、非 authentic sample 或 identity mismatch 都返回具体 `reason_code` 并 fail closed。
+Adaptive control 只面向精确 wrapper PID；wrapper 转发 Runner cancel 并执行 upstream cleanup。
+Web 读取 Runner journal 判断 generation/batch terminal，不能跳过旧 generation cleanup、直接
+启动下一 tier，或从 process exit 推导 cleanup。
 
-- [ ] **Step 4: 接入 cooperative cancellation。**
-
-batch 在 reachability 前、point start 前、execution 返回后、worker cleanup 前、reset 前和 batch finalize 前调用 `ControlPort.checkpoint()`。收到 cancel 后先完成 hold/stop 与 safety receipt；超时或无 receipt 时进入 recovery，不 signal stack。
+- [ ] **Step 4: 接入 mode-specific stop gate。** 固定模式只有 terminal `BatchSummary`、
+  `batch_cleanup_complete=true`、cleanup receipt hash、descendant inventory 和 assigned ROS
+  domain clear 同时通过，process owner 才能停止 coordinator PGID。ACK timeout、socket
+  消失或证据不一致进入 `NEEDS_OPERATOR_RECOVERY`。
+  Adaptive 模式只请求 wrapper cooperative cancel/cleanup；Web 不直接 stop Runner 或
+  generation coordinator。Runner `INFRA_FAILED` 且 wrapper cleanup complete 可安全终止，
+  cleanup 证据缺失则进入 `NEEDS_OPERATOR_RECOVERY`。
 
 - [ ] **Step 5: 运行 GREEN。**
 
 ```zsh
-validation_pytest src/so101_demo_py/test/test_shutdown_safety.py \
-  src/so101_demo_py/test/test_task_shutdown_safety_cli.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_control.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py -q
 ```
 
 - [ ] **Step 6: Commit。**
 
 ```zsh
-git add src/so101_demo_py/src/application/shutdown_safety.py \
-  src/so101_demo_py/src/runtime/shutdown_safety_probe.py \
-  src/so101_demo_py/src/cli/task_shutdown_safety.py \
-  src/so101_demo_py/config/expert_validation/shutdown_safety_v1.yaml \
-  src/so101_demo_py/src/application/task_batch.py \
-  src/so101_demo_py/src/runtime/task_batch_runtime.py \
-  src/so101_demo_py/src/runtime/process_owner.py \
-  src/so101_demo_py/test/test_shutdown_safety.py \
-  src/so101_demo_py/test/test_task_shutdown_safety_cli.py \
-  src/so101_demo_py/test/test_task_batch.py \
-  src/so101_demo_py/test/test_task_batch_runtime.py \
+git add src/so101_teleop/so101_teleop/expert_validation/control.py \
+  src/so101_teleop/so101_teleop/expert_validation/coordinator.py \
   src/so101_teleop/so101_teleop/expert_validation/process_owner.py \
-  src/so101_demo_py/setup.py
-git commit -m "feat: gate validation shutdown on safety evidence"
+  src/so101_teleop/test/teleop/test_expert_validation_control.py
+git commit -m "feat: control parallel validation coordinators"
 ```
 
 ### Task 7: 实现 durable supervisor store 与幂等事务
@@ -804,8 +819,13 @@ git commit -m "feat: gate validation shutdown on safety evidence"
 
 **Interfaces:**
 
-- Consumes: canonical JSON command bodies, progress events, Task 5 process-owner journal callbacks, process intents and receipts.
-- Produces: `SupervisorStore.open(root: Path)`, `begin_command()`, `record_spawn_intent()`, `acknowledge_process()`, `record_cleanup_and_advance_retry()`, `accept_event()`, `finish_command()`, `reconcile()`, and immutable query projections.
+- Consumes: canonical Web command bodies, campaign manifests, Task 5 tagged execution ownership
+  callbacks, Task 3 accepted top-level cursors, and mode-specific terminal/cleanup receipts.
+- Produces: `SupervisorStore.open(root: Path)`, `begin_command()`,
+  `record_preflight_receipt()`, `consume_preflight_and_bind_campaign_batch()`,
+  `record_execution_owner_intent()`, `acknowledge_execution_owner()`,
+  `accept_upstream_cursor()`, `record_cleanup_and_advance_retry()`, `finish_command()`,
+  `reconcile()`, and immutable query projections.
 
 - [ ] **Step 1: 写 crash-window RED tests。**
 
@@ -826,21 +846,24 @@ def test_same_id_different_payload_is_rejected(store):
 
 def test_reopen_recovers_ownership_and_retry_cursor_without_memory_state(tmp_path):
     store = SupervisorStore.open(tmp_path)
-    store.record_spawn_intent(spawn_intent("worker-1", token="spawn-a"))
-    store.acknowledge_process(process_ack("worker-1", pid=123, pgid=123))
+    store.bind_campaign_batch(binding("campaign-1", "batch-1", "PARALLEL", 2, 10))
+    store.record_coordinator_intent(coordinator_intent("batch-1", token="spawn-a"))
+    store.acknowledge_coordinator(coordinator_ack("batch-1", pid=123, pgid=123, epoch=4))
     store.enqueue_retries("campaign-1", ["sample_05_near_center", "sample_14_far_right"])
     store.close()
     reopened = SupervisorStore.open(tmp_path)
-    assert reopened.owned_process("worker-1").spawn_token == "spawn-a"
+    assert reopened.owned_coordinator("batch-1").spawn_token == "spawn-a"
     assert reopened.next_retry("campaign-1").point_id == "sample_05_near_center"
 
 def test_cleanup_and_retry_advance_are_one_transaction(store):
     store.enqueue_retries("campaign-1", ["sample_05_near_center"])
-    store.record_cleanup_and_advance_retry(cleanup_receipt("worker-1"))
+    store.record_cleanup_and_advance_retry(batch_cleanup_receipt("retry-batch-1"))
     assert store.next_retry("campaign-1") is None
 ```
 
-补充 spawn intent 后崩溃、child ack 后崩溃、event log fsync 后 journal 前、journal 后 HTTP 前、retry finish 后 dequeue 前、singleton lock 和 ambiguous command 测试。
+补充 fixed/adaptive owner intent 后崩溃、ACK 后崩溃、Runner generation change、upstream journal commit 后 Web cursor 前、cursor
+后 HTTP 前、retry terminal 后 cleanup 前、cleanup 后 dequeue 前、singleton lock 和 ambiguous
+command 测试。证明 store 中不存在 Worker lease、point result 或 Broker health 的第二写入路径。
 
 - [ ] **Step 2: 运行 RED。**
 
@@ -869,34 +892,51 @@ CREATE TABLE manifests (
   source_config_sha256 TEXT NOT NULL,
   created_at_ns INTEGER NOT NULL
 );
+CREATE TABLE preflight_receipts (
+  receipt_id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL UNIQUE,
+  manifest_id TEXT NOT NULL REFERENCES manifests(manifest_id),
+  canonical_start_request_sha256 TEXT NOT NULL,
+  receipt_json TEXT NOT NULL,
+  receipt_sha256 TEXT NOT NULL,
+  expires_at_monotonic_ns INTEGER NOT NULL,
+  consumed_at_ns INTEGER
+);
 CREATE TABLE campaigns (
   campaign_id TEXT PRIMARY KEY,
   state TEXT NOT NULL,
   manifest_id TEXT NOT NULL REFERENCES manifests(manifest_id),
   executor_id TEXT NOT NULL,
   operation_id TEXT NOT NULL,
-  executor_config_sha256 TEXT NOT NULL
+  executor_config_sha256 TEXT NOT NULL,
+  execution_mode TEXT NOT NULL CHECK (execution_mode IN ('SEQUENTIAL','PARALLEL','ADAPTIVE')),
+  execution_config_json TEXT NOT NULL,
+  execution_config_sha256 TEXT NOT NULL,
+  preflight_receipt_id TEXT NOT NULL UNIQUE REFERENCES preflight_receipts(receipt_id)
 );
-CREATE TABLE attempts (
-  attempt_id TEXT PRIMARY KEY,
+CREATE TABLE campaign_batches (
+  batch_id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id),
+  batch_kind TEXT NOT NULL CHECK (batch_kind IN ('FIRST_PASS','FULL_RESTART_RETRY')),
+  point_id TEXT,
   state TEXT NOT NULL,
-  accepted_sequence INTEGER NOT NULL DEFAULT 0,
-  simulation_session_id TEXT NOT NULL,
-  ros_domain_id INTEGER NOT NULL
+  coordinator_epoch INTEGER,
+  pool_generation INTEGER,
+  journal_root TEXT NOT NULL,
+  terminal_summary_sha256 TEXT,
+  cleanup_receipt_sha256 TEXT
 );
-CREATE TABLE accepted_events (
-  attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
-  sequence INTEGER NOT NULL,
-  event_sha256 TEXT NOT NULL,
-  canonical_json TEXT NOT NULL,
-  PRIMARY KEY (attempt_id, sequence)
+CREATE TABLE upstream_cursors (
+  batch_id TEXT PRIMARY KEY REFERENCES campaign_batches(batch_id),
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('COORDINATOR','ADAPTIVE_RUNNER')),
+  owner_epoch_or_generation INTEGER NOT NULL,
+  segment_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  frame_sha256 TEXT NOT NULL
 );
-CREATE TABLE owned_processes (
-  worker_id TEXT PRIMARY KEY,
-  attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
-  parent_worker_id TEXT,
-  role TEXT NOT NULL,
+CREATE TABLE owned_execution (
+  batch_id TEXT PRIMARY KEY REFERENCES campaign_batches(batch_id),
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('COORDINATOR','ADAPTIVE_WRAPPER')),
   state TEXT NOT NULL,
   spawn_token TEXT NOT NULL UNIQUE,
   expected_executable TEXT NOT NULL,
@@ -908,61 +948,46 @@ CREATE TABLE owned_processes (
   pid INTEGER,
   pgid INTEGER,
   started_ticks INTEGER,
+  control_socket TEXT,
+  coordinator_epoch INTEGER,
+  runner_pid INTEGER,
+  runner_journal_root TEXT,
   acknowledged_at_ns INTEGER
 );
-CREATE TABLE process_descendants (
-  worker_id TEXT NOT NULL REFERENCES owned_processes(worker_id),
-  pid INTEGER NOT NULL,
-  pgid INTEGER NOT NULL,
-  started_ticks INTEGER NOT NULL,
-  executable_sha256 TEXT NOT NULL,
-  PRIMARY KEY (worker_id, pid, started_ticks)
-);
-CREATE TABLE cleanup_receipts (
-  cleanup_receipt_id TEXT PRIMARY KEY,
-  worker_id TEXT NOT NULL REFERENCES owned_processes(worker_id),
-  safety_receipt_id TEXT NOT NULL,
-  descendants_gone INTEGER NOT NULL,
-  canonical_json TEXT NOT NULL,
-  receipt_sha256 TEXT NOT NULL,
-  recorded_at_ns INTEGER NOT NULL
+CREATE TABLE adaptive_projection_cache (
+  batch_id TEXT PRIMARY KEY REFERENCES campaign_batches(batch_id),
+  current_generation INTEGER,
+  current_level INTEGER,
+  fallback_history_json TEXT NOT NULL,
+  resource_observations_json TEXT NOT NULL
 );
 CREATE TABLE retry_queue (
   campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id),
   ordinal INTEGER NOT NULL,
   point_id TEXT NOT NULL,
   state TEXT NOT NULL,
-  attempt_id TEXT,
-  cleanup_receipt_id TEXT,
+  batch_id TEXT REFERENCES campaign_batches(batch_id),
+  cleanup_receipt_sha256 TEXT,
   PRIMARY KEY (campaign_id, ordinal)
 );
 CREATE TABLE leases (lease_id TEXT PRIMARY KEY, service_session_id TEXT NOT NULL, generation INTEGER NOT NULL, expires_monotonic_ns INTEGER NOT NULL, state TEXT NOT NULL);
-CREATE TABLE artifacts (
-  artifact_id TEXT PRIMARY KEY,
-  campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id),
-  attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
-  relative_path TEXT NOT NULL,
-  media_type TEXT NOT NULL,
-  sha256 TEXT NOT NULL
-);
-CREATE TABLE safety_receipts (
-  receipt_id TEXT PRIMARY KEY,
-  attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
-  canonical_json TEXT NOT NULL,
-  receipt_sha256 TEXT NOT NULL
-);
-CREATE TABLE readiness_receipts (
-  receipt_id TEXT PRIMARY KEY,
-  attempt_id TEXT NOT NULL REFERENCES attempts(attempt_id),
-  receipt_kind TEXT NOT NULL,
-  canonical_json TEXT NOT NULL,
-  receipt_sha256 TEXT NOT NULL
-);
 ```
 
 所有 mutation 使用 `BEGIN IMMEDIATE`，canonical JSON 使用 sorted keys 与 UTF-8，store root 必须是绝对非 symlink 路径。OS-level lock 文件在 SQLite 打开前取得，第二个 writer 返回 `VALIDATION_SUPERVISOR_ACTIVE`。
 
-事务顺序固定为：command/campaign/attempt 或 retry queue 先落盘；每次 fork 前单独提交 ownership intent；child 停在 exec barrier；PID/PGID/start ticks、parent/descendant identity 和 executable readback 在同一 acknowledgement 事务写入后才放行；event journal acceptance 单独提交；cleanup receipt 与 retry cursor advance 必须处于同一事务；最后提交 command result，随后才返回 HTTP。重启测试必须关闭旧 store、丢弃全部 Python 对象，再从 SQLite、event log 和 `/proc` 重建状态。任何缺失 ack、fingerprint mismatch 或 cursor/cleanup 不一致都返回 `COMMAND_OUTCOME_UNKNOWN` 或进入 `NEEDS_OPERATOR_RECOVERY`，不得猜测执行完成。
+`execution_config_json` 是 tagged union：固定模式保存 N/K，自适应保存 preferred/fallback、
+initial affinity、timeout、infra-attempt limit 和 config hash，二者互斥。自适应 cache 可由 Runner
+journal删除重建，不具备提交权。
+
+事务顺序固定为：command/campaign/batch binding 或 retry queue 先落盘；execution owner fork 前单独
+提交 ownership intent；child 停在 exec barrier；mode-specific identity readback 在
+同一 acknowledgement 事务写入后才放行；accepted upstream cursor 单独提交；terminal batch
+cleanup receipt 与 retry cursor advance 必须处于同一事务；最后提交 command result，随后才
+返回 HTTP。重启测试关闭旧 store、丢弃全部 Python 对象，再从 SQLite、fixed coordinator 或
+adaptive Runner 顶层 journal 和 `/proc` 重建状态。Worker/point/Broker 状态只从绑定的顶层
+journal 重放。任何缺失 ACK、
+fingerprint mismatch 或 cursor/cleanup 不一致都返回 `COMMAND_OUTCOME_UNKNOWN` 或进入
+`NEEDS_OPERATOR_RECOVERY`。
 
 - [ ] **Step 4: 运行 GREEN。**
 
@@ -982,169 +1007,190 @@ git add src/so101_teleop/so101_teleop/expert_validation/models.py \
 git commit -m "feat: persist expert validation supervisor state"
 ```
 
-### Task 8: 实现 first-pass 与 FULL_RESTART supervisor
+### Task 8: 实现三模式 campaign supervisor
 
 **Files:**
 
 - Create: `src/so101_teleop/so101_teleop/expert_validation/supervisor.py`
-- Create: `src/so101_teleop/so101_teleop/expert_validation/readiness.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/preflight.py`
 - Create: `src/so101_teleop/test/teleop/test_expert_validation_supervisor.py`
-- Create: `src/so101_teleop/test/teleop/test_expert_validation_readiness.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_preflight.py`
+- Modify: `src/so101_teleop/so101_teleop/expert_validation/coordinator.py`
+- Modify: `src/so101_teleop/so101_teleop/expert_validation/adaptive.py`
+- Modify: `src/so101_teleop/so101_teleop/expert_validation/control.py`
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/process_owner.py`
 - Modify: `src/so101_teleop/so101_teleop/expert_validation/store.py`
 
 **Interfaces:**
 
-- Consumes: `SupervisorStore`, sampler manifests, process broker, `ShutdownSafetyReceipt`, brokered ROS/physics probes, installed ROS argv builder and progress log.
-- Produces: `ReadinessReceipt`, `InitialStateReceipt`, `ReadinessProbePort`, `ExpertValidationSupervisor.start_first_pass()`, `cancel()`, `start_retries()`, `status()`, `list_campaigns()`, and `reconcile_startup()`.
+- Consumes: `SupervisorStore`, `PointSelection`, upstream fixed/adaptive configs,
+  model/install/domain/resource probes, tagged process/control/event ports, and statistics projection.
+- Produces: `CampaignPreflightReceipt`,
+  `ExpertValidationSupervisor.preflight()`, `start_first_pass()`, `cancel()`,
+  `start_retries()`, `status()`, `list_campaigns()`, and `reconcile_startup()`.
 
 - [ ] **Step 1: 写 lifecycle RED tests。**
 
 ```python
-async def test_first_pass_uses_one_stack_and_one_batch(fake_owner, supervisor):
-    campaign = await supervisor.start_first_pass(start_request("manifest-20"))
-    await fake_owner.finish_batch(campaign.attempt_id, shutdown_safe=True)
-    assert fake_owner.roles_started == ["stack", "batch"]
-    assert fake_owner.stack_starts == 1
+async def test_sequential_and_parallel_use_same_coordinator_path(supervisor, owner):
+    await supervisor.start_first_pass(start_request("manifest-4", "SEQUENTIAL", n=1, k=4))
+    await owner.finish(batch_cleanup_complete=True)
+    await supervisor.start_first_pass(start_request("manifest-4b", "PARALLEL", n=2, k=2))
+    assert [(r.worker_count, r.max_points_per_worker) for r in owner.requests] == [
+        (1, 4), (2, 2),
+    ]
 
-async def test_each_retry_gets_fresh_stack_and_cleanup_before_next(fake_owner, supervisor):
+async def test_each_retry_gets_new_n1_k1_batch_and_cleanup_before_next(owner, supervisor):
     await supervisor.start_retries(retry_request(
         "campaign-1", ["sample_05_near_center", "sample_14_far_right"]
     ))
-    assert fake_owner.timeline == [
-        "start-stack-sample_05_near_center",
-        "start-batch-sample_05_near_center",
-        "cleanup-sample_05_near_center",
-        "start-stack-sample_14_far_right",
-        "start-batch-sample_14_far_right",
-        "cleanup-sample_14_far_right",
+    assert owner.timeline == [
+        "start-batch-sample_05_near_center-n1-k1",
+        "cleanup-batch-sample_05_near_center",
+        "start-batch-sample_14_far_right-n1-k1",
+        "cleanup-batch-sample_14_far_right",
     ]
 
-@pytest.mark.parametrize("failure", [
-    "CONTROLLER_NOT_ACTIVE", "JOINT_STATE_STALE", "MOVEIT_NOT_READY",
-    "PLANNING_SCENE_NOT_READY", "CAMERA_NOT_READY",
-    "PHYSICAL_EVIDENCE_STALE", "SESSION_OR_EPOCH_MISMATCH",
-])
-async def test_readiness_failure_never_starts_batch(supervisor, readiness, failure):
-    readiness.stack_receipt = failed_readiness(failure)
-    await supervisor.start_first_pass(start_request("manifest-20"))
-    assert supervisor.process_owner.roles_started == ["stack"]
+async def test_parallel_never_silently_downgrades(supervisor, resources):
+    resources.reject("GPU_HEADROOM")
+    with pytest.raises(PreflightRejected, match="GPU_HEADROOM"):
+        await supervisor.start_first_pass(
+            start_request("manifest-20", "PARALLEL", n=2, k=10)
+        )
+    assert supervisor.process_owner.spawn_calls == []
 
-async def test_retry_wrong_canonical_initial_state_never_executes(supervisor, readiness):
-    readiness.initial_receipt = failed_initial_state(
-        point_id="sample_05_near_center", reason="CUP_POSITION_MISMATCH"
+async def test_adaptive_uses_wrapper_ladder_without_k(supervisor, owner):
+    request = adaptive_start_request(
+        "manifest-20", preferred=8, fallback=(6, 4, 2, 1), initial_affinity=3
     )
-    await supervisor.start_retries(
-        retry_request("campaign-1", ["sample_05_near_center"])
-    )
-    assert supervisor.process_owner.roles_started == ["stack"]
+    await supervisor.start_first_pass(request)
+    assert owner.requests[-1].owner_kind == "ADAPTIVE_WRAPPER"
+    assert owner.requests[-1].max_points_per_worker is None
+
+async def test_adaptive_resource_observations_do_not_reject_start(supervisor, resources):
+    resources.observe(gpu_headroom="LOW", memory_pressure="HIGH")
+    receipt = await supervisor.preflight(adaptive_start_request("manifest-20"))
+    assert receipt.admitted is True
+    assert receipt.resource_observations["memory_pressure"] == "HIGH"
 ```
 
-覆盖 no second active execution、invalid retry eligibility、cleanup failure stops queue、held cup、unknown process、owner death、server restart reconciliation 和 `LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED`。readiness tests 还要覆盖错误 joint 初态、gripper 未打开、cup 未受桌面支撑、指尖仍接触、MoveIt 中杯子仍 attached，以及 receipt 超出 freshness bound。
+覆盖 `SEQUENTIAL` N≠1、`PARALLEL` N<2/N>3、N×K 不足、默认 K、显式 K、adaptive 与 K
+互斥、ladder 顺序、1–5 字符 ASCII batch ID、runtime root、stale preflight、no second active
+execution owner、只有安全终态 business `FAILED` 可 retry、cleanup failure stops queue、
+fixed owner/Runner death、server restart reconciliation 和
+`LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED`。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_readiness.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_preflight.py \
   src/so101_teleop/test/teleop/test_expert_validation_supervisor.py -q
 ```
 
-- [ ] **Step 3: 实现 readiness 与 canonical initial-state contracts。**
+- [ ] **Step 3: 实现 campaign preflight contract。**
 
 ```python
 @dataclass(frozen=True)
-class AttemptRequest:
+class CampaignPreflightReceipt:
+    receipt_id: str
     campaign_id: str
-    attempt_id: str
+    service_session_id: str
+    lease_generation: int
     manifest_id: str
-    simulation_session_id: str
-    ros_domain_id: int
-    evidence_root: Path
-
-@dataclass(frozen=True)
-class ReadinessReceipt:
-    attempt_id: str
-    simulation_session_id: str
-    reset_epoch: int
-    observed_at_ns: int
-    freshness_limit_ns: int
+    canonical_start_request_sha256: str
+    execution_mode: Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"]
+    execution_config: FixedExecutionConfig | AdaptiveExecutionConfig
+    point_count: int
+    capacity: int
     source_commit: str
     install_prefix: str
-    runtime_sha256: str
-    active_controllers: tuple[str, ...]
-    joint_state_stamp_ns: int
-    moveit_ready: bool
-    planning_scene_revision: str
-    camera_stamps_ns: Mapping[str, int]
-    physical_evidence_stamp_ns: int
-    physical_evidence_authentic: bool
-    ready: bool
-    reason_codes: tuple[str, ...]
-
-@dataclass(frozen=True)
-class InitialStateReceipt:
-    attempt_id: str
-    point_id: str
-    simulation_session_id: str
-    reset_epoch: int
+    coordinator_executable_sha256: str
+    parallel_config_sha256: str
+    catalog_sha256: str
+    selection_sha256: str
+    yolo_weights_sha256: str
+    grounded_sam_manifest_sha256: str
+    broker_image_id: str
+    resource_manifest_sha256: str
     observed_at_ns: int
-    maximum_joint_error_rad: float
-    gripper_open: bool
-    cup_position_error_m: float
-    cup_orientation_error_rad: float
-    support_confirmed: bool
-    fingertip_contact_count: int
-    moveit_world_contains_cup: bool
-    moveit_attached_object_ids: tuple[str, ...]
-    valid: bool
+    expires_at_monotonic_ns: int
+    admitted: bool
     reason_codes: tuple[str, ...]
-
-class ReadinessProbePort(Protocol):
-    def probe_stack(self, request: AttemptRequest) -> ReadinessReceipt: ...
-    def probe_initial_state(
-        self, request: AttemptRequest, point: ManifestPoint
-    ) -> InitialStateReceipt: ...
 ```
 
-`probe_stack()` 必须通过 brokered commands 运行现有 `motion_stack_ready`，读取 fresh `/joint_states`，执行 Planning Scene observe，并读取 task RGB-D 与 authentic `SimulationEvidence`。所有样本必须匹配 attempt session/epoch，且来源 commit、install prefix 和 runtime SHA256 与 ownership intent 一致。`probe_initial_state()` 从 installed MuJoCo scene 的 `task_start` keyframe 和当前 manifest point 取得期望值；joint tolerance 使用 installed `headless_execution.yaml:joint_convergence_tolerance_rad`，cup pose tolerance 使用 installed dynamic policy 的 `scene_position_tolerance_m` 与 `scene_orientation_tolerance_rad`。它还要求 gripper open、桌面支撑、零指尖接触、杯子在 MoveIt world 集合且 attached 集合为空。receipt 连同输入 hashes 写入 store；任何缺项都不启动 batch。
+preflight 直接调用上游严格配置解析、catalog/selection 校验、模型/Broker provenance、domain
+claim 和 execution-owner singleton probe。固定模式调用 resource allocator；省略 K 时使用
+`ceil(total_points / worker_count)`，显式 K 不足或资源不足拒绝。Adaptive 校验字段互斥、冻结
+ladder、config/wrapper/Runner/cleanup provenance、短 batch ID、runtime root 和 unresolved owner，
+但资源指标只作为 observation，不参与 admitted 或 tier 选择。依赖缺失或 hash 漂移都返回稳定
+reason code，不启动 owner，也不改变请求模式。receipt 绑定 canonical start body、prospective campaign ID、service session 和
+lease generation，并使用短期 monotonic expiry；start 时必须重算请求 hash、确认未过期且未被
+消费，并重新检查 singleton 与未解决 cleanup。start 在创建 campaign/batch binding 的同一事务中
+消费一次性 receipt。
 
-- [ ] **Step 4: 实现 argv-only stack 与 batch 启动。**
+- [ ] **Step 4: 实现 typed fixed coordinator / adaptive wrapper 启动。**
 
 ```python
-def stack_argv(request: AttemptRequest) -> tuple[str, ...]:
+def coordinator_argv(request: CoordinatorStartRequest) -> tuple[str, ...]:
     return (
-        "ros2", "launch", "so101_demo_py", "so101_mujoco_task_station.launch.py",
-        "headless:=false", "sensor_rendering:=true", "include_teleop:=false",
-        f"session_id:={request.simulation_session_id}",
-        f"task_evidence_root:={request.evidence_root}",
+        "ros2", "run", "so101_demo_py", "so101_parallel_batch",
+        "--points", str(request.points_path),
+        "--config", str(request.parallel_config_path),
+        "--batch-id", request.batch_id,
+        "--worker-count", str(request.worker_count),
+        "--max-points-per-worker", str(request.max_points_per_worker),
+        "--evidence-root", str(request.batch_root),
+        "--run-mode", "execute",
     )
 ```
 
-batch argv 必须包含 `--attach-existing-stack`、准确 MuJoCo PID、campaign/attempt IDs、progress log、broker socket 和 broker token。每次 attempt 分配新 simulation session、ROS domain、evidence child 和 process identities。stack acknowledgement 后先接受 `ReadinessReceipt`，retry 还必须接受 `InitialStateReceipt`，之后才能 spawn batch。未知冲突只报告，不自动 kill。不得依赖 `mujoco_rgbd_batch.py` attached 分支中当前缺失的 `_wait_for_task_station()` 调用。
+argv 还要按 manifest 顺序追加 repeatable canonical `--point-id`，并传递 frozen model/Broker
+provenance；所有参数都由服务端 typed request 构造。Web supervisor 只执行一次 coordinator spawn，
+Worker stack、ROS domain、session、Broker token 和 point gate 全由上游 coordinator 分配与记录。
+retry 使用相同路径但固定 N=1/K=1 和单点 selection；禁止 `--attach-existing-stack` 或旧
+`mujoco_rgbd_batch.py` fallback。
+
+Adaptive 路径只能执行 `scripts/run_so101_adaptive_batch.zsh`，显式传
+`--adaptive-workers`、`--worker-count 8`、`--fallback-worker-counts 6,4,2,1`、
+`--initial-points-per-worker 3`、`--worker-start-timeout-s 120`、
+`--max-infra-attempts-per-point 5`、`--adaptive-config`、短 batch ID 和 runtime root，且不得传
+`--max-points-per-worker`。Web 只 spawn
+一次 wrapper；Runner 负责 W8/W6/W4/W2/W1 generation 与 top-level journal。
 
 - [ ] **Step 5: 实现 terminal/recovery 顺序。**
 
-先接受 `BATCH_FINISHED` 与 result manifest，再接受 fresh shutdown receipt，之后按 point workers、batch、stack 顺序 cleanup 并验证 descendants 和 ROS graph 消失。任何缺口写 `NEEDS_OPERATOR_RECOVERY`；retry queue 只有在 cleanup receipt 落盘后推进。
+固定模式先接受 coordinator 的 terminal `BatchSummary`；adaptive 接受 Runner
+`COMPLETED | COMPLETED_WITH_FAILURES | INFRA_FAILED`、final point set、generation/fallback
+history 和 sealed references。两者随后接受 `batch_cleanup_complete=true` 的 cleanup receipt。
+Web 只在授权后停止/回收固定 coordinator；adaptive 只通过 wrapper cleanup。Wrapper exit 0
+只对应 `COMPLETED`；exit 1 可能是 `COMPLETED_WITH_FAILURES` 或 `INFRA_FAILED`，必须结合 Runner
+journal 裁决，不能把非零退出一律当进程故障；
+任何缺口写 `NEEDS_OPERATOR_RECOVERY`。retry queue 只有在 one-point batch 的 cleanup receipt
+与 coordinator reconciliation 同一事务落盘后推进。
 
 - [ ] **Step 6: 运行 GREEN。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_readiness.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_preflight.py \
   src/so101_teleop/test/teleop/test_expert_validation_supervisor.py \
   src/so101_teleop/test/teleop/test_expert_validation_process_owner.py \
-  src/so101_teleop/test/teleop/test_expert_validation_store.py -q
+  src/so101_teleop/test/teleop/test_expert_validation_store.py \
+  src/so101_demo_py/test/test_parallel_batch_cli.py -q
 ```
 
 - [ ] **Step 7: Commit。**
 
 ```zsh
 git add src/so101_teleop/so101_teleop/expert_validation/supervisor.py \
-  src/so101_teleop/so101_teleop/expert_validation/readiness.py \
+  src/so101_teleop/so101_teleop/expert_validation/preflight.py \
+  src/so101_teleop/so101_teleop/expert_validation/coordinator.py \
+  src/so101_teleop/so101_teleop/expert_validation/adaptive.py \
+  src/so101_teleop/so101_teleop/expert_validation/control.py \
   src/so101_teleop/so101_teleop/expert_validation/process_owner.py \
   src/so101_teleop/so101_teleop/expert_validation/store.py \
-  src/so101_teleop/test/teleop/test_expert_validation_readiness.py \
+  src/so101_teleop/test/teleop/test_expert_validation_preflight.py \
   src/so101_teleop/test/teleop/test_expert_validation_supervisor.py
-git commit -m "feat: supervise expert validation campaigns"
+git commit -m "feat: supervise validation execution modes"
 ```
 
 ### Task 9: 加入 lease、executor registry 和 application service
@@ -1179,11 +1225,24 @@ def test_expiry_requests_cancel_and_blocks_new_campaign(lease_service, superviso
     assert supervisor.cancel_requests == ["LEASE_EXPIRED"]
     assert lease_service.can_start_campaign("browser-b") is False
 
-def test_v1_registry_only_exposes_moveit_validation(registry):
+def test_v1_registry_exposes_three_explicit_modes(registry):
     capability = registry.require("moveit_expert", "validate_pick_place")
-    assert capability.lifecycle_modes == ("RESET_WORLD", "FULL_RESTART")
+    assert capability.execution_modes == ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")
+    assert capability.batch_kinds == ("FIRST_PASS", "FULL_RESTART_RETRY")
     with pytest.raises(UnknownOperation):
         registry.require("act_collect", "collect_demonstration")
+
+def test_parallel_capability_fails_closed_without_upstream_acceptance(registry, probes):
+    probes.two_worker_live_acceptance = None
+    capability = registry.require("moveit_expert", "validate_pick_place")
+    assert capability.mode_availability["PARALLEL"].available is False
+    assert capability.mode_availability["PARALLEL"].reason == "PARALLEL_NOT_QUALIFIED"
+
+def test_adaptive_capability_is_independent_from_fixed_modes(registry, probes):
+    probes.adaptive_acceptance = None
+    capability = registry.require("moveit_expert", "validate_pick_place")
+    assert capability.mode_availability["SEQUENTIAL"].available is True
+    assert capability.mode_availability["ADAPTIVE"].reason == "ADAPTIVE_NOT_QUALIFIED"
 
 def test_stale_manifest_remains_readable_but_cannot_start(service, stale_manifest):
     assert service.get_manifest(stale_manifest.manifest_id) == stale_manifest
@@ -1227,7 +1286,9 @@ class ExecutorCapability:
     operation_id: str
     request_model: type[BaseModel]
     evidence_schema_id: str
-    lifecycle_modes: tuple[str, ...]
+    execution_modes: tuple[Literal["SEQUENTIAL", "PARALLEL", "ADAPTIVE"], ...]
+    batch_kinds: tuple[Literal["FIRST_PASS", "FULL_RESTART_RETRY"], ...]
+    mode_availability: Mapping[str, ModeAvailability]
     success_contract_id: str
 
 class ExecutorRegistry:
@@ -1235,11 +1296,27 @@ class ExecutorRegistry:
     def require(self, executor_id: str, operation_id: str) -> ExecutorCapability: ...
 ```
 
-启动时使旧 generation 全部失效。browser disconnect 不自动释放。lease expiry 只请求 cooperative cancellation；没有 safety receipt 时仍进入 recovery。新 holder 在 unresolved campaign 期间只能 read/cancel/recover。V1 registry 只注册 `moveit_expert/validate_pick_place`；未来 `act_collect` 和 `act_rollout` operation 只能通过新 request model、evidence schema 和 success contract 显式注册，不能复用 MoveIt 统计。
+启动时使旧 generation 全部失效。browser disconnect 不自动释放。lease expiry 只通过
+mode-specific owner control 请求 cooperative cancellation；没有 batch cleanup receipt 时仍进入
+recovery。新 holder 在 unresolved campaign 期间只能 read/cancel/recover。V1 registry 只注册
+`moveit_expert/validate_pick_place`，默认 `SEQUENTIAL`；`PARALLEL` 只有在上游模块、配置、
+Broker 镜像、资源探针和双 Worker live acceptance 都可核验时才标为 available。
+`ADAPTIVE` 只有在 Runner、production wrapper、cleanup、frozen config、fault injection、20 点
+live 和 W1/W2/W4/W6/W8 performance evidence 都可核验时才 available；它与 fixed availability
+分开判定。未来
+`act_collect` 和 `act_rollout` operation 只能通过新 request model、evidence schema 和 success
+contract 显式注册，不能复用 MoveIt 统计。
 
 - [ ] **Step 4: 实现 immutable manifest 与 durable command idempotency。**
 
-manifest generation 将完整 16 点 pool 按 Task 1 规则裁成请求点数，生成 server-owned `manifest_id`，并把 canonical document 与 SHA256 作为同一 durable transaction 写入 store。start 重新计算 installed sampler/policy/scene/geometry/anchor hashes；不一致时只拒绝启动，旧 manifest 仍可查询。service 对 campaign start/cancel/retry 使用 canonical request SHA256。相同 command ID 与 payload 返回存储结果，不同 payload 返回 `COMMAND_ID_REUSED`；崩溃后无法判定的命令返回 `COMMAND_OUTCOME_UNKNOWN`，禁止换 ID 绕过 reconciliation。
+manifest generation 将上游完整 20 点 catalog 按 Task 1 规则裁成请求点数，生成 server-owned
+`manifest_id`，并把 canonical document 与 SHA256 作为同一 durable transaction 写入 store。
+service 提供 `preflight()`，绑定 tagged execution config、manifest/selection、
+source/install/config、模型与 mode-specific probe hash；start 重算这些值并校验 receipt 尚未
+过期。不一致时只拒绝启动，旧 manifest 仍可查询。
+service 对 campaign start/cancel/retry 使用 canonical request SHA256。相同 command ID 与 payload
+返回存储结果，不同 payload 返回 `COMMAND_ID_REUSED`；崩溃后无法判定的命令返回
+`COMMAND_OUTCOME_UNKNOWN`，禁止换 ID 绕过 reconciliation。
 
 - [ ] **Step 5: 运行 GREEN。**
 
@@ -1264,85 +1341,105 @@ git add src/so101_teleop/so101_teleop/expert_validation/lease.py \
 git commit -m "feat: lease expert validation campaigns"
 ```
 
-### Task 10: 接入 GNOME/macOS 截图和 artifact registry
+### Task 10: 接入上游 artifact manifest 与证据隔离
 
 **Files:**
 
-- Create: `src/so101_teleop/so101_teleop/expert_validation/capture.py`
-- Create: `src/so101_teleop/test/teleop/test_expert_validation_capture.py`
-- Modify: `src/so101_demo_py/src/runtime/viewer_capture.py`
-- Modify: `src/so101_demo_py/test/test_viewer_capture.py`
-- Modify: `src/so101_demo_py/src/cli/mujoco_rgbd_batch.py`
-- Modify: `src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py`
+- Create: `src/so101_teleop/so101_teleop/expert_validation/artifacts.py`
+- Create: `src/so101_teleop/test/teleop/test_expert_validation_artifacts.py`
 - Modify: `src/so101_teleop/so101_teleop/task_artifacts.py`
 - Modify: `src/so101_teleop/test/teleop/test_task_artifacts.py`
 
 **Interfaces:**
 
-- Consumes: brokered `capture_viewer` request, exact PID/window identity and attempt evidence root.
-- Produces: `CaptureReceipt(artifact_id, captured_at_ns, window_id, process_started_ticks, sha256)` and registered opaque artifact IDs.
+- Consumes: bound fixed batch root or adaptive Runner root, accepted Runner generation references,
+  sealed Worker/attempt/recovery/Broker manifests, and upstream artifact references.
+- Produces: `ValidationArtifactRegistry.register_manifest()`, `resolve_opaque_id()`,
+  `ArtifactView`, and checksum-verified read streams scoped to one campaign/Runner batch/pool
+  generation/coordinator batch/Worker/attempt.
 
-- [ ] **Step 1: 写 stale-window 与 traversal RED tests。**
+- [ ] **Step 1: 写 manifest、隔离与 traversal RED tests。**
 
 ```python
-def test_capture_rejects_image_older_than_request(adapter):
-    with pytest.raises(CaptureError, match="STALE_VIEWER_CAPTURE"):
-        adapter.capture(requested_at_ns=200, image_mtime_ns=199)
-
-def test_artifact_cannot_escape_campaign_root(store, foreign_file):
+def test_artifact_cannot_escape_bound_batch_root(registry, foreign_file):
     with pytest.raises(ArtifactAccessError):
-        store.register_file(foreign_file, "image/png", campaign_id="campaign-1")
+        registry.register_manifest(
+            upstream_manifest(file=foreign_file), binding("campaign-1", "batch-1")
+        )
 
-def test_linux_validation_cli_uses_brokered_capture_not_mac_adapter(cli, broker):
-    result = cli.run(platform="linux", process_owner=broker)
-    assert result.capture_adapter == "gnome"
-    assert broker.requests[-1].role == "capture"
-    assert "MacViewerCapture" not in result.imported_types
+def test_worker_artifact_cannot_be_claimed_by_another_attempt(registry):
+    artifact = registry.register_manifest(
+        worker_manifest(worker_id="worker-1", attempt_id="attempt-1"),
+        binding("campaign-1", "batch-1"),
+    )[0]
+    with pytest.raises(ArtifactAccessError, match="ARTIFACT_IDENTITY_MISMATCH"):
+        registry.resolve_opaque_id(
+            artifact.artifact_id,
+            expected_attempt_id="attempt-2",
+        )
 ```
+
+补测 checksum/media type、absolute path、`..`、symlink、cross-campaign、cross-batch、
+cross-Worker、旧 generation、未提交 result、Broker evidence 和 recovery receipt。只有
+mode-specific top-level journal 已接受并引用的 sealed manifest 才能注册。
 
 - [ ] **Step 2: 运行 RED。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_capture.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_artifacts.py \
   src/so101_teleop/test/teleop/test_task_artifacts.py \
-  src/so101_demo_py/test/test_viewer_capture.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py -q
+  src/so101_demo_py/test/test_parallel_batch_artifacts.py -q
 ```
 
-- [ ] **Step 3: 实现 adapter factory。**
+- [ ] **Step 3: 实现只读 artifact bridge。**
 
 ```python
-def capture_adapter(platform: str, process_owner: ProcessOwnerPort) -> ViewerCapture:
-    if platform == "linux":
-        return GnomeViewerCapture(process_owner)
-    if platform == "darwin":
-        return MacViewerCapture(process_owner)
-    raise CaptureError("VIEWER_CAPTURE_PLATFORM_UNSUPPORTED")
+@dataclass(frozen=True)
+class ArtifactView:
+    artifact_id: str
+    campaign_id: str
+    batch_id: str
+    worker_id: str | None
+    worker_generation: int | None
+    attempt_id: str | None
+    role: str
+    media_type: str
+    size_bytes: int
+    sha256: str
+
+class ValidationArtifactRegistry:
+    def register_manifest(
+        self, manifest: SealedArtifactManifest, binding: CampaignBatchBinding
+    ) -> tuple[ArtifactView, ...]: ...
+    def resolve_opaque_id(self, artifact_id: str) -> VerifiedArtifact: ...
 ```
 
-GNOME adapter 从本次 attempt 的 MuJoCo PID 查窗口，记录 window ID、PID start time、capture start/end 和 manifest；macOS 保留现有窗口选择规则。`mujoco_rgbd_batch.py` 删除顶层硬编码的 `MacViewerCapture.from_package(...)`，改为从 Task 5 的 broker token 构造 `BrokeredViewerCapture`；supervisor 根据平台选择 GNOME 或 macOS adapter 并拥有平台工具进程。无 broker 的旧 CLI 才在本地调用 `capture_adapter(sys.platform, ...)`。batch 不直接启动截图工具，也不复用旧图片。
+registry 从当前 campaign-to-batch binding 推导允许的 batch root，不接受客户端路径。它重新
+验证 upstream manifest identity、relative path、regular-file/symlink 边界、size 和 SHA256，再
+产生 server-owned opaque ID。task-camera RGB-D、point-cloud、planning/controller/physical、
+Worker recovery 和 Broker diagnostics 都保留原始 role 与 identity；Web 不复制文件，也不把
+共享 Broker 证据错误归到某个 Worker。现有 `task_artifacts` 只复用安全读取与 media-type
+allow-list，不成为第二个结果提交权威。
+
+计数型并发 campaign 使用每个 Worker 的固定 task camera 证据，不要求共享 GNOME/macOS
+桌面截图；既有交互 Teleop capture adapter 保持不变并继续由原测试覆盖。
 
 - [ ] **Step 4: 运行 GREEN。**
 
 ```zsh
-validation_pytest src/so101_teleop/test/teleop/test_expert_validation_capture.py \
+validation_pytest src/so101_teleop/test/teleop/test_expert_validation_artifacts.py \
   src/so101_teleop/test/teleop/test_task_artifacts.py \
-  src/so101_demo_py/test/test_viewer_capture.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py -q
+  src/so101_demo_py/test/test_parallel_batch_artifacts.py -q
 ```
 
 - [ ] **Step 5: Commit。**
 
 ```zsh
-git add src/so101_teleop/so101_teleop/expert_validation/capture.py \
-  src/so101_teleop/test/teleop/test_expert_validation_capture.py \
+git add src/so101_teleop/so101_teleop/expert_validation/artifacts.py \
+  src/so101_teleop/test/teleop/test_expert_validation_artifacts.py \
   src/so101_teleop/so101_teleop/task_artifacts.py \
-  src/so101_teleop/test/teleop/test_task_artifacts.py \
-  src/so101_demo_py/src/runtime/viewer_capture.py \
-  src/so101_demo_py/test/test_viewer_capture.py \
-  src/so101_demo_py/src/cli/mujoco_rgbd_batch.py \
-  src/so101_demo_py/test/test_mujoco_rgbd_batch_cli.py
-git commit -m "feat: capture validation evidence across platforms"
+  src/so101_teleop/test/teleop/test_task_artifacts.py
+git commit -m "feat: expose parallel validation artifacts"
 ```
 
 ### Task 11: 暴露独立 validation API 与 server entry point
@@ -1386,6 +1483,30 @@ def test_retry_requires_lease_command_and_confirmation(client):
     assert response.status_code == 409
     assert response.json()["code"] == "CONFIRMATION_REQUIRED"
 
+def test_parallel_start_requires_matching_preflight_and_capacity(client):
+    preflight = client.post("/expert-validation/campaigns/preflight", json={
+        "service_session_id": "browser-a", "lease_id": "lease-a",
+        "manifest_id": "manifest-20", "execution_mode": "PARALLEL",
+        "worker_count": 2, "max_points_per_worker": 10,
+    }).json()
+    response = client.post("/expert-validation/campaigns", json={
+        "service_session_id": "browser-a", "lease_id": "lease-a",
+        "command_id": "start-1",
+        "manifest_id": "manifest-20", "execution_mode": "PARALLEL",
+        "worker_count": 2, "max_points_per_worker": 9,
+        "preflight_receipt_id": preflight["receipt_id"],
+    })
+    assert response.status_code == 409
+    assert response.json()["code"] == "PREFLIGHT_REQUEST_MISMATCH"
+
+def test_adaptive_start_rejects_k_and_freezes_ladder(client):
+    response = client.post("/expert-validation/campaigns/preflight", json={
+        "manifest_id": "manifest-20", "execution_mode": "ADAPTIVE",
+        "preferred_worker_count": 8, "fallback_worker_counts": [6, 4, 2, 1],
+        "initial_points_per_worker": 3, "max_points_per_worker": 10,
+    })
+    assert response.status_code == 422
+
 def test_regular_server_reports_validation_unavailable(regular_client):
     assert regular_client.get("/expert-validation/capabilities").json() == {
         "available": False,
@@ -1404,7 +1525,16 @@ validation_pytest src/so101_teleop/test/teleop/test_expert_validation_api.py \
 
 - [ ] **Step 3: 实现 app factory 和 artifact route。**
 
-`create_expert_validation_app(service, static_dir)` 只接受 loopback 或 Tailscale CGNAT bind。实现设计中列出的 13 个 HTTP/WebSocket endpoints。artifact route 通过 registry 打开 opaque ID，拒绝 absolute client path、`..`、symlink、跨 campaign 和 hash mismatch。WebSocket 只推 journal 已接受的 sequence；reconnect 后客户端先 GET campaign。现有 `create_app()` 只新增只读 unavailable capability route，不获得 supervisor、lease 或进程控制引用，原 `/tasks` 行为保持不变。
+`create_expert_validation_app(service, static_dir)` 只接受 loopback 或 Tailscale CGNAT bind。实现
+设计中列出的 14 个 HTTP/WebSocket endpoints，其中 preflight 返回绑定 tagged execution
+config、manifest 和 provenance 的短期 receipt；start body 必须逐项匹配。campaign response
+返回 Web campaign ID、owner kind/identity、固定 coordinator summary 或 adaptive Runner
+status/levels/fallbacks/generation/final points/infra attempts/resource observations。固定模式才
+返回四个 qualification flags。artifact route
+通过 registry 打开 opaque ID，拒绝 absolute client path、`..`、symlink、跨 campaign、
+cross-Worker 和 hash mismatch。WebSocket 只推 journal 已接受的 sequence；reconnect 后客户端先
+GET campaign。现有 `create_app()` 只新增只读 unavailable capability route，不获得 supervisor、
+lease 或进程控制引用，原 `/tasks` 行为保持不变。
 
 - [ ] **Step 4: 安装 entry point 和 config。**
 
@@ -1500,6 +1630,26 @@ test("retry sends exact confirmation and selected failed ids", async () => {
     confirmation: "CONFIRM FULL_RESTART RETRIES",
   });
 });
+
+test("parallel start preserves admitted mode N and K", async () => {
+  const receipt = await client.preflight("manifest-20", "PARALLEL", 2, 10);
+  await client.startCampaign({
+    manifest_id: "manifest-20", execution_mode: "PARALLEL",
+    worker_count: 2, max_points_per_worker: 10,
+    preflight_receipt_id: receipt.receipt_id,
+  }, lease);
+  expect(lastBody()).toMatchObject({
+    execution_mode: "PARALLEL", worker_count: 2, max_points_per_worker: 10,
+  });
+});
+
+test("adaptive start preserves ladder and never sends K", async () => {
+  const request = adaptiveRequest({ preferred: 8, fallback: [6, 4, 2, 1] });
+  const receipt = await client.preflight(request);
+  await client.startCampaign({ ...request, preflight_receipt_id: receipt.receipt_id }, lease);
+  expect(lastBody().max_points_per_worker).toBeUndefined();
+  expect(lastBody().fallback_worker_counts).toEqual([6, 4, 2, 1]);
+});
 ```
 
 - [ ] **Step 2: 运行 RED。**
@@ -1512,7 +1662,15 @@ validation_web run test \
 
 - [ ] **Step 3: 实现 client 与 store。**
 
-`expert-validation-types.ts` 只从生成的 `expert-validation-schema.d.ts` 提取 aliases，禁止再手写第二份 wire schema。生成契约必须闭合列出 manifest geometry、point states、attempts、statistics、lease、artifact、safety receipt 和 campaign state。client 对非 2xx machine-readable error 保留 `code`；store 丢弃 `sequence <= current` 的 hint，并在 sequence gap 时重新 GET campaign。
+`expert-validation-types.ts` 只从生成的 `expert-validation-schema.d.ts` 提取 aliases，禁止再
+手写第二份 wire schema。生成契约必须闭合列出 `ExecutionMode`、mode availability、tagged
+fixed/adaptive config 与 preflight、manifest geometry、fixed/adaptive point states、attempt
+states、Worker slot/generation/state/current point/K/heartbeat/deadline/recovery/quarantine、Broker
+health、fixed 四 flags、adaptive Runner status/levels/fallbacks/generations/observations、
+statistics、lease、artifact 和 campaign/upstream identity。client
+对非 2xx machine-readable error 保留 `code`；store 丢弃 `sequence <= current` 的 hint，并在
+sequence gap 时重新 GET campaign。它只投影固定 coordinator 或 adaptive Runner 返回值，
+不从 Web events 推导新的终态、fallback 或 qualification。
 
 - [ ] **Step 4: 运行 GREEN。**
 
@@ -1559,8 +1717,11 @@ test("matches Python projection fixture", () => {
 });
 
 test.each([
-  ["PENDING", "blue"], ["RUNNING", "blue"], ["SUCCEEDED", "green"],
-  ["FAILED", "red"], ["INVALID", "red"], ["NOT_RUN", "red"], ["BLOCKED", "red"],
+  ["ELIGIBLE_UNRUN", "blue"], ["LEASED", "blue"], ["EXECUTING", "blue"],
+  ["INFRA_INTERRUPTED_REQUEUEABLE", "blue"],
+  ["PASSED", "green"], ["FAILED", "red"], ["INDETERMINATE", "red"],
+  ["TERMINAL_UNRUN", "red"], ["INVALID_BLOCKED", "red"],
+  ["INFRA_FAILED_REMAINDER", "red"],
 ])("renders %s with %s semantic style", (state, color) => {
   renderMap(pointWithState(state));
   expect(screen.getByLabelText(/P01/).getAttribute("data-color")).toBe(color);
@@ -1576,7 +1737,10 @@ validation_web run test src/components/expert-validation/projection.test.ts \
 
 - [ ] **Step 3: 实现 SVG。**
 
-使用一个 viewBox 和单一 equal-scale transform。绘制 table/grid、方形 base、base origin、target center、target region、target tolerance 虚线圆、P01 cup footprint 虚线圆和全部等半径点位。`RUNNING` 只加粗蓝色 stroke；selection 只增加外 focus ring。每个 point 是可键盘选择的 `<button>` 等价 SVG 元素，并提供完整 aria label。
+使用一个 viewBox 和单一 equal-scale transform。绘制 table/grid、方形 base、base origin、
+target center、target region、target tolerance 虚线圆、P01 cup footprint 虚线圆和全部等半径
+点位。active Worker point 只加粗蓝色 stroke；selection 只增加外 focus ring。每个 point 是可
+键盘选择的 `<button>` 等价 SVG 元素，并提供状态、Worker ID、阶段和失败原因的完整 aria label。
 
 - [ ] **Step 4: 同 Python golden fixture 做双向 readback。**
 
@@ -1629,15 +1793,39 @@ test("changing count invalidates generated preview", async () => {
 });
 
 test("only valid failures are retry eligible", async () => {
-  renderCampaign(points("SUCCEEDED", "FAILED", "INVALID", "BLOCKED"));
+  renderCampaign(points("PASSED", "FAILED", "INDETERMINATE", "UNRUN"));
   expect((screen.getByLabelText("Retry P02") as HTMLInputElement).disabled).toBe(false);
   expect((screen.getByLabelText("Retry P01") as HTMLInputElement).disabled).toBe(true);
   expect((screen.getByLabelText("Retry P03") as HTMLInputElement).disabled).toBe(true);
   expect((screen.getByLabelText("Retry P04") as HTMLInputElement).disabled).toBe(true);
 });
+
+test("parallel setup shows capacity admission and worker lanes", async () => {
+  render(<ExpertValidationApp api={fakeParallelApi()} />);
+  await user.selectOptions(screen.getByLabelText("Execution mode"), "PARALLEL");
+  await user.selectOptions(screen.getByLabelText("Worker count"), "2");
+  expect(screen.getByText("Capacity 20 / 20")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Check resources" }));
+  expect(screen.getByText("Parallel admission passed")).toBeTruthy();
+  expect(screen.getByLabelText("Worker worker-1")).toBeTruthy();
+  expect(screen.getByLabelText("Worker worker-2")).toBeTruthy();
+});
+
+test("adaptive setup shows fallback timeline and observational resources", async () => {
+  render(<ExpertValidationApp api={fakeAdaptiveApi({ levels: [8, 6] })} />);
+  await user.selectOptions(screen.getByLabelText("Execution mode"), "ADAPTIVE");
+  expect(screen.queryByLabelText("Max points per worker")).toBeNull();
+  expect(screen.getByText("W8 -> W6 -> W4 -> W2 -> W1")).toBeTruthy();
+  expect(screen.getByText("Resource observations only")).toBeTruthy();
+  expect(screen.getByText("W8 -> W6: WORKER_START_FAILED")).toBeTruthy();
+});
 ```
 
-再覆盖 count 3/21、default seed、lease required、map/list shared selection、separate first-pass/retry statistics、recovery lockout、inline image media types、opaque download URL 和 exact confirmation。
+再覆盖 count 3/21、只读 seed、顺序默认、任一 mode-specific input 改动使 preflight 失效、
+fixed N×K 不足、adaptive K rejection、ladder validation、
+parallel unavailable、lease required、map/list/Worker shared selection、Broker degraded、并发 active
+points、separate first-pass/retry statistics、recovery lockout、inline image media types、opaque
+download URL 和 exact confirmation。
 
 - [ ] **Step 2: 运行 RED。**
 
@@ -1648,11 +1836,26 @@ validation_web run test src/expert-validation-app.test.tsx \
 
 - [ ] **Step 3: 实现页面布局。**
 
-左侧固定 `TopViewMap`，右侧显示 campaign state、evaluation/execution coverage、qualified first-pass fraction、current point、first shared failure 和 lifecycle。selected point panel 按时间显示 first pass 与 retry attempts；支持 RGB/Viewer/point-cloud preview inline，PLY/JSON/log 下载。
+setup 显示执行模式；固定模式显示 Worker 数、K、`N × K` capacity、preflight expiry 和资源
+拒绝原因；adaptive 显示 preferred/fallback、initial affinity、startup timeout、infra attempt
+limit，并将资源指标标为只读 observation。默认顺序模式。左侧固定 `TopViewMap`，右侧显示
+campaign/upstream identity、execution mode、mode-specific config、fixed coordinator state 或
+adaptive Runner state/current/final level/levels used/fallback timeline/generation/remaining/load/
+elapsed、evaluation/execution coverage、固定四 flags 或 adaptive terminal status、qualified first-pass
+fraction、Broker health、first shared failure 和 lifecycle。Worker lanes 显示 generation、state、
+current point、K used/remaining、heartbeat/deadline、recovery 与 quarantine。selected point panel 按
+时间显示 first pass 与 retry attempts；支持 task RGB-D/point-cloud preview inline，PLY/JSON/log
+下载。
 
 - [ ] **Step 4: 实现 lease 与 retry。**
 
-页面加载取得 stable service session，再显式 acquire lease 并按 capabilities 周期 renew。browser disconnect 不发送 release。retry modal 要求用户输入 `CONFIRM FULL_RESTART RETRIES`，只发送当前 campaign 中选中的 `FAILED` 或 `SKIPPED_UNREACHABLE` IDs。
+页面加载取得 stable service session，再显式 acquire lease 并按 capabilities 周期 renew。browser
+disconnect 不发送 release。start 前用当前 manifest/tagged execution config 取得 preflight receipt；任何输入
+变化或 receipt 过期都禁用 start。retry modal 要求用户输入
+`CONFIRM FULL_RESTART RETRIES`，只发送当前 campaign 中 authoritative first-pass status 为
+`FAILED` 的 canonical IDs；adaptive 只有 `COMPLETED_WITH_FAILURES` 且 cleanup complete 才开放
+该操作，`INFRA_INTERRUPTED`/attempt-level `INDETERMINATE`/`INFRA_FAILED` 不可进入 retry。
+unreachable 已属于 `FAILED` reason，不使用第二种状态名。
 
 - [ ] **Step 5: 运行 GREEN。**
 
@@ -1689,10 +1892,12 @@ git commit -m "feat: add expert validation web page"
 - [ ] **Step 1: 写 Playwright RED scenario。**
 
 ```typescript
-test("restores a campaign and retries a failed point", async ({ page }) => {
-  const fake = await installFakeSupervisor(page, campaignWithFailedP09());
+test("restores an adaptive campaign and retries a business-failed point", async ({ page }) => {
+  const fake = await installFakeRunner(page, adaptiveCampaignWithFailedP09());
   await page.goto("/expert-validation");
   await expect(page.getByLabel("P09 FAILED")).toBeVisible();
+  await expect(page.getByLabel("Worker worker-1")).toBeVisible();
+  await expect(page.getByLabel("Worker worker-2")).toBeVisible();
   await page.getByLabel("Retry P09").check();
   await page.getByRole("button", { name: "Retry selected with FULL_RESTART" }).click();
   await page.getByLabel("Confirmation").fill("CONFIRM FULL_RESTART RETRIES");
@@ -1701,6 +1906,12 @@ test("restores a campaign and retries a failed point", async ({ page }) => {
   await expect(page.getByText("FULL_RESTART attempt 2")).toBeVisible();
 });
 ```
+
+fake Runner scenario 必须给出 W8 -> W6 fallback、交错 Worker events、Broker pause/recovery、
+attempt-level `INDETERMINATE`、requeued point、sequence gap 后 HTTP resync、
+`COMPLETED_WITH_FAILURES`，以及 retry batch N=1/K=1；另保留 fixed coordinator compatibility
+fixture。它只验证浏览器投影，不模拟
+MuJoCo、ROS 或 Worker 进程。
 
 - [ ] **Step 2: 运行 RED。**
 
@@ -1711,7 +1922,13 @@ validation_web run test:e2e -- e2e/expert-validation.spec.ts
 
 - [ ] **Step 3: 完成 build/install checks。**
 
-package layout 必须证明 sampler configs、projection fixture、server executable 和 SPA route 均安装。`so101_demo_py/setup.py` 已用 `find_packages(where="src")` 自动安装新增 modules；Task 6 只为新增 `task_shutdown_safety` console script 修改它。CMake 逐个注册 Tasks 1-11 新增的 Python test files，其中必须包括 `test_expert_validation_process_owner_integration.py`。layout test 对注册集合做 readback，避免本地 pytest 通过而 colcon gate 漏测。
+package layout 必须证明 catalog adapter、projection fixture、server executable 和 SPA route 均
+安装，并且上游 `so101_parallel_batch`、adaptive Runner/production wrapper/cleanup、configs 和
+catalog 可由 installed overlay 解析。
+`so101_demo_py/setup.py` 已用 `find_packages(where="src")` 自动安装新增 modules；新增 coordinator
+console script 属于上游实施计划，本计划不再复制。CMake 逐个注册 Tasks 1-11 新增的 Python
+test files，其中必须包括 `test_expert_validation_process_owner_integration.py`。layout test 对注册
+集合做 readback，避免本地 pytest 通过而 colcon gate 漏测。
 
 - [ ] **Step 4: 运行全部 Web gate。**
 
@@ -1747,7 +1964,7 @@ git commit -m "test: cover expert validation end to end"
 
 ## 批次 D：ai-station build 与 live acceptance
 
-### Task 16: 在 ai-station 做隔离 build、4 点 smoke 和 20 点首轮
+### Task 16: 在 ai-station 做隔离 build、固定模式 smoke 和 20 点 adaptive 首轮
 
 **Files:**
 
@@ -1761,7 +1978,12 @@ git commit -m "test: cover expert validation end to end"
 
 - [ ] **Step 1: 冻结 PLANNED entries。**
 
-账本先写 `EXP-001` package gate、`EXP-002` 4-point smoke、`EXP-003` 20-point first pass。每条分别写 commit、overlay、runtime executable、`ROS_DOMAIN_ID`、`GZ_PARTITION`、成功/失败/invalid 判据和唯一变量。不要复用正在运行的 `codex-19` checkout 或进程。
+账本先写 `EXP-001` package gate、`EXP-002` 4-point sequential smoke、`EXP-003` 相同
+selection 的 4-point parallel smoke、`EXP-004` 20-point adaptive first pass。每条分别写
+commit、overlay、coordinator/Runner/wrapper/cleanup/config/catalog/Broker image hashes、固定
+N/K 或 adaptive ladder/affinity/timeout/infra-attempt limit、资源 observation、
+成功/失败/indeterminate/invalid 判据和唯一变量。不要复用任何正在运行或未登记的 checkout、
+tmux 或进程，也不复用本计划编写时观察到的 adaptive tmux/worktree。
 
 - [ ] **Step 2: 创建 NVMe scratch 并 build。**
 
@@ -1781,6 +2003,8 @@ source "$VALIDATION_EVIDENCE/install/setup.zsh"
 ros2 pkg prefix so101_demo_py
 ros2 pkg prefix so101_teleop
 ros2 pkg executables so101_teleop | rg so101_expert_validation_server
+ros2 run so101_demo_py so101_parallel_batch --help | rg -- '--adaptive-workers'
+test -x scripts/run_so101_adaptive_batch.zsh
 ```
 
 - [ ] **Step 3: 运行 ai-station package gate。**
@@ -1830,17 +2054,37 @@ ros2 run so101_teleop so101_expert_validation_server.py
 
 - [ ] **Step 5: 通过页面执行 4 点 smoke。**
 
-生成 `total_points=4, seed=20260911`，取得 lease，启动 first pass。必须从页面看到进度，并逐点核对 fresh RGB/Viewer、输入 stamp、MoveIt plan/execute、controller/joint/TF、MuJoCo lift/transport/release/final pose/contact、Planning Scene attached/world 和 cleanup。任何 provenance/reset 污染将 `EXP-002` 标为 `INVALID`，不得继续混算。
+生成 frozen catalog 的 `total_points=4` selection，核对只读 `seed=20260911` 和 selection
+hash，取得 lease，选择 `SEQUENTIAL, N=1, K=4` 并通过 preflight 后启动 first pass。必须从
+页面看到 coordinator/Worker/point 进度，并逐点核对 fresh task-camera RGB-D、输入 stamp、
+MoveIt plan/execute、controller/joint/TF、MuJoCo lift/transport/release/final pose/contact、Planning
+Scene attached/world、Worker recovery 和 batch cleanup。任何 provenance/reset 污染将该 attempt
+记为 `INVALID`；point 终态仍由 coordinator 裁决，不得由 Web 混算。
 
-- [ ] **Step 6: 通过页面执行精确 20 点首轮。**
+- [ ] **Step 6: 对相同 4 点执行并发 smoke。**
 
-生成 `ai_station_baseline_v1` manifest，核对 20 点坐标和 manifest hash后启动。保存 requested/evaluated/execution_started/valid_succeeded/valid_failed/invalid/not_executed、两种 coverage、qualified success rate、首坏阶段与每点 artifact IDs。首轮只用一个 fresh stack 和点间 `RESET_WORLD`。
+复用同一 immutable point selection，创建新的 campaign，选择 `PARALLEL, N=2, K=2` 并通过
+resource admission。核对两个独立 Worker 的 ROS domain、simulation session、process tree、
+runtime/evidence root、generation、dynamic point lease 和 K debit，以及共享 Broker 的 request
+identity/generation/fairness。任一 cross-Worker pose、artifact 或 ownership 泄漏都判为并发门失败；
+不得降级为顺序重跑后声称通过。
 
-- [ ] **Step 7: 写 checkpoint。**
+- [ ] **Step 7: 通过页面执行精确 20 点 adaptive 首轮。**
+
+生成 `ai_station_baseline_v1` manifest，逐项核对 20 点坐标、catalog/selection hash，选择
+`ADAPTIVE`，preferred W8、fallback W6/W4/W2/W1、`initial_points_per_worker=3`、
+`worker_start_timeout_s=120`、`max_infra_attempts_per_point=5`，确认请求不含 K 后重新 preflight
+并通过 production wrapper 启动。资源 snapshot 只记录为 observation，不作为启动门或 tier
+选择器。保存 Runner status、initial/final Worker count、levels used、fallback transition/reason、
+pool generations、每点 final state、attempt-level infra history、Worker/Broker recovery、elapsed、
+resource observations、batch cleanup 和每点 artifact IDs。不得将 retry 或固定 smoke 结果合并
+进首轮统计；也不得由 Web 重新推导固定模式的四个 qualification flags。
+
+- [ ] **Step 8: 写 checkpoint。**
 
 账本记录 retained root、scratch deletion candidates、无 archived run、owned process cleanup、剩余风险和下一条精确命令。未获用户授权不删除任何证据。
 
-### Task 17: 验证失败点 FULL_RESTART、视觉结果和最终边界
+### Task 17: 验证 adaptive 业务失败点 FULL_RESTART、视觉结果和最终边界
 
 **Files:**
 
@@ -1853,19 +2097,33 @@ ros2 run so101_teleop so101_expert_validation_server.py
 
 - [ ] **Step 1: 冻结 retry experiment。**
 
-若首轮有 `FAILED` 或 `SKIPPED_UNREACHABLE`，为最早 eligible point 建 `EXP-004`，`lifecycle: FULL_RESTART`，记录 canonical point ID、display ID 与首坏边界。若全部有效点成功，不制造失败，记录 `LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED`；同时把 Task 16 的 Linux real-process integration JUnit、store-reopen reconciliation 和 cleanup-before-next-start assertions 登记为 restart/cleanup 证据，再跳到 Step 4。fake owner 或 Playwright 不能替代这组证据。
+若 20 点 adaptive 首轮以 `COMPLETED_WITH_FAILURES` 安全结束、cleanup complete 且有业务
+`FAILED`，为最早 eligible point 建 `EXP-005`，`batch_kind:
+FULL_RESTART_RETRY`，记录 canonical point ID、display ID、首坏边界和首轮 batch ID。unreachable
+是 `FAILED` 的 reason，不另设状态。若全部有效点成功，不制造失败，记录
+`LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED`；同时把 Task 16 的 Linux real-process integration
+JUnit、store-reopen reconciliation 和 cleanup-before-next-start assertions 登记为 restart/cleanup
+证据，再跳到 Step 4。若 adaptive 首轮是 `INFRA_FAILED`，禁止 retry，先记录 Runner/fallback/
+cleanup 诊断并结束验收。fake Runner/coordinator 或 Playwright 不能替代这组证据。
 
 - [ ] **Step 2: 从页面执行 retry。**
 
-选中点位，输入 `CONFIRM FULL_RESTART RETRIES`。证明新 attempt ID、simulation session、ROS domain、stack PGID、batch PGID、worker PGIDs 和 evidence child 均与首轮不同。开始下一 attempt 前，前一 attempt 的 cleanup receipt 必须落盘且 descendants/ROS graph 已消失。
+选中点位，输入 `CONFIRM FULL_RESTART RETRIES`。证明这不是 adaptive 自动 infra rerun，而是
+新 fixed `SEQUENTIAL` coordinator batch，固定 N=1/K=1 且不带 `--adaptive-workers`；
+batch/attempt ID、coordinator epoch、simulation session、ROS domain、
+coordinator/Worker PGID 和 evidence child 均与首轮不同。开始下一 retry 前，前一 batch 的
+cleanup receipt 必须落盘，registered descendants/ROS graph 已消失，Web 才推进 durable queue。
 
 - [ ] **Step 3: 核对 retry 不改首轮统计。**
 
 GET campaign readback 必须保持首轮 numerator、denominator 和 point receipt 不变；retry 在独立 attempt list 中。cleanup ambiguity、held cup 或 stale receipt 必须进入 `NEEDS_OPERATOR_RECOVERY`，不得自动 signal 或启动下一 stack。
 
-- [ ] **Step 4: 做 fresh visual acceptance。**
+- [ ] **Step 4: 做 fresh task-camera visual acceptance。**
 
-使用 `$gui-capture` 执行 `snapshot -> action -> fresh snapshot`，打开新截图并描述 robot pose、gripper、cup initial/final pose、穿透/掉落、target tolerance 和 Planning Scene 一致性。截图不能替代数值与 action/physics evidence。
+从 Web artifact panel 逐项打开选中 point 的 fresh task-camera before/after RGB-D 与
+point-cloud preview，核对 robot pose、gripper、cup initial/final pose、穿透/掉落、target
+tolerance 和 Planning Scene 一致性。必要时可用 `$gui-capture` 补充顺序 smoke 的交互桌面
+诊断，但共享桌面截图不是并发 qualification 证据，也不能替代数值与 action/physics evidence。
 
 - [ ] **Step 5: 最终 readback。**
 
@@ -1875,14 +2133,18 @@ git status --short
 ros2 pkg prefix so101_demo_py
 ros2 pkg prefix so101_teleop
 curl --fail http://127.0.0.1:8010/health
-ps -eo pid,pgid,cmd | rg '(move_group|mujoco|so101_expert_validation|so101_mujoco_rgbd_batch)' || true
+ps -eo pid,pgid,cmd | rg '(move_group|mujoco|so101_expert_validation|so101_parallel_batch)' || true
 ```
 
-停止 validation server 前先确认没有 active attempt，并保存 server 自身退出与清理记录。不得停止用户的 `codex-19` 或其他未登记进程。
+停止 validation server 前先确认没有 active attempt，并保存 server 自身退出与清理记录。不得
+停止任何用户任务或其他未登记进程。
 
 - [ ] **Step 6: 写最终账本 checkpoint。**
 
-报告 manifest ID/hash、commit/overlay/runtime provenance、4 点 smoke、20 点首轮、retry、first-bad-boundary、artifact hashes、ROS/process cleanup、retained/archived/deletion candidates 和未解决风险。明确区分实现完成、package test、仿真 runtime 与 ACT 未实现边界。
+报告 manifest ID/hash、commit/overlay/runtime provenance、4 点 fixed smoke、20 点 adaptive
+首轮、levels/fallbacks/generations、retry、first-bad-boundary、artifact hashes、ROS/process
+cleanup、retained/archived/deletion candidates 和未解决风险。明确区分实现完成、package
+test、仿真 runtime 与 ACT 未实现边界。
 
 - [ ] **Step 7: Commit 实验账本。**
 
@@ -1895,20 +2157,39 @@ git commit -m "docs: record expert validation acceptance"
 
 - [ ] `ai_station_baseline_v1` 精确复现 20 点；`geometry_v2` 仍为独立 35 mm profile。
 - [ ] Python 和 React 对 table/base/target/P01/20 点投影、半径与颜色的 golden tests 一致。
-- [ ] progress log 的 manifest/event/journal 顺序通过 crash-window tests；snapshot 可删除重建。
+- [ ] fixed coordinator 与 adaptive Runner framed journal 的 manifest/event 顺序通过 crash-window tests；Web snapshot 可删除重建。
 - [ ] API、journal、store 和 retry command 只使用 canonical point ID；`P01` 至 `P20` 只用于展示。
-- [ ] stack 在 batch 前产生完整 `ReadinessReceipt`；每个 `FULL_RESTART` retry 还产生有效 `InitialStateReceipt`。
-- [ ] normal point cleanup 只停止该点 worker PGIDs，长生命周期 batch 能继续下一个点。
-- [ ] validation batch 的 `Popen`、one-shot command、poll、signal 和 capture 均通过 broker；没有 direct `subprocess.run` 或 `killpg` 旁路。
+- [ ] 三模式 start 都使用未过期 `CampaignPreflightReceipt`；tagged config、catalog/selection、
+  source/install/config、model/Broker 与 mode-specific probes 全部匹配。
+- [ ] `SEQUENTIAL` 走 coordinator N=1；`PARALLEL` 走 N=2..3；不存在 Web 自有 legacy
+  attached-stack 路径或静默降级。
+- [ ] `ADAPTIVE` 只通过 production wrapper 启动 Runner，使用 W8/W6/W4/W2/W1、initial
+  affinity 而非 K；资源指标只观察，真实 infra failure 才触发降级。
+- [ ] fixed coordinator 独占固定 point lease/K；Runner 独占 adaptive generations/fallback/final
+  results；Web 只拥有 fixed coordinator 或 exact wrapper identity，并且从不 signal Runner、
+  Worker 或 Broker groups。
 - [ ] Linux real-process integration gate 实际执行非零 tests，并通过 descendant、barrier、ack、reopen 和 serial cleanup cases。
-- [ ] 所有 exit path 产生 fresh shutdown receipt 或进入 `NEEDS_OPERATOR_RECOVERY`。
+- [ ] 所有 exit path 产生 Worker recovery 与 batch cleanup receipt，或进入 `NEEDS_OPERATOR_RECOVERY`。
 - [ ] command idempotency、lease restart/expiry、browser disconnect 和 singleton lock 均通过测试。
-- [ ] terminal campaign 没有 `PENDING`/`RUNNING`，unreachable 和 interrupted points 的统计符合设计。
-- [ ] `/expert-validation` 页面支持生成、开始、进度、选择、证据和 confirmed retry；`/tasks` 在 dedicated server 上禁用。
+- [ ] terminal campaign 没有 active lease/stage；fixed points 归入
+  `PASSED | FAILED | INDETERMINATE | UNRUN`，adaptive final points 和 attempt history 保持 Runner
+  语义；unreachable、infra interrupted 和 business failed 的统计不混淆。
+- [ ] `/expert-validation` 页面支持 mode-specific config/preflight、生成、开始、并发
+  Worker/Broker 进度、adaptive levels/fallbacks/generations、选择、证据和 confirmed retry；
+  `/tasks` 在 dedicated server 上禁用。
 - [ ] Web tests、Playwright、两个 Python package gates 均收集非零测试且无新增 failure/error。
 - [ ] ai-station 使用 task-owned overlay、fresh source、独立 ROS domain/GZ partition 和 registered durable evidence root。
-- [ ] fresh GUI 截图与 Gazebo/MoveIt/controller/pose/contact 数值证据共同通过。
-- [ ] 无 duplicate stack、未知 descendants 或失控后台进程；未触碰用户已有 ai-station 改动与 `codex-19`。
+- [ ] 4 点 N=1/K=4 顺序 smoke、同一 selection 的 N=2/K=2 固定并发 smoke，以及 20 点
+  adaptive W8->W6->W4->W2->W1 首轮都有 fresh task-camera/MoveIt/controller/pose/contact/
+  generation/cleanup 证据；共享
+  GUI 截图不是并发 qualification 前提。
+- [ ] upstream W8 startup->W6、W8 mid-run->W6、20 点 adaptive run 和 W1/W2/W4/W6/W8
+  performance gates 已验收；Web 只复用，不另造 fault-injection 语义。
+- [ ] 人工 `FULL_RESTART` 只接受安全完成首轮的 business `FAILED`，固定 N=1/K=1；adaptive
+  infra rerun、`INFRA_INTERRUPTED` 和 `INFRA_FAILED` 不进入 retry queue。
+- [ ] 每个 generation/Worker/attempt/recovery/Broker artifact 都通过 bound manifest 和 opaque ID 隔离；无
+  duplicate coordinator、未知 descendants 或失控后台进程；未触碰用户已有 ai-station 改动、
+  tmux 任务或其他 worktree。
 - [ ] retained、archived 和 deletion candidates 已分类，且没有未经授权删除证据。
 
 ## 执行选择

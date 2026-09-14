@@ -2,28 +2,54 @@
 
 **Date:** 2026-09-11
 
-**Status:** Approved after independent GPT-6 high written-spec review
+**Updated:** 2026-09-14 for adaptive Worker-pool compatibility while preserving fixed sequential/parallel modes
 
-**Runtime target:** ai-station GNOME Linux with visible MuJoCo; macOS remains supported through its existing capture adapter
+**Status:** Approved compatibility approach A; this revision is documentation-only and does not
+claim that the Web workflow or adaptive runtime has been implemented
+
+**Runtime target:** ai-station Linux with isolated MuJoCo workers and sensor rendering; the existing
+interactive Teleop task station remains a separate workflow
 
 **Package scope:** `src/so101_demo_py`, `src/so101_teleop`, and the maintained top-view generator under `scripts/`
 
-**Design evidence root:** `/tmp/so101-debug-teleop-random-validation-EADE4s/`
+**2026-09-14 compatibility-revision evidence root:**
+`/tmp/so101-debug-teleop-adaptive-pool-docs-NseXAdJ5/`
+
+**Normative dependencies:**
+
+- `docs/superpowers/specs/2026-09-11-so101-parallel-multipoint-validation-design.md` for the
+  fixed-cardinality coordinator, Worker, Broker, journal, K accounting, and qualification contract;
+- `docs/superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md` for the adaptive Runner,
+  pool generations, fallback transaction, wrapper ownership, and adaptive terminal semantics.
+
+Until the corresponding implementation plans are present in the implementation worktree,
+reviewed, implemented, and qualified, capabilities must report the affected execution mode as
+unavailable. Availability is mode-specific; absence of adaptive support does not change fixed-mode
+semantics.
 
 ## 1. Objective
 
 Add a separate MoveIt expert validation page to the Teleop Web application. The operator chooses a
 final point count, generates a reproducible position manifest containing the four canonical points,
-runs the current RGB-D perception and MoveIt expert workflow, follows progress on an exact top-view
-map, and opens evidence for any point. Failed points can be selected for independent
-`FULL_RESTART` retries.
+runs the current RGB-D perception and MoveIt expert workflow sequentially, with a fixed isolated
+parallel pool, or with an adaptive isolated Worker pool, follows progress on an exact top-view map,
+and opens point, Worker, pool-generation, recovery, and shared-perception evidence. Business-failed
+points can be selected for independent `FULL_RESTART` retries after the first pass safely ends.
 
-The first pass and retries have different lifecycle meanings:
+The first pass exposes three explicit modes:
 
-- the first pass starts one fresh owned stack and executes the requested points in order, using
-  `RESET_WORLD` between points;
-- each selected retry starts and stops its own fresh stack and is recorded as one
-  `FULL_RESTART` attempt;
+- `SEQUENTIAL` fixes `worker_count=1`; the Worker keeps one isolated stack and restores each
+  leased point before execution;
+- `PARALLEL` accepts `worker_count=2..3`; every Worker owns an isolated ROS domain,
+  MuJoCo/MoveIt/controller process tree, runtime directories, and evidence subtree;
+- fixed `SEQUENTIAL` and `PARALLEL` use `max_points_per_worker=K`; start is rejected unless
+  `worker_count × K >= total_points`;
+- `ADAPTIVE` starts at the preferred tier, normally W8, and may degrade only through the frozen
+  fallback ladder W8 -> W6 -> W4 -> W2 -> W1 after an infrastructure failure. It uses point
+  affinity rather than a K capacity limit and never silently becomes a fixed mode;
+- each selected retry runs as a separate one-point coordinator batch with
+  fixed `SEQUENTIAL`, `worker_count=1`, `K=1`, a fresh stack, and a `FULL_RESTART` lifecycle
+  record. Automatic adaptive infrastructure reruns are not operator retries;
 - a retry never overwrites the first-pass result or changes its denominator.
 
 This is simulation-only work. The page and its APIs do not authorize real-hardware movement.
@@ -36,21 +62,33 @@ handling. The batch engine in `so101_demo_py` performs declared reachability, tr
 `RESET_WORLD`, RGB-D perception, dynamic target construction, MoveIt execution, physical outcome
 checks, terminal capture, and per-point artifact registration.
 
-It cannot implement this feature by itself. The current Teleop task service is a child of the
-persistent MuJoCo task-station stack and attaches its batch process to that stack. A service in
-that position cannot perform a true `FULL_RESTART` without either terminating itself or leaving a
-second stack running. The batch manifest also appears only at terminal completion, so the current
-Web API cannot report authoritative point-by-point progress while the batch is running.
+The approved parallel design adds a separate `ParallelBatchCoordinator`, isolated Worker slots,
+a shared `PerceptionBroker`, a crash-safe event journal, lease/K accounting, generation fencing,
+sealed attempt evidence, and Worker recovery receipts. Those components are the execution source
+of truth for both sequential and parallel campaigns. The Teleop service must not recreate their
+queue, lease, result-commit, Worker lifecycle, or Broker logic in SQLite.
 
-The new page therefore uses the existing task and artifact types where they fit, but execution is
-owned by a long-lived validation supervisor outside all MuJoCo stacks.
+The adaptive design adds an `AdaptiveBatchRunner` above successive coordinator generations and a
+production wrapper that owns the Runner subprocess and exact cleanup. The Runner is the sole
+top-level journal writer and final point-status authority across generations; each generation still
+uses an unchanged `ParallelBatchCoordinator` internally.
+
+The missing boundary is a durable Web-facing process adapter and projection. For fixed modes it
+starts or reconnects to one coordinator process. For adaptive mode it starts or reconnects to the
+production wrapper, then projects only the Runner's top-level journal and its references to nested
+generation evidence. It translates Web commands without changing upstream meaning and exposes only
+registered artifacts.
+The current task-station child service cannot own this boundary because a `FULL_RESTART` would
+terminate or orphan its own stack.
 
 ## 3. Chosen architecture
 
 Add a dedicated validation server entry point in `so101_teleop`. It serves the installed Web bundle
 and the `/expert-validation` route, but it does not join a simulation ROS graph. Its
-`ExpertValidationSupervisor` owns every simulation process group, session identifier, ROS domain,
-input manifest, progress stream, and cleanup result.
+`ExpertValidationSupervisor` owns Web control leases, durable command idempotency, campaign-to-upstream
+bindings, retry ordering, and the top-level execution-owner identity: coordinator for fixed modes,
+wrapper for adaptive mode. It does not own or signal Runner, Worker, Broker, MuJoCo, MoveIt,
+controller, or point-process groups.
 
 ```text
 browser /expert-validation
@@ -59,34 +97,57 @@ browser /expert-validation
 FastAPI validation service + lease + artifact registry
         |
         v
-ExpertValidationSupervisor (long-lived, no robot control loop)
+ExpertValidationSupervisor (Web command and batch binding authority)
         |
-        +-- first pass: fresh stack -> attached RESET_WORLD batch -> ordered shutdown
+        +-- SEQUENTIAL -> coordinator N=1, K=total_points
         |
-        +-- retry Pxx: fresh stack -> one-point batch -> ordered shutdown
-        +-- retry Pyy: fresh stack -> one-point batch -> ordered shutdown
+        +-- PARALLEL -> coordinator N=2..3, validated K
+        |
+        +-- ADAPTIVE -> production wrapper -> AdaptiveBatchRunner
+        |                                    -> coordinator generations W8/W6/W4/W2/W1
+        |
+        +-- FULL_RESTART retry Pxx -> new coordinator batch N=1, K=1
+                                |
+                                v
+                 ParallelBatchCoordinator
+                    |              |
+              isolated Workers   PerceptionBroker
 ```
 
-Only the supervisor starts or signals simulation processes. The existing batch logic remains the
-point-workflow owner, but its attached-stack mode no longer calls `Popen`, `start_new_session`,
-`killpg`, or direct process signals. It requests launch, perception, and consumer processes through
-a supervisor process-owner port. The supervisor creates one stack process group, one batch process
-group, and a separately registered process group for each point worker. A point worker's descendants
-remain in that worker group. This lets normal point cleanup stop perception and consumer workers
-without signalling the long-lived batch. It also keeps every group reachable after its original
-leader exits.
+In fixed modes, the coordinator is the only authority for the global point queue, atomic point
+lease, slot K debit,
+`coordinator_epoch`, `worker_generation`, `lease_generation`, `ATTEMPT_STARTED`,
+`RESULT_COMMITTED`, point terminal state, Worker recovery, Broker health, and batch qualification.
+It owns and signals only its registered Broker and Worker process groups. The Web supervisor owns
+only the coordinator process identity and uses the coordinator control socket for cancellation and
+shutdown.
+It may signal that PGID only after the coordinator has returned a fresh batch cleanup receipt or an
+operator has resolved `NEEDS_OPERATOR_RECOVERY`.
 
-Before a child crosses its exec barrier, the supervisor durably records an ownership intent with an
-attempt-scoped spawn token, expected executable and environment fingerprints, target process group,
-and cleanup state. It then records PID, PGID, process start time, and the child acknowledgement before
-the child may run. A missing acknowledgement, unexpected descendant, or ambiguous process identity
-blocks new work and moves the campaign to `NEEDS_OPERATOR_RECOVERY`. Cleanup verifies that every
-registered process and descendant has disappeared; checking only the group leader is insufficient.
+In adaptive mode, the Runner is the only authority across pool generations. It imports fsynced
+terminal results from each nested coordinator, preserves `PASSED` and `FAILED`, classifies eligible
+infrastructure-interrupted work, performs the exact stop/fence/cleanup/requeue/start transaction,
+and records every generation and fallback. The wrapper owns the Runner child and exact cleanup; the
+Web layer owns only the wrapper PID identity and sends cancellation to that exact PID after identity
+verification. It never broadcasts to a wrapper process group or signals descendants directly.
 
-The batch requests cooperative point-worker shutdown only after its execution boundary has returned
-and controller stop has been confirmed. The supervisor signals only the registered worker groups for
-that point. If worker-stop safety is unknown, the attempt enters `NEEDS_OPERATOR_RECOVERY`; the
-supervisor does not signal the batch or stack as a substitute.
+The authoritative journal is mode-specific: the coordinator journal for fixed modes and the Runner
+top-level journal for adaptive mode. Sealed manifests remain authoritative evidence. The Web store
+keeps command fingerprints, service leases, batch bindings, accepted upstream cursor/hash, and
+retry queue state.
+It may cache a campaign projection, but it cannot independently commit a point result or reconstruct
+one from logs. On restart it reconnects only when batch ID, coordinator epoch, PID/PGID/start time,
+control-socket or wrapper ownership, source/install/config hashes, and the applicable journal chain
+all reconcile. A Web-server restart may reconnect to a still-running adaptive wrapper/Runner after
+this reconciliation. A Runner process crash is not automatically resumed: wrapper-confirmed cleanup
+ends the campaign as `INFRA_FAILED`; unresolved cleanup becomes `NEEDS_OPERATOR_RECOVERY`.
+If the wrapper itself is killed before it can clean up, persistent `ACTIVE` domain claims block new
+runs until exact operator reconciliation; the Web layer never clears or overrides those claims.
+
+Fixed sequential and parallel modes differ only in resource cardinality. All three modes use the
+same point manifest and perception/evidence primitives. Adaptive state, event, terminal, and
+qualification semantics come only from the Runner. The Web service never implements a hidden
+legacy execution path or converts one mode into another.
 
 The browser submits typed intent and renders state. It never constructs shell commands, chooses ROS
 state-machine transitions, or sends joint targets.
@@ -96,6 +157,65 @@ server, `/` redirects to `/expert-validation`; `/tasks` and existing task-mutati
 disabled capability and never attach to a simulation. A regular Teleop server that was not started
 in validation mode also reports validation as unavailable rather than pretending it can restart its
 own stack.
+
+### 3.1 Execution configuration
+
+The frozen campaign request contains:
+
+```text
+execution_mode: SEQUENTIAL | PARALLEL | ADAPTIVE
+worker_count
+max_points_per_worker                 # fixed modes only
+preferred_worker_count                # adaptive, default 8
+fallback_worker_counts                # adaptive, default [6, 4, 2, 1]
+initial_points_per_worker             # adaptive affinity, default 3
+worker_start_timeout_s                # adaptive, default 120
+max_infra_attempts_per_point          # adaptive, default 5
+parallel_config_sha256
+adaptive_config_sha256                # adaptive mode only
+run_mode: execute
+```
+
+`SEQUENTIAL` requires `worker_count=1`. `PARALLEL` requires `2 <= worker_count <= 3`.
+`K` is a positive integer no greater than 20. The server defaults K to
+`ceil(total_points / worker_count)`, shows the computed value before start, and allows an advanced
+override. It never silently lowers Worker count, raises K, changes the selected mode, or creates
+fixed point shards. A Worker dynamically leases the next eligible point.
+
+`ADAPTIVE` invokes `scripts/run_so101_adaptive_batch.zsh` with the explicit adaptive flag and rejects
+`max_points_per_worker`. Its preferred
+Worker count defaults to 8; fallback counts default to `6,4,2,1`; all values must form a strictly
+decreasing supported ladder ending at W1. `initial_points_per_worker=3` is only an initial affinity
+hint and never a capacity limit. The request also freezes `worker_start_timeout_s=120`,
+`max_infra_attempts_per_point=5`, and the adaptive configuration hash. All Workers in a generation
+must report READY before the Runner enters `POOL_RUNNING` or releases work.
+
+Version 1 Web campaigns expose only `run_mode=execute`. The coordinator CLI may support
+`dry_run` and `plan_only` for implementation tests, but those results keep physical points
+`UNRUN` and can never produce a Web qualification result.
+
+### 3.2 Capability and admission boundary
+
+Capabilities report the installed coordinator, adaptive Runner, and production-wrapper
+executable/module hashes, parallel/adaptive config hashes,
+supported modes, default mode, Worker range, K range, available ROS domains, model hashes, queue
+limits, deadlines, and current admission result. `PARALLEL` is unavailable unless the upstream
+implementation, combined model Broker, task-owned overlay, resource probe, and two-Worker live gate
+all exist and match their declared provenance. `ADAPTIVE` is unavailable until its Runner, wrapper,
+cleanup function, frozen ladder configuration, and required W8/W6/W4/W2/W1 qualification evidence
+exist and match provenance.
+
+Before start, the service validates `N × K`, manifest identity, source/install/config/policy/scene
+and model hashes, evidence-root ownership, coordinator singleton status, CPU/RAM/GPU admission, and
+the absence of unresolved owned processes. Resource failure rejects start; it does not downgrade a
+parallel request to sequential.
+
+Adaptive preflight instead validates mutually exclusive request fields, ladder ordering, short
+1-5-character ASCII batch ID and `<evidence-root>/r/<batch-id>` runtime path,
+source/install/config/model/Broker provenance, domain claims, singleton ownership, and unresolved
+cleanup. CPU, RAM, GPU, pressure, and real-time-factor measurements are recorded as observations
+only and cannot admit, reject, or choose a tier. Only observed process, OOM, RPC, Broker, startup,
+or cleanup outcomes drive adaptive degradation.
 
 ## 4. Deterministic point generation
 
@@ -111,11 +231,13 @@ own stack.
 | `P04` | `cup_test_right_5cm` | `(0.07, -0.28, 0.165)` |
 
 Version 1 accepts `4 <= total_points <= 20`. The upper bound matches the frozen 16-sample continuous
-pool. The capabilities API returns this limit and the selected sampler profile. A later calibrated
-profile can raise the limit without changing the Web form, but it receives a new sampler version and
-does not change a stored manifest.
+pool. The capabilities API returns this limit and the selected catalog profile. Version 1 execute
+campaigns use only the frozen `seed=20260911` catalog required by the parallel coordinator; seed is
+displayed as provenance, not editable input. A later calibrated catalog can add another profile
+without changing a stored manifest, but it needs a new catalog/version/hash and separate runtime
+qualification.
 
-### 4.2 Sampler contract
+### 4.2 Catalog and selection contract
 
 The sampler runs on the server. Version 1 names the compatibility profile
 `ai_station_baseline_v1`. Its authoritative historical inputs are:
@@ -152,12 +274,14 @@ The profile configuration also records:
 - cup centre Z, upright orientation, minimum pairwise XY distance, and minimum cup-edge clearance;
 - the four anchor identities and positions.
 
-The service always generates the complete 16-point pool for a seed. For a request below 20 total
-points, it allocates the requested pool size across the nine strata with the largest-remainder
-method, using the 16-entry schedule above as the quota source. Ties follow first appearance in that
-schedule. It selects the earliest generated members of each allocated stratum, restores canonical
-pool order, and then assigns consecutive display IDs. Generating the full pool first avoids changing
-a point merely because the requested count changed.
+The installed package contains the exact complete 16-point pool for `seed=20260911`; the Web
+service verifies its catalog SHA256 rather than regenerating execute coordinates at request time.
+For a request below 20 total points, it allocates the requested pool size across the nine strata with
+the largest-remainder method, using the 16-entry schedule above as the quota source. Ties follow
+first appearance in that schedule. It selects the earliest catalog members of each allocated
+stratum, restores canonical pool order, and assigns consecutive display IDs. The selected canonical
+point-ID list has its own selection hash. This matches the coordinator's complete catalog plus
+repeatable `--point-id` contract and avoids creating another point YAML.
 
 `seed=20260911` and `total_points=20` are a compatibility fixture. They must reproduce the exact
 four anchors and 16 generated coordinates from the 2026-09-11 ai-station MoveIt expert baseline.
@@ -184,8 +308,9 @@ The fixture is checked coordinate-for-coordinate; a visually similar distributio
 
 The maintained top-view generator currently has a separate geometry-derived sampler whose 35 mm
 minimum separation cannot reproduce this fixture. Implementation must expose that behaviour under a
-different profile, such as `geometry_v2`, and add `ai_station_baseline_v1` without silently changing
-either profile. The Web page defaults to `ai_station_baseline_v1` for this validation campaign.
+different profile, such as `geometry_v2`; that profile is preview-only until a matching coordinator
+catalog and runtime qualification exist. The Web page uses `ai_station_baseline_v1` for version 1
+execute campaigns.
 
 Sampling fails closed when a coordinate is non-finite, outside the selected profile, too close to
 another point under that profile, exceeds the rejection cap, or lacks the profile's required
@@ -201,7 +326,7 @@ Creating a manifest returns a server-generated `manifest_id` and a canonical doc
 schema_version
 manifest_id
 sampler_id and sampler_version
-seed and total_points
+catalog_seed, total_points and ordered selection hash
 source, policy, scene, geometry and anchor hashes
 points[]: display_id, id, label, source, stratum, cup_position_world_m
 geometry: table, base, candidate region, target, cup radius and target tolerance
@@ -229,12 +354,17 @@ Point colours are fixed:
 
 | State | Stroke | Fill |
 |---|---|---|
-| `PENDING` or `RUNNING` | blue | matching pale blue |
-| `SUCCEEDED` | green | matching pale green |
-| `FAILED`, `SKIPPED_UNREACHABLE`, `INVALID`, `NOT_RUN`, or `BLOCKED` | red | matching pale red |
+| Eligible `UNRUN`, `LEASED`, `RUNNING`, `INFRA_INTERRUPTED` while adaptive fallback remains possible, or active Worker stage | blue | matching pale blue |
+| `PASSED` | green | matching pale green |
+| Business `FAILED`, fixed-mode `INDETERMINATE`, terminal `UNRUN`, or any point blocked by terminal `INFRA_FAILED` or unresolved invalid evidence | red | matching pale red |
 
-`RUNNING` uses a thicker blue stroke and an accessible current-point label. Marker diameter does
-not change with state. Selection adds an outer focus ring without changing the position marker.
+An active point uses a thicker blue stroke and an accessible label containing Worker ID and stage.
+Marker diameter does not change with state. Selection adds an outer focus ring without changing the
+position marker. Colour is not the only status signal: terminal markers also carry a shape/icon and
+screen-reader label. Fixed-mode `INDETERMINATE` remains a distinct state even though it shares the
+red palette. Adaptive attempt-level `INDETERMINATE` remains visible in history, but the point stays
+blue when the Runner has safely classified it `INFRA_INTERRUPTED` and can requeue it; if the Runner
+ends `INFRA_FAILED`, remaining `UNRUN` and `INFRA_INTERRUPTED` points become red terminal blockers.
 
 The maintained Python top-view tool and the React SVG component consume the same geometry and
 status model. Shared golden tests compare their projected coordinates, point order, radii, status
@@ -250,83 +380,127 @@ The new route is `/expert-validation`.
 The setup card contains:
 
 - final point count;
-- seed, under an advanced control, defaulting to `20260911`;
+- catalog profile and read-only seed/hash provenance;
+- execution mode, defaulting to `SEQUENTIAL`;
+- Worker count, fixed to 1 for sequential mode and selectable from 2 to the admitted maximum for
+  parallel mode;
+- fixed-mode `max_points_per_worker`, with an advanced override and a visible `N × K` capacity
+  check;
+- adaptive preferred tier, fallback ladder, initial points-per-Worker affinity, startup timeout,
+  and infrastructure-attempt limit. Adaptive mode hides and rejects K;
 - `Generate points`, which creates a frozen manifest but does not move the robot;
-- sampler version, capacity, manifest hash, and geometry/policy hashes;
+- sampler version, capacity, manifest hash, geometry/policy hashes, parallel config hash, model
+  hashes, and current mode-specific preflight result. Adaptive resource readings are labelled
+  observational and are never displayed as an admission score;
 - `Start validation`, enabled only with a current manifest and valid control lease.
 
-Changing count or seed invalidates the preview until the operator generates a new manifest.
+Changing count invalidates the preview until the operator generates a new manifest.
+Changing execution mode or any mode-specific execution field leaves the point manifest intact but
+invalidates the start-request preview and requires a new preflight.
 
 ### 6.2 Map and progress
 
-The map occupies the left side of the main area. The right side shows campaign state, coverage,
-first-pass success rate when qualified, current point, first shared failure, lifecycle, and an
-ordered point list. Selecting a map point or list row updates the same selected-point state.
+The map occupies the left side of the main area. The right side shows campaign state, execution
+mode, mode-specific execution summary, coverage, first-pass success state, shared Broker health,
+first shared failure, and an ordered point list. Adaptive campaigns additionally show preferred,
+current, and final Worker tiers; `levels_used`; fallback transitions and reasons; current pool
+generation; remaining points; per-Worker load; elapsed time; infrastructure-attempt count; and
+observational CPU/RAM/GPU/pressure/RTF data. A Worker panel shows each stable slot's
+`worker_id`, generation, state, current point, lease count/K, last heartbeat, active deadline,
+recovery result, and quarantine reason. Selecting a map point, point row, or Worker's current-point
+link updates the same selected-point state.
 
-The first-pass summary uses these explicit counts:
+Fixed-mode first-pass summaries use these explicit counts:
 
 ```text
 requested = every point in the frozen manifest
-evaluated = points with an accepted POINT_REACHABILITY decision
-execution_started = points that reached POINT_STARTED
-valid_succeeded = accepted SUCCEEDED point results
-valid_failed = accepted product failures, including SKIPPED_UNREACHABLE
-invalid = attempts rejected for provenance, initial-state, progress, or cleanup ambiguity
-not_executed = terminal NOT_RUN + BLOCKED points
+evaluated = points with an accepted reachability decision
+execution_started = points with an accepted ATTEMPT_STARTED event
+valid_succeeded = point status PASSED
+valid_failed = point status FAILED
+indeterminate = point status INDETERMINATE
+invalid_attempts = attempt records with status INVALID
+not_executed = terminal point status UNRUN
 evaluation_coverage = evaluated / requested
 execution_coverage = execution_started / requested
 qualified_first_pass_success_rate = valid_succeeded / (valid_succeeded + valid_failed)
 ```
 
 `qualified_first_pass_success_rate` is unavailable when its denominator is zero or when campaign
-shutdown safety is unresolved. An unreachable point is evaluated, does not increment
-`execution_started`, becomes `SKIPPED_UNREACHABLE`, and enters `valid_failed`; it is never reported as
-unexecuted. Invalid and unexecuted points do not enter the success-rate denominator. When a shared
-failure, cancellation, or recovery condition stops the campaign, unresolved points become `BLOCKED`
-or `NOT_RUN` with a reason instead of remaining `PENDING`. A point result accepted before a later
-shared failure remains frozen. A cleanup ambiguity for that point makes its attempt `INVALID`; a
-later campaign-level shutdown ambiguity preserves accepted point outcomes but marks the campaign
-qualification unresolved.
+cleanup is unresolved. An unreachable point is an evaluated `FAILED` result with an unreachable
+reason; it does not increment `execution_started` and is not `UNRUN`. Invalid attempts and
+unexecuted points do not enter the success-rate denominator. When capacity exhaustion, shared
+dependency failure, cancellation, or quarantine prevents more leases, untouched points finish as
+`UNRUN` with a reason. A point result accepted before a later shared failure remains frozen.
+Recovery failure after commit preserves the point result but makes `batch_cleanup_complete=false`.
 
 Terminal reconciliation uses this precedence:
 
 | Observed boundary | Terminal point state | Counting rule |
 |---|---|---|
-| Accepted successful point receipt | `SUCCEEDED` | `valid_succeeded` |
-| Accepted product-failure receipt | `FAILED` | `valid_failed` |
-| Accepted unreachable decision | `SKIPPED_UNREACHABLE` | `valid_failed`, evaluated but not execution-started |
-| Accepted non-unreachable reachability decision, but interruption before `POINT_STARTED` or a terminal receipt | `INVALID` with reachability or owner-loss reason | `invalid`; evaluated but not execution-started |
-| Point started, but no accepted terminal receipt after cancellation, owner loss, timeout, or torn progress | `INVALID` with interruption reason | `invalid` |
-| Point not yet evaluated when a shared failure or recovery condition stops the batch | `BLOCKED` with blocking reason | `not_executed` |
-| Point not yet evaluated when the operator cancels | `NOT_RUN` with cancellation reason | `not_executed` |
+| Accepted successful result manifest and `RESULT_COMMITTED` | `PASSED` | `valid_succeeded` |
+| Accepted product-failure result, including unreachable | `FAILED` | `valid_failed` |
+| Formal attempt started, but its outcome cannot be proven after lease expiry, owner loss, timeout, or journal ambiguity | `INDETERMINATE` | separate count; never retried in this campaign |
+| Attempt invalidated before formal execution and safely fenced | remains eligible until capacity or batch termination | increment `invalid_attempts`; a later attempt may execute the point |
+| Point never obtains a terminal execution opportunity | `UNRUN` with capacity, cancellation, dependency, or quarantine reason | `not_executed` |
 
-An integrity failure that invalidates a point receipt takes precedence over its earlier product
-outcome. A later campaign-level failure does not overwrite a point receipt that remains valid. Every
-terminal campaign must reconcile all requested points and contain no `PENDING` or `RUNNING` state.
+Historical `RESULT_COMMITTED`, `LEASE_EXPIRED`, and point-terminal events cannot be overwritten by
+a later file scan or Web projection. A later campaign-level failure does not overwrite an accepted
+point result. Every terminal campaign must reconcile all requested points into
+`PASSED | FAILED | INDETERMINATE | UNRUN` and contain no active lease or Worker stage.
+
+The Web reads the coordinator's authoritative `coverage_complete`, `execution_complete`,
+`batch_cleanup_complete`, and `qualification_passed` fields. It may derive display counters from
+accepted events, but a derived value can never turn a false coordinator qualification into true.
+`coverage_complete` requires every point to be `PASSED` or `FAILED`;
+`qualification_passed` additionally requires every point to be `PASSED` and batch cleanup to be
+complete.
 
 Retry outcomes appear in a separate attempt summary and never alter first-pass counts or the frozen
 first-pass fraction.
+
+Adaptive campaigns use the Runner's mode-specific summary instead of deriving the four fixed-mode
+qualification flags. Runner terminal status is `COMPLETED`, `COMPLETED_WITH_FAILURES`, or
+`INFRA_FAILED`. `COMPLETED` requires every final point to be `PASSED` and cleanup complete;
+`COMPLETED_WITH_FAILURES` requires every point to have a business terminal result, at least one
+`FAILED`, and cleanup complete. `INFRA_FAILED` covers exhaustion at W1, infrastructure-attempt
+limits, Runner loss, or failure to complete the required degradation/cleanup transaction. The UI
+must preserve attempt-level `INDETERMINATE` records and fallback history while showing the Runner's
+final per-point state; a later result never deletes or rewrites an earlier attempt.
+Wrapper exit status is not a substitute for this journal summary: exit 0 represents only
+`COMPLETED`, while exit 1 may represent either `COMPLETED_WITH_FAILURES` or `INFRA_FAILED`.
 
 ### 6.3 Evidence
 
 The selected-point panel lists the first-pass result followed by retry attempts in time order. It
 shows image artifacts inline when their media type is supported and exposes downloads for RGB,
-Viewer screenshots, point-cloud previews, PLY, JSON, and logs. Every link uses a manifest-registered
-opaque artifact ID. Browser-visible responses contain no absolute evidence path.
+task-camera frames, point-cloud previews, PLY, JSON, and logs. It also exposes the assigned Worker,
+lease/attempt identity, initial-state receipt, YOLO/Grounded-SAM decision chain,
+`POSE_ACCEPTED`, planning/controller/physical evidence, sealed result, and recovery receipt.
+Every link uses a manifest-registered opaque artifact ID. Browser-visible responses contain no
+absolute evidence path.
 
 ### 6.4 Retry
 
-After a first pass reaches a safe terminal state, valid product failures and
-`SKIPPED_UNREACHABLE` points can be selected. `INVALID`, `NOT_RUN`, and `BLOCKED` points require a
-new first-pass campaign after the underlying execution condition is corrected; they are not product
+After a fixed first pass reaches a safe terminal state, or an adaptive first pass reaches
+`COMPLETED_WITH_FAILURES` with cleanup complete, points whose authoritative first-pass status is
+`FAILED` can be selected. `INDETERMINATE`, `UNRUN`, and points with unresolved invalid attempts
+require a new first-pass campaign after the underlying condition is corrected; they are not product
 failure retries. The
 `Retry selected with FULL_RESTART` action requires the explicit confirmation string
 `CONFIRM FULL_RESTART RETRIES`.
 
-Selected points run serially. Each receives a new attempt ID, simulation session ID, ROS domain,
-owned process group, evidence directory, and terminal cleanup record. A retry button is disabled
-for successful points, a non-terminal first pass, an active execution, or a campaign in
-`NEEDS_OPERATOR_RECOVERY`, or a campaign without a confirmed shutdown-safety receipt.
+An adaptive infrastructure interruption, fallback, or automatic re-execution is never eligible for
+this action. An adaptive `INFRA_FAILED` campaign must be diagnosed and rerun as a new first-pass
+campaign; it cannot enter the product-failure retry queue.
+
+Selected points run serially. Each becomes a new fixed-mode one-point coordinator batch with
+`worker_count=1`, `max_points_per_worker=1`, a new batch/attempt ID, simulation session,
+coordinator epoch, Worker generation, lease generation, ROS domain, process groups, evidence child,
+and terminal cleanup record. The next retry is not dequeued until the previous batch reports
+`batch_cleanup_complete=true` and all registered descendants are gone. A retry button is disabled
+for `PASSED`, `INDETERMINATE`, `UNRUN`, a non-terminal first pass, any active execution,
+`NEEDS_OPERATOR_RECOVERY`, or unresolved cleanup.
 
 ## 7. API
 
@@ -334,110 +508,162 @@ The validation server exposes these routes:
 
 | Method and route | Purpose |
 |---|---|
-| `GET /expert-validation/capabilities` | Return availability, sampler limits, executors, operations, and lifecycle support. |
+| `GET /expert-validation/capabilities` | Return mode-specific availability, sampler limits, fixed Worker/K limits, adaptive ladder/defaults, executor operations, frozen hashes, and preflight capability. |
 | `POST /expert-validation/lease` | Acquire the supervisor-scoped control lease for one service session. |
 | `PUT /expert-validation/lease/{lease_id}` | Renew the current lease before its server-defined expiry. |
 | `DELETE /expert-validation/lease/{lease_id}` | Release an idle lease; an active campaign requires cancellation or completion first. |
 | `POST /expert-validation/manifests` | Generate and persist one immutable point/geometry manifest. |
 | `GET /expert-validation/manifests/{manifest_id}` | Read an existing manifest. |
-| `POST /expert-validation/campaigns` | Start one first-pass `RESET_WORLD` campaign. |
+| `POST /expert-validation/campaigns/preflight` | Validate the typed fixed or adaptive execution configuration, provenance, singleton/domain ownership, cleanup state, and Broker readiness without starting motion. |
+| `POST /expert-validation/campaigns` | Start one fixed coordinator batch or one adaptive production wrapper. |
 | `GET /expert-validation/campaigns` | List retained campaign summaries. |
-| `GET /expert-validation/campaigns/{campaign_id}` | Read authoritative campaign, point, progress, and retry state. |
+| `GET /expert-validation/campaigns/{campaign_id}` | Read mode-specific execution owner, batch/Runner summary, generation, Worker, point, progress, evidence, and retry state. |
 | `POST /expert-validation/campaigns/{campaign_id}/cancel` | Request cancellation at a safe checkpoint. |
 | `POST /expert-validation/campaigns/{campaign_id}/full-restart-retries` | Start serial retries for selected failed point IDs. |
 | `GET /expert-validation/artifacts/{artifact_id}` | Read one manifest-registered artifact. |
 | `WS /expert-validation/events` | Stream sequenced progress hints; HTTP state remains authoritative. |
 
-Manifest generation and evidence reads are non-moving operations. Campaign start, cancel, and retry
-require the supervisor-scoped lease, a command ID, and durable server-side idempotency. A repeated
+Manifest generation and evidence reads are non-moving operations. Preflight requires the current
+supervisor-scoped lease because its receipt is bound to that lease generation. Campaign start,
+cancel, and retry additionally require a command ID and durable server-side idempotency. A repeated
 command ID with the same canonical request returns its stored result. The same ID with different
 content fails with `COMMAND_ID_REUSED`; an ambiguous pre-crash command returns
 `COMMAND_OUTCOME_UNKNOWN` and cannot be submitted under a new ID until reconciliation finishes.
 
-The validation service creates a stable service session for the browser. It is independent of every
-attempt's `simulation_session_id`. Lease duration and renewal margin come from capabilities. A
-browser disconnect does not release the lease or stop an attempt. Lease expiry requests cooperative
-cancellation at the next safe checkpoint and blocks new attempts. After expiry, another service
-session may acquire the lease only to inspect state or cancel/recover the unresolved campaign; it
-cannot start a second campaign. A server restart invalidates every lease, restores durable campaign
-state, and requires a new lease after reconciliation. Releasing a lease while a campaign is active
-fails closed.
+The start body freezes `manifest_id`, `execution_mode`, a tagged execution-configuration object,
+`executor_id`, `operation_id`, and the preflight receipt ID. Fixed configuration contains
+`worker_count` and `max_points_per_worker`; adaptive configuration contains preferred/fallback
+tiers, initial affinity, startup timeout, infrastructure-attempt limit, and adaptive config hash,
+and must not contain K.
+`SEQUENTIAL` with N other than 1, `PARALLEL` outside the admitted 2–3 range, insufficient N×K,
+or a stale preflight receipt is rejected before execution-owner spawn. Invalid adaptive field
+combinations, ladder order, batch ID, or runtime-root identity are rejected before wrapper spawn.
+The response returns the Web `campaign_id`, execution-owner kind/identity, and immutable upstream
+batch identity; the IDs are never inferred from each other.
+Preflight allocates and returns the prospective `campaign_id` inside its receipt but starts no
+process and performs no motion. Start atomically consumes that one-shot receipt and returns the same
+campaign ID; the receipt binds the service session and current lease generation and cannot be reused
+for a second campaign or with a different lease/session.
+
+The validation service creates a stable service session for the browser. It is independent of
+`batch_id`, coordinator epoch, Worker generation, lease generation, attempt ID, and simulation
+session. Lease duration and renewal margin come from capabilities. A browser disconnect does not
+release the lease or stop an attempt. Web lease expiry asks the fixed coordinator through its
+authenticated control channel, or sends the adaptive wrapper an identity-checked cancellation
+request, to stop issuing work and cancel safely; it never signals a Runner, Worker, Broker, or
+simulation process directly. After expiry, another service session may acquire the lease only to inspect,
+cancel, or reconcile the unresolved campaign. A server restart invalidates every Web lease,
+restores durable command/batch bindings, and requires a new lease after execution-owner reconciliation.
+Releasing a lease while a campaign is active fails closed.
 
 The WebSocket is an acceleration path, not the source of truth. Reconnect always reads the campaign
 resource before applying later event sequences.
 
 ## 8. Persistent state, progress, and evidence
 
-### 8.1 Supervisor journal
+### 8.1 Web store and upstream journals
 
-The supervisor uses one durable store under its configured evidence root. It contains manifest
-references, canonical command fingerprints and results, campaign and attempt states, retry queue and
-cursor, lease generation, simulation identifiers, ownership intents and acknowledgements, safety
-receipts, and cleanup state. A process-wide lock admits only one supervisor writer.
+The Web supervisor uses one durable store under its configured evidence root. It contains manifest
+references, canonical Web command fingerprints and results, service leases, campaign-to-batch
+bindings, tagged execution configuration and hash, execution-owner kind and process identity,
+accepted top-level upstream cursor/hash, current adaptive generation and fallback-history cache,
+retry queue/cursor, and Web projection cache. A process-wide lock admits only one Web writer.
+
+For fixed modes, the coordinator's framed fsync journal remains authoritative for queue state, K debit, point lease,
+Worker generation, attempt authorization, Broker health, sealed result acceptance, point status,
+recovery, capacity exhaustion, and batch qualification. The Web store does not duplicate those
+events as independent truth. It records the last accepted upstream event identity and validates the
+hash chain again after restart.
+
+For adaptive mode, the Runner's framed fsync journal is the top-level authority for pool state,
+generation transitions, imported terminal results, infrastructure interruptions and attempt counts,
+fallback history, final point states, terminal Runner status, and batch cleanup. Generation
+coordinator journals and manifests are nested evidence referenced by the Runner; the Web relay does
+not merge them independently or bypass the Runner.
 
 State-changing commands follow this order:
 
-1. validate the lease, manifest, current state, and command fingerprint;
-2. commit command intent and the next campaign/attempt state;
-3. commit ownership intent before any child crosses its exec barrier;
-4. record the child acknowledgement and only then let execution continue;
-5. commit progress and terminal receipts before returning a terminal command result;
-6. dequeue a retry only after the preceding attempt has a confirmed cleanup receipt.
+1. validate the Web lease, manifest, tagged execution configuration, preflight receipt, current state, and command
+   fingerprint;
+2. commit the Web command intent and campaign-to-upstream identity;
+3. commit execution-owner intent before the coordinator or wrapper crosses its exec barrier;
+4. record the fixed coordinator PID/PGID/start-time/control socket or adaptive wrapper PID/start
+   time/Runner binding acknowledgement and only then release the barrier;
+5. let the coordinator or Runner persist and ACK all transitions in its authoritative journal;
+6. accept the mode-specific terminal summary and cleanup receipt before returning a terminal Web
+   command result;
+7. dequeue a retry only after the preceding one-point batch is terminal, cleanup-complete, and its
+   coordinator process is reconciled.
 
-On restart, the supervisor takes the singleton lock, invalidates old leases, compares the durable
-ownership registry with the complete descendant inventory, and reconciles every non-terminal
-command and attempt. It never repeats an ambiguous command or starts a new stack while ownership or
-cleanup is unresolved. A cleanly terminal attempt can be restored. Any mismatch becomes
+On restart, the supervisor takes the singleton lock, invalidates old leases, and reconciles the
+durable execution-owner record. It asks a fixed coordinator to replay its journal or reconnects to
+a still-running adaptive wrapper/Runner and replays the Runner journal. It never reconstructs
+Worker state by scanning processes or
+sealed directories itself, repeats an ambiguous command, or starts a second coordinator while
+ownership or cleanup is unresolved. A cleanly terminal batch can be restored. An adaptive Runner
+crash is never resumed automatically. Journal corruption, identity mismatch, an unreachable active
+execution owner, or an unresolved descendant inventory becomes
 `NEEDS_OPERATOR_RECOVERY`.
 
 ### 8.2 Progress framing
 
-The batch engine writes a flushed, append-only progress event for each boundary:
+The Web event relay consumes the mode-specific top-level framed, checksum-protected journal. Fixed
+coordinator boundaries include:
 
 ```text
-BATCH_STARTED
-POINT_REACHABILITY
-POINT_STARTED
-ARTIFACT_REGISTERED
-POINT_FINISHED
-BATCH_FINISHED
+BATCH_STARTED / LEASE_GRANTED / ATTEMPT_STARTED
+POSE_ACCEPTED / RESULT_COMMITTED / LEASE_EXPIRED
+WORKER_RECOVERY_RECORDED / WORKER_QUARANTINED
+BROKER_HEALTH_CHANGED / BATCH_FINISHED
 ```
 
-Phase-level progress is optional in version 1 because the current batch has no authoritative phase
-callback. It may be added later only from an execution-owned event source; log parsing is not an
-authoritative phase signal.
+Adaptive Runner boundaries additionally include pool state
+`CREATED | STARTING(Wn) | RUNNING(Wn) | DEGRADING(Wn->Wm) | COMPLETED |
+COMPLETED_WITH_FAILURES | INFRA_FAILED`, generation identity, READY barrier, fallback reason,
+terminal-result import, infrastructure-attempt count, and cleanup result. Adaptive point working
+states are `UNRUN | LEASED | RUNNING | INFRA_INTERRUPTED | PASSED | FAILED`; `PASSED` and `FAILED`
+are immutable across generations.
 
-Events are newline-delimited canonical JSON written by one batch writer. Each complete record
-contains schema version, campaign ID, attempt ID, sequence, event type, payload hash, and timestamp.
-The validated contiguous event log is the commit authority. The snapshot is a rebuildable cache, not
-a second commit decision.
+Worker stage and heartbeat events may provide finer progress when their schema is frozen. Log
+parsing is never an authoritative phase signal.
 
-For `POINT_FINISHED` and `BATCH_FINISHED`, the writer first atomically installs and fsyncs the
-referenced result manifest, then appends one bounded event record, terminates it with a newline, and
-fsyncs the log. The supervisor validates the next contiguous record and its referenced manifest,
-commits the accepted sequence and projected state in its durable journal, and only then exposes that
-state through HTTP or WebSocket. It may rewrite an atomic progress snapshot after journal acceptance.
+Each top-level event carries schema version, batch ID, event ID, idempotency
+key, previous-frame hash, identity fields, event type, canonical payload, and timestamp. The
+fixed schema includes coordinator epoch; the adaptive schema includes Runner and pool-generation
+identity plus nested coordinator references. The validated contiguous journal is the commit authority. Upstream and Web snapshots are rebuildable
+caches, not additional commit decisions.
 
-The supervisor tails only the owned event file. It buffers a final byte range without a newline and
-does not parse or publish it while the writer is alive. A malformed complete record, duplicate or
-reordered sequence, identity mismatch, invalid referenced manifest, or dangling partial record after
-the writer exits makes the attempt invalid. On recovery, every complete contiguous record beyond the
-journal's accepted sequence is validated and accepted idempotently; a stale snapshot is rebuilt. A
-snapshot ahead of either the log or the journal is discarded. If the supervisor crashed after
-journal acceptance but before an HTTP response, durable command idempotency returns the already
-accepted result. These rules cover crashes after log fsync, after journal acceptance, and after
-snapshot replacement without making a terminal point disappear.
+For a point result, the Worker fsyncs its files, atomically changes `working/` to `sealed/`, and
+submits the manifest under the current lease. The coordinator validates identity and evidence,
+fsyncs `RESULT_COMMITTED`, and only then returns ACK. The Web relay validates the next committed
+frame and referenced manifest, records its accepted cursor, and only then exposes the projection
+through HTTP or WebSocket.
 
-The first-pass campaign manifest stores every requested point from the start. Points are `PENDING`
-only while they remain eligible to run; terminal reconciliation converts untouched points to
-`NOT_RUN` or `BLOCKED` with a reason. Point result manifests and the terminal campaign manifest reuse
-the current artifact registry and checksum rules. Retry attempts link to both `campaign_id` and the
-original point ID.
+The Web relay reads only the bound fixed coordinator journal or adaptive Runner journal. An
+incomplete EOF tail is handled by the applicable upstream recovery contract. A complete checksum error, broken segment chain, identity mismatch,
+invalid manifest, duplicate result, or event that conflicts with the stored binding blocks the Web
+projection and enters `NEEDS_OPERATOR_RECOVERY`. On recovery, accepted frames are replayed
+idempotently; snapshots ahead of the journal are discarded. If the Web process crashed after
+coordinator commit but before HTTP response, Web command idempotency returns the already-bound
+batch and current coordinator state.
+
+The first-pass campaign manifest stores every requested point from the start. A fixed point can be
+presented as pending while its coordinator status is eligible `UNRUN`, and fixed terminal
+reconciliation uses `PASSED | FAILED | INDETERMINATE | UNRUN`. Adaptive projection follows the
+Runner working and terminal states above. A possibly-started infrastructure attempt remains
+attempt-level `INDETERMINATE`; after exact old-generation cleanup and a fresh initial-state gate,
+the Runner may safely requeue the point as `INFRA_INTERRUPTED`. Point result manifests and the
+terminal batch
+manifest reuse the artifact registry and checksum rules. Retry attempts link to `campaign_id`,
+their one-point `batch_id`, and the original point ID.
 
 Evidence roots follow the repository SO-101 policy. The validation server is started with one
-absolute, non-symlink task-family root. Each campaign and attempt receives a child directory under
-that root. The service rejects `..`, absolute client paths, symlink traversal, unregistered files,
-and files outside the configured root.
+absolute, non-symlink task-family root. Each campaign receives a child, and each coordinator batch
+owns the expected `workers/`, `events/`, `scratch/`, and `reports/` layout beneath it. The
+Adaptive campaigns additionally allocate the required short-ID runtime root
+`<evidence-root>/r/<batch-id>` and identify every artifact by Runner batch, pool generation,
+coordinator batch, Worker, lease, and attempt. The service rejects `..`, absolute client paths, symlink traversal, unregistered files, and files
+outside the configured root. Worker and Broker evidence remain single-writer.
 
 ## 9. Supervisor lifecycle
 
@@ -445,8 +671,9 @@ The first-pass state machine is:
 
 ```text
 IDLE
-  -> PREPARING_STACK
-  -> RUNNING_RESET_WORLD_BATCH
+  -> PREFLIGHTING
+  -> STARTING_COORDINATOR | STARTING_ADAPTIVE_WRAPPER
+  -> RUNNING_SEQUENTIAL_BATCH | RUNNING_PARALLEL_BATCH | RUNNING_ADAPTIVE_BATCH
   -> FINALIZING
   -> COMPLETED | PARTIAL_FAILED | FAILED | CANCELLED | NEEDS_OPERATOR_RECOVERY
 ```
@@ -455,48 +682,62 @@ The retry queue is:
 
 ```text
 IDLE
-  -> PREPARING_FRESH_STACK
-  -> RUNNING_FULL_RESTART_POINT
-  -> FINALIZING_ATTEMPT
+  -> PREFLIGHTING_ONE_POINT_BATCH
+  -> STARTING_COORDINATOR_N1_K1
+  -> RUNNING_FULL_RESTART_POINT_BATCH
+  -> FINALIZING_BATCH
   -> next selected point or terminal retry summary
 ```
 
 Only one of these paths can be active. Before starting a stack, the supervisor reconciles its durable
-ownership registry, inventories descendants and the assigned ROS domain, and verifies that no
-previous cleanup is unresolved. Unknown conflicting processes fail the request; they are never
-killed automatically.
+execution-owner record and verifies that no previous coordinator, adaptive wrapper/Runner, or batch cleanup is
+unresolved. The selected upstream owner then performs its own domain/Worker/Broker reconciliation.
+Unknown conflicting processes fail the request; neither layer kills them automatically.
 
-For a first pass, the supervisor starts one visible stack without a nested Teleop server, waits for
-controllers, joint feedback, MoveIt, Planning Scene, camera, and physical-evidence readiness, then
-runs the existing batch logic in `--attach-existing-stack` mode through the supervisor process-owner
-port. The implementation must wire the batch's cancellation callback and replace the current
-hard-coded post-execution `SafetyReceipt` with an actual session- and epoch-bound probe. The
-supervisor performs ordered shutdown only after it receives a fresh shutdown-safety receipt.
+For a fixed first pass, the Web supervisor starts one coordinator with the frozen mode/N/K request. The
+coordinator creates stable Worker slots, starts one isolated headless
+`sensor_rendering=true,include_teleop=false` stack per execute Worker, starts the shared model
+Broker, and dynamically leases points. `SEQUENTIAL` uses the same path with one slot. Every point
+must pass `worker_ready_gate`, receive a durable lease, reset to its exact scene, pass
+`point_initial_gate`, and receive a durable `ATTEMPT_STARTED` ACK before perception or motion.
 
-For a retry, the supervisor starts a fresh stack, proves canonical initial state, runs exactly one
-point, captures terminal evidence, and performs ordered shutdown before dequeuing the next point.
-This is the counted `FULL_RESTART` boundary.
+For an adaptive first pass, the supervisor invokes the production wrapper with the frozen adaptive
+request. The wrapper owns one Runner child; the Runner starts exactly one coordinator generation at
+a time. Every generation must pass the all-Workers READY barrier before point release. On an
+infrastructure failure, the Runner stops new leases, fsyncs accepted terminal results, classifies
+in-flight attempts, performs exact generation cleanup, proves old resources gone, requeues only
+`UNRUN` and `INFRA_INTERRUPTED`, and starts the next configured tier. Business `FAILED` does not
+degrade the pool. A W1 infrastructure failure or any failed cleanup ends `INFRA_FAILED`.
 
-The ai-station GNOME capture adapter is moved from task-local evidence into maintained product
-source behind the existing viewer-capture interface. macOS keeps its current adapter. Platform
-selection is explicit and tested; neither adapter may return an old screenshot as current
-evidence.
+For a retry, the Web supervisor starts a new one-point coordinator batch. The Worker proves initial
+state, executes one point, seals terminal evidence, recovers, and shuts down. This is the counted
+`FULL_RESTART` boundary. Reusing a first-pass Worker or changing only its world state is not a
+`FULL_RESTART` retry.
 
-The supervisor records ownership intent, spawn token, PID, PGID, process start time, parent and
-descendant identities, session, source/install/runtime fingerprints, ROS domain, and cleanup state
-before reporting ownership. After a restart, it may resume observation of an attempt only after
-durable command, ownership, progress, safety, and cleanup records all reconcile. It does not resume
-robot execution from a guessed state. A running stack with ambiguous batch state is preserved for
-operator recovery, and the campaign becomes `NEEDS_OPERATOR_RECOVERY`.
+Visual evidence comes from each Worker's fixed task camera with source stamps newer than the reset
+or action boundary. Shared desktop screenshots are not required for a parallel qualification and
+cannot replace RGB-D, TF, controller, physical, Planning Scene, or cleanup evidence. The maintained
+GNOME/macOS capture adapters remain available to existing interactive Teleop workflows but are not
+an ownership dependency of a counted parallel campaign.
+
+The supervisor records execution-owner kind and intent, spawn token, exact process identity,
+control endpoint where applicable, source/install/runtime fingerprints, batch ID, and cleanup state
+before reporting ownership. After restart, it resumes observation only after durable Web
+command/binding state and the applicable top-level journal, ownership, point, safety, and cleanup
+records reconcile. It does not
+resume robot execution from a guessed state. An active coordinator with ambiguous identity is
+preserved for operator recovery, and the campaign becomes `NEEDS_OPERATOR_RECOVERY`.
 
 ## 10. Cancellation, safety, and failure semantics
 
-Execution outcome and shutdown safety are separate records. Every attempt exit, including product
-failure, shared failure, timeout, corrupt progress, owner death, and cancellation, must produce or
-attempt to produce a fresh `ShutdownSafetyReceipt` containing:
+Execution outcome, Worker recovery, pool-generation cleanup, and batch cleanup are separate records. Every attempt exit,
+including product failure, shared failure, timeout, corrupt progress, owner death, lease expiry, and
+cancellation, must seal or attempt to seal its result and append a Worker recovery receipt. The
+coordinator emits a batch cleanup receipt only after every Worker/Broker/controller/process boundary
+is reconciled. Safety evidence contains:
 
 ```text
-campaign_id and attempt_id
+campaign_id, batch_id, worker_id/generation, lease generation and attempt_id
 simulation_session_id and reset/release epoch
 observed_at and freshness bound
 cup_held and support_confirmed
@@ -507,40 +748,54 @@ reason_code
 evidence artifact IDs
 ```
 
-The batch never fabricates this receipt from a process exit code. Missing, stale, or identity-mismatched
-evidence sets `safe_to_shutdown=false`. The supervisor then enters `NEEDS_OPERATOR_RECOVERY`, keeps
-the owned stack available for inspection when possible, and does not reset, open the gripper, start
-another stack, or claim cleanup.
+No layer fabricates a recovery or cleanup receipt from a process exit code. Missing, stale, or
+identity-mismatched evidence makes recovery fail and normally quarantines that Worker. Other healthy
+Workers may continue while queue and capacity remain. The Web campaign cannot qualify unless
+`batch_cleanup_complete=true`. If the coordinator cannot safely contain the affected Worker or
+cannot prove control has stopped, the campaign enters `NEEDS_OPERATOR_RECOVERY`; it does not reset,
+open the gripper, start another coordinator, or claim cleanup.
 
-Cancellation uses a supervisor-to-batch control channel tied to campaign and attempt identity. The
-batch acknowledges the request at a declared safe checkpoint, requests hold/stop through the normal
-robot-control boundary, emits the shutdown-safety receipt, and exits cooperatively. If it does not
-acknowledge within the configured bound, the supervisor does not assume that signalling is safe. It
-records the timeout and enters `NEEDS_OPERATOR_RECOVERY`. Signal escalation is allowed only after a
-fresh receipt says the cup is supported or not held and controller stop is confirmed.
+Fixed-mode cancellation uses an authenticated Web-supervisor-to-coordinator control channel tied to
+campaign/batch identity and coordinator epoch. The coordinator stops new leases, fences invalid
+generations, asks active Workers to cancel and confirm controller goals, and reconciles untouched
+points to `UNRUN`. If the coordinator does not acknowledge within the configured bound, the Web
+supervisor does not signal Worker groups. It records the timeout and enters
+`NEEDS_OPERATOR_RECOVERY`. Signalling the coordinator PGID is allowed only after a fresh batch
+cleanup receipt confirms no held cup, active controller goal, or unresolved descendant.
 
-The UI distinguishes product failures from invalid execution, although both use the requested red
-map styling:
+Adaptive cancellation targets only the registered wrapper PID after PID/start-time/batch identity
+verification. The wrapper forwards the request to the Runner and owns the exact
+`so101_parallel_batch_cleanup` boundary. The Web layer never signals the wrapper PGID because that
+would directly broadcast to Runner or generation descendants. Missing acknowledgement with
+unresolved cleanup becomes `NEEDS_OPERATOR_RECOVERY`; wrapper-confirmed cleanup produces the
+Runner-defined terminal result.
+
+The UI distinguishes product failures, indeterminate outcomes, invalid attempts, and unexecuted
+points, although their terminal point markers share the requested red palette:
 
 - a valid perception, planning, controller, grasp, transport, release, placement, or evidence-gate
   failure counts in that lifecycle's denominator;
-- missing provenance, duplicate stack, wrong initial state, corrupt progress, stale manifest, or
-  cleanup ambiguity is invalid execution and is reported separately;
-- `SKIPPED_UNREACHABLE` is a first-pass failure and later points may continue when the shared stack
-  is healthy;
-- a shared-stack failure stops the first pass;
-- an unsupported held cup or uncertain reset safety enters `NEEDS_OPERATOR_RECOVERY`; no automatic
-  opening, reset, shutdown, or retry follows;
-- cleanup failure after a retry stops the retry queue before another stack starts.
+- an authorized attempt whose result cannot be proven is `INDETERMINATE`, not an ordinary
+  `FAILED` result;
+- missing provenance, wrong initial state, stale lease, Broker infrastructure error, or a safely
+  fenced pre-execution loss is an `INVALID` attempt and is reported separately;
+- an unreachable point is a valid `FAILED` point and later points continue when capacity and
+  shared dependencies remain healthy;
+- Broker failure pauses new leases; recovery deadline expiry terminates with
+  `SHARED_DEPENDENCY_UNAVAILABLE`;
+- Worker recovery failure quarantines that slot. Other slots continue if they have capacity;
+- cleanup failure after a one-point retry stops the retry queue before another coordinator starts.
 
-When signal escalation is permitted, the supervisor signals only registered process groups, first
-with `SIGINT` and then with a bounded `SIGTERM`. It never uses wide process-name matching. Cleanup is
-complete only after registered descendants disappear and the ROS domain no longer exposes the owned
-graph. A surviving descendant or unknown process keeps ownership unresolved.
+When signal escalation is permitted, the coordinator signals only its registered Broker/Worker
+groups, first with `SIGINT` and then bounded `SIGTERM`. The Web supervisor applies the same rule only
+to the registered coordinator group. Neither uses process-name matching. Cleanup is complete only
+after all registered descendants disappear and assigned ROS domains no longer expose owned graphs.
+A surviving descendant or unknown process keeps ownership unresolved.
 
 ## 11. ACT extension boundary
 
-Campaigns carry an `executor_id`, `operation_id`, and executor configuration hash. Version 1
+Campaigns carry an `executor_id`, `operation_id`, execution mode, tagged fixed/adaptive execution
+configuration, and executor configuration hash. Version 1
 registers:
 
 ```text
@@ -548,14 +803,16 @@ executor_id: moveit_expert
 operation_id: validate_pick_place
 ```
 
-The backend registry exposes typed executor capabilities and allowed operations. Future ACT work
+The backend registry exposes typed executor capabilities, allowed operations, and compatible
+execution modes. Future ACT work
 can register `act_collect` and `act_rollout` operations with their own request model, evidence
 schema, controls, and success contract. Expected collection actions include Search, Start
 Recording, Run Expert, Keep, and Discard, as described in the ACT head/wrist design.
 
 The extension does not put high-frequency control in the browser. An ACT executor must still use a
-server-side owner, safety supervisor, and evidence writer. MoveIt expert, ACT collection, and ACT
-rollout statistics remain separate even when they share the same point manifest.
+server-side controller-ownership broker, safety supervisor, and evidence writer. A batch point lease
+never grants ACT control authority. MoveIt expert, ACT collection, and ACT rollout statistics remain
+separate even when they share the same point manifest or scheduler implementation.
 
 A successful MoveIt validation point does not automatically qualify as an ACT demonstration or
 held-out ACT evaluation point. ACT collection adds a separate immutable manifest with head/wrist
@@ -565,13 +822,13 @@ rollout adds its own policy checkpoint, observation contract, safety result, and
 
 ## 12. Testing
 
-### 12.1 Sampler and map
+### 12.1 Catalog, selection, and map
 
 - exact `ai_station_baseline_v1` 20-point compatibility fixture for `seed=20260911`, including
   source manifest and sampler hashes, bands, ordered strata, 15 mm threshold, six-decimal rounding,
   and rejection cap;
-- deterministic repeat, changed-seed divergence, four-anchor prefix, stable subset behaviour, and
-  canonical hash tests;
+- frozen catalog byte/hash verification, four-anchor prefix, deterministic count-based selection,
+  ordered selection hash, and stable subset tests;
 - count bounds, finite values, pairwise separation, table clearance, and stale-input rejection;
 - shared Python/React projection fixtures for table, base, target, cup radius, marker radius, and
   status colours;
@@ -580,66 +837,97 @@ rollout adds its own policy checkpoint, observation contract, safety result, and
 
 ### 12.2 Supervisor and service
 
-- fake-process tests for one first-pass stack, per-point progress, ordered cleanup, and no second
-  active execution;
-- process-owner tests where the batch dies after requesting a child, a group leader exits while a
-  descendant remains, a spawn acknowledgement is missing, and cleanup leaves a descendant;
-- a two-point lifecycle test proving point-one worker groups disappear while the same batch process
-  stays alive and starts point two;
-- one fresh stack per selected retry, strict serial order, unique session/domain/attempt IDs, and
-  cleanup-before-next-start assertions;
-- durable idempotency tests at every spawn/result/dequeue transaction boundary, singleton lock,
-  lease acquisition/renewal/expiry, browser disconnect, cancel checkpoint, held-cup blocking, stale
-  manifest, corrupt complete event, live partial event, torn terminal event, ownership mismatch, and
-  restart reconciliation tests;
-- fresh shutdown-safety receipt tests for success, product failure, shared failure, timeout,
-  cancellation, corrupt progress, and owner death; missing evidence must enter
-  `NEEDS_OPERATOR_RECOVERY`;
-- count and denominator tests for early shared failure, invalid attempt, cancellation, zero valid
-  attempts, all-unreachable and mixed unreachable campaigns, a started point interrupted before its
-  terminal receipt, an `UNKNOWN` reachability decision, owner loss between `POINT_REACHABILITY` and
-  `POINT_STARTED`, campaign cleanup ambiguity, and first-pass results after retries;
-- progress crash tests immediately after result-manifest fsync, event-log fsync, journal acceptance,
-  snapshot replacement, and before the HTTP response;
+- request tests for `SEQUENTIAL => N=1`, `PARALLEL => N=2..3`, default K, explicit K,
+  `N×K` rejection, `ADAPTIVE` field exclusivity, frozen fallback ladder, no K, short batch ID,
+  no silent mode conversion, and stale preflight rejection;
+- coordinator-process tests for spawn intent/ACK, reconnect, conflicting PID/start time, socket
+  ownership, journal corruption, and surviving descendants;
+- projection tests for multiple simultaneous Worker stages, generation changes, K debit,
+  quarantine, Broker pause/recovery, capacity exhaustion, and dynamic point assignment;
+- adaptive projection tests for W8 startup failure to W6, W8 mid-run infrastructure failure to W6,
+  READY barriers, immutable business terminals, attempt-level `INDETERMINATE`,
+  `INFRA_INTERRUPTED` requeue, cleanup failure, W1 exhaustion, and all Runner terminal statuses;
+- one fresh N=1/K=1 coordinator batch per selected retry, strict serial order, unique
+  batch/epoch/session/domain/attempt identities, and cleanup-before-next-start assertions;
+- durable Web idempotency tests at coordinator spawn, batch binding, terminal acceptance, and retry
+  dequeue boundaries; the upstream coordinator suite remains responsible for Worker lease/result
+  commit crash windows;
+- cancellation tests proving the Web layer uses authenticated fixed-coordinator control or an
+  identity-checked adaptive wrapper PID and never signals Runner, Worker, or Broker groups;
+- count and denominator tests for `PASSED`, `FAILED`, `INDETERMINATE`, retried `INVALID`
+  attempts, terminal `UNRUN`, zero valid attempts, unreachable failures, quarantine, shared
+  dependency failure, and cleanup ambiguity;
+- upstream journal relay tests after coordinator fsync, before Web cursor commit, after Web cursor
+  commit, and before HTTP response;
 - artifact allow-list, symlink, traversal, media type, checksum, and cross-campaign isolation tests;
 - OpenAPI snapshot and generated TypeScript schema checks.
 
 ### 12.3 Web
 
-Use the repository Bun toolchain. Component tests cover count/seed input, manifest invalidation,
-equal-radius SVG markers, exact status colours, map/list selection, progress recovery, evidence
+Use the repository Bun toolchain. Component tests cover count/catalog input, manifest invalidation,
+mode-specific input, fixed capacity/admission feedback, adaptive observational metrics and fallback
+timeline, equal-radius SVG markers, exact status colours, map/list/Worker shared selection,
+concurrent progress recovery, Broker/Worker health, evidence
 previews, retry eligibility, confirmation, and separate first-pass/retry statistics. Playwright
-uses a fake supervisor API; it must not start MuJoCo.
+uses fixed-coordinator and adaptive-Runner API fixtures; it must not start MuJoCo.
 
 ### 12.4 ai-station simulation acceptance
 
 After source tests and package tests pass, build a task-owned overlay on ai-station and verify the
-installed executable and Web bundle provenance. With no pre-existing SO-101 application stack:
+installed coordinator, validation server, Web bundle, model container, config, and point-manifest
+provenance. With no pre-existing SO-101 application stack:
 
 1. start the validation server with one registered durable evidence root;
-2. generate `total_points=4`, run the anchor smoke campaign, and inspect fresh progress, numeric
-   evidence, and Viewer screenshots through the page;
-3. generate the exact `total_points=20` compatibility manifest and run its first pass;
-4. if that fresh first pass contains a valid failed or unreachable point, select one such point and
-   run one independent `FULL_RESTART` retry through the same page;
-5. if every valid point succeeds, record `LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED` rather than
+2. generate `total_points=4`, run a fixed sequential N=1/K=4 anchor smoke campaign, and inspect fresh
+   progress, numeric evidence, task-camera frames, and cleanup through the page;
+3. run the same four-point selection as a parallel N=2/K=2 campaign. Verify distinct ROS domains,
+   Worker roots, sessions, process trees, dynamic leases, Broker request identity, and no
+   cross-Worker artifact or pose exchange;
+4. only after both fixed-mode compatibility smokes pass, generate the exact `total_points=20`
+   compatibility manifest and start an adaptive first pass through the production wrapper with
+   preferred W8, fallback W6/W4/W2/W1, `initial_points_per_worker=3`, and no K. Display and retain
+   every generation, fallback reason, resource observation, final point result, and cleanup record;
+5. reuse the upstream adaptive acceptance rather than inventing a Web-only fault model: the
+   upstream package/live gates must already prove W8 startup failure to W6, W8 mid-run failure to
+   W6, a 20-point adaptive run, and W1/W2/W4/W6/W8 performance evidence. The page additionally
+   proves one live adaptive launch and projection; deterministic fake-Runner tests exercise every
+   fallback UI branch;
+6. if that fresh adaptive first pass ends `COMPLETED_WITH_FAILURES` and contains a business
+   `FAILED` point, select one and run one independent
+   N=1/K=1 `FULL_RESTART` retry through the same page;
+7. if every valid point succeeds, record `LIVE_RETRY_NOT_APPLICABLE_ALL_SUCCEEDED` rather than
    fabricating a failure; the deterministic fake-supervisor acceptance must still exercise the
-   failure-selection and retry UI, while supervisor integration tests prove real process restart and
-   cleanup;
-6. read back both campaigns, attempts, artifact hashes, ROS graph, complete process inventory,
-   shutdown-safety receipts, and cleanup state.
+   failure-selection and retry UI, while real-process integration tests prove coordinator restart
+   and cleanup;
+8. read back campaigns, the Runner journal, nested generation coordinator journals,
+   Worker/attempt/recovery manifests, artifact hashes, assigned ROS graphs, Broker generation,
+   complete process inventory, and batch cleanup state.
 
-The live result is accepted only from that new run. Historical baseline screenshots and success
-messages do not replace fresh Gazebo/MuJoCo, MoveIt, controller, Planning Scene, perception, and
-visual evidence. No real-hardware command is part of this acceptance.
+The live result is accepted only from those new runs. Historical baseline screenshots and success
+messages do not replace fresh MuJoCo, MoveIt, controller, Planning Scene, perception, task-camera,
+recovery, and cleanup evidence. The 20-point result qualifies only when all points are `PASSED`,
+`coverage_complete=true`, `execution_complete=true`, `batch_cleanup_complete=true`, and
+`qualification_passed=true` under one frozen hash set for fixed modes. The adaptive 20-point result
+is accepted only as Runner `COMPLETED` with all final points `PASSED` and
+`batch_cleanup_complete=true`; `COMPLETED_WITH_FAILURES` is a valid completed business-failure run,
+not a qualification pass. No real-hardware command is part of this acceptance.
 
 ## 13. Delivery boundary
 
-The first implementation delivers the MoveIt expert validation workflow, exact map, persistent
-supervisor journal, lease boundary, progress, evidence browser integration, and `FULL_RESTART` retry
-supervisor. The current attached batch cannot be reused unchanged: implementation must add the
-process-owner port, cooperative cancellation channel, and real shutdown-safety probe described
-above before live execution is enabled.
+The first implementation delivers the MoveIt expert validation workflow, exact map,
+sequential/fixed-parallel/adaptive mode selection, coordinator- or Runner-backed Worker progress,
+pool generations and fallback history, evidence browser
+integration, Web command idempotency, and serial one-point `FULL_RESTART` retries. It depends on the
+approved fixed parallel coordinator plus the adaptive Runner, production wrapper, exact cleanup,
+Worker, Broker, journals, process supervisor, and headless sensor-rendering runtime. The Web plan
+must integrate those modules rather than duplicate or weaken them.
+
+Until the fixed upstream implementation passes its package gate and two-Worker live acceptance, the
+capabilities endpoint returns `PARALLEL` as unavailable. Until the adaptive upstream package,
+fault-injection, performance, and live acceptance gates pass, it returns `ADAPTIVE` as unavailable.
+If the coordinator dependency is absent
+entirely, campaign start fails closed; the server does not fall back to the old attached-stack
+batch. The existing `/tasks` workflow remains available through its own server mode.
 
 This version does not implement head/wrist cameras, episode recording, ACT training, ACT inference,
 Keep/Discard data curation, or real-hardware control. Those operations use the executor extension
