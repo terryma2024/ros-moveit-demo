@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import threading
 import time
 from types import SimpleNamespace
 from typing import Callable, Mapping
@@ -124,15 +125,42 @@ class _IsolatedRosNode:
         self.context = context
         self.executor = executor
         self._closed = False
+        self._spin_lock = threading.Lock()
+        self._background_stop = threading.Event()
+        self._background_thread = None
 
     def spin_once(self, *, timeout_sec):
         if self._closed:
             raise RuntimeError("ISOLATED_ROS_NODE_CLOSED")
-        self.executor.spin_once(timeout_sec=timeout_sec)
+        with self._spin_lock:
+            if self._closed:
+                raise RuntimeError("ISOLATED_ROS_NODE_CLOSED")
+            self.executor.spin_once(timeout_sec=timeout_sec)
+
+    def start_background_spin(self):
+        if self._closed:
+            raise RuntimeError("ISOLATED_ROS_NODE_CLOSED")
+        if self._background_thread is not None:
+            return
+
+        def spin():
+            while not self._background_stop.is_set():
+                self.spin_once(timeout_sec=0.02)
+                self._background_stop.wait(0.001)
+
+        self._background_thread = threading.Thread(
+            target=spin,
+            name=f"{self.node.get_name()}-executor",
+            daemon=True,
+        )
+        self._background_thread.start()
 
     def close(self):
         if self._closed:
             return
+        self._background_stop.set()
+        if self._background_thread is not None:
+            self._background_thread.join(timeout=1.0)
         self._closed = True
         try:
             self.executor.remove_node(self.node)
@@ -1278,6 +1306,7 @@ class ParallelRosRuntimePorts:
         )
         try:
             publisher = owner.node.create_publisher(PoseStamped, "/cup_pose", 10)
+            owner.start_background_spin()
         except Exception:
             owner.close()
             raise

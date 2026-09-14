@@ -1279,6 +1279,40 @@ def test_isolated_ros_node_owns_executor_for_its_private_context(monkeypatch):
     ]
 
 
+def test_isolated_ros_node_can_keep_sim_clock_callbacks_live_in_background():
+    import threading
+
+    from so101_demo.runtime.parallel_ros_runtime import _IsolatedRosNode
+
+    spun = threading.Event()
+
+    class Executor:
+        def spin_once(self, *, timeout_sec):
+            assert timeout_sec > 0.0
+            spun.set()
+
+        @staticmethod
+        def remove_node(_node):
+            return None
+
+        @staticmethod
+        def shutdown():
+            return None
+
+    owner = _IsolatedRosNode(
+        SimpleNamespace(
+            destroy_node=lambda: None,
+            get_name=lambda: "background-clock-test",
+        ),
+        SimpleNamespace(shutdown=lambda: None),
+        Executor(),
+    )
+
+    owner.start_background_spin()
+    assert spun.wait(1.0)
+    owner.close()
+
+
 def test_pose_publication_waits_for_admitted_source_on_isolated_sim_clock(monkeypatch):
     import rclpy
     from so101_demo.core.task_geometry import Pose7
@@ -1497,6 +1531,10 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
         closed = False
 
         @staticmethod
+        def start_background_spin():
+            events.append("background-spin-started")
+
+        @staticmethod
         def spin_once(*, timeout_sec):
             events.append(("spin", timeout_sec))
 
@@ -1520,6 +1558,7 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
 
     assert ports.consumer_ready(SimpleNamespace(pid=os.getpid())) is True
     assert events[0] == "publisher-created"
+    assert events[1] == "background-spin-started"
     admitted = SimpleNamespace(
         source_stamp_ns=100_000_000,
         pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
