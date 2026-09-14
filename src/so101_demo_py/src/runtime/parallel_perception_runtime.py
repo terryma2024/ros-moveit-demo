@@ -376,6 +376,7 @@ class PerceptionService:
         self._response_condition = threading.Condition(self._lock)
         self._executor_threads = []
         self._watchdog_thread = None
+        self._metrics = None
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
             config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
@@ -383,6 +384,9 @@ class PerceptionService:
             queue_capacity_per_model=queue_capacity_per_model,
             **kwargs)
         runtime.health_changed = self._health_changed
+
+    def set_metrics(self, metrics):
+        self._metrics = metrics
 
     def _health_changed(self, healthy):
         for model in (YOLO_ID, GROUNDED_ID):
@@ -445,6 +449,8 @@ class PerceptionService:
             self._requests.setdefault(request.request_id, request)
         self._response_health(submission.response)
         if submission.accepted and submission.response is None:
+            if self._metrics is not None:
+                self._metrics.queued(request)
             self._work_available.set()
         with self._response_condition:
             self._response_condition.notify_all()
@@ -457,6 +463,8 @@ class PerceptionService:
                 self._work_available.wait(0.02)
                 self._work_available.clear()
                 continue
+            if self._metrics is not None:
+                self._metrics.started(request, executor_index)
             try:
                 result = self._detect(
                     request,
@@ -556,6 +564,8 @@ class PerceptionService:
 
     def _response_health(self, response):
         if response is not None:
+            if self._metrics is not None:
+                self._metrics.completed(response.request)
             with self._lock:
                 self._requests.pop(response.request.request_id, None)
             with self._response_condition:

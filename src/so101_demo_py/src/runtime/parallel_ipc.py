@@ -65,7 +65,137 @@ class _ReplayEntry:
     error: str | None = None
 
 
-def _dispatch_idempotently(replays, lock, key, digest, message, mutation):
+class _BrokerMetrics:
+    """Bounded, payload-free timing and concurrency evidence for one Broker."""
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._events = []
+        self._next_connection = 0
+        self._pending_connections = 0
+        self._pending_peak = 0
+        self._queue_depth = {}
+        self._queue_peak = 0
+        self._active = {}
+        self._active_peak = {}
+        self._request_state = {}
+        self._logical_inference_keys = set()
+        self._replay_count = 0
+        self._transport_errors = {}
+
+    def _record(self, event, *, connection_id=None, message=None, error=None):
+        value = {"event": event, "monotonic_s": time.monotonic()}
+        if connection_id is not None:
+            value["connection_id"] = connection_id
+        if type(message) is dict:
+            for name in ("request_id", "idempotency_key"):
+                if isinstance(message.get(name), str):
+                    value[name] = message[name]
+        if error is not None:
+            value["error"] = str(error)
+        if len(self._events) < 10000:
+            self._events.append(value)
+
+    def connection_accepted(self):
+        with self._lock:
+            self._next_connection += 1
+            connection_id = self._next_connection
+            self._pending_connections += 1
+            self._pending_peak = max(
+                self._pending_peak, self._pending_connections
+            )
+            self._record("accepted", connection_id=connection_id)
+            return connection_id
+
+    def connection_event(self, connection_id, event, message=None, error=None):
+        with self._lock:
+            self._record(
+                event,
+                connection_id=connection_id,
+                message=message,
+                error=error,
+            )
+            if error is not None:
+                key = str(error)
+                self._transport_errors[key] = self._transport_errors.get(key, 0) + 1
+
+    def connection_closed(self, connection_id):
+        with self._lock:
+            self._pending_connections -= 1
+            self._record("closed", connection_id=connection_id)
+
+    def idempotency(self, message, state):
+        with self._lock:
+            self._record(state.lower(), message=message)
+            if state == "OWNER" and message.get("payload", {}).get("operation") == "infer":
+                self._logical_inference_keys.add(message["idempotency_key"])
+            elif state == "REPLAY":
+                self._replay_count += 1
+
+    def authenticated(self, message):
+        with self._lock:
+            self._record("authenticated", message=message)
+
+    def queued(self, request):
+        with self._lock:
+            key = request.request_id
+            if key in self._request_state:
+                return
+            self._request_state[key] = (request.model_id, "QUEUED")
+            self._queue_depth[request.model_id] = (
+                self._queue_depth.get(request.model_id, 0) + 1
+            )
+            self._queue_peak = max(
+                self._queue_peak, sum(self._queue_depth.values())
+            )
+            self._record("queued", message={"request_id": key})
+
+    def started(self, request, executor_index):
+        with self._lock:
+            key = request.request_id
+            prior = self._request_state.get(key)
+            if prior == (request.model_id, "QUEUED"):
+                self._queue_depth[request.model_id] -= 1
+            self._request_state[key] = (request.model_id, "RUNNING")
+            self._active[request.model_id] = self._active.get(request.model_id, 0) + 1
+            self._active_peak[request.model_id] = max(
+                self._active_peak.get(request.model_id, 0),
+                self._active[request.model_id],
+            )
+            self._record(
+                "started",
+                message={"request_id": key},
+            )
+            self._events[-1]["executor_index"] = executor_index
+
+    def completed(self, request):
+        with self._lock:
+            key = request.request_id
+            prior = self._request_state.pop(key, None)
+            if prior == (request.model_id, "QUEUED"):
+                self._queue_depth[request.model_id] -= 1
+            elif prior == (request.model_id, "RUNNING"):
+                self._active[request.model_id] -= 1
+            if prior is not None:
+                self._record("completed", message={"request_id": key})
+
+    def snapshot(self):
+        with self._lock:
+            return json.loads(canonical_json({
+                "pending_rpc_peak": self._pending_peak,
+                "queue_depth_peak": self._queue_peak,
+                "model_active_peak": self._active_peak,
+                "replay_count": self._replay_count,
+                "logical_inference_count": len(self._logical_inference_keys),
+                "logical_inference_keys": sorted(self._logical_inference_keys),
+                "transport_errors": self._transport_errors,
+                "events": self._events,
+            }))
+
+
+def _dispatch_idempotently(
+    replays, lock, key, digest, message, mutation, *, observer=None
+):
     with lock:
         entry = replays.get(key)
         if entry is None:
@@ -76,6 +206,9 @@ def _dispatch_idempotently(replays, lock, key, digest, message, mutation):
             if entry.digest != digest:
                 raise IpcError("IDEMPOTENCY_CONFLICT")
             owns_mutation = False
+
+    if observer is not None:
+        observer(message, "OWNER" if owns_mutation else "REPLAY")
 
     if owns_mutation:
         try:
@@ -452,6 +585,7 @@ class AuthenticatedUnixServer:
         accept_poll_s=0.25,
         error_reply_timeout_s=1.0,
         max_concurrent_connections=1,
+        metrics=None,
     ):
         self.path = Path(path)
         if self.path.parent != authority.ipc_root:
@@ -464,6 +598,7 @@ class AuthenticatedUnixServer:
         self.max_frame_bytes = max_frame_bytes
         self.accept_poll_s = float(accept_poll_s)
         self.error_reply_timeout_s = float(error_reply_timeout_s)
+        self.metrics = metrics
         self.max_concurrent_connections = _positive_int(
             "MAX_CONCURRENT_CONNECTIONS", max_concurrent_connections
         )
@@ -516,11 +651,16 @@ class AuthenticatedUnixServer:
             if self._handler_slots is not None:
                 self._handler_slots.release()
             raise
+        connection_id = (
+            None if self.metrics is None else self.metrics.connection_accepted()
+        )
         if self._executor is None:
-            self._serve_connection(connection)
+            self._serve_connection(connection, connection_id)
             return
         try:
-            future = self._executor.submit(self._serve_connection, connection)
+            future = self._executor.submit(
+                self._serve_connection, connection, connection_id
+            )
         except BaseException:
             connection.close()
             self._handler_slots.release()
@@ -549,59 +689,85 @@ class AuthenticatedUnixServer:
                 self._handlers_condition.wait(remaining)
         return True
 
-    def _serve_connection(self, connection) -> None:
-        deadline = time.monotonic() + self.deadline_s
-        with connection:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise IpcError("DEADLINE_EXCEEDED")
-            message = receive_frame(
-                connection,
-                deadline_s=remaining,
-                max_frame_bytes=self.max_frame_bytes,
-            )
-            try:
-                completed = threading.Event()
-                result = {}
-
-                def invoke():
-                    try:
-                        result["payload"] = self.authority.dispatch(message, self.handler)
-                    except BaseException as error:
-                        result["error"] = error
-                    finally:
-                        completed.set()
-
-                threading.Thread(target=invoke, daemon=True).start()
+    def _serve_connection(self, connection, connection_id=None) -> None:
+        message = None
+        try:
+            deadline = time.monotonic() + self.deadline_s
+            with connection:
                 remaining = deadline - time.monotonic()
-                if remaining <= 0 or not completed.wait(remaining):
-                    raise IpcError("HANDLER_DEADLINE_EXCEEDED")
-                if "error" in result:
-                    raise result["error"]
-                payload = result["payload"]
-                reply = _response(message, payload=payload)
-            except IpcError as error:
-                reply = _response(message, error=str(error))
-            except Exception as error:
-                reply = _response(message, error=f"HANDLER_REJECTED: {error}")
-            connection.settimeout(self.error_reply_timeout_s)
-            try:
-                connection.sendall(
-                    encode_frame(reply, max_frame_bytes=self.max_frame_bytes)
+                if remaining <= 0:
+                    raise IpcError("DEADLINE_EXCEEDED")
+                message = receive_frame(
+                    connection,
+                    deadline_s=remaining,
+                    max_frame_bytes=self.max_frame_bytes,
                 )
-            except (BrokenPipeError, ConnectionResetError):
-                # A Worker can disappear after its authenticated request was
-                # handled.  Its reply channel is request-local and must not
-                # take down the shared Broker/coordinator service loop.
-                return
+                if self.metrics is not None:
+                    self.metrics.connection_event(
+                        connection_id, "received", message
+                    )
+                try:
+                    completed = threading.Event()
+                    result = {}
+
+                    def invoke():
+                        try:
+                            result["payload"] = self.authority.dispatch(message, self.handler)
+                        except BaseException as error:
+                            result["error"] = error
+                        finally:
+                            completed.set()
+
+                    threading.Thread(target=invoke, daemon=True).start()
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not completed.wait(remaining):
+                        raise IpcError("HANDLER_DEADLINE_EXCEEDED")
+                    if "error" in result:
+                        raise result["error"]
+                    payload = result["payload"]
+                    reply = _response(message, payload=payload)
+                except IpcError as error:
+                    reply = _response(message, error=str(error))
+                except Exception as error:
+                    reply = _response(message, error=f"HANDLER_REJECTED: {error}")
+                frame = encode_frame(reply, max_frame_bytes=self.max_frame_bytes)
+                if self.metrics is not None:
+                    self.metrics.connection_event(
+                        connection_id, "serialized", message
+                    )
+                connection.settimeout(self.error_reply_timeout_s)
+                try:
+                    connection.sendall(frame)
+                    if self.metrics is not None:
+                        self.metrics.connection_event(
+                            connection_id, "sent", message
+                        )
+                except (BrokenPipeError, ConnectionResetError) as error:
+                    if self.metrics is not None:
+                        self.metrics.connection_event(
+                            connection_id, "send_failed", message, error
+                        )
+                    return
+        except BaseException as error:
+            if self.metrics is not None:
+                self.metrics.connection_event(
+                    connection_id, "transport_error", message, error
+                )
+            raise
+        finally:
+            if self.metrics is not None:
+                self.metrics.connection_closed(connection_id)
+
+    def stop_accept(self) -> None:
+        self._closed.set()
+        self._socket.close()
 
     def close(self) -> None:
-        self._closed.set()
+        self.stop_accept()
         try:
-            self._socket.close()
-        finally:
             if self._executor is not None:
                 self._executor.shutdown(wait=False)
+        finally:
             try:
                 os.unlink(self.path.name, dir_fd=self._parent_fd)
             except FileNotFoundError:
@@ -750,16 +916,19 @@ def _broker_response(response):
 class _CoordinatorBackedBrokerAuthority:
     """Authenticate every Worker request at the parent Coordinator boundary."""
 
-    def __init__(self, ipc_root, authority_call):
+    def __init__(self, ipc_root, authority_call, metrics=None):
         self.ipc_root = Path(ipc_root)
         self._authority_call = authority_call
         self._replays = {}
         self._lock = threading.RLock()
+        self._metrics = metrics
 
     def dispatch(self, message, mutation):
         if type(message) is not dict:
             raise IpcError("REQUEST_FIELDS")
         self._authority_call("authenticate_broker_message", {"message": message})
+        if self._metrics is not None:
+            self._metrics.authenticated(message)
         try:
             key = (
                 message["worker_id"],
@@ -776,6 +945,9 @@ class _CoordinatorBackedBrokerAuthority:
             digest,
             message,
             mutation,
+            observer=(
+                None if self._metrics is None else self._metrics.idempotency
+            ),
         )
 
 
@@ -804,6 +976,7 @@ class BrokerTransport:
             None if runtime_identity is None else canonical_json(runtime_identity)
         )
         self._ready_identity = None
+        self._metrics = _BrokerMetrics()
 
     @property
     def runtime_identity(self):
@@ -892,9 +1065,9 @@ class BrokerTransport:
             submission = service.submit(request, snapshot)
             response = submission.response
             if response is None and submission.accepted:
-                response = service.run_next()
-            if response is None:
-                response = service.poll_response(request)
+                response = service.wait_response(
+                    request, timeout_s=self.deadline_s
+                )
             if response is None:
                 raise IpcError("BROKER_RESPONSE_PENDING")
             return _broker_response(response)
@@ -910,15 +1083,25 @@ class BrokerTransport:
 
     def server(self, service, *, endpoint):
         authority = _CoordinatorBackedBrokerAuthority(
-            self.ipc_root, self._authority_call
+            self.ipc_root, self._authority_call, self._metrics
         )
+        set_metrics = getattr(service, "set_metrics", None)
+        if callable(set_metrics):
+            set_metrics(self._metrics)
         return AuthenticatedUnixServer(
             endpoint,
             authority,
             lambda message: self._handler(service, message),
             deadline_s=self.deadline_s,
             max_frame_bytes=self.max_frame_bytes,
+            max_concurrent_connections=(self.runtime_identity or {}).get(
+                "connection_handler_count", 1
+            ),
+            metrics=self._metrics,
         )
+
+    def metrics_snapshot(self):
+        return self._metrics.snapshot()
 
     def serve(self, runtime, *, endpoint):
         from so101_demo.runtime.parallel_perception_runtime import PerceptionService
@@ -937,7 +1120,17 @@ class BrokerTransport:
         try:
             server.serve_forever()
         finally:
+            server.stop_accept()
+            service_closed = service.close(timeout_s=self.deadline_s)
+            handlers_closed = server.wait_handlers(timeout_s=self.deadline_s)
             server.close()
+            print(canonical_json({
+                "schema_version": 1,
+                "kind": "broker_concurrency_summary",
+                **self.metrics_snapshot(),
+            }).decode("utf-8"), file=os.sys.stderr, flush=True)
+            if not service_closed or not handlers_closed:
+                raise IpcError("BROKER_SHUTDOWN_TIMEOUT")
 
 
 class _BrokerCoordinatorClient:

@@ -430,6 +430,7 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
         PerceptionService,
         YOLO_ID,
     )
+    from so101_demo.runtime.parallel_ipc import _BrokerMetrics
 
     f = fixture_runtime(tmp_path, monkeypatch)
     release = threading.Event()
@@ -476,6 +477,8 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
     )
     runtime = Runtime()
     service = PerceptionService(runtime, config, generation=1)
+    metrics = _BrokerMetrics()
+    service.set_metrics(metrics)
     service.start()
     requests = [
         replace(f.req, request_id=f'yolo-{index}', worker_id=f'y{index}')
@@ -508,6 +511,9 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
     assert all(response.outcome is ModelOutcome.NORMAL_REJECTION for response in responses)
     assert len(calls[YOLO_ID]) == 3
     assert len(calls[GROUNDED_ID]) == 2
+    summary = metrics.snapshot()
+    assert summary['queue_depth_peak'] > 1
+    assert summary['model_active_peak'] == {GROUNDED_ID: 1, YOLO_ID: 2}
     assert service.close(timeout_s=1.0) is True
 
 

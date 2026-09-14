@@ -270,6 +270,12 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         generation=1,
         authority_call=coordinator_authority,
         deadline_s=1.0,
+        runtime_identity={
+            "connection_handler_count": 8,
+            "yolo_executor_count": 2,
+            "grounded_sam_executor_count": 1,
+            "queue_capacity_per_model": 8,
+        },
     )
     inference = InferenceRequest(
         request_id="attempt-1-yolo",
@@ -323,6 +329,11 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
             return BrokerSubmission(True)
 
         def run_next(self):
+            raise AssertionError("transport must not run inference inline")
+
+        def wait_response(self, actual_request, timeout_s):
+            assert actual_request == inference
+            assert timeout_s == 1.0
             return response
 
         def poll_response(self, _request):
@@ -331,7 +342,8 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
     service = Service()
     socket_path = tmp_path / "ipc/perception.sock"
     server = transport.server(service, endpoint=socket_path)
-    thread = threading.Thread(target=server.serve_once)
+    assert server.max_concurrent_connections == 8
+    thread = threading.Thread(target=server.serve_forever)
     thread.start()
     message = request(
         kind="broker_call",
@@ -358,16 +370,28 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         },
     )
     reply = UnixRpcClient(socket_path, deadline_s=1.0).call(message)
-    thread.join(timeout=2.0)
+    replay = UnixRpcClient(socket_path, deadline_s=1.0).call(message)
     server.close()
+    assert server.wait_handlers(timeout_s=1.0) is True
+    thread.join(timeout=2.0)
 
     assert reply["payload"]["outcome"] == "QUALIFIED"
     assert reply["payload"]["candidate"] == {"candidate": "real-service-result"}
+    assert replay == reply
     assert [call[0] for call in authority_calls] == [
         "authenticate_broker_message",
         "authorize_inference",
+        "authenticate_broker_message",
     ]
     assert service.mutations == [(inference, snapshot)]
+    metrics = transport.metrics_snapshot()
+    assert metrics["logical_inference_count"] == 1
+    assert metrics["replay_count"] == 1
+    assert metrics["transport_errors"].get("TRUNCATED_FRAME", 0) == 0
+    assert {
+        "accepted", "received", "authenticated", "owner", "replay",
+        "serialized", "sent"
+    }.issubset({event["event"] for event in metrics["events"]})
 
     assert transport.report_health_down({
         "outcome": "INFERENCE_TIMEOUT",
@@ -509,6 +533,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
+        _BrokerMetrics,
         _CoordinatorBackedBrokerAuthority,
     )
 
@@ -517,6 +542,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     worker_authority.bind_lease("worker-01", 2, request()["lease"])
+    metrics = _BrokerMetrics()
     authority = _CoordinatorBackedBrokerAuthority(
         worker_authority.ipc_root,
         lambda operation, payload: (
@@ -524,6 +550,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
             if operation == "authenticate_broker_message"
             else None
         ),
+        metrics,
     )
     all_entered = threading.Barrier(8)
     active = 0
@@ -548,6 +575,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
         handler,
         deadline_s=2.0,
         max_concurrent_connections=8,
+        metrics=metrics,
     )
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.start()
@@ -558,6 +586,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
         message = request(
             request_id=f"request-{index}",
             idempotency_key=f"operation-{index}",
+            payload={"operation": "infer"},
         )
         try:
             replies.append(
@@ -582,6 +611,11 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
     assert sorted(reply["request_id"] for reply in replies) == [
         f"request-{index}" for index in range(8)
     ]
+    summary = metrics.snapshot()
+    assert summary["pending_rpc_peak"] == 8
+    assert summary["logical_inference_count"] == 8
+    assert summary["replay_count"] == 0
+    assert summary["transport_errors"].get("TRUNCATED_FRAME", 0) == 0
 
 
 def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
@@ -1124,8 +1158,19 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         def start(self):
             return True
 
+        def close(self, timeout_s):
+            assert timeout_s == 75.0
+            return True
+
     class Server:
         def serve_forever(self):
+            return True
+
+        def stop_accept(self):
+            return True
+
+        def wait_handlers(self, timeout_s):
+            assert timeout_s == 75.0
             return True
 
         def close(self):
