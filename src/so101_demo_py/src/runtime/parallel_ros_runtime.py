@@ -731,6 +731,7 @@ class ParallelRosRuntimePorts:
         "capture_numeric_evidence",
         "cancel_motion",
         "confirm_no_controller_goal",
+        "pause_physics",
         "resume_physics",
         "recovery",
         "close_runtime",
@@ -1715,6 +1716,19 @@ class ParallelRosRuntimePorts:
         from ..backends.mujoco.lifecycle import resume_physics
 
         return resume_physics(None)
+
+    def pause_physics(self, lease, reset_receipt):
+        call = self.dependencies.get("pause_physics")
+        if call is not None:
+            return call(lease, reset_receipt)
+        if (
+            reset_receipt.simulation_session_id != self.resources.session_id
+            or reset_receipt.reset_epoch_value is None
+        ):
+            return False
+        from ..backends.mujoco.lifecycle import pause_physics
+
+        return pause_physics(None)
 
     def recovery(self, worker_id, generation, deadline):
         call = self.dependencies.get("recovery")

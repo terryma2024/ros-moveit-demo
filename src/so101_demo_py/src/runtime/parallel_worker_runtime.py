@@ -670,6 +670,7 @@ class ParallelWorkerRuntime:
         | None = None,
         cancel_motion: Callable[[Any], bool] | None = None,
         confirm_no_controller_goal: Callable[[Any], bool] | None = None,
+        pause_physics: Callable[[Any, Any], bool] | None = None,
         resume_physics: Callable[[Any, Any], bool] | None = None,
         recovery: Callable[[str, int, float], bool] | None = None,
         replace_resources: Callable[..., WorkerResources] | None = None,
@@ -715,6 +716,7 @@ class ParallelWorkerRuntime:
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
         )
+        self._pause_physics = pause_physics or (lambda _lease, _reset: True)
         self._resume_physics = resume_physics or (lambda _lease, _reset: True)
         self._recovery = recovery or (lambda _worker, _generation, _deadline: True)
         self._replace_resources = replace_resources or _required("replace_resources")
@@ -726,6 +728,7 @@ class ParallelWorkerRuntime:
         self._used_session_ids = {resources.session_id}
         self._batch_id: str | None = None
         self._reset_boundaries: dict[tuple[object, ...], float] = {}
+        self._reset_receipts: dict[tuple[object, ...], Any] = {}
         self._numeric_receipts: dict[
             tuple[object, ...], NumericEvidenceReceipt
         ] = {}
@@ -735,6 +738,7 @@ class ParallelWorkerRuntime:
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
         self._execute_consumers: dict[tuple[object, ...], Any] = {}
+        self._paused_for_inference: set[tuple[object, ...]] = set()
         self._active_lease: Any | None = None
         self._stop_requested = threading.Event()
         self._revocation_receipt_lock = threading.Lock()
@@ -943,6 +947,7 @@ class ParallelWorkerRuntime:
         if self._reserve_workspace(lease, receipt) is not True:
             raise RuntimeError("point workspace was not durably reserved")
         self._reset_boundaries[key] = boundary
+        self._reset_receipts[key] = receipt
         return receipt
 
     def inference_snapshot(self, lease: Any) -> InferenceSnapshotReceipt:
@@ -1008,6 +1013,10 @@ class ParallelWorkerRuntime:
             )
         if reset_session is not None and inference.simulation_session_id != reset_session:
             raise RuntimeError("inference RGB simulation session mismatch")
+        if self.run_mode is RunMode.EXECUTE:
+            if self._pause_physics(lease, reset_receipt) is not True:
+                raise RuntimeError("inference snapshot could not freeze simulation")
+            self._paused_for_inference.add(key)
         return gate
 
     def reset_and_validate_point(self, lease: Any):
@@ -1145,7 +1154,12 @@ class ParallelWorkerRuntime:
         self._execution_allowed()
         if self.run_mode is not RunMode.EXECUTE:
             raise RuntimeError("expert execution requires execute")
+        key = self._lease_key(lease)
         if getattr(admitted, "perception_terminal", False) is True:
+            if key in self._paused_for_inference:
+                if self._resume_physics(lease, self._reset_receipts[key]) is not True:
+                    raise RuntimeError("inference hold could not resume simulation")
+                self._paused_for_inference.remove(key)
             status = (
                 AttemptStatus.FAILED
                 if getattr(admitted, "disposition", None) == "FAILED"
@@ -1159,7 +1173,6 @@ class ParallelWorkerRuntime:
         reset_epoch = getattr(admitted, "reset_epoch", None)
         if reset_epoch is None:
             raise RuntimeError("accepted pose lacks reset epoch")
-        key = self._lease_key(lease)
         if self._accepted_poses.get(key) is not admitted:
             raise RuntimeError("expert execution requires the admitted pose")
         if key in self._published_pose_keys:
@@ -1168,6 +1181,10 @@ class ParallelWorkerRuntime:
             child = self._execute_consumers[key]
         except KeyError as error:
             raise RuntimeError("execute consumer was not ready before inference") from error
+        if key in self._paused_for_inference:
+            if self._resume_physics(lease, self._reset_receipts[key]) is not True:
+                raise RuntimeError("inference hold could not resume simulation")
+            self._paused_for_inference.remove(key)
         if self._publish_pose(admitted) is False:
             raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
         self._published_pose_keys.add(key)

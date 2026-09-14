@@ -451,6 +451,7 @@ def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path)
         initial_gate=lambda _lease, receipt: receipt,
         capture_rgb=capture,
         consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+        pause_physics=lambda _lease, _reset: events.append(("pause",)) or True,
     )
     runtime.start_physical_runtime()
     events.clear()
@@ -463,6 +464,7 @@ def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path)
         ("start", "dynamic-consumer"),
         ("ready", "dynamic-consumer"),
         ("capture", "rgb.npy"),
+        ("pause",),
     ]
 
 
@@ -836,6 +838,8 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         admit_pose=lambda _lease, value: events.append(("admit",)) or admitted,
         publish_pose=lambda value: events.append(("publish", value)) or True,
         consumer_ready=lambda child: events.append(("ready", child.role)) or True,
+        pause_physics=lambda _lease, _reset: events.append(("pause",)) or True,
+        resume_physics=lambda _lease, _reset: events.append(("resume",)) or True,
         execute_result=lambda _lease, _admitted, _child: events.append(("await",))
         or ExecutionCompletionReceipt(
             RuntimeDecision(
@@ -859,6 +863,7 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
         ("localize",),
         ("numeric", 10.0),
         ("admit",),
+        ("resume",),
         ("publish", admitted),
         ("await",),
         ("capture", "terminal-rgb.png", 30.0),
