@@ -1032,6 +1032,10 @@ class ParallelWorkerRuntime:
             raise RuntimeError("point localization lacks a reset boundary") from error
         if key in self._accepted_poses:
             raise RuntimeError("point pose was already admitted")
+        if self.run_mode is RunMode.EXECUTE and key in self._paused_for_inference:
+            if self._resume_physics(lease, self._reset_receipts[key]) is not True:
+                raise RuntimeError("inference hold could not resume simulation")
+            self._paused_for_inference.remove(key)
         if getattr(broker_result, "perception_chain_complete", False) is True:
             if getattr(broker_result, "perception_terminal", False) is True:
                 return broker_result
@@ -1156,10 +1160,6 @@ class ParallelWorkerRuntime:
             raise RuntimeError("expert execution requires execute")
         key = self._lease_key(lease)
         if getattr(admitted, "perception_terminal", False) is True:
-            if key in self._paused_for_inference:
-                if self._resume_physics(lease, self._reset_receipts[key]) is not True:
-                    raise RuntimeError("inference hold could not resume simulation")
-                self._paused_for_inference.remove(key)
             status = (
                 AttemptStatus.FAILED
                 if getattr(admitted, "disposition", None) == "FAILED"
@@ -1181,10 +1181,6 @@ class ParallelWorkerRuntime:
             child = self._execute_consumers[key]
         except KeyError as error:
             raise RuntimeError("execute consumer was not ready before inference") from error
-        if key in self._paused_for_inference:
-            if self._resume_physics(lease, self._reset_receipts[key]) is not True:
-                raise RuntimeError("inference hold could not resume simulation")
-            self._paused_for_inference.remove(key)
         if self._publish_pose(admitted) is False:
             raise RuntimeError("POSE_ACCEPTED_PUBLICATION_FAILED")
         self._published_pose_keys.add(key)

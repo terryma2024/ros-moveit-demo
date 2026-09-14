@@ -855,15 +855,20 @@ def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Pat
     accepted = runtime.localize_and_admit_pose(lease, "broker-result")
 
     assert accepted is admitted
-    assert events == [("localize",), ("numeric", 10.0), ("admit",)]
+    assert events == [
+        ("resume",),
+        ("localize",),
+        ("numeric", 10.0),
+        ("admit",),
+    ]
     decision = runtime.execute_expert(lease, admitted)
 
     assert decision.status is AttemptStatus.PASSED
     assert events == [
+        ("resume",),
         ("localize",),
         ("numeric", 10.0),
         ("admit",),
-        ("resume",),
         ("publish", admitted),
         ("await",),
         ("capture", "terminal-rgb.png", 30.0),
