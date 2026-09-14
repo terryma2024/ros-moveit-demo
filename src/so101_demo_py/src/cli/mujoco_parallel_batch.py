@@ -3623,8 +3623,13 @@ def _run_with_shutdown_signals(call):
     if threading.current_thread() is not threading.main_thread():
         return call()
     previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)}
+    terminating = False
 
     def terminate(number, _frame):
+        nonlocal terminating
+        if terminating:
+            return
+        terminating = True
         raise CliError(f"SHUTDOWN_SIGNAL:{signal.Signals(number).name}")
 
     try:

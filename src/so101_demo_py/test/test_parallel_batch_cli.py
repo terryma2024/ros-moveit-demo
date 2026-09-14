@@ -82,6 +82,34 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
+def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch):
+    import signal
+
+    from so101_demo.cli.mujoco_parallel_batch import (
+        CliError,
+        _run_with_shutdown_signals,
+    )
+
+    handlers = {}
+
+    def install(number, handler):
+        previous = handlers.get(number, signal.SIG_DFL)
+        handlers[number] = handler
+        return previous
+
+    monkeypatch.setattr(signal, "signal", install)
+
+    def interrupted_call():
+        try:
+            handlers[signal.SIGTERM](signal.SIGTERM, None)
+        except CliError as error:
+            handlers[signal.SIGINT](signal.SIGINT, None)
+            raise error
+
+    with pytest.raises(CliError, match="SHUTDOWN_SIGNAL:SIGTERM"):
+        _run_with_shutdown_signals(interrupted_call)
+
+
 def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import _write_worker_results
     from so101_demo.parallel_batch.worker import WorkerRunResult
