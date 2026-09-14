@@ -1690,6 +1690,8 @@ def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: 
     command = runtime.consumer_argv("reset-17", _lease())
     index = command.index("--expected-reset-epoch")
     assert command[index + 1] == "17"
+    timeout_index = command.index("--cup-pose-timeout-s")
+    assert command[timeout_index + 1] == "240.0"
     lease = _lease()
     for flag, expected in {
         "--batch-id": lease.batch_id,

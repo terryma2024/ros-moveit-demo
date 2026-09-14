@@ -1884,6 +1884,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         )
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
+        runtime_kwargs["pose_receive_timeout_s"] = config.executing_hard_timeout_s
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources

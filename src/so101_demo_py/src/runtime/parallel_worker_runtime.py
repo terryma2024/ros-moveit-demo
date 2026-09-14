@@ -675,14 +675,23 @@ class ParallelWorkerRuntime:
         replace_resources: Callable[..., WorkerResources] | None = None,
         rebind_resources: Callable[[WorkerResources], bool] | None = None,
         close_runtime: Callable[[], None] | None = None,
+        pose_receive_timeout_s: float = 240.0,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(resources, WorkerResources):
             raise TypeError("WorkerResources are required")
         if run_mode not in (RunMode.PLAN_ONLY, RunMode.EXECUTE):
             raise ValueError("physical Worker runtime requires plan_only or execute")
+        if (
+            isinstance(pose_receive_timeout_s, bool)
+            or not isinstance(pose_receive_timeout_s, (int, float))
+            or not math.isfinite(pose_receive_timeout_s)
+            or pose_receive_timeout_s <= 0.0
+        ):
+            raise ValueError("pose receive timeout must be finite and positive")
         self.resources = resources
         self.run_mode = run_mode
+        self._pose_receive_timeout_s = float(pose_receive_timeout_s)
         self._processes = process_group or WorkerOwnedProcessTree(
             manifest_path=resources.worker_root / "owned-runtime-processes.json"
         )
@@ -1096,6 +1105,8 @@ class ParallelWorkerRuntime:
                 "--execute",
                 "--expected-reset-epoch",
                 str(self._reset_epoch_integer(reset_epoch)),
+                "--cup-pose-timeout-s",
+                str(self._pose_receive_timeout_s),
                 "--session-id",
                 self.resources.session_id,
                 "--batch-id",
