@@ -11,10 +11,12 @@ import stat
 import sys
 
 
-TASK_EVIDENCE_ROOT = Path(
-    "/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1"
+TASK_EVIDENCE_ROOTS = (
+    Path("/data/work/so101-evidence/parallel-multipoint-validation/20260912-v1"),
+    Path("/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"),
 )
-TARGETS = {"worker-01", "worker-02", "worker-03", "broker"}
+TASK_EVIDENCE_ROOT = TASK_EVIDENCE_ROOTS[0]
+TARGETS = {*(f"worker-{number:02d}" for number in range(1, 9)), "broker"}
 MANIFEST_FIELDS = {"schema_version", "batch_id", "processes"}
 PROCESS_FIELDS = {"batch_id", "role", "pid", "pgid", "cmdline", "start_time"}
 MAX_IDENTITY_DOCUMENT_BYTES = 1024 * 1024
@@ -194,18 +196,45 @@ def _validate_evidence_directory_chain(root: Path, task_root: Path):
     if (not stat.S_ISDIR(task_info.st_mode)
             or task_info.st_uid != os.getuid()):
         raise ValueError("EVIDENCE_TASK_ROOT_IDENTITY")
-    if root == task_root and stat.S_IMODE(task_info.st_mode) != 0o700:
+    if stat.S_IMODE(root.stat().st_mode) != 0o700:
         raise ValueError("EVIDENCE_ROOT_IDENTITY")
     shared_scratch = task_root / "scratch"
     current = root
     while current != task_root:
         info = current.lstat()
+        permissions = stat.S_IMODE(info.st_mode)
         if (not stat.S_ISDIR(info.st_mode)
                 or info.st_uid != os.getuid()
-                or (current != shared_scratch
-                    and stat.S_IMODE(info.st_mode) != 0o700)):
+                or (current != shared_scratch and permissions & 0o022)):
             raise ValueError("EVIDENCE_ROOT_IDENTITY")
         current = current.parent
+
+
+def _parse_arguments(argv):
+    if (not isinstance(argv, (list, tuple))
+            or any(not isinstance(value, str) or not value for value in argv)):
+        raise ValueError("ARGUMENT_VECTOR_INVALID")
+    if len(argv) == 3 and all(not value.startswith("--") for value in argv):
+        return tuple(argv)
+    if (
+        len(argv) == 6
+        and argv[0] == "--batch-root"
+        and argv[2] == "--worker-id"
+        and argv[4] == "--signal"
+    ):
+        return argv[1], argv[3], argv[5]
+    raise ValueError("ARGUMENT_VECTOR_INVALID")
+
+
+def _task_root_for(root: Path) -> Path:
+    for configured in TASK_EVIDENCE_ROOTS:
+        try:
+            task_root = _no_symlink_path(configured, directory=True)
+        except ValueError:
+            continue
+        if root == task_root or task_root in root.parents:
+            return task_root
+    raise ValueError("EVIDENCE_ROOT_OUT_OF_TASK")
 
 
 def _read_proc(pid: int):
@@ -257,17 +286,12 @@ def _validate_proc(expected, actual):
 
 def inject_fault(argv, *, proc_reader=None, signal_group=None):
     """Validate an owned target twice before delivering exactly SIGTERM."""
-    if (not isinstance(argv, (list, tuple)) or len(argv) != 3
-            or any(not isinstance(value, str) or not value for value in argv)):
-        raise ValueError("ARGUMENT_VECTOR_INVALID")
-    evidence_root, target, requested_signal = argv
+    evidence_root, target, requested_signal = _parse_arguments(argv)
     raw_root = Path(evidence_root)
     root = _no_symlink_path(raw_root, directory=True)
     root_info = root.stat()
     root_identity = (root_info.st_dev, root_info.st_ino, root_info.st_uid)
-    task_root = _no_symlink_path(TASK_EVIDENCE_ROOT, directory=True)
-    if root != task_root and task_root not in root.parents:
-        raise ValueError("EVIDENCE_ROOT_OUT_OF_TASK")
+    task_root = _task_root_for(root)
     _validate_evidence_directory_chain(root, task_root)
     if target not in TARGETS:
         raise ValueError("TARGET_NOT_ALLOWED")
