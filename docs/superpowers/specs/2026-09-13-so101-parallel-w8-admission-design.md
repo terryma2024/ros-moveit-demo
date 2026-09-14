@@ -2,7 +2,10 @@
 
 日期：2026-09-13
 
-状态：设计已确认，等待实施与 ai-station 现场验收。
+状态：已废弃。2026-09-14 起由
+`docs/superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md` 取代。本文保留为历史设计记录，
+不得继续据此实现 AdmissionAuthority、资源画像、Ed25519、cgroup 硬准入、分级 canary 或 W8
+原数恢复语义。
 
 关联文档：
 

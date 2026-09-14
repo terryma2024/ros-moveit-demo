@@ -1,5 +1,10 @@
 # SO-101 Parallel W8 Admission Implementation Plan
 
+> **Status:** Superseded on 2026-09-14 by
+> `docs/superpowers/plans/2026-09-14-so101-adaptive-worker-pool-implementation.md`.
+> Preserve this file for history; do not execute its Authority, signed profile, cgroup admission,
+> staged qualification, or canary tasks.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在当前 ai-station 上实现八个完整 MuJoCo MoveIt 专家 Worker 的冻结准入、同批次 `1 → 2 → 4 → 6 → 8` qualification、资源画像和 W8 正式 20 点回归。
