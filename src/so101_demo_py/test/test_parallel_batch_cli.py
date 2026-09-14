@@ -2534,6 +2534,7 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
+    from so101_demo.runtime.parallel_ipc import IpcError
 
     class Probe:
         def snapshot(self):
@@ -2584,7 +2585,21 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
     try:
         with pytest.raises(CliError, match="ACTIVE_LEASE_REQUIRED"):
             proxy.current_broker()
+        composition.adaptive_context = SimpleNamespace()
+        with pytest.raises(IpcError, match="STARTUP_BROKER_WORKER"):
+            proxy.startup_broker()
         proxy.register_worker("worker-01", generation=1)
+        composition.coordinator.mark_broker_health(True)
+        assert proxy.startup_broker() == {
+            "healthy": True,
+            "broker_generation": 1,
+            "broker_socket_path": str(root / "ipc/broker/perception.sock"),
+            "recovery_deadline_monotonic_s": None,
+        }
+        assert composition.coordinator.snapshot().workers[
+            "worker-01"
+        ].lease_count == 0
+        composition.adaptive_context = None
         from so101_demo.parallel_batch.worker import LeaseGrantPaused
 
         composition.coordinator.mark_broker_health(False)
@@ -2635,8 +2650,6 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
         )
         assert current["broker_socket_path"] != first["broker_socket_path"]
         from dataclasses import replace
-        from so101_demo.runtime.parallel_ipc import IpcError
-
         proxy._lease = replace(lease, attempt_id="stale-attempt")
         with pytest.raises(IpcError, match="STALE_LEASE"):
             proxy.current_broker()

@@ -1111,6 +1111,7 @@ def _lease_wire(lease):
 
 _RPC_PAYLOAD_FIELDS = {
     "current_broker": set(),
+    "startup_broker": set(),
     "register_worker": {"generation", "recovery_deadline_monotonic_s"},
     "grant_lease": {"generation"},
     "record_recovery": {
@@ -1359,10 +1360,8 @@ class _CoordinatorRpcProxy:
         )
         return _resource_from_dict(value)
 
-    def current_broker(self):
-        if self._lease is None:
-            raise CliError("BROKER_DISCOVERY_ACTIVE_LEASE_REQUIRED")
-        value = self._call("current_broker", lease=self._lease)
+    def _broker_state(self, operation, lease):
+        value = self._call(operation, lease=lease)
         fields = {
             "healthy", "broker_generation", "broker_socket_path",
             "recovery_deadline_monotonic_s",
@@ -1392,6 +1391,16 @@ class _CoordinatorRpcProxy:
         ):
             raise CliError("BROKER_AUTHORITY_SCHEMA")
         return value
+
+    def current_broker(self):
+        if self._lease is None:
+            raise CliError("BROKER_DISCOVERY_ACTIVE_LEASE_REQUIRED")
+        return self._broker_state("current_broker", self._lease)
+
+    def startup_broker(self):
+        if self._lease is not None:
+            raise CliError("STARTUP_BROKER_ACTIVE_LEASE")
+        return self._broker_state("startup_broker", None)
 
 
 class _WorkerControlProxy:
@@ -1663,10 +1672,14 @@ class _WorkerBrokerProxy:
         )
         return self._call(message)["cancelled"]
 
-    def _refresh_broker(self, *, wait_until_healthy):
+    def _refresh_broker(self, *, wait_until_healthy, startup=False):
         deadline = self._clock() + self.config.broker_recovery_timeout_s
         while True:
-            authority = self.coordinator.current_broker()
+            authority = (
+                self.coordinator.startup_broker()
+                if startup
+                else self.coordinator.current_broker()
+            )
             if authority["healthy"]:
                 generation = authority["broker_generation"]
                 if generation < self.broker_generation:
@@ -1984,7 +1997,8 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
                 broker_ready = True
             else:
                 broker_generation = worker._broker._refresh_broker(
-                    wait_until_healthy=False
+                    wait_until_healthy=False,
+                    startup=True,
                 )
                 broker_ready = broker_generation == document["broker_generation"]
             receipt = WorkerReadinessReceipt(
@@ -3097,9 +3111,22 @@ class ProductionBatchComposition:
                 return {"authorized": authorized}
             raise CliError("BROKER_AUTHORITY_OPERATION")
         _validate_rpc_payload(payload)
-        if operation == "current_broker":
-            self._broker_discovery_lease(message)
+        if operation in {"current_broker", "startup_broker"}:
             snapshot = self.coordinator.snapshot()
+            if operation == "startup_broker":
+                worker = snapshot.workers.get(worker_id)
+                if (
+                    self.adaptive_context is None
+                    or message["lease"] is not None
+                    or worker is None
+                    or worker.generation != generation
+                    or worker.lease is not None
+                    or worker.lease_count != 0
+                    or worker.stop_requested
+                ):
+                    raise CliError("STARTUP_BROKER_WORKER")
+            else:
+                self._broker_discovery_lease(message)
             if not snapshot.broker_healthy:
                 return {
                     "healthy": False,
