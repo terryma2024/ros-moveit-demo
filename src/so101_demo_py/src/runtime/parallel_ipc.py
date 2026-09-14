@@ -13,7 +13,8 @@ import stat
 import struct
 import threading
 import time
-from dataclasses import asdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass
 from typing import Callable, Mapping
 
 
@@ -53,6 +54,56 @@ _RESPONSE_FIELDS = {
 }
 _KINDS = {"coordinator_call", "broker_call", "worker_call"}
 _DEFAULT_MAX_FRAME = 8 * 1024 * 1024
+
+
+@dataclass
+class _ReplayEntry:
+    digest: str
+    completed: threading.Event
+    state: str = "PENDING"
+    payload: bytes | None = None
+    error: str | None = None
+
+
+def _dispatch_idempotently(replays, lock, key, digest, message, mutation):
+    with lock:
+        entry = replays.get(key)
+        if entry is None:
+            entry = _ReplayEntry(digest=digest, completed=threading.Event())
+            replays[key] = entry
+            owns_mutation = True
+        else:
+            if entry.digest != digest:
+                raise IpcError("IDEMPOTENCY_CONFLICT")
+            owns_mutation = False
+
+    if owns_mutation:
+        try:
+            payload = canonical_json(mutation(message))
+        except BaseException as error:
+            normalized = (
+                str(error)
+                if isinstance(error, IpcError)
+                else f"HANDLER_REJECTED: {error}"
+            )
+            with lock:
+                entry.error = normalized
+                entry.state = "FAILED"
+                entry.completed.set()
+            raise
+        with lock:
+            entry.payload = payload
+            entry.state = "DONE"
+            entry.completed.set()
+    else:
+        entry.completed.wait()
+
+    with lock:
+        if entry.state == "FAILED":
+            raise IpcError(entry.error or "HANDLER_REJECTED")
+        if entry.state != "DONE" or entry.payload is None:
+            raise IpcError("IDEMPOTENCY_STATE")
+        return _decode_payload(entry.payload)
 
 
 def _pairs(pairs):
@@ -196,7 +247,7 @@ class WorkerTokenAuthority:
         self._tokens: dict[tuple[str, int], bytes] = {}
         self._retired_tokens: dict[tuple[str, int], bytes] = {}
         self._leases: dict[tuple[str, int], dict] = {}
-        self._replays: dict[tuple[str, int, str], tuple[str, bytes]] = {}
+        self._replays: dict[tuple[str, int, str], _ReplayEntry] = {}
         self._lock = threading.RLock()
 
     def issue(self, worker_id: str, generation: int) -> Path:
@@ -324,7 +375,7 @@ class WorkerTokenAuthority:
                         (worker_id, generation, message["idempotency_key"])
                     )
                     digest = hashlib.sha256(canonical_json(message)).hexdigest()
-                    if replay is None or replay[0] != digest:
+                    if replay is None or replay.digest != digest:
                         raise IpcError("STALE_GENERATION")
                     return json.loads(canonical_json(message))
                 if any(candidate[0] == worker_id for candidate in self._tokens):
@@ -362,16 +413,14 @@ class WorkerTokenAuthority:
             authenticated["idempotency_key"],
         )
         digest = hashlib.sha256(canonical_json(authenticated)).hexdigest()
-        with self._lock:
-            prior = self._replays.get(key)
-            if prior is not None:
-                if prior[0] != digest:
-                    raise IpcError("IDEMPOTENCY_CONFLICT")
-                return _decode_payload(prior[1])
-            result = mutation(authenticated)
-            detached = canonical_json(result)
-            self._replays[key] = (digest, detached)
-            return _decode_payload(detached)
+        return _dispatch_idempotently(
+            self._replays,
+            self._lock,
+            key,
+            digest,
+            authenticated,
+            mutation,
+        )
 
 
 def _response(message: Mapping[str, object], *, payload=None, error=None) -> dict:
@@ -402,6 +451,7 @@ class AuthenticatedUnixServer:
         max_frame_bytes=_DEFAULT_MAX_FRAME,
         accept_poll_s=0.25,
         error_reply_timeout_s=1.0,
+        max_concurrent_connections=1,
     ):
         self.path = Path(path)
         if self.path.parent != authority.ipc_root:
@@ -414,6 +464,26 @@ class AuthenticatedUnixServer:
         self.max_frame_bytes = max_frame_bytes
         self.accept_poll_s = float(accept_poll_s)
         self.error_reply_timeout_s = float(error_reply_timeout_s)
+        self.max_concurrent_connections = _positive_int(
+            "MAX_CONCURRENT_CONNECTIONS", max_concurrent_connections
+        )
+        if self.max_concurrent_connections > 8:
+            raise IpcError("MAX_CONCURRENT_CONNECTIONS_LIMIT")
+        self._executor = (
+            None
+            if self.max_concurrent_connections == 1
+            else ThreadPoolExecutor(
+                max_workers=self.max_concurrent_connections,
+                thread_name_prefix="authenticated-unix",
+            )
+        )
+        self._handler_slots = (
+            None
+            if self._executor is None
+            else threading.BoundedSemaphore(self.max_concurrent_connections)
+        )
+        self._handlers = set()
+        self._handlers_condition = threading.Condition()
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._parent_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         self._address = f"/proc/self/fd/{self._parent_fd}/{self.path.name}"
@@ -431,12 +501,53 @@ class AuthenticatedUnixServer:
         self._closed = threading.Event()
 
     def serve_once(self) -> None:
+        if self._handler_slots is not None and not self._handler_slots.acquire(
+            timeout=self.accept_poll_s
+        ):
+            raise IpcError("HANDLER_POLL")
         self._socket.settimeout(self.accept_poll_s)
         try:
             connection, _ = self._socket.accept()
         except (TimeoutError, socket.timeout) as error:
+            if self._handler_slots is not None:
+                self._handler_slots.release()
             raise IpcError("ACCEPT_POLL") from error
-        self._serve_connection(connection)
+        except BaseException:
+            if self._handler_slots is not None:
+                self._handler_slots.release()
+            raise
+        if self._executor is None:
+            self._serve_connection(connection)
+            return
+        try:
+            future = self._executor.submit(self._serve_connection, connection)
+        except BaseException:
+            connection.close()
+            self._handler_slots.release()
+            raise
+        with self._handlers_condition:
+            self._handlers.add(future)
+        future.add_done_callback(self._handler_finished)
+
+    def _handler_finished(self, future) -> None:
+        try:
+            future.exception()
+        except BaseException:
+            pass
+        with self._handlers_condition:
+            self._handlers.discard(future)
+            self._handlers_condition.notify_all()
+        self._handler_slots.release()
+
+    def wait_handlers(self, timeout_s: float) -> bool:
+        deadline = time.monotonic() + float(timeout_s)
+        with self._handlers_condition:
+            while self._handlers:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._handlers_condition.wait(remaining)
+        return True
 
     def _serve_connection(self, connection) -> None:
         deadline = time.monotonic() + self.deadline_s
@@ -489,6 +600,8 @@ class AuthenticatedUnixServer:
         try:
             self._socket.close()
         finally:
+            if self._executor is not None:
+                self._executor.shutdown(wait=False)
             try:
                 os.unlink(self.path.name, dir_fd=self._parent_fd)
             except FileNotFoundError:
@@ -503,7 +616,9 @@ class AuthenticatedUnixServer:
             try:
                 self.serve_once()
             except IpcError as error:
-                if self._closed.is_set() or "ACCEPT_POLL" in str(error):
+                if self._closed.is_set() or any(
+                    marker in str(error) for marker in ("ACCEPT_POLL", "HANDLER_POLL")
+                ):
                     continue
             except OSError:
                 if not self._closed.is_set():
@@ -654,16 +769,14 @@ class _CoordinatorBackedBrokerAuthority:
         except KeyError as error:
             raise IpcError("REQUEST_FIELDS") from error
         digest = hashlib.sha256(canonical_json(message)).hexdigest()
-        with self._lock:
-            prior = self._replays.get(key)
-            if prior is not None:
-                if prior[0] != digest:
-                    raise IpcError("IDEMPOTENCY_CONFLICT")
-                return _decode_payload(prior[1])
-            result = mutation(message)
-            detached = canonical_json(result)
-            self._replays[key] = (digest, detached)
-            return _decode_payload(detached)
+        return _dispatch_idempotently(
+            self._replays,
+            self._lock,
+            key,
+            digest,
+            message,
+            mutation,
+        )
 
 
 class BrokerTransport:

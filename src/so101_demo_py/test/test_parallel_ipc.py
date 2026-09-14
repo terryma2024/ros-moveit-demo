@@ -504,6 +504,272 @@ def test_server_handler_timeout_returns_structured_error(tmp_path):
     assert not thread.is_alive()
 
 
+def test_server_eight_distinct_requests_enter_handlers_concurrently():
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+        _CoordinatorBackedBrokerAuthority,
+    )
+
+    root = Path(os.environ["TMPDIR"]) / "eight"
+    root.mkdir()
+    worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
+    worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    worker_authority.bind_lease("worker-01", 2, request()["lease"])
+    authority = _CoordinatorBackedBrokerAuthority(
+        worker_authority.ipc_root,
+        lambda operation, payload: (
+            worker_authority.authenticate(payload["message"])
+            if operation == "authenticate_broker_message"
+            else None
+        ),
+    )
+    all_entered = threading.Barrier(8)
+    active = 0
+    maximum_active = 0
+    active_lock = threading.Lock()
+
+    def handler(message):
+        nonlocal active, maximum_active
+        with active_lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        try:
+            all_entered.wait(timeout=1.0)
+            return {"request_id": message["request_id"]}
+        finally:
+            with active_lock:
+                active -= 1
+
+    server = AuthenticatedUnixServer(
+        root / "ipc/broker.sock",
+        authority,
+        handler,
+        deadline_s=2.0,
+        max_concurrent_connections=8,
+    )
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.start()
+    replies = []
+    errors = []
+
+    def call(index):
+        message = request(
+            request_id=f"request-{index}",
+            idempotency_key=f"operation-{index}",
+        )
+        try:
+            replies.append(
+                UnixRpcClient(server.path, deadline_s=3.0).call(message)["payload"]
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    clients = [threading.Thread(target=call, args=(index,)) for index in range(8)]
+    for client in clients:
+        client.start()
+    for client in clients:
+        client.join(timeout=4.0)
+    server.close()
+    assert server.wait_handlers(timeout_s=2.0) is True
+    server_thread.join(timeout=2.0)
+
+    assert not server_thread.is_alive()
+    assert all(not client.is_alive() for client in clients)
+    assert errors == []
+    assert maximum_active == 8
+    assert sorted(reply["request_id"] for reply in replies) == [
+        f"request-{index}" for index in range(8)
+    ]
+
+
+def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+        _CoordinatorBackedBrokerAuthority,
+    )
+
+    root = Path(os.environ["TMPDIR"]) / "pending"
+    root.mkdir()
+    worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
+    worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    worker_authority.bind_lease("worker-01", 2, request()["lease"])
+    authority = _CoordinatorBackedBrokerAuthority(
+        worker_authority.ipc_root,
+        lambda operation, payload: (
+            worker_authority.authenticate(payload["message"])
+            if operation == "authenticate_broker_message"
+            else None
+        ),
+    )
+    mutation_entered = threading.Event()
+    release_mutation = threading.Event()
+    mutation_calls = []
+
+    def handler(_message):
+        mutation_calls.append("called")
+        mutation_entered.set()
+        assert release_mutation.wait(timeout=1.0)
+        return {"value": [1, 2, 3]}
+
+    server = AuthenticatedUnixServer(
+        root / "ipc/broker.sock",
+        authority,
+        handler,
+        deadline_s=2.0,
+        max_concurrent_connections=2,
+    )
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.start()
+    replies = []
+    errors = []
+
+    def call():
+        try:
+            replies.append(
+                UnixRpcClient(server.path, deadline_s=3.0).call(request())["payload"]
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    clients = [threading.Thread(target=call) for _ in range(2)]
+    for client in clients:
+        client.start()
+    assert mutation_entered.wait(timeout=1.0)
+    time.sleep(0.05)
+    assert mutation_calls == ["called"]
+    release_mutation.set()
+    for client in clients:
+        client.join(timeout=3.0)
+    server.close()
+    assert server.wait_handlers(timeout_s=2.0) is True
+    server_thread.join(timeout=2.0)
+
+    assert errors == []
+    assert mutation_calls == ["called"]
+    assert replies == [{"value": [1, 2, 3]}, {"value": [1, 2, 3]}]
+    replies[0]["value"].append(4)
+    assert replies[1] == {"value": [1, 2, 3]}
+
+
+def test_pending_mutation_failure_is_published_before_waiters_wake():
+    from so101_demo.runtime.parallel_ipc import (
+        IpcError,
+        WorkerTokenAuthority,
+        _CoordinatorBackedBrokerAuthority,
+    )
+
+    root = Path(os.environ["TMPDIR"]) / "failed"
+    root.mkdir()
+    worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
+    worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    worker_authority.bind_lease("worker-01", 2, request()["lease"])
+    authority = _CoordinatorBackedBrokerAuthority(
+        worker_authority.ipc_root,
+        lambda _operation, payload: worker_authority.authenticate(payload["message"]),
+    )
+    mutation_entered = threading.Event()
+    release_mutation = threading.Event()
+    calls = []
+    errors = []
+
+    def mutation(_message):
+        calls.append("called")
+        mutation_entered.set()
+        assert release_mutation.wait(timeout=1.0)
+        raise IpcError("EXPECTED_FAILURE")
+
+    def dispatch():
+        try:
+            authority.dispatch(request(), mutation)
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=dispatch) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    assert mutation_entered.wait(timeout=1.0)
+    time.sleep(0.05)
+    assert calls == ["called"]
+    release_mutation.set()
+    for thread in threads:
+        thread.join(timeout=2.0)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert calls == ["called"]
+    assert len(errors) == 2
+    assert all(isinstance(error, IpcError) for error in errors)
+    assert [str(error) for error in errors] == ["EXPECTED_FAILURE"] * 2
+    with pytest.raises(IpcError, match="EXPECTED_FAILURE"):
+        authority.dispatch(request(), lambda _message: calls.append("double"))
+    assert calls == ["called"]
+
+
+def test_default_server_remains_serial():
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+    )
+
+    root = Path(os.environ["TMPDIR"]) / "serial"
+    root.mkdir()
+    authority = WorkerTokenAuthority(root, coordinator_epoch=7)
+    authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    authority.bind_lease("worker-01", 2, request()["lease"])
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    entered = []
+
+    def handler(message):
+        entered.append(message["request_id"])
+        if message["request_id"] == "request-1":
+            first_entered.set()
+            assert release_first.wait(timeout=1.0)
+        return {"request_id": message["request_id"]}
+
+    server = AuthenticatedUnixServer(
+        root / "ipc/coordinator.sock",
+        authority,
+        handler,
+        deadline_s=2.0,
+    )
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.start()
+    errors = []
+
+    def call(message):
+        try:
+            UnixRpcClient(server.path, deadline_s=3.0).call(message)
+        except BaseException as error:
+            errors.append(error)
+
+    first = threading.Thread(target=call, args=(request(),))
+    second = threading.Thread(
+        target=call,
+        args=(
+            request(request_id="request-2", idempotency_key="operation-2"),
+        ),
+    )
+    first.start()
+    assert first_entered.wait(timeout=1.0)
+    second.start()
+    time.sleep(0.05)
+    assert entered == ["request-1"]
+    release_first.set()
+    first.join(timeout=3.0)
+    second.join(timeout=3.0)
+    server.close()
+    assert server.wait_handlers(timeout_s=1.0) is True
+    server_thread.join(timeout=2.0)
+
+    assert errors == []
+    assert entered == ["request-1", "request-2"]
+
+
 def test_client_rejects_wrong_response_schema_and_union(tmp_path):
     from so101_demo.runtime.parallel_ipc import IpcError, UnixRpcClient, encode_frame
 
