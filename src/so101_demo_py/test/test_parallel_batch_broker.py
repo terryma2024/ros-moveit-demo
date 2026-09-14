@@ -32,14 +32,21 @@ def model_result(outcome=ModelOutcome.NORMAL_REJECTION):
     return ModelResult(outcome, {'mask': [1, 2]} if outcome == ModelOutcome.QUALIFIED else None)
 
 
-def harness(*, ready=True, detectors=None, authorize=None):
+def harness(
+    *, ready=True, detectors=None, authorize=None, queue_capacity_per_model=None
+):
     from so101_demo.parallel_batch.broker import PerceptionBroker
     control = SimpleNamespace(now=100.0, authorized=True)
     config = load_parallel_runtime_config(
         Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    capacity_kwargs = (
+        {} if queue_capacity_per_model is None
+        else {'queue_capacity_per_model': queue_capacity_per_model}
+    )
     broker = PerceptionBroker(config, grounded_model_id=GROUNDED,
                               authorize=authorize or (lambda r: control.authorized),
-                              clock=lambda: control.now, detectors=detectors)
+                              clock=lambda: control.now, detectors=detectors,
+                              **capacity_kwargs)
     if ready:
         broker.set_model_ready(YOLO, True)
         broker.set_model_ready(GROUNDED, True)
@@ -108,6 +115,36 @@ def test_queue_capacity_is_three_per_model_six_total_without_eviction():
         observed.append(request)
         broker.complete(request, model_result())
     assert set(observed) == set(queued)
+
+
+def test_adaptive_broker_accepts_eight_workers_and_rejects_the_ninth():
+    broker, _ = harness(queue_capacity_per_model=8)
+
+    accepted = [
+        enqueue(
+            broker,
+            req(f'worker-{index:02d}', f'adaptive-{index}'),
+        )
+        for index in range(1, 9)
+    ]
+    rejected = broker.submit(req('worker-09', 'adaptive-9'))
+
+    assert rejected.accepted is False
+    assert rejected.reason == 'QUEUE_FULL'
+    observed = []
+    for request in accepted:
+        assert broker.next_ready_request() == request
+        observed.append(request.worker_id)
+        broker.complete(request, model_result())
+    assert observed == [f'worker-{index:02d}' for index in range(1, 9)]
+
+
+@pytest.mark.parametrize('capacity', [True, 0, 9])
+def test_adaptive_broker_rejects_invalid_capacity_override(capacity):
+    from so101_demo.parallel_batch.broker import BrokerError
+
+    with pytest.raises(BrokerError, match='QUEUE_CAPACITY'):
+        harness(queue_capacity_per_model=capacity)
 
 
 def test_duplicate_submit_does_not_reset_queue_deadline():

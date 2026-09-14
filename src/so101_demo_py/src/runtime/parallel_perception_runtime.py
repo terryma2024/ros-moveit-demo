@@ -327,6 +327,7 @@ class PerceptionService:
     def __init__(
         self, runtime, config, *, generation, clock=None,
         health_down=lambda _event: True,
+        queue_capacity_per_model=None,
     ):
         self.runtime = runtime
         self._snapshots = {}
@@ -338,6 +339,7 @@ class PerceptionService:
         self.broker = PerceptionBroker(
             config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
             generation=generation, detectors={model: self._detect for model in (YOLO_ID, GROUNDED_ID)},
+            queue_capacity_per_model=queue_capacity_per_model,
             **kwargs)
         runtime.health_changed = self._health_changed
 

@@ -334,8 +334,16 @@ def main(argv=None, *, transport=None, authorize=None):
             "grounded_manifest_sha256", "config_path", "authority_endpoint",
             "authority_token_path", "request_deadline_s", "max_frame_bytes",
         }
-        if type(spec) is not dict or set(spec) != required:
+        if type(spec) is not dict or set(spec) not in (
+            required,
+            required | {"queue_capacity_per_model"},
+        ):
             raise ValueError("BROKER_RUNTIME_SPEC_SCHEMA")
+        capacity = spec.get("queue_capacity_per_model")
+        if capacity is not None and (
+            type(capacity) is not int or not 1 <= capacity <= 8
+        ):
+            raise ValueError("BROKER_RUNTIME_QUEUE_CAPACITY")
         model_receipt = json.loads(model_ready_path.read_text(encoding="utf-8"))
         if model_receipt.get("ready") is not True or set(runtime.detectors) != {
             YOLO_ID, "grounded-sam"

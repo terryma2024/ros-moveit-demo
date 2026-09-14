@@ -776,6 +776,40 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
             },
         )
     ]
+    adaptive_document = {**document, "queue_capacity_per_model": 8}
+    spec.write_text(
+        json.dumps(adaptive_document, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    adaptive_transport = parallel_ipc.build_broker_transport(spec)
+    assert adaptive_transport.runtime_identity == adaptive_document
+
+    service_calls = []
+    from so101_demo.runtime import parallel_perception_runtime
+
+    class Service:
+        def __init__(self, _runtime, _config, **kwargs):
+            service_calls.append(kwargs)
+
+        def start(self):
+            return True
+
+    class Server:
+        def serve_forever(self):
+            return True
+
+        def close(self):
+            return True
+
+    monkeypatch.setattr(parallel_perception_runtime, "PerceptionService", Service)
+    monkeypatch.setattr(
+        adaptive_transport,
+        "server",
+        lambda _service, *, endpoint: Server(),
+    )
+    adaptive_transport.serve(object(), endpoint=ipc_root / "perception.sock")
+    assert service_calls[0]["queue_capacity_per_model"] == 8
+
     from so101_demo.runtime.parallel_ipc import IpcError
     invalid_documents = [
         {**document, "extra": True},
@@ -783,6 +817,8 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         {**document, "broker_generation": "1"},
         {**document, "run_mode": "dry_run"},
         {**document, "image_id": "sha256:" + "z" * 64},
+        {**document, "queue_capacity_per_model": True},
+        {**document, "queue_capacity_per_model": 9},
     ]
     for invalid in invalid_documents:
         spec.write_text(

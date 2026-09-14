@@ -803,6 +803,9 @@ class BrokerTransport:
             self.config,
             generation=self.generation,
             health_down=self.report_health_down,
+            queue_capacity_per_model=(self.runtime_identity or {}).get(
+                "queue_capacity_per_model"
+            ),
         )
         service.start()
         server = self.server(service, endpoint=endpoint)
@@ -910,7 +913,7 @@ def build_broker_transport(runtime_spec):
         "max_frame_bytes",
     }
     if (
-        set(document) != fields
+        set(document) not in (fields, fields | {"queue_capacity_per_model"})
         or type(document["schema_version"]) is not int
         or document["schema_version"] != 1
         or document["kind"] != "so101_parallel_broker_runtime"
@@ -919,6 +922,12 @@ def build_broker_transport(runtime_spec):
     _identifier("BATCH_ID", document["batch_id"])
     _positive_int("EPOCH", document["coordinator_epoch"])
     generation = _positive_int("BROKER_GENERATION", document["broker_generation"])
+    if "queue_capacity_per_model" in document:
+        capacity = _positive_int(
+            "QUEUE_CAPACITY", document["queue_capacity_per_model"]
+        )
+        if capacity > 8:
+            raise IpcError("BROKER_QUEUE_CAPACITY")
     if document["run_mode"] not in {"plan_only", "execute"}:
         raise IpcError("BROKER_RUN_MODE")
     if (

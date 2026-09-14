@@ -2446,25 +2446,27 @@ class ProductionBatchComposition:
         config_copy = runtime_root / "runtime-config.yaml"
         _write_bytes(config_copy, self.spec.config_path.read_bytes())
         spec_path = runtime_root / "broker-spec.json"
-        _write_json(
-            spec_path,
-            {
-                "schema_version": 1,
-                "kind": "so101_parallel_broker_runtime",
-                "batch_id": self.spec.request.batch_id,
-                "coordinator_epoch": self.journal.coordinator_epoch,
-                "broker_generation": generation,
-                "run_mode": self.spec.request.run_mode.value,
-                "image_id": self.spec.provenance.get("image_id"),
-                "yolo_weights_sha256": self.spec.yolo_weights_sha256,
-                "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
-                "config_path": "/runtime/runtime-config.yaml",
-                "authority_endpoint": f"/runtime/{authority_name}",
-                "authority_token_path": f"/runtime/{token_path.name}",
-                "request_deadline_s": self.spec.config.heartbeat_timeout_s,
-                "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
-            },
-        )
+        broker_document = {
+            "schema_version": 1,
+            "kind": "so101_parallel_broker_runtime",
+            "batch_id": self.spec.request.batch_id,
+            "coordinator_epoch": self.journal.coordinator_epoch,
+            "broker_generation": generation,
+            "run_mode": self.spec.request.run_mode.value,
+            "image_id": self.spec.provenance.get("image_id"),
+            "yolo_weights_sha256": self.spec.yolo_weights_sha256,
+            "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
+            "config_path": "/runtime/runtime-config.yaml",
+            "authority_endpoint": f"/runtime/{authority_name}",
+            "authority_token_path": f"/runtime/{token_path.name}",
+            "request_deadline_s": self.spec.config.heartbeat_timeout_s,
+            "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
+        }
+        if self.adaptive_context is not None:
+            broker_document["queue_capacity_per_model"] = (
+                self.adaptive_context.request.worker_count
+            )
+        _write_json(spec_path, broker_document)
         self.broker_generation = generation
         self.broker_runtime_root = runtime_root
         self.broker_socket_path = runtime_root / "perception.sock"

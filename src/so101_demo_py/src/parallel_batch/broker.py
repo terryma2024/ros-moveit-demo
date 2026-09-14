@@ -78,8 +78,11 @@ class _Entry:
 class PerceptionBroker:
     """Linearize admission, dispatch, completion and permanent fencing."""
 
-    def __init__(self, config, *, grounded_model_id, authorize, clock=time.monotonic, generation=1,
-                 detectors=None, fault_hook=None):
+    def __init__(
+        self, config, *, grounded_model_id, authorize, clock=time.monotonic,
+        generation=1, detectors=None, fault_hook=None,
+        queue_capacity_per_model=None,
+    ):
         """Bind the frozen model limits and injected host authorization ports."""
         if type(config) is not ParallelRuntimeConfig:
             raise BrokerError('RUNTIME_CONFIG_REQUIRED')
@@ -96,7 +99,15 @@ class PerceptionBroker:
             config.yolo_queue_timeout_s, config.grounded_sam_queue_timeout_s)))
         self._inference_timeout = dict(zip(self._models, (
             config.yolo_inference_timeout_s, config.grounded_sam_inference_timeout_s)))
-        self._capacity = config.broker_queue_capacity_per_model
+        if queue_capacity_per_model is None:
+            self._capacity = config.broker_queue_capacity_per_model
+        elif (
+            type(queue_capacity_per_model) is not int
+            or not 1 <= queue_capacity_per_model <= 8
+        ):
+            raise BrokerError('QUEUE_CAPACITY_PER_MODEL')
+        else:
+            self._capacity = queue_capacity_per_model
         self._total_capacity = self._capacity * len(self._models)
         self._detectors = dict(detectors or {})
         if any(model not in self._models or not callable(detector)

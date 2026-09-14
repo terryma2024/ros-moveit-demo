@@ -1,6 +1,7 @@
 """Safety contracts for adaptive pool startup readiness."""
 
 from dataclasses import replace
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -409,3 +410,51 @@ def test_adaptive_socket_paths_freeze_the_107_byte_boundary():
     assert len(str(root / "ipc/broker/authority.sock").encode()) == 106
     assert max(len(str(path).encode()) for path in paths) == 107
     assert all("broker-authority.sock" not in str(path) for path in paths)
+
+
+def test_adaptive_broker_spec_carries_current_pool_capacity(tmp_path, monkeypatch):
+    from so101_demo.cli import mujoco_parallel_batch as cli
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+
+    config_path = (
+        Path(__file__).resolve().parents[1]
+        / "config/mujoco/parallel_batch_v1.yaml"
+    )
+    config = load_parallel_runtime_config(config_path)
+    owner = object.__new__(cli.ProductionBatchComposition)
+    ipc_root = tmp_path / "ipc"
+    ipc_root.mkdir()
+    owner.authority = SimpleNamespace(ipc_root=ipc_root)
+    owner.broker_authority_server = None
+    owner._broker_authority_thread = None
+    owner.broker_generation = 0
+    owner.adaptive_context = SimpleNamespace(
+        request=SimpleNamespace(worker_count=8)
+    )
+    owner.journal = SimpleNamespace(coordinator_epoch=3)
+    owner.spec = SimpleNamespace(
+        request=SimpleNamespace(
+            batch_id="abcde-g01-w08",
+            evidence_root=tmp_path,
+            run_mode=RunMode.PLAN_ONLY,
+        ),
+        config=config,
+        config_path=config_path,
+        provenance={"image_id": "sha256:" + "b" * 64},
+        yolo_weights_sha256=config.yolo_weights_sha256,
+        grounded_manifest_sha256=config.grounded_sam_manifest_sha256,
+    )
+    owner._coordinator_handler = lambda _message: None
+
+    class Server:
+        def __init__(self, path, *_args, **_kwargs):
+            self.path = path
+
+    monkeypatch.setattr(cli, "AuthenticatedUnixServer", Server)
+
+    owner._prepare_broker_generation(1)
+
+    document = json.loads(owner.broker_spec_path.read_text(encoding="utf-8"))
+    assert document["queue_capacity_per_model"] == 8
+    assert document["authority_endpoint"] == "/runtime/authority.sock"
+    assert owner.broker_authority_server.path.name == "authority.sock"

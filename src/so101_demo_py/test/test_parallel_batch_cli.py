@@ -610,6 +610,7 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     assert broker_spec["broker_generation"] == 1
     assert broker_spec["coordinator_epoch"] == composition.journal.coordinator_epoch
     assert broker_spec["authority_endpoint"] == "/runtime/broker-authority.sock"
+    assert "queue_capacity_per_model" not in broker_spec
     assert broker_spec["config_path"] == "/runtime/runtime-config.yaml"
     assert broker_spec["authority_token_path"] == "/runtime/broker-g1.token"
     worker_spec = json.loads(composition.worker_specs[0].read_text())
