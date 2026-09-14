@@ -7,7 +7,7 @@ success_contract: Complete all 13 implementation tasks, automated gates, two liv
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 467065a0f55e4fad9eea68741598fce0c8c14386
+current_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -21,13 +21,14 @@ confirmed_conclusions:
   - Task 6 production Workers and the adaptive production factory passed 265 split tests; commit b983d521f.
   - Task 7 per-model adaptive perception queues passed 367 Broker, runtime, IPC, and spec tests; commit a50aae938.
   - Task 8 first-failure convergence, verified persistent-claim release, exact external cleanup, adaptive aggregate output, and wrapper supervision passed the focused and specified regression gates; evidence is in task-08/failure-and-cleanup.md.
+  - Task 10 exact startup and active-attempt fault injections each produced one W8-to-W6 transition, preserved task-external sentinels, completed every assigned point, and reported complete cleanup; accepted runs su09 and mr08.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
 open_hypotheses:
   - the lightweight contracts and factory boundary can extend W1-W8 while preserving frozen v1 W1-W3 behavior and serialized bytes.
   - exact cleanup and persistent Domain markers are sufficient for safe fallback without broad process discovery.
-latest_checkpoint: CP-002
-next_experiment: EXP-002A
+latest_checkpoint: CP-003
+next_experiment: EXP-003
 ```
 
 ## Evidence policy
@@ -137,4 +138,111 @@ open_risks:
   - live Docker, CUDA, MuJoCo, MoveIt, model, and GUI readiness are not yet proven.
   - direct console commands require the installed package libexec directory on PATH.
 next_command: implement and RED/GREEN test exact adaptive Worker fault injection
+```
+
+## EXP-002A — Startup fault before readiness
+
+```yaml
+experiment_id: EXP-002A
+status: VALID
+prior_experiment: EXP-001
+hypothesis: Terminating one registered W8 Worker before POOL_RUNNING and before any lease is granted will make the runner clean W8 and continue at W6 without affecting processes outside the batch manifest.
+prediction: W8 grants zero leases, one 8-to-6 fallback occurs, W6 reaches readiness and completes all four points, cleanup succeeds, and both task-owned side sentinels survive.
+single_variable: Send SIGTERM to the exact registered W8 Worker identity before POOL_RUNNING and LEASE_GRANTED.
+lifecycle: ISOLATED_STACK
+batch_id: su09
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/su09
+provenance:
+  source_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
+  broker_image_id: sha256:3b1a6661a87359729b848cb92807c0e45f618ae2dec0e20a1f534e51f6148a79
+  broker_source_sha256: 286b5d9f4e994e897c1c01bb75c79d399dbbeaba573a7779424e4a498146a37e
+  runtime_executable: /usr/bin/python3
+  initial_worker_count: 8
+  fallback_worker_counts: [6, 4, 2, 1]
+observed:
+  - The injector selected worker01 with PID and PGID 3911563 and start ticks 118345028 before POOL_RUNNING and before any lease was granted.
+  - W8 granted zero leases. The only transition was W8 to W6 after the injected Worker exited with signal 15.
+  - W6 completed task_start, cup_test_forward_5cm, sample_05_near_center, and sample_14_far_right as PASSED.
+  - The batch finished COMPLETED in 179.47665203316137 seconds with levels_used [8, 6], final_worker_count 6, and batch_cleanup_complete true.
+  - Domains 215 through 220 were released, and no owned process remained in either generation manifest.
+  - The recorded sleep and ROS Domain 230 sentinels retained their original PID, PGID, session, and start-tick identities after the batch.
+invalid_runs:
+  - su01 through su08 were retained as diagnostic or invalid attempts and were not used for acceptance.
+conclusion: Exact failure of a registered Worker before readiness causes one clean startup fallback from W8 to W6. No task-external process was removed.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/su09
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-10/exp002a-r9-injection.txt
+decision: Accept EXP-002A and run the active-attempt fault experiment.
+next_experiment: EXP-002B
+```
+
+## EXP-002B — Active attempt fault after committed work
+
+```yaml
+experiment_id: EXP-002B
+status: VALID
+prior_experiment: EXP-002A
+hypothesis: Terminating the Worker for one active attempt after W8 has committed work will preserve terminal results, mark unfinished work as infrastructure interrupted, and let W6 process only unfinished points.
+prediction: The injected attempt receives POINT_INFRA_INTERRUPTED, previously committed points are not rerun, one 8-to-6 fallback occurs, W6 passes the interrupted and remaining points through the initial gate, all 20 points pass, cleanup succeeds, and both side sentinels survive.
+single_variable: Send SIGTERM to the exact Worker identity of one active second-wave attempt after eight W8 results are committed.
+lifecycle: ISOLATED_STACK
+batch_id: mr08
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/mr08
+provenance:
+  source_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
+  broker_image_id: sha256:3b1a6661a87359729b848cb92807c0e45f618ae2dec0e20a1f534e51f6148a79
+  broker_source_sha256: 286b5d9f4e994e897c1c01bb75c79d399dbbeaba573a7779424e4a498146a37e
+  runtime_executable: /usr/bin/python3
+  initial_worker_count: 8
+  fallback_worker_counts: [6, 4, 2, 1]
+observed:
+  - Before injection, W8 had committed exactly eight first-wave points: sample_01_near_left, sample_04_near_left, cup_test_left_5cm, task_start, sample_02_near_center, cup_test_right_5cm, sample_03_near_right, and cup_test_forward_5cm.
+  - The injector selected worker05 for sample_05_near_center lease 1 with PID and PGID 30934 and start ticks 118883715 while that second-wave attempt was active.
+  - The top journal records POINT_INFRA_INTERRUPTED for sample_05_near_center and every other unfinished point. None of the eight terminal W8 points received another business attempt.
+  - W6 admitted sample_05_near_center through a new POINT_INITIAL_GATE with all checks true and later committed it PASSED. W6 committed exactly the interrupted point and the other 11 points that were unfinished at injection.
+  - The batch finished COMPLETED in 439.67304879799485 seconds with 20 PASSED points, levels_used [8, 6], one W8-to-W6 transition, final_worker_count 6, and batch_cleanup_complete true.
+  - Domains 215 through 220 were released, both generation manifests had no owned process, and no broker container remained.
+  - Both recorded side sentinels survived this batch. Their exact process groups were stopped only after identity revalidation, and the dedicated sentinel tmux session was then absent.
+invalid_runs:
+  - mr01 through mr05 exposed production race and clock defects and were retained as diagnostic evidence.
+  - mr06 completed all 20 points but used levels [8, 6, 4], so it was retained as recovery evidence rather than acceptance for the predicted single transition.
+  - mr07 failed naturally before injection because a publisher clock became stale. The task-owned runner and watcher were stopped, cleanup completed, and the run was retained as invalid.
+fixes_from_diagnostic_runs:
+  - f10106bd2, 53a404f99, c128ebbaa, a5fc810ff, 35a9ac8bd, 70598fe26, e5001ade4, be4c08a11, e33e59537, 47dd44445, a6421af8e, 7169a68ce, and 3d35cb017.
+conclusion: An exact active-attempt Worker failure preserves committed results and moves only unfinished work to W6. All 20 points passed, cleanup was exact, and the sentinels were unaffected.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/r/mr08
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-10/exp002b-r8-injection.txt
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/task-10/sentinels-04/cleanup-readback.txt
+decision: Accept EXP-002B and proceed to the uninjected 20-point adaptive regression.
+next_experiment: EXP-003
+```
+
+## CP-003 — Fault-injection acceptance
+
+```yaml
+checkpoint_id: CP-003
+last_valid_experiment: EXP-002B
+current_hypothesis: The same qualified W8-to-W1 ladder can complete the 20-point catalog without injection and with every point passing its fresh initial-state gate.
+working_tree_status: clean at 3d35cb017caddcb7ffecc667f031fde25a162903 before this ledger update
+source_commit: 3d35cb017caddcb7ffecc667f031fde25a162903
+accepted_batches: [su09, mr08]
+owned_processes: current Codex session only; accepted batch manifests are empty and the dedicated sentinel process groups were stopped after exact identity checks
+preserved_processes: pre-existing process groups 3835752, 3835753, 3882463, and 3882464; tmux sessions codex and codex-task-so101-adaptive-worker-pool
+confirmed_conclusions:
+  - startup Worker loss before readiness grants no W8 lease and falls back once to W6.
+  - active-attempt Worker loss preserves eight W8 terminal results and sends only unfinished work to W6.
+  - both accepted batches released their Domains, sockets, broker container, and manifest-owned processes.
+  - exact task-external sentinel identities survived both fault injections.
+retained_runs:
+  - accepted: r/su09 and r/mr08
+  - diagnostic_or_invalid: r/su01 through r/su08 and r/mr01 through r/mr07
+archived_runs: []
+deletion_candidates:
+  - all scratch trees under scratch/r31 through scratch/r39 after their recorded readback
+  - no candidate may be deleted without explicit user authorization
+open_risks:
+  - uninjected 20-point execution and visual readback have not yet been qualified.
+  - W1, W2, W4, W6, and W8 no-fallback performance samples have not yet been collected.
+next_command: run EXP-003 as batch e2001 with initial-points-per-worker 3
 ```
