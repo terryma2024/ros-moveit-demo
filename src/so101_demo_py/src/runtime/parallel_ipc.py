@@ -392,7 +392,17 @@ def _response(message: Mapping[str, object], *, payload=None, error=None) -> dic
 class AuthenticatedUnixServer:
     """One strict request/response endpoint; callers control its service loop."""
 
-    def __init__(self, path, authority, handler, *, deadline_s=5.0, max_frame_bytes=_DEFAULT_MAX_FRAME):
+    def __init__(
+        self,
+        path,
+        authority,
+        handler,
+        *,
+        deadline_s=5.0,
+        max_frame_bytes=_DEFAULT_MAX_FRAME,
+        accept_poll_s=0.25,
+        error_reply_timeout_s=1.0,
+    ):
         self.path = Path(path)
         if self.path.parent != authority.ipc_root:
             raise IpcError("SOCKET_OUTSIDE_IPC_ROOT")
@@ -402,6 +412,8 @@ class AuthenticatedUnixServer:
         self.handler = handler
         self.deadline_s = float(deadline_s)
         self.max_frame_bytes = max_frame_bytes
+        self.accept_poll_s = float(accept_poll_s)
+        self.error_reply_timeout_s = float(error_reply_timeout_s)
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._parent_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         self._address = f"/proc/self/fd/{self._parent_fd}/{self.path.name}"
@@ -419,12 +431,15 @@ class AuthenticatedUnixServer:
         self._closed = threading.Event()
 
     def serve_once(self) -> None:
-        deadline = time.monotonic() + self.deadline_s
-        self._socket.settimeout(self.deadline_s)
+        self._socket.settimeout(self.accept_poll_s)
         try:
             connection, _ = self._socket.accept()
         except (TimeoutError, socket.timeout) as error:
-            raise IpcError("ACCEPT_DEADLINE") from error
+            raise IpcError("ACCEPT_POLL") from error
+        self._serve_connection(connection)
+
+    def _serve_connection(self, connection) -> None:
+        deadline = time.monotonic() + self.deadline_s
         with connection:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -458,10 +473,7 @@ class AuthenticatedUnixServer:
                 reply = _response(message, error=str(error))
             except Exception as error:
                 reply = _response(message, error=f"HANDLER_REJECTED: {error}")
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return
-            connection.settimeout(remaining)
+            connection.settimeout(self.error_reply_timeout_s)
             try:
                 connection.sendall(
                     encode_frame(reply, max_frame_bytes=self.max_frame_bytes)
@@ -491,7 +503,7 @@ class AuthenticatedUnixServer:
             try:
                 self.serve_once()
             except IpcError as error:
-                if self._closed.is_set() or "ACCEPT_DEADLINE" in str(error):
+                if self._closed.is_set() or "ACCEPT_POLL" in str(error):
                     continue
             except OSError:
                 if not self._closed.is_set():

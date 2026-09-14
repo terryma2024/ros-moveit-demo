@@ -447,6 +447,63 @@ def test_server_bounds_handler_and_response_send_to_one_absolute_deadline(tmp_pa
     assert time.monotonic() - started < 0.3
 
 
+def test_server_accept_idle_does_not_consume_request_deadline(tmp_path):
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+    )
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    authority.bind_lease("worker-01", 2, request()["lease"])
+    server = AuthenticatedUnixServer(
+        tmp_path / "ipc/coordinator.sock",
+        authority,
+        lambda _message: time.sleep(0.05) or {"ok": True},
+        deadline_s=0.20,
+    )
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        time.sleep(0.18)
+        assert UnixRpcClient(server.path, deadline_s=0.5).call(request())[
+            "payload"
+        ] == {"ok": True}
+    finally:
+        server.close()
+        thread.join(timeout=1.0)
+    assert not thread.is_alive()
+
+
+def test_server_handler_timeout_returns_structured_error(tmp_path):
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        IpcError,
+        UnixRpcClient,
+        WorkerTokenAuthority,
+    )
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
+    authority.bind_lease("worker-01", 2, request()["lease"])
+    server = AuthenticatedUnixServer(
+        tmp_path / "ipc/coordinator.sock",
+        authority,
+        lambda _message: time.sleep(0.20),
+        deadline_s=0.05,
+    )
+    thread = threading.Thread(target=server.serve_once)
+    thread.start()
+    try:
+        with pytest.raises(IpcError, match="HANDLER_DEADLINE_EXCEEDED"):
+            UnixRpcClient(server.path, deadline_s=0.5).call(request())
+    finally:
+        thread.join(timeout=1.0)
+        server.close()
+    assert not thread.is_alive()
+
+
 def test_client_rejects_wrong_response_schema_and_union(tmp_path):
     from so101_demo.runtime.parallel_ipc import IpcError, UnixRpcClient, encode_frame
 
