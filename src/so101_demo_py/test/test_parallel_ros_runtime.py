@@ -1707,6 +1707,38 @@ def test_exit_zero_unverifiable_dynamic_manifest_never_passes(
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
 
 
+def test_execute_result_waits_for_configured_execution_timeout(
+        tmp_path, monkeypatch):
+    import so101_demo.runtime.parallel_ros_runtime as runtime_module
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))
+    waitpid_calls = []
+
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: next(observations))
+    monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
+    monkeypatch.setattr(
+        os,
+        "waitpid",
+        lambda pid, options: (waitpid_calls.append((pid, options)) or (0, 0)),
+    )
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=tmp_path, session_id="session-1"),
+        catalog={},
+        config=SimpleNamespace(executing_hard_timeout_s=240.0),
+    )
+
+    receipt = ports.execute_result(
+        _lease(),
+        SimpleNamespace(reset_epoch="reset-17"),
+        SimpleNamespace(pid=417),
+    )
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert waitpid_calls == [(417, os.WNOHANG), (417, os.WNOHANG)]
+
+
 @pytest.mark.parametrize(
     "manifest_status,wait_status,expected_status,expected_reason",
     [

@@ -1595,7 +1595,8 @@ class ParallelRosRuntimePorts:
         call = self.dependencies.get("execute_result")
         if call is not None:
             return call(lease, admitted, child)
-        deadline = time.monotonic() + 180.0
+        timeout_s = getattr(self.config, "executing_hard_timeout_s", 180.0)
+        deadline = time.monotonic() + timeout_s
         status = None
         while time.monotonic() < deadline:
             waited, observed = os.waitpid(child.pid, os.WNOHANG)
