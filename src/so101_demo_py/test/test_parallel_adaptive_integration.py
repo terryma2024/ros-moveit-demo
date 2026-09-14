@@ -260,6 +260,9 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         assert sentinel.poll() is None
         assert receipt["cleanup_complete"] is True
         assert receipt["released_domain_ids"] == [215]
+        assert json.loads(
+            (pool_root / "owned-processes.json").read_text(encoding="utf-8")
+        )["processes"] == []
         assert json.loads(claim_path.read_text(encoding="utf-8"))["claim_state"] == "RELEASED"
         assert cleanup_runtime(runtime_root) == receipt
     finally:

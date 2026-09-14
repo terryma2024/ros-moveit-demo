@@ -116,7 +116,7 @@ def _retire_processes(pool_root: Path, pool_batch_id: str) -> None:
     if not os.path.lexists(manifest_path):
         return
     document = _read_json(manifest_path, "PROCESS_MANIFEST")
-    supervisor = ProcessSupervisor(pool_batch_id)
+    supervisor = ProcessSupervisor(pool_batch_id, manifest_path=manifest_path)
     try:
         retired = supervisor.retire_manifest(document)
     except Exception as error:
