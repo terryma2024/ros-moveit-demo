@@ -51,17 +51,34 @@ def make(tmp_path):
     """Create isolated coordinators and release every real journal lock."""
     journals = []
 
-    def factory(points=('p1', 'p2'), workers=1, k=3, mode=RunMode.EXECUTE):
+    def factory(
+        points=('p1', 'p2'), workers=1, k=3, mode=RunMode.EXECUTE,
+        *, point_selector=None, adaptive=False,
+    ):
         module = importlib.import_module('so101_demo.parallel_batch.coordinator')
         root = tmp_path / str(len(journals))
         journal = CoordinatorJournal.create(root, 'batch-a')
         journals.append(journal)
-        request = BatchRequest('batch-a', mode, points, workers, k, root)
+        if adaptive:
+            from so101_demo.parallel_batch.adaptive_contracts import (
+                _new_pool_request_for_production_factory,
+            )
+            request = _new_pool_request_for_production_factory(
+                batch_id='batch-a', run_mode=mode, selected_point_ids=points,
+                worker_count=workers, max_points_per_worker=k,
+                evidence_root=root,
+            )
+        else:
+            request = BatchRequest('batch-a', mode, points, workers, k, root)
         clock, results = Clock(), Results()
         config = load_parallel_runtime_config(
             Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        selector_args = (
+            {} if point_selector is None else {'point_selector': point_selector}
+        )
         coordinator = module.BatchCoordinator(
-            journal, request, config=config, clock=clock, result_port=results)
+            journal, request, config=config, clock=clock, result_port=results,
+            **selector_args)
         for i in range(workers):
             coordinator.register_worker(f'w{i + 1}', generation=1)
         return coordinator, clock, results, journal, request
@@ -71,9 +88,9 @@ def make(tmp_path):
         journal.close()
 
 
-def start(c, worker='w1'):
+def start(c, worker='w1', generation=1):
     """Obtain both durable ACKs before executing a point."""
-    lease = c.grant_lease(worker, generation=1)
+    lease = c.grant_lease(worker, generation=generation)
     c.ack_lease(lease, request_key=f'ack-{lease.attempt_id}')
     c.ack_attempt_started(
         lease, request_key=f'start-{lease.attempt_id}', gate_summary=gate_summary(lease))
@@ -193,6 +210,41 @@ def test_concurrent_grants_do_not_double_lease(make):
     with ThreadPoolExecutor(2) as pool:
         leases = list(pool.map(lambda w: c.grant_lease(w, generation=1), ['w1', 'w2']))
     assert {lease.point_id for lease in leases} == {'p1', 'p2'}
+
+
+def test_adaptive_selector_allows_one_worker_to_lease_beyond_initial_k(make):
+    """The adaptive K is an affinity hint, not a capacity debit."""
+    from so101_demo.parallel_batch.adaptive_queue import AdaptivePointSelector
+
+    points = ('p1', 'p2', 'p3')
+    selector = AdaptivePointSelector(points, ('w1',), 1)
+    c, _, results, _, _ = make(
+        points=points, workers=1, k=1, adaptive=True,
+        point_selector=selector.choose,
+    )
+    generation = 1
+    leased = []
+    for index in range(3):
+        lease = start(c, generation=generation)
+        leased.append(lease.point_id)
+        finish(c, results, lease, 'PASSED')
+        if index != 2:
+            generation = recover_worker(c, generation=generation)
+
+    assert leased == ['p1', 'p2', 'p3']
+    assert c.snapshot().workers['w1'].lease_count == 3
+    assert c.snapshot().terminal_reason == 'POINTS_COMPLETE'
+
+
+def test_default_selector_keeps_the_v1_hard_k_limit(make):
+    """No selector means the original immutable per-worker debit remains active."""
+    c, _, results, _, _ = make(points=('p1', 'p2'), workers=2, k=1)
+    lease = start(c)
+    finish(c, results, lease, 'PASSED')
+    generation = recover_worker(c)
+
+    assert c.grant_lease('w1', generation=generation) is None
+    assert c.grant_lease('w2', generation=1).point_id == 'p2'
 
 
 def test_journal_fsync_precedes_grant_projection_and_ack(make, monkeypatch):
