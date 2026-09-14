@@ -74,35 +74,59 @@ class MujocoLifecycleAdapter:
         return ShutdownResult(bool(accepted), None if accepted else "SHUTDOWN_FAILED")
 
 
-def _set_physics_paused(paused: bool) -> bool:
-    import rclpy
-    from rclpy.executors import SingleThreadedExecutor
-    from mujoco_ros2_control_msgs.srv import SetPause
+class MujocoPauseControl:
+    """Retain one private ROS participant across point pause/resume calls."""
 
-    context = rclpy.context.Context()
-    rclpy.init(context=context)
-    node = rclpy.create_node(
-        "so101_live_runtime_pause_control", context=context
-    )
-    executor = SingleThreadedExecutor(context=context)
-    executor.add_node(node)
-    try:
-        client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
-        if not client.wait_for_service(timeout_sec=5.0):
+    def __init__(self) -> None:
+        import rclpy
+        from rclpy.executors import SingleThreadedExecutor
+        from mujoco_ros2_control_msgs.srv import SetPause
+
+        self._context = rclpy.context.Context()
+        rclpy.init(context=self._context)
+        self._node = rclpy.create_node(
+            "so101_live_runtime_pause_control", context=self._context
+        )
+        self._executor = SingleThreadedExecutor(context=self._context)
+        self._executor.add_node(self._node)
+        self._client = self._node.create_client(
+            SetPause, "/mujoco_ros2_control_node/set_pause"
+        )
+        self._request_type = SetPause.Request
+        self._closed = False
+
+    def set_paused(self, paused: bool) -> bool:
+        if self._closed:
+            raise RuntimeError("MuJoCo pause control is closed")
+        if type(paused) is not bool:
+            raise TypeError("paused must be bool")
+        if not self._client.wait_for_service(timeout_sec=5.0):
             return False
-        request = SetPause.Request()
+        request = self._request_type()
         request.paused = paused
-        future = client.call_async(request)
+        future = self._client.call_async(request)
         deadline = time.monotonic() + 5.0
         while not future.done() and time.monotonic() < deadline:
-            executor.spin_once(timeout_sec=0.01)
+            self._executor.spin_once(timeout_sec=0.01)
         response = future.result() if future.done() else None
         return bool(response is not None and response.success)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._executor.remove_node(self._node)
+        self._executor.shutdown()
+        self._node.destroy_node()
+        self._context.shutdown()
+
+
+def _set_physics_paused(paused: bool) -> bool:
+    control = MujocoPauseControl()
+    try:
+        return control.set_paused(paused)
     finally:
-        executor.remove_node(node)
-        executor.shutdown()
-        node.destroy_node()
-        context.shutdown()
+        control.close()
 
 
 def pause_physics(config: Any) -> bool:

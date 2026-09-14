@@ -463,6 +463,47 @@ def test_production_port_factory_binds_every_task10_port_without_empty_side_effe
     assert all("RUNTIME_PORT_NOT_READY" not in repr(value) for value in ports.values())
 
 
+def test_pause_control_is_retained_across_point_freeze_and_resume() -> None:
+    from so101_demo.runtime.parallel_ros_runtime import (
+        ParallelRosRuntimePorts,
+        ResetBoundaryReceipt,
+    )
+
+    events = []
+
+    class Control:
+        def set_paused(self, paused):
+            events.append(("set-paused", paused))
+            return True
+
+        def close(self):
+            events.append(("close",))
+
+    control = Control()
+    resources = SimpleNamespace(
+        worker_id="worker-01", generation=1, session_id="session-1"
+    )
+    ports = ParallelRosRuntimePorts(
+        resources,
+        catalog={},
+        dependencies={"pause_control_factory": lambda: control},
+    )
+    lease = _lease()
+    reset = ResetBoundaryReceipt("reset-2", "session-1", 10.0, 12.0, 2)
+
+    assert ports.resume_physics(lease, reset) is True
+    assert ports.pause_physics(lease, reset) is True
+    assert ports.resume_physics(lease, reset) is True
+    ports.close_runtime()
+
+    assert events == [
+        ("set-paused", False),
+        ("set-paused", True),
+        ("set-paused", False),
+        ("close",),
+    ]
+
+
 def test_recovery_requires_observed_child_and_ros_graph_absence():
     from so101_demo.runtime.parallel_ros_runtime import (
         ParallelRosRuntimePorts,

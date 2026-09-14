@@ -761,6 +761,7 @@ class ParallelRosRuntimePorts:
         self._planner = None
         self._pose_publisher_owner = None
         self._pose_publisher = None
+        self._pause_control = None
 
     def bind_broker_generation(self, generation):
         """Advance the policy authority to an authenticated discovered Broker."""
@@ -841,6 +842,7 @@ class ParallelRosRuntimePorts:
         self._admitted.clear()
         self._admission_candidates.clear()
         self._close_pose_publisher()
+        self._close_pause_control()
         if self._planner is not None:
             self._planner.close()
             self._planner = None
@@ -852,6 +854,7 @@ class ParallelRosRuntimePorts:
             source.close()
         self._rgbd.clear()
         self._close_pose_publisher()
+        self._close_pause_control()
         if self._planner is not None:
             self._planner.close()
             self._planner = None
@@ -1713,9 +1716,7 @@ class ParallelRosRuntimePorts:
             or reset_receipt.reset_epoch_value is None
         ):
             return False
-        from ..backends.mujoco.lifecycle import resume_physics
-
-        return resume_physics(None)
+        return self._retained_pause_control().set_paused(False)
 
     def pause_physics(self, lease, reset_receipt):
         call = self.dependencies.get("pause_physics")
@@ -1726,9 +1727,23 @@ class ParallelRosRuntimePorts:
             or reset_receipt.reset_epoch_value is None
         ):
             return False
-        from ..backends.mujoco.lifecycle import pause_physics
+        return self._retained_pause_control().set_paused(True)
 
-        return pause_physics(None)
+    def _retained_pause_control(self):
+        if self._pause_control is None:
+            factory = self.dependencies.get("pause_control_factory")
+            if factory is None:
+                from ..backends.mujoco.lifecycle import MujocoPauseControl
+
+                factory = MujocoPauseControl
+            self._pause_control = factory()
+        return self._pause_control
+
+    def _close_pause_control(self):
+        if self._pause_control is None:
+            return
+        control, self._pause_control = self._pause_control, None
+        control.close()
 
     def recovery(self, worker_id, generation, deadline):
         call = self.dependencies.get("recovery")
