@@ -253,6 +253,25 @@ def test_pool_root_and_required_append_only_events_are_frozen(tmp_path):
     runner.close()
 
 
+def test_private_pool_parent_exists_before_factory_allocation(tmp_path):
+    class InspectingPools(FakePools):
+        def __call__(self, request):
+            parent = request.evidence_root.parent
+            assert parent.is_dir()
+            assert parent.stat().st_mode & 0o777 == 0o700
+            runtime_root = parent.parent
+            assert runtime_root.stat().st_mode & 0o777 == 0o700
+            assert runtime_root.parent.stat().st_mode & 0o777 == 0o700
+            return super().__call__(request)
+
+    runner, _ = make_runner(tmp_path, InspectingPools())
+
+    summary = runner.run()
+
+    assert summary.status is BatchTerminalStatus.COMPLETED
+    runner.close()
+
+
 def test_infrastructure_failure_after_all_results_does_not_start_an_empty_pool(tmp_path):
     pools = FakePools(
         midrun={8: {"passed": ("p01", "p09", "p18"), "active": ()}}

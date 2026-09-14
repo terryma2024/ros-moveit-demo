@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import os
 from pathlib import Path
+import stat
 from typing import Callable
 
 from .adaptive_contracts import (
@@ -23,6 +25,24 @@ from .journal import CoordinatorJournal
 
 class AdaptiveRunnerError(RuntimeError):
     """The top-level adaptive history or pool result failed closed."""
+
+
+def _prepare_private_directory(path: Path) -> Path:
+    try:
+        path.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise AdaptiveRunnerError("PRIVATE_DIRECTORY_IDENTITY") from error
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+    ):
+        raise AdaptiveRunnerError("PRIVATE_DIRECTORY_IDENTITY")
+    return path
 
 
 def _request_document(request: AdaptiveBatchRequest) -> dict[str, object]:
@@ -77,7 +97,10 @@ class AdaptiveBatchRunner:
             raise AdaptiveRunnerError("POOL_FACTORY_REQUIRED")
         self.request = request
         self.pool_factory = pool_factory
-        self.runtime_root = request.runtime_root
+        runtime_parent = _prepare_private_directory(request.evidence_root / "r")
+        self.runtime_root = _prepare_private_directory(
+            runtime_parent / request.batch_id
+        )
         self.journal = CoordinatorJournal.create(
             self.runtime_root / "journal", request.batch_id
         )
@@ -325,6 +348,7 @@ class AdaptiveBatchRunner:
             return self._terminal_summary
         if self._levels_used:
             raise AdaptiveRunnerError("CRASHED_BATCH_REPORT_ONLY")
+        pool_parent = _prepare_private_directory(self.runtime_root / "p")
         levels = self.request.options.levels
         for index, worker_count in enumerate(levels):
             generation = index + 1
@@ -339,7 +363,7 @@ class AdaptiveBatchRunner:
                 for point_id in self.request.selected_point_ids
                 if point_id in self._remaining
             )
-            pool_root = self.runtime_root / f"p/g{generation:02d}w{worker_count:02d}"
+            pool_root = pool_parent / f"g{generation:02d}w{worker_count:02d}"
             pool_request = _new_pool_request_for_production_factory(
                 batch_id=(
                     f"{self.request.batch_id}-g{generation:02d}-w{worker_count:02d}"
