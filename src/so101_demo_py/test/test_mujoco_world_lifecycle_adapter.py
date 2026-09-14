@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -114,6 +115,91 @@ def test_pause_requires_matching_post_request_observation() -> None:
     result = adapter.pause(True)
     assert not result.accepted
     assert result.error_code == "WORLD_STATE_NOT_CONFIRMED"
+
+
+def test_live_pause_control_uses_a_private_ros_context(monkeypatch) -> None:
+    """The RGB-D source may already own the process-default ROS context."""
+
+    from so101_demo.backends.mujoco.lifecycle import pause_physics
+
+    events = []
+
+    class Context:
+        def shutdown(self):
+            events.append(("context-shutdown", self))
+
+    class Future:
+        @staticmethod
+        def done():
+            return True
+
+        @staticmethod
+        def result():
+            return SimpleNamespace(success=True)
+
+    class Client:
+        @staticmethod
+        def wait_for_service(*, timeout_sec):
+            assert timeout_sec == 5.0
+            return True
+
+        @staticmethod
+        def call_async(request):
+            events.append(("request", request.paused))
+            return Future()
+
+    class Node:
+        @staticmethod
+        def create_client(_service_type, service_name):
+            assert service_name == "/mujoco_ros2_control_node/set_pause"
+            return Client()
+
+        @staticmethod
+        def destroy_node():
+            events.append(("node-destroy",))
+
+    class Executor:
+        def __init__(self, *, context):
+            self.context = context
+
+        def add_node(self, node):
+            events.append(("add-node", self.context, node))
+
+        def remove_node(self, node):
+            events.append(("remove-node", self.context, node))
+
+        def shutdown(self):
+            events.append(("executor-shutdown", self.context))
+
+    class SetPause:
+        class Request:
+            paused = False
+
+    rclpy = SimpleNamespace(
+        context=SimpleNamespace(Context=Context),
+        init=lambda *, context: events.append(("init", context)),
+        create_node=lambda _name, *, context: (
+            events.append(("create-node", context)) or Node()
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+    monkeypatch.setitem(
+        sys.modules,
+        "rclpy.executors",
+        SimpleNamespace(SingleThreadedExecutor=Executor),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "mujoco_ros2_control_msgs.srv",
+        SimpleNamespace(SetPause=SetPause),
+    )
+
+    assert pause_physics(None) is True
+    contexts = [event[1] for event in events if event[0] == "init"]
+    assert len(contexts) == 1
+    assert ("request", True) in events
+    assert ("executor-shutdown", contexts[0]) in events
+    assert ("context-shutdown", contexts[0]) in events
 
 
 def test_world_adapter_rejects_sequence_or_step_regression() -> None:

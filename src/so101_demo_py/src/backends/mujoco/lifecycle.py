@@ -76,12 +76,16 @@ class MujocoLifecycleAdapter:
 
 def _set_physics_paused(paused: bool) -> bool:
     import rclpy
+    from rclpy.executors import SingleThreadedExecutor
     from mujoco_ros2_control_msgs.srv import SetPause
 
-    initialized_here = not rclpy.ok()
-    if initialized_here:
-        rclpy.init()
-    node = rclpy.create_node("so101_live_runtime_pause_control")
+    context = rclpy.context.Context()
+    rclpy.init(context=context)
+    node = rclpy.create_node(
+        "so101_live_runtime_pause_control", context=context
+    )
+    executor = SingleThreadedExecutor(context=context)
+    executor.add_node(node)
     try:
         client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
         if not client.wait_for_service(timeout_sec=5.0):
@@ -91,13 +95,14 @@ def _set_physics_paused(paused: bool) -> bool:
         future = client.call_async(request)
         deadline = time.monotonic() + 5.0
         while not future.done() and time.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.01)
+            executor.spin_once(timeout_sec=0.01)
         response = future.result() if future.done() else None
         return bool(response is not None and response.success)
     finally:
+        executor.remove_node(node)
+        executor.shutdown()
         node.destroy_node()
-        if initialized_here and rclpy.ok():
-            rclpy.shutdown()
+        context.shutdown()
 
 
 def pause_physics(config: Any) -> bool:
