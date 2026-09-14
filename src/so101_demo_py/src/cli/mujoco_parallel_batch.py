@@ -2930,13 +2930,11 @@ class ProductionBatchComposition:
         def readiness_or_none(control):
             try:
                 return control.readiness()
-            except IpcError as error:
-                if str(error) not in {
-                    "DEADLINE_EXCEEDED", "HANDLER_DEADLINE_EXCEEDED"
-                }:
-                    raise
-                return None
-            except TimeoutError:
+            except (IpcError, OSError):
+                # A live readiness probe may outlast the request-local IPC
+                # deadline under multi-stack startup load.  No receipt means
+                # no release authority; retry only within the shared startup
+                # deadline and keep every schema/identity check below.
                 return None
 
         while self._clock() < deadline:

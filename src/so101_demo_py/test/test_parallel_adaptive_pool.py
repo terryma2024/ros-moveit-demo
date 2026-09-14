@@ -139,7 +139,10 @@ def test_control_socket_appearing_after_six_seconds_uses_shared_120_second_deadl
     assert len(recorded) == 1
 
 
-def test_transient_readiness_transport_timeout_is_retried_before_shared_deadline():
+@pytest.mark.parametrize("transport_error", ["DEADLINE_EXCEEDED", "TRUNCATED_FRAME"])
+def test_transient_readiness_transport_failure_is_retried_before_shared_deadline(
+    transport_error,
+):
     from so101_demo.runtime.parallel_ipc import IpcError
 
     clock = FakeClock()
@@ -154,7 +157,7 @@ def test_transient_readiness_transport_timeout_is_retried_before_shared_deadline
         def readiness(self):
             self.readiness_calls += 1
             if self.readiness_calls == 1:
-                raise IpcError("DEADLINE_EXCEEDED")
+                raise IpcError(transport_error)
             return valid_receipt(observed=clock.now)
 
         def release_start(self):
