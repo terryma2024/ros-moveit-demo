@@ -1138,6 +1138,8 @@ class ParallelWorkerRuntime:
                 str(lease.lease_generation),
                 "--evidence-root",
                 str(point_root / "dynamic"),
+                "--ready-receipt",
+                str(point_root / "dynamic" / "consumer-ready.json"),
                 "--scene-source",
                 "observe_only",
             )

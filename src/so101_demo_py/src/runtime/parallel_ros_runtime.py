@@ -762,6 +762,7 @@ class ParallelRosRuntimePorts:
         self._pose_publisher_owner = None
         self._pose_publisher = None
         self._pause_control = None
+        self._minimum_inference_stamp_ns = None
 
     def bind_broker_generation(self, generation):
         """Advance the policy authority to an authenticated discovered Broker."""
@@ -841,6 +842,7 @@ class ParallelRosRuntimePorts:
         self._localized.clear()
         self._admitted.clear()
         self._admission_candidates.clear()
+        self._minimum_inference_stamp_ns = None
         self._close_pose_publisher()
         self._close_pause_control()
         if self._planner is not None:
@@ -853,6 +855,7 @@ class ParallelRosRuntimePorts:
         for source, *_rest in tuple(self._rgbd.values()):
             source.close()
         self._rgbd.clear()
+        self._minimum_inference_stamp_ns = None
         self._close_pose_publisher()
         self._close_pause_control()
         if self._planner is not None:
@@ -1008,12 +1011,26 @@ class ParallelRosRuntimePorts:
         from ..cli.rgbd_point_cloud import _decode_rgb, message_stamp_ns
         from .point_cloud_preview import write_png_rgb8
 
-        source, (camera, color, depth), received = self._capture_aligned()
+        capture_attempt = 0
+        while True:
+            source, (camera, color, depth), received = self._capture_aligned()
+            stamp = message_stamp_ns(color)
+            minimum_stamp = self._minimum_inference_stamp_ns
+            if (
+                path.suffix == ".npy"
+                and minimum_stamp is not None
+                and stamp < minimum_stamp
+            ):
+                source.close()
+                capture_attempt += 1
+                if capture_attempt >= 5:
+                    raise RuntimeError("RGB_SOURCE_PREDATES_CONSUMER_READY")
+                continue
+            break
         try:
             if received <= boundary:
                 raise RuntimeError("RGB_SOURCE_NOT_FRESH")
             rgb = np.array(_decode_rgb(color), copy=True)
-            stamp = message_stamp_ns(color)
             if path.suffix == ".npy":
                 path.parent.mkdir(parents=True, exist_ok=True)
                 buffer = io.BytesIO()
@@ -1055,6 +1072,7 @@ class ParallelRosRuntimePorts:
                     os.close(parent_fd)
                 self._rgbd[stamp] = (source, camera, depth, color.header.frame_id)
                 source = None
+                self._minimum_inference_stamp_ns = None
                 return receipt
             write_png_rgb8(rgb, path)
             return SourceStampedCapture(path, received, source_stamp_ns=stamp)
@@ -1437,6 +1455,107 @@ class ParallelRosRuntimePorts:
     def plan_prefix(self, lease, admitted, states):
         return self._planning_adapter()(lease, admitted, states)
 
+    @staticmethod
+    def _command_option(command, name):
+        try:
+            index = command.index(name)
+            return command[index + 1]
+        except (AttributeError, IndexError, ValueError) as error:
+            raise RuntimeError("DYNAMIC_READY_COMMAND_IDENTITY") from error
+
+    def _consumer_ready_fence(self, child):
+        command = tuple(getattr(child, "cmdline", ()))
+        values = {
+            name: self._command_option(command, f"--{name.replace('_', '-')}")
+            for name in (
+                "batch_id",
+                "coordinator_epoch",
+                "worker_id",
+                "worker_generation",
+                "point_id",
+                "attempt_id",
+                "lease_generation",
+                "session_id",
+                "expected_reset_epoch",
+                "ready_receipt",
+            )
+        }
+        expected_path = (
+            Path(self.resources.worker_root)
+            / "attempts"
+            / values["point_id"]
+            / values["attempt_id"]
+            / "working/dynamic/consumer-ready.json"
+        )
+        path = Path(values["ready_receipt"])
+        if path != expected_path:
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_PATH")
+        try:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            return None
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+                or info.st_size > 8192
+            ):
+                raise RuntimeError("DYNAMIC_READY_RECEIPT_FILE_IDENTITY")
+            payload = os.read(descriptor, 8193)
+        finally:
+            os.close(descriptor)
+        try:
+            document = json.loads(payload)
+        except (UnicodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_JSON") from error
+        integer_fields = (
+            "coordinator_epoch",
+            "worker_generation",
+            "lease_generation",
+        )
+        lease_identity = {
+            name: int(values[name]) if name in integer_fields else values[name]
+            for name in (
+                "batch_id",
+                "coordinator_epoch",
+                "worker_id",
+                "worker_generation",
+                "point_id",
+                "attempt_id",
+                "lease_generation",
+            )
+        }
+        expected = {
+            "schema_version": 1,
+            "kind": "dynamic_consumer_ready",
+            "session_id": values["session_id"],
+            "reset_epoch": int(values["expected_reset_epoch"]),
+            "parallel_lease_identity": lease_identity,
+        }
+        if any(document.get(name) != value for name, value in expected.items()):
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_IDENTITY")
+        if set(document) != {
+            *expected,
+            "ready_ros_ns",
+            "ready_monotonic_s",
+        }:
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_SCHEMA")
+        ready_ros_ns = document["ready_ros_ns"]
+        ready_monotonic_s = document["ready_monotonic_s"]
+        if type(ready_ros_ns) is not int or ready_ros_ns <= 0:
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_ROS_TIME")
+        if (
+            isinstance(ready_monotonic_s, bool)
+            or not isinstance(ready_monotonic_s, (int, float))
+            or not math.isfinite(ready_monotonic_s)
+            or ready_monotonic_s <= 0.0
+            or ready_monotonic_s > time.monotonic()
+        ):
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_MONOTONIC_TIME")
+        return ready_ros_ns
+
     def consumer_ready(self, child):
         call = self.dependencies.get("consumer_ready")
         if call is not None:
@@ -1464,7 +1583,10 @@ class ParallelRosRuntimePorts:
                     and publisher.get_subscription_count() == 1
                     and owner.node.get_clock().now().nanoseconds > 0
                 ):
-                    return True
+                    ready_ros_ns = self._consumer_ready_fence(child)
+                    if ready_ros_ns is not None:
+                        self._minimum_inference_stamp_ns = ready_ros_ns
+                        return True
             except Exception:
                 self._close_pose_publisher()
                 return False

@@ -612,6 +612,52 @@ def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction
     assert "status=DONE" in output
 
 
+def test_parallel_dynamic_execute_writes_child_ready_receipt_after_arm(
+    tmp_path,
+) -> None:
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events: list[str] = []
+    scene = RecordingTaskScenePort()
+    runtime = _runtime(
+        events,
+        observations=(
+            _observation(simulator_x=-0.03, moveit_x=0.02),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+            _observation(simulator_x=-0.03, moveit_x=-0.03),
+        ),
+        scene=scene,
+    )
+    options = _options(tmp_path)
+    options.ready_receipt = tmp_path / "consumer-ready.json"
+    options.batch_id = "batch-1"
+    options.coordinator_epoch = 1
+    options.worker_id = "worker-01"
+    options.worker_generation = 2
+    options.point_id = "task_start"
+    options.attempt_id = "attempt-1"
+    options.lease_generation = 3
+
+    assert run_dynamic_execute(options, _runtime=runtime) == 0
+    assert json.loads(options.ready_receipt.read_text(encoding="utf-8")) == {
+        "kind": "dynamic_consumer_ready",
+        "parallel_lease_identity": {
+            "attempt_id": "attempt-1",
+            "batch_id": "batch-1",
+            "coordinator_epoch": 1,
+            "lease_generation": 3,
+            "point_id": "task_start",
+            "worker_generation": 2,
+            "worker_id": "worker-01",
+        },
+        "ready_monotonic_s": 1.0,
+        "ready_ros_ns": 1,
+        "reset_epoch": 3,
+        "schema_version": 1,
+        "session_id": "task-5",
+    }
+
+
 def test_run_dynamic_execute_emits_ready_after_subscription_before_pose_wait(
     tmp_path,
 ) -> None:

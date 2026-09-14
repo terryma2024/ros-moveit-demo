@@ -1702,6 +1702,11 @@ def test_execute_consumer_receives_integer_reset_epoch_not_wire_label(tmp_path: 
     assert command[index + 1] == "17"
     timeout_index = command.index("--cup-pose-timeout-s")
     assert command[timeout_index + 1] == "240.0"
+    ready_index = command.index("--ready-receipt")
+    assert command[ready_index + 1] == str(
+        tmp_path
+        / "worker-1/attempts/P01/attempt-1/working/dynamic/consumer-ready.json"
+    )
     lease = _lease()
     for flag, expected in {
         "--batch-id": lease.batch_id,

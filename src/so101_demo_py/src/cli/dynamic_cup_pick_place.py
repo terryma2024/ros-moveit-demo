@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id", default="")
     parser.add_argument("--expected-reset-epoch", type=int)
     parser.add_argument("--evidence-root", type=Path)
+    parser.add_argument("--ready-receipt", type=Path)
     parser.add_argument("--batch-id")
     parser.add_argument("--coordinator-epoch", type=int)
     parser.add_argument("--worker-id")

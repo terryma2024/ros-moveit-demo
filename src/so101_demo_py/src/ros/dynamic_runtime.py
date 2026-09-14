@@ -33,6 +33,40 @@ from .cup_scene_observer import RosCupSceneObserver
 from .dynamic_planner import RosDynamicPlanner
 
 
+def _write_consumer_ready_receipt(path: Path, document: dict[str, object]) -> None:
+    """Exclusively publish one fsync-backed child READY boundary."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    payload = (
+        json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(descriptor, payload[offset:])
+            if written <= 0:
+                raise OSError("consumer READY receipt write made no progress")
+            offset += written
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory = os.open(
+        path.parent,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    )
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
 def _failure_code(error: Exception) -> str:
     code = getattr(error, "code", None)
     if isinstance(code, str) and code:
@@ -414,7 +448,26 @@ def run_dynamic_execute(
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
         source = runtime.cup_pose_source(node, loaded.template)
-        source.arm(min(5.0, options.cup_pose_timeout_s))
+        ready_boundary = source.arm(min(5.0, options.cup_pose_timeout_s))
+        if parallel_lease_identity is not None:
+            ready_receipt = getattr(options, "ready_receipt", None)
+            expected_ready_receipt = Path(options.evidence_root) / "consumer-ready.json"
+            if ready_receipt is None or Path(ready_receipt) != expected_ready_receipt:
+                raise RuntimeError("DYNAMIC_READY_RECEIPT_IDENTITY")
+            _write_consumer_ready_receipt(
+                expected_ready_receipt,
+                {
+                    "schema_version": 1,
+                    "kind": "dynamic_consumer_ready",
+                    "session_id": options.session_id,
+                    "reset_epoch": options.expected_reset_epoch,
+                    "parallel_lease_identity": parallel_lease_identity,
+                    "ready_ros_ns": ready_boundary.ready_ros_ns,
+                    "ready_monotonic_s": ready_boundary.ready_monotonic_s,
+                },
+            )
+        elif getattr(options, "ready_receipt", None) is not None:
+            raise RuntimeError("DYNAMIC_READY_RECEIPT_WITHOUT_LEASE")
         if event_emitter is not None:
             ready_payload = {
                 "session_id": options.session_id,

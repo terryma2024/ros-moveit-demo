@@ -879,6 +879,56 @@ def test_capture_rgb_mirror_creates_private_directory_chain(tmp_path, monkeypatc
     source.close()
 
 
+def test_inference_capture_retries_frame_older_than_child_ready_fence(
+    tmp_path, monkeypatch
+):
+    from so101_demo.cli import rgbd_point_cloud
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    worker_root = tmp_path / "workers/worker-01"
+    worker_root.mkdir(parents=True, mode=0o700)
+    (tmp_path / "broker-inputs").mkdir(mode=0o700)
+    closed = []
+
+    def sample(stamp_ns):
+        source = SimpleNamespace(close=lambda: closed.append(stamp_ns))
+        color = SimpleNamespace(
+            header=SimpleNamespace(
+                frame_id="task_camera_frame",
+                stamp=SimpleNamespace(
+                    sec=stamp_ns // 1_000_000_000,
+                    nanosec=stamp_ns % 1_000_000_000,
+                ),
+            )
+        )
+        return source, (object(), color, object()), 11.0
+
+    captures = [sample(100), sample(200)]
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+    )
+    ports._minimum_inference_stamp_ns = 200
+    ports._capture_aligned = lambda: captures.pop(0)
+    monkeypatch.setattr(
+        rgbd_point_cloud,
+        "_decode_rgb",
+        lambda _message: np.zeros((2, 3, 3), dtype=np.uint8),
+    )
+    destination = (
+        worker_root
+        / "attempts/task_start/attempt-1/working/perception/input/rgb.npy"
+    )
+
+    receipt = ports.capture_rgb(destination, 10.0)
+
+    assert receipt.source_stamp_ns == 200
+    assert closed == [100]
+    assert ports._minimum_inference_stamp_ns is None
+    ports.close_runtime()
+    assert closed == [100, 200]
+
+
 def test_initial_gate_requires_exact_worker_node_inventory():
     from so101_demo.runtime.parallel_ros_runtime import (
         InitialGateObservation, ParallelRosRuntimePorts, ResetBoundaryReceipt,
@@ -1530,7 +1580,9 @@ def test_pose_publication_allows_recovered_publisher_clock_to_catch_up(monkeypat
     assert clock_ns[0] >= admitted.source_stamp_ns
 
 
-def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
+def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(
+    tmp_path, monkeypatch
+):
     from so101_demo.core.task_geometry import Pose7
     from so101_demo.runtime import parallel_ros_runtime as runtime_module
     from so101_demo.runtime import task_batch_runtime
@@ -1595,9 +1647,70 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypat
         "_open_isolated_ros_node",
         lambda *_args, **_kwargs: owner,
     )
-    ports = ParallelRosRuntimePorts(SimpleNamespace(), catalog={})
+    worker_root = tmp_path / "worker-01"
+    ready_receipt = (
+        worker_root
+        / "attempts/task_start/attempt-1/working/dynamic/consumer-ready.json"
+    )
+    ready_receipt.parent.mkdir(parents=True)
+    ready_receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "kind": "dynamic_consumer_ready",
+                "session_id": "session-1",
+                "reset_epoch": 1,
+                "parallel_lease_identity": {
+                    "batch_id": "batch-1",
+                    "coordinator_epoch": 1,
+                    "worker_id": "worker-01",
+                    "worker_generation": 1,
+                    "point_id": "task_start",
+                    "attempt_id": "attempt-1",
+                    "lease_generation": 1,
+                },
+                "ready_ros_ns": 100_000_000,
+                "ready_monotonic_s": 1.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    ready_receipt.chmod(0o600)
+    child = SimpleNamespace(
+        pid=os.getpid(),
+        cmdline=(
+            "python3",
+            "-m",
+            "so101_demo.cli.dynamic_cup_pick_place",
+            "--batch-id",
+            "batch-1",
+            "--coordinator-epoch",
+            "1",
+            "--worker-id",
+            "worker-01",
+            "--worker-generation",
+            "1",
+            "--point-id",
+            "task_start",
+            "--attempt-id",
+            "attempt-1",
+            "--lease-generation",
+            "1",
+            "--session-id",
+            "session-1",
+            "--expected-reset-epoch",
+            "1",
+            "--ready-receipt",
+            str(ready_receipt),
+        ),
+    )
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+    )
 
-    assert ports.consumer_ready(SimpleNamespace(pid=os.getpid())) is True
+    assert ports.consumer_ready(child) is True
+    assert ports._minimum_inference_stamp_ns == 100_000_000
     assert events[0] == "publisher-created"
     assert events[1] == "background-spin-started"
     admitted = SimpleNamespace(
