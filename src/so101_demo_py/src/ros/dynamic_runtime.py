@@ -92,6 +92,7 @@ def run_dynamic_plan_only(options) -> int:
     planner = None
     try:
         source = RosCupPoseSource(node, loaded.template)
+        source.arm(min(5.0, options.cup_pose_timeout_s))
         sample = source.get_one(options.cup_pose_timeout_s)
         targets = resolve_motion_targets(sample, loaded.template)
         scene = RosCupSceneObserver(node)
