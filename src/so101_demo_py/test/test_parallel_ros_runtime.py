@@ -1356,11 +1356,12 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     published = []
+    spin_durations = []
 
     class Publisher:
         @staticmethod
         def get_subscription_count():
-            return 0 if len(published) >= 75 else 1
+            return 0 if len(published) >= 25 else 1
 
         @staticmethod
         def publish(message):
@@ -1383,7 +1384,11 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
 
     monkeypatch.setattr(rclpy, "ok", lambda: True)
     monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
-    monkeypatch.setattr(rclpy, "spin_once", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        rclpy,
+        "spin_once",
+        lambda *_args, **kwargs: spin_durations.append(kwargs["timeout_sec"]),
+    )
     admitted = SimpleNamespace(
         source_stamp_ns=100_000_000,
         pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
@@ -1392,7 +1397,8 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
     assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
         admitted
     ) is True
-    assert len(published) == 75
+    assert len(published) == 25
+    assert spin_durations == [0.02] * 241
 
 
 def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
