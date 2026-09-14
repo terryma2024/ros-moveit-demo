@@ -336,7 +336,7 @@ class SystemResourceProbe:
             if not stat.S_ISDIR(process_stat.st_mode):
                 raise ResourceAllocationError(f'PROC_IDENTITY_UNVERIFIABLE: {process.name}')
             try:
-                before, comm, argv = _read_process_identity(process)
+                before, comm, argv = _read_process_identity_with_retry(process)
             except (FileNotFoundError, ProcessLookupError):
                 if not os.path.lexists(process):
                     continue
@@ -350,7 +350,9 @@ class SystemResourceProbe:
             skip_reason = _frozen_non_candidate_reason(before[2], comm, argv)
             if skip_reason is not None:
                 try:
-                    after, _comm_after, _argv_after = _read_process_identity(process)
+                    after, _comm_after, _argv_after = (
+                        _read_process_identity_with_retry(process)
+                    )
                 except (OSError, UnicodeError, ValueError) as error:
                     raise ResourceAllocationError(
                         f'PROC_IDENTITY_CHANGED: {process.name}'
@@ -371,7 +373,7 @@ class SystemResourceProbe:
                 continue
             candidate = _is_high_recall_ros_candidate(comm, argv)
             try:
-                entries = (process / 'environ').read_bytes().split(b'\0')
+                entries = _read_process_environ_with_retry(process)
             except (FileNotFoundError, ProcessLookupError) as error:
                 if not os.path.lexists(process):
                     continue
@@ -388,7 +390,9 @@ class SystemResourceProbe:
                     f'{boundary}: {process.name}'
                 ) from error
             try:
-                after, _comm_after, _argv_after = _read_process_identity(process)
+                after, _comm_after, _argv_after = _read_process_identity_with_retry(
+                    process
+                )
             except (OSError, UnicodeError, ValueError) as error:
                 raise ResourceAllocationError(
                     f'PROC_IDENTITY_CHANGED: {process.name}'
@@ -1917,6 +1921,27 @@ def _read_process_identity(
         if item
     )
     return (pid, starttime, fields[0]), comm, argv
+
+
+def _read_process_identity_with_retry(
+    process: Path,
+) -> tuple[tuple[int, int, str], str, tuple[str, ...]]:
+    """Retry one transient procfs I/O race without weakening fail-closed reads."""
+
+    try:
+        return _read_process_identity(process)
+    except OSError:
+        return _read_process_identity(process)
+
+
+def _read_process_environ_with_retry(process: Path) -> list[bytes]:
+    """Retry one transient environ read; a repeated denial still propagates."""
+
+    try:
+        payload = (process / 'environ').read_bytes()
+    except OSError:
+        payload = (process / 'environ').read_bytes()
+    return payload.split(b'\0')
 
 
 def _frozen_non_candidate_reason(
