@@ -1441,7 +1441,9 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                 self.request = request
                 return BrokerSubmission(True)
 
-            def run_next(self):
+            def wait_response(self, request, timeout_s):
+                assert request == self.request
+                assert timeout_s == 1.0
                 return BrokerResponse(
                     self.request,
                     1,
@@ -1454,9 +1456,6 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                     13.1,
                     12.2,
                 )
-
-            def poll_response(self, _request):
-                return None
 
         broker_server = transport.server(
             Service(), endpoint=composition.broker_socket_path
