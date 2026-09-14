@@ -1401,6 +1401,60 @@ def test_pose_publication_retransmits_until_consumer_subscription_closes(monkeyp
     assert spin_durations == [0.02] * 241
 
 
+def test_pose_publication_allows_recovered_publisher_clock_to_catch_up(monkeypatch):
+    import rclpy
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    clock_ns = [0]
+    monotonic_s = [0.0]
+    published = []
+
+    class Publisher:
+        @staticmethod
+        def get_subscription_count():
+            return 0 if published else 1
+
+        @staticmethod
+        def publish(message):
+            published.append(message)
+
+    class Node:
+        @staticmethod
+        def create_publisher(*_args):
+            return Publisher()
+
+        @staticmethod
+        def get_clock():
+            return SimpleNamespace(
+                now=lambda: SimpleNamespace(nanoseconds=clock_ns[0])
+            )
+
+        @staticmethod
+        def destroy_node():
+            return None
+
+    def spin_once(_node, *, timeout_sec):
+        monotonic_s[0] += timeout_sec
+        clock_ns[0] += round(timeout_sec * 1_000_000_000)
+
+    monkeypatch.setattr(rclpy, "ok", lambda: True)
+    monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
+    monkeypatch.setattr(rclpy, "spin_once", spin_once)
+    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: monotonic_s[0])
+    admitted = SimpleNamespace(
+        source_stamp_ns=3_000_000_000,
+        pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
+    )
+
+    assert ParallelRosRuntimePorts(SimpleNamespace(), catalog={}).publish_pose(
+        admitted
+    ) is True
+    assert len(published) == 1
+    assert clock_ns[0] >= admitted.source_stamp_ns
+
+
 def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(monkeypatch):
     from so101_demo.core.task_geometry import Pose7
     from so101_demo.runtime import parallel_ros_runtime as runtime_module

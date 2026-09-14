@@ -1327,13 +1327,17 @@ class ParallelRosRuntimePorts:
                 message.pose.orientation.z,
                 message.pose.orientation.w,
             ) = values
-            deadline = time.monotonic() + 2.0
+            clock_deadline = time.monotonic() + 10.0
             while node.get_clock().now().nanoseconds < admitted.source_stamp_ns:
-                remaining = deadline - time.monotonic()
+                remaining = clock_deadline - time.monotonic()
                 if remaining <= 0.0:
                     return False
                 spin_once(min(0.02, remaining))
-            while publisher.get_subscription_count() < 1 and time.monotonic() < deadline:
+            subscription_deadline = time.monotonic() + 2.0
+            while (
+                publisher.get_subscription_count() < 1
+                and time.monotonic() < subscription_deadline
+            ):
                 spin_once(0.02)
             if publisher.get_subscription_count() < 1:
                 return False
