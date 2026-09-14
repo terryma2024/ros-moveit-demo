@@ -3,10 +3,14 @@
 import json
 import os
 from pathlib import Path
+import runpy
 import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
+
+import pytest
 
 
 def test_adaptive_outcome_document_is_stable_and_failure_exit_is_nonzero(tmp_path):
@@ -263,3 +267,95 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         )
         sentinel.terminate()
         sentinel.wait(timeout=2.0)
+
+
+def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
+    import setuptools
+
+    package = Path(__file__).resolve().parents[1]
+    captured = {}
+    monkeypatch.setattr(setuptools, "setup", lambda **values: captured.update(values))
+
+    runpy.run_path(str(package / "setup.py"), run_name="__task9_setup__")
+
+    installed = {
+        source
+        for _destination, sources in captured["data_files"]
+        for source in sources
+    }
+    assert "config/mujoco/parallel_adaptive_workers_v1.yaml" in installed
+    assert (
+        "so101_parallel_batch_cleanup = "
+        "so101_demo.cli.parallel_batch_cleanup:main"
+    ) in captured["entry_points"]["console_scripts"]
+
+
+def test_adaptive_help_is_explicit_and_rejects_heavy_admission_flags():
+    from so101_demo.cli.mujoco_parallel_batch import build_parser, CliError
+
+    parser = build_parser()
+    help_document = parser.format_help()
+    expected = {
+        "--adaptive-workers",
+        "--adaptive-config",
+        "--fallback-worker-counts",
+        "--initial-points-per-worker",
+        "--worker-start-timeout-s",
+        "--max-infra-attempts-per-point",
+    }
+    forbidden = {
+        "--admission-mode",
+        "--admission-profile",
+        "--admission-authority",
+        "--cgroup-parent",
+        "--qualification",
+        "--canary",
+    }
+
+    assert all(option in help_document for option in expected)
+    assert forbidden.isdisjoint(parser._option_string_actions)
+    for option in forbidden:
+        with pytest.raises(CliError, match="ARGUMENT_ERROR"):
+            parser.parse_args([option])
+
+
+def test_adaptive_module_imports_exclude_abandoned_heavy_stack():
+    command = """
+import importlib
+import json
+import sys
+for name in (
+    'so101_demo.parallel_batch.adaptive_contracts',
+    'so101_demo.parallel_batch.adaptive_queue',
+    'so101_demo.parallel_batch.adaptive_runner',
+    'so101_demo.parallel_batch.adaptive_pool',
+):
+    importlib.import_module(name)
+forbidden = (
+    'so101_demo.parallel_batch.qualification',
+    'so101_demo.parallel_batch.resource_monitor',
+    'so101_demo.parallel_batch.watchdog',
+    'so101_demo.parallel_batch.cgroups',
+)
+print(json.dumps([name for name in forbidden if name in sys.modules]))
+"""
+    environment = dict(os.environ)
+    environment["PYTHONNOUSERSITE"] = "1"
+
+    completed = subprocess.run(
+        [sys.executable, "-c", command],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert json.loads(completed.stdout) == []
+
+
+def test_adaptive_cli_has_no_parallel_v2_config_route():
+    from so101_demo.cli import mujoco_parallel_batch as cli
+
+    assert "parallel_batch_v2.yaml" not in Path(cli.__file__).read_text(
+        encoding="utf-8"
+    )
