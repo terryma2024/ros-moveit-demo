@@ -20,7 +20,7 @@ from so101_demo.adapters.perception.errors import (
 )
 
 from so101_demo.runtime.parallel_perception_runtime import (
-    GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
+    GROUNDED_ID, GROUNDED_SHA, IMAGE_TAG, PINS, YOLO_ID, YOLO_SHA,
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
@@ -250,33 +250,63 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
             raise ModelRuntimeInfrastructureError(f'SMOKE_CLOCK_FAILED: {error}') from error
 
     results = {}
-    for model_id, built in runtime.detectors.items():
-        started = now()
-        record = {'model_provenance': built.provenance_document, 'executed': False}
-        try:
-            if not runtime.healthy:
-                raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
-            record['executed'] = True
-            candidate = normalize_batch(built.detector.detect(frame, DetectionQuery('plastic_cup')), frame)
-            record.update(outcome='QUALIFIED' if candidate['candidates'] else 'NORMAL_REJECTION',
-                          result=candidate)
-        except DeterministicModelResultError as error:
-            if 'INFERENCE_FAILED' in str(error):
+    for model_id, instances in runtime.detectors.items():
+        instance_records = []
+        for executor_index, built in enumerate(instances):
+            started = now()
+            record = {
+                'executor_index': executor_index,
+                'model_provenance': built.provenance_document,
+                'executed': False,
+            }
+            try:
+                if not runtime.healthy:
+                    raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
+                record['executed'] = True
+                candidate = normalize_batch(
+                    built.detector.detect(frame, DetectionQuery('plastic_cup')),
+                    frame,
+                )
+                record.update(
+                    outcome=(
+                        'QUALIFIED'
+                        if candidate['candidates']
+                        else 'NORMAL_REJECTION'
+                    ),
+                    result=candidate,
+                )
+            except DeterministicModelResultError as error:
+                if 'INFERENCE_FAILED' in str(error):
+                    runtime._unhealthy()
+                    record.update(outcome='INFRA_ERROR', reason=str(error))
+                else:
+                    record.update(outcome='MODEL_ERROR', reason=str(error))
+            except Exception as error:
                 runtime._unhealthy()
                 record.update(outcome='INFRA_ERROR', reason=str(error))
-            else:
-                record.update(outcome='MODEL_ERROR', reason=str(error))
-        except Exception as error:
-            runtime._unhealthy()
-            record.update(outcome='INFRA_ERROR', reason=str(error))
-        completed = now()
-        latency = (completed - started) * 1000.
-        if not math.isfinite(latency) or latency < 0:
-            runtime._unhealthy()
-            raise ModelRuntimeInfrastructureError('SMOKE_CLOCK_LATENCY_INVALID')
-        record.update(started_monotonic_s=started, completed_monotonic_s=completed,
-                      latency_ms=latency)
-        results[model_id] = record
+            completed = now()
+            latency = (completed - started) * 1000.
+            if not math.isfinite(latency) or latency < 0:
+                runtime._unhealthy()
+                raise ModelRuntimeInfrastructureError(
+                    'SMOKE_CLOCK_LATENCY_INVALID'
+                )
+            record.update(
+                started_monotonic_s=started,
+                completed_monotonic_s=completed,
+                latency_ms=latency,
+            )
+            instance_records.append(record)
+        result = dict(instance_records[0])
+        result['executor_count'] = len(instance_records)
+        result['instances'] = instance_records
+        for record in instance_records:
+            if record['outcome'] == 'INFRA_ERROR':
+                result.update(outcome='INFRA_ERROR', reason=record.get('reason'))
+                break
+            if record['outcome'] == 'MODEL_ERROR':
+                result.update(outcome='MODEL_ERROR', reason=record.get('reason'))
+        results[model_id] = result
     return json.loads(canonical_json(results))
 
 
@@ -321,9 +351,15 @@ def main(argv=None, *, transport=None, authorize=None):
         raise ValueError('IMAGE_ID_REQUIRED')
     ready_path = Path(args.ready_receipt)
     model_ready_path = ready_path.with_name(".model-ready.json")
+    runtime_identity = getattr(transport, 'runtime_identity', None)
+    runtime_identity = runtime_identity if type(runtime_identity) is dict else {}
     runtime = ParallelPerceptionRuntime(
         input_root=Path(args.input_root), ready_receipt=model_ready_path,
         options=frozen_options(Path(args.yolo_weights), Path(args.grounded_root)),
+        executor_counts={
+            YOLO_ID: runtime_identity.get('yolo_executor_count', 1),
+            GROUNDED_ID: runtime_identity.get('grounded_sam_executor_count', 1),
+        },
         provenance=provenance, authorize=authorize or (lambda request, snapshot: False))
     runtime.start()
     if args.smoke_input is None and model_ready_path.is_file():

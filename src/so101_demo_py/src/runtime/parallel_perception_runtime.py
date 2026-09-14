@@ -157,10 +157,25 @@ class ParallelPerceptionRuntime:
     """One model pair per service generation, with irreversible unhealthy state."""
 
     def __init__(self, *, input_root, ready_receipt, options, provenance, authorize,
+                 executor_counts=None,
                  readonly_mount=lambda root: bool(os.statvfs(root).f_flag & os.ST_RDONLY),
                  health_changed=lambda healthy: None):
         self.input_root, self.ready_receipt = Path(input_root), Path(ready_receipt)
         self.options, self.provenance = dict(options), dict(provenance)
+        self.executor_counts = (
+            {YOLO_ID: 1, GROUNDED_ID: 1}
+            if executor_counts is None
+            else dict(executor_counts)
+        )
+        if set(self.executor_counts) != {YOLO_ID, GROUNDED_ID}:
+            raise ValueError('EXECUTOR_COUNT_MODELS')
+        if (
+            type(self.executor_counts[YOLO_ID]) is not int
+            or self.executor_counts[YOLO_ID] not in {1, 2, 4}
+            or type(self.executor_counts[GROUNDED_ID]) is not int
+            or self.executor_counts[GROUNDED_ID] != 1
+        ):
+            raise ValueError('EXECUTOR_COUNT')
         self.authorize, self.readonly_mount = authorize, readonly_mount
         self.health_changed = health_changed
         self.detectors = {}
@@ -217,16 +232,30 @@ class ParallelPerceptionRuntime:
             checked_path(self.input_root, owner=(os.getuid(), os.getgid()), directory=True)
             if self.readonly_mount(self.input_root) is not True:
                 raise ValueError('READONLY_INPUT_MOUNT_REQUIRED')
+            detectors = {}
             for model_id in (YOLO_ID, GROUNDED_ID):
-                built = detector_factory.build_detector(self.options[model_id])
-                if built.detector.runtime_device != 'cuda':
-                    raise ValueError('CUDA_REQUIRED')
-                self.detectors[model_id] = built
+                instances = []
+                for _executor_index in range(self.executor_counts[model_id]):
+                    built = detector_factory.build_detector(self.options[model_id])
+                    if built.detector.runtime_device != 'cuda':
+                        raise ValueError('CUDA_REQUIRED')
+                    instances.append(built)
+                detectors[model_id] = tuple(instances)
             receipt = {'ready': True, 'provenance': self.provenance, 'models': {
-                key: {'provenance': value.provenance_document,
-                      'cold_start_latency_ms': value.cold_start_latency_ms}
-                for key, value in self.detectors.items()}}
+                key: {
+                    'executor_count': len(instances),
+                    'instances': [
+                        {
+                            'executor_index': executor_index,
+                            'provenance': value.provenance_document,
+                            'cold_start_latency_ms': value.cold_start_latency_ms,
+                        }
+                        for executor_index, value in enumerate(instances)
+                    ],
+                }
+                for key, instances in detectors.items()}}
             write_receipt(self.ready_receipt, receipt)
+            self.detectors = detectors
             self.healthy = True
             self.health_changed(True)
         except Exception as error:
@@ -284,14 +313,19 @@ class ParallelPerceptionRuntime:
             raise ValueError('INPUT_SHAPE_STAMP')
         return DetectionFrame(rgb, snapshot.source_stamp_ns, snapshot.source_frame_id)
 
-    def infer(self, request, snapshot):
+    def infer(self, request, snapshot, *, executor_index=0):
         try:
             if not self.healthy:
                 raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
+            if type(executor_index) is not int or executor_index < 0:
+                raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
+            instances = self.detectors.get(request.model_id, ())
+            if executor_index >= len(instances):
+                raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
             frame = self._frame(request, snapshot)
             query = DetectionQuery(snapshot.query_class_id)
             try:
-                batch = self.detectors[request.model_id].detector.detect(frame, query)
+                batch = instances[executor_index].detector.detect(frame, query)
                 candidate = normalize_batch(batch, frame)
                 result = (ModelResult(ModelOutcome.QUALIFIED, candidate=candidate)
                           if candidate['candidates'] else ModelResult(ModelOutcome.NORMAL_REJECTION))

@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
 import pytest
 
 
@@ -166,3 +167,49 @@ def test_failed_receipt_readback_keeps_runtime_unhealthy(tmp_path, monkeypatch):
     with pytest.raises(OSError, match='READBACK'):
         write_receipt(ipc / 'ready.json', {'ready': True})
     assert (ipc / 'ready.json').stat().st_mode & 0o777 == 0o600
+
+
+def test_runtime_receives_executor_counts_from_adaptive_identity(
+        tmp_path, monkeypatch):
+    from so101_demo.cli import parallel_perception_broker as cli
+
+    captured = []
+
+    class Runtime:
+        detectors = {}
+        healthy = True
+
+        def __init__(self, **kwargs):
+            captured.append(kwargs)
+
+        def start(self):
+            return None
+
+    transport = SimpleNamespace(
+        authorize=lambda *_args: True,
+        runtime_identity={
+            'yolo_executor_count': 2,
+            'grounded_sam_executor_count': 1,
+        },
+        serve=lambda _runtime, *, endpoint: 0,
+    )
+    pins = dict(pin.split('==') for pin in cli.PINS)
+    monkeypatch.setattr(cli, 'ParallelPerceptionRuntime', Runtime)
+    monkeypatch.setattr(cli.importlib.metadata, 'version', pins.__getitem__)
+    monkeypatch.setenv('PARALLEL_IMAGE_ID', 'sha256:' + 'b' * 64)
+    provenance = {'source_sha256': 'c' * 64, 'verified_source_sha256': 'c' * 64}
+    read_bytes = Path.read_bytes
+    monkeypatch.setattr(
+        Path,
+        'read_bytes',
+        lambda path: cli.canonical_json(provenance)
+        if str(path) == '/opt/parallel-provenance.json'
+        else read_bytes(path),
+    )
+    monkeypatch.setattr(cli, 'verify_source', lambda _package, expected: expected)
+
+    assert cli.main(cli.broker_argv(), transport=transport) == 0
+    assert captured[0]['executor_counts'] == {
+        'plastic-cup-yolo11n-seg-v1': 2,
+        'grounded-sam': 1,
+    }

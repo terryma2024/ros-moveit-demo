@@ -11,7 +11,15 @@ import numpy as np
 import pytest
 
 
-def fixture_runtime(tmp_path, monkeypatch, *, validation=False, failure=None):
+def fixture_runtime(
+    tmp_path,
+    monkeypatch,
+    *,
+    validation=False,
+    failure=None,
+    yolo_executor_count=1,
+    grounded_sam_executor_count=1,
+):
     from so101_demo.runtime.parallel_perception_runtime import (
         ParallelPerceptionRuntime, Snapshot, frozen_options)
     from so101_demo.adapters.perception import detector_factory
@@ -66,6 +74,10 @@ def fixture_runtime(tmp_path, monkeypatch, *, validation=False, failure=None):
     runtime = ParallelPerceptionRuntime(
         input_root=root, ready_receipt=ipc / 'ready.json',
         options=frozen_options(Path('/models/yolo/best.pt'), Path('/models/grounded')),
+        executor_counts={
+            'plastic-cup-yolo11n-seg-v1': yolo_executor_count,
+            'grounded-sam': grounded_sam_executor_count,
+        },
         provenance={'image_id': 'sha256:' + 'b' * 64, 'dockerfile_sha256': 'c' * 64,
                     'lock_sha256': 'd' * 64, 'source_sha256': 'e' * 64},
         authorize=lambda request, snapshot: snapshot.start_event_id == 'event1',
@@ -90,6 +102,67 @@ def test_both_execution_kinds_normalize_lossless_candidates(tmp_path, monkeypatc
     assert f.receipt.stat().st_mode & 0o777 == 0o600
     assert f.receipt.stat().st_uid == os.getuid()
     assert json.loads(f.receipt.read_text())['ready'] is True
+
+
+def test_runtime_builds_independent_detector_instances_and_records_them(
+        tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+
+    assert len(f.runtime.detectors[YOLO_ID]) == 2
+    assert (
+        f.runtime.detectors[YOLO_ID][0].detector
+        is not f.runtime.detectors[YOLO_ID][1].detector
+    )
+    assert len(f.runtime.detectors[GROUNDED_ID]) == 1
+    receipt = json.loads(f.receipt.read_text(encoding='utf-8'))
+    assert receipt['models'][YOLO_ID]['executor_count'] == 2
+    assert [item['executor_index'] for item in receipt['models'][YOLO_ID]['instances']] == [0, 1]
+    assert receipt['models'][GROUNDED_ID]['executor_count'] == 1
+
+
+def test_runtime_infer_selects_the_requested_detector_instance(tmp_path, monkeypatch):
+    from so101_demo.runtime.parallel_perception_runtime import YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+    selected = []
+    first = f.runtime.detectors[YOLO_ID][0].detector
+    second = f.runtime.detectors[YOLO_ID][1].detector
+    first_detect = first.detect
+    second_detect = second.detect
+    first.detect = lambda frame, query: selected.append(0) or first_detect(frame, query)
+    second.detect = lambda frame, query: selected.append(1) or second_detect(frame, query)
+
+    f.runtime.infer(f.req, f.snapshot, executor_index=1)
+
+    assert selected == [1]
+
+
+def test_second_yolo_instance_setup_failure_never_publishes_ready(
+        tmp_path, monkeypatch):
+    from so101_demo.adapters.perception import detector_factory
+    from so101_demo.adapters.perception.errors import ModelRuntimeInfrastructureError
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    build = detector_factory.build_detector
+    calls = []
+
+    def fail_second_yolo(options):
+        calls.append(options.backend)
+        if calls == ['yolo_seg', 'yolo_seg']:
+            raise RuntimeError('second YOLO warmup failed')
+        return build(options)
+
+    monkeypatch.setattr(detector_factory, 'build_detector', fail_second_yolo)
+    with pytest.raises(ModelRuntimeInfrastructureError, match='second YOLO'):
+        f.runtime.start()
+    assert calls == ['yolo_seg', 'yolo_seg']
+    assert f.runtime.detectors == {}
+    assert not f.receipt.exists()
+    assert not f.runtime.healthy
 
 
 def test_started_healthy_runtime_replays_ready_to_late_lifecycle_observer(
@@ -215,7 +288,7 @@ def test_deterministic_error_is_model_error_and_empty_is_normal(tmp_path, monkey
     f.runtime.start()
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.MODEL_ERROR
     assert f.runtime.healthy
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     from so101_demo.core.detection import DetectionBatch
     detector.detect = lambda frame, query: DetectionBatch('fake', 'a' * 64, 'cuda', 0., 3, 2, ())
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.NORMAL_REJECTION
@@ -395,7 +468,7 @@ def test_input_changed_during_detector_never_returns_candidate(tmp_path, monkeyp
     from so101_demo.parallel_batch.contracts import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     detect = detector.detect
     def changing(frame, query):
         result = detect(frame, query)
@@ -412,7 +485,7 @@ def test_normalized_schema_error_and_rle_roundtrip(tmp_path, monkeypatch):
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     frame = DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera')
-    batch = f.runtime.detectors[f.req.model_id].detector.detect(frame, DetectionQuery('plastic_cup'))
+    batch = f.runtime.detectors[f.req.model_id][0].detector.detect(frame, DetectionQuery('plastic_cup'))
     mask = normalize_batch(batch, frame)['candidates'][0]['mask_rle']
     decoded = [bool(i % 2) for i, count in enumerate(mask['counts']) for _ in range(count)]
     assert decoded == [False, True, True, False, False, True]
@@ -443,7 +516,7 @@ def test_service_preserves_empty_rejection_and_marks_deadline_unhealthy(tmp_path
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
     service.start()
-    detector = f.runtime.detectors[f.req.model_id].detector
+    detector = f.runtime.detectors[f.req.model_id][0].detector
     detector.detect = lambda frame, query: DetectionBatch('fake', 'a' * 64, 'cuda', 0., 3, 2, ())
     assert service.submit(f.req, f.snapshot).accepted
     assert service.run_next().outcome is ModelOutcome.NORMAL_REJECTION
@@ -470,7 +543,9 @@ def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch)
     detector._model = SimpleNamespace(predict=lambda **kwargs: [])
     detector._imgsz, detector.runtime_device = 640, 'cuda'
     detector._monotonic_ns = lambda: 1
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.MODEL_ERROR
     assert f.runtime.healthy
 
@@ -500,6 +575,31 @@ def test_smoke_records_independent_monotonic_latency_per_model(tmp_path, monkeyp
     assert all(item['outcome'] == 'QUALIFIED' for item in results.values())
     assert results['grounded-sam']['model_provenance'] == {'backend': 'grounded_sam'}
     assert json.loads(json.dumps(results, allow_nan=False)) == results
+
+
+def test_smoke_executes_and_indexes_every_detector_instance(tmp_path, monkeypatch):
+    from so101_demo.cli.parallel_perception_broker import smoke_models
+    from so101_demo.core.detection import DetectionFrame
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch, yolo_executor_count=2)
+    f.runtime.start()
+    frame = DetectionFrame(
+        np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera'
+    )
+
+    results = smoke_models(
+        f.runtime,
+        frame,
+        clock=iter([1.0, 1.1, 1.1, 1.2, 1.2, 1.3]).__next__,
+    )
+
+    assert results[YOLO_ID]['executor_count'] == 2
+    assert [
+        item['executor_index'] for item in results[YOLO_ID]['instances']
+    ] == [0, 1]
+    assert results[GROUNDED_ID]['executor_count'] == 1
+    assert sum(call[0] == 'detect' for call in f.calls) == 3
 
 
 @pytest.mark.parametrize('clock_values', [[1., float('nan')], [1., .5],
@@ -543,7 +643,7 @@ def test_second_smoke_model_infra_does_not_hide_behind_first_success(tmp_path, m
     f.runtime.start()
     def fail(frame, query):
         raise RuntimeError('second model CUDA OOM')
-    f.runtime.detectors[GROUNDED_ID].detector.detect = fail
+    f.runtime.detectors[GROUNDED_ID][0].detector.detect = fail
     frame = DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera')
     results = smoke_models(f.runtime, frame, clock=iter([1., 2., 2., 3.]).__next__)
     assert results[f.req.model_id]['outcome'] == 'QUALIFIED'
@@ -635,7 +735,7 @@ def test_authority_failure_is_infrastructure_at_every_boundary(tmp_path, monkeyp
     if phase == 'dispatch':
         failed[0] = True
     elif phase == 'completion':
-        detector = f.runtime.detectors[f.req.model_id].detector
+        detector = f.runtime.detectors[f.req.model_id][0].detector
         detect = detector.detect
         def complete(frame, query):
             batch = detect(frame, query)
@@ -738,7 +838,9 @@ def test_yolo_completed_schema_vs_tensor_transfer_boundary(tmp_path, monkeypatch
     detector._monotonic_ns = lambda: 1
     detector._model_id, detector._weights_sha256 = 'yolo', 'a' * 64
     detector._class_names = None if bad == 'class_mapping' else {0: 'plastic_cup'}
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     expected = ModelOutcome.INFRA_ERROR if bad.startswith('transfer_') else ModelOutcome.MODEL_ERROR
     assert f.runtime.infer(f.req, f.snapshot).outcome is expected
     assert f.runtime.healthy is (expected is ModelOutcome.MODEL_ERROR)
@@ -783,6 +885,8 @@ def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypa
     detector._grounding_processor, detector._sam_processor = GroundingProcessor(), SamProcessor()
     detector._grounding_model, detector._sam_model = grounding_model, sam_model
     detector.runtime_device, detector.target_class_id = 'cuda', 'plastic_cup'
-    f.runtime.detectors[f.req.model_id] = replace(f.runtime.detectors[f.req.model_id], detector=detector)
+    f.runtime.detectors[f.req.model_id] = (
+        replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
+    )
     assert f.runtime.infer(f.req, f.snapshot).outcome.value == expected
     assert calls == calls_expected
