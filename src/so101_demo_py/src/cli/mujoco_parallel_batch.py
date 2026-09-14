@@ -32,6 +32,7 @@ from so101_demo.parallel_batch.artifacts import (
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchRequest,
     AdaptiveWorkerOptions,
+    PoolRequest,
     load_adaptive_worker_options,
 )
 from so101_demo.parallel_batch.adaptive_pool import (
@@ -72,7 +73,11 @@ from so101_demo.parallel_batch.resources import (
     WorkerResourceAllocator,
     WorkerResources,
 )
-from so101_demo.parallel_batch.worker import LeaseGrantPaused, ParallelWorker
+from so101_demo.parallel_batch.worker import (
+    LeaseGrantPaused,
+    ParallelWorker,
+    adaptive_result_is_infrastructure,
+)
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
     BrokerTransport,
@@ -114,7 +119,7 @@ class _Parser(argparse.ArgumentParser):
 
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
-    request: BatchRequest | None
+    request: BatchRequest | PoolRequest | None
     adaptive_request: AdaptiveBatchRequest | None
     config: ParallelRuntimeConfig
     config_path: Path
@@ -1798,13 +1803,20 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         "broker_generation", "catalog", "control_token_path",
         "control_socket_path", "shutdown_deadline_s", "max_frame_bytes",
     }
-    optional_fields = {"start_paused", "worker_start_timeout_s"}
+    adaptive_fields = {
+        "start_paused", "worker_start_timeout_s", "adaptive_workers"
+    }
     if (
         type(document) is not dict
-        or set(document) not in (required_fields, required_fields | optional_fields)
+        or set(document) not in (required_fields, required_fields | adaptive_fields)
         or document["schema_version"] != 1
-        or (("start_paused" in document) != ("worker_start_timeout_s" in document))
-        or ("start_paused" in document and document["start_paused"] is not True)
+        or (
+            "start_paused" in document
+            and (
+                document["start_paused"] is not True
+                or document["adaptive_workers"] is not True
+            )
+        )
     ):
         raise CliError("WORKER_SPEC_INVALID")
     if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
@@ -1869,6 +1881,11 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         "config": config,
         "worker_id": resources.worker_id,
         "generation": resources.generation,
+        **(
+            {"adaptive_workers": True}
+            if document.get("adaptive_workers") is True
+            else {}
+        ),
     })
     return worker, runtime
 
@@ -1884,10 +1901,12 @@ def _write_worker_results(resources, results):
     return path
 
 
-def _worker_results_failed(results):
+def _worker_results_failed(results, *, adaptive_workers=False):
     """Classify only an unrecovered or nonterminal Worker result as fatal."""
     if not results:
         return True
+    if adaptive_workers:
+        return any(adaptive_result_is_infrastructure(result) for result in results)
     for result in results:
         if result.stopped_reason in {"POINT_TERMINAL", "NO_POINT"}:
             continue
@@ -2008,7 +2027,12 @@ def _run_worker_spec(path, *, runtime_side_effects=None):
             return 1
         results = worker.run()
         _write_worker_results(resources, results)
-        return int(_worker_results_failed(results))
+        return int(
+            _worker_results_failed(
+                results,
+                adaptive_workers=document.get("adaptive_workers", False),
+            )
+        )
     finally:
         try:
             runtime.shutdown_owned()
@@ -2053,6 +2077,7 @@ class ProductionBatchComposition:
         clock=time.monotonic,
         sleep=time.sleep,
         adaptive_context: AdaptivePoolContext | None = None,
+        allocation_policy: AllocationPolicy | None = None,
         pool_running_recorder=None,
     ):
         if spec.request is None:
@@ -2067,6 +2092,10 @@ class ProductionBatchComposition:
         self.spec = spec
         self.adaptive_context = adaptive_context
         self._pool_running_recorder = pool_running_recorder
+        self.worker_exit_codes = ()
+        self.adaptive_attempt_statuses = {}
+        self.adaptive_result_locations = {}
+        self.adaptive_cleanup_complete = False
         self._clock = clock
         self._sleep = sleep
         self.supervisor = supervisor or ProcessSupervisor(
@@ -2106,7 +2135,9 @@ class ProductionBatchComposition:
             live_headroom_verifier=live_headroom_verifier,
             batch_id=spec.request.batch_id,
             allocation_policy=(
-                None
+                allocation_policy
+                if allocation_policy is not None
+                else None
                 if adaptive_context is None
                 else AllocationPolicy(
                     max_worker_count=adaptive_context.options.worker_count,
@@ -2248,6 +2279,7 @@ class ProductionBatchComposition:
             if adaptive_context is not None:
                 worker_spec.update(
                     start_paused=True,
+                    adaptive_workers=True,
                     worker_start_timeout_s=(
                         adaptive_context.options.worker_start_timeout_s
                     ),
@@ -2399,8 +2431,13 @@ class ProductionBatchComposition:
             ipc_root=runtime_root,
         )
         token_path = authority.issue("broker", generation)
+        authority_name = (
+            "authority.sock"
+            if self.adaptive_context is not None
+            else "broker-authority.sock"
+        )
         authority_server = AuthenticatedUnixServer(
-            runtime_root / "broker-authority.sock",
+            runtime_root / authority_name,
             authority,
             self._coordinator_handler,
             deadline_s=self.spec.config.heartbeat_timeout_s,
@@ -2422,7 +2459,7 @@ class ProductionBatchComposition:
                 "yolo_weights_sha256": self.spec.yolo_weights_sha256,
                 "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
                 "config_path": "/runtime/runtime-config.yaml",
-                "authority_endpoint": "/runtime/broker-authority.sock",
+                "authority_endpoint": f"/runtime/{authority_name}",
                 "authority_token_path": f"/runtime/{token_path.name}",
                 "request_deadline_s": self.spec.config.heartbeat_timeout_s,
                 "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
@@ -3142,14 +3179,45 @@ class ProductionBatchComposition:
         try:
             results = worker.run()
             return int(
-                not results
-                or any(
-                    result.stopped_reason not in {"POINT_TERMINAL", "NO_POINT"}
-                    for result in results
+                _worker_results_failed(
+                    results,
+                    adaptive_workers=getattr(self, "adaptive_context", None)
+                    is not None,
                 )
             )
         finally:
             runtime.shutdown_owned()
+
+    def _capture_adaptive_results(self):
+        if self.adaptive_context is None:
+            return
+        statuses = {}
+        for resources in self.resource_manifest.workers:
+            path = resources.worker_root / "worker-run-results.json"
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+            except (FileNotFoundError, OSError, ValueError, TypeError):
+                continue
+            for result in document.get("results", ()):
+                point_id = result.get("point_id")
+                status = result.get("terminal_status")
+                if isinstance(point_id, str) and isinstance(status, str):
+                    try:
+                        statuses[point_id] = AttemptStatus(status)
+                    except ValueError:
+                        continue
+        locations = {}
+        for event in self.journal.replay().events:
+            if event.type != "RESULT_COMMITTED":
+                continue
+            response = event.payload.get("response", {})
+            identity = event.payload.get("identity", {})
+            point_id = identity.get("point_id")
+            location = response.get("location", identity.get("location"))
+            if isinstance(point_id, str) and isinstance(location, str):
+                locations[point_id] = location
+        self.adaptive_attempt_statuses = statuses
+        self.adaptive_result_locations = locations
 
     def run(self) -> BatchSummary:
         failure = False
@@ -3188,12 +3256,17 @@ class ProductionBatchComposition:
                     deadline_monotonic_s=(
                         self._clock() + self.spec.config.batch_hard_timeout_s
                     ),
-                    health_recovery=self._recover_broker,
+                    health_recovery=(
+                        None
+                        if self.adaptive_context is not None
+                        else self._recover_broker
+                    ),
                     health_probe=lambda _expected: (
                         self.coordinator.snapshot().broker_healthy
                     ),
                 )
                 self._worker_children_reaped = True
+            self.worker_exit_codes = tuple(codes)
             failure = any(code != 0 for code in codes)
             self._settle_shared_dependency_failure()
             snapshot = self.coordinator.snapshot()
@@ -3259,6 +3332,10 @@ class ProductionBatchComposition:
                     except Exception as error:
                         cleanup = False
                         completion_error = error
+                self.adaptive_cleanup_complete = bool(
+                    cleanup and snapshot.summary.batch_cleanup_complete
+                )
+                self._capture_adaptive_results()
                 _write_json(
                     self.spec.request.evidence_root / "cleanup-gates.json",
                     {

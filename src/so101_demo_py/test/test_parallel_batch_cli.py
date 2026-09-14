@@ -161,6 +161,38 @@ def test_recovered_initial_gate_terminal_is_not_a_worker_process_failure():
     )) is True
 
 
+def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure():
+    from so101_demo.cli.mujoco_parallel_batch import _worker_results_failed
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    invalid = SimpleNamespace(
+        point_id="task_start",
+        stopped_reason="INITIAL_GATE_FAILED",
+        terminal_status=AttemptStatus.INVALID,
+        recovered=True,
+    )
+    exhausted = SimpleNamespace(
+        point_id=None,
+        stopped_reason="NO_POINT",
+        terminal_status=None,
+        recovered=False,
+    )
+    stopped = SimpleNamespace(
+        point_id=None,
+        stopped_reason="STOP_REQUESTED",
+        terminal_status=None,
+        recovered=False,
+    )
+
+    assert _worker_results_failed((invalid, exhausted)) is False
+    assert _worker_results_failed(
+        (invalid, exhausted), adaptive_workers=True
+    ) is True
+    assert _worker_results_failed(
+        (exhausted, stopped), adaptive_workers=True
+    ) is False
+
+
 @pytest.mark.parametrize(
     "changes,error",
     [
@@ -1773,6 +1805,56 @@ def test_legacy_w4_remains_rejected_by_the_v1_contract(tmp_path):
             argv(tmp_path / "legacy", worker_count="4"),
             provenance_verifier=verified,
         )
+
+
+def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path):
+    from dataclasses import replace
+
+    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        PoolRequest,
+        _new_pool_request_for_production_factory,
+    )
+    from so101_demo.parallel_batch.adaptive_pool import (
+        ProductionAdaptivePoolFactory,
+    )
+
+    evidence_root = Path(
+        "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"
+    )
+    prepared = prepare_batch(
+        adaptive_argv(
+            tmp_path / "source",
+            batch_id="abcde",
+            point_id=("task_start",),
+        ),
+        provenance_verifier=verified,
+    )
+    prepared = replace(
+        prepared,
+        adaptive_request=replace(
+            prepared.adaptive_request,
+            evidence_root=evidence_root,
+        ),
+    )
+    request = _new_pool_request_for_production_factory(
+        batch_id="abcde-g01-w08",
+        run_mode=RunMode.DRY_RUN,
+        selected_point_ids=("task_start",),
+        worker_count=8,
+        max_points_per_worker=1,
+        evidence_root=evidence_root / "r/abcde/p/g01w08",
+    )
+
+    pool = ProductionAdaptivePoolFactory(
+        prepared,
+        composition_factory=lambda *_args, **_kwargs: None,
+    )(request)
+
+    assert isinstance(pool.prepared.request, PoolRequest)
+    assert pool.context.request.worker_count == 8
+    assert pool.context.options.worker_count == 8
+    assert pool.context.selector.choose("worker-08", ("task_start",)) == "task_start"
 
 
 def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):

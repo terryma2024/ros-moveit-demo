@@ -1,9 +1,18 @@
 """Safety contracts for adaptive pool startup readiness."""
 
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from so101_demo.parallel_batch.contracts import (
+    AttemptStatus,
+    BatchSummary,
+    PointStatus,
+    RunMode,
+    ValidationStatus,
+)
 
 
 def valid_receipt(worker_id="w1", *, generation=1, observed=10.0):
@@ -222,3 +231,181 @@ def test_final_readiness_recheck_rejects_wrong_broker_or_stale_receipt(change):
 
     with pytest.raises(CliError, match="WORKER_READINESS_INVALID"):
         composition._release_adaptive_workers()
+
+
+def production_pool(tmp_path, summary, **composition_state):
+    from dataclasses import replace as dc_replace
+
+    from so101_demo.parallel_batch.adaptive_contracts import (
+        _new_pool_request_for_production_factory,
+        load_adaptive_worker_options,
+    )
+    from so101_demo.parallel_batch.adaptive_pool import (
+        AdaptivePointSelector,
+        AdaptivePoolContext,
+        ProductionAdaptivePool,
+    )
+
+    request = _new_pool_request_for_production_factory(
+        batch_id="a001-g01-w01",
+        run_mode=summary.run_mode,
+        selected_point_ids=tuple(summary.point_statuses),
+        worker_count=1,
+        max_points_per_worker=len(summary.point_statuses),
+        evidence_root=tmp_path / "r/a001/p/g01w01",
+    )
+    options = dc_replace(
+        load_adaptive_worker_options(
+            Path(__file__).resolve().parents[1]
+            / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+        ),
+        worker_count=1,
+        fallback_worker_counts=(),
+    )
+    context = AdaptivePoolContext(
+        request,
+        options,
+        AdaptivePointSelector(request.selected_point_ids, ("worker-01",), 3),
+    )
+    default_locations = {
+        point_id: tmp_path / "sealed" / point_id
+        for point_id, status in summary.point_statuses.items()
+        if status in {PointStatus.PASSED, PointStatus.FAILED}
+    }
+
+    class Composition:
+        worker_exit_codes = composition_state.get("worker_exit_codes", ())
+        adaptive_cleanup_complete = composition_state.get(
+            "adaptive_cleanup_complete", True
+        )
+        adaptive_attempt_statuses = composition_state.get(
+            "adaptive_attempt_statuses", {}
+        )
+        adaptive_result_locations = composition_state.get(
+            "adaptive_result_locations", default_locations
+        )
+
+        def __init__(self, *_args, **kwargs):
+            self.pool_running_recorder = kwargs["pool_running_recorder"]
+
+        def run(self):
+            exception = composition_state.get("exception")
+            if exception is not None:
+                raise exception
+            self.pool_running_recorder(())
+            return summary
+
+    return ProductionAdaptivePool(
+        prepared=SimpleNamespace(request=request),
+        context=context,
+        generation=1,
+        composition_factory=Composition,
+    )
+
+
+def execute_summary(statuses, *, cleanup=True):
+    return BatchSummary(
+        RunMode.EXECUTE,
+        statuses,
+        batch_terminal=True,
+        batch_cleanup_complete=cleanup,
+        terminal_reason="POINTS_COMPLETE",
+    )
+
+
+def test_production_adapter_keeps_business_failure_in_the_same_pool(tmp_path):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.PASSED, "p2": PointStatus.FAILED}),
+    )
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert [item.status for item in result.terminal_results] == [
+        PointStatus.PASSED,
+        PointStatus.FAILED,
+    ]
+    assert result.infrastructure_failure is None
+
+
+@pytest.mark.parametrize(
+    ("state", "kind"),
+    [
+        ({"adaptive_attempt_statuses": {"p1": AttemptStatus.INVALID}}, "RECOVERY"),
+        ({"worker_exit_codes": (17,)}, "PROCESS_EXIT"),
+        ({"exception": RuntimeError("BROKER_DISCONNECTED")}, "BROKER_DISCONNECTED"),
+    ],
+)
+def test_production_adapter_names_infrastructure_failures(tmp_path, state, kind):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.UNRUN}, cleanup=kind != "PROCESS_EXIT"),
+        **state,
+    )
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert result.infrastructure_failure.kind.value == kind
+
+
+def test_production_adapter_cleanup_false_is_infrastructure(tmp_path):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.UNRUN}, cleanup=False),
+    )
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert result.infrastructure_failure.kind.value == "CLEANUP"
+    assert result.cleanup_complete is False
+
+
+def test_production_adapter_imports_only_fsync_located_terminal_results(tmp_path):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.PASSED}),
+        adaptive_result_locations={},
+    )
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert result.terminal_results == ()
+    assert result.interrupted_point_ids == ("p1",)
+    assert result.infrastructure_failure.kind.value == "COORDINATOR"
+
+
+def test_plan_only_validation_never_becomes_a_physical_terminal_result(tmp_path):
+    summary = BatchSummary(
+        RunMode.PLAN_ONLY,
+        {"p1": PointStatus.UNRUN},
+        batch_terminal=True,
+        validation_statuses={"p1": ValidationStatus.VALIDATION_PASSED},
+        batch_cleanup_complete=True,
+        terminal_reason="POINTS_COMPLETE",
+    )
+    pool = production_pool(tmp_path, summary)
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    assert result.terminal_results == ()
+    assert result.infrastructure_failure is None
+
+
+def test_adaptive_socket_paths_freeze_the_107_byte_boundary():
+    from so101_demo.parallel_batch.adaptive_pool import adaptive_socket_paths
+
+    root = Path(
+        "/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/"
+        "r/abcde/p/g01w08"
+    )
+    paths = adaptive_socket_paths(root, 8)
+
+    assert len(str(root / "ipc/worker-08-control.sock").encode()) == 107
+    assert len(str(root / "ipc/broker/authority.sock").encode()) == 106
+    assert max(len(str(path).encode()) for path in paths) == 107
+    assert all("broker-authority.sock" not in str(path) for path in paths)

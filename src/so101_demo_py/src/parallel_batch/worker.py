@@ -50,6 +50,38 @@ class WorkerRunResult:
     failure_message: str | None = None
 
 
+def adaptive_result_is_infrastructure(result: WorkerRunResult) -> bool:
+    """Classify one adaptive result without treating queue exhaustion as failure."""
+
+    stopped_reason = getattr(result, "stopped_reason", None)
+    if stopped_reason in {"NO_POINT", "STOP_REQUESTED"}:
+        return False
+    terminal_status = getattr(result, "terminal_status", None)
+    if terminal_status in {
+        AttemptStatus.INVALID,
+        AttemptStatus.INDETERMINATE,
+        ValidationStatus.VALIDATION_INVALID,
+    }:
+        return True
+    if stopped_reason in {
+        "INITIAL_GATE_FAILED",
+        "WORKER_NOT_READY",
+        "LEASE_ACK_FAILED",
+        "START_ACK_FAILED",
+        "TERMINAL_ACK_FAILED",
+        "PORT_FAILURE",
+        "REENTRANT_CALL_REJECTED",
+    }:
+        return True
+    if (
+        getattr(result, "point_id", None)
+        and stopped_reason == "POINT_TERMINAL"
+        and getattr(result, "recovered", None) is not True
+    ):
+        return True
+    return stopped_reason != "POINT_TERMINAL"
+
+
 def _bounded_failure_message(error: Exception) -> str:
     normalized = " ".join(str(error).splitlines())
     payload = normalized.encode("utf-8", errors="replace")[:512]
@@ -164,8 +196,12 @@ class ParallelWorker:
             "coordinator", "broker", "runtime", "results", "clock", "config",
             "worker_id", "generation",
         }
-        if (not isinstance(ports, Mapping)
-                or set(ports) not in (required, required | {"fault_hook"})):
+        optional = {"fault_hook", "adaptive_workers"}
+        if (
+            not isinstance(ports, Mapping)
+            or not required.issubset(ports)
+            or not set(ports).issubset(required | optional)
+        ):
             raise WorkerError("WORKER_PORTS_REQUIRED")
         self._coordinator = ports["coordinator"]
         self._broker = ports["broker"]
@@ -176,8 +212,11 @@ class ParallelWorker:
         self._worker_id = ports["worker_id"]
         self._generation = ports["generation"]
         self._fault_hook = ports.get("fault_hook")
+        self._adaptive_workers = ports.get("adaptive_workers", False)
         if self._fault_hook is not None and not callable(self._fault_hook):
             raise WorkerError("FAULT_HOOK_CALLABLE")
+        if type(self._adaptive_workers) is not bool:
+            raise WorkerError("ADAPTIVE_WORKERS_BOOLEAN")
         if type(self._config) is not ParallelRuntimeConfig:
             raise WorkerError("FROZEN_CONFIG_REQUIRED")
         if not isinstance(self._worker_id, str) or not self._worker_id:
@@ -1086,6 +1125,9 @@ class ParallelWorker:
                 time.sleep(0.01)
                 continue
             results.append(result)
+            if self._adaptive_workers and adaptive_result_is_infrastructure(result):
+                self._quarantined = True
+                break
             if (
                 result.stopped_reason not in {
                     "POINT_TERMINAL", "INITIAL_GATE_FAILED"
