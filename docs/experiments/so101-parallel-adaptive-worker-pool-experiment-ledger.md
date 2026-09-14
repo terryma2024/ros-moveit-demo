@@ -7,7 +7,7 @@ success_contract: Complete each planned RED/GREEN implementation task and commit
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 167c74a941782e37ed1369ee10c42ac6b77088a9
+current_commit: c8d44b862a90e4aa20e9945cf223caeff12ce4d5
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -32,6 +32,7 @@ confirmed_conclusions:
   - EXP-008 live-01 and live-02 are INVALID preflight attempts, and live-03 is INVALID because systemd-oomd killed its 16.2 GiB tmux scope before any point lease; CP-012.
   - Task 10 independent review is accepted after correcting the audit record: the timeout RED/GREEN stdout streams are unavailable, while the adjacent 40-test log remains retained; CP-019.
   - Task 11 final ordinary package collection at source 167c74a941782e37ed1369ee10c42ac6b77088a9 collected 3035 tests: 3033 passed, 1 skipped, and the sole failure is the preserved task-external dirty test test_transient_unclassified_proc_read_error_is_retried; CP-019.
+  - EXP-009 confirmed and fixed the post-review dynamic plan-only READY-boundary regression with an auditable 1-failure RED, 1-pass GREEN, and 40-pass adjacent gate; source/test commit c8d44b862a90e4aa20e9945cf223caeff12ce4d5; CP-020.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
   - A hidden transport pre-accept delay is the dominant W8 `/cup_pose` cost; its 0.091 s median was below internal Broker queue wait, response delivery, model execution, and the full Broker round trip.
@@ -39,8 +40,8 @@ disproven_routes:
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
   - NONE; the authorized W8, W6, and W1 live qualification sequence is exhausted, and no further live run is authorized.
-latest_checkpoint: CP-019
-next_experiment: NONE_TASK11_FINAL
+latest_checkpoint: CP-020
+next_experiment: NONE_POST_REVIEW
 ```
 
 ## CP-016 — Configured execution timeout restored
@@ -1324,4 +1325,94 @@ open_risks:
   - Historical timeout RED/GREEN ordering cannot be independently verified because stdout was not retained.
   - The literal ordinary package gate remains nonzero due only to the preserved user-owned dirty test.
 next_command: NONE; Task 11 is finalized with blocked qualification boundaries. No push, merge, evidence deletion, or further live run is authorized.
+```
+
+## EXP-009 — Post-review plan-only READY boundary regression
+
+```yaml
+experiment_id: EXP-009
+status: VALID
+prior_experiment: NONE
+hypothesis: Dynamic plan-only rejects every otherwise valid `/cup_pose` sample because its orchestration path calls `get_one()` without first arming the READY boundary now required by `RosCupPoseSource`.
+prediction: A focused orchestration regression will fail against source commit 9a7b296740d33fdb7d703a4e29de1731ba0ebce0 at the missing `arm()` call, then pass after adding the same bounded arm-before-acquire sequence used by execute mode.
+single_variable: Add `source.arm(min(5.0, options.cup_pose_timeout_s))` between plan-only source construction and pose acquisition.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - No live SO-101, MoveIt, MuJoCo, Gazebo, or RViz runtime is started; this is an adapter-orchestration test only.
+  - The preserved dirty `src/so101_demo_py/test/test_parallel_batch_resources.py` and untracked `MUJOCO_LOG.TXT` remain untouched and unstaged.
+  - Every pytest invocation uses a fresh short scratch path below the registered durable evidence root, with `/usr/bin/python3` verifying `tempfile.gettempdir()` before collection.
+success_criteria:
+  - RED fails because plan-only attempts pose acquisition before arming the READY boundary.
+  - GREEN passes after the minimal call-sequence change and asserts the five-second arm cap plus the unchanged full acquisition timeout.
+  - Adjacent plan-only, cup-pose-source, and execute scene-sync regressions pass with zero failures.
+failure_criteria:
+  - The focused test passes before implementation, fails for an unrelated reason, or any task-owned adjacent regression fails.
+invalid_criteria:
+  - Source provenance, test executable, scratch provenance, or preserved dirty-file boundary differs from this record.
+provenance:
+  source_commit: 9a7b296740d33fdb7d703a4e29de1731ba0ebce0
+  qualified_feature_commit: c8d44b862a90e4aa20e9945cf223caeff12ce4d5
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: 0
+  gz_partition: post-review-plan-only-ready-no-live-stack
+commands:
+  - command: PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test/test_dynamic_plan_only.py::test_run_dynamic_plan_only_arms_ready_boundary_before_pose_wait --junitxml=/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr01/red.xml
+    exit_code: 1
+  - command: PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test/test_dynamic_plan_only.py::test_run_dynamic_plan_only_arms_ready_boundary_before_pose_wait --junitxml=/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr03/green.xml
+    exit_code: 0
+  - command: PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test/test_dynamic_plan_only.py src/so101_demo_py/test/test_cup_pose_source.py src/so101_demo_py/test/test_dynamic_scene_sync.py --junitxml=/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr04/adjacent.xml
+    exit_code: 0
+  - command: PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test --junitxml=/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr05/package.xml
+    exit_code: 1
+observed:
+  - OBSERVED source history: commit 33a8b59aa0e5158aab79cbf0c2fc4751b07da1cf added `arm()` and a mandatory `_convert()` boundary, but only execute mode calls `arm()` before `get_one()`.
+  - RED collected one test and failed one in 0.14 s because the production entrypoint returned 1 after `get_one()` raised `pose read before READY boundary`; shell elapsed 0.40 s.
+  - The first GREEN attempt in scratch/pr02 was not authoritative: after reaching the newly enabled planner path it exposed an incomplete test fixture missing `arm_joint_names`; it collected one and failed one in 0.13 s. The log and scratch remain retained.
+  - Authoritative GREEN collected one test and passed one in 0.13 s; shell elapsed 0.41 s. It proves `arm(5.0)` precedes `get_one(8.0)`.
+  - The adjacent plan-only, cup-pose-source, and dynamic scene-sync files collected 40 tests and passed 40 in 0.59 s; shell elapsed 0.91 s.
+  - The fresh ordinary package scope collected 3036 tests: 3034 passed, 1 skipped, 1 failed, and 4 warnings in 61.36 s; shell elapsed 62.52 s. The sole failure is the preserved task-external dirty test `test_transient_unclassified_proc_read_error_is_retried`; no task-owned failure appeared and benchmark tests were not collected.
+  - All five pytest runs used distinct previously nonexistent scratch roots pr01 through pr05 and exact `/usr/bin/python3`; each preflight verified `tempfile.gettempdir()` resolved to that run's `tmp` child.
+inferred:
+  - The missing plan-only orchestration call was the first bad boundary; execute-mode semantics supplied the established bounded-arm reference.
+conclusion: CONFIRMED and FIXED at the automated orchestration boundary. Live plan-only, MoveIt, MuJoCo, Gazebo, controller, joint/TF, and visual validation were intentionally not run and are not claimed.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/post-review-plan-only-ready/red.log SHA256 01f646f4d4817abb6a2fd3d1820a4b0c18c09290b21e2ae8c2a335a6a73363dd
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr01/red.xml SHA256 671e646c6a9a6062ce69f7bbd59a231455dd28f067fea8690ffa0e3e690dcce6
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/post-review-plan-only-ready/green-r2.log SHA256 79b6a7654a844c039d16ad3f03170fa4326b0a574de63a2876ecf1c5b2272a5d
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr03/green.xml SHA256 71bff87a2516fde21e2afeb1f026c36dc5554eaf56587637356a29fbbb5681ca
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/post-review-plan-only-ready/adjacent.log SHA256 6138862c4dc728713bd4f8fa656e742debafe06d9281bbb691f8ea4511c22614
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr04/adjacent.xml SHA256 7475fa8771f0d0af340808f4615d232d64c08f5cfc8c55ccdf1fa8f28d7ce29a
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/post-review-plan-only-ready/package.log SHA256 e8163366176dd940741a1373da92958de90a8874bb17cf74af7cfff1740366a7
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/scratch/pr05/package.xml SHA256 32c14cefa68cc4c335345a66ac1b82f429067f8de584e8981f6f755f6a5865a5
+decision: KEEP
+next_experiment: NONE
+```
+
+## CP-020 — Post-review dynamic plan-only READY fix
+
+```yaml
+checkpoint_id: CP-020
+last_valid_experiment: EXP-009
+current_hypothesis: NONE
+source_commit: c8d44b862a90e4aa20e9945cf223caeff12ce4d5
+working_tree_status: Ledger-only audit update pending; preserved user `src/so101_demo_py/test/test_parallel_batch_resources.py` and `MUJOCO_LOG.TXT` remain untouched and unstaged.
+owned_processes: NONE; no live robot, MuJoCo, Gazebo, MoveIt, RViz, or ROS graph was started.
+preserved_processes: Existing unrelated tmux sessions were not modified.
+confirmed_conclusions:
+  - Dynamic plan-only now arms the ROS-clock READY boundary with `min(5.0, options.cup_pose_timeout_s)` before waiting for a pose, matching execute-mode boundary semantics.
+  - The focused RED failed 1/1 at the missing boundary; authoritative GREEN passed 1/1; adjacent ROS boundary tests passed 40/40.
+  - The current ordinary package gate remains non-green at 3034 passed, 1 skipped, and 1 failed; its sole failure is the preserved user-owned dirty test and does not change EXP-009's task-owned result.
+  - Earlier W8 qualification remains BLOCKED: no valid fixed-W8 20/20 result exists, the five-second SLO remains BLOCKED, C4 remains NOT_RUN, and adaptive fallback remains NOT_RUN/BLOCKED.
+disproven_routes:
+  - Changing `RosCupPoseSource._convert()` or weakening its READY validation is unnecessary; the defect was the omitted orchestration call.
+open_risks:
+  - No live plan-only ROS/MoveIt acceptance or fresh visual evidence was run because this dispatch explicitly prohibited live robot/MuJoCo execution.
+  - The preserved external package-test failure remains unresolved and out of scope.
+retained_runs:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01/post-review-plan-only-ready and scratch/pr01 through scratch/pr05.
+archived_runs: []
+deletion_candidates:
+  - scratch/pr01, scratch/pr02, scratch/pr03, scratch/pr04, and scratch/pr05; retained and not deleted pending explicit authorization.
+next_command: NONE; source/test and ledger audit commits complete after final readback, with prior qualification boundaries unchanged.
 ```
