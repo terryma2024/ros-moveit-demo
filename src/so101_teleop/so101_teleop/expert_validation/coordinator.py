@@ -1,0 +1,69 @@
+"""Typed fixed-coordinator launch contracts for the validation Web service."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import re
+from types import MappingProxyType
+from typing import Mapping
+
+
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def _absolute_normalized(name: str, value: Path) -> Path:
+    path = Path(value)
+    if not path.is_absolute() or path != path.resolve(strict=False):
+        raise ValueError(f"{name}_ABSOLUTE_NORMALIZED")
+    return path
+
+
+@dataclass(frozen=True)
+class CoordinatorStartRequest:
+    campaign_id: str
+    batch_id: str
+    execution_mode: str
+    worker_count: int
+    max_points_per_worker: int
+    argv: tuple[str, ...]
+    environment: Mapping[str, str]
+    batch_root: Path
+    control_socket: Path
+    control_token_sha256: str
+    coordinator_epoch: int = 1
+
+    def __post_init__(self) -> None:
+        for name in ("campaign_id", "batch_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
+                raise ValueError(f"{name.upper()}_INVALID")
+        if self.execution_mode not in {"SEQUENTIAL", "PARALLEL"}:
+            raise ValueError("FIXED_EXECUTION_MODE")
+        for name in ("worker_count", "max_points_per_worker", "coordinator_epoch"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name.upper()}_POSITIVE")
+        if self.execution_mode == "SEQUENTIAL" and self.worker_count != 1:
+            raise ValueError("SEQUENTIAL_WORKER_COUNT")
+        argv = tuple(self.argv)
+        if not argv or any(not isinstance(item, str) or not item for item in argv):
+            raise ValueError("COORDINATOR_ARGV")
+        object.__setattr__(self, "argv", argv)
+        if not isinstance(self.environment, Mapping) or any(
+            not isinstance(key, str)
+            or not key
+            or not isinstance(value, str)
+            for key, value in self.environment.items()
+        ):
+            raise ValueError("COORDINATOR_ENVIRONMENT")
+        object.__setattr__(self, "environment", MappingProxyType(dict(self.environment)))
+        batch_root = _absolute_normalized("BATCH_ROOT", self.batch_root)
+        control_socket = _absolute_normalized("CONTROL_SOCKET", self.control_socket)
+        if not control_socket.is_relative_to(batch_root):
+            raise ValueError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
+        object.__setattr__(self, "batch_root", batch_root)
+        object.__setattr__(self, "control_socket", control_socket)
+        if _SHA256.fullmatch(self.control_token_sha256) is None:
+            raise ValueError("CONTROL_TOKEN_SHA256")
