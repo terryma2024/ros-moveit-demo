@@ -482,11 +482,13 @@ class PerceptionService:
 
     def _watchdog_loop(self):
         while not self._closed.wait(0.02):
+            changed = False
             try:
-                self._sync_health()
+                changed = self._sync_health()
             finally:
-                with self._response_condition:
-                    self._response_condition.notify_all()
+                if changed:
+                    with self._response_condition:
+                        self._response_condition.notify_all()
 
     def wait_response(self, request, timeout_s):
         if (
@@ -497,14 +499,21 @@ class PerceptionService:
             raise ValueError('WAIT_RESPONSE_TIMEOUT')
         deadline = time.monotonic() + float(timeout_s)
         while True:
-            response = self.poll_response(request)
-            if response is not None:
-                return response
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return None
             with self._response_condition:
-                self._response_condition.wait(min(remaining, 0.02))
+                response = self._response_health(
+                    self.broker.poll_response(request)
+                )
+                if response is not None:
+                    return response
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                # Executor completion and the one independent deadline/
+                # authorization watchdog both notify this condition.  Waiting
+                # RPC handlers must not each repeat the watchdog's global scan:
+                # that turns N concurrent requests into N-squared coordinator
+                # authorization traffic and can starve the bounded C2 queue.
+                self._response_condition.wait(remaining)
 
     def close(self, timeout_s):
         if (
@@ -559,8 +568,13 @@ class PerceptionService:
         # Poll only the public Broker API; no second deadline/state machine.
         with self._lock:
             requests = tuple(self._requests.values())
+        changed = False
         for request in requests:
-            self._response_health(self.broker.poll_response(request))
+            changed = (
+                self._response_health(self.broker.poll_response(request))
+                is not None
+            ) or changed
+        return changed
 
     def _response_health(self, response):
         if response is not None:

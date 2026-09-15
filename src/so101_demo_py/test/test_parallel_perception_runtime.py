@@ -585,6 +585,74 @@ def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeyp
     assert service.close(timeout_s=1.0) is True
 
 
+def test_wait_response_does_not_repeat_the_watchdogs_global_authorization_scan(
+        tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.broker import ModelResult
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        load_parallel_runtime_config,
+    )
+    from so101_demo.runtime.parallel_perception_runtime import (
+        GROUNDED_ID,
+        PerceptionService,
+        YOLO_ID,
+    )
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Runtime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        healthy = False
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            self.healthy = True
+            self.health_changed(True)
+
+        def _authorized(self, _request, _snapshot):
+            return True
+
+        def infer(self, _request, _snapshot, *, executor_index):
+            assert executor_index == 0
+            entered.set()
+            assert release.wait(timeout=2.0)
+            return ModelResult(ModelOutcome.NORMAL_REJECTION)
+
+        def record_failure(self, **_kwargs):
+            return None
+
+        def _unhealthy(self):
+            self.healthy = False
+            self.health_changed(False)
+
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+    )
+    service = PerceptionService(Runtime(), config, generation=1)
+    service.start()
+    assert service.submit(f.req, f.snapshot).accepted
+    assert entered.wait(timeout=1.0)
+    waiting_thread = threading.current_thread()
+    sync_health = service._sync_health
+
+    def watchdog_only_scan():
+        assert threading.current_thread() is not waiting_thread
+        return sync_health()
+
+    monkeypatch.setattr(service, '_sync_health', watchdog_only_scan)
+    timer = threading.Timer(0.05, release.set)
+    timer.start()
+    try:
+        response = service.wait_response(f.req, timeout_s=1.0)
+    finally:
+        timer.join(timeout=1.0)
+
+    assert response.outcome is ModelOutcome.NORMAL_REJECTION
+    assert service.close(timeout_s=1.0) is True
+
+
 def test_service_preserves_initiating_runtime_failure_before_health_fanout(
         tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
