@@ -5,7 +5,7 @@ success_contract: Omitting --workers selects pytest subprocess concurrency 8 whi
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+current_commit: ae62559645c1a045c53bf5c376a0ef6e8e67343e
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
@@ -25,13 +25,15 @@ confirmed_conclusions:
   - Pytest concurrency 8 passes all 3056 nodes in 59.291 seconds; its 43.099-second straggler and fresh timing estimate warrant one bounded concurrency-10 run (EXP-029-PYTEST-P8).
   - Pytest concurrency 10 passes all 3056 nodes in 27.072 seconds; one concurrency-12 run will test the predeclared 10-percent stopping boundary (EXP-030-PYTEST-P10).
   - Pytest concurrency 12 passes all 3056 nodes in 27.952 seconds but is 3.249 percent slower than concurrency 10; select concurrency 10 and stop expansion (EXP-031-PYTEST-P12, CP-007).
+  - Omitting --workers selects concurrency 8, while an explicit value still overrides it; the focused contract completed RED then 31/31 GREEN (EXP-032-DEFAULT-P8-TDD).
+  - Commit ae62559645c1a045c53bf5c376a0ef6e8e67343e passes all 3058 ordinary pytest nodes when launched without --workers and records worker_count 8 (EXP-035-DEFAULT-P8-FULL-RETRY).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
   - SO-101 application Worker W1-W10 correctness validation is explicitly outside the resumed pytest-only optimization scope.
 open_hypotheses:
   - The existing required --workers argument can become an optional default of 8 without changing explicit override behavior or full-gate semantics (EXP-032-DEFAULT-P8-TDD).
-latest_checkpoint: CP-007
-next_experiment: EXP-032-DEFAULT-P8-TDD
+latest_checkpoint: CP-008
+next_experiment: EXP-036-MERGE
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -2584,7 +2586,12 @@ next_experiment: EXP-033-DEFAULT-P8-FULL
 
 ```yaml
 experiment_id: EXP-033-DEFAULT-P8-FULL
-status: PLANNED
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:20:28+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:21:20+08:00
 prior_experiment: EXP-032-DEFAULT-P8-TDD
 hypothesis: The committed runner passes the full ordinary pytest gate when --workers is omitted, and records worker_count 8.
 prediction: Exact ordinary-node PASS with worker_count=8, unchanged collection semantics, readable JUnit evidence, and complete child cleanup.
@@ -2601,7 +2608,73 @@ failure_criteria:
 invalid_criteria:
   - Source/environment/timing-input drift, scratch collision, or external interruption.
 provenance:
-  source_commit: PENDING_POST_COMMIT
+  source_commit: ae62559645c1a045c53bf5c376a0ef6e8e67343e
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Run tools/so101_pytest_gate.py without --workers from commit ae62559645c1a045c53bf5c376a0ef6e8e67343e using fresh run ID p and the EXP-028 timing input.
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/p
+decision: RUN
+next_experiment: EXP-034-MERGE
+```
+
+### EXP-033 invalidation update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T23:22:05+08:00
+commands:
+  - command: tools/so101_pytest_gate.py without --workers using run ID p
+    exit_code: 1
+observed:
+  - OBSERVED: No pytest subprocess launched; the runner rejected scratch/p with FileExistsError.
+  - OBSERVED: scratch/p was created at 2026-09-15T17:08:42+08:00 by an earlier experiment and contains retained evidence.
+  - OBSERVED: The runner's failure summary records worker_count=8, independently confirming that omitted --workers resolved to the new default before layout validation.
+  - OBSERVED: The admission shell used `test ! -e scratch/p` without fail-fast; subsequent commands masked that nonzero result.
+inferred:
+  - NONE
+conclusion: EXP-033 is INVALID because its selected scratch path was not fresh; runner behavior was correct and no implementation change is required.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp033-default-p8-full.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/p/summary.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp033-default-p8-full-console.log
+decision: RETAIN_INVALID
+next_experiment: EXP-034-DEFAULT-P8-FULL-RETRY
+```
+
+## EXP-034-DEFAULT-P8-FULL-RETRY — Fresh-scratch committed default verification
+
+```yaml
+experiment_id: EXP-034-DEFAULT-P8-FULL-RETRY
+status: PLANNED
+prior_experiment: EXP-033-DEFAULT-P8-FULL
+hypothesis: With a truly fresh scratch path and fail-fast admission, the committed runner invoked without --workers passes the full ordinary gate at worker_count 8.
+prediction: Exact ordinary-node PASS, worker_count=8, complete cleanup, and no benchmark collection.
+single_variable: Replace stale run ID p with verified-new run ID q; command and candidate remain otherwise unchanged.
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate remains ae62559645c1a045c53bf5c376a0ef6e8e67343e with only this ledger dirty and allowlisted.
+  - A fail-fast admission command verifies scratch/q is absent immediately before launch.
+  - Exact Python, overlay, source shim, and EXP-028 timing input remain fixed.
+success_criteria:
+  - Runner summary reports PASS, worker_count=8, exact expected/actual node equality, benchmark exclusion, and complete cleanup.
+failure_criteria:
+  - Any test/process/coverage/JUnit/provenance/timeout/cleanup gate fails or worker_count differs from 8.
+invalid_criteria:
+  - Source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: ae62559645c1a045c53bf5c376a0ef6e8e67343e
   install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
   runtime_executable: /usr/bin/python3
   timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
@@ -2615,7 +2688,129 @@ inferred:
   - NONE
 conclusion: PENDING
 evidence:
-  - PENDING_FRESH_RUN_ROOT
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/q
 decision: PENDING
-next_experiment: EXP-034-MERGE
+next_experiment: EXP-035-MERGE
+```
+
+### EXP-034 preflight invalidation
+
+```yaml
+status: INVALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T23:23:11+08:00
+  - status: INVALID
+    at: 2026-09-15T23:23:11+08:00
+commands:
+  - command: fail-fast assertion that scratch/q is absent
+    exit_code: 1
+observed:
+  - OBSERVED: The fail-fast admission stopped immediately; no pytest or gate runner launched.
+  - OBSERVED: scratch/q was created at 2026-09-15T17:26:27+08:00 and is retained evidence.
+inferred:
+  - NONE
+conclusion: EXP-034 is INVALID before test launch because run ID q was not fresh; the corrected admission behavior prevented reuse.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/q
+decision: RETAIN_INVALID
+next_experiment: EXP-035-DEFAULT-P8-FULL-RETRY
+```
+
+## EXP-035-DEFAULT-P8-FULL-RETRY — Fresh-scratch committed default verification
+
+```yaml
+experiment_id: EXP-035-DEFAULT-P8-FULL-RETRY
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:23:40+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:24:03+08:00
+prior_experiment: EXP-034-DEFAULT-P8-FULL-RETRY
+hypothesis: With verified-new run ID r and fail-fast admission, the committed runner invoked without --workers passes the full ordinary gate at worker_count 8.
+prediction: Exact ordinary-node PASS, worker_count=8, complete cleanup, and no benchmark collection.
+single_variable: Replace stale run ID q with verified-new run ID r; command and candidate remain otherwise unchanged.
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate remains ae62559645c1a045c53bf5c376a0ef6e8e67343e with only this ledger dirty and allowlisted.
+  - A fail-fast admission command verifies scratch/r is absent immediately before launch.
+  - Exact Python, overlay, source shim, and EXP-028 timing input remain fixed.
+success_criteria:
+  - Runner summary reports PASS, worker_count=8, exact expected/actual node equality, benchmark exclusion, and complete cleanup.
+failure_criteria:
+  - Any test/process/coverage/JUnit/provenance/timeout/cleanup gate fails or worker_count differs from 8.
+invalid_criteria:
+  - Source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: ae62559645c1a045c53bf5c376a0ef6e8e67343e
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Run a fail-fast admission and tools/so101_pytest_gate.py without --workers using fresh run ID r.
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r
+decision: RUN
+next_experiment: EXP-036-MERGE
+```
+
+### EXP-035 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T23:25:30+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id r --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit ae62559645c1a045c53bf5c376a0ef6e8e67343e --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS with worker_count=8 and exact 3058 expected/actual nodes; collection SHA256 is `dd1beda7f4370f0faf9361ccec70e48949c4ab4aabf1f0f2ef0cfea832bdbbe5`.
+  - OBSERVED: Setup=5.353 seconds, serial lane=10.944 seconds, parallel critical path=49.012 seconds, runner total=65.494 seconds, aggregate CPU time=123.900 seconds, and peak per-process RSS=1814416 KiB.
+  - OBSERVED: All child processes were reaped; benchmark paths remained excluded; the only dirty source path remained this allowlisted ledger.
+inferred:
+  - NONE
+conclusion: The committed default-W8 runner passes the complete ordinary pytest gate when --workers is omitted.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp035-default-p8-full.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp035-default-p8-full-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp035-default-p8-full-outer-time.txt
+decision: KEEP
+next_experiment: EXP-036-MERGE
+```
+
+## CP-008 — Default-W8 source branch ready to merge
+
+```yaml
+checkpoint_id: CP-008
+status: COMPLETE
+timestamp: 2026-09-15T23:25:30+08:00
+last_valid_experiment: EXP-035-DEFAULT-P8-FULL-RETRY
+current_hypothesis: Local no-ff merge can preserve the target worktree's pre-existing unstaged test modification because the feature branch does not change that file.
+working_tree_status: only this ledger is dirty; implementation commit ae62559645c1a045c53bf5c376a0ef6e8e67343e is committed
+owned_processes: NONE
+preserved_processes: NONE
+confirmed_conclusions:
+  - Default startup selects pytest concurrency 8 and explicit overrides remain supported.
+  - Focused runner contracts are 31/31 GREEN and the default-start full ordinary gate is 3058/3058 PASS.
+disproven_routes:
+  - Run IDs p and q are not fresh and must not be reused.
+open_risks:
+  - The target branch has one pre-existing unstaged change in src/so101_demo_py/test/test_parallel_batch_resources.py; its content and unstaged status must survive the merge unchanged.
+retained_runs:
+  - Entire registered evidence root, including invalid p/q admission attempts and valid scratch/r.
+archived_runs:
+  - NONE
+deletion_candidates:
+  - All task scratch, build, install, and log trees; no deletion is authorized or performed.
+next_command: git -C /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool merge --no-ff codex/pytest-gate-parallelism
 ```
