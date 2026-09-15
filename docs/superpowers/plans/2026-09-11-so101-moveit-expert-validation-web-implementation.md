@@ -1,6 +1,11 @@
 # SO-101 MoveIt expert validation Web implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For the ai-station Codex:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` and execute
+> this plan inline in the current session. Do not delegate tasks to subagents. Steps use checkbox
+> (`- [ ]`) syntax for tracking.
+
+**Updated:** 2026-09-16 against merged upstream implementation
+`origin/main@25d1130a990f34334b20e9ced4bcde4f4ed83aba`.
 
 **Goal:** 在 Teleop Web 中交付一个独立的 MoveIt 专家随机点位验证页面，支持固定顺序、
 固定并发和显式自适应 Worker 池三种模式、4 至 20 个确定性点位、实时 Worker/分代/俯视
@@ -26,6 +31,13 @@ wrapper 持有 `AdaptiveBatchRunner`，Runner 跨 pool generation 保持唯一�
 本计划从两个上游计划的已验收产物开始，不复制 coordinator、Runner、wrapper、journal、
 Worker、PerceptionBroker、精确 cleanup、资源观测或故障恢复实现。
 
+**Implemented upstream baseline:** `25d1130a` contains `AdaptiveBatchRunner`,
+`ProductionAdaptivePoolFactory`, `so101_parallel_batch`, `so101_parallel_batch_cleanup`,
+`scripts/run_so101_adaptive_batch.zsh`, the frozen W8/W6/W4/W2/W1 configuration, C2 stateless
+PerceptionBroker, W1–W16 contract support, and retained W1/W2/W4/W6/W8 plus W10 scaling evidence.
+W8 remains the default; W16 is not live-qualified. This plan implements only the missing Teleop Web
+adapter, projection, API, UI, evidence browser, and retry workflow.
+
 ## Global Constraints
 
 - 本功能仅允许 MuJoCo 仿真，不得发送真实机械臂命令。实体机械臂继续保持 fail-closed 或 plan-only。
@@ -37,7 +49,9 @@ Worker、PerceptionBroker、精确 cleanup、资源观测或故障恢复实现�
   动态 lease，不做固定分片。K 是正整数且不大于 20，`N × K < total_points` 时拒绝启动。
 - `ADAPTIVE` 必须显式选择，默认 preferred W8、fallback W6/W4/W2/W1、
   `initial_points_per_worker=3`、`worker_start_timeout_s=120`、
-  `max_infra_attempts_per_point=5`。它禁止 K；initial affinity 不是容量上限。
+  `max_infra_attempts_per_point=5`、`yolo_executor_count=2`。显式 preferred tier 接受 W1–W16，
+  fallback 必须严格递减且可为空；Web 首版固定 C2，不开放任意 executor 修改。它禁止 K；
+  initial affinity 不是容量上限。
 - 页面默认顺序模式。固定并发必须通过上游 resource admission；自适应 preflight 只把
   CPU/RAM/GPU/pressure/RTF 记为 observation，不能据此拒绝、选 tier 或静默降级。自适应只
   根据真实 startup/process/OOM/RPC/Broker/cleanup 结果沿冻结 ladder 降级。
@@ -78,21 +92,21 @@ Worker、PerceptionBroker、精确 cleanup、资源观测或故障恢复实现�
 
 ## 执行前准备与证据门
 
-本次 2026-09-14 兼容修订编写时，目标 worktree 是 detached
-`97e75940db51f67809213d70adfa599a70975f4c`；adaptive 设计输入来自 clean canonical checkout
-`main@bd708bd94e9f69c705ccef3b0439b899fcb6b40c`。ai-station 只读快照中 adaptive 实现位于
-`codex/parallel-adaptive-worker-pool@4c777fa722586be92a0b357b861ab4ce460a06ab`，对应 tmux 任务
-仍归原执行者所有。本计划不得复制、清理、提交或控制该运行任务；正式实施前必须重新核对
-所有可变 commit、dirty state、tmux、进程和上游验收状态。
+2026-09-16 文档同步以 `origin/main@25d1130a990f34334b20e9ced4bcde4f4ed83aba` 为源代码基线。
+该 merge 已包含固定并发、自适应 Worker 池、stateless Broker、完整普通 pytest gate 和现场扩容
+账本。实施开始时仍须重新核对 ai-station 的 commit、dirty state、tmux、进程、安装 overlay 和
+上游证据哈希；不得把“已合并”直接当成当前安装可用。
 
-- [ ] 先完成并验收上游并发实施计划 Task 1–15。实现 worktree 必须包含已提交的并发
-  设计/计划、`so101_demo.parallel_batch.*`、`so101_parallel_batch`、combined Broker
-  image、package gate 与双 Worker live evidence；任一缺失时本计划停止，不写兼容 shim。
-- [ ] 完成并验收上游 adaptive Worker-pool 计划。必须具备 `--adaptive-workers`、
-  `AdaptiveBatchRunner`、`scripts/run_so101_adaptive_batch.zsh`、
-  `so101_parallel_batch_cleanup`、Runner 顶层 journal、W8 startup/mid-run failure 到 W6、
-  20 点 adaptive run 及 W1/W2/W4/W6/W8 性能证据。缺失时只将 `ADAPTIVE` 标为 unavailable，
-  不改变固定模式。
+- [ ] fetch `origin/main`，确认待实现基线包含 `25d1130a`，并回读
+  `src/so101_demo_py/src/parallel_batch/adaptive_runner.py`、
+  `src/so101_demo_py/src/parallel_batch/adaptive_pool.py`、
+  `src/so101_demo_py/src/cli/parallel_batch_cleanup.py`、
+  `scripts/run_so101_adaptive_batch.zsh` 和
+  `src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml`。缺一即停止，不写兼容 shim。
+- [ ] 核对 retained upstream ledger：固定并发验收、自适应故障注入、20 点执行、
+  W1/W2/W4/W6/W8 scaling 和 ordinary package gate。W10 只作为附加合格样本；W16 只报告
+  contract-supported/live-unqualified。证据或 installed provenance 不匹配时，仅把受影响模式标为
+  unavailable，不改变其他模式。
 - [ ] 使用 `superpowers:using-git-worktrees` 创建 Web 实现 worktree。起点必须同时包含
   已批准的并发实现、Web 设计与本计划；不要从未提交输入猜测基线。
 - [ ] 读取根 `AGENTS.md`、`so101-dev`、`ai-station-access.md`、`so101-system-map.md`、`debug-evidence.md`、`test-and-acceptance.md` 和 `experiment-ledger.md`。
@@ -412,6 +426,9 @@ validation_pytest src/so101_teleop/test/teleop/test_expert_validation_coordinato
   `CoordinatorProjectionError`，由 supervisor 转为 `NEEDS_OPERATOR_RECOVERY`。Adaptive reader
   只接受 Runner 顶层 batch/generation/hash chain，展示其 nested coordinator references、
   `levels_used`、fallback、infra attempt 和 cleanup；不得自行合并 generation journal。
+  当前实现的 adaptive runtime root 固定为 `<evidence_root>/r/<batch_id>`，顶层 journal root 是
+  其下的 `journal/`，终态投影是 `aggregate_results.json`，wrapper cleanup 回执是
+  `cleanup-receipt.json`。这些路径从已绑定 request 推导并逐项校验，不做递归文件搜索。
 
 - [ ] **Step 4: GREEN，并运行上游 journal regression。**
 
@@ -645,8 +662,9 @@ class OwnedCoordinator:
 ```
 
 另定义 `AdaptiveStartRequest`，冻结 1–5 字符 ASCII batch ID、
-`<evidence-root>/r/<batch-id>`、preferred/fallback tiers、initial affinity、startup timeout、infra
-attempt limit、adaptive config/model/Broker hashes；它必须拒绝 K。`OwnedAdaptiveWrapper` 只记录
+`<evidence-root>/r/<batch-id>`、W1–W16 preferred tier、严格递减且可为空的 fallback tiers、
+initial affinity、startup timeout、infra attempt limit、只读 C2 `yolo_executor_count`、adaptive
+config/model/Broker hashes；它必须拒绝 K 和 fixed-mode live-headroom 字段。`OwnedAdaptiveWrapper` 只记录
 wrapper PID/start ticks/argv/env hash、Runner PID/batch handshake 和 Runner journal root，不把
 Runner 或 generation descendants 变成 Web-owned process。
 
@@ -1105,7 +1123,12 @@ class CampaignPreflightReceipt:
     source_commit: str
     install_prefix: str
     coordinator_executable_sha256: str
+    adaptive_runner_module_sha256: str | None
+    adaptive_pool_module_sha256: str | None
+    adaptive_cleanup_executable_sha256: str | None
+    adaptive_wrapper_sha256: str | None
     parallel_config_sha256: str
+    adaptive_config_sha256: str | None
     catalog_sha256: str
     selection_sha256: str
     yolo_weights_sha256: str
@@ -1153,7 +1176,7 @@ retry 使用相同路径但固定 N=1/K=1 和单点 selection；禁止 `--attach
 Adaptive 路径只能执行 `scripts/run_so101_adaptive_batch.zsh`，显式传
 `--adaptive-workers`、`--worker-count 8`、`--fallback-worker-counts 6,4,2,1`、
 `--initial-points-per-worker 3`、`--worker-start-timeout-s 120`、
-`--max-infra-attempts-per-point 5`、`--adaptive-config`、短 batch ID 和 runtime root，且不得传
+`--max-infra-attempts-per-point 5`、`--yolo-executor-count 2`、`--adaptive-config`、短 batch ID 和 runtime root，且不得传
 `--max-points-per-worker`。Web 只 spawn
 一次 wrapper；Runner 负责 W8/W6/W4/W2/W1 generation 与 top-level journal。
 
@@ -1301,9 +1324,10 @@ mode-specific owner control 请求 cooperative cancellation；没有 batch clean
 recovery。新 holder 在 unresolved campaign 期间只能 read/cancel/recover。V1 registry 只注册
 `moveit_expert/validate_pick_place`，默认 `SEQUENTIAL`；`PARALLEL` 只有在上游模块、配置、
 Broker 镜像、资源探针和双 Worker live acceptance 都可核验时才标为 available。
-`ADAPTIVE` 只有在 Runner、production wrapper、cleanup、frozen config、fault injection、20 点
-live 和 W1/W2/W4/W6/W8 performance evidence 都可核验时才 available；它与 fixed availability
-分开判定。未来
+`ADAPTIVE` 只有在 Runner、`ProductionAdaptivePoolFactory`、production wrapper、cleanup、
+frozen config、fault injection、20 点 live 和 W1/W2/W4/W6/W8 performance evidence 都可核验时
+才 available；它与 fixed availability 分开判定。W10 作为附加证据展示，不改变 W8 默认；
+W16 只标为 contract-supported/live-unqualified。未来
 `act_collect` 和 `act_rollout` operation 只能通过新 request model、evidence schema 和 success
 contract 显式注册，不能复用 MoveIt 统计。
 
@@ -1503,7 +1527,8 @@ def test_adaptive_start_rejects_k_and_freezes_ladder(client):
     response = client.post("/expert-validation/campaigns/preflight", json={
         "manifest_id": "manifest-20", "execution_mode": "ADAPTIVE",
         "preferred_worker_count": 8, "fallback_worker_counts": [6, 4, 2, 1],
-        "initial_points_per_worker": 3, "max_points_per_worker": 10,
+        "initial_points_per_worker": 3, "yolo_executor_count": 2,
+        "max_points_per_worker": 10,
     })
     assert response.status_code == 422
 
@@ -1649,6 +1674,7 @@ test("adaptive start preserves ladder and never sends K", async () => {
   await client.startCampaign({ ...request, preflight_receipt_id: receipt.receipt_id }, lease);
   expect(lastBody().max_points_per_worker).toBeUndefined();
   expect(lastBody().fallback_worker_counts).toEqual([6, 4, 2, 1]);
+  expect(lastBody().yolo_executor_count).toBe(2);
 });
 ```
 
@@ -1981,7 +2007,7 @@ git commit -m "test: cover expert validation end to end"
 账本先写 `EXP-001` package gate、`EXP-002` 4-point sequential smoke、`EXP-003` 相同
 selection 的 4-point parallel smoke、`EXP-004` 20-point adaptive first pass。每条分别写
 commit、overlay、coordinator/Runner/wrapper/cleanup/config/catalog/Broker image hashes、固定
-N/K 或 adaptive ladder/affinity/timeout/infra-attempt limit、资源 observation、
+N/K 或 adaptive ladder/affinity/timeout/infra-attempt limit/C2、资源 observation、
 成功/失败/indeterminate/invalid 判据和唯一变量。不要复用任何正在运行或未登记的 checkout、
 tmux 或进程，也不复用本计划编写时观察到的 adaptive tmux/worktree。
 
@@ -2004,7 +2030,9 @@ ros2 pkg prefix so101_demo_py
 ros2 pkg prefix so101_teleop
 ros2 pkg executables so101_teleop | rg so101_expert_validation_server
 ros2 run so101_demo_py so101_parallel_batch --help | rg -- '--adaptive-workers'
+ros2 pkg executables so101_demo_py | rg 'so101_parallel_batch_cleanup'
 test -x scripts/run_so101_adaptive_batch.zsh
+rg '^yolo_executor_count: 2$' src/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml
 ```
 
 - [ ] **Step 3: 运行 ai-station package gate。**
@@ -2073,7 +2101,8 @@ identity/generation/fairness。任一 cross-Worker pose、artifact 或 ownership
 
 生成 `ai_station_baseline_v1` manifest，逐项核对 20 点坐标、catalog/selection hash，选择
 `ADAPTIVE`，preferred W8、fallback W6/W4/W2/W1、`initial_points_per_worker=3`、
-`worker_start_timeout_s=120`、`max_infra_attempts_per_point=5`，确认请求不含 K 后重新 preflight
+`worker_start_timeout_s=120`、`max_infra_attempts_per_point=5`、`yolo_executor_count=2`，确认请求
+不含 K 或 fixed-mode live-headroom 字段后重新 preflight
 并通过 production wrapper 启动。资源 snapshot 只记录为 observation，不作为启动门或 tier
 选择器。保存 Runner status、initial/final Worker count、levels used、fallback transition/reason、
 pool generations、每点 final state、attempt-level infra history、Worker/Broker recovery、elapsed、
@@ -2163,8 +2192,9 @@ git commit -m "docs: record expert validation acceptance"
   source/install/config、model/Broker 与 mode-specific probes 全部匹配。
 - [ ] `SEQUENTIAL` 走 coordinator N=1；`PARALLEL` 走 N=2..3；不存在 Web 自有 legacy
   attached-stack 路径或静默降级。
-- [ ] `ADAPTIVE` 只通过 production wrapper 启动 Runner，使用 W8/W6/W4/W2/W1、initial
-  affinity 而非 K；资源指标只观察，真实 infra failure 才触发降级。
+- [ ] `ADAPTIVE` 只通过 production wrapper 启动 Runner，默认使用 W8/W6/W4/W2/W1、C2 和
+  initial affinity 而非 K；显式 preferred tier 受 W1–W16 契约约束。资源指标只观察，真实
+  infra failure 才触发降级。
 - [ ] fixed coordinator 独占固定 point lease/K；Runner 独占 adaptive generations/fallback/final
   results；Web 只拥有 fixed coordinator 或 exact wrapper identity，并且从不 signal Runner、
   Worker 或 Broker groups。
@@ -2184,7 +2214,8 @@ git commit -m "docs: record expert validation acceptance"
   generation/cleanup 证据；共享
   GUI 截图不是并发 qualification 前提。
 - [ ] upstream W8 startup->W6、W8 mid-run->W6、20 点 adaptive run 和 W1/W2/W4/W6/W8
-  performance gates 已验收；Web 只复用，不另造 fault-injection 语义。
+  performance gates 已验收；W10 附加样本和 W16 未现场验收边界显示正确；Web 只复用，不另造
+  fault-injection 语义。
 - [ ] 人工 `FULL_RESTART` 只接受安全完成首轮的 business `FAILED`，固定 N=1/K=1；adaptive
   infra rerun、`INFRA_INTERRUPTED` 和 `INFRA_FAILED` 不进入 retry queue。
 - [ ] 每个 generation/Worker/attempt/recovery/Broker artifact 都通过 bound manifest 和 opaque ID 隔离；无
@@ -2192,9 +2223,9 @@ git commit -m "docs: record expert validation acceptance"
   tmux 任务或其他 worktree。
 - [ ] retained、archived 和 deletion candidates 已分类，且没有未经授权删除证据。
 
-## 执行选择
+## 执行方式
 
-计划执行时使用以下一种方式：
-
-1. **Subagent-Driven（推荐）**：按 Task 派发 fresh subagent，每个 Task 完成后先做 spec compliance review，再做 code-quality review。
-2. **Inline Execution**：在当前 session 使用 `superpowers:executing-plans`，按批次 A、B、C、D 执行并在每批结束时停下复核。
+本轮锁定 **Inline Execution**：ai-station Codex 在当前 session 使用
+`superpowers:executing-plans`，不创建 subagent，按批次 A、B、C、D 执行，并在每批结束时完成
+计划要求的测试、账本更新和 checkpoint 后继续。只有需要用户扩大授权、真实硬件动作或处理不明
+所有权资源时才停止并请求用户输入。

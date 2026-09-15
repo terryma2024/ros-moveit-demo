@@ -2,18 +2,18 @@
 
 **Date:** 2026-09-11
 
-**Updated:** 2026-09-14 for adaptive Worker-pool compatibility while preserving fixed sequential/parallel modes
+**Updated:** 2026-09-16 against merged parallel/adaptive implementation `25d1130a990f34334b20e9ced4bcde4f4ed83aba`
 
-**Status:** Approved compatibility approach A; this revision is documentation-only and does not
-claim that the Web workflow or adaptive runtime has been implemented
+**Status:** Approved compatibility approach A. The fixed/adaptive sampling runtime is implemented
+and merged; the Teleop Web workflow described here is not yet implemented.
 
 **Runtime target:** ai-station Linux with isolated MuJoCo workers and sensor rendering; the existing
 interactive Teleop task station remains a separate workflow
 
 **Package scope:** `src/so101_demo_py`, `src/so101_teleop`, and the maintained top-view generator under `scripts/`
 
-**2026-09-14 compatibility-revision evidence root:**
-`/tmp/so101-debug-teleop-adaptive-pool-docs-NseXAdJ5/`
+**2026-09-16 implementation-sync evidence root:**
+`/tmp/so101-debug-teleop-sync-dispatch-rw2rl6/`
 
 **Normative dependencies:**
 
@@ -22,10 +22,12 @@ interactive Teleop task station remains a separate workflow
 - `docs/superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md` for the adaptive Runner,
   pool generations, fallback transaction, wrapper ownership, and adaptive terminal semantics.
 
-Until the corresponding implementation plans are present in the implementation worktree,
-reviewed, implemented, and qualified, capabilities must report the affected execution mode as
-unavailable. Availability is mode-specific; absence of adaptive support does not change fixed-mode
-semantics.
+The upstream implementation is present on `origin/main` at merge commit
+`25d1130a990f34334b20e9ced4bcde4f4ed83aba`. Source presence does not by itself admit execution:
+the Web capability probe still verifies the installed console entry points, source/install/config
+and model hashes, accepted upstream qualification records, current domain ownership, and clean
+runtime state. Availability remains mode-specific, and a failed adaptive probe does not change
+fixed-mode semantics.
 
 ## 1. Objective
 
@@ -47,6 +49,9 @@ The first pass exposes three explicit modes:
 - `ADAPTIVE` starts at the preferred tier, normally W8, and may degrade only through the frozen
   fallback ladder W8 -> W6 -> W4 -> W2 -> W1 after an infrastructure failure. It uses point
   affinity rather than a K capacity limit and never silently becomes a fixed mode;
+- the adaptive CLI accepts an explicit preferred tier from W1 through W16 and a strictly decreasing
+  fallback list. W8 -> W6 -> W4 -> W2 -> W1 remains the frozen Web default; W16 is a contract ceiling,
+  not a live-qualified default;
 - each selected retry runs as a separate one-point coordinator batch with
   fixed `SEQUENTIAL`, `worker_count=1`, `K=1`, a fresh stack, and a `FULL_RESTART` lifecycle
   record. Automatic adaptive infrastructure reruns are not operator retries;
@@ -62,14 +67,16 @@ handling. The batch engine in `so101_demo_py` performs declared reachability, tr
 `RESET_WORLD`, RGB-D perception, dynamic target construction, MoveIt execution, physical outcome
 checks, terminal capture, and per-point artifact registration.
 
-The approved parallel design adds a separate `ParallelBatchCoordinator`, isolated Worker slots,
+The merged parallel implementation provides a `ParallelBatchCoordinator`, isolated Worker slots,
 a shared `PerceptionBroker`, a crash-safe event journal, lease/K accounting, generation fencing,
 sealed attempt evidence, and Worker recovery receipts. Those components are the execution source
 of truth for both sequential and parallel campaigns. The Teleop service must not recreate their
 queue, lease, result-commit, Worker lifecycle, or Broker logic in SQLite.
 
-The adaptive design adds an `AdaptiveBatchRunner` above successive coordinator generations and a
-production wrapper that owns the Runner subprocess and exact cleanup. The Runner is the sole
+The merged adaptive implementation provides `AdaptiveBatchRunner` above successive coordinator
+generations, `ProductionAdaptivePoolFactory`, the `so101_parallel_batch` console entry point,
+`so101_parallel_batch_cleanup`, and `scripts/run_so101_adaptive_batch.zsh`. The wrapper owns the
+Runner subprocess and exact cleanup. The Runner is the sole
 top-level journal writer and final point-status authority across generations; each generation still
 uses an unchanged `ParallelBatchCoordinator` internally.
 
@@ -80,6 +87,12 @@ generation evidence. It translates Web commands without changing upstream meanin
 registered artifacts.
 The current task-station child service cannot own this boundary because a `FULL_RESTART` would
 terminate or orphan its own stack.
+
+The frozen W1/W2/W4/W6/W8 scaling series completed 20/20 points at each tier with exact cleanup;
+one later fixed W10 sample also completed 20/20. W8 remains the Web default because W10 has only one
+successful sample and two retained failed attempts. W16 remains contract-tested but not live
+qualified. These upstream results establish dependency readiness; they do not constitute Teleop Web
+acceptance evidence.
 
 ## 3. Chosen architecture
 
@@ -171,6 +184,7 @@ fallback_worker_counts                # adaptive, default [6, 4, 2, 1]
 initial_points_per_worker             # adaptive affinity, default 3
 worker_start_timeout_s                # adaptive, default 120
 max_infra_attempts_per_point          # adaptive, default 5
+yolo_executor_count                   # adaptive, default 2; allowed 1, 2, or 4
 parallel_config_sha256
 adaptive_config_sha256                # adaptive mode only
 run_mode: execute
@@ -182,13 +196,17 @@ run_mode: execute
 override. It never silently lowers Worker count, raises K, changes the selected mode, or creates
 fixed point shards. A Worker dynamically leases the next eligible point.
 
-`ADAPTIVE` invokes `scripts/run_so101_adaptive_batch.zsh` with the explicit adaptive flag and rejects
-`max_points_per_worker`. Its preferred
-Worker count defaults to 8; fallback counts default to `6,4,2,1`; all values must form a strictly
-decreasing supported ladder ending at W1. `initial_points_per_worker=3` is only an initial affinity
-hint and never a capacity limit. The request also freezes `worker_start_timeout_s=120`,
-`max_infra_attempts_per_point=5`, and the adaptive configuration hash. All Workers in a generation
-must report READY before the Runner enters `POOL_RUNNING` or releases work.
+`ADAPTIVE` invokes `scripts/run_so101_adaptive_batch.zsh`, which in turn owns
+`so101_parallel_batch --adaptive-workers`; it rejects `max_points_per_worker` and fixed-mode
+live-headroom arguments. The preferred Worker count defaults to 8 and accepts W1 through W16.
+Fallback counts default to `6,4,2,1` and must be strictly decreasing below the preferred tier; an
+explicit experiment may use an empty fallback list, including a W1 run. The Web default remains the
+full ladder ending at W1. `initial_points_per_worker=3` is only an initial affinity hint and never a
+capacity limit. The request also freezes `worker_start_timeout_s=120`,
+`max_infra_attempts_per_point=5`, `yolo_executor_count=2`, and the adaptive configuration hash.
+The upstream contract accepts executor counts 1, 2, or 4; version 1 of this Web page exposes the
+frozen value 2 read-only. All Workers in a generation must report READY before the Runner records
+`POOL_RUNNING` or releases work.
 
 Version 1 Web campaigns expose only `run_mode=execute`. The coordinator CLI may support
 `dry_run` and `plan_only` for implementation tests, but those results keep physical points
@@ -196,14 +214,17 @@ Version 1 Web campaigns expose only `run_mode=execute`. The coordinator CLI may 
 
 ### 3.2 Capability and admission boundary
 
-Capabilities report the installed coordinator, adaptive Runner, and production-wrapper
-executable/module hashes, parallel/adaptive config hashes,
+Capabilities report the installed coordinator, adaptive Runner, production pool factory, cleanup
+entry point, and wrapper executable/module hashes, parallel/adaptive config hashes,
 supported modes, default mode, Worker range, K range, available ROS domains, model hashes, queue
-limits, deadlines, and current admission result. `PARALLEL` is unavailable unless the upstream
-implementation, combined model Broker, task-owned overlay, resource probe, and two-Worker live gate
-all exist and match their declared provenance. `ADAPTIVE` is unavailable until its Runner, wrapper,
-cleanup function, frozen ladder configuration, and required W8/W6/W4/W2/W1 qualification evidence
-exist and match provenance.
+limits, deadlines, `yolo_executor_count`, and current admission result. The source dependency is
+satisfied by `25d1130a`, but `PARALLEL` remains unavailable on a concrete host unless the installed
+implementation, combined model Broker, task-owned overlay, resource probe, and accepted fixed-mode
+live gate all exist and match their declared provenance. `ADAPTIVE` remains unavailable unless its
+Runner, production pool factory, wrapper, cleanup entry point, frozen configuration, and accepted
+W1/W2/W4/W6/W8 qualification evidence exist and match current provenance. The W10 sample is reported
+as additional evidence, not used to change the default. W16 must be reported as contract-supported
+and live-unqualified.
 
 Before start, the service validates `N × K`, manifest identity, source/install/config/policy/scene
 and model hashes, evidence-root ownership, coordinator singleton status, CPU/RAM/GPU admission, and
@@ -533,8 +554,9 @@ content fails with `COMMAND_ID_REUSED`; an ambiguous pre-crash command returns
 The start body freezes `manifest_id`, `execution_mode`, a tagged execution-configuration object,
 `executor_id`, `operation_id`, and the preflight receipt ID. Fixed configuration contains
 `worker_count` and `max_points_per_worker`; adaptive configuration contains preferred/fallback
-tiers, initial affinity, startup timeout, infrastructure-attempt limit, and adaptive config hash,
-and must not contain K.
+tiers, initial affinity, startup timeout, infrastructure-attempt limit, frozen
+`yolo_executor_count=2`, and adaptive config hash, and must not contain K or fixed-mode live-headroom
+arguments.
 `SEQUENTIAL` with N other than 1, `PARALLEL` outside the admitted 2–3 range, insufficient N×K,
 or a stale preflight receipt is rejected before execution-owner spawn. Invalid adaptive field
 combinations, ladder order, batch ID, or runtime-root identity are rejected before wrapper spawn.
@@ -838,8 +860,9 @@ rollout adds its own policy checkpoint, observation contract, safety result, and
 ### 12.2 Supervisor and service
 
 - request tests for `SEQUENTIAL => N=1`, `PARALLEL => N=2..3`, default K, explicit K,
-  `N×K` rejection, `ADAPTIVE` field exclusivity, frozen fallback ladder, no K, short batch ID,
-  no silent mode conversion, and stale preflight rejection;
+  `N×K` rejection, `ADAPTIVE` field exclusivity, W1–W16 bounds, frozen default fallback ladder,
+  optional empty fallback, no K, frozen C2 executor count, short batch ID, no silent mode conversion,
+  and stale preflight rejection;
 - coordinator-process tests for spawn intent/ACK, reconnect, conflicting PID/start time, socket
   ownership, journal corruption, and surviving descendants;
 - projection tests for multiple simultaneous Worker stages, generation changes, K debit,
@@ -885,8 +908,9 @@ provenance. With no pre-existing SO-101 application stack:
    cross-Worker artifact or pose exchange;
 4. only after both fixed-mode compatibility smokes pass, generate the exact `total_points=20`
    compatibility manifest and start an adaptive first pass through the production wrapper with
-   preferred W8, fallback W6/W4/W2/W1, `initial_points_per_worker=3`, and no K. Display and retain
-   every generation, fallback reason, resource observation, final point result, and cleanup record;
+   preferred W8, fallback W6/W4/W2/W1, `initial_points_per_worker=3`,
+   `yolo_executor_count=2`, and no K. Display and retain every generation, fallback reason, resource
+   observation, final point result, and cleanup record;
 5. reuse the upstream adaptive acceptance rather than inventing a Web-only fault model: the
    upstream package/live gates must already prove W8 startup failure to W6, W8 mid-run failure to
    W6, a 20-point adaptive run, and W1/W2/W4/W6/W8 performance evidence. The page additionally
@@ -922,10 +946,11 @@ approved fixed parallel coordinator plus the adaptive Runner, production wrapper
 Worker, Broker, journals, process supervisor, and headless sensor-rendering runtime. The Web plan
 must integrate those modules rather than duplicate or weaken them.
 
-Until the fixed upstream implementation passes its package gate and two-Worker live acceptance, the
-capabilities endpoint returns `PARALLEL` as unavailable. Until the adaptive upstream package,
-fault-injection, performance, and live acceptance gates pass, it returns `ADAPTIVE` as unavailable.
-If the coordinator dependency is absent
+The merged source and retained upstream evidence satisfy the design-time dependency gate. At
+runtime, capabilities still return a mode as unavailable whenever the current installed entry
+points, hashes, model image, accepted qualification records, domain claims, or cleanup state fail
+reconciliation. The Web service must never replace that live check with a hard-coded availability
+bit. If the coordinator dependency is absent
 entirely, campaign start fails closed; the server does not fall back to the old attached-stack
 batch. The existing `/tasks` workflow remains available through its own server mode.
 
