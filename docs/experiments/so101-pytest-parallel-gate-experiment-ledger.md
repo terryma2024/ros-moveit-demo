@@ -5,20 +5,23 @@ success_contract: A repository-maintained deterministic runner passes focused RE
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: ceb41ec94d09eddc1537cf24859531a033acf61f
+current_commit: e81286bf5aa465168d7d611de349635cbcae8a9e
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
   - Full-gate timing is currently inadmissible because the preserved primary stateless-Broker task owns W10 MuJoCo, ROS, Docker, GPU, and user-service resources (CP-001).
   - The primary task reached COMPLETE and released its runtime resources; fresh admission at 2026-09-15T16:43:26+08:00 found no W10 processes, containers, GPU clients, or active W10 units (CP-002).
   - Exact /usr/bin/python3 command identity is preserved by candidate commit 1c0ec9a7bb04bd435cf38b9af254af7a9df4667b (EXP-006-PROVENANCE-CORRECTION).
+  - Candidate e81286bf5aa465168d7d611de349635cbcae8a9e has 27 focused runner contracts GREEN and isolates five source-evidenced sensitive modules (EXP-018-ISOLATION-RED-GREEN).
+  - EXP-019 completed normally with exit 1; it is INVALID for timing because a 108-byte Unix-socket path failed and its manifests expose 19 nested ordinary nodes omitted by top-level-only module discovery (EXP-019-W1 result update).
+  - A 12-hex physical identity plus a pre-run 107-byte AF_UNIX budget gate fixes the reproduced socket-path boundary with 28 focused contracts GREEN (EXP-020-LAYOUT-BUDGET-RED-GREEN).
+  - Recursive deterministic ordinary-module discovery includes nested contract and characterization tests while preserving benchmark exclusion, with 28 focused contracts GREEN (EXP-021-RECURSIVE-DISCOVERY-RED-GREEN).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
 open_hypotheses:
-  - Deterministic file-level LPT sharding can preserve exact ordinary-gate coverage and reduce critical-path wall time.
-  - Additional source-evidenced global-resource owners may need the serial lane beyond the two mandatory modules.
-latest_checkpoint: CP-003
-next_experiment: EXP-010-BENCHMARK-PATH-CORRECTION
+  - The combined candidate can build with exact overlay provenance and pass W1/W2/W4 with identical 3054-node coverage.
+latest_checkpoint: CP-005
+next_experiment: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -821,4 +824,836 @@ evidence:
   - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp010-benchmark-path/SHA256SUMS
 decision: KEEP
 next_experiment: EXP-011-W1
+```
+
+## CP-004 — Final corrected measurement candidate
+
+```yaml
+checkpoint_id: CP-004
+last_valid_experiment: EXP-010-BENCHMARK-PATH-CORRECTION
+current_hypothesis: Candidate de1e0aa03b2dfec402f028f9497a037c89935842 will pass exact W1 coverage and scale at W2/W4.
+working_tree_status: clean immediately after commit de1e0aa03b2dfec402f028f9497a037c89935842; only this ledger becomes dirty on append
+owned_processes: Codex process/session only; no pytest process remains from collection-only diagnostics
+preserved_processes: completed stateless-Broker Codex session; inert pre-existing colcon version-check process; all other worktrees and sessions
+confirmed_conclusions:
+  - 25 focused tests and Ruff checks pass.
+  - Prior W1 attempts started no test-execution process and are excluded from timing comparison.
+disproven_routes:
+  - Generic stripped porcelain output and full-node-ID benchmark substring matching are fixed and regression-tested.
+open_risks:
+  - Full test execution has not yet completed through the runner.
+next_command: fresh admission then tools/so101_pytest_gate.py --workers 1 with run-id exp011-w1
+```
+
+## EXP-011-W1 — Authoritative new-runner W1 baseline
+
+```yaml
+experiment_id: EXP-011-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T17:00:45+08:00
+  - status: RUNNING
+    at: 2026-09-15T17:01:31+08:00
+prior_experiment: EXP-009-W1
+hypothesis: Corrected candidate de1e0aa0 preserves exact ordinary collection and provides a valid W1 baseline.
+prediction: All expected node IDs execute exactly once across the serial lane and one shard, all tests pass, and benchmark paths remain absent.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - HEAD is de1e0aa03b2dfec402f028f9497a037c89935842; only the exact task-ledger path is dirty and allowlisted.
+  - Python, overlay, timing JUnit hash, serial lane, and fresh scratch are frozen as in EXP-009 except for the corrected committed runner.
+  - Fresh admission must be conflict-free.
+success_criteria:
+  - PASS with exact nonzero node-ID union, benchmark exclusion, all process exits/JUnits/provenance valid, and complete timing/resource summary.
+failure_criteria:
+  - Any test, process, coverage, provenance, or JUnit gate fails.
+invalid_criteria:
+  - Admission conflict, source/environment drift, or scratch collision.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id exp011-w1 --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit de1e0aa03b2dfec402f028f9497a037c89935842 --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp011-w1
+decision: PENDING
+next_experiment: EXP-012-W2
+```
+
+### EXP-011 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T17:05:57+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id exp011-w1 --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit de1e0aa03b2dfec402f028f9497a037c89935842 --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 1
+observed:
+  - OBSERVED: collection passed and produced 3051 ordinary node IDs; benchmark-path exclusion passed.
+  - OBSERVED: the serial lane ran first and stopped the gate after 156 passed and 1 failed in 7.30 seconds; no parallel shard started.
+  - OBSERVED: test_parallel_batch_resources.py::test_production_cli_composes_three_workers_with_current_accepted_headroom raised TRUSTED_FINAL_TARGET_INVALID.
+  - OBSERVED: so101_demo resolved to the copied overlay path install/so101_demo_py/lib/python3.12/site-packages/so101_demo, so Path(__file__).parents[2] did not contain the package-relative config expected by the contract test.
+inferred:
+  - INFERRED: this build's setuptools fallback from editable/develop to full install changed import layout relative to the historical accepted baseline, whose so101_demo import resolved through a source-tree symlink.
+conclusion: The runner failed closed correctly, but this run cannot serve as a W1 performance baseline because the frozen environment did not reproduce the established source-import layout.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp011-w1
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp011-w1/serial/pytest.log
+decision: EXCLUDE_FROM_TIMING_COMPARISON
+next_experiment: EXP-012-SOURCE-IMPORT-PROVENANCE
+```
+
+## EXP-012-SOURCE-IMPORT-PROVENANCE — Restore established source import layout
+
+```yaml
+experiment_id: EXP-012-SOURCE-IMPORT-PROVENANCE
+status: PLANNED
+prior_experiment: EXP-011-W1
+hypothesis: A task-owned PYTHONPATH shim that points so101_demo at this worktree's source tree restores the historical import semantics without modifying source, install artifacts, or any other worktree.
+prediction: The previously failing serial-lane node passes with so101_demo.__file__ resolving inside this worktree's src/so101_demo_py/src tree.
+single_variable: Prepend a task-owned source-import shim to PYTHONPATH.
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit remains de1e0aa03b2dfec402f028f9497a037c89935842 and only this ledger is dirty.
+  - The shim is created under the registered evidence root and targets only the current worktree source tree.
+success_criteria:
+  - Exact /usr/bin/python3 tempfile verification passes; import provenance resolves to current source; the one previously failing test passes with readable JUnit.
+failure_criteria:
+  - Import provenance remains installed-copy based or the focused test fails.
+invalid_criteria:
+  - Scratch collision, source/environment drift, or admission conflict.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp012-source-import
+decision: PENDING
+next_experiment: EXP-013-W1
+```
+
+### EXP-012 result update
+
+```yaml
+status: INVALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T17:08:00+08:00
+  - status: INVALID
+    at: 2026-09-15T17:08:07+08:00
+commands:
+  - command: create task-owned runtime-python/so101_demo symlink; verify exact-Python tempfile and import; run the previously failing node under scratch/exp012-source-import
+    exit_code: 1
+observed:
+  - OBSERVED: /usr/bin/python3 tempfile provenance passed and so101_demo.__file__ resolved to the current worktree source through the task-owned shim.
+  - OBSERVED: the trusted-final-target setup passed, disproving the copied-install failure mechanism from EXP-011.
+  - OBSERVED: the test then failed before its assertion because the 108-byte fixture Unix socket path exceeded the 107-byte kernel/library guard.
+inferred:
+  - NONE
+conclusion: Source-import provenance is corrected, but this diagnostic scratch identifier is too long for the suite's explicit Unix-socket constraint.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python/so101_demo
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp012-source-import
+decision: RETAIN_INVALID_DIAGNOSTIC
+next_experiment: EXP-013-SHORT-SCRATCH-PROVENANCE
+```
+
+## EXP-013-SHORT-SCRATCH-PROVENANCE — Verify source import with short durable scratch
+
+```yaml
+experiment_id: EXP-013-SHORT-SCRATCH-PROVENANCE
+status: PLANNED
+prior_experiment: EXP-012-SOURCE-IMPORT-PROVENANCE
+hypothesis: Using a unique short identifier under the same registered durable scratch root keeps fixture socket paths below 107 bytes while preserving all mandated /data tempfile provenance.
+prediction: The exact tempfile and source-import preflight passes and the previously failing node passes.
+single_variable: Shorten the task-owned scratch identifier from exp012-source-import/tmp to p/t.
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate, overlay, Python, source-import shim, and focused node are unchanged.
+  - scratch/p does not exist before the experiment.
+success_criteria:
+  - Preflight passes, the node passes, JUnit is readable, and the measured socket fixture prefix is below 107 bytes.
+failure_criteria:
+  - Test failure or invalid JUnit/provenance.
+invalid_criteria:
+  - Scratch collision or source/environment drift.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/p
+decision: PENDING
+next_experiment: EXP-014-W1
+```
+
+### EXP-013 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T17:12:30+08:00
+  - status: VALID
+    at: 2026-09-15T17:12:32+08:00
+commands:
+  - command: exact-Python tempfile/source/socket-length preflight then the previously failing node with JUnit under scratch/p
+    exit_code: 0
+observed:
+  - OBSERVED: tempfile.gettempdir() resolved to the registered /data scratch, so101_demo resolved to the current worktree source, and the representative socket path was 89 bytes.
+  - OBSERVED: the previously failing node passed in 0.50 seconds and JUnit was readable.
+inferred:
+  - NONE
+conclusion: The established source-import semantics and short durable scratch layout are suitable for the frozen full-gate measurements.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/p
+decision: KEEP
+next_experiment: EXP-014-W1
+```
+
+## EXP-014-W1 — Authoritative W1 baseline with corrected provenance
+
+```yaml
+experiment_id: EXP-014-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T17:14:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T17:15:00+08:00
+prior_experiment: EXP-013-SHORT-SCRATCH-PROVENANCE
+hypothesis: Candidate de1e0aa0 passes exact ordinary coverage in deterministic serial-plus-one-shard mode under the established source-import layout.
+prediction: All 3051 expected node IDs execute exactly once, all subprocess/JUnit/provenance gates pass, and benchmark paths are absent.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - HEAD is de1e0aa03b2dfec402f028f9497a037c89935842 and only this task ledger is dirty/allowlisted.
+  - Python=/usr/bin/python3; current overlay is sourced; PYTHONPATH prepends the task-owned current-source shim; historical timing JUnit and serial lane are frozen.
+  - Fresh run ID a is previously nonexistent; its process scratch paths keep representative fixture sockets below 107 bytes.
+  - Admission proves no conflicting primary-task pytest, ROS, simulation, Docker, GPU, or active-unit workload.
+success_criteria:
+  - PASS with exact nonzero node-ID union, benchmark exclusion, zero process/test failures, readable JUnits, valid provenance, cleanup readback, and complete timing/resource summary.
+failure_criteria:
+  - Any process, test, exact-coverage, JUnit, provenance, timeout, or cleanup failure.
+invalid_criteria:
+  - Admission conflict, source/environment drift, or scratch collision.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  timing_input_sha256: 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp014-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/a
+decision: PENDING
+next_experiment: EXP-015-W2
+```
+
+### EXP-014 result update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T17:28:00+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id a --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit de1e0aa03b2dfec402f028f9497a037c89935842 --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 1
+observed:
+  - OBSERVED: collection and the 157-test ordered serial lane passed; the one parallel shard completed 2869 passed, 7 failed, 4 warnings in 742.01 seconds.
+  - OBSERVED: four failures read the uninitialized third_party/mujoco_ros2_control gitlink; git submodule status was -c16b5a5f and the directory was empty.
+  - OBSERVED: two installed-provenance failures showed so101_mujoco_support resolved to /data/work/ws_moveit/install and mujoco_ros2_control to /opt/ros/jazzy instead of this worktree overlay.
+  - OBSERVED: one timing-sensitive worker heartbeat test failed independently; it requires focused readback after environment repair.
+  - OBSERVED: the runner stopped with a fail-closed summary; all owned subprocesses exited and full JUnit/resource evidence was retained.
+inferred:
+  - NONE
+conclusion: This is not a valid W1 baseline because the pinned submodule and full dependency overlay preconditions were not satisfied.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/a
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp014-w1-outer-time.txt
+decision: EXCLUDE_FROM_TIMING_COMPARISON
+next_experiment: EXP-015-CURRENT-OVERLAY-REPAIR
+```
+
+## EXP-015-CURRENT-OVERLAY-REPAIR — Initialize pinned fork and build dependency-complete overlay
+
+```yaml
+experiment_id: EXP-015-CURRENT-OVERLAY-REPAIR
+status: PLANNED
+prior_experiment: EXP-014-W1
+hypothesis: Initializing the recorded gitlink and building the candidate worktree's dependency packages makes every install-contract prefix and fork path resolve within the current candidate.
+prediction: The pinned submodule is at c16b5a5f; dependency prefix probes resolve within this worktree; the six environment-caused failing nodes pass.
+single_variable: Repair the incomplete current-worktree submodule/build environment; source commit and runner remain unchanged.
+lifecycle: REBUILD_STACK
+preconditions:
+  - Pinned submodule objects are available locally or fetched without changing another worktree.
+  - Build and install outputs are confined to this worktree; build logs use this registered evidence root.
+success_criteria:
+  - Submodule and prefix provenance pass and all six environment-caused nodes pass from fresh NVMe scratch with readable JUnit.
+failure_criteria:
+  - Initialization/build/provenance/focused tests fail.
+invalid_criteria:
+  - Source commit changes, unrelated worktree changes, or primary-task activity resumes.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  runtime_executable: /usr/bin/python3
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp015
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/q
+decision: PENDING
+next_experiment: EXP-016-HEARTBEAT-READBACK
+```
+
+### EXP-015 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T17:32:00+08:00
+  - status: VALID
+    at: 2026-09-15T17:35:00+08:00
+commands:
+  - command: git submodule update --init --recursive third_party/mujoco_ros2_control
+    exit_code: 0
+  - command: initial scoped five-package build
+    exit_code: 1
+  - command: dependency-closure colcon build --symlink-install with Linux system mujoco_vendor
+    exit_code: 0
+  - command: exact-Python/prefix preflight and three environment-sensitive test modules under scratch/q
+    exit_code: 0
+observed:
+  - OBSERVED: the pinned gitlink initialized at c16b5a5fe880b6e1857f56486dab4ae726576969 without changing the superproject source commit.
+  - OBSERVED: the initial scoped build fail-closed because mujoco_3d_lidar was not selected; the dependency-closure build then completed 7 packages in 55.5 seconds.
+  - OBSERVED: so101_demo_py, so101_mujoco_support, mujoco_ros2_control, mujoco_ros2_control_plugins, and mujoco_ros2_control_msgs all resolve inside this worktree's install tree; so101_demo resolves inside its source tree.
+  - OBSERVED: all 28 tests across the three previously environment-failing modules passed in 6.12 seconds with readable JUnit.
+inferred:
+  - NONE
+conclusion: The current-worktree submodule and dependency-complete overlay are now valid for measurement.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp015
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp015-closure
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/q
+decision: KEEP
+next_experiment: EXP-016-HEARTBEAT-READBACK
+```
+
+## EXP-016-HEARTBEAT-READBACK — Recheck isolated timing-sensitive failure
+
+```yaml
+experiment_id: EXP-016-HEARTBEAT-READBACK
+status: PLANNED
+prior_experiment: EXP-015-CURRENT-OVERLAY-REPAIR
+hypothesis: The single worker-heartbeat failure in the invalid 12-minute environment run was transient scheduling jitter rather than a deterministic candidate defect.
+prediction: The exact node passes repeatedly in one fresh process under the corrected frozen overlay.
+single_variable: Re-run only the isolated node three times through pytest parametrized repetition by three explicit invocations in separate fresh processes.
+lifecycle: REUSE_STACK
+preconditions:
+  - Corrected submodule/overlay provenance from EXP-015 remains unchanged.
+  - Each invocation uses a distinct previously nonexistent /data scratch directory.
+success_criteria:
+  - All three invocations pass with readable JUnit and exact-Python tempfile preflight.
+failure_criteria:
+  - Any invocation reproduces the failure.
+invalid_criteria:
+  - Scratch collision or environment/source drift.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  runtime_executable: /usr/bin/python3
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r1
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r2
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r3
+decision: PENDING
+next_experiment: EXP-017-W1
+```
+
+### EXP-016 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T17:36:00+08:00
+  - status: VALID
+    at: 2026-09-15T17:36:02+08:00
+commands:
+  - command: three separate exact-node pytest invocations under fresh scratch/r1, r2, and r3
+    exit_code: 0
+observed:
+  - OBSERVED: all three separate processes passed the node in 0.18, 0.18, and 0.17 seconds with exact-Python tempfile preflight and readable JUnit.
+inferred:
+  - INFERRED: the one failure inside invalid EXP-014 was transient scheduling jitter during a non-authoritative environment run, not a deterministic candidate defect.
+conclusion: The node is stable across three corrected-environment readbacks; no test semantic or timeout change is justified.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r1
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r2
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/r3
+decision: KEEP_TEST_UNCHANGED
+next_experiment: EXP-017-W1
+```
+
+## EXP-017-W1 — Authoritative corrected-environment W1 baseline
+
+```yaml
+experiment_id: EXP-017-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T17:28:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T17:29:00+08:00
+prior_experiment: EXP-016-HEARTBEAT-READBACK
+hypothesis: The unchanged committed runner passes the complete 3051-node ordinary gate at W1 with the now-complete candidate overlay.
+prediction: Exact once-only coverage, all-pass JUnits/provenance, and a complete W1 resource/timing summary.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Commit de1e0aa03b2dfec402f028f9497a037c89935842, timing JUnit, Python, serial lane, source shim, and dependency-complete overlay are frozen.
+  - Submodule is initialized at the pinned gitlink and only the task ledger is dirty.
+  - Fresh run ID b is absent and fresh admission is conflict-free.
+success_criteria:
+  - PASS with exact nonzero node-ID union, zero missing/duplicate/unexpected IDs, benchmark exclusion, all subprocess/JUnit/provenance gates, cleanup readback, and timing/resource summary.
+failure_criteria:
+  - Any process, test, coverage, JUnit, provenance, timeout, or cleanup failure.
+invalid_criteria:
+  - Admission conflict, source/environment drift, or scratch collision.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  timing_input_sha256: 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp017-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/b
+decision: PENDING
+next_experiment: EXP-018-W2
+```
+
+### EXP-017 result update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T17:42:45+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id b --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit de1e0aa03b2dfec402f028f9497a037c89935842 --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 1
+observed:
+  - OBSERVED: the dependency-complete overlay eliminated all six provenance/fork failures from EXP-014.
+  - OBSERVED: the shard completed 2874 passed, 2 failed, 4 warnings in 781.39 seconds; outer elapsed was 796.03 seconds at 103 percent CPU and 2731296 KiB peak RSS.
+  - OBSERVED: test_parallel_batch_worker.py reproduced its deadline-sensitive background-heartbeat failure only after earlier LPT-ordered modules, despite three isolated passes.
+  - OBSERVED: test_inject_so101_parallel_fault.py collided with a prior run because its fixture derives an external scratch key from TMPDIR.parent.name, while every runner invocation used the repeated physical name shard-01.
+  - OBSERVED: no other tests failed; the runner retained complete JUnit and failed closed.
+inferred:
+  - NONE
+conclusion: W1 is invalid for comparison; source evidence requires serial-first placement for the load-sensitive worker module and the shared-filesystem fault-injector module, plus a unique bounded physical process directory identity across gate runs.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/b
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp017-w1-outer-time.txt
+decision: EXCLUDE_FROM_TIMING_COMPARISON
+next_experiment: EXP-018-ISOLATION-RED-GREEN
+```
+
+## EXP-018-ISOLATION-RED-GREEN — Complete source-evidenced isolation classification
+
+```yaml
+experiment_id: EXP-018-ISOLATION-RED-GREEN
+status: PLANNED
+prior_experiment: EXP-017-W1
+hypothesis: Whole-module serial-first isolation for the deadline-sensitive worker tests and shared-filesystem fault-injector tests, combined with run-unique bounded physical process directory names, removes both reproduced interactions without weakening semantics.
+prediction: New focused contracts fail before implementation, then the complete runner-focused suite and Ruff pass after the narrow implementation.
+single_variable: Add the two source-evidenced serial classifications and deterministic run-unique physical layout identity.
+lifecycle: REUSE_STACK
+preconditions:
+  - Production code and ordinary test semantics remain unchanged.
+  - Only the runner, its focused contract tests, and this ledger may change.
+success_criteria:
+  - Recorded RED failure; GREEN focused suite; deterministic distinct physical identities for the same logical process across separate run roots; both modules excluded from shards.
+failure_criteria:
+  - Focused or static checks fail after implementation.
+invalid_criteria:
+  - Wrong tempfile provenance, unrelated source drift, or scratch collision.
+provenance:
+  source_commit: de1e0aa03b2dfec402f028f9497a037c89935842
+  runtime_executable: /usr/bin/python3
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/s
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/t
+decision: PENDING
+next_experiment: EXP-019-W1
+```
+
+### EXP-018 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T17:44:00+08:00
+  - status: VALID
+    at: 2026-09-15T17:46:00+08:00
+commands:
+  - command: focused runner suite before implementation under scratch/s
+    exit_code: 1
+  - command: focused runner suite plus Ruff check/format after implementation under scratch/t
+    exit_code: 0
+  - command: local commit e81286bf5aa465168d7d611de349635cbcae8a9e
+    exit_code: 0
+  - command: candidate-only so101_demo_py rebuild against dependency-complete overlay
+    exit_code: 0
+observed:
+  - OBSERVED: RED produced exactly two failures: missing source-evidenced serial membership and repeated physical process basename across separate run roots.
+  - OBSERVED: GREEN passed all 27 focused tests in 0.05 seconds; Ruff check and format-check passed.
+  - OBSERVED: physical directory names are deterministic p- plus a 12-hex digest of absolute run root and logical process name; logical process names and summary semantics remain unchanged.
+  - OBSERVED: the refreshed so101_demo_py build completed in develop/symlink mode in 1.42 seconds and records candidate commit e81286bf5aa465168d7d611de349635cbcae8a9e.
+inferred:
+  - NONE
+conclusion: The complete source-evidenced isolation policy and cross-run scratch identity are committed and focused-verified without changing production or test semantics.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/s
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/t
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp018-candidate
+decision: KEEP
+next_experiment: EXP-019-W1
+```
+
+## EXP-019-W1 — Frozen final-candidate W1 baseline
+
+```yaml
+experiment_id: EXP-019-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T17:47:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T17:48:00+08:00
+prior_experiment: EXP-018-ISOLATION-RED-GREEN
+hypothesis: Final candidate e81286bf passes the exact complete ordinary gate at W1 with every source-evidenced sensitive module in the ordered serial lane.
+prediction: All 3051 expected nodes execute exactly once with zero failures and a complete summary.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Commit e81286bf5aa465168d7d611de349635cbcae8a9e, /usr/bin/python3, dependency-complete overlay, source shim, historical timing input, and five-module serial lane are frozen.
+  - Pinned submodule is initialized and only this task ledger is dirty/allowlisted.
+  - Fresh run ID c is absent and admission is conflict-free.
+success_criteria:
+  - PASS; exact nonzero once-only coverage; benchmark exclusion; zero process/test/provenance/JUnit failures; cleanup readback; full timing/resource summary.
+failure_criteria:
+  - Any process, test, coverage, provenance, JUnit, timeout, or cleanup failure.
+invalid_criteria:
+  - Admission conflict, source/environment drift, or scratch collision.
+provenance:
+  source_commit: e81286bf5aa465168d7d611de349635cbcae8a9e
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  timing_input_sha256: 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp019-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/c
+decision: PENDING
+next_experiment: EXP-020-W2
+```
+
+### EXP-019 result update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T20:08:23+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id c --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit e81286bf5aa465168d7d611de349635cbcae8a9e --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 1
+observed:
+  - OBSERVED: The runner command completed normally rather than being killed or externally interrupted; `/usr/bin/time` recorded exit status 1, 736.00 seconds wall time, 103 percent CPU, and 2649688 KiB peak RSS.
+  - OBSERVED: The ordered five-module serial lane passed 306 tests in 10.51 seconds and its ownership document records `state=EXITED`, `returncode=0`, and `cleanup_readback=0`.
+  - OBSERVED: Shard 1 completed 2729 collected tests as 2728 passed and 1 failed in 718.33 seconds; the failure was `test_parallel_ipc.py::test_client_rejects_wrong_response_schema_and_union`, where `layout.root/ipc-response/s` was 108 bytes and `socket.bind()` raised `OSError: AF_UNIX path too long`.
+  - OBSERVED: Shard ownership records `state=EXITED`, `returncode=1`, `timed_out=false`, and `cleanup_readback=1`; no task-owned pytest process remained at restoration.
+  - OBSERVED: The whole-directory collection manifest contains 3054 node IDs, while the serial and shard manifests contain 306 and 2729. Exact set subtraction identifies 19 missing nodes under `test/characterization/` and `test/contracts/`, because runner discovery currently uses a top-level-only glob.
+  - OBSERVED: The fail-closed summary SHA256 is `7ca5c40b81e12fe443c4f65369196360ec5e9b1755012a1fe87c9c9a34e23d23`; serial JUnit SHA256 is `d086e1f275379e7bd5189820e1a86eba2449f62e2abc2b6081a2bcd38249fec1`; shard JUnit SHA256 is `cdc64e9ef88928d5cfa64e88157f5e3081a86e3a5071a1d5529fd6919e037718`; outer-time SHA256 is `94fa2155b61db3185c4076b636221d606d99ab44480dff03701d6d241a7f1c9a`.
+inferred:
+  - NONE
+conclusion: EXP-019 is INVALID for correctness and timing comparison. Its command completed normally, but the current physical scratch layout exceeds the suite's Unix-socket budget and top-level-only discovery cannot cover the complete ordinary gate.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp019-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp019-w1-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp019-w1-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/c
+decision: RETAIN_INVALID_DIAGNOSTIC_AND_FIX
+next_experiment: EXP-020-LAYOUT-BUDGET-RED-GREEN
+```
+
+## CP-005 — Restored checkpoint after corrected-scope dispatch
+
+```yaml
+checkpoint_id: CP-005
+last_valid_experiment: EXP-018-ISOLATION-RED-GREEN
+current_hypothesis: Two runner-boundary defects exposed by EXP-019 must be isolated in separate RED/GREEN rounds before repeating W1: Unix-socket path budget first, then recursive nested-module discovery.
+working_tree_status: only docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md is modified; implementation HEAD is e81286bf5aa465168d7d611de349635cbcae8a9e; pinned submodule c16b5a5fe880b6e1857f56486dab4ae726576969 is initialized and clean
+owned_processes: current Codex process/session only; no pytest, colcon, ROS, simulation, Docker, GPU-client, or task user-unit process is owned or active
+preserved_processes: all other worktrees, tmux sessions, processes, containers, GPU clients, and user units; parallel-adaptive-worker-pool remains out of scope
+confirmed_conclusions:
+  - EXP-018 is the last valid experiment and candidate e81286bf has 27 focused contracts GREEN.
+  - EXP-019 evidence is retained unchanged and is INVALID; the command completed normally with exit 1, so external interruption is not used as its invalidation reason.
+  - Formal Worker scaling status is COMPLETE with final_cleanup PASS as of 2026-09-15T19:59:40+08:00.
+  - EXP-019 directly observed one 108-byte AF_UNIX bind failure and manifest-set subtraction observed 19 nested ordinary nodes absent from execution assignment.
+disproven_routes:
+  - Treating EXP-019 as a valid timing sample is rejected because correctness failed.
+  - Marking the pytest command itself externally interrupted is rejected by its completed `/usr/bin/time` record and EXITED ownership readbacks.
+  - Adding more serial modules cannot repair a deterministic path-budget failure or top-level-only discovery omission.
+open_risks:
+  - A fresh full resource admission check is still required immediately before each W1/W2/W4 run.
+  - The shortest safe physical name must retain cross-run identity and fail closed if the registered evidence path cannot accommodate the reserved socket suffix.
+  - Recursive discovery must not enter benchmark_test or split whole modules.
+next_command: add a focused failing Unix-socket-budget contract under EXP-020-LAYOUT-BUDGET-RED-GREEN using a fresh registered /data scratch root
+```
+
+## EXP-020-LAYOUT-BUDGET-RED-GREEN — Reserve the Unix-socket path budget
+
+```yaml
+experiment_id: EXP-020-LAYOUT-BUDGET-RED-GREEN
+status: PLANNED
+prior_experiment: EXP-019-W1
+hypothesis: A path-budget-aware deterministic physical process basename can keep `layout.root/ipc-response/s` within Linux's 107-byte AF_UNIX pathname payload limit while preserving fresh per-process TMP/ROS/JUnit/log isolation and cross-run identity.
+prediction: A focused contract using a run-root length matching EXP-019 fails against the 14-byte `p-<12-hex>` basename, then passes when the basename is deterministically shortened only as much as the reserved socket budget requires.
+single_variable: Physical process basename length selection in `create_process_layout`; no discovery, production, or ordinary-test semantic change.
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate HEAD is e81286bf5aa465168d7d611de349635cbcae8a9e and only this ledger is dirty before the RED test is added.
+  - Exact /usr/bin/python3 and a unique previously nonexistent scratch directory under the registered evidence root are used for each focused invocation.
+success_criteria:
+  - RED fails only on the 107-byte derived-socket budget assertion; GREEN passes the complete focused runner suite; deterministic cross-run identity and all existing isolation contracts remain GREEN; Ruff check and format-check pass.
+failure_criteria:
+  - Any unrelated focused contract fails or the selected layout can exceed 107 bytes without failing closed.
+invalid_criteria:
+  - Wrong Python/tempfile routing, scratch collision, unrelated source drift, or resource contamination.
+provenance:
+  source_commit: e81286bf5aa465168d7d611de349635cbcae8a9e
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/u
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/v
+decision: PENDING
+next_experiment: EXP-021-RECURSIVE-DISCOVERY-RED-GREEN
+```
+
+### EXP-020 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T20:10:00+08:00
+  - status: VALID
+    at: 2026-09-15T20:15:13+08:00
+commands:
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest before implementation under scratch/u
+    exit_code: 2
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest after implementation under scratch/v
+    exit_code: 0
+  - command: Ruff check and format-check after implementation under scratch/v
+    exit_code: 1
+  - command: exact-/usr/bin/python3 tempfile preflight, complete focused runner pytest, Ruff check, and Ruff format-check after targeted formatting under scratch/w
+    exit_code: 0
+observed:
+  - OBSERVED: RED failed during collection only because `validate_process_path_budget` did not exist; exact Python and tempfile routing were valid.
+  - OBSERVED: The first behavioral GREEN passed 28 tests, while static checks rejected only import ordering and formatting; this intermediate scratch is retained but is not the acceptance run.
+  - OBSERVED: The fresh post-format GREEN passed all 28 focused tests in 0.05 seconds; pytest, Ruff check, and Ruff format-check all exited 0.
+  - OBSERVED: A 12-hex SHA256 identity retains 48 bits of deterministic cross-run/process identity while removing the two decorative `p-` bytes; the EXP-019-length reserved path is 106 bytes.
+  - OBSERVED: `run_gate` now validates the reserved `ipc-response/s` path before creating the run root and rejects a three-character run ID at 108 bytes with an AF_UNIX-specific error.
+inferred:
+  - NONE
+conclusion: The reproduced socket-path failure is fixed at the runner layout boundary without changing ordinary tests, production code, tempfile isolation, or evidence placement.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/u
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/v
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/w
+decision: KEEP
+next_experiment: EXP-021-RECURSIVE-DISCOVERY-RED-GREEN
+```
+
+## EXP-021-RECURSIVE-DISCOVERY-RED-GREEN — Include nested ordinary modules exactly once
+
+```yaml
+experiment_id: EXP-021-RECURSIVE-DISCOVERY-RED-GREEN
+status: PLANNED
+prior_experiment: EXP-020-LAYOUT-BUDGET-RED-GREEN
+hypothesis: Recursive deterministic `test_*.py` discovery beneath `src/so101_demo_py/test/` includes the 19 nested contract and characterization nodes omitted in EXP-019 while preserving whole-module assignment and benchmark exclusion.
+prediction: A focused nested-module discovery contract fails before implementation because top-level `glob` returns only the top-level fixture, then the complete focused suite passes after changing only discovery to recursive `rglob`.
+single_variable: Ordinary module discovery recursion; physical layout, serial policy, production code, and ordinary-test semantics remain unchanged.
+lifecycle: REUSE_STACK
+preconditions:
+  - EXP-020 is VALID and no full gate starts before this focused round completes.
+  - Exact /usr/bin/python3 and distinct previously nonexistent /data scratch roots are used for RED and GREEN.
+success_criteria:
+  - RED fails only because the nested ordinary module is absent; GREEN passes the complete focused suite; deterministic ordering and benchmark exclusion remain GREEN; Ruff check and format-check pass.
+failure_criteria:
+  - Nested ordinary modules remain absent, benchmark modules enter discovery, module assignment duplicates paths, or any existing focused/static contract fails.
+invalid_criteria:
+  - Wrong Python/tempfile routing, scratch collision, unrelated source drift, or resource contamination.
+provenance:
+  source_commit: e81286bf5aa465168d7d611de349635cbcae8a9e
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/x
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/y
+decision: PENDING
+next_experiment: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
+```
+
+### EXP-021 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T20:16:00+08:00
+  - status: VALID
+    at: 2026-09-15T20:18:15+08:00
+commands:
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest before recursive discovery under scratch/x
+    exit_code: 1
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest after recursive discovery under scratch/y
+    exit_code: 0
+  - command: Ruff check and format-check after recursive discovery under scratch/y
+    exit_code: 1
+  - command: exact-/usr/bin/python3 tempfile preflight, complete focused runner pytest, Ruff check, and Ruff format-check after targeted formatting under scratch/z
+    exit_code: 0
+observed:
+  - OBSERVED: RED ran 28 tests and produced exactly one failure: `discover_ordinary_modules` returned only `test/test_fast.py` and omitted `test/contracts/test_nested.py`; benchmark isolation remained intact.
+  - OBSERVED: Changing only `test_root.glob("test_*.py")` to deterministic sorted `test_root.rglob("test_*.py")` made the focused behavior GREEN.
+  - OBSERVED: The first GREEN passed pytest and Ruff check but Ruff format-check rejected only the new test fixture's line wrapping; it is retained as an intermediate diagnostic, not acceptance evidence.
+  - OBSERVED: Fresh post-format acceptance under scratch/z passed all 28 focused tests in 0.09 seconds; pytest, Ruff check, and Ruff format-check all exited 0.
+inferred:
+  - NONE
+conclusion: Recursive discovery now assigns the complete ordinary test tree by whole module without collecting the sibling benchmark_test tree or weakening exact node-ID verification.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/x
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/y
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/z
+decision: KEEP
+next_experiment: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
+```
+
+## EXP-022-CANDIDATE-FOCUSED-AND-BUILD — Freeze and rebuild the corrected candidate
+
+```yaml
+experiment_id: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
+status: PLANNED
+prior_experiment: EXP-021-RECURSIVE-DISCOVERY-RED-GREEN
+hypothesis: Committing the two runner-boundary fixes and their contracts produces one reviewable candidate that retains focused correctness and rebuilds against the dependency-complete local overlay.
+prediction: Scoped diff checks pass, the commit contains only runner/test/ledger changes, a fresh focused acceptance passes, and the so101_demo_py symlink build plus package/import provenance resolves inside this worktree.
+single_variable: Freeze the already GREEN EXP-020/EXP-021 changes into one candidate commit and refresh its Python package overlay.
+lifecycle: REBUILD_STACK
+preconditions:
+  - EXP-020 and EXP-021 are VALID; no production or ordinary-test semantic file changed.
+  - The pinned submodule remains initialized and unchanged; only task-owned runner, focused-test, and ledger paths are dirty.
+success_criteria:
+  - `git diff --check` passes; scoped commit succeeds; fresh focused pytest and Ruff pass; colcon build exits 0; HEAD, package prefix, import origin, exact Python, and dependency prefixes match the current worktree.
+failure_criteria:
+  - Any diff, commit-scope, focused, static, build, or provenance gate fails.
+invalid_criteria:
+  - Unrelated dirty path, source drift after commit, resource conflict, or overlay resolution outside this worktree.
+provenance:
+  source_commit: PENDING_COMMIT
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/aa
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp022
+decision: PENDING
+next_experiment: EXP-023-W1
 ```

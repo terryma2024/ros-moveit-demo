@@ -42,6 +42,9 @@ SERIAL_MODULE_REASONS = {
 }
 SERIAL_MODULES = tuple(SERIAL_MODULE_REASONS)
 BENCHMARK_COMPONENT = "benchmark_test"
+AF_UNIX_PATH_MAX_BYTES = 107
+PHYSICAL_PROCESS_ID_HEX_CHARS = 12
+RESERVED_SOCKET_SUFFIX = Path("ipc-response") / "s"
 
 
 class CoverageError(RuntimeError):
@@ -127,7 +130,7 @@ def discover_ordinary_modules(package_root: Path) -> tuple[Path, ...]:
     if not test_root.is_dir():
         raise FileNotFoundError(f"ordinary test root does not exist: {test_root}")
     modules = tuple(
-        sorted(test_root.glob("test_*.py"), key=lambda path: path.as_posix())
+        sorted(test_root.rglob("test_*.py"), key=lambda path: path.as_posix())
     )
     if not modules:
         raise CoverageError("ordinary module discovery must be nonzero")
@@ -271,7 +274,9 @@ def create_process_layout(run_root: Path, name: str) -> ProcessLayout:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
         raise ValueError(f"invalid process layout name: {name}")
     identity_input = f"{run_root.resolve()}\0{name}".encode()
-    physical_name = f"p-{hashlib.sha256(identity_input).hexdigest()[:12]}"
+    physical_name = hashlib.sha256(identity_input).hexdigest()[
+        :PHYSICAL_PROCESS_ID_HEX_CHARS
+    ]
     root = run_root / physical_name
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     tmp_dir = root / "tmp"
@@ -299,6 +304,19 @@ def create_process_layout(run_root: Path, name: str) -> ProcessLayout:
             "ROS_LOG_DIR": str(ros_log_dir),
         },
     )
+
+
+def validate_process_path_budget(run_root: Path) -> int:
+    reserved_path = (
+        run_root / ("0" * PHYSICAL_PROCESS_ID_HEX_CHARS) / RESERVED_SOCKET_SUFFIX
+    )
+    path_bytes = len(os.fsencode(reserved_path))
+    if path_bytes > AF_UNIX_PATH_MAX_BYTES:
+        raise ValueError(
+            "AF_UNIX process scratch path exceeds the 107-byte payload limit: "
+            f"{path_bytes} bytes for {reserved_path}"
+        )
+    return path_bytes
 
 
 def _atomic_json(path: Path, document: object) -> None:
@@ -611,6 +629,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         raise FileNotFoundError(f"Python executable does not exist: {python}")
     workers = validate_worker_count(arguments.workers)
     run_root = arguments.evidence_root.resolve() / "scratch" / arguments.run_id
+    validate_process_path_budget(run_root)
     run_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     summary_path = run_root / "summary.json"
     source_commit = _git(repo_root, "rev-parse", "HEAD")

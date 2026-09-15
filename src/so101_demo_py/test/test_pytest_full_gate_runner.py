@@ -16,6 +16,7 @@ from tools.so101_pytest_gate import (
     split_lanes,
     validate_exact_coverage,
     validate_process_outcomes,
+    validate_process_path_budget,
     validate_source_status,
     validate_worker_count,
 )
@@ -154,15 +155,17 @@ def test_shard_failures_timeouts_provenance_and_junit_fail_closed(
 def test_ordinary_discovery_excludes_benchmark_tree(tmp_path: Path) -> None:
     package = tmp_path / "package"
     ordinary = package / "test"
+    contracts = ordinary / "contracts"
     benchmark = package / "benchmark_test"
-    ordinary.mkdir(parents=True)
+    contracts.mkdir(parents=True)
     benchmark.mkdir()
     (ordinary / "test_fast.py").write_text("def test_fast(): pass\n", encoding="utf-8")
+    (contracts / "test_nested.py").write_text("def test_nested(): pass\n", encoding="utf-8")
     (benchmark / "test_slow.py").write_text("def test_slow(): pass\n", encoding="utf-8")
 
     modules = discover_ordinary_modules(package)
 
-    assert modules == (ordinary / "test_fast.py",)
+    assert modules == (contracts / "test_nested.py", ordinary / "test_fast.py")
     assert all("benchmark_test" not in path.parts for path in modules)
 
 
@@ -201,6 +204,16 @@ def test_physical_process_identity_is_unique_across_gate_runs(tmp_path: Path) ->
 
     assert first.name == second.name == "shard-01"
     assert first.root.name != second.root.name
+
+
+def test_process_layout_reserves_the_linux_unix_socket_path_budget() -> None:
+    run_root = Path(
+        "/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/c"
+    )
+
+    assert validate_process_path_budget(run_root) == 106
+    with pytest.raises(ValueError, match="AF_UNIX"):
+        validate_process_path_budget(run_root.parent / "abc")
 
 
 @pytest.mark.parametrize("worker_count", (1, 2, 4))
