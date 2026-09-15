@@ -398,6 +398,59 @@ def test_production_adapter_names_infrastructure_failures(tmp_path, state, kind)
     assert result.infrastructure_failure.kind.value == kind
 
 
+def test_startup_exception_persists_stage_traceback_chain_and_cleanup(tmp_path):
+    pool = production_pool(
+        tmp_path,
+        execute_summary({"p1": PointStatus.UNRUN}, cleanup=False),
+    )
+
+    def fail_during_construction(*_args, **_kwargs):
+        try:
+            raise OSError("domain claim unavailable")
+        except OSError as cause:
+            error = RuntimeError("composition construction failed")
+            error.startup_stage = "resource_allocation"
+            error.partial_cleanup = {
+                "worker_servers": [],
+                "journal": None,
+                "allocator": {
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                },
+            }
+            raise error from cause
+
+    pool.composition_factory = fail_during_construction
+    pool.context.request.evidence_root.parent.mkdir(parents=True, mode=0o700)
+    pool.bind_pool_running_recorder(lambda _receipts: None)
+
+    result = pool.run()
+
+    report_path = tmp_path / "r/a001/p/g01w01-failure.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["stage"] == "resource_allocation"
+    assert report["pool_running"] is False
+    assert report["cleanup_complete"] is False
+    assert report["exception_chain"] == [
+        {"type": "RuntimeError", "message": "composition construction failed"},
+        {"type": "OSError", "message": "domain claim unavailable"},
+    ]
+    assert report["partial_cleanup"] == {
+        "worker_servers": [],
+        "journal": None,
+        "allocator": {
+            "succeeded": True,
+            "error_type": None,
+            "error_message": None,
+        },
+    }
+    assert "raise error from cause" in report["traceback"]
+    assert result.infrastructure_failure.detail == (
+        "RuntimeError: composition construction failed"
+    )
+
+
 def test_production_adapter_cleanup_false_is_infrastructure(tmp_path):
     pool = production_pool(
         tmp_path,

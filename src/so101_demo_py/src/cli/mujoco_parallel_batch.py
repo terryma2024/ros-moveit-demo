@@ -2086,10 +2086,16 @@ class ProductionBatchComposition:
         self._server_threads = []
         self.allocator = None
         self.journal = None
+        self._startup_stage = "constructor"
         try:
             self._initialize(spec, **kwargs)
-        except BaseException:
-            self._release_partial()
+        except BaseException as error:
+            partial_cleanup = self._release_partial()
+            try:
+                error.startup_stage = self._startup_stage
+                error.partial_cleanup = partial_cleanup
+            except (AttributeError, TypeError):
+                pass
             raise
 
     def _initialize(
@@ -2112,6 +2118,7 @@ class ProductionBatchComposition:
         allocation_policy: AllocationPolicy | None = None,
         pool_running_recorder=None,
     ):
+        self._startup_stage = "validate_context"
         if spec.request is None:
             raise CliError("POOL_REQUEST_REQUIRED")
         if adaptive_context is not None:
@@ -2131,6 +2138,7 @@ class ProductionBatchComposition:
         self.adaptive_diagnostics = []
         self._clock = clock
         self._sleep = sleep
+        self._startup_stage = "process_supervisor"
         self.supervisor = supervisor or ProcessSupervisor(
             spec.request.batch_id,
             manifest_path=spec.request.evidence_root / "owned-processes.json",
@@ -2159,6 +2167,7 @@ class ProductionBatchComposition:
                 raise CliError("THREE_WORKER_LIVE_EVIDENCE_INVALID") from error
             if dict(current_headroom) != dict(spec.live_headroom_verification):
                 raise CliError("THREE_WORKER_LIVE_EVIDENCE_CHANGED")
+        self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
             spec.config,
             spec.request.evidence_root,
@@ -2180,6 +2189,7 @@ class ProductionBatchComposition:
                 )
             ),
         )
+        self._startup_stage = "resource_allocation"
         if spec.resume:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
@@ -2209,10 +2219,12 @@ class ProductionBatchComposition:
             spec.request.run_mode,
             expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
         )
+        self._startup_stage = "coordinator_journal"
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
             )
+        self._startup_stage = "coordinator"
         self.coordinator = BatchCoordinator(
             self.journal,
             spec.request,
@@ -2231,6 +2243,7 @@ class ProductionBatchComposition:
         if broker_request_model is not None:
             raise CliError("IN_PROCESS_BROKER_FORBIDDEN")
         self._worker_children_reaped = False
+        self._startup_stage = "control_authority"
         self.authority = WorkerTokenAuthority(
             spec.request.evidence_root,
             coordinator_epoch=self.journal.coordinator_epoch,
@@ -2249,6 +2262,7 @@ class ProductionBatchComposition:
         self.broker_runtime_root = self.authority.ipc_root / "broker"
         self.broker_input_root = spec.request.evidence_root / "broker-inputs"
         self.broker_socket_path = self.broker_runtime_root / "perception.sock"
+        self._startup_stage = "broker_runtime"
         if spec.request.run_mode is not RunMode.DRY_RUN:
             if spec.resume:
                 if not self.broker_input_root.is_dir() or self.broker_input_root.is_symlink():
@@ -2268,6 +2282,7 @@ class ProductionBatchComposition:
         self.worker_controls = []
         self._runtime_side_effects_factory = runtime_side_effects_factory
         self._worker_launcher = worker_launcher
+        self._startup_stage = "worker_ipc"
         for resources in self.resource_manifest.workers:
             if (
                 self._recovered_worker_ids is not None
@@ -2330,6 +2345,7 @@ class ProductionBatchComposition:
                 deadline_s=spec.config.heartbeat_timeout_s,
                 orphan_manifest=resources.worker_root / "owned-runtime-processes.json",
             ))
+        self._startup_stage = "initialized"
 
     def _remove_stale_worker_sockets(self):
         """Remove only prior generation sockets after exact process fencing."""
@@ -2488,23 +2504,59 @@ class ProductionBatchComposition:
         self.broker_spec_path = spec_path
 
     def _release_partial(self):
+        outcomes = {"worker_servers": []}
         for server in getattr(self, "worker_servers", ()):
             try:
                 server.close()
-            except Exception:
-                pass
+            except Exception as error:
+                outcomes["worker_servers"].append({
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                })
+            else:
+                outcomes["worker_servers"].append({
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                })
         journal = getattr(self, "journal", None)
         if journal is not None:
             try:
                 journal.close()
-            except Exception:
-                pass
+            except Exception as error:
+                outcomes["journal"] = {
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                }
+            else:
+                outcomes["journal"] = {
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                }
+        else:
+            outcomes["journal"] = None
         allocator = getattr(self, "allocator", None)
         if allocator is not None:
             try:
                 allocator.close()
-            except Exception:
-                pass
+            except Exception as error:
+                outcomes["allocator"] = {
+                    "succeeded": False,
+                    "error_type": type(error).__name__,
+                    "error_message": str(error),
+                }
+            else:
+                outcomes["allocator"] = {
+                    "succeeded": True,
+                    "error_type": None,
+                    "error_message": None,
+                }
+        else:
+            outcomes["allocator"] = None
+        return outcomes
 
     def _start_broker(self):
         if self.broker_spec_path is None:
@@ -3140,7 +3192,99 @@ class ProductionBatchComposition:
             raise CliError("ADAPTIVE_POOL_CONTEXT")
         role = getattr(process, "role", "unknown")
         self.adaptive_diagnostics.append(f"FIRST_INFRA:{role}:{code}")
+        if role == "broker":
+            try:
+                self._capture_broker_exit_evidence(process, code)
+            except Exception as error:
+                self.adaptive_diagnostics.append(
+                    f"BROKER_EXIT_EVIDENCE:{type(error).__name__}:{error}"
+                )
         self.coordinator.request_stop(reason="ADAPTIVE_INFRASTRUCTURE_FAILURE")
+
+    def _capture_broker_exit_evidence(self, process, code):
+        """Persist bounded Docker evidence before cleanup can erase it."""
+
+        try:
+            identity = self.broker_container_id_path.lstat()
+            container_id = self.broker_container_id_path.read_text(
+                encoding="ascii"
+            ).strip()
+        except (OSError, UnicodeError) as error:
+            raise CliError("BROKER_CONTAINER_ID_MISSING") from error
+        if (
+            not stat.S_ISREG(identity.st_mode)
+            or identity.st_uid != os.getuid()
+            or stat.S_IMODE(identity.st_mode) != 0o600
+            or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
+        ):
+            raise CliError("BROKER_CONTAINER_ID_INVALID")
+
+        def run(command):
+            try:
+                result = self._container_runner(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5.0,
+                )
+            except Exception as error:
+                return {
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": f"{type(error).__name__}: {error}"[:65536],
+                }
+            return {
+                "returncode": result.returncode,
+                "stdout": (result.stdout or "")[-65536:],
+                "stderr": (result.stderr or "")[-65536:],
+            }
+
+        inspected = run(
+            ["docker", "inspect", "--type", "container", container_id]
+        )
+        state = None
+        if inspected["returncode"] == 0:
+            try:
+                documents = json.loads(inspected["stdout"])
+                if (
+                    type(documents) is list
+                    and len(documents) == 1
+                    and type(documents[0]) is dict
+                    and documents[0].get("Id") == container_id
+                    and type(documents[0].get("State")) is dict
+                ):
+                    state = documents[0]["State"]
+            except (TypeError, json.JSONDecodeError):
+                pass
+        logs = run(["docker", "logs", "--tail", "200", container_id])
+        events = run([
+            "docker", "events", "--since", "10m", "--until", "0s",
+            "--filter", f"container={container_id}", "--format", "{{json .}}",
+        ])
+        _write_json(
+            self.broker_runtime_root / "broker-exit.json",
+            {
+                "schema_version": 1,
+                "kind": "so101_broker_exit",
+                "recorded_unix_ns": time.time_ns(),
+                "process": {
+                    "role": getattr(process, "role", "unknown"),
+                    "pid": getattr(process, "pid", None),
+                    "pgid": getattr(process, "pgid", None),
+                    "start_time": getattr(process, "start_time", None),
+                    "exit_code": code,
+                },
+                "container": {
+                    "id": container_id,
+                    "state": state,
+                    "inspect": inspected,
+                },
+                "logs": logs,
+                "events": events,
+            },
+        )
+        return True
 
     def _release_adaptive_resources(self, cleanup_verified):
         if self.adaptive_context is None:

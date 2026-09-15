@@ -400,6 +400,16 @@ class AdaptiveBatchRunner:
                     worker_count,
                     "POOL_RUNNING was not durably recorded",
                 )
+            if failure is not None:
+                self.journal.append(
+                    "POOL_FAILED",
+                    f"pool-failed-{generation:02d}",
+                    {
+                        "failure": _failure_document(failure),
+                        "cleanup_complete": result.cleanup_complete,
+                        "diagnostics": list(result.diagnostics),
+                    },
+                )
             limit_reached = False
             for point_id in result.interrupted_point_ids:
                 limit_reached = self._interrupt(point_id, generation) or limit_reached

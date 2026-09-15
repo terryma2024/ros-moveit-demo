@@ -4174,6 +4174,68 @@ cleanup: PASS
 next_experiment: NONE
 ```
 
+## EXP-049 — Fixed-contract W10 success recovery
+
+```yaml
+experiment_id: EXP-049-W10-SUCCESS-RECOVERY
+date: 2026-09-15
+dispatch_id: 4f896ffe-c94a-45fc-ab19-c4d6a7099aed
+status: RUNNING
+objective: >-
+  Preserve actionable startup and Broker-exit diagnostics, then execute exactly
+  one clean W10/C2 twenty-point run under the frozen EXP-040 contract.
+registered_evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
+phase_evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe
+baseline:
+  valid_success: EXP-040-FIXED-W10-20-POINT
+  late_failure: EXP-047-FORMAL-W10
+  startup_failure: EXP-048-FORMAL-W10-R2
+frozen_contract:
+  worker_count: 10
+  yolo_executor_count: 2
+  point_count: 20
+  run_mode: execute
+  fallback_worker_counts: []
+  infrastructure_retry: forbidden
+  model_fallback: forbidden
+change:
+  - Persist pool failure stage, traceback, causal chain, and partial cleanup.
+  - Persist bounded Broker process, CID, inspect state, log tail, and Docker events.
+  - Journal terminal no-fallback failures as POOL_FAILED.
+red_green:
+  focused: 41 passed in 0.41 s
+  candidate_full: 135 passed in 4.38 s
+  ordinary_gate: collection blocked because /usr/bin/python3 lacks torch
+candidate:
+  build: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-03
+  build_status: PASS
+evidence_matrix: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/evidence-matrix.md
+protected_dirty_test:
+  path: src/so101_demo_py/test/test_parallel_batch_resources.py
+  diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
+  staged: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49r
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49g
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49p
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49q
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49s
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49b
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49c
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49d
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49e
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49f
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49t
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49u
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49v
+  deleted: []
+next_experiment: EXP-049-CLEAN-W10-C2
+```
+
 ## CP-047 — Worker numeric x mapping unified and visually requalified
 
 ```yaml

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import json
 import math
 import os
 from pathlib import Path
 import re
+import tempfile
 import threading
+import time
+import traceback
 from typing import Callable
 
 from .adaptive_contracts import (
@@ -204,6 +208,61 @@ class ProductionAdaptivePool:
             detail,
         )
 
+    def _persist_failure(self, error: Exception, *, composition, cleanup: bool) -> None:
+        stage = (
+            getattr(error, "startup_stage", None)
+            or ("composition_factory" if composition is None else "composition_run")
+        )
+        chain = []
+        current: BaseException | None = error
+        seen = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            chain.append({"type": type(current).__name__, "message": str(current)})
+            current = current.__cause__ or current.__context__
+        document = {
+            "schema_version": 1,
+            "kind": "so101_adaptive_pool_failure",
+            "batch_id": self.context.request.batch_id,
+            "generation": self.generation,
+            "worker_count": self.context.request.worker_count,
+            "stage": stage,
+            "pool_running": self._pool_running,
+            "cleanup_complete": cleanup,
+            "partial_cleanup": getattr(error, "partial_cleanup", None),
+            "exception_chain": chain,
+            "traceback": "".join(
+                traceback.format_exception(type(error), error, error.__traceback__)
+            ),
+            "recorded_unix_ns": time.time_ns(),
+        }
+        path = self.context.request.evidence_root.parent / (
+            f"{self.context.request.evidence_root.name}-failure.json"
+        )
+        payload = json.dumps(
+            document, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}-", dir=path.parent)
+        try:
+            os.fchmod(descriptor, 0o600)
+            os.write(descriptor, payload)
+            os.fsync(descriptor)
+            os.close(descriptor)
+            descriptor = -1
+            os.replace(temporary, path)
+            parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+
     def _map_summary(self, summary: BatchSummary, composition) -> PoolExecutionResult:
         terminal_results = []
         missing_terminal_locations = []
@@ -312,12 +371,20 @@ class ProductionAdaptivePool:
             cleanup = bool(
                 getattr(composition, "adaptive_cleanup_complete", False)
             )
+            diagnostics = list(getattr(composition, "adaptive_diagnostics", ()))
+            try:
+                self._persist_failure(error, composition=composition, cleanup=cleanup)
+            except Exception as persistence_error:
+                diagnostics.append(
+                    "FAILURE_EVIDENCE_WRITE:"
+                    f"{type(persistence_error).__name__}:{persistence_error}"
+                )
             return PoolExecutionResult(
                 (),
                 interrupted,
                 self._failure(kind, f"{type(error).__name__}: {message}"),
                 cleanup,
-                tuple(getattr(composition, "adaptive_diagnostics", ())),
+                tuple(diagnostics),
             )
 
 

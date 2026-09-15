@@ -1031,6 +1031,70 @@ def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_pat
     assert owner._retire_broker_container() is True
 
 
+def test_broker_exit_capture_persists_process_container_logs_and_events(tmp_path):
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+
+    owner = object.__new__(ProductionBatchComposition)
+    owner.broker_runtime_root = tmp_path / "broker"
+    owner.broker_runtime_root.mkdir()
+    owner.broker_container_id_path = owner.broker_runtime_root / "container.cid"
+    container_id = "c" * 64
+    owner.broker_container_id_path.write_text(container_id + "\n", encoding="ascii")
+    owner.broker_container_id_path.chmod(0o600)
+    state = {
+        "Status": "exited",
+        "Running": False,
+        "Paused": False,
+        "Restarting": False,
+        "OOMKilled": False,
+        "Dead": False,
+        "Pid": 0,
+        "ExitCode": 17,
+        "Error": "broker crashed",
+        "StartedAt": "2026-09-15T11:00:00Z",
+        "FinishedAt": "2026-09-15T11:03:00Z",
+    }
+
+    def run(command, **_kwargs):
+        if command[1:3] == ["inspect", "--type"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps([{"Id": container_id, "State": state}]),
+                stderr="",
+            )
+        if command[1] == "logs":
+            return SimpleNamespace(returncode=0, stdout="last broker line\n", stderr="")
+        assert command[1] == "events"
+        return SimpleNamespace(
+            returncode=0,
+            stdout='{"status":"die","exitCode":"17"}\n',
+            stderr="",
+        )
+
+    owner._container_runner = run
+    process = SimpleNamespace(
+        role="broker", pid=123, pgid=123, start_time=456,
+        cmdline=("docker", "run"), batch_id="a001-g01-w10",
+    )
+
+    owner._capture_broker_exit_evidence(process, 17)
+
+    report = json.loads(
+        (owner.broker_runtime_root / "broker-exit.json").read_text(encoding="utf-8")
+    )
+    assert report["process"] == {
+        "role": "broker",
+        "pid": 123,
+        "pgid": 123,
+        "start_time": 456,
+        "exit_code": 17,
+    }
+    assert report["container"]["id"] == container_id
+    assert report["container"]["state"] == state
+    assert report["logs"] == {"returncode": 0, "stdout": "last broker line\n", "stderr": ""}
+    assert report["events"]["stdout"] == '{"status":"die","exitCode":"17"}\n'
+
+
 def test_broker_cleanup_waits_for_exact_auto_remove_after_successful_stop(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import (
         CliError,
@@ -2067,10 +2131,16 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
         return calls[-1]
 
     monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_first)
-    with pytest.raises(RuntimeError, match="constructor fault"):
+    with pytest.raises(RuntimeError, match="constructor fault") as raised:
         ProductionBatchComposition(
             spec, resource_probe=Probe(), claim_root=scratch / "fc"
         )
+    assert raised.value.startup_stage == "worker_ipc"
+    assert raised.value.partial_cleanup == {
+        "worker_servers": [],
+        "journal": {"succeeded": True, "error_type": None, "error_message": None},
+        "allocator": {"succeeded": True, "error_type": None, "error_message": None},
+    }
     assert all(server.path.exists() is False for server in calls)
     assert not (scratch / "fc" / spec.request.batch_id).exists()
 

@@ -112,14 +112,22 @@ class FakePools:
         return FakePool(self, request, len(self.requests))
 
 
-def make_runner(tmp_path, pools, *, points=None, max_infra_attempts=None):
+def make_runner(
+    tmp_path, pools, *, points=None, max_infra_attempts=None,
+    fallback_worker_counts=None,
+):
     from so101_demo.parallel_batch.adaptive_runner import AdaptiveBatchRunner
 
     options = load_adaptive_worker_options(CONFIG)
-    if max_infra_attempts is not None:
+    if max_infra_attempts is not None or fallback_worker_counts is not None:
         from dataclasses import replace
 
-        options = replace(options, max_infra_attempts_per_point=max_infra_attempts)
+        changes = {}
+        if max_infra_attempts is not None:
+            changes["max_infra_attempts_per_point"] = max_infra_attempts
+        if fallback_worker_counts is not None:
+            changes["fallback_worker_counts"] = tuple(fallback_worker_counts)
+        options = replace(options, **changes)
     request = AdaptiveBatchRequest(
         "a001",
         RunMode.EXECUTE,
@@ -199,6 +207,31 @@ def test_cleanup_failure_never_starts_the_next_pool(tmp_path):
     assert summary.status is BatchTerminalStatus.INFRA_FAILED
     assert [request.worker_count for request in pools.requests] == [8]
     assert summary.cleanup_complete is False
+    runner.close()
+
+
+def test_terminal_infrastructure_failure_is_durable_without_fallback(tmp_path):
+    pools = FakePools(startup_failure_levels={8})
+    runner, _ = make_runner(tmp_path, pools, fallback_worker_counts=())
+
+    summary = runner.run()
+
+    failures = [
+        event.payload
+        for event in runner.journal.replay().events
+        if event.type == "POOL_FAILED"
+    ]
+    assert summary.status is BatchTerminalStatus.INFRA_FAILED
+    assert failures == [{
+        "failure": {
+            "kind": "STARTUP",
+            "generation": 1,
+            "worker_count": 8,
+            "detail": "simulated startup failure",
+        },
+        "cleanup_complete": True,
+        "diagnostics": [],
+    }]
     runner.close()
 
 
