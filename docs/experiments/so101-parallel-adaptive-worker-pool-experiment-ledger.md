@@ -4007,14 +4007,15 @@ next_experiment: NONE
 
 ```yaml
 experiment_id: EXP-048-FORMAL-W10-R2
-status: VALID
+status: FAILED
 status_history:
   - status: PLANNED
     at: 2026-09-15T20:14:21+08:00
   - status: RUNNING
     at: 2026-09-15T20:22:21+08:00
-  - status: VALID
+  - status: FAILED
     at: 2026-09-15T20:22:58+08:00
+admission_valid: true
 prior_experiment: EXP-047-FORMAL-W10
 hypothesis: EXP-047's unexpected Broker-container disappearance was transient; one fresh W10 attempt under the byte-equivalent v4 runtime payload can complete all twenty points while preserving the fixed W10/C2 evidence contract.
 prediction: If the disappearance was transient, this one attempt completes 20/20 points on first attempts at `levels_used=[10]`; if the same failure repeats, the retained Docker/system/kernel/coordinator evidence will establish its first bad boundary without a third run.
@@ -4055,7 +4056,7 @@ observed:
 inferred:
   - The first bad boundary is STARTUP after durable POOL_STARTING and before POOL_RUNNING. ProductionAdaptivePool caught the underlying exception, but the no-fallback top-level journal persisted only the interrupted points and INFRA_FAILED; the exception detail is unavailable and no deeper cause is asserted.
   - EXP-047 and EXP-048 failed at different boundaries. Their shared W10 setting is insufficient evidence that they share one root cause, and neither OOM nor YOLO saturation is supported by EXP-048.
-conclusion: VALID fixed-contract runtime attempt with a FAILED outcome. W10 now has two admitted failures, zero valid twenty-point performance samples, and remains excluded from the W1-W8 scaling curve.
+conclusion: FAILED fixed-contract runtime attempt. W10 now has two admitted failures, zero valid twenty-point performance samples, and remains excluded from the W1-W8 scaling curve.
 evidence:
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
@@ -4064,6 +4065,45 @@ evidence:
   - coordinator_journal_sha256: 28f8a0cdc18f8576394069ad7a31a8aa54eb3fb817fde8b2b7b20ac8ab49fe75
   - final_cleanup_readback_sha256: f45f216acbd4f551d0f4882147d93bf2c6185918187d7c683ac13f31609d501c
   - forensic_manifest_sha256: fb092e6f2f22e172abbb1975be4c6721366797074237b88a054fb603aeedbba7
+w10_attempts:
+  - experiment_id: EXP-047-FORMAL-W10
+    status: FAILED
+    successful_points: 10
+    first_bad_boundary: after POOL_RUNNING; Broker container disappeared
+    performance_sample: null
+    retained_runtime: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/l
+  - experiment_id: EXP-048-FORMAL-W10-R2
+    status: FAILED
+    successful_points: 0
+    first_bad_boundary: after POOL_STARTING and before POOL_RUNNING
+    performance_sample: null
+    retained_runtime: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
+comparison_v2:
+  path: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/comparison-v2
+  manifest_sha256: 473d4508a641e48053ae4b36edabfc4261f2180540923c62c3f468eddd877698
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/l
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
+  archived_runs: []
+  scratch_deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-pytest-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-pytest2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-red-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-green-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-final-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-postcommit-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-resume-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-red-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-red2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-green-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-postcommit-df261a05
+  deleted: []
+cleanup:
+  exp047: {status: PASS, readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-8d75fe6f-v4/final-cleanup-readback.txt, sha256: cf6c4841868187ce0b881f83e634d18313c3b25c130ef4bc36f6b63b158fa8f5}
+  exp048: {status: PASS, readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/w10/final-cleanup-readback.txt, sha256: f45f216acbd4f551d0f4882147d93bf2c6185918187d7c683ac13f31609d501c}
 decision: STOP_W10_AND_PUBLISH_FAILED_POINT
 next_experiment: NONE
 ```
