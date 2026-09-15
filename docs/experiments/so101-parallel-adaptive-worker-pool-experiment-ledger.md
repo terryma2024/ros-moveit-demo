@@ -7,7 +7,7 @@ success_contract: Preserve EXP-047, perform exactly one new valid fixed-W10 runt
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 919edc8d9764e232149da3fe14285432182ca03f
+current_commit: 4283eada24d6313bdc1fec4cf7a0fd8cc00d9ce6
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -29,6 +29,7 @@ confirmed_conclusions:
   - EXP-006 used a 240 s consumer get_one timeout, so none of its 20 points timed out under current configuration; against the separate 5 s target SLO, 5/20 exceeded from get_one start to POSE_ACCEPTED and 4/20 exceeded from consumer READY to accepted.
   - The formal frozen C2 comparison qualifies W1, W2, W4, W6, and W8 with one complete 20/20 first-attempt sample each. W8 is fastest at 4.55 points/minute and W4 is the 96.5-percent-efficiency knee.
   - EXP-048 is the second admitted W10 runtime failure and contributes no performance point. It stopped after POOL_STARTING and before POOL_RUNNING with 0/20 points; the exact cleanup readback passed and no third W10 run was launched.
+  - CP-047 makes the Worker-to-x transform a single generator function used by valid and ideal series, value labels, Worker ticks, and failed-level markers; checked SVG coordinates place W8 at 883.8 and W10 at 1110.0 in every panel.
   - Task 15 preflight at CP-010 confirmed the required linked worktree and HEAD, preserved the three existing dirty paths, and found no conflicting process, ROS node on Domains 0/215-222, Docker container, GPU compute app, or tmux session.
   - Task 15 implementation through CP-011 is committed at 3677e9d97f1367f861496817cee5edeb4349871f; EXP-007R2 qualified eight authenticated Broker clients with C2 YOLO execution, queue depth five, eight distinct logical inferences, zero replay, and zero transport truncation.
   - EXP-008 live-01 and live-02 are INVALID preflight attempts, and live-03 is INVALID because systemd-oomd killed its 16.2 GiB tmux scope before any point lease; CP-012.
@@ -48,7 +49,7 @@ disproven_routes:
 open_hypotheses:
   - Fixed-pool throughput should improve from W1 until shared C2 inference, host CPU/memory, and per-point motion lifecycles dominate; additional Workers beyond that knee may add startup/resource cost without proportional throughput.
   - The production Broker may not persist its optional concurrency summary before the frozen five-second Docker stop boundary; sealed request correlation remains authoritative, but queue/service distributions will be reported unavailable rather than estimated if the file is absent.
-latest_checkpoint: CP-046
+latest_checkpoint: CP-047
 next_experiment: NONE
 ```
 
@@ -4128,6 +4129,67 @@ retention:
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-final-df261a05
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/so101-parallel-worker-scaling-render.png
     - /tmp/so101-debug-df261a05
+  deleted: []
+cleanup: PASS
+next_experiment: NONE
+```
+
+## CP-047 — Worker numeric x mapping unified and visually requalified
+
+```yaml
+checkpoint_id: CP-047
+last_valid_performance_experiment: EXP-046-FORMAL-W8
+last_runtime_experiment: EXP-048-FORMAL-W10-R2
+status: COMPLETE
+prior_checkpoint: CP-046
+confirmed_conclusions:
+  - No W10 runtime was rerun. This checkpoint changes and verifies only the deterministic chart boundary.
+  - The generator now has one Worker-to-x mapping used by valid and ideal series, valid-point circles and value labels, Worker ticks, failure markers, and failure-label anchors.
+  - In each of the three panels, W8 series points, circles, value labels, and W8 ticks resolve to x=883.8. W10 failure-marker centers and W10 ticks resolve to x=1110.0.
+  - The fresh 1200x900 render shows W4, W6, and W8 above their corresponding numeric ticks. W8 remains visibly separated from the W10 red X in all panels, and no label or chart edge is clipped.
+change_commit: 4283eada24d6313bdc1fec4cf7a0fd8cc00d9ce6
+changed_paths:
+  - docs/guides/assets/so101-parallel-worker-scaling.svg
+  - scripts/generate_so101_parallel_worker_scaling_chart.py
+  - src/so101_demo_py/test/test_generate_so101_parallel_worker_scaling_chart.py
+red_green:
+  invalid_red: tempfile.gettempdir() resolved to /tmp; retained but excluded from evidence.
+  valid_red: 2 failed and 4 passed after the new coordinate-identity assertions, with tempfile.gettempdir() inside the registered NVMe scratch directory.
+  green: 6 passed in 0.01 s; deterministic generator check and JSON/SVG parse passed.
+  valid_red_sha256: 0d2c41c3d6f8a840aa7d56e27fa044d912a0a3b16986ec80b7356518654db560
+  green_sha256: 85c6b7990271c27ab857cea1c173930be3abe220c0a7e5b2bf9a8d12f0be2bba
+verification:
+  postcommit_pytest: 6 passed in 0.01 s
+  postcommit_elapsed_s: 0.264
+  generator_check: PASS
+  coordinate_readback: PASS
+  git_diff_check: PASS
+  postcommit_scratch: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-postcommit-df261a05
+  postcommit_log_sha256: 483b716d1d7049d98048d95f5caed6b89078f13879da24fc9fc46af86d10a499
+visual_evidence:
+  render: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/so101-parallel-worker-scaling-render-v3.png
+  render_sha256: 61cb8cf09b78aa844ee2a83a603bf2427266d47ccf3e59c1f1b09fa475fb253c
+  readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/chart-xmap-visual-readback.txt
+  readback_sha256: 2c402c32a43b9a71f8f04d950a4ee2ad89b6902b673ba9a65b40df14d021f947
+artifacts:
+  corrected_svg_sha256: be7b78368dc1ab1f08047df91ba1a7e62a9bb1bd32ee2dfe12ffd62d1de16016
+  chart_xmap_v3: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/chart-xmap-v3
+  chart_xmap_v3_manifest_sha256: 416e156cdcbce12f115bcab23ed4e29f898fa4aa821e47613e37ed36bb53a800
+protected_dirty_test:
+  path: src/so101_demo_py/test/test_parallel_batch_resources.py
+  diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
+  staged: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05/chart-xmap-v3
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-red-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-red2-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-green-df261a05
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-postcommit-df261a05
+    - /tmp/so101-debug-df261a05/chrome-profile-v3
   deleted: []
 cleanup: PASS
 next_experiment: NONE
