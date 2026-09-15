@@ -122,6 +122,12 @@ def test_exact_node_union_rejects_benchmark_and_zero_collection() -> None:
         )
 
 
+def test_benchmark_word_in_an_ordinary_test_name_is_not_a_benchmark_path() -> None:
+    node_id = "test/test_partition.py::test_benchmark_test_is_excluded"
+    result = validate_exact_coverage((node_id,), ((node_id,),))
+    assert result["actual_count"] == 1
+
+
 @pytest.mark.parametrize(
     "outcome",
     (

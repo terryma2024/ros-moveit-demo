@@ -12,6 +12,7 @@ import json
 import math
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 import signal
 import statistics
@@ -204,7 +205,7 @@ def validate_exact_coverage(
     actual = tuple(node_id for collection in collections for node_id in collection)
     if not expected_tuple:
         raise CoverageError("expected collection must be nonzero")
-    if any(BENCHMARK_COMPONENT in node_id for node_id in (*expected_tuple, *actual)):
+    if any(_node_is_benchmark(node_id) for node_id in (*expected_tuple, *actual)):
         raise CoverageError("benchmark node ID entered the ordinary gate")
     expected_counts = Counter(expected_tuple)
     actual_counts = Counter(actual)
@@ -235,6 +236,11 @@ def validate_exact_coverage(
         "actual_count": len(actual),
         "collection_sha256": digest,
     }
+
+
+def _node_is_benchmark(node_id: str) -> bool:
+    test_path = node_id.split("::", 1)[0]
+    return BENCHMARK_COMPONENT in PurePosixPath(test_path).parts
 
 
 def validate_process_outcomes(outcomes: Sequence[ProcessOutcome]) -> None:
@@ -635,7 +641,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
     validate_process_outcomes((collection,))
     if not collection.node_ids:
         raise CoverageError("ordinary serial collection must be nonzero")
-    if any(BENCHMARK_COMPONENT in node_id for node_id in collection.node_ids):
+    if any(_node_is_benchmark(node_id) for node_id in collection.node_ids):
         raise CoverageError("benchmark node ID entered expected collection")
     setup_elapsed_s = time.monotonic() - overall_started
 

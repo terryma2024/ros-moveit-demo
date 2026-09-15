@@ -5,7 +5,7 @@ success_contract: A repository-maintained deterministic runner passes focused RE
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: 1c0ec9a7bb04bd435cf38b9af254af7a9df4667b
+current_commit: ceb41ec94d09eddc1537cf24859531a033acf61f
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
@@ -18,7 +18,7 @@ open_hypotheses:
   - Deterministic file-level LPT sharding can preserve exact ordinary-gate coverage and reduce critical-path wall time.
   - Additional source-evidenced global-resource owners may need the serial lane beyond the two mandatory modules.
 latest_checkpoint: CP-003
-next_experiment: EXP-008-STATUS-CORRECTION
+next_experiment: EXP-010-BENCHMARK-PATH-CORRECTION
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -619,4 +619,206 @@ evidence:
   - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp008-status-correction/SHA256SUMS
 decision: KEEP
 next_experiment: EXP-009-W1
+```
+
+## EXP-008B-CANDIDATE-REBUILD — Final pre-measurement overlay refresh
+
+```yaml
+experiment_id: EXP-008B-CANDIDATE-REBUILD
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:55:48+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:56:04+08:00
+  - status: INVALID
+    at: 2026-09-15T16:56:43+08:00
+prior_experiment: EXP-008-STATUS-CORRECTION
+hypothesis: A final lightweight rebuild binds the overlay checks to committed candidate ceb41ec94f777b59a54bc51ca975e49e9443db3a.
+prediction: Build and package provenance pass without runtime resource use.
+single_variable: Refresh the so101_demo_py symlink install after the porcelain fix commit.
+lifecycle: REUSE_STACK
+preconditions:
+  - HEAD is ceb41ec94f777b59a54bc51ca975e49e9443db3a and only this ledger is dirty.
+success_criteria:
+  - Build exits 0; exact package/Python provenance remains local.
+failure_criteria:
+  - Build or provenance fails.
+invalid_criteria:
+  - Source drift or conflicting runtime activity.
+provenance:
+  source_commit: ceb41ec94f777b59a54bc51ca975e49e9443db3a
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: colcon --log-base <EVIDENCE_ROOT>/build-log-candidate3 build --packages-select so101_demo_py --symlink-install
+    exit_code: 0
+observed:
+  - OBSERVED: build and package provenance commands exited 0, but actual `git rev-parse HEAD` was ceb41ec94d09eddc1537cf24859531a033acf61f.
+  - OBSERVED: the PLANNED entry incorrectly expanded short hash ceb41ec94 using invented suffix bytes rather than command readback.
+inferred:
+  - NONE
+conclusion: Build mechanics passed but the experiment is INVALID because frozen source provenance did not equal actual HEAD.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-candidate3.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-candidate3-SHA256SUMS
+decision: REPEAT
+next_experiment: EXP-008C-CANDIDATE-REBUILD
+```
+
+## Commit provenance correction
+
+```yaml
+correction_at: 2026-09-15T16:56:43+08:00
+incorrect_value: ceb41ec94f777b59a54bc51ca975e49e9443db3a
+authoritative_value: ceb41ec94d09eddc1537cf24859531a033acf61f
+reason: The incorrect value was inferred from the short commit prefix instead of read from git rev-parse HEAD.
+scope: Header current_commit and all future experiments use the authoritative value; EXP-008B remains historically invalid and unmodified apart from status/result fields.
+```
+
+## EXP-008C-CANDIDATE-REBUILD — Exact final pre-measurement overlay refresh
+
+```yaml
+experiment_id: EXP-008C-CANDIDATE-REBUILD
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:56:43+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:57:12+08:00
+  - status: VALID
+    at: 2026-09-15T16:57:28+08:00
+prior_experiment: EXP-008B-CANDIDATE-REBUILD
+hypothesis: Repeating the lightweight build with command-read authoritative HEAD yields valid exact candidate provenance.
+prediction: Build and provenance pass at ceb41ec94d09eddc1537cf24859531a033acf61f.
+single_variable: Correct the frozen source_commit value; build inputs and environment are otherwise unchanged.
+lifecycle: REUSE_STACK
+preconditions:
+  - git rev-parse HEAD equals ceb41ec94d09eddc1537cf24859531a033acf61f; only this ledger is dirty.
+success_criteria:
+  - Build exits 0 and recorded HEAD/package/Python provenance matches the planned values.
+failure_criteria:
+  - Build or provenance fails.
+invalid_criteria:
+  - Source drift or conflicting runtime activity.
+provenance:
+  source_commit: ceb41ec94d09eddc1537cf24859531a033acf61f
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: colcon --log-base <EVIDENCE_ROOT>/build-log-candidate4 build --packages-select so101_demo_py --symlink-install
+    exit_code: 0
+observed:
+  - OBSERVED: build passed in 1.21 seconds; wrapper elapsed_ms=1356.
+  - OBSERVED: recorded HEAD exactly matched ceb41ec94d09eddc1537cf24859531a033acf61f; package, Python, and Torch provenance matched the planned environment.
+inferred:
+  - NONE
+conclusion: Final candidate overlay provenance is valid.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-candidate4.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-candidate4-SHA256SUMS
+decision: KEEP
+next_experiment: EXP-009-W1
+```
+
+## EXP-009-W1 — Authoritative new-runner serial baseline
+
+```yaml
+experiment_id: EXP-009-W1
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:57:40+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:58:16+08:00
+  - status: VALID
+    at: 2026-09-15T16:58:58+08:00
+prior_experiment: EXP-007-W1
+hypothesis: The corrected committed runner at W1 preserves exact ordinary collection and establishes an uncontaminated baseline.
+prediction: Every expected node ID appears exactly once across the ordered serial lane and one remaining shard; benchmark_test is absent; all tests pass.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate HEAD is ceb41ec94d09eddc1537cf24859531a033acf61f; only the task ledger is dirty and explicitly allowlisted.
+  - Exact Python, current worktree overlay, historical timing input SHA256 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21, serial lane, and scratch root are frozen.
+  - Fresh admission shows no conflicting pytest, ROS/MuJoCo/MoveIt/Gazebo, Docker, GPU, or W10 unit activity.
+success_criteria:
+  - PASS, exact nonzero node-ID coverage, benchmark exclusion, all JUnits readable, all process exits 0, and complete timing/resource summary.
+failure_criteria:
+  - Any test/process/coverage/provenance/JUnit failure.
+invalid_criteria:
+  - Admission conflict, source/environment drift, or scratch collision.
+provenance:
+  source_commit: ceb41ec94d09eddc1537cf24859531a033acf61f
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id exp009-w1 --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit ceb41ec94d09eddc1537cf24859531a033acf61f --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 1
+observed:
+  - OBSERVED: collection pytest exited 0, wrote readable JUnit and manifest, and collected 3051 ordinary nodes with hash 862237d395aa3b3fe3e713ccbc927fafd1d838e34b3aac6c6c68d130a6ebb5c8.
+  - OBSERVED: no test-execution process launched; the runner rejected `test/test_test_suite_partition.py::test_low_frequency_benchmark_tests_are_outside_default_package_suite` because it searched the full node ID for the benchmark directory token.
+  - OBSERVED: the path portion was `test/test_test_suite_partition.py`, so this is an ordinary test whose function name describes benchmark exclusion.
+inferred:
+  - NONE
+conclusion: W1 timing was not produced; benchmark isolation must inspect path components only, not test names or parameter IDs.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp009-w1
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp009-w1/collection/nodeids.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp009-w1/summary.json
+decision: KEEP
+next_experiment: EXP-010-BENCHMARK-PATH-CORRECTION
+```
+
+## EXP-010-BENCHMARK-PATH-CORRECTION — Path-scoped benchmark exclusion
+
+```yaml
+experiment_id: EXP-010-BENCHMARK-PATH-CORRECTION
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:59:20+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:59:49+08:00
+  - status: VALID
+    at: 2026-09-15T17:00:17.110653458+08:00
+prior_experiment: EXP-009-W1
+hypothesis: Checking only the node ID's file-path components rejects benchmark_test directories without rejecting ordinary test names that mention benchmark isolation.
+prediction: The focused suite passes 25 tests and Ruff checks pass.
+single_variable: Scope benchmark detection to the node file path and add one regression.
+lifecycle: REUSE_STACK
+preconditions:
+  - EXP-009-W1 executed collection only and no test modules.
+success_criteria:
+  - All 25 focused tests and Ruff checks pass.
+failure_criteria:
+  - Any focused/static check fails.
+invalid_criteria:
+  - Wrong Python/tempfile provenance or unrelated source change.
+provenance:
+  source_commit: ceb41ec94d09eddc1537cf24859531a033acf61f
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: fresh-scratch focused pytest plus Ruff check and format-check
+    exit_code: 0
+observed:
+  - OBSERVED: all 25 focused tests passed in 0.05 seconds.
+  - OBSERVED: Ruff check and format-check passed.
+inferred:
+  - NONE
+conclusion: Benchmark exclusion now distinguishes directory ownership from ordinary test names.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp010-benchmark-path
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp010-benchmark-path/SHA256SUMS
+decision: KEEP
+next_experiment: EXP-011-W1
 ```
