@@ -209,3 +209,20 @@ class CleanupReceipt:
         for name in ("campaign_id", "batch_id", "point_id"):
             _identifier(name, getattr(self, name))
         _sha("receipt_sha256", self.receipt_sha256)
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationManifest:
+    manifest_id: str
+    canonical_document: Mapping
+    manifest_sha256: str
+    source_config_sha256: str
+    created_at_ns: int
+    stale: bool = False
+
+    def __post_init__(self) -> None:
+        _identifier("manifest_id", self.manifest_id)
+        _sha("manifest_sha256", self.manifest_sha256)
+        _sha("source_config_sha256", self.source_config_sha256)
+        if not isinstance(self.canonical_document, Mapping):
+            raise ValueError("MANIFEST_DOCUMENT")
