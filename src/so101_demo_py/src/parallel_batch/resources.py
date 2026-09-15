@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from types import MappingProxyType
 from typing import Mapping
 import uuid
@@ -32,6 +33,15 @@ _BATCH_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 _DOMAIN_CLAIM_SCOPE = 'cooperating_same_uid_processes'
 _DOMAIN_CLAIM_PROTOCOL = 'uid_flock_v1'
 _MAX_LIVE_EVIDENCE_BYTES = 1024 * 1024
+_CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS = 601
+_CLEANUP_PROC_SCAN_QUIESCENCE_INTERVAL_S = 0.05
+_CLEANUP_TRANSIENT_PROC_SCAN_BOUNDARIES = (
+    'PROC_IDENTITY_UNVERIFIABLE:',
+    'PROC_METADATA_UNVERIFIABLE:',
+    'PROC_ENV_UNVERIFIABLE:',
+    'PROC_CLASSIFICATION_UNVERIFIABLE:',
+    'PROC_IDENTITY_CHANGED:',
+)
 _TASK14_ARTIFACT_NAMES = (
     'source_manifest',
     'install_manifest',
@@ -420,6 +430,27 @@ class SystemResourceProbe:
     def socket_in_use(self, path: Path) -> bool:
         """Treat every existing filesystem object as a socket reservation."""
         return os.path.lexists(path)
+
+
+def _ros_domain_in_use_after_cleanup_quiescence(
+    probe: SystemResourceProbe, domain_id: int
+) -> bool:
+    """Rescan bounded transient process races only during verified cleanup."""
+
+    for attempt in range(_CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS):
+        try:
+            return probe.ros_domain_in_use(domain_id)
+        except ResourceAllocationError as error:
+            transient = str(error).startswith(
+                _CLEANUP_TRANSIENT_PROC_SCAN_BOUNDARIES
+            )
+            if (
+                not transient
+                or attempt + 1 >= _CLEANUP_PROC_SCAN_QUIESCENCE_ATTEMPTS
+            ):
+                raise
+            time.sleep(_CLEANUP_PROC_SCAN_QUIESCENCE_INTERVAL_S)
+    raise AssertionError('unreachable process scan retry loop')
 
 
 class Task14AcceptanceProvider:
@@ -1350,7 +1381,9 @@ class WorkerResourceAllocator:
         for worker in self._manifest.workers:
             if self.probe.socket_in_use(worker.socket_path):
                 raise ResourceAllocationError('CLEANUP_SOCKET_ACTIVE')
-            if self.probe.ros_domain_in_use(worker.ros_domain_id):
+            if _ros_domain_in_use_after_cleanup_quiescence(
+                self.probe, worker.ros_domain_id
+            ):
                 raise ResourceAllocationError('CLEANUP_ROS_DOMAIN_ACTIVE')
         released = []
         for record in self._domain_claims:

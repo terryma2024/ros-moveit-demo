@@ -94,6 +94,34 @@ def test_cleanup_domain_probe_outlives_the_five_second_shutdown_tail(monkeypatch
     assert sleeps == [0.05] * 101
 
 
+def test_allocator_release_probe_outlives_the_five_second_shutdown_tail(
+    monkeypatch,
+):
+    from so101_demo.parallel_batch import resources
+
+    class Probe:
+        calls = 0
+
+        def ros_domain_in_use(self, domain_id):
+            assert domain_id == 181
+            self.calls += 1
+            if self.calls <= 101:
+                raise resources.ResourceAllocationError(
+                    "PROC_METADATA_UNVERIFIABLE: 4249"
+                )
+            return False
+
+    probe = Probe()
+    sleeps = []
+    monkeypatch.setattr(resources.time, "sleep", sleeps.append)
+
+    assert resources._ros_domain_in_use_after_cleanup_quiescence(
+        probe, 181
+    ) is False
+    assert probe.calls == 102
+    assert sleeps == [0.05] * 101
+
+
 def test_cleanup_domain_probe_keeps_persistent_proc_races_fail_closed(
     monkeypatch,
 ):
