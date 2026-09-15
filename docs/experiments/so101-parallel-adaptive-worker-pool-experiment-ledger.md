@@ -7,7 +7,7 @@ success_contract: Preserve EXP-047, perform exactly one new valid fixed-W10 runt
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 0c52cc42bf5b37610dfea49ac8d2b54f2e8ad0ae
+current_commit: 919edc8d9764e232149da3fe14285432182ca03f
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -2194,7 +2194,7 @@ next_experiment: EXP-019-W8
 
 ```yaml
 experiment_id: EXP-019-W8
-status: FAILED
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-15T08:48:00+08:00
@@ -4012,7 +4012,7 @@ status_history:
     at: 2026-09-15T20:14:21+08:00
   - status: RUNNING
     at: 2026-09-15T20:22:21+08:00
-  - status: FAILED
+  - status: VALID
     at: 2026-09-15T20:22:58+08:00
 prior_experiment: EXP-047-FORMAL-W10
 hypothesis: EXP-047's unexpected Broker-container disappearance was transient; one fresh W10 attempt under the byte-equivalent v4 runtime payload can complete all twenty points while preserving the fixed W10/C2 evidence contract.
@@ -4054,7 +4054,7 @@ observed:
 inferred:
   - The first bad boundary is STARTUP after durable POOL_STARTING and before POOL_RUNNING. ProductionAdaptivePool caught the underlying exception, but the no-fallback top-level journal persisted only the interrupted points and INFRA_FAILED; the exception detail is unavailable and no deeper cause is asserted.
   - EXP-047 and EXP-048 failed at different boundaries. Their shared W10 setting is insufficient evidence that they share one root cause, and neither OOM nor YOLO saturation is supported by EXP-048.
-conclusion: FAILED valid fixed-contract runtime attempt. W10 now has two admitted failures, zero valid twenty-point performance samples, and remains excluded from the W1-W8 scaling curve.
+conclusion: VALID fixed-contract runtime attempt with a FAILED outcome. W10 now has two admitted failures, zero valid twenty-point performance samples, and remains excluded from the W1-W8 scaling curve.
 evidence:
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/m
