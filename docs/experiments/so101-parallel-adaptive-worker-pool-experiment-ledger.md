@@ -2194,7 +2194,7 @@ next_experiment: EXP-019-W8
 
 ```yaml
 experiment_id: EXP-019-W8
-status: VALID
+status: FAILED
 status_history:
   - status: PLANNED
     at: 2026-09-15T08:48:00+08:00
@@ -4006,7 +4006,7 @@ next_experiment: NONE
 
 ```yaml
 experiment_id: EXP-048-FORMAL-W10-R2
-status: FAILED
+status: VALID
 status_history:
   - status: PLANNED
     at: 2026-09-15T20:14:21+08:00
