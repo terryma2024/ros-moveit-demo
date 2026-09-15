@@ -20,7 +20,7 @@
 
 本文沿用 [`so101-yolo-seg-rgbd-perception-pick-place-source-guide.md`](so101-yolo-seg-rgbd-perception-pick-place-source-guide.md) 的讲解方式：先看完整数据流，再按源码边界逐层拆开，最后结合真实实验解释踩过的坑。感知模型、RGB-D 定位和单次抓放内部细节不在这里重复，可配合原导读和 [`so101-dynamic-cup-pick-place-source-guide.md`](so101-dynamic-cup-pick-place-source-guide.md) 阅读。
 
-本文描述的是 `codex/parallel-adaptive-worker-pool` 实现线。冻结合同下的 W1、W2、W4、W6、W8 已完成正式对比，默认档位 W8 是当前最快的有效档位；W10 两次运行均失败，没有有效性能样本。文中使用以下标签区分证据强度：
+本文描述的是 `codex/parallel-adaptive-worker-pool` 实现线。冻结合同下的 W1、W2、W4、W6、W8 已完成正式对比，后续的干净环境恢复实验又取得一个有效 W10 样本。W10 是当前最快的有效档位，但默认值仍是 W8：W10 只有一次成功样本，另有两次发生在不同阶段的历史失败。文中使用以下标签区分证据强度：
 
 | 标签 | 含义 |
 |---|---|
@@ -143,13 +143,13 @@ yolo_executor_count: 2
 
 这些数字的含义不同：
 
-- W8 是默认运行档位，也是当前最高的现场合格档位；
+- W8 是默认运行档位；W10 是当前最高的现场合格档位，但还没有足够的重复性证据替代默认值；
 - W16 是接口与契约上限，W17 会在创建进程前被拒绝；
 - `215..230` 只是可分配 Domain 池，不表示每次都占满；
 - C2 表示两个 YOLO executor，不等于两个 Broker；
 - `initial_points_per_worker=3` 只是初始亲和提示，不是每个 Worker 最多做三个点。
 
-W10、W12、W16 不属于默认性能矩阵。显式运行它们时，要按真实 `levels_used` 报告。W10 降到 W8 后完成，只能说明自适应恢复可用，不能算作 W10 性能样本。
+W10、W12、W16 不属于默认回归档位。显式运行它们时，要按真实 `levels_used` 报告。W10 降到 W8 后完成，只能说明自适应恢复可用，不能算作 W10 性能样本；EXP-049 从头到尾保持 `levels_used=[10]`，因此可以进入 W10 曲线。
 
 ## 6. 启动时发生什么
 
@@ -471,7 +471,7 @@ scripts/run_so101_adaptive_batch.zsh \
 
 ```bash
 scripts/run_so101_adaptive_worker_scaling.zsh \
-  --worker-counts 1,2,4,6,8 \
+  --worker-counts 1,2,4,6,8,10 \
   --evidence-root /data/work/so101-evidence/<task-family>/<run-id> \
   --dry-run
 ```
@@ -502,7 +502,7 @@ scripts/run_so101_adaptive_worker_scaling.zsh \
 
 ## 19. 当前现场结果
 
-下面的正式对比来自 2026-09-15。同一份 20 点清单、顺序、reset、MoveIt policy、YOLO 权重、Broker C2、timeout 和无 Worker fallback 合同依次运行 W1、W2、W4、W6、W8、W10。W1–W8 各只有一个完整批次，因此这些数值是工程测量，不是重复实验的置信区间。
+下面的数据来自 2026-09-15。同一份 20 点清单、顺序、reset、MoveIt policy、YOLO 权重、Broker C2、timeout 和无 Worker fallback 合同依次运行 W1、W2、W4、W6、W8，并在补齐失败诊断后完成 W10 恢复实验。W1–W10 每档都只有一个完整有效批次，因此这些数值是工程测量，不是重复实验的置信区间。W10 使用 `405e5987280ceef54bbb08002cb60cb04e37d0`；相对前一候选只增加失败证据持久化，成功路径的调度与执行合同未变。
 
 ![SO-101 固定 Worker 扩容曲线](assets/so101-parallel-worker-scaling.svg)
 
@@ -513,11 +513,11 @@ scripts/run_so101_adaptive_worker_scaling.zsh \
 | W4 | 20/20 `PASSED` | 412.42 s | 2.91 | 3.86× | 96.5% | 4.00 GiB |
 | W6 | 20/20 `PASSED` | 338.78 s | 3.54 | 4.70× | 78.3% | 5.87 GiB |
 | W8 | 20/20 `PASSED` | 263.64 s | 4.55 | 6.04× | 75.5% | 7.70 GiB |
-| W10 | 两次运行失败，无有效样本 | — | — | — | — | 9.17 GiB（EXP-047 失败诊断值） |
+| W10 | 20/20 `PASSED` | 215.40 s | 5.57 | 7.39× | 73.9% | 9.45 GiB |
 
-W8 是当前最快的有效档位，也是推荐默认值。W4 则是效率拐点：它保留 96.5% 并行效率；继续加到 W6、W8 仍能缩短墙钟时间，但启动成本、进程调度和内存增长已经明显压低边际收益。W8 的 6.04× 加速低于理想 8×，不能把 Worker 数直接当作加速倍数。
+W10 是当前最快的有效档位，20 点执行区间比 W8 少 48.24 秒。默认值暂时仍是 W8，因为 W10 在这一组证据里只有一次成功，另有两次运行失败。W4 是效率拐点，保留 96.5% 并行效率；继续扩到 W6、W8、W10 仍能缩短墙钟时间，但内存增长和调度成本把 W10 的并行效率压到 73.9%。Worker 数不能直接当作加速倍数。
 
-W10 没有曲线点。EXP-047 在十个首波点成功后丢失 Broker 容器；EXP-048 在 `POOL_STARTING` 之后、`POOL_RUNNING` 之前失败，零点完成。两次都是通过准入后的真实运行失败，成功率为 0/2，但失败阶段不同，不能据此断言它们有同一个根因。图中的红叉只表示失败，不与 W1–W8 的有效折线相连。
+EXP-049 是图中的 W10 蓝点：20 个点全部首 attempt 成功，YOLO=20、retry=0、fallback=0，执行区间 215.40 秒，清理读回通过。EXP-047 在十个首波点成功后丢失 Broker 容器；EXP-048 在 `POOL_STARTING` 之后、`POOL_RUNNING` 之前失败，零点完成。这两次失败仍保留在维护数据里，但不再用红叉占据 W10 性能坐标。干净环境 A/B 排除了持续性的固定合同缺陷，旧失败的具体外部触发仍未确认。
 
 图表不是手工描点。维护源是 [`data/so101-parallel-worker-scaling.json`](data/so101-parallel-worker-scaling.json)，生成器是 [`../../scripts/generate_so101_parallel_worker_scaling_chart.py`](../../scripts/generate_so101_parallel_worker_scaling_chart.py)。修改数据后运行：
 
@@ -526,7 +526,7 @@ python3 scripts/generate_so101_parallel_worker_scaling_chart.py
 python3 scripts/generate_so101_parallel_worker_scaling_chart.py --check
 ```
 
-生成器会拒绝重复档位、失败档位携带性能值、完整成功却被记为失败等含混数据，并检查生成 SVG 是否与维护源一致。
+生成器会拒绝重复档位、失败档位携带性能值、完整成功却被记为失败等含混数据，并检查生成 SVG 是否与维护源一致。失败尝试和有效档位分开保存：一个档位后来取得有效样本时，历史失败不会被删除，也不会继续冒充该档位的性能点。
 
 ## 20. 出现过的坑与解法
 
@@ -629,15 +629,17 @@ ai-station 上 fsync-heavy pytest 必须把 `TMPDIR`、`TMP` 和 `TEMP` 指向 `
 
 现在先看 `accepted`、`queued`、`model_started`、`model_completed`、`sent`、`consumer_received`。若 `model_started` 没出现，检查 frame/schema、连接和队列上限、executor/health 与本地 deadline。不要让 Broker 查询 Coordinator lease 或 journal 来“确认”请求，也不要增加 durable replay。重复或迟到推理只是算力浪费；动作与最终结果仍由外部 lease 门拒绝。
 
-### 20.12 W10 两次运行停在不同边界
+### 20.12 W10 两次失败与一次干净恢复
 
 EXP-047 的十个 Worker 全部 READY，十个首波点也已在首 attempt 成功。随后 Broker 容器消失，Coordinator 在事件 1404 写入 `broker_healthy=false` 并停止批次。该次 cgroup 峰值为 9.17 GiB，内核没有 OOM 记录；容器内部退出原因没有留存，所以再往下不能定因。
 
 EXP-048 使用相同冻结运行负载和一字符 batch ID，通过了独立准入。它在 45.7 ms 内写入 `POOL_STARTING`，随后二十个点全部成为 `POINT_INFRA_INTERRUPTED`，没有写入 `POOL_RUNNING`。本次没有 Worker 证据、Broker 容器或 Docker event，Runner 峰值只有 6,209,536 bytes，内核日志也没有 OOM；最终清理读回通过。
 
-这次更早的启动异常在 `ProductionAdaptivePool.run()` 中被转成 `STARTUP` 基础设施失败，但无 fallback 的顶层终态只持久化了中断点和 `INFRA_FAILED`，没有保存异常明细。因此，证据能确认“进入 pool 启动、未完成 pool 运行”，却不能恢复触发异常的具体字符串。后续若要继续查 W10，应先补齐这条失败明细的持久化，再申请新的运行次数；不能用第三次运行代替缺失的观测。
+这次更早的启动异常在 `ProductionAdaptivePool.run()` 中被转成 `STARTUP` 基础设施失败，但无 fallback 的顶层终态只持久化了中断点和 `INFRA_FAILED`，没有保存异常明细。因此，证据能确认“进入 pool 启动、未完成 pool 运行”，却不能恢复触发异常的具体字符串。
 
-两次 W10 都没有 OOM 证据，也没有有效 20 点性能值。提高 deadline、handler 数或 YOLO executor 都可能改变症状，但现有结果不足以证明其中任何一项是根因修复。
+恢复阶段先补上两处观测缺口：构造失败会保存 stage、异常链、traceback 和局部清理结果；Broker 子进程异常会保存 CID、退出状态、bounded log tail 与 Docker event。随后只运行一次干净 W10/C2。EXP-049 完成 20/20，`levels_used=[10]`，没有 retry、模型 fallback 或 Worker reduction，runner、validator 和 cleanup 均返回 0。
+
+这个 A/B 说明固定 W10/C2 合同没有持续性缺陷，却不能倒推出 EXP-047 或 EXP-048 当时的外部触发。两份旧证据没有容器退出状态或启动异常明细，成功运行也无法补回历史数据。OOM、YOLO 饱和和 deadline 不足都没有得到确认。
 
 ## 21. 从哪里开始排障
 
@@ -724,11 +726,11 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 ## 24. 当前实现边界
 
 - Broker 是无调度状态的有界推理服务，不读取 Coordinator lease、generation、start-event、reset epoch 或 journal；
-- 当前最高现场合格档位是 W8，不是 W16；
+- 当前最高现场合格档位是 W10；W8 仍是默认值，W16 仍只有契约支持；
 - W8 正确性通过，但历史 5 秒 `READY → POSE_ACCEPTED` SLO 未通过；
-- 正式冻结对比中，W8 的 20 点执行区间为 263.64 s，吞吐为 4.55 点/分，相对 W1 加速 6.04×；
-- W4 是效率拐点，W6 与 W8 继续提速，但内存成本和效率损失都在增加；
-- W10 两次有效运行均失败：一次在 10/20 后丢失 Broker，一次未到 `POOL_RUNNING`；没有 W10 性能曲线点；
+- 冻结合同下，W10 的 20 点执行区间为 215.40 s，吞吐为 5.57 点/分，相对 W1 加速 7.39×；
+- W4 是效率拐点，W6、W8 与 W10 继续提速，但内存成本和效率损失都在增加；
+- W10 有一个有效 20/20 性能样本；此前一次在 10/20 后丢失 Broker，另一次未到 `POOL_RUNNING`，两个旧触发都未确认；
 - W16 只有契约支持，没有 live qualification；
 - 默认 fallback 处理基础设施故障，不会自动重试并覆盖业务失败；
 - 这是 MuJoCo MoveIt 专家验证工具，不授权实体机械臂并发执行；
@@ -787,6 +789,6 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 16. evidence root 的 `0700` 和 Unix socket 的 107 bytes 分别保护什么？
 17. W8 20/20 为什么仍不能宣称满足 5 秒感知 SLO？
 18. W16 契约测试通过为什么不等于 W16 可运行？
-19. 两次 W10 的第一坏边界分别是什么，为什么不能把它们合成一个根因或性能样本？
+19. EXP-047 与 EXP-048 的第一坏边界分别是什么，为什么 EXP-049 成功后仍不能反推两个旧触发？
 
 如果答案只能概括成“开多个仿真并行跑”，建议回到 READY fence、lease identity、Broker 和降级事务四节，对着源码与实验账本再走一遍。

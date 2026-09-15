@@ -140,14 +140,17 @@ def render_svg(document: dict[str, object]) -> str:
     lines = [
         f'<svg xmlns="{SVG_NS}" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">',
         '<title id="title">SO-101 固定 Worker 扩容曲线</title>',
-        '<desc id="desc">W1、W2、W4、W6、W8 是完整有效样本；W10 两次运行均失败，不连接到性能曲线。</desc>',
+        '<desc id="desc">W1、W2、W4、W6、W8、W10 都有完整有效样本；W10 的两次历史失败保留在数据中，不作为性能点。</desc>',
         '<style>text{font-family:system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;fill:#1f2937}.title{font-size:28px;font-weight:700}.sub{font-size:14px;fill:#4b5563}.panel{fill:#fff;stroke:#d1d5db}.grid{stroke:#e5e7eb;stroke-width:1}.axis{stroke:#6b7280;stroke-width:1.5}.valid{fill:none;stroke:#1677ff;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}.ideal{fill:none;stroke:#94a3b8;stroke-width:2;stroke-dasharray:7 6}.dot{fill:#fff;stroke:#1677ff;stroke-width:3}.fail{stroke:#dc2626;stroke-width:4;stroke-linecap:round}.label{font-size:13px}.small{font-size:12px;fill:#64748b}.panel-title{font-size:17px;font-weight:650}.legend{font-size:13px}</style>',
         '<rect width="1200" height="900" fill="#f8fafc"/>',
         '<text class="title" x="60" y="50">SO-101 固定 Worker 扩容曲线</text>',
         '<text class="sub" x="60" y="78">冻结 20 点 / C2 / YOLO-first / 无 Worker fallback；每个有效档位 n=1</text>',
         '<line x1="785" y1="46" x2="815" y2="46" class="valid"/><text class="legend" x="824" y="51">有效样本</text>',
-        '<line x1="930" y1="38" x2="946" y2="54" class="fail"/><line x1="946" y1="38" x2="930" y2="54" class="fail"/><text class="legend" x="956" y="51">失败（不连线）</text>',
     ]
+    if failed:
+        lines.extend([
+            '<line x1="930" y1="38" x2="946" y2="54" class="fail"/><line x1="946" y1="38" x2="930" y2="54" class="fail"/><text class="legend" x="956" y="51">失败档位（不连线）</text>',
+        ])
 
     for panel_index, (box, field, maximum, panel_title) in enumerate(zip(boxes, fields, maxima, titles)):
         left, top, width, height = box
@@ -222,8 +225,19 @@ def render_svg(document: dict[str, object]) -> str:
                 f'{fail_label}</text>',
             ])
 
+    w10 = next(row for row in document["levels"] if row["workers"] == 10)
+    w10_failure_ids = " / ".join(
+        attempt["experiment_id"]
+        for attempt in document["failed_attempts"]
+        if attempt["workers"] == 10
+    )
+    w10_footer = f'W10：{w10["experiment_id"]} 完成 20/20'
+    if w10_failure_ids:
+        w10_footer += f"；{w10_failure_ids} 保留为失败历史，不进入性能折线。"
+    else:
+        w10_footer += "。"
     lines.extend([
-        '<text class="sub" x="60" y="865">W10：EXP-047 在 10/20 后 Broker 消失；EXP-048 在 POOL_RUNNING 前失败。两次均完整清理，均不进入曲线。</text>',
+        f'<text class="sub" x="60" y="865">{_escape(w10_footer)}</text>',
         '</svg>',
     ])
     svg = "\n".join(lines) + "\n"

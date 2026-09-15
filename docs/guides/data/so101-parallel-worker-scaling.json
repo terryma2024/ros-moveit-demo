@@ -6,7 +6,11 @@
     "comparison_artifact_sha256": "9b523321fb477cdad7e1e94aa92ce203d96ccc89c4954609d0d1f263493b4848",
     "w10_rerun_root": "/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/formal-worker-scaling-w10-r2-df261a05",
     "w10_rerun_aggregate_sha256": "23c07ddb8f1e43591f63805ba4e179d66b35cb67d4501daf92509d1a29dbe33b",
-    "w10_rerun_journal_sha256": "28f8a0cdc18f8576394069ad7a31a8aa54eb3fb817fde8b2b7b20ac8ab49fe75"
+    "w10_rerun_journal_sha256": "28f8a0cdc18f8576394069ad7a31a8aa54eb3fb817fde8b2b7b20ac8ab49fe75",
+    "w10_success_root": "/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10",
+    "w10_success_aggregate_sha256": "971520cea8c6fb81cc750195dec62db6e50b9f44b6180db1aba2ee571e417137",
+    "w10_success_evidence_validation_sha256": "52984353ba4a90e26b2305b80a64b7790bfd7bd3b3db03cbd969f3d3dfe2a0a7",
+    "w10_success_final_cleanup_readback_sha256": "323df8d370a9337af7b2c13870374a3e6bd01df26186e8f686c41f4e2d3f232b"
   },
   "contract": {
     "date": "2026-09-15",
@@ -80,15 +84,15 @@
     },
     {
       "workers": 10,
-      "experiment_id": null,
-      "status": "FAILED",
-      "successful_points": null,
-      "valid_performance_sample": false,
-      "execution_s": null,
-      "throughput_points_per_min": null,
-      "speedup_vs_w1": null,
-      "parallel_efficiency": null,
-      "peak_memory_b": null
+      "experiment_id": "EXP-049-W10-SUCCESS-RECOVERY",
+      "status": "PASSED",
+      "successful_points": 20,
+      "valid_performance_sample": true,
+      "execution_s": 215.4021017551422,
+      "throughput_points_per_min": 5.570976282135338,
+      "speedup_vs_w1": 7.3932118091306736,
+      "parallel_efficiency": 0.7393211809130673,
+      "peak_memory_b": 10148159488
     }
   ],
   "failed_attempts": [
@@ -115,10 +119,10 @@
     }
   ],
   "conclusion": {
-    "fastest_valid_level": 8,
+    "fastest_valid_level": 10,
     "efficiency_knee_workers": 4,
     "recommended_default_workers": 8,
-    "w10_valid_performance_samples": 0,
+    "w10_valid_performance_samples": 1,
     "w10_failed_runtime_attempts": 2
   }
 }

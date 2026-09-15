@@ -30,6 +30,7 @@ confirmed_conclusions:
   - The formal frozen C2 comparison qualifies W1, W2, W4, W6, and W8 with one complete 20/20 first-attempt sample each. W8 is fastest at 4.55 points/minute and W4 is the 96.5-percent-efficiency knee.
   - EXP-048 is the second admitted W10 runtime failure and contributes no performance point. It stopped after POOL_STARTING and before POOL_RUNNING with 0/20 points; the exact cleanup readback passed.
   - EXP-049 is a fresh valid W10/C2 recovery sample: 20/20 first-attempt PASSED, YOLO-only, levels_used=[10], no retry/fallback/Worker reduction, runner/validator/cleanup exit zero, 315.32049167505465 s end to end, and fresh visual review passed.
+  - CP-049 publishes EXP-049 as the valid W10 endpoint in the maintained guide, JSON, and deterministic SVG. W10 is the fastest measured valid level at 5.57 points/minute and 7.39x W1 speedup, while W8 remains the recommended default because W10 has one valid sample and two retained historical failures.
   - The EXP-049 clean-host A/B contradicts a persistent source, image, model, configuration, socket-length, W10/C2 capacity, or deterministic startup defect. EXP-047 and EXP-048 remain separate transient lifecycle failures; their exact external triggers are not confirmed because the decisive historical state was not retained.
   - CP-047 makes the Worker-to-x transform a single generator function used by valid and ideal series, value labels, Worker ticks, and failed-level markers; checked SVG coordinates place W8 at 883.8 and W10 at 1110.0 in every panel.
   - Task 15 preflight at CP-010 confirmed the required linked worktree and HEAD, preserved the three existing dirty paths, and found no conflicting process, ROS node on Domains 0/215-222, Docker container, GPU compute app, or tmux session.
@@ -51,7 +52,7 @@ disproven_routes:
 open_hypotheses:
   - Fixed-pool throughput should improve from W1 until shared C2 inference, host CPU/memory, and per-point motion lifecycles dominate; additional Workers beyond that knee may add startup/resource cost without proportional throughput.
   - The production Broker may not persist its optional concurrency summary before the frozen five-second Docker stop boundary; sealed request correlation remains authoritative, but queue/service distributions will be reported unavailable rather than estimated if the file is absent.
-latest_checkpoint: CP-048
+latest_checkpoint: CP-049
 next_experiment: NONE
 ```
 
@@ -4432,5 +4433,78 @@ retention:
     - /tmp/so101-debug-4f896ffe.VxVPZM
   deleted: []
 cleanup: PASS
+next_experiment: NONE
+```
+
+## CP-049 — W10 success added to the maintained guide and chart
+
+```yaml
+checkpoint_id: CP-049
+last_valid_experiment: EXP-049-W10-SUCCESS-RECOVERY
+last_runtime_experiment: EXP-049-W10-SUCCESS-RECOVERY
+status: COMPLETE
+prior_checkpoint: CP-048
+completed_at: 2026-09-15T22:27:44+08:00
+source_head_before_checkpoint: 5d3b2ba40cf3fb36b82659314397d2d48537a4e1
+scope:
+  - No SO-101 runtime or benchmark was started. This checkpoint updates only the maintained guide, source data, deterministic chart generator, generated SVG, chart tests, and ledger.
+  - EXP-049 is the valid W10 performance endpoint. EXP-047 and EXP-048 remain historical failed attempts in the maintained JSON and chart footer, but no longer occupy a failed-level marker.
+confirmed_conclusions:
+  - The frozen valid curve now contains W1, W2, W4, W6, W8, and W10. EXP-049 contributes 215.4021017551422 s execution time, 5.570976282135338 points/minute, 7.3932118091306736x W1 speedup, 0.7393211809130673 parallel efficiency, and 10148159488 bytes peak memory.
+  - W10 is the fastest valid measured level. W8 remains the recommended default because the evidence has one valid W10 sample and two retained W10 runtime failures; W4 remains the efficiency knee.
+  - Every series, value label, failed-level marker path, and Worker tick uses the shared numeric Worker-to-x mapping. Current W8 and W10 coordinates are x=883.8 and x=1110.0 in every panel.
+  - The fresh 1200x900 render has no W10 failure marker, clipping, overlap, or label/tick misalignment. The W10 values and the footer retaining EXP-047 and EXP-048 are readable.
+changed_paths:
+  - docs/guides/so101-parallel-adaptive-worker-pool-source-guide.md
+  - docs/guides/data/so101-parallel-worker-scaling.json
+  - docs/guides/assets/so101-parallel-worker-scaling.svg
+  - scripts/generate_so101_parallel_worker_scaling_chart.py
+  - src/so101_demo_py/test/test_generate_so101_parallel_worker_scaling_chart.py
+tdd:
+  first_red: 3 failed and 3 passed; old maintained data had no valid W10 point.
+  first_green: 6 passed in 0.01 s.
+  footer_red: 1 failed and 6 passed; the chart footer still hard-coded historical experiment IDs.
+  intermediate_green_correction: 1 failed and 6 passed because the test expected abbreviated IDs after the generator correctly emitted the full maintained IDs.
+  final_green: 7 passed in 0.02 s.
+verification:
+  final_focused_test: 7 passed in 0.01 s
+  final_elapsed_s: 0.31
+  final_scratch: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10f
+  final_log_sha256: f9466891a86f9a300462366f9969c1dd7a5d6fcc6f8ccc1293e04fedafadfa91
+  generator_check: PASS
+  json_parse: PASS
+  svg_xml_parse: PASS
+  markdown_link_check: PASS
+  source_literal_check: PASS
+  coordinate_readback: PASS
+  git_diff_check: PASS
+artifacts:
+  guide_sha256: e7682aacfefc3e92b62cd1b7408379375ad35dda883c440d044b1c0c92417431
+  data_sha256: 43a627c09f71a737f0aee021befc959b8f14a5a3cd78dcd31d49238cea12d0b7
+  generator_sha256: 29978169e1c99d412f4be90159845247d7bb8b5e34dcb5f3d186d38e7dc4e8ca
+  generator_test_sha256: 888d99de277952b89950a3d32def921d9fc238eaa5283de32a447c723dbe6641
+  svg_sha256: 2eee1c8bf8746e010e16f5984884b2a1ad1e1aae2c6b17510fde79b36783cf98
+visual_evidence:
+  status: PASS
+  render: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/guide-refresh/render/so101-parallel-worker-scaling.png
+  render_sha256: a439fceae672b67153ede353ddc226a642cc9de83357dc51d70ae2eb78b42df0
+protected_dirty_test:
+  path: src/so101_demo_py/test/test_parallel_batch_resources.py
+  diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
+  staged: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/guide-refresh/render
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10r
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10g
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10r2
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10g2
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10g3
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/gw10f
+  deleted: []
+cleanup: No runtime cleanup was needed; all test scratch and render evidence remain retained.
 next_experiment: NONE
 ```
