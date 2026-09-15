@@ -33,6 +33,12 @@ SERIAL_MODULE_REASONS = {
     "test_parallel_adaptive_integration.py": (
         "starts and signals real process groups, including an unowned sentinel"
     ),
+    "test_parallel_batch_worker.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_inject_so101_parallel_fault.py": (
+        "writes fault-injector fixtures beneath a shared allowlisted evidence root"
+    ),
 }
 SERIAL_MODULES = tuple(SERIAL_MODULE_REASONS)
 BENCHMARK_COMPONENT = "benchmark_test"
@@ -264,7 +270,9 @@ def validate_process_outcomes(outcomes: Sequence[ProcessOutcome]) -> None:
 def create_process_layout(run_root: Path, name: str) -> ProcessLayout:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
         raise ValueError(f"invalid process layout name: {name}")
-    root = run_root / name
+    identity_input = f"{run_root.resolve()}\0{name}".encode()
+    physical_name = f"p-{hashlib.sha256(identity_input).hexdigest()[:12]}"
+    root = run_root / physical_name
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
     tmp_dir = root / "tmp"
     ros_home = root / "ros-home"

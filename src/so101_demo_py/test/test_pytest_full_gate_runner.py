@@ -70,6 +70,8 @@ def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
         Path("test/test_text_pick_agent_e2e_process.py"),
         Path("test/test_parallel_adaptive_integration.py"),
         Path("test/test_parallel_batch_resources.py"),
+        Path("test/test_parallel_batch_worker.py"),
+        Path("test/test_inject_so101_parallel_fault.py"),
     )
 
     serial, parallel = split_lanes(modules)
@@ -77,6 +79,11 @@ def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
     assert tuple(path.name for path in serial) == SERIAL_MODULES
     assert parallel == (Path("test/test_other.py"),)
     assert not set(serial) & set(parallel)
+
+
+def test_source_evidenced_load_and_shared_filesystem_modules_are_serial() -> None:
+    assert "test_parallel_batch_worker.py" in SERIAL_MODULES
+    assert "test_inject_so101_parallel_fault.py" in SERIAL_MODULES
 
 
 def test_exact_node_union_accepts_each_expected_node_once() -> None:
@@ -181,6 +188,19 @@ def test_every_pytest_process_layout_has_isolated_fresh_paths(tmp_path: Path) ->
         assert layout.ownership_path.parent == layout.root
     with pytest.raises(FileExistsError):
         create_process_layout(run_root, "serial")
+
+
+def test_physical_process_identity_is_unique_across_gate_runs(tmp_path: Path) -> None:
+    first_run = tmp_path / "first"
+    second_run = tmp_path / "second"
+    first_run.mkdir()
+    second_run.mkdir()
+
+    first = create_process_layout(first_run, "shard-01")
+    second = create_process_layout(second_run, "shard-01")
+
+    assert first.name == second.name == "shard-01"
+    assert first.root.name != second.root.name
 
 
 @pytest.mark.parametrize("worker_count", (1, 2, 4))
