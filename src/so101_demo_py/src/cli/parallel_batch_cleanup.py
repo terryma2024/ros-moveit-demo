@@ -27,7 +27,7 @@ class CleanupError(RuntimeError):
     """Cleanup could not prove that only the requested batch was retired."""
 
 
-_PROC_SCAN_QUIESCENCE_ATTEMPTS = 101
+_PROC_SCAN_QUIESCENCE_ATTEMPTS = 601
 _PROC_SCAN_QUIESCENCE_INTERVAL_S = 0.05
 _TRANSIENT_PROC_SCAN_BOUNDARIES = (
     "PROC_IDENTITY_UNVERIFIABLE:",
