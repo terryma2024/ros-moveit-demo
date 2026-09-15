@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+<title id="title">SO-101 固定 Worker 扩容曲线</title>
+<desc id="desc">W1、W2、W4、W6、W8 是完整有效样本；W10 两次运行均失败，不连接到性能曲线。</desc>
+<style>text{font-family:system-ui,-apple-system,"Noto Sans CJK SC",sans-serif;fill:#1f2937}.title{font-size:28px;font-weight:700}.sub{font-size:14px;fill:#4b5563}.panel{fill:#fff;stroke:#d1d5db}.grid{stroke:#e5e7eb;stroke-width:1}.axis{stroke:#6b7280;stroke-width:1.5}.valid{fill:none;stroke:#1677ff;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}.ideal{fill:none;stroke:#94a3b8;stroke-width:2;stroke-dasharray:7 6}.dot{fill:#fff;stroke:#1677ff;stroke-width:3}.fail{stroke:#dc2626;stroke-width:4;stroke-linecap:round}.label{font-size:13px}.small{font-size:12px;fill:#64748b}.panel-title{font-size:17px;font-weight:650}.legend{font-size:13px}</style>
+<rect width="1200" height="900" fill="#f8fafc"/>
+<text class="title" x="60" y="50">SO-101 固定 Worker 扩容曲线</text>
+<text class="sub" x="60" y="78">冻结 20 点 / C2 / YOLO-first / 无 Worker fallback；每个有效档位 n=1</text>
+<line x1="785" y1="46" x2="815" y2="46" class="valid"/><text class="legend" x="824" y="51">有效样本</text>
+<line x1="930" y1="38" x2="946" y2="54" class="fail"/><line x1="946" y1="38" x2="930" y2="54" class="fail"/><text class="legend" x="956" y="51">失败（不连线）</text>
+<rect class="panel" x="60" y="100.0" width="1080" height="226" rx="10"/>
+<text class="panel-title" x="92.0" y="128.0">20 点有效执行区间（秒，越低越好）</text>
+<line class="grid" x1="92.0" y1="308.0" x2="1110.0" y2="308.0"/>
+<text class="small" text-anchor="end" x="82.0" y="312.0">0</text>
+<line class="grid" x1="92.0" y1="265.5" x2="1110.0" y2="265.5"/>
+<text class="small" text-anchor="end" x="82.0" y="269.5">425</text>
+<line class="grid" x1="92.0" y1="223.0" x2="1110.0" y2="223.0"/>
+<text class="small" text-anchor="end" x="82.0" y="227.0">850</text>
+<line class="grid" x1="92.0" y1="180.5" x2="1110.0" y2="180.5"/>
+<text class="small" text-anchor="end" x="82.0" y="184.5">1275</text>
+<line class="grid" x1="92.0" y1="138.0" x2="1110.0" y2="138.0"/>
+<text class="small" text-anchor="end" x="82.0" y="142.0">1700</text>
+<line class="axis" x1="92.0" y1="308.0" x2="1110.0" y2="308.0"/>
+<polyline class="valid" points="92.0,148.7 205.1,227.0 431.3,266.8 657.6,274.1 883.8,281.6"/>
+<circle class="dot" cx="92.0" cy="148.7" r="5"/>
+<text class="label" text-anchor="middle" x="92.0" y="152.0">1592.5 s</text>
+<circle class="dot" cx="205.1" cy="227.0" r="5"/>
+<text class="label" text-anchor="middle" x="205.1" y="217.0">810.0 s</text>
+<circle class="dot" cx="431.3" cy="266.8" r="5"/>
+<text class="label" text-anchor="middle" x="431.3" y="256.8">412.4 s</text>
+<circle class="dot" cx="657.6" cy="274.1" r="5"/>
+<text class="label" text-anchor="middle" x="657.6" y="264.1">338.8 s</text>
+<circle class="dot" cx="883.8" cy="281.6" r="5"/>
+<text class="label" text-anchor="middle" x="883.8" y="271.6">263.6 s</text>
+<text class="small" text-anchor="middle" x="92.0" y="328.0">W1</text>
+<text class="small" text-anchor="middle" x="205.1" y="328.0">W2</text>
+<text class="small" text-anchor="middle" x="431.3" y="328.0">W4</text>
+<text class="small" text-anchor="middle" x="657.6" y="328.0">W6</text>
+<text class="small" text-anchor="middle" x="883.8" y="328.0">W8</text>
+<text class="small" text-anchor="middle" x="1110.0" y="328.0">W10</text>
+<line class="fail" x1="1103.0" y1="289.0" x2="1117.0" y2="303.0"/>
+<line class="fail" x1="1117.0" y1="289.0" x2="1103.0" y2="303.0"/>
+<text class="small" text-anchor="end" x="1098.0" y="286.0">无有效 W10 性能值</text>
+<rect class="panel" x="60" y="344.0" width="1080" height="226" rx="10"/>
+<text class="panel-title" x="92.0" y="372.0">相对 W1 加速比（虚线为理想线）</text>
+<line class="grid" x1="92.0" y1="552.0" x2="1110.0" y2="552.0"/>
+<text class="small" text-anchor="end" x="82.0" y="556.0">0</text>
+<line class="grid" x1="92.0" y1="509.5" x2="1110.0" y2="509.5"/>
+<text class="small" text-anchor="end" x="82.0" y="513.5">2</text>
+<line class="grid" x1="92.0" y1="467.0" x2="1110.0" y2="467.0"/>
+<text class="small" text-anchor="end" x="82.0" y="471.0">5</text>
+<line class="grid" x1="92.0" y1="424.5" x2="1110.0" y2="424.5"/>
+<text class="small" text-anchor="end" x="82.0" y="428.5">8</text>
+<line class="grid" x1="92.0" y1="382.0" x2="1110.0" y2="382.0"/>
+<text class="small" text-anchor="end" x="82.0" y="386.0">10</text>
+<line class="axis" x1="92.0" y1="552.0" x2="1110.0" y2="552.0"/>
+<polyline class="valid" points="92.0,535.0 205.1,518.6 431.3,486.4 657.6,472.1 883.8,449.3"/>
+<polyline class="ideal" points="92.0,535.0 205.1,518.0 431.3,484.0 657.6,450.0 883.8,416.0"/>
+<circle class="dot" cx="92.0" cy="535.0" r="5"/>
+<text class="label" text-anchor="middle" x="92.0" y="525.0">1.00× / 0.75 点/分</text>
+<circle class="dot" cx="205.1" cy="518.6" r="5"/>
+<text class="label" text-anchor="middle" x="205.1" y="508.6">1.97× / 1.48 点/分</text>
+<circle class="dot" cx="431.3" cy="486.4" r="5"/>
+<text class="label" text-anchor="middle" x="431.3" y="476.4">3.86× / 2.91 点/分</text>
+<circle class="dot" cx="657.6" cy="472.1" r="5"/>
+<text class="label" text-anchor="middle" x="657.6" y="462.1">4.70× / 3.54 点/分</text>
+<circle class="dot" cx="883.8" cy="449.3" r="5"/>
+<text class="label" text-anchor="middle" x="883.8" y="439.3">6.04× / 4.55 点/分</text>
+<text class="small" text-anchor="middle" x="92.0" y="572.0">W1</text>
+<text class="small" text-anchor="middle" x="205.1" y="572.0">W2</text>
+<text class="small" text-anchor="middle" x="431.3" y="572.0">W4</text>
+<text class="small" text-anchor="middle" x="657.6" y="572.0">W6</text>
+<text class="small" text-anchor="middle" x="883.8" y="572.0">W8</text>
+<text class="small" text-anchor="middle" x="1110.0" y="572.0">W10</text>
+<line class="fail" x1="1103.0" y1="533.0" x2="1117.0" y2="547.0"/>
+<line class="fail" x1="1117.0" y1="533.0" x2="1103.0" y2="547.0"/>
+<text class="small" text-anchor="end" x="1098.0" y="530.0">无有效 W10 性能值</text>
+<rect class="panel" x="60" y="588.0" width="1080" height="226" rx="10"/>
+<text class="panel-title" x="92.0" y="616.0">Runner cgroup 峰值内存（GiB）</text>
+<line class="grid" x1="92.0" y1="796.0" x2="1110.0" y2="796.0"/>
+<text class="small" text-anchor="end" x="82.0" y="800.0">0.0</text>
+<line class="grid" x1="92.0" y1="753.5" x2="1110.0" y2="753.5"/>
+<text class="small" text-anchor="end" x="82.0" y="757.5">2.8</text>
+<line class="grid" x1="92.0" y1="711.0" x2="1110.0" y2="711.0"/>
+<text class="small" text-anchor="end" x="82.0" y="715.0">5.5</text>
+<line class="grid" x1="92.0" y1="668.5" x2="1110.0" y2="668.5"/>
+<text class="small" text-anchor="end" x="82.0" y="672.5">8.2</text>
+<line class="grid" x1="92.0" y1="626.0" x2="1110.0" y2="626.0"/>
+<text class="small" text-anchor="end" x="82.0" y="630.0">11.0</text>
+<line class="axis" x1="92.0" y1="796.0" x2="1110.0" y2="796.0"/>
+<polyline class="valid" points="92.0,776.4 205.1,763.0 431.3,734.1 657.6,705.2 883.8,677.0"/>
+<circle class="dot" cx="92.0" cy="776.4" r="5"/>
+<text class="label" text-anchor="middle" x="92.0" y="766.4">1.27 GiB</text>
+<circle class="dot" cx="205.1" cy="763.0" r="5"/>
+<text class="label" text-anchor="middle" x="205.1" y="753.0">2.14 GiB</text>
+<circle class="dot" cx="431.3" cy="734.1" r="5"/>
+<text class="label" text-anchor="middle" x="431.3" y="724.1">4.00 GiB</text>
+<circle class="dot" cx="657.6" cy="705.2" r="5"/>
+<text class="label" text-anchor="middle" x="657.6" y="695.2">5.87 GiB</text>
+<circle class="dot" cx="883.8" cy="677.0" r="5"/>
+<text class="label" text-anchor="middle" x="883.8" y="667.0">7.70 GiB</text>
+<text class="small" text-anchor="middle" x="92.0" y="816.0">W1</text>
+<text class="small" text-anchor="middle" x="205.1" y="816.0">W2</text>
+<text class="small" text-anchor="middle" x="431.3" y="816.0">W4</text>
+<text class="small" text-anchor="middle" x="657.6" y="816.0">W6</text>
+<text class="small" text-anchor="middle" x="883.8" y="816.0">W8</text>
+<text class="small" text-anchor="middle" x="1110.0" y="816.0">W10</text>
+<line class="fail" x1="1103.0" y1="647.3" x2="1117.0" y2="661.3"/>
+<line class="fail" x1="1117.0" y1="647.3" x2="1103.0" y2="661.3"/>
+<text class="small" text-anchor="end" x="1098.0" y="644.3">失败峰值 9.17 GiB</text>
+<text class="sub" x="60" y="865">W10：EXP-047 在 10/20 后 Broker 消失；EXP-048 在 POOL_RUNNING 前失败。两次均完整清理，均不进入曲线。</text>
+</svg>
