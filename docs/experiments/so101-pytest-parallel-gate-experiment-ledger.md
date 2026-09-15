@@ -5,18 +5,19 @@ success_contract: A repository-maintained deterministic runner passes focused RE
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: b0f9e7168198285fba4133026d9d3b132075f88b
+current_commit: e97a106a7e1b2048ade92926c8c708012b442c59
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
   - Full-gate timing is currently inadmissible because the preserved primary stateless-Broker task owns W10 MuJoCo, ROS, Docker, GPU, and user-service resources (CP-001).
+  - The primary task reached COMPLETE and released its runtime resources; fresh admission at 2026-09-15T16:43:26+08:00 found no W10 processes, containers, GPU clients, or active W10 units (CP-002).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
 open_hypotheses:
   - Deterministic file-level LPT sharding can preserve exact ordinary-gate coverage and reduce critical-path wall time.
   - Additional source-evidenced global-resource owners may need the serial lane beyond the two mandatory modules.
-latest_checkpoint: CP-001
-next_experiment: EXP-005
+latest_checkpoint: CP-002
+next_experiment: EXP-006-PROVENANCE-CORRECTION
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -326,4 +327,169 @@ evidence:
   - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp005-focused/SHA256SUMS
 decision: KEEP
 next_experiment: EXP-006
+```
+
+## CP-002 — Committed candidate and released primary resources
+
+```yaml
+checkpoint_id: CP-002
+last_valid_experiment: EXP-005
+current_hypothesis: The committed runner can build against this worktree overlay and then preserve exact coverage with lower wall time at W2 or W4.
+working_tree_status: only docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md is modified after candidate commit e97a106a7e1b2048ade92926c8c708012b442c59
+owned_processes: Codex process/session codex-task-so101-pytest-parallel only; no pytest, build, ROS, Docker, GPU, or user-unit process started yet
+preserved_processes: completed codex-task-so101-stateless-broker session; all other worktrees and tmux sessions
+confirmed_conclusions:
+  - Candidate implementation, plugin, 22 focused tests, and ledger through EXP-005 are committed as e97a106a7e1b2048ade92926c8c708012b442c59.
+  - Read-only primary pane shows CP-044 COMPLETE and final cleanup; independent admission found no W10 processes, Docker containers, GPU clients, or active W10 units.
+disproven_routes:
+  - Running full gates during the earlier active W10 interval remains invalid and was not attempted.
+open_risks:
+  - The new worktree overlay has not yet been built or sourced.
+  - The runner subprocess/plugin path has not yet been exercised against the installed package.
+next_command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/install/setup.zsh; colcon --log-base /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log build --packages-select so101_demo_py --symlink-install
+```
+
+## EXP-006 — Candidate package build and overlay provenance
+
+```yaml
+experiment_id: EXP-006
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:46:47+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:47:27+08:00
+  - status: VALID
+    at: 2026-09-15T16:48:02+08:00
+prior_experiment: EXP-005
+hypothesis: The committed runner candidate can use a current-worktree symlink install while retaining the established /usr/bin/python3 plus Grounded-SAM dependency environment.
+prediction: so101_demo_py builds successfully; ros2 package prefix and imported so101_demo origin both resolve inside this worktree.
+single_variable: Build and source candidate commit e97a106a7e1b2048ade92926c8c708012b442c59; no pytest execution.
+lifecycle: REUSE_STACK
+preconditions:
+  - Primary W10 runtime resources are absent and the prior task is COMPLETE.
+  - Only this task ledger is dirty after the committed candidate.
+success_criteria:
+  - colcon build exits 0; current overlay package prefix is this worktree install; /usr/bin/python3 imports so101_demo from this worktree and torch from the frozen venv dependency path.
+failure_criteria:
+  - Build fails or any provenance path resolves to another worktree.
+invalid_criteria:
+  - Primary task restarts conflicting work during build or the source commit changes.
+provenance:
+  source_commit: e97a106a7e1b2048ade92926c8c708012b442c59
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: source /opt/ros/jazzy/setup.zsh; source /data/work/ws_moveit/install/setup.zsh; PYTHONPATH=/data/work/venvs/so101-grounded-sam/lib/python3.12/site-packages:$PYTHONPATH colcon --log-base <EVIDENCE_ROOT>/build-log build --packages-select so101_demo_py --symlink-install
+    exit_code: 0
+observed:
+  - OBSERVED: colcon built so101_demo_py successfully in 2.40 seconds; wrapper elapsed_ms=2698.
+  - OBSERVED: /usr/bin/python3 imported so101_demo from this worktree install and torch 2.13.0+cu130 from /data/work/venvs/so101-grounded-sam.
+  - OBSERVED: ros2 pkg prefix so101_demo_py returned this worktree's install/so101_demo_py.
+  - OBSERVED: build admission found no W10 process, container, GPU client, or active W10 unit.
+inferred:
+  - NONE
+conclusion: The committed candidate overlay and exact Python/dependency provenance are valid for full-gate measurements.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-SHA256SUMS
+decision: KEEP
+next_experiment: EXP-007-W1
+```
+
+## EXP-006-PROVENANCE-CORRECTION — Preserve exact Python command identity
+
+```yaml
+experiment_id: EXP-006-PROVENANCE-CORRECTION
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T16:49:40+08:00
+  - status: RUNNING
+    at: 2026-09-15T16:50:06+08:00
+  - status: VALID
+    at: 2026-09-15T16:50:34.216260275+08:00
+prior_experiment: EXP-006
+hypothesis: Keeping an absolute user-specified Python path without resolving its symlink preserves the exact /usr/bin/python3 command identity while samefile checks still verify the interpreter.
+prediction: The focused suite passes 23 tests and Ruff checks pass after the correction.
+single_variable: Replace Path.resolve() for the CLI Python argument with absolute-without-symlink-resolution normalization and add one regression test.
+lifecycle: REUSE_STACK
+preconditions:
+  - W1 remains PLANNED and its scratch root is absent; no full gate has started.
+  - EXP-006 package build remains valid because this correction changes only repository test tooling.
+success_criteria:
+  - All 23 focused tests and Ruff checks pass.
+failure_criteria:
+  - Any focused or static check fails.
+invalid_criteria:
+  - Wrong tempfile routing or unrelated source change.
+provenance:
+  source_commit: e97a106a7e1b2048ade92926c8c708012b442c59
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: TMPDIR=<SCRATCH>/tmp TMP=<same> TEMP=<same> ROS_HOME=<SCRATCH>/ros-home ROS_LOG_DIR=<SCRATCH>/ros-log PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test/test_pytest_full_gate_runner.py --junitxml=<SCRATCH>/green.xml
+    exit_code: 0
+  - command: /home/lenovo/.local/bin/ruff check and format --check on the three runner files
+    exit_code: 0
+observed:
+  - OBSERVED: all 23 focused tests passed in 0.04 seconds.
+  - OBSERVED: Ruff check and format-check passed.
+  - OBSERVED: the new regression confirms /usr/bin/python3 remains textually unchanged while relative executable paths become absolute.
+inferred:
+  - NONE
+conclusion: Exact Python command identity is preserved without weakening samefile provenance checks.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp006-python-provenance
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp006-python-provenance/SHA256SUMS
+decision: KEEP
+next_experiment: EXP-007-W1
+```
+
+## EXP-007-W1 — New-runner serial baseline
+
+```yaml
+experiment_id: EXP-007-W1
+status: PLANNED
+prior_experiment: EXP-006
+hypothesis: The new runner at W1 preserves the exact ordinary serial collection and provides the uncontaminated comparison baseline.
+prediction: Every expected node ID appears exactly once across the ordered serial lane and one remaining shard; benchmark_test is absent; all tests pass.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit is e97a106a7e1b2048ade92926c8c708012b442c59 and only this audit ledger is dirty.
+  - Python is /usr/bin/python3; overlay is /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install; imported package provenance is inside this worktree.
+  - Timing input is historical JUnit SHA256 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21.
+  - Serial lane order is test_parallel_batch_resources.py, test_text_pick_agent_e2e_process.py, test_parallel_adaptive_integration.py.
+  - Scratch root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp007-w1 does not exist before launch.
+  - Fresh admission must show no conflicting pytest, ROS/MuJoCo/MoveIt/Gazebo, Docker, GPU, or W10 user-unit activity.
+success_criteria:
+  - Runner result PASS, every pytest process exit 0, readable JUnit and node manifest, exact nonzero node-ID union, and benchmark_test absent.
+failure_criteria:
+  - Any test or shard fails, times out, is killed, has invalid provenance, lacks readable JUnit, or has missing/duplicate/unexpected nodes.
+invalid_criteria:
+  - Admission conflict, source/overlay/Python/timing drift, scratch collision, or worktree change during the run.
+provenance:
+  source_commit: e97a106a7e1b2048ade92926c8c708012b442c59
+  install_overlay: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id exp007-w1 --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit e97a106a7e1b2048ade92926c8c708012b442c59 --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/exp007-w1
+decision: PENDING
+next_experiment: EXP-008-W2
 ```

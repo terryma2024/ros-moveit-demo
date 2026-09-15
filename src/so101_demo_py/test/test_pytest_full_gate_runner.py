@@ -10,6 +10,7 @@ from tools.so101_pytest_gate import (
     assign_lpt,
     create_process_layout,
     discover_ordinary_modules,
+    exact_executable,
     load_module_durations,
     split_lanes,
     validate_exact_coverage,
@@ -184,6 +185,11 @@ def test_required_runtime_worker_counts_are_supported(worker_count: int) -> None
 def test_nonpositive_worker_counts_are_rejected(worker_count: int) -> None:
     with pytest.raises(ValueError, match="worker"):
         validate_worker_count(worker_count)
+
+
+def test_exact_python_symlink_spelling_is_preserved(tmp_path: Path) -> None:
+    assert exact_executable(Path("/usr/bin/python3"), tmp_path) == Path("/usr/bin/python3")
+    assert exact_executable(Path("bin/python3"), tmp_path) == tmp_path / "bin/python3"
 
 
 def test_only_explicit_audit_paths_may_be_dirty() -> None:

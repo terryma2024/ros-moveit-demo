@@ -83,6 +83,11 @@ def validate_worker_count(worker_count: int) -> int:
     return worker_count
 
 
+def exact_executable(path: Path, cwd: Path) -> Path:
+    """Make an executable absolute without resolving its user-specified symlink."""
+    return path if path.is_absolute() else (cwd / path).absolute()
+
+
 def validate_source_status(
     source_status: str,
     allowed_dirty_paths: Sequence[str],
@@ -571,7 +576,9 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
     overall_started = time.monotonic()
     repo_root = arguments.repo_root.resolve()
     package_root = arguments.package_root.resolve()
-    python = arguments.python.resolve()
+    python = exact_executable(arguments.python, Path.cwd())
+    if not python.is_file():
+        raise FileNotFoundError(f"Python executable does not exist: {python}")
     workers = validate_worker_count(arguments.workers)
     run_root = arguments.evidence_root.resolve() / "scratch" / arguments.run_id
     run_root.mkdir(mode=0o700, parents=True, exist_ok=False)
