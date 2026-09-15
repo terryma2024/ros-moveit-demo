@@ -67,7 +67,7 @@ flowchart TB
   JOURNAL[(顶层 fsync journal)]
   POOL["当前 AdaptiveWorkerPool<br/>W8 / W6 / W4 / W2 / W1"]
   COORD["ParallelBatchCoordinator<br/>本代 lease 与结果提交"]
-  BROKER["PerceptionBroker<br/>有界队列 + generation fence"]
+  BROKER["PerceptionBroker<br/>有界 IPC + 队列 + executor"]
   YOLO[YOLO executor C2]
   GSAM[Grounded-SAM executor]
   EVID[(attempt evidence)]
@@ -83,7 +83,7 @@ flowchart TB
   W2 --> BROKER
   WN --> BROKER
   BROKER --> YOLO
-  BROKER -. allowed fallback .-> GSAM
+  BROKER -. requested model .-> GSAM
   W1 --> EVID
   W2 --> EVID
   WN --> EVID
@@ -99,7 +99,7 @@ flowchart TB
 - 独立 worker identity、worker generation、heartbeat 和 lease；
 - 到共享 Broker 的具名连接。
 
-共享的是 GPU 感知服务和顶层调度状态，不共享仿真世界与控制器。
+Worker 共享 GPU 感知服务，但不把顶层调度状态交给 Broker。仿真世界与控制器也各自隔离。
 
 ## 4. 源码分成哪些层
 
@@ -109,11 +109,11 @@ flowchart TB
 | 初始亲和与抢任务 | `src/so101_demo_py/src/parallel_batch/adaptive_queue.py` | preferred deque、全局队列和跨 Worker 窃取顺序 |
 | 跨代 Runner | `src/so101_demo_py/src/parallel_batch/adaptive_runner.py` | 剩余点、不可变终态、pool generation、降级和顶层 summary |
 | 单代 Pool 适配 | `src/so101_demo_py/src/parallel_batch/adaptive_pool.py` | READY barrier、socket 预检、生产 composition、结果映射和清理 |
-| 本代协调器 | `src/so101_demo_py/src/parallel_batch/coordinator.py` | Worker 注册、lease、ACK、heartbeat、Broker 授权、结果提交 |
+| 本代协调器 | `src/so101_demo_py/src/parallel_batch/coordinator.py` | Worker 注册、lease、ACK、heartbeat、动作权限与最终结果提交 |
 | Worker 状态机 | `src/so101_demo_py/src/parallel_batch/worker.py` | 初始状态门、感知、执行、封存、恢复和 watchdog |
-| 感知 Broker | `src/so101_demo_py/src/parallel_batch/broker.py` | 有界队列、公平轮转、每 Worker/model 单 in-flight、deadline 和 fencing |
-| IPC | `src/so101_demo_py/src/runtime/parallel_ipc.py` | 鉴权 Unix socket、frame 限制、handler 生命周期 |
-| Broker runtime | `src/so101_demo_py/src/runtime/parallel_perception_runtime.py` | 多 executor、模型执行、等待与指标 |
+| 感知 Broker | `src/so101_demo_py/src/parallel_batch/broker.py` | 有界队列、executor、deadline、health、provenance 与 request/response 精确关联 |
+| IPC | `src/so101_demo_py/src/runtime/parallel_ipc.py` | Broker 的有界推理 IPC，以及与它分离的 Coordinator/Worker 鉴权控制 IPC |
+| Broker runtime | `src/so101_demo_py/src/runtime/parallel_perception_runtime.py` | 无调度状态的模型执行、等待、结果关联与指标 |
 | ROS Worker runtime | `src/so101_demo_py/src/runtime/parallel_worker_runtime.py` | MuJoCo/MoveIt/controller、动态 `/cup_pose` consumer 与动作取消 |
 | 资源与进程 | `src/so101_demo_py/src/parallel_batch/resources.py`、`src/so101_demo_py/src/runtime/parallel_processes.py` | Domain claim、目录、进程身份、资源读回和精确清理 |
 | 用户入口 | `src/so101_demo_py/src/cli/mujoco_parallel_batch.py` | 参数解析、provenance、composition、RPC server 和最终报告 |
@@ -173,7 +173,7 @@ W10、W12、W16 不属于默认性能矩阵。显式运行它们时，要按真�
 - Coordinator 注册成功；
 - 当前 worker generation 与进程 start ticks 匹配；
 - MuJoCo、MoveIt、controller 和 ROS runtime 可用；
-- Broker 已完成本代发现和健康检查；
+- Broker 服务就绪，模型健康与 provenance 已读回；
 - 本地动态 `/cup_pose` consumer 已建立自己的 READY fence。
 
 只有 N 个 Worker 全部满足条件，`POOL_RUNNING` 才会成为线性化点。在它之前故障，当前代不得获得真实点位 lease；在它之后故障，系统必须先裁决在途点，再考虑降级。
@@ -257,7 +257,9 @@ attempt_id
 lease_generation
 ```
 
-这些字段共同防止旧消息复活。Worker 重启后即使仍叫 `worker-03`，generation 已经变化；旧 generation 的 Broker 结果、heartbeat 或 result commit 都会被拒绝。
+这些字段由 Coordinator 和 Worker 的控制面使用。Worker 重启后即使仍叫 `worker-03`，generation 也已经变化；旧 heartbeat、动作请求和 result commit 会在控制面被拒绝。
+
+Broker 不读取这些字段来决定是否推理，也不查询 lease、generation、start-event、reset epoch 或 Coordinator journal。它只按推理 `request_id` 关联请求与响应。迟到的响应仍然只是数据：Worker 在开始或继续动作前复核当前 lease，Coordinator 在接纳最终结果时再次验证所有权。两个语义相同但 `request_id` 不同的请求可以分别执行；多算一次可以接受，不能因此放宽动作与终态边界。
 
 点位状态按下面的语义处理：
 
@@ -277,7 +279,7 @@ lease_generation
 
 ```text
 N 个 Worker
-  -> authenticated Unix RPC
+  -> bounded Unix RPC
   -> PerceptionBroker
       -> YOLO bounded queue -> C2 executors
       -> Grounded-SAM bounded queue -> executor
@@ -285,20 +287,22 @@ N 个 Worker
 
 Broker 的主要约束是：
 
-- 每个模型有界排队，不因扩容无限吃内存；
-- model 与 Worker 都按 round-robin 调度，避免一个 Worker 连续占队列；
-- 同一 Worker、同一模型最多一个 in-flight；
-- request identity、worker generation 和 broker generation 全部匹配；
-- admission、dispatch、completion 前重新校验授权和 deadline；
-- generation 被取消后，即使模型稍后返回，也只能得到 `GENERATION_FENCED`。
+- 并发连接、frame 与每个模型的队列都有上限，不因扩容无限占用内存；
+- executor 数固定，例如 C2 只允许两个 YOLO 执行槽；
+- 每个请求带唯一的在途 `request_id`、模型、不可变输入或 digest、推理选项和 caller deadline；
+- 响应原样回传 `request_id`、模型 identity/version、终态、结果或结构化错误和 timing；
+- 乱序完成不能串线。一个请求超时或断开，也不能取消或误投其他请求；
+- health、provenance、schema、socket 权限和本地 deadline 都由 Broker 自己处理。
 
-YOLO-first 是 Worker 的业务策略，不是 Broker 偷偷改模型。只有 YOLO 没有合格检测、mask/depth 质量不合格，或确定的请求级模型错误，才允许使用新鲜输入请求 Grounded-SAM。下面这些情况属于基础设施故障，不触发模型回退：
+Broker 的推理路径不会调用 Coordinator，也不会读取或 replay Coordinator journal。lease、Worker generation、start-event 和 reset epoch 即使为了兼容暂时随请求携带，也只是 opaque metadata，不参与 admission、dispatch 或 completion。同一个语义请求可以换用新的 `request_id` 再算一次；相同的在途 `request_id` 可以在 Broker 本地拒绝，以免响应关联产生歧义。这不是调度判断，也不需要 durable replay cache。
+
+YOLO-first 和是否请求 Grounded-SAM 属于 Worker 侧的业务策略，Broker 只执行明确指定的模型。只有 YOLO 没有合格检测、mask/depth 质量不合格，或确定的请求级模型错误，Worker 才能使用新鲜输入请求 Grounded-SAM。下面这些情况属于基础设施故障，不触发模型回退：
 
 - Broker 或 CUDA 进程退出；
 - OOM、GPU Xid；
 - Unix RPC 断开；
 - queue/inference/handler deadline；
-- 无法验证 request authorization。
+- queue full 或模型 health 失败。
 
 否则 W10 的 Broker 崩溃可能被伪装成“YOLO 没看到杯子”，实验结果会失真。
 
@@ -310,7 +314,7 @@ YOLO-first 是 Worker 的业务策略，不是 Broker 偷偷改模型。只有 Y
 Worker READY fence
   -> post-fence RGB-D snapshot
   -> Worker IPC request
-  -> Broker 鉴权与授权
+  -> Broker frame/schema 校验与 request_id 登记
   -> 排队
   -> YOLO 执行
   -> mask + Depth + exact-stamp TF
@@ -320,7 +324,7 @@ Worker READY fence
   -> POSE_ACCEPTED
 ```
 
-因此，YOLO 单次推理很快，并不能排除 `/cup_pose` 超时。Broker 排队、授权热路径、ROS 调度、consumer 尚未 arm、源帧过旧，都会消耗这段时间。
+因此，YOLO 单次推理很快，并不能排除 `/cup_pose` 超时。Broker IPC、排队、本地 deadline、ROS 调度、consumer 尚未 arm 和源帧过旧，都会消耗这段时间。lease 校验发生在 Worker 的动作边界和 Coordinator 的最终结果边界，不计入 Broker 推理 admission。
 
 ### 11.1 READY fence 解决什么
 
@@ -339,16 +343,16 @@ Worker READY fence
 
 ## 12. 为什么 Broker 的等待方式会影响 W8
 
-W8 最初出现过 `/cup_pose` 排队超时。根因不在 GPU：每个等待者除了等待结果，还重复执行 service-wide authorization scan；watchdog 也在轮询。请求数增加后，这些扫描在 Broker 锁内放大成近似 O(N²) 的 Coordinator 流量，真正的模型 dispatch 反而得不到运行机会。
+W8 早期出现过 `/cup_pose` 排队超时。旧实现让 waiter 反复检查调度状态，watchdog 也持续轮询。请求数增加后，Broker 锁内的额外工作挡住了模型 dispatch。这条路径已经删除，当前合同里没有 Broker 侧调度检查。
 
-已验证的修复是把响应等待改成事件驱动：
+当前 Broker 的等待只依赖本地事件和 deadline：
 
 - submit、model start、completion、cancel 或 health 变化时唤醒 waiter；
 - 没有事件时按最近 deadline 阻塞；
 - deadline watchdog 只处理本地时间边界；
-- 授权保留在 admission、dispatch 和 completion 等所有权变化点，不在每个 poll 重放。
+- 推理全生命周期对 Coordinator authorization 调用为零，对 Coordinator journal replay 也为零。
 
-修复后 W8 完成 20/20，说明提高 GPU executor 数并不是当时的第一修复点。并发系统里，低 GPU 利用率加上请求超时，往往说明请求还没有走到模型执行层。
+迟到或重复的推理可以继续消耗一次计算，Broker 不为此恢复调度状态。调用方按 `request_id` 接收结果；Worker 随后在动作前检查 lease，Coordinator 在 final result commit 时检查所有权。W8 完成 20/20 也说明，提高 GPU executor 数并不是当时的第一修复点。
 
 ## 13. 业务失败与基础设施失败为什么要分开
 
@@ -375,7 +379,7 @@ W8 不能简单地再启动一套 W6。旧 generation 尚未停干净时复用 D
 停止发新 lease
   -> fsync 已提交 PASSED / FAILED
   -> 裁决每个在途 attempt
-  -> 取消本代 Broker generation 与 controller goal
+  -> 停止 Broker 接纳，按 request_id 尽力取消本地请求，并取消 controller goal
   -> 停止本代 Worker、MuJoCo、MoveIt、Broker
   -> 回读进程、Domain、socket、容器与 attachment 均已清理
   -> 记录 POOL_DEGRADED
@@ -621,9 +625,9 @@ ai-station 上 fsync-heavy pytest 必须把 `TMPDIR`、`TMP` 和 `TEMP` 指向 `
 
 ### 20.11 W8 低 GPU 利用率却发生 Broker 超时
 
-第一次直觉通常是“增加 YOLO 并发”。现场独立推理上限测试却显示 GPU 还有余量，而 Worker 请求仍在进入 detector 之前超时。最终定位到重复授权扫描和 20 ms polling 放大的 Broker 锁竞争。
+第一次直觉通常是“增加 YOLO 并发”。现场独立推理上限测试却显示 GPU 还有余量，而 Worker 请求仍在进入 detector 之前超时。旧实现把调度状态检查和 20 ms polling 放进 Broker hot path，放大了锁竞争；这条路径现已删除。
 
-解法是先记录阶段时间：accepted、authorized、queued、model_started、model_completed、sent、consumer_received。若 `model_started` 都没有出现，提高 executor 数不会解决问题；先修 admission、授权或 IPC。
+现在先看 `accepted`、`queued`、`model_started`、`model_completed`、`sent`、`consumer_received`。若 `model_started` 没出现，检查 frame/schema、连接和队列上限、executor/health 与本地 deadline。不要让 Broker 查询 Coordinator lease 或 journal 来“确认”请求，也不要增加 durable replay。重复或迟到推理只是算力浪费；动作与最终结果仍由外部 lease 门拒绝。
 
 ### 20.12 W10 两次运行停在不同边界
 
@@ -650,10 +654,13 @@ POOL_RUNNING 后没有 ATTEMPT_STARTED
   -> 检查 start gate、lease、initial-state readback
 
 ATTEMPT_STARTED 后没有 model_started
-  -> 检查 Worker IPC、Broker handler、授权热路径和 queue admission
+  -> 检查 Worker IPC、frame/schema、Broker handler、queue capacity、executor/health 和本地 deadline
 
 model_completed 但没有 POSE_ACCEPTED
-  -> 检查 source_stamp > ready_ros_ns、Depth/TF、ROS/DDS 与 consumer gate
+  -> 先按 request_id 核对响应归属，再检查 source_stamp > ready_ros_ns、Depth/TF、ROS/DDS 与 consumer gate
+
+收到重复或迟到的 inference response
+  -> 接受计算已经浪费；在 Worker 动作边界和 Coordinator final result commit 重新检查 lease，不给 Broker 增加 replay/authorization
 
 POSE_ACCEPTED 后失败
   -> 回到 MoveIt plan、controller goal、joint/TF、MuJoCo contact/pose
@@ -716,6 +723,7 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 
 ## 24. 当前实现边界
 
+- Broker 是无调度状态的有界推理服务，不读取 Coordinator lease、generation、start-event、reset epoch 或 journal；
 - 当前最高现场合格档位是 W8，不是 W16；
 - W8 正确性通过，但历史 5 秒 `READY → POSE_ACCEPTED` SLO 未通过；
 - 正式冻结对比中，W8 的 20 点执行区间为 263.64 s，吞吐为 4.55 点/分，相对 W1 加速 6.04×；
@@ -731,19 +739,18 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 
 按状态所有权读，比从最长的 CLI 文件开始容易：
 
-1. [`2026-09-14-so101-adaptive-worker-pool-design.md`](../superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md)：先理解目标和非目标；
-2. `parallel_adaptive_workers_v1.yaml`：看默认 W8、fallback、Domain 和 C2；
-3. `adaptive_contracts.py`：看输入怎样在启动前失败关闭；
-4. `adaptive_queue.py`：看 preferred、global 和 stealing；
-5. `adaptive_runner.py`：看跨代 remaining set、终态和 fallback；
-6. `adaptive_pool.py`：看 READY barrier、socket preflight 和 production composition；
-7. `coordinator.py`：看本代 lease、ACK、heartbeat 与授权；
-8. `worker.py`：沿单点状态机走一次完整 attempt；
-9. `broker.py`：看有界公平队列、deadline 和 fencing；
-10. `parallel_perception_runtime.py` 与 `parallel_ipc.py`：看 executor、waiter 和 Unix RPC；
-11. `parallel_worker_runtime.py`：看 `/cup_pose` consumer 与动作取消；
-12. `mujoco_parallel_batch.py`：最后看生产接线和 CLI；
-13. `so101-parallel-adaptive-worker-pool-experiment-ledger.md`：把设计与现场故障逐条对应。
+1. [`2026-09-14-so101-adaptive-worker-pool-design.md`](../superpowers/specs/2026-09-14-so101-adaptive-worker-pool-design.md)：先理解 Worker pool 的目标和非目标；
+2. [`2026-09-15-so101-stateless-perception-broker-design.md`](../superpowers/specs/2026-09-15-so101-stateless-perception-broker-design.md)：划清 Broker 与调度控制面的边界；
+3. `parallel_adaptive_workers_v1.yaml`：看默认 W8、fallback、Domain 和 C2；
+4. `adaptive_contracts.py` 与 `adaptive_queue.py`：看启动约束、preferred、global 和 stealing；
+5. `adaptive_runner.py` 与 `adaptive_pool.py`：看跨代终态、fallback、READY barrier 和 production composition；
+6. `coordinator.py`：看本代 lease、ACK、heartbeat、动作权限与最终结果接纳；
+7. `worker.py` 与 `parallel_worker_runtime.py`：沿单点 attempt 查看感知调用、`/cup_pose` consumer、动作前 lease 校验和取消；
+8. `broker.py`：只看有界队列、本地 deadline、health、provenance 和 request/response correlation；
+9. `parallel_perception_runtime.py`：看 executor、waiter 与乱序完成；
+10. `parallel_ipc.py`：区分无 Coordinator 授权的 Broker 推理 IPC 和鉴权的 Coordinator/Worker 控制 IPC；
+11. `mujoco_parallel_batch.py`：最后看生产接线和 CLI；
+12. `so101-parallel-adaptive-worker-pool-experiment-ledger.md`：把设计与现场故障逐条对应。
 
 ## 26. 一个最小观察练习
 
@@ -770,15 +777,16 @@ W8 现场合格至少要求：20 个不同点位、首 attempt、完整物理与
 6. 每个点为什么只要求可读回的初始状态，而不要求内部步骤等价 `RESET_WORLD`？
 7. 哪些失败是业务失败，哪些是基础设施失败？
 8. 为什么业务失败不能触发自动降级重试并覆盖原结果？
-9. Broker 为什么共享模型，但不能共享 Worker identity 或 response？
-10. C2、W8 和 20 个点分别描述什么维度？
-11. `/cup_pose` 的 5 秒边界为什么远大于一次 YOLO kernel？
-12. 为什么 stale Pose 不能通过重写时间戳或重发恢复？
-13. systemd user unit 在这里解决的是资源保障还是进程所有权？
-14. tmux 被 systemd-oomd 杀死时，为什么不能直接宣告 Runner 已退出？
-15. evidence root 的 `0700` 和 Unix socket 的 107 bytes 分别保护什么？
-16. W8 20/20 为什么仍不能宣称满足 5 秒感知 SLO？
-17. W16 契约测试通过为什么不等于 W16 可运行？
-18. 两次 W10 的第一坏边界分别是什么，为什么不能把它们合成一个根因或性能样本？
+9. Broker 为什么只按 `request_id` 关联结果，而不查询 Coordinator lease、generation、start-event、reset epoch 或 journal？
+10. 为什么重复或迟到 inference 可以浪费算力，却不能获得动作权限或提交最终结果？
+11. C2、W8 和 20 个点分别描述什么维度？
+12. `/cup_pose` 的 5 秒边界为什么远大于一次 YOLO kernel？
+13. 为什么 stale Pose 不能通过重写时间戳或重发恢复？
+14. systemd user unit 在这里解决的是资源保障还是进程所有权？
+15. tmux 被 systemd-oomd 杀死时，为什么不能直接宣告 Runner 已退出？
+16. evidence root 的 `0700` 和 Unix socket 的 107 bytes 分别保护什么？
+17. W8 20/20 为什么仍不能宣称满足 5 秒感知 SLO？
+18. W16 契约测试通过为什么不等于 W16 可运行？
+19. 两次 W10 的第一坏边界分别是什么，为什么不能把它们合成一个根因或性能样本？
 
 如果答案只能概括成“开多个仿真并行跑”，建议回到 READY fence、lease identity、Broker 和降级事务四节，对着源码与实验账本再走一遍。
