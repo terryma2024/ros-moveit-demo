@@ -7,7 +7,7 @@ success_contract: Obtain a focused RED for every true W8 ceiling, minimally admi
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+current_commit: e955907c6efc93a5ede31c6f6b450f361f99ee39
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -37,15 +37,16 @@ confirmed_conclusions:
   - CP-039 completed fixed W6 and W8 correctness qualification at f349cd8d1942c31a276b3237c1676eee9f8cce39; each passed 20/20 on first attempts with exact cleanup, while the separate W8 five-second READY-to-POSE SLO remained false.
   - Commit b5cd54bd3f28cf26c2dec01989e277f9bcba7953 extends every identified optional adaptive-worker ceiling to W16 while preserving default W8, fallback (6, 4, 2, 1), C2, timeout policy, and two-digit identities; focused, adjacent, and all 3050 ordinary package tests passed.
   - The one authorized EXP-031 launch was invalid before a batch started because the registered evidence root was mode 0775 rather than the required exact 0700. No runtime root, Worker, Broker container, or point attempt was created; exact readback is clean and no retry was made.
+  - EXP-033 was the first genuine W10 runtime sample. All ten Workers reached READY and began one point each, but every Broker request_model RPC reached HANDLER_DEADLINE_EXCEEDED before perception returned. The run is FAILED, W10 is not qualified, all ten attempts prove physical action absent, and exact cleanup passed.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
   - A hidden transport pre-accept delay is the dominant W8 `/cup_pose` cost; its 0.091 s median was below internal Broker queue wait, response delivery, model execution, and the full Broker round trip.
   - YOLO compute, RGB capture, simulation pause/resume, exact-TF localization, numeric capture, pose admission, or DDS callback delivery is the first expected-budget violation in EXP-006; no configured budget was violated.
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
-  - W10 can execute the EXP-028 catalog under C2 without fallback, but the invalid pre-runtime EXP-031 launch provides no runtime evidence; a new live attempt requires separate authorization.
+  - The internal cause of the EXP-033 Broker inference handler stall is not localized because no detector failure receipt was persisted; any diagnosis or tuning requires separate authorization.
   - W16 itself remains contract-tested but runtime-untested unless separately authorized.
-latest_checkpoint: CP-040
+latest_checkpoint: CP-041
 next_experiment: NONE
 ```
 
@@ -2914,4 +2915,177 @@ evidence:
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/core-sha256.txt
 decision: STOP_NO_RETRY
 next_experiment: NONE
+```
+
+## EXP-032-W10-R1 — Authorized genuine ten-worker retry
+
+```yaml
+experiment_id: EXP-032-W10-R1
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T12:00:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T12:04:43+08:00
+  - status: INVALID
+    at: 2026-09-15T12:04:45+08:00
+prior_experiment: EXP-031-W10
+hypothesis: Narrowing only the existing registered evidence root from mode 0775 to exact 0700 removes the proven pre-runtime contamination and lets the immutable W16-capable candidate execute the first genuine W10 generation under the frozen EXP-028 policy.
+prediction: The CLI accepts the registered root, creates one fresh g32w0 W10 runtime, and the batch reaches top COMPLETED with 20/20 distinct first-attempt PASSED points, levels_used [10], healthy C2 Broker, no fallback or infra retry, complete physical/visual evidence, and exact automatic cleanup.
+single_variable: Pre-runtime orchestration correction only: after exact path and current-user ownership readback, narrow /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01 from mode 0775 to exact 0700. Product source, candidate commit, catalog, execute policy, C2, models, timeouts, and worker count remain frozen.
+lifecycle: ISOLATED_STACK
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g32w0
+source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+systemd_unit: so101-w10-g32.service
+monitor_unit: so101-w10-g32-monitor.service
+preconditions:
+  - Dispatch receipt 8fe063a6-2921-43e2-84cf-fef21f057c4c exists as exact 36-byte content, and retry-handoff.md authorizes this retry because EXP-031 created no runtime stack or attempt.
+  - Worktree HEAD is preserved at e955907c6efc93a5ede31c6f6b450f361f99ee39; implementation commit b5cd54bd3f28cf26c2dec01989e277f9bcba7953 and invalid-attempt ledger commit e955907c6efc93a5ede31c6f6b450f361f99ee39 remain unchanged.
+  - A fresh detached candidate must be clean at b5cd54bd3f28cf26c2dec01989e277f9bcba7953 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969 and matching source/build hashes.
+  - The registered root resolves exactly to the authorized path, is owned by the current uid, and is mode 0700 after the single authorized correction; report and runtime paths are absent before creation.
+  - Domains 215-224, prospective units, owned processes, labeled container, runtime sockets, and GPU compute applications are empty immediately before launch.
+success_criteria:
+  - Exactly one genuine W10 pool generation runs all 20 frozen points in execute mode with initial_points_per_worker 3, worker_start_timeout_s 120, max_infra_attempts_per_point 1, and exactly two YOLO executors.
+  - Top status is COMPLETED; all 20 distinct points are PASSED on first attempts; levels_used is exactly [10]; systemd exits zero; Broker health, queue, and model provenance are valid.
+  - No Grounded-SAM execution, fallback, infra retry, stale pose, queue/inference timeout, lease expiry, truncated frame, OOM, or Broker-health failure occurs.
+  - Every point retains controller/five-joint, TF, Planning Scene attach/detach, physical/contact, initial/final image, source-fence, and sealed-hash evidence; fresh initial and terminal contact sheets are generated and inspected.
+  - Automatic internal and outer cleanup complete; Domains 215-224, owned processes, container, sockets, GPU applications, runner, and monitor are released with exact readback.
+failure_criteria:
+  - Any started W10 task-point, provenance, policy, first-attempt, Broker, source/build, systemd, evidence, visual, or cleanup gate fails.
+invalid_criteria:
+  - A pre-runtime harness error prevents the genuine stack from starting; only a trivial deterministic orchestration correction may then be made without changing product semantics.
+provenance:
+  source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  install_overlay: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/candidate-src/install/so101_demo_py
+  runtime_executable: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/candidate-src/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  broker_image_id: sha256:b94b595ed560ba227e1c9dde03532a8699696ca97821f6eb3325574d77e04854
+  runner_invocation_id: 929d787f061540029411d31bdd19e986
+  monitor_invocation_id: 59a30d808cb1489ab921ae9414f2b20b
+  ros_domain_id: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224]
+  gz_partition: not_applicable
+commands:
+  - command: Exact argv retained at /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/exact-command.txt and systemd ExecStart readback retained at systemd-launch.txt
+    exit_code: 1
+observed:
+  - Read-only preflight at 2026-09-15T11:59:28+08:00 confirmed ai-station, linked worktree HEAD/submodule, only the two preserved user dirty paths, root mode 0775 owned by uid 1000, absent fresh report/runtime paths, empty Domains 215-224, and no prospective unit, owned process, labeled container, ROS daemon, or GPU compute application.
+  - Authorized path/owner readback resolved the exact registered root and narrowed only its mode from 0775 to 0700 at 12:00:40; the fresh detached candidate then matched source, submodule, install, executable, Broker image, model, config, and source/build provenance.
+  - The genuine runner and independent monitor started at 12:04:43 with invocation IDs 929d787f061540029411d31bdd19e986 and 59a30d808cb1489ab921ae9414f2b20b.
+  - The CLI created only the batch manifest and coordinator journal, then rejected the first derived worker control socket as UNIX_SOCKET_PATH_TOO_LONG at 111 bytes. No pool root, Worker, Broker container, ROS claim, point attempt, fallback, or model execution was created.
+  - The wrapper's follow-up POOL_ROOT error reflects the absent pool root after the primary path rejection. Exact readback found no owned process, container, socket, claim, ROS node, GPU compute application, or active unit; the partial runtime root is retained unchanged as invalid harness evidence.
+  - Path-length calculation proved a one-character legal batch ID produces the same longest control socket at 107 bytes, within the UNIX pathname content boundary, while preserving the registered evidence root and every product/runtime parameter.
+inferred:
+  - EXP-031 and the adaptive CLI validator establish the root mode mismatch as the sole known pre-runtime divergence; no product-code change is indicated.
+conclusion: INVALID before a genuine W10 stack started because the five-character retry batch ID made its derived UNIX socket pathname 111 bytes; this is a deterministic orchestration error and supplies no W10 behavior sample.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/retry-preflight-before-mode.txt SHA256 45ec5efd064d2e143b85a56f5b74366817f995a5fbe2d2dfd5ffe49824fc4e84
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/retry-root-mode-correction.txt SHA256 6c84c2abd09cf556fa2c991348e74cbdb63db91a6448e0bf434dc7f98b57a929
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/provenance.txt SHA256 4484511177946f160a7405634f4384f4917c336d9d3c7201bc63cba18af2ffc7
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/prelaunch-final.txt SHA256 deccd803030ed050e927773b159d7121b3367fce257b6884e33908192f5d2b08
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/run.log SHA256 b54a0c640146a44e3d8757aa17d4bbccd0b03684473d616736c62571cbd2e932
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp032-w10-qualified/harness-cleanup-readback.txt SHA256 51019cb480ae6c2cc865d52a02a40d838b524abde4b4f400ca098f1c28cf64e5
+decision: CORRECT_TRIVIAL_BATCH_ID_AND_REPEAT
+next_experiment: EXP-033-W10-R2
+```
+
+## EXP-033-W10-R2 — Genuine W10 with bounded socket pathname
+
+```yaml
+experiment_id: EXP-033-W10-R2
+status: FAILED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T12:07:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T12:09:37+08:00
+  - status: FAILED
+    at: 2026-09-15T12:16:19+08:00
+prior_experiment: EXP-032-W10-R1
+hypothesis: A fresh one-character batch ID keeps every derived W10 UNIX socket pathname within the kernel boundary and allows the unchanged immutable candidate to start the first genuine W10 stack.
+prediction: Batch x passes pre-runtime path validation, starts ten Workers plus the C2 Broker, and reaches top COMPLETED with 20/20 distinct first-attempt PASSED points, levels_used [10], no fallback/infra retry, complete evidence, and exact cleanup.
+single_variable: Trivial deterministic orchestration correction only: shorten the fresh batch ID from invalid g32w0 to legal x, reducing the longest derived control socket from 111 to 107 bytes. Root mode 0700, product source, catalog, execute policy, worker count, C2, models, and timeouts remain frozen.
+lifecycle: ISOLATED_STACK
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/x
+source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+systemd_unit: so101-w10-x.service
+monitor_unit: so101-w10-x-monitor.service
+preconditions:
+  - EXP-031 and EXP-032 remain immutable INVALID pre-runtime evidence and consume no genuine W10 execution; both have exact clean resource readbacks.
+  - A newly cloned detached candidate must be clean at b5cd54bd3f28cf26c2dec01989e277f9bcba7953 with initialized submodule c16b5a5fe880b6e1857f56486dab4ae726576969 and matching source/build/install/model/image/config provenance.
+  - The exact registered root remains owned by the current uid and mode 0700; fresh report exp033-w10-qualified and runtime r/x are absent before creation.
+  - Domains 215-224, prospective units, owned processes, labeled container, runtime sockets, and GPU compute applications are empty immediately before launch.
+success_criteria:
+  - Exactly one genuine W10 pool generation runs all 20 frozen points in execute mode with initial_points_per_worker 3, worker_start_timeout_s 120, max_infra_attempts_per_point 1, and exactly two YOLO executors.
+  - Top status is COMPLETED; all 20 distinct points are PASSED on first attempts; levels_used is exactly [10]; systemd exits zero; Broker health, queue, and model provenance are valid.
+  - No Grounded-SAM execution, fallback, infra retry, stale pose, queue/inference timeout, lease expiry, truncated frame, OOM, or Broker-health failure occurs.
+  - Every point retains controller/five-joint, TF, Planning Scene attach/detach, physical/contact, initial/final image, source-fence, and sealed-hash evidence; fresh initial and terminal contact sheets are generated and inspected.
+  - Automatic internal and outer cleanup complete; Domains 215-224, owned processes, container, sockets, GPU applications, runner, and monitor are released with exact readback.
+failure_criteria:
+  - Any started W10 task-point, provenance, policy, first-attempt, Broker, source/build, systemd, evidence, visual, or cleanup gate fails; stop after exact cleanup with no tuning or retry.
+invalid_criteria:
+  - Another pre-runtime harness error prevents the genuine stack from starting; only a trivial deterministic orchestration correction may be made without changing product semantics.
+provenance:
+  source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  install_overlay: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/candidate-src/install/so101_demo_py
+  runtime_executable: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/candidate-src/install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch
+  broker_image_id: sha256:b94b595ed560ba227e1c9dde03532a8699696ca97821f6eb3325574d77e04854
+  runner_invocation_id: 776da45673c14ad49003fa25160315e1
+  monitor_invocation_id: 31e0d3316bee4bfe9bdbbf5c51f4c81c
+  ros_domain_id: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224]
+  gz_partition: not_applicable
+commands:
+  - command: Exact argv retained at /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/exact-command.txt and systemd ExecStart readback retained at systemd-launch.txt
+    exit_code: 1
+observed:
+  - Fresh detached source/submodule/install, source/build hashes, correct EXP-028 models and C2 image, root mode 0700, 107-byte longest control socket, absent r/x, and empty Domains/resources were verified before launch.
+  - The runner and independent monitor started at 12:09:37 with invocation IDs 776da45673c14ad49003fa25160315e1 and 31e0d3316bee4bfe9bdbbf5c51f4c81c.
+  - Reattachment after the tmux host interruption confirmed the same invocation IDs. All ten Workers and dynamic /cup_pose consumers reached READY, and each Worker passed its initial-state ATTEMPT_STARTED gate with a fresh source frame.
+  - All ten first-wave attempts failed at request_model with IpcError HANDLER_DEADLINE_EXCEEDED against the frozen 75 s Broker request deadline. Their sealed status is INVALID with reason AUTHORIZATION_OR_PORT_FAILURE, and all ten record physical_action_proven_absent true; the other ten points remained UNRUN with zero attempts.
+  - Top status is INFRA_FAILED after 400.37538262386806 s, terminal_reason is ADAPTIVE_INFRASTRUCTURE_FAILURE, levels_used is [10], final_worker_count is 10, no fallback occurred, and systemd exited 1. Peak cgroup memory was 9770795008 bytes; peak GPU use was 5375 MiB and peak sampled utilization was 14 percent.
+  - Ten sealed attempt manifests and initial images passed full hash/inventory/identity decoding verification. The hash-chained coordinator journal replayed 1773 events at epoch 1 with no damaged tail. The inspected contact sheet shows every cup still upright and separated from the destination and gripper; terminal images do not exist because perception never returned and motion never began.
+  - Automatic cleanup completed. Domains 215-224 were RELEASED; runner and monitor units are not-found/inactive/dead; exact task processes, labeled container, live runtime sockets, ROS nodes, and owned-process records are empty.
+  - The final ordinary package gate passed 3050 tests with four warnings in 61.75 s. Earlier retained verification attempts document missing-overlay, missing-Torch, overlong-socket-path, and one nondeterministic two-lock test race before the clean rerun.
+inferred:
+  - EXP-032 directly establishes derived socket length, not W10 product behavior; shortening only the batch identity is the minimal permitted correction.
+  - Because no detector .failure.json receipt exists and GPU utilization dropped to zero while requests waited, the first divergence is bounded to the Broker inference RPC handler failing to return before its deadline. The evidence does not identify the handler's internal cause.
+conclusion: The genuine W10 sample failed the frozen qualification contract at Broker inference RPC completion. W10 is not qualified; no tuning, retry, fallback, or W16 run is authorized.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/provenance.txt SHA256 6bd56b6a4bbfa745e0392949df0473e664ed02c34ca3b252ac0b3d8bd8a5e6f5
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/prelaunch-final.txt SHA256 076beae499eebfdbed0e062a4c9cf111dfbd9b1540b626a7bddec0a9a2c7af05
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/aggregate_results.json SHA256 d8fe9829d69c47483247067b4fb5e6feecb089824f07cb9a9616c5a67112d17e
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/cleanup-receipt.json SHA256 dfd405fd14600dd430936edc57f764bbd1d22a70c118386909629235302e920e
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/cleanup-readback.txt SHA256 0874f6f7fbf19843160063b0ba89153e2266832ff6d1d9d2c36e5b1a1378d640
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/initial-failure-contact-sheet.png SHA256 7955937bb767c228cedf2556070c84db4e6d85563fe037f6c407c499d6a1a566
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp033-w10-qualified/validation-summary.json and final-core-sha256.txt contain the complete artifact, journal, resource, visual, and core-file readback.
+decision: STOP_NO_RETRY
+next_experiment: NONE
+```
+
+## CP-041 — W10 terminal failure, verified cleanup, and task closeout
+
+```yaml
+checkpoint_id: CP-041
+status: COMPLETE
+last_valid_experiment: EXP-030-W16-GREEN
+last_executed_experiment: EXP-033-W10-R2
+confirmed_conclusions:
+  - The W16 optional-ceiling implementation remains verified at b5cd54bd3f28cf26c2dec01989e277f9bcba7953, preserving default W8 and fallback 6, 4, 2, 1.
+  - The frozen EXP-028 W8 result remains the highest runtime-qualified level; EXP-033 does not qualify W10.
+  - EXP-033 formed the genuine fixed-W10 stack and reached ten initial attempts, then failed uniformly at Broker request_model completion before any physical action.
+  - Exact automatic and outer cleanup passed, and the complete ordinary package gate passed 3050 tests.
+owned_runtime: NONE
+retained_runs:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
+archived_runs: []
+deletion_candidates:
+  - Completed verification scratch trees under /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch, including exp033-final-verify, exp033-final-verify-overlay, exp033-final-verify-complete-env, q, and s.
+  - Superseded EXP-031 and EXP-032 report/runtime artifacts, the completed EXP-033 candidate build tree, and completed runtime r/x; all remain retained pending explicit deletion authorization.
+external_actions:
+  - No push, merge, deletion, tuning, retry, fallback, new stack, or W16 runtime launch was performed.
+open_risk:
+  - The Broker handler's internal W10 stall mechanism remains unknown because it produced no detector failure receipt; investigation requires a separately authorized experiment.
+next_command: NONE
 ```
