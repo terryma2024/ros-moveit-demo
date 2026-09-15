@@ -7,7 +7,7 @@ success_contract: Obtain a focused RED for every true W8 ceiling, minimally admi
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+current_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -35,16 +35,18 @@ confirmed_conclusions:
   - EXP-009 confirmed and fixed the post-review dynamic plan-only READY-boundary regression with an auditable 1-failure RED, 1-pass GREEN, and 40-pass adjacent gate; source/test commit c8d44b862a90e4aa20e9945cf223caeff12ce4d5; CP-020.
   - Retained EXP-008R7-W1 stage traces localize its 240 s expiry before dynamic planning: the parent declared subscription READY before the child froze its ROS READY boundary, then published one immutable source stamp that the consumer rejected thirty times as pre-READY.
   - CP-039 completed fixed W6 and W8 correctness qualification at f349cd8d1942c31a276b3237c1676eee9f8cce39; each passed 20/20 on first attempts with exact cleanup, while the separate W8 five-second READY-to-POSE SLO remained false.
+  - Commit b5cd54bd3f28cf26c2dec01989e277f9bcba7953 extends every identified optional adaptive-worker ceiling to W16 while preserving default W8, fallback (6, 4, 2, 1), C2, timeout policy, and two-digit identities; focused, adjacent, and all 3050 ordinary package tests passed.
+  - The one authorized EXP-031 launch was invalid before a batch started because the registered evidence root was mode 0775 rather than the required exact 0700. No runtime root, Worker, Broker container, or point attempt was created; exact readback is clean and no retry was made.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
   - A hidden transport pre-accept delay is the dominant W8 `/cup_pose` cost; its 0.091 s median was below internal Broker queue wait, response delivery, model execution, and the full Broker round trip.
   - YOLO compute, RGB capture, simulation pause/resume, exact-TF localization, numeric capture, pose admission, or DDS callback delivery is the first expected-budget violation in EXP-006; no configured budget was violated.
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
-  - The W8 ceiling is enforced independently by adaptive contracts, the frozen Domain pool, Broker handler/queue validation, and the top-level cleanup active-pool identity check; all must admit W16 while W17 remains rejected.
-  - W10 can execute the EXP-028 catalog under C2 without fallback, but W16 itself remains runtime-untested unless separately authorized.
+  - W10 can execute the EXP-028 catalog under C2 without fallback, but the invalid pre-runtime EXP-031 launch provides no runtime evidence; a new live attempt requires separate authorization.
+  - W16 itself remains contract-tested but runtime-untested unless separately authorized.
 latest_checkpoint: CP-040
-next_experiment: EXP-029-W16-RED
+next_experiment: NONE
 ```
 
 ## CP-016 — Configured execution timeout restored
@@ -2687,34 +2689,41 @@ next_command: NONE
 
 ```yaml
 checkpoint_id: CP-040
-status: ACTIVE
-last_valid_experiment: EXP-028-W8
-source_commit: e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+status: COMPLETE
+last_valid_experiment: EXP-030-W16-GREEN
+source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
 working_tree_status: Task-owned ledger update plus preserved user src/so101_demo_py/test/test_parallel_batch_resources.py and MUJOCO_LOG.TXT; no other dirty path.
 owned_processes: NONE; no SO-101, MoveIt, MuJoCo, Gazebo, Broker, Docker, GPU-compute, or ROS-domain runtime is active.
 preserved_processes: Existing codex and codex-task-so101-w6-w8-success-opt tmux sessions remain untouched; codex-cua is absent.
 confirmed_conclusions:
   - CP-039 is the final trusted prior checkpoint: fixed W6 and W8 each passed 20/20 on first attempts with exact cleanup at f349cd8d1942c31a276b3237c1676eee9f8cce39.
-  - The current linked worktree is on codex/parallel-adaptive-worker-pool at e04b03700c9d341f263f84d0f75e9b8fd8a69a97 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969.
+  - The task started from codex/parallel-adaptive-worker-pool at e04b03700c9d341f263f84d0f75e9b8fd8a69a97 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969.
   - Domains 0 and 215-230 had empty ROS graphs, but the first graph probe unintentionally left one ros2-daemon in each Domain. Exact per-Domain `ros2 daemon stop` retired all 17 task-created daemons; PID readback is empty. Claims 215-222 are RELEASED with cleanup_verified true; claims 223-230 are absent. No container or GPU compute application is active.
   - Static inspection and post-GREEN rescan found independent W8 ceilings in adaptive contracts, the frozen Domain pool, Broker transport plus service queue/handler validation, top-level cleanup active-pool identity validation, the scaling launcher, and the exact fault injector target set.
+  - Commit b5cd54bd3f28cf26c2dec01989e277f9bcba7953 raises those optional ceilings to W16 and rejects W17 without changing the W8 default, fallback ladder, C2 policy, timeout policy, or identity formatting.
+  - EXP-030 passed 11 focused tests, 344 adjacent tests, the preserved resource file's independent 137-test gate, and the complete 3050-test ordinary package gate; benchmark_test was not collected.
+  - Final completion verification used fresh scratch/v32c-final with verified system Python and tempfile routing; all 3050 ordinary tests passed again in 62.10 s with four existing fork warnings and no benchmark collection.
+  - EXP-031 is terminally INVALID before runtime: the registered evidence root was mode 0775, while the adaptive CLI requires an existing evidence root to be owned by the caller and mode exactly 0700. The runner exited before creating r/g31w0 or any Worker, Broker, or point attempt.
+  - Exact post-failure readback found Domains 215-224 empty with no claims or daemons, no owned process, container, runtime socket, or GPU compute application, and both transient units inactive. No retry, fallback, tuning, W16 live run, push, merge, or deletion was performed.
 disproven_routes:
   - Changing the default worker count to W16 or changing the existing fallback sequence is outside the requested contract.
   - Reviving AdmissionAuthority, systemd Authority/watchdog, signature, or hard-cgroup admission designs is prohibited and unnecessary.
 open_risks:
-  - W10 full-stack memory, process, latency, broker, and cleanup behavior has not yet been measured.
+  - W10 full-stack memory, process, latency, Broker, correctness, and cleanup behavior remains unmeasured because EXP-031 did not pass its pre-runtime evidence-root gate.
   - W16 support will be contract-tested only; no W16 live run is authorized.
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 evidence:
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/preflight/host-state.txt SHA256 20f9626fbbf9ace49448c1a3509c7901c4bd208568e6185f2eebb2c30c849ecc
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/preflight/ros-daemon-cleanup.txt SHA256 0e7f3481cda487bb6c3b504439575a791322c9f1de73a0faba6d44e3c19d85e0
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp032-final-verification.log SHA256 13b10577ca285c1ad103bee61076883139c1baf9e71448b94984ab75e4a34b9b
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/v32c-final/so101-demo-py.xml SHA256 61ce6978708f4f9b1d8da5dc1cec57b22738f9f6724066685db1d80d49260c7d
 retained_runs:
   - All prior evidence remains under /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01.
-  - The new handoff, dispatch receipt, and preflight are retained under /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01.
+  - The new handoff, dispatch receipt, preflight, test scratch trees, detached candidate, image build, and invalid EXP-031 launch evidence are retained under /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01.
 archived_runs: []
 deletion_candidates:
-  - NONE for the new task before tests; prior candidates remain retained pending explicit authorization.
-next_command: Add focused W16/W17/default/domain/Broker/cleanup behavior tests, then run them against unchanged source using a fresh verified NVMe scratch.
+  - All completed test scratch trees, including invalid pre-pytest v32-final, PATH-corrupted v32b-final, and valid v32c-final, plus the detached candidate/build tree and invalid EXP-031 report are deletion candidates but remain retained pending explicit user authorization.
+next_command: NONE; a fresh W10 attempt requires explicit authorization and a new evidence root whose mode is verified as 0700 before launch.
 ```
 
 ## EXP-029-W16-RED — Optional ceiling contract
@@ -2842,4 +2851,67 @@ evidence:
   - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/p30e/so101-demo-py.xml SHA256 02454dc1bc4d40146c22c446bdd009702236ab7094ce0397e18f4a162a2545cd
 decision: COMMIT_IMMUTABLE_CANDIDATE_AND_RUN_EXACTLY_ONE_W10
 next_experiment: EXP-031-W10
+```
+
+## EXP-031-W10 — Explicit ten-worker qualification
+
+```yaml
+experiment_id: EXP-031-W10
+status: INVALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T11:37:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T11:44:58+08:00
+  - status: INVALID
+    at: 2026-09-15T11:45:00+08:00
+prior_experiment: EXP-030-W16-GREEN
+hypothesis: The immutable W16-capable candidate can run one genuine W10 generation over the frozen EXP-028 catalog and C2/YOLO-only policy, completing all 20 points on their first attempts with exact cleanup.
+prediction: The one authorized W10 batch reaches top COMPLETED with 20/20 PASSED, levels_used [10], zero infra attempts and fallback transitions, healthy Broker, systemd exit zero, and clean Domains 215-224 plus process/container/socket/GPU/unit readback.
+single_variable: Requested worker count increases from the qualified EXP-028 W8 to explicit W10; max infra attempts is tightened to the handoff-required one while catalog, execute policy, C2, two YOLO executors, model identities, timeouts, and cleanup rules remain fixed.
+lifecycle: ISOLATED_STACK
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified
+runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/g31w0
+source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+systemd_unit: so101-w10-g31.service
+monitor_unit: so101-w10-g31-monitor.service
+preconditions:
+  - EXP-030 passed 11 focused tests, 344 plus 137 adjacent tests, and all 3050 ordinary package tests; no benchmark was collected.
+  - A fresh detached candidate must be clean at b5cd54bd3f28cf26c2dec01989e277f9bcba7953 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969 and matching source/build hashes.
+  - No existing SO-101 stack, owned container, GPU compute application, or conflicting ROS process/claim may use Domains 215-224; runtime root must be absent.
+  - The CLI has no separate empty-fallback spelling. The unchanged default fallback ladder remains configured, but any fallback transition or level other than 10 makes this experiment terminally invalid and cannot be represented as W10 success.
+success_criteria:
+  - Exactly one W10 pool generation runs all 20 frozen points in execute mode with initial_points_per_worker 3, worker_start_timeout_s 120, max_infra_attempts_per_point 1, and exactly two YOLO executors.
+  - All points are distinct, PASSED on first attempts, and retain controller/five-joint, TF, Planning Scene attach/detach, physical/contact, initial/final image, source-fence, and visual contact-sheet evidence.
+  - No Grounded-SAM execution, fallback, infra retry, stale pose, queue/inference timeout, lease expiry, truncated frame, OOM, or Broker-health failure occurs.
+  - Automatic internal and outer cleanup complete; Domains 215-224, owned processes, container, sockets, GPU applications, runner, and monitor are released with exact readback.
+failure_criteria:
+  - Any task-point, provenance, policy, first-attempt, Broker, source/build, systemd, evidence, or cleanup gate fails.
+invalid_criteria:
+  - Any pre-runtime clone/build/path/host/Domain/monitor error occurs before the valid batch starts, or any lower fallback level runs.
+provenance:
+  source_commit: b5cd54bd3f28cf26c2dec01989e277f9bcba7953
+  submodule_commit: c16b5a5fe880b6e1857f56486dab4ae726576969
+  broker_image_id: sha256:b94b595ed560ba227e1c9dde03532a8699696ca97821f6eb3325574d77e04854
+  runner_invocation_id: 1cc9289176d240828c7df708afd3e39b
+  monitor_invocation_id: 1a8cd4e095dc4006a015bb73edaad2a1
+observed:
+  - The detached candidate was clean at the committed source, its submodule and source/build hashes matched, the rebuilt local C2 image identity was frozen, Domains 215-224 were empty, and r/g31w0 was absent.
+  - The runner started once at 11:44:58 and exited at 11:45:00 with ADAPTIVE_EVIDENCE_ROOT_INVALID. Stat readback found the existing registered evidence root owned by uid 1000 but mode 0775; the CLI requires mode exactly 0700 at mujoco_parallel_batch.py lines 697-710.
+  - The wrapper's unconditional cleanup then reported RUNTIME_ROOT because r/g31w0 had never been created. This is a consequence of the primary pre-runtime rejection, not a second runtime failure.
+  - No valid adaptive batch started: zero runtime roots, Workers, Broker containers, point attempts, fallback transitions, Grounded-SAM executions, or visual frames were created. Therefore no contact sheet exists and no W10 correctness or performance claim is made.
+  - The independent monitor captured two samples only: launch-time cgroup peak 7,094,272 bytes, host GPU 537 MiB at zero utilization, and no Broker container. The transient runner journal records exit status 1; the monitor stopped cleanly after observing the runner inactive.
+  - Exact cleanup readback at 11:47:51 found Domains 215-224 with empty graphs and absent claims, no ROS daemon, owned process, owned container, W10 runtime socket, or GPU compute application, and both units inactive.
+inferred:
+  - The first divergence was an operator preflight omission: evidence-root mode was recorded only implicitly through existence/ownership checks and was not verified or normalized to the adaptive CLI's exact 0700 contract before launch.
+  - Because the handoff requires stopping after any unsuccessful W10 gate, the mode was not changed and the launch was not retried.
+conclusion: INVALID before runtime due solely to the registered evidence root's mode 0775; implementation and test qualification remain valid, but W10 live qualification is not established.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/run.log SHA256 f84062109040209e1d9b98faaf99688950014a1927402bee5aef6c575f632a2c
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/resource-monitor.tsv SHA256 22efe998fb82e64328856ff8d3061fe32dc62ff8bcd2bf0f0bb3b826fcc937cf
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/first-divergence.txt SHA256 2a7d32cfab00cff8439cc8bfc4cd69508c867bf3cb58f5313a293214982e7057
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/cleanup-readback.txt SHA256 5f0698ae15b966058700e74c228b886aa6271e45b9bb8dbe95103139583eb9eb
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp031-w10-qualified/core-sha256.txt
+decision: STOP_NO_RETRY
+next_experiment: NONE
 ```
