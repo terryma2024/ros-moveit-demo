@@ -17,10 +17,28 @@ from typing import Mapping
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _MAX_RENDER_BYTES = 10 * 1024 * 1024
+_ALLOWED_MEDIA_TYPES = frozenset(
+    {
+        "application/json",
+        "application/octet-stream",
+        "application/x-npy",
+        "image/jpeg",
+        "image/png",
+        "model/ply",
+        "text/plain",
+        "video/mp4",
+    }
+)
 
 
 class ArtifactAccessError(RuntimeError):
     pass
+
+
+def validate_artifact_media_type(media_type: str) -> str:
+    if not isinstance(media_type, str) or media_type not in _ALLOWED_MEDIA_TYPES:
+        raise ArtifactAccessError("ARTIFACT_MEDIA_TYPE")
+    return media_type
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +170,7 @@ class ManifestArtifactStore:
         source_artifact_id: str | None = None,
         metadata: Mapping[str, object] | None = None,
     ) -> ArtifactEntry:
+        media_type = validate_artifact_media_type(media_type)
         capture_id = self._id("capture_id", capture_id)
         run_id = self._id("run_id", run_id)
         resolved = self._regular(Path(path))
