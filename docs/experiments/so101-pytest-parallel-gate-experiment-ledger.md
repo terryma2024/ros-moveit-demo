@@ -1,11 +1,11 @@
 ---
 task_id: so101-pytest-parallel-gate
-goal: Reduce wall-clock time of the complete ordinary src/so101_demo_py/test pytest gate without changing coverage, semantics, failure criteria, benchmark isolation, or evidence quality.
-success_contract: A repository-maintained deterministic runner passes focused RED/GREEN tests, proves exact node-ID coverage and benchmark exclusion, and produces uncontaminated W1/W2/W4 measurements on one committed candidate; the fastest valid mode is selected.
+goal: Minimize wall-clock time of the complete ordinary src/so101_demo_py/test pytest gate without changing its collected cases or pass/fail semantics.
+success_contract: All 3056 ordinary pytest nodes execute exactly once and pass on the committed pytest-only candidate; compare pytest process concurrency 4, 6, 8, 10, and 12, then select the fastest valid full-suite result at the predeclared 10-percent stopping boundary.
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d
+current_commit: dab91e3d615d4be61a2414695877910d2c5808ab
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
@@ -19,12 +19,18 @@ confirmed_conclusions:
   - Candidate 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d passes 28 focused contracts and has a fresh dependency-complete merged overlay with exact package/import provenance (EXP-022-CANDIDATE-FOCUSED-AND-BUILD).
   - EXP-023 passed exact 3055-node W1 correctness and cleanup, but its timing sample is INVALID because indented GNU-time labels produced null per-process CPU/RSS metrics (EXP-023 result update).
   - Indented GNU-time resource labels parse exactly after a one-regex correction, with 29 focused contracts GREEN (EXP-024-RESOURCE-METRICS-RED-GREEN).
+  - Candidate dab91e3d615d4be61a2414695877910d2c5808ab passes 29 focused contracts and has exact refreshed overlay provenance (EXP-025-CANDIDATE-REFRESH).
+  - Pytest concurrency 4 passes all 3056 ordinary nodes in 189.788 seconds, with exact coverage and complete cleanup (EXP-027-PYTEST-P4).
+  - Pytest concurrency 6 with fresh timing input passes all 3056 nodes in 99.225 seconds, but a remaining 82.971-second straggler warrants concurrency 8 (EXP-028-PYTEST-P6).
+  - Pytest concurrency 8 passes all 3056 nodes in 59.291 seconds; its 43.099-second straggler and fresh timing estimate warrant one bounded concurrency-10 run (EXP-029-PYTEST-P8).
+  - Pytest concurrency 10 passes all 3056 nodes in 27.072 seconds; one concurrency-12 run will test the predeclared 10-percent stopping boundary (EXP-030-PYTEST-P10).
+  - Pytest concurrency 12 passes all 3056 nodes in 27.952 seconds but is 3.249 percent slower than concurrency 10; select concurrency 10 and stop expansion (EXP-031-PYTEST-P12, CP-007).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
-open_hypotheses:
-  - The resource-corrected committed candidate will pass fresh W1/W2/W4 with identical 3056-node exact coverage and complete resource summaries.
-latest_checkpoint: CP-005
-next_experiment: EXP-025-CANDIDATE-REFRESH
+  - SO-101 application Worker W1-W10 correctness validation is explicitly outside the resumed pytest-only optimization scope.
+open_hypotheses: []
+latest_checkpoint: CP-007
+next_experiment: WAIT_FOR_USER
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -33,6 +39,7 @@ next_experiment: EXP-025-CANDIDATE-REFRESH
 
 - Registered durable evidence root: `/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01`
 - Dispatch receipt: `/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/handoff/dispatch-b2bba2a8-3e03-4d03-abbb-af88915ac4d1.receipt`
+- Corrected-scope dispatch receipt: `/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/handoff/dispatch-3ACD66BD-3894-4671-AD70-AA3FE36DDFC4.receipt`
 - Initial host snapshot: `/data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/initial-state.txt`
 - Initial host snapshot SHA256: `2be39531b31968d088361326d942ea4cc7b5dab9e47654199116c60b8ef871db`
 - Historical read-only timing input: `/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml`
@@ -1905,4 +1912,589 @@ evidence:
   - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp025
 decision: PENDING
 next_experiment: EXP-026-W1
+```
+
+### EXP-025 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T21:13:59+08:00
+  - status: VALID
+    at: 2026-09-15T21:16:00+08:00
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+commands:
+  - command: git diff --check and scoped commit `fix: record pytest gate resource metrics`
+    exit_code: 0
+  - command: fresh-build-base incremental merged-install refresh of so101_demo_py
+    exit_code: 0
+  - command: exact /usr/bin/python3 focused pytest plus Ruff check and format-check under scratch/ae
+    exit_code: 0
+  - command: exact Python/import/package-prefix/commit provenance readback
+    exit_code: 0
+observed:
+  - OBSERVED: Commit dab91e3d615d4be61a2414695877910d2c5808ab contains only the runner parser, its focused regression test, and this ledger.
+  - OBSERVED: Fresh-build-base incremental refresh completed in 1.37 seconds and retained all five required package prefixes in install-exp022.
+  - OBSERVED: Fresh scratch/ae resolved tempfile inside its NVMe tmp directory; all 29 focused tests passed in 0.05 seconds and both Ruff gates passed.
+  - OBSERVED: `/usr/bin/python3`, the source shim, all required package prefixes, and candidate commit passed exact provenance readback.
+inferred:
+  - NONE
+conclusion: Candidate dab91e3d6 is committed, focused-verified, and installed with exact provenance for the formal W1/W2/W4 comparison.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp025.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp025.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp025-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp025
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp025-provenance.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ae
+decision: KEEP
+next_experiment: EXP-026-W1
+```
+
+## EXP-026-W1 — Resource-complete serial baseline
+
+```yaml
+experiment_id: EXP-026-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T21:16:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T21:17:30+08:00
+prior_experiment: EXP-025-CANDIDATE-REFRESH
+hypothesis: Candidate dab91e3d6 passes the complete ordinary gate at W1 with exact once-only coverage and complete CPU/RSS metrics.
+prediction: The five-module serial lane and one parallel shard pass; all collected node IDs execute exactly once; nested tests are present; benchmark paths are absent; every process and aggregate resource field is non-null.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate, exact /usr/bin/python3, install-exp022, source shim, timing input, serial lane, and environment are frozen for W1/W2/W4.
+  - Fresh one-character run ID g is previously nonexistent and validates the 106-byte reserved AF_UNIX path budget.
+  - Only this ledger is dirty and explicitly allowlisted.
+  - Fresh coordination and host admission must be conflict-free immediately before launch.
+success_criteria:
+  - PASS with exact expected/actual node equality, zero missing/duplicate/unexpected IDs, benchmark exclusion, all pytest/JUnit/provenance/cleanup gates, and complete resource evidence.
+failure_criteria:
+  - Any test, process, coverage, provenance, JUnit, timeout, cleanup, or resource gate fails.
+invalid_criteria:
+  - Admission conflict, source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  timing_input_sha256: 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp026-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/g
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp026-w1-outer-time.txt
+decision: PENDING
+next_experiment: EXP-027-W2
+```
+
+### EXP-026 interruption update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T21:26:30+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id g --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 130
+observed:
+  - OBSERVED: User requested an immediate pause after 9 minutes 4.61 seconds; the runner received SIGINT and therefore produced no formal summary.
+  - OBSERVED: Collection completed with 3056 ordinary nodes and the serial lane passed all 306 tests before interruption; the parallel shard had reached 54 percent.
+  - OBSERVED: The outer runner stopped first, leaving its owned pytest process group alive; explicit TERM/KILL cleanup removed that process group.
+  - OBSERVED: Cleanup also stopped ROS 2 daemon PID 2421996 and one unrelated stale orphan ROS-setup/colcon process group 750253 as explicitly requested by the user.
+  - OBSERVED: Final process, no-daemon ROS graph, Docker, GPU-client, and user-unit readback found no ROS, simulator, pytest, SO-101, or matching container/service residue.
+inferred:
+  - NONE
+conclusion: EXP-026 is INVALID solely because of the requested external interruption; its partial timing is excluded and W1 must use a new run ID after user resume.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp026-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/g
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp026-w1-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp026-w1-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/cleanup-user-pause-20260915T2130.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/cleanup-user-pause-final.txt
+decision: RETAIN_INVALID_INTERRUPTED_EVIDENCE
+next_experiment: PAUSED_BEFORE_EXP-026-W1-RERUN
+```
+
+```yaml
+checkpoint_id: CP-006
+last_valid_experiment: EXP-025-CANDIDATE-REFRESH
+current_hypothesis: Candidate dab91e3d6 remains ready for fresh W1/W2/W4 comparison; interrupted scratch/g cannot be reused.
+working_tree_status: only this ledger is dirty; implementation candidate dab91e3d6 is committed
+owned_processes: NONE
+preserved_processes: Codex/tmux control session only; all ROS and pytest processes were removed at user request
+confirmed_conclusions:
+  - Candidate dab91e3d6 passes 29 focused tests, Ruff, incremental build, and exact overlay provenance.
+  - Interrupted EXP-026 collected 3056 ordinary nodes and passed the 306-test serial lane before user-requested termination.
+  - Final cleanup readback is empty for ROS, simulator, pytest, containers, GPU clients, and matching user units.
+open_risks:
+  - Formal W1/W2/W4 measurements and fastest-mode selection remain incomplete.
+  - A resumed W1 must use a new previously nonexistent one-character scratch/run ID.
+retained_runs:
+  - Entire registered evidence root, including interrupted scratch/g and all prior valid/invalid experiments.
+archived_runs:
+  - NONE
+deletion_candidates:
+  - All scratch trees and build/install/log trees under the registered evidence root after final readback; no deletion is authorized or performed.
+next_command: WAIT_FOR_USER_RESUME
+```
+
+## Resumed-scope correction
+
+```yaml
+correction_at: 2026-09-15T22:20:33+08:00
+user_scope:
+  - Optimize only complete ordinary pytest wall-clock time.
+  - Pytest-only changes do not require SO-101 application Worker W1-W10 correctness validation.
+  - Any change outside pytest runner/test files requires prior user approval.
+clarification:
+  - P4 and P6 below mean four and six concurrent pytest subprocesses; they do not select or inject an SO-101 application Worker mode into test cases.
+allowed_executable_source_paths:
+  - tools/so101_pytest_gate.py
+  - tools/so101_pytest_manifest.py
+  - src/so101_demo_py/test/test_pytest_full_gate_runner.py
+audit_path:
+  - docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md
+acceptance:
+  - Full ordinary pytest collection passes exactly once; lowest measured total_elapsed_s wins.
+excluded:
+  - benchmark_test
+  - SO-101 runtime, Gazebo, MoveIt, GUI, and application Worker W1-W10 validation
+```
+
+## EXP-027-PYTEST-P4 — Full ordinary pytest at concurrency 4
+
+```yaml
+experiment_id: EXP-027-PYTEST-P4
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T22:20:33+08:00
+  - status: RUNNING
+    at: 2026-09-15T22:21:30+08:00
+prior_experiment: EXP-026-W1
+hypothesis: Four concurrent pytest subprocesses reduce the full-suite wall time substantially while preserving the exact 3056-node ordinary collection.
+prediction: The five sensitive modules pass in the serial lane, all remaining modules pass across four balanced shards, and total wall time is substantially below the retained 869.141-second serial-runner observation.
+single_variable: pytest subprocess concurrency=4
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit dab91e3d615d4be61a2414695877910d2c5808ab, exact /usr/bin/python3, install-exp022, source shim, timing input, and serial-module classification are frozen.
+  - Fresh one-character run ID h is previously nonexistent and only this ledger is dirty/allowlisted.
+  - Fresh host admission immediately before launch finds no competing pytest, ROS, simulator, container, GPU, or matching user-unit workload.
+success_criteria:
+  - PASS; 3056 expected and actual nodes; zero missing, duplicate, or unexpected nodes; every pytest process exits 0; total_elapsed_s is recorded.
+failure_criteria:
+  - Any test/process/collection/JUnit/provenance/timeout/cleanup gate fails.
+invalid_criteria:
+  - Admission conflict, source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp027-p4.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/h
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-outer-time.txt
+decision: PENDING
+next_experiment: EXP-028-PYTEST-P6
+```
+
+### EXP-027 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T22:25:00+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 4 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id h --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS; expected=3056, actual=3056, collection SHA256 `91a4c4b43fd3a74425b0433282ff739e08faed9dc2c08201431304e749d1a967`, and all children reaped.
+  - OBSERVED: Setup=6.553 seconds, serial lane=10.640 seconds, parallel critical path=172.465 seconds, runner total=189.788 seconds, and outer wall=189.86 seconds.
+  - OBSERVED: Four shard wall times were 6.535, 10.190, 32.338, and 172.465 seconds, demonstrating severe imbalance from the stale historical timing input.
+  - OBSERVED: Aggregate CPU time=237.620 seconds, CPU utilization=125.203 percent, peak per-process RSS=1396596 KiB, and warnings=4.
+  - OBSERVED: Compared with the retained 869.141-second successful serial-runner observation from EXP-023, concurrency 4 reduced wall time by 78.16 percent.
+  - OBSERVED: The five execution JUnits were merged into a valid 3056-testcase fresh timing artifact with SHA256 `5cb13f3bf15130b85f6df440b76383c4213af081d52c545e45308db8f96a1368`.
+inferred:
+  - INFERRED: Rebalancing from fresh candidate timings should materially reduce the 172.465-second straggler at concurrency 6.
+conclusion: Pytest concurrency 4 is a valid full-suite result and current best at 189.788 seconds; stale timing data, not available CPU count, is now the first performance boundary.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp027-p4.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/h
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-fresh-timings.xml
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-fresh-timings-SHA256SUMS
+decision: KEEP
+next_experiment: EXP-028-PYTEST-P6
+```
+
+## EXP-028-PYTEST-P6 — Freshly balanced full ordinary pytest at concurrency 6
+
+```yaml
+experiment_id: EXP-028-PYTEST-P6
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T22:26:29+08:00
+  - status: RUNNING
+    at: 2026-09-15T22:28:20+08:00
+prior_experiment: EXP-027-PYTEST-P4
+hypothesis: Six pytest subprocesses assigned from the fresh candidate JUnit reduce full-suite wall time below the valid 189.788-second concurrency-4 result.
+prediction: Exact 3056-node PASS; the fresh LPT estimate places the largest module alone and reduces the parallel critical path below 172.465 seconds.
+single_variable: pytest subprocess concurrency=6 and timing input refreshed from the immediately prior candidate run
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit, exact Python, overlay, source shim, serial classification, and host remain unchanged from EXP-027.
+  - Fresh timing input contains exactly 3056 testcase elements and has SHA256 `5cb13f3bf15130b85f6df440b76383c4213af081d52c545e45308db8f96a1368`.
+  - Fresh one-character run ID i is previously nonexistent; only this ledger is dirty/allowlisted.
+  - Fresh host admission immediately before launch is conflict-free.
+success_criteria:
+  - PASS; exact 3056-node execution; all process exits 0; total_elapsed_s is lower than 189.7883924790658.
+failure_criteria:
+  - Any test/process/coverage/JUnit/provenance/timeout/cleanup gate fails, or total time is not lower than concurrency 4.
+invalid_criteria:
+  - Admission conflict, source/environment drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp028-p6.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/i
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-outer-time.txt
+decision: PENDING
+next_experiment: EXP-029-SELECTION
+```
+
+### EXP-028 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T22:30:00+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 6 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id i --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp027-p4-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS with the same exact 3056-node collection SHA256 as EXP-027 and complete child cleanup.
+  - OBSERVED: Setup=5.278 seconds, serial lane=10.849 seconds, parallel critical path=82.971 seconds, runner total=99.225 seconds, and outer wall=99.30 seconds.
+  - OBSERVED: Concurrency 6 improved total time by 47.72 percent from concurrency 4 and by 88.58 percent from the retained serial-runner observation.
+  - OBSERVED: Six shard times were 4.529, 12.148, 82.971, 21.976, 9.739, and 6.637 seconds; one shard still dominates.
+  - OBSERVED: Aggregate CPU time=150.080 seconds, CPU utilization=151.253 percent, peak per-process RSS=1361620 KiB, and warnings=4.
+  - OBSERVED: Fresh P6 JUnits merge to exactly 3056 testcase elements with SHA256 `a64dede10286fb95f478da1738ea7d6b88b7eac65d5952ee1dc65adacd982cbd`.
+inferred:
+  - INFERRED: The prior prediction that concurrency above 6 would have little value is disproven by the remaining 82.971-second straggler and the refreshed P8 LPT estimate.
+conclusion: Pytest concurrency 6 is valid and current best at 99.225 seconds; one further full concurrency-8 experiment is warranted by new timing evidence.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp028-p6.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/i
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
+decision: KEEP
+next_experiment: EXP-029-PYTEST-P8
+```
+
+## EXP-029-PYTEST-P8 — Freshly balanced full ordinary pytest at concurrency 8
+
+```yaml
+experiment_id: EXP-029-PYTEST-P8
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T22:30:37+08:00
+  - status: RUNNING
+    at: 2026-09-15T22:31:45+08:00
+prior_experiment: EXP-028-PYTEST-P6
+hypothesis: Eight pytest subprocesses assigned from P6's fresh candidate JUnit reduce full-suite wall time below 99.225 seconds.
+prediction: Exact 3056-node PASS and a parallel critical path below 82.971 seconds; refreshed LPT case-time estimate falls from 20.256 seconds at P6 to 15.198 seconds at P8.
+single_variable: pytest subprocess concurrency=8 and timing input refreshed from EXP-028
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit, exact Python, overlay, source shim, serial classification, and host remain unchanged.
+  - Fresh timing input contains exactly 3056 testcase elements and has SHA256 `a64dede10286fb95f478da1738ea7d6b88b7eac65d5952ee1dc65adacd982cbd`.
+  - Fresh one-character run ID j is previously nonexistent; only this ledger is dirty/allowlisted.
+  - Fresh host admission immediately before launch is conflict-free.
+success_criteria:
+  - PASS; exact 3056-node execution; all process exits 0; total_elapsed_s is lower than 99.22460507391952.
+failure_criteria:
+  - Any test/process/coverage/JUnit/provenance/timeout/cleanup gate fails, or total time is not lower than concurrency 6.
+invalid_criteria:
+  - Admission conflict, source/environment drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp029-p8.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/j
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-outer-time.txt
+decision: PENDING
+next_experiment: EXP-030-SELECTION
+```
+
+### EXP-029 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T22:33:00+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 8 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id j --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS with exact 3056-node collection SHA256 `91a4c4b43fd3a74425b0433282ff739e08faed9dc2c08201431304e749d1a967` and complete cleanup.
+  - OBSERVED: Setup=5.233 seconds, serial lane=10.842 seconds, parallel critical path=43.099 seconds, runner total=59.291 seconds, and outer wall=59.36 seconds.
+  - OBSERVED: Concurrency 8 improved total time by 40.25 percent from concurrency 6 and by 93.18 percent from the retained serial-runner observation.
+  - OBSERVED: Aggregate CPU time=114.500 seconds, CPU utilization=193.116 percent, peak per-process RSS=1835624 KiB, and warnings=4.
+  - OBSERVED: Fresh P8 JUnits merge to exactly 3056 testcase elements with SHA256 `aab82183eca12cdf974c789bd7ccc50377040eab8b009ab8cd00a58930253fae`.
+inferred:
+  - INFERRED: P10 remains warranted because P8 still has a 43.099-second straggler and fresh LPT predicts a lower 9.856-second maximum case-time load versus 11.197 at P8.
+conclusion: Pytest concurrency 8 is valid and current best at 59.291 seconds; the stopping rule permits one concurrency-10 experiment.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp029-p8.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/j
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-fresh-timings.xml
+decision: KEEP
+next_experiment: EXP-030-PYTEST-P10
+```
+
+## EXP-030-PYTEST-P10 — Bounded full ordinary pytest at concurrency 10
+
+```yaml
+experiment_id: EXP-030-PYTEST-P10
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T22:33:28+08:00
+  - status: RUNNING
+    at: 2026-09-15T22:34:45+08:00
+prior_experiment: EXP-029-PYTEST-P8
+hypothesis: Ten pytest subprocesses assigned from P8's fresh candidate JUnit reduce full-suite wall time by at least 10 percent from 59.291 seconds.
+prediction: Exact 3056-node PASS and total_elapsed_s below 53.362 seconds; otherwise concurrency 8 remains selected and concurrency expansion stops.
+single_variable: pytest subprocess concurrency=10 and timing input refreshed from EXP-029
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit, exact Python, overlay, source shim, serial classification, and host remain unchanged.
+  - Fresh timing input contains exactly 3056 testcase elements and has SHA256 `aab82183eca12cdf974c789bd7ccc50377040eab8b009ab8cd00a58930253fae`.
+  - Fresh one-character run ID k is previously nonexistent; only this ledger is dirty/allowlisted.
+  - Fresh host admission immediately before launch is conflict-free.
+success_criteria:
+  - PASS; exact 3056-node execution; all process exits 0; total_elapsed_s is at least 10 percent lower than 59.290769696002826.
+failure_criteria:
+  - Any pytest gate fails, or improvement is below 10 percent.
+invalid_criteria:
+  - Admission conflict, source/environment drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp030-p10.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/k
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-outer-time.txt
+decision: PENDING
+next_experiment: EXP-031-SELECTION
+```
+
+### EXP-030 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T22:35:30+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 10 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id k --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS with exact 3056-node collection SHA256 `91a4c4b43fd3a74425b0433282ff739e08faed9dc2c08201431304e749d1a967` and complete cleanup.
+  - OBSERVED: Setup=5.291 seconds, serial lane=10.754 seconds, parallel critical path=10.840 seconds, runner total=27.072 seconds, and outer wall=27.13 seconds.
+  - OBSERVED: Concurrency 10 improved total time by 54.34 percent from concurrency 8 and by 96.89 percent from the retained serial-runner observation.
+  - OBSERVED: Aggregate CPU time=88.110 seconds, CPU utilization=325.462 percent, peak per-process RSS=1423700 KiB, and warnings=4.
+  - OBSERVED: Fresh P10 JUnits merge to exactly 3056 testcase elements with SHA256 `97643da6456e933769201b18141ea55a031557b4dbfdc05f19058d93ba410df6`.
+inferred:
+  - INFERRED: Parallel execution is now balanced near 10 seconds; fixed collection and serial work dominate, so P12 is expected to produce less than the 10-percent continuation threshold.
+conclusion: Pytest concurrency 10 is valid and current best at 27.072 seconds; one P12 stopping check remains.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp030-p10.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/k
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-outer-time.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-fresh-timings.xml
+decision: KEEP
+next_experiment: EXP-031-PYTEST-P12
+```
+
+## EXP-031-PYTEST-P12 — Final stopping-boundary full pytest check
+
+```yaml
+experiment_id: EXP-031-PYTEST-P12
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T22:35:49+08:00
+  - status: RUNNING
+    at: 2026-09-15T22:36:37+08:00
+prior_experiment: EXP-030-PYTEST-P10
+hypothesis: Twelve pytest subprocesses cannot improve total full-suite time by at least 10 percent because collection plus the ordered serial lane already consume about 16 seconds.
+prediction: Exact 3056-node PASS, but total_elapsed_s is at least 24.365 seconds; select concurrency 10 if so.
+single_variable: pytest subprocess concurrency=12 and timing input refreshed from EXP-030
+lifecycle: REUSE_STACK
+preconditions:
+  - Candidate commit, exact Python, overlay, source shim, serial classification, and host remain unchanged.
+  - Fresh timing input contains exactly 3056 testcase elements and has SHA256 `97643da6456e933769201b18141ea55a031557b4dbfdc05f19058d93ba410df6`.
+  - Fresh one-character run ID l is previously nonexistent; only this ledger is dirty/allowlisted.
+  - Fresh host admission immediately before launch is conflict-free.
+success_criteria:
+  - PASS with exact 3056-node execution and a measured comparison against the 24.365-second continuation threshold.
+failure_criteria:
+  - Any pytest gate fails.
+invalid_criteria:
+  - Admission conflict, source/environment drift, scratch collision, or external interruption.
+provenance:
+  source_commit: dab91e3d615d4be61a2414695877910d2c5808ab
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Fresh admission recorded at 2026-09-15T22:36:37+08:00 in admission-exp031-p12.txt.
+  - Run tools/so101_pytest_gate.py with --workers 12, fresh --run-id l, and the EXP-030 merged timing input under /usr/bin/time -v.
+observed:
+  - Fresh admission passed: exact candidate commit and timing-input digest, only the ledger dirty/allowlisted, no conflicting processes, ROS daemon, containers, GPU clients, user units, or pre-existing scratch/l.
+inferred:
+  - The run is admissible under the resumed pytest-only scope.
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp031-p12.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/l
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp031-p12-outer-time.txt
+decision: RUN
+next_experiment: EXP-032-SELECTION
+```
+
+### EXP-031 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T22:39:00+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 12 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id l --timings /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp030-p10-fresh-timings.xml --python /usr/bin/python3 --expected-source-commit dab91e3d615d4be61a2414695877910d2c5808ab --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: Runner PASS with exact 3056-node collection SHA256 `91a4c4b43fd3a74425b0433282ff739e08faed9dc2c08201431304e749d1a967` and complete child cleanup.
+  - OBSERVED: Setup=5.199 seconds, serial lane=10.696 seconds, parallel critical path=11.902 seconds, runner total=27.952 seconds, and outer wall=28.03 seconds.
+  - OBSERVED: Concurrency 12 is 3.249 percent slower than concurrency 10 and does not satisfy the 24.365-second continuation threshold.
+  - OBSERVED: Aggregate CPU time=95.280 seconds, CPU utilization=340.872 percent, peak per-process RSS=1299200 KiB, and warnings=4.
+inferred:
+  - INFERRED: Fixed collection and serial-lane cost now dominates; adding pytest subprocesses beyond 10 increased scheduling overhead without reducing the parallel critical path.
+conclusion: Pytest concurrency 12 is valid but slower than concurrency 10; the stopping condition is met and concurrency 10 is selected.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp031-p12.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/l
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp031-p12-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp031-p12-outer-time.txt
+decision: STOP_AND_SELECT_P10
+next_experiment: CP-007
+```
+
+## CP-007 — Pytest concurrency selected; merge-ready verification pending
+
+```yaml
+checkpoint_id: CP-007
+status: COMPLETE
+timestamp: 2026-09-15T22:42:15+08:00
+selected_configuration:
+  pytest_subprocess_concurrency: 10
+  validated_timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp029-p8-fresh-timings.xml
+  total_elapsed_s: 27.072288793046027
+selection_evidence:
+  - Concurrency 4, 6, 8, 10, and 12 each passed all 3056 ordinary pytest nodes exactly once with the same collection hash and complete cleanup.
+  - Concurrency 10 was the fastest valid observation; concurrency 12 took 27.951860055094585 seconds and was 3.249 percent slower.
+  - The canonical comparison artifact SHA256 is `bbf05d479a3f58764b3988350c3ee73e32d0eaf842bb2e08a61333b01dd77db8`.
+  - An initial derived comparison had incorrect run_id labels only; it is retained as `pytest-concurrency-comparison.invalid-run-labels.json` and excluded from conclusions.
+scope_readback:
+  - Executable changes are limited to tools/so101_pytest_gate.py, tools/so101_pytest_manifest.py, and src/so101_demo_py/test/test_pytest_full_gate_runner.py.
+  - This ledger is the only non-pytest file changed and is required audit documentation.
+  - No SO-101 application Worker W1-W10, Gazebo, MoveIt, GUI, or benchmark validation was run after the resumed scope correction.
+cleanup:
+  - Runner-owned children were fully reaped for every selected-scope full-suite run.
+  - Final process readback recorded no pytest-gate, pytest, ROS-daemon, simulator, or MuJoCo process.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/pytest-concurrency-comparison.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/pytest-concurrency-comparison.invalid-run-labels.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/final-process-cleanup.txt
+retained_runs:
+  - Entire registered evidence root, including interrupted scratch/g and all valid/invalid experiment artifacts.
+archived_runs:
+  - NONE
+deletion_candidates:
+  - All scratch trees and build/install/log trees under the registered evidence root after final readback; no deletion is authorized or performed.
+next_experiment: WAIT_FOR_USER
 ```
