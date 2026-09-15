@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 
 def _proc_process(root: Path, pid: int) -> Path:
     process = root / str(pid)
@@ -36,3 +38,64 @@ def test_transient_proc_metadata_error_is_retried(tmp_path, monkeypatch):
 
     assert SystemResourceProbe(proc_root=proc_root).ros_domain_in_use(181) is False
     assert reads == 3
+
+
+def test_cleanup_domain_probe_rescans_a_transient_proc_race(monkeypatch):
+    from so101_demo.cli import parallel_batch_cleanup
+    from so101_demo.parallel_batch.resources import ResourceAllocationError
+
+    class Probe:
+        calls = 0
+
+        def ros_domain_in_use(self, domain_id):
+            assert domain_id == 181
+            self.calls += 1
+            if self.calls < 3:
+                raise ResourceAllocationError(
+                    "PROC_METADATA_UNVERIFIABLE: 4249"
+                )
+            return False
+
+    probe = Probe()
+    sleeps = []
+    monkeypatch.setattr(parallel_batch_cleanup.time, "sleep", sleeps.append)
+
+    assert parallel_batch_cleanup._ros_domain_in_use_after_quiescence(
+        probe, 181
+    ) is False
+    assert probe.calls == 3
+    assert sleeps == [0.05, 0.05]
+
+
+def test_cleanup_domain_probe_keeps_persistent_proc_races_fail_closed(
+    monkeypatch,
+):
+    from so101_demo.cli import parallel_batch_cleanup
+    from so101_demo.parallel_batch.resources import ResourceAllocationError
+
+    class Probe:
+        calls = 0
+
+        def ros_domain_in_use(self, domain_id):
+            assert domain_id == 181
+            self.calls += 1
+            raise ResourceAllocationError(
+                "PROC_METADATA_UNVERIFIABLE: 4249"
+            )
+
+    probe = Probe()
+    sleeps = []
+    monkeypatch.setattr(
+        parallel_batch_cleanup, "_PROC_SCAN_QUIESCENCE_ATTEMPTS", 3
+    )
+    monkeypatch.setattr(parallel_batch_cleanup.time, "sleep", sleeps.append)
+
+    with pytest.raises(
+        ResourceAllocationError,
+        match=r"^PROC_METADATA_UNVERIFIABLE: 4249$",
+    ):
+        parallel_batch_cleanup._ros_domain_in_use_after_quiescence(
+            probe, 181
+        )
+    assert probe.calls == 3
+    assert sleeps == [0.05, 0.05]

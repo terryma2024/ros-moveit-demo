@@ -12,15 +12,46 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 from so101_demo.parallel_batch.adaptive_pool import adaptive_socket_paths
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.parallel_batch.resources import SystemResourceProbe
+from so101_demo.parallel_batch.resources import (
+    ResourceAllocationError,
+    SystemResourceProbe,
+)
 from so101_demo.runtime.parallel_processes import ProcessSupervisor
 
 
 class CleanupError(RuntimeError):
     """Cleanup could not prove that only the requested batch was retired."""
+
+
+_PROC_SCAN_QUIESCENCE_ATTEMPTS = 101
+_PROC_SCAN_QUIESCENCE_INTERVAL_S = 0.05
+_TRANSIENT_PROC_SCAN_BOUNDARIES = (
+    "PROC_IDENTITY_UNVERIFIABLE:",
+    "PROC_METADATA_UNVERIFIABLE:",
+    "PROC_ENV_UNVERIFIABLE:",
+    "PROC_CLASSIFICATION_UNVERIFIABLE:",
+    "PROC_IDENTITY_CHANGED:",
+)
+
+
+def _ros_domain_in_use_after_quiescence(
+    probe: SystemResourceProbe, domain_id: int
+) -> bool:
+    """Rescan bounded transient process-table races before releasing a claim."""
+
+    for attempt in range(_PROC_SCAN_QUIESCENCE_ATTEMPTS):
+        try:
+            return probe.ros_domain_in_use(domain_id)
+        except ResourceAllocationError as error:
+            transient = str(error).startswith(_TRANSIENT_PROC_SCAN_BOUNDARIES)
+            if not transient or attempt + 1 >= _PROC_SCAN_QUIESCENCE_ATTEMPTS:
+                raise
+            time.sleep(_PROC_SCAN_QUIESCENCE_INTERVAL_S)
+    raise AssertionError("unreachable process scan retry loop")
 
 
 def _read_json(path: Path, label: str):
@@ -227,7 +258,9 @@ def _release_claims(pool_root: Path, pool_batch_id: str) -> tuple[int, ...]:
     released = []
     for worker in workers:
         domain_id = worker.get("ros_domain_id")
-        if type(domain_id) is not int or probe.ros_domain_in_use(domain_id):
+        if type(domain_id) is not int or _ros_domain_in_use_after_quiescence(
+            probe, domain_id
+        ):
             raise CleanupError("ROS_DOMAIN_ACTIVE")
     for claim in claims:
         if type(claim) is not dict:
