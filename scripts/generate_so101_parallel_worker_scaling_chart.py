@@ -97,6 +97,16 @@ def _escape(value: object) -> str:
     return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _worker_x(
+    worker: int,
+    box: tuple[float, float, float, float],
+    worker_domain: tuple[int, int],
+) -> float:
+    left, _, width, _ = box
+    worker_min, worker_max = worker_domain
+    return left + (worker - worker_min) / (worker_max - worker_min) * width
+
+
 def _points(
     rows: list[dict[str, object]],
     field: str,
@@ -104,11 +114,10 @@ def _points(
     maximum: float,
     worker_domain: tuple[int, int],
 ) -> list[tuple[float, float]]:
-    left, top, width, height = box
-    worker_min, worker_max = worker_domain
+    _, top, _, height = box
     result = []
     for row in rows:
-        x = left + (row["workers"] - worker_min) / (worker_max - worker_min) * width
+        x = _worker_x(row["workers"], box, worker_domain)
         y = top + height - float(row[field]) / maximum * height
         result.append((x, y))
     return result
@@ -121,7 +130,9 @@ def _polyline(points: list[tuple[float, float]], css_class: str) -> str:
 
 def render_svg(document: dict[str, object]) -> str:
     valid = [row for row in document["levels"] if row["valid_performance_sample"]]
+    failed = [row for row in document["levels"] if not row["valid_performance_sample"]]
     workers = [row["workers"] for row in document["levels"]]
+    worker_domain = (workers[0], workers[-1])
     boxes = ((92.0, 138.0, 1018.0, 170.0), (92.0, 382.0, 1018.0, 170.0), (92.0, 626.0, 1018.0, 170.0))
     fields = ("execution_s", "speedup_vs_w1", "peak_memory_b")
     maxima = (1700.0, 10.0, 11 * 1024**3)
@@ -152,7 +163,6 @@ def render_svg(document: dict[str, object]) -> str:
                 label = f"{value:.0f}"
             lines.append(f'<text class="small" text-anchor="end" x="{left - 10:.1f}" y="{y + 4:.1f}">{label}</text>')
         lines.append(f'<line class="axis" x1="{left:.1f}" y1="{top + height:.1f}" x2="{left + width:.1f}" y2="{top + height:.1f}"/>')
-        worker_domain = (workers[0], workers[-1])
         valid_points = _points(valid, field, box, maximum, worker_domain)
         lines.append(_polyline(valid_points, "valid"))
         if field == "speedup_vs_w1":
@@ -164,31 +174,53 @@ def render_svg(document: dict[str, object]) -> str:
                 )
             )
         for row, (x, y) in zip(valid, valid_points):
-            lines.append(f'<circle class="dot" cx="{x:.1f}" cy="{y:.1f}" r="5"/>')
+            lines.append(
+                f'<circle class="dot" data-role="valid-point" data-worker="{row["workers"]}" '
+                f'cx="{x:.1f}" cy="{y:.1f}" r="5"/>'
+            )
             if field == "execution_s":
                 label = f'{row[field]:.1f} s'
             elif field == "speedup_vs_w1":
                 label = f'{row[field]:.2f}× / {row["throughput_points_per_min"]:.2f} 点/分'
             else:
                 label = f'{row[field] / 1024**3:.2f} GiB'
-            lines.append(f'<text class="label" text-anchor="middle" x="{x:.1f}" y="{max(top + 14, y - 10):.1f}">{_escape(label)}</text>')
-        worker_min, worker_max = workers[0], workers[-1]
+            lines.append(
+                f'<text class="label" data-role="value-label" data-worker="{row["workers"]}" '
+                f'text-anchor="middle" x="{x:.1f}" y="{max(top + 14, y - 10):.1f}">'
+                f'{_escape(label)}</text>'
+            )
         for worker in workers:
-            x = left + (worker - worker_min) / (worker_max - worker_min) * width
-            lines.append(f'<text class="small" text-anchor="middle" x="{x:.1f}" y="{top + height + 20:.1f}">W{worker}</text>')
-        fail_x = left + width
-        if field == "peak_memory_b":
-            failure_peak = max(attempt["peak_memory_b"] for attempt in document["failed_attempts"])
-            fail_y = top + height - failure_peak / maximum * height
-            fail_label = f'失败峰值 {failure_peak / 1024**3:.2f} GiB'
-        else:
-            fail_y = top + height - 12
-            fail_label = "无有效 W10 性能值"
-        lines.extend([
-            f'<line class="fail" x1="{fail_x - 7:.1f}" y1="{fail_y - 7:.1f}" x2="{fail_x + 7:.1f}" y2="{fail_y + 7:.1f}"/>',
-            f'<line class="fail" x1="{fail_x + 7:.1f}" y1="{fail_y - 7:.1f}" x2="{fail_x - 7:.1f}" y2="{fail_y + 7:.1f}"/>',
-            f'<text class="small" text-anchor="end" x="{fail_x - 12:.1f}" y="{fail_y - 10:.1f}">{fail_label}</text>',
-        ])
+            x = _worker_x(worker, box, worker_domain)
+            lines.append(
+                f'<text class="small" data-role="worker-tick" data-worker="{worker}" '
+                f'text-anchor="middle" x="{x:.1f}" y="{top + height + 20:.1f}">W{worker}</text>'
+            )
+        for failed_row in failed:
+            failed_worker = failed_row["workers"]
+            fail_x = _worker_x(failed_worker, box, worker_domain)
+            if field == "peak_memory_b":
+                failed_attempts = [
+                    attempt
+                    for attempt in document["failed_attempts"]
+                    if attempt["workers"] == failed_worker
+                ]
+                failure_peak = max(attempt["peak_memory_b"] for attempt in failed_attempts)
+                fail_y = top + height - failure_peak / maximum * height
+                fail_label = f'失败峰值 {failure_peak / 1024**3:.2f} GiB'
+            else:
+                fail_y = top + height - 12
+                fail_label = f"无有效 W{failed_worker} 性能值"
+            lines.extend([
+                f'<line class="fail" data-role="failure-marker" data-worker="{failed_worker}" '
+                f'x1="{fail_x - 7:.1f}" y1="{fail_y - 7:.1f}" '
+                f'x2="{fail_x + 7:.1f}" y2="{fail_y + 7:.1f}"/>',
+                f'<line class="fail" data-role="failure-marker" data-worker="{failed_worker}" '
+                f'x1="{fail_x + 7:.1f}" y1="{fail_y - 7:.1f}" '
+                f'x2="{fail_x - 7:.1f}" y2="{fail_y + 7:.1f}"/>',
+                f'<text class="small" data-role="failure-label" data-worker="{failed_worker}" '
+                f'text-anchor="end" x="{fail_x - 12:.1f}" y="{fail_y - 10:.1f}">'
+                f'{fail_label}</text>',
+            ])
 
     lines.extend([
         '<text class="sub" x="60" y="865">W10：EXP-047 在 10/20 后 Broker 消失；EXP-048 在 POOL_RUNNING 前失败。两次均完整清理，均不进入曲线。</text>',
