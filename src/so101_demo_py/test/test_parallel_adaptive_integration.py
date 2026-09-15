@@ -192,6 +192,46 @@ def test_adaptive_wrapper_preserves_runner_status_after_successful_cleanup(tmp_p
     ]
 
 
+def test_scaling_driver_accepts_w16_and_rejects_w17_in_dry_run(tmp_path):
+    """The maintained launcher must expose the same optional ceiling as the CLI."""
+
+    script = (
+        Path(__file__).resolve().parents[3]
+        / "scripts/run_so101_adaptive_worker_scaling.zsh"
+    )
+    accepted = subprocess.run(
+        [
+            str(script),
+            "--worker-counts",
+            "16",
+            "--evidence-root",
+            str(tmp_path),
+            "--dry-run",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    rejected = subprocess.run(
+        [
+            str(script),
+            "--worker-counts",
+            "17",
+            "--evidence-root",
+            str(tmp_path),
+            "--dry-run",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert accepted.returncode == 0
+    assert "--worker-count 16" in accepted.stdout
+    assert rejected.returncode == 2
+    assert "unsupported Worker count: 17" in rejected.stderr
+
+
 def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path):
     from so101_demo.cli.parallel_batch_cleanup import cleanup_runtime
     from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -273,6 +313,34 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         )
         sentinel.terminate()
         sentinel.wait(timeout=2.0)
+
+
+def test_external_cleanup_accepts_w16_and_rejects_w17_pool_identity(tmp_path):
+    """Top-level cleanup must recognize every supported pool and fail closed above it."""
+
+    from so101_demo.cli.parallel_batch_cleanup import CleanupError, cleanup_runtime
+    from so101_demo.parallel_batch.journal import CoordinatorJournal
+
+    def runtime(worker_count):
+        batch_id = f"w{worker_count}"
+        root = tmp_path / batch_id
+        root.mkdir(mode=0o700)
+        journal = CoordinatorJournal.create(root / "journal", batch_id)
+        journal.append(
+            "POOL_STARTING",
+            f"pool-starting-{worker_count}",
+            {"generation": 1, "worker_count": worker_count},
+        )
+        journal.close()
+        (root / f"p/g01w{worker_count:02d}").mkdir(parents=True, mode=0o700)
+        return root
+
+    receipt = cleanup_runtime(runtime(16))
+
+    assert receipt["worker_count"] == 16
+    assert receipt["cleanup_complete"] is True
+    with pytest.raises(CleanupError, match="ACTIVE_POOL_IDENTITY"):
+        cleanup_runtime(runtime(17))
 
 
 def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):

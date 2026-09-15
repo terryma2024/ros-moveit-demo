@@ -602,7 +602,7 @@ class AuthenticatedUnixServer:
         self.max_concurrent_connections = _positive_int(
             "MAX_CONCURRENT_CONNECTIONS", max_concurrent_connections
         )
-        if self.max_concurrent_connections > 8:
+        if self.max_concurrent_connections > 16:
             raise IpcError("MAX_CONCURRENT_CONNECTIONS_LIMIT")
         self._executor = (
             None
@@ -1250,12 +1250,12 @@ def build_broker_transport(runtime_spec):
         capacity = _positive_int(
             "QUEUE_CAPACITY", document["queue_capacity_per_model"]
         )
-        if capacity > 8:
+        if capacity > 16:
             raise IpcError("BROKER_QUEUE_CAPACITY")
         handlers = _positive_int(
             "CONNECTION_HANDLER_COUNT", document["connection_handler_count"]
         )
-        if handlers > 8:
+        if handlers > 16:
             raise IpcError("BROKER_CONNECTION_HANDLER_COUNT")
         yolo_executors = _positive_int(
             "YOLO_EXECUTOR_COUNT", document["yolo_executor_count"]

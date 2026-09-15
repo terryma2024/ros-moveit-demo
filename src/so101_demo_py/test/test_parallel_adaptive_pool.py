@@ -31,6 +31,19 @@ def valid_receipt(worker_id="w1", *, generation=1, observed=10.0):
     )
 
 
+def test_w16_socket_paths_keep_two_digit_worker_identities():
+    """W10 through W16 retain the established two-digit endpoint names."""
+
+    from so101_demo.parallel_batch.adaptive_pool import adaptive_socket_paths
+
+    paths = adaptive_socket_paths(Path("/tmp/w16-pool"), 16)
+    rendered = {str(path) for path in paths}
+
+    assert len(paths) == 50
+    assert "/tmp/w16-pool/ipc/worker-10.sock" in rendered
+    assert "/tmp/w16-pool/ipc/worker-16-control.sock" in rendered
+
+
 def test_worker_cannot_request_a_lease_before_release_start():
     from so101_demo.parallel_batch.adaptive_pool import WorkerStartGate
 

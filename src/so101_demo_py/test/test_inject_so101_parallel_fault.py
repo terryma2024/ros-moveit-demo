@@ -160,13 +160,15 @@ def test_exact_owned_identity_is_rechecked_before_term(module, tmp_path, target)
     assert sent == [(value["pgid"], module.signal.SIGTERM)]
 
 
-def test_adaptive_flag_interface_targets_exact_worker_eight(module, tmp_path):
-    root = adaptive_evidence_root(tmp_path, "worker-08")
-    value = entry(root, "worker-08", batch_id="su01-g01-w08")
+def test_adaptive_flag_interface_targets_worker_sixteen_and_rejects_seventeen(
+    module, tmp_path
+):
+    root = adaptive_evidence_root(tmp_path, "worker-16")
+    value = entry(root, "worker-16", batch_id="su01-g01-w16")
     write_manifest(
         root,
         [value],
-        batch_id="su01-g01-w08",
+        batch_id="su01-g01-w16",
         task_root=ADAPTIVE_TASK_ROOT,
     )
     sent = []
@@ -176,7 +178,7 @@ def test_adaptive_flag_interface_targets_exact_worker_eight(module, tmp_path):
             "--batch-root",
             str(root),
             "--worker-id",
-            "worker-08",
+            "worker-16",
             "--signal",
             "TERM",
         ],
@@ -184,9 +186,16 @@ def test_adaptive_flag_interface_targets_exact_worker_eight(module, tmp_path):
         signal_group=lambda pgid, number: sent.append((pgid, number)),
     )
 
-    assert result["batch_id"] == "su01-g01-w08"
-    assert result["target"] == "worker-08"
+    assert result["batch_id"] == "su01-g01-w16"
+    assert result["target"] == "worker-16"
     assert sent == [(value["pgid"], module.signal.SIGTERM)]
+
+    with pytest.raises(ValueError, match="TARGET_NOT_ALLOWED"):
+        module.inject_fault(
+            [str(root), "worker-17", "TERM"],
+            proc_reader=lambda _pid: proc(value),
+            signal_group=lambda _pgid, _number: None,
+        )
 
 
 def test_recovered_broker_generation_is_resolved_from_its_exact_runtime_mount(

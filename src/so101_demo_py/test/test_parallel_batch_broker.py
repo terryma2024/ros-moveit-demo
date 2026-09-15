@@ -127,17 +127,17 @@ def test_queue_capacity_is_three_per_model_six_total_without_eviction():
     assert set(observed) == set(queued)
 
 
-def test_adaptive_broker_accepts_eight_workers_and_rejects_the_ninth():
-    broker, _ = harness(queue_capacity_per_model=8)
+def test_adaptive_broker_accepts_sixteen_workers_and_rejects_the_seventeenth():
+    broker, _ = harness(queue_capacity_per_model=16)
 
     accepted = [
         enqueue(
             broker,
             req(f'worker-{index:02d}', f'adaptive-{index}'),
         )
-        for index in range(1, 9)
+        for index in range(1, 17)
     ]
-    rejected = broker.submit(req('worker-09', 'adaptive-9'))
+    rejected = broker.submit(req('worker-17', 'adaptive-17'))
 
     assert rejected.accepted is False
     assert rejected.reason == 'QUEUE_FULL'
@@ -146,10 +146,10 @@ def test_adaptive_broker_accepts_eight_workers_and_rejects_the_ninth():
         assert broker.next_ready_request() == request
         observed.append(request.worker_id)
         broker.complete(request, model_result())
-    assert observed == [f'worker-{index:02d}' for index in range(1, 9)]
+    assert observed == [f'worker-{index:02d}' for index in range(1, 17)]
 
 
-@pytest.mark.parametrize('capacity', [True, 0, 9])
+@pytest.mark.parametrize('capacity', [True, 0, 17])
 def test_adaptive_broker_rejects_invalid_capacity_override(capacity):
     from so101_demo.parallel_batch.broker import BrokerError
 

@@ -310,6 +310,35 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
     return json.loads(canonical_json(results))
 
 
+def _validate_runtime_concurrency(spec):
+    """Validate the optional adaptive Broker concurrency extension."""
+
+    capacity = spec.get("queue_capacity_per_model")
+    if capacity is not None and (
+        type(capacity) is not int or not 1 <= capacity <= 16
+    ):
+        raise ValueError("BROKER_RUNTIME_QUEUE_CAPACITY")
+    adaptive = {
+        "queue_capacity_per_model", "connection_handler_count",
+        "yolo_executor_count", "grounded_sam_executor_count",
+    }
+    if adaptive.issubset(spec):
+        handlers = spec["connection_handler_count"]
+        yolo_executors = spec["yolo_executor_count"]
+        grounded_executors = spec["grounded_sam_executor_count"]
+        if (
+            type(handlers) is not int
+            or not 1 <= handlers <= 16
+            or type(yolo_executors) is not int
+            or yolo_executors not in {1, 2, 4}
+            or yolo_executors > handlers
+            or type(grounded_executors) is not int
+            or grounded_executors != 1
+            or capacity != handlers
+        ):
+            raise ValueError("BROKER_RUNTIME_CONCURRENCY")
+
+
 def main(argv=None, *, transport=None, authorize=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'container':
@@ -379,26 +408,7 @@ def main(argv=None, *, transport=None, authorize=None):
             required | adaptive,
         ):
             raise ValueError("BROKER_RUNTIME_SPEC_SCHEMA")
-        capacity = spec.get("queue_capacity_per_model")
-        if capacity is not None and (
-            type(capacity) is not int or not 1 <= capacity <= 8
-        ):
-            raise ValueError("BROKER_RUNTIME_QUEUE_CAPACITY")
-        if adaptive.issubset(spec):
-            handlers = spec["connection_handler_count"]
-            yolo_executors = spec["yolo_executor_count"]
-            grounded_executors = spec["grounded_sam_executor_count"]
-            if (
-                type(handlers) is not int
-                or not 1 <= handlers <= 8
-                or type(yolo_executors) is not int
-                or yolo_executors not in {1, 2, 4}
-                or yolo_executors > handlers
-                or type(grounded_executors) is not int
-                or grounded_executors != 1
-                or capacity != handlers
-            ):
-                raise ValueError("BROKER_RUNTIME_CONCURRENCY")
+        _validate_runtime_concurrency(spec)
         model_receipt = json.loads(model_ready_path.read_text(encoding="utf-8"))
         if model_receipt.get("ready") is not True or set(runtime.detectors) != {
             YOLO_ID, "grounded-sam"

@@ -5,5 +5,5 @@ fallback_worker_counts: [6, 4, 2, 1]
 initial_points_per_worker: 3
 worker_start_timeout_s: 120.0
 max_infra_attempts_per_point: 5
-ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222]
+ros_domain_ids: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230]
 yolo_executor_count: 2

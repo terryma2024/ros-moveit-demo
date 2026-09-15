@@ -16,7 +16,7 @@ TASK_EVIDENCE_ROOTS = (
     Path("/data/work/so101-evidence/parallel-adaptive-worker/20260914-a01"),
 )
 TASK_EVIDENCE_ROOT = TASK_EVIDENCE_ROOTS[0]
-TARGETS = {*(f"worker-{number:02d}" for number in range(1, 9)), "broker"}
+TARGETS = {*(f"worker-{number:02d}" for number in range(1, 17)), "broker"}
 MANIFEST_FIELDS = {"schema_version", "batch_id", "processes"}
 PROCESS_FIELDS = {"batch_id", "role", "pid", "pgid", "cmdline", "start_time"}
 MAX_IDENTITY_DOCUMENT_BYTES = 1024 * 1024

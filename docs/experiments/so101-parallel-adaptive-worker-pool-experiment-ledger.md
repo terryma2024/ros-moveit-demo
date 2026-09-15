@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: so101-adaptive-worker-pool
-goal: Locate and fix the exact fixed-worker execute boundary that expires at 240 seconds, then qualify fresh fixed-W6 and fixed-W8 twenty-point runs without weakening READY, evidence, correctness, or fallback semantics.
-success_contract: Prove the first bad boundary with a fresh stage-level W1 reproduction and an A/B experiment, add an auditable RED before the minimal owning-boundary repair, pass focused and ordinary package gates, then complete fixed-W6 20/20 followed by fixed-W8 20/20 using C2 YOLO only with no fallback or TRUNCATED_FRAME, complete physical and PlanningScene evidence, resource monitoring, and exact cleanup.
+goal: Extend the optional adaptive-worker ceiling from W8 to W16 while preserving the default W8 ladder, then execute one isolated fixed-W10 twenty-point batch under the frozen EXP-028 policy.
+success_contract: Obtain a focused RED for every true W8 ceiling, minimally admit W16 while rejecting W17, retain default W8 and its fallback sequence, pass focused, adjacent, and complete ordinary package gates, then run exactly one fixed-W10/C2/YOLO-only execute batch with first-attempt correctness, full evidence, resource monitoring, and exact cleanup.
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 11f96bd1f35ec79d5910d0cb414e7121a9a93c0e
-evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01
+current_commit: e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
   - the legacy worktree remains at 2d13ae65490cf1eccfd57fa683e4b13b41784402 with its untracked admission test preserved; startup preflight CP-001.
@@ -34,17 +34,17 @@ confirmed_conclusions:
   - Task 11 final ordinary package collection at source 167c74a941782e37ed1369ee10c42ac6b77088a9 collected 3035 tests: 3033 passed, 1 skipped, and the sole failure is the preserved task-external dirty test test_transient_unclassified_proc_read_error_is_retried; CP-019.
   - EXP-009 confirmed and fixed the post-review dynamic plan-only READY-boundary regression with an auditable 1-failure RED, 1-pass GREEN, and 40-pass adjacent gate; source/test commit c8d44b862a90e4aa20e9945cf223caeff12ce4d5; CP-020.
   - Retained EXP-008R7-W1 stage traces localize its 240 s expiry before dynamic planning: the parent declared subscription READY before the child froze its ROS READY boundary, then published one immutable source stamp that the consumer rejected thirty times as pre-READY.
+  - CP-039 completed fixed W6 and W8 correctness qualification at f349cd8d1942c31a276b3237c1676eee9f8cce39; each passed 20/20 on first attempts with exact cleanup, while the separate W8 five-second READY-to-POSE SLO remained false.
 disproven_routes:
   - the superseded heavy AdmissionAuthority/profile/Ed25519/cgroup/canary design is outside this task and will not be reused.
   - A hidden transport pre-accept delay is the dominant W8 `/cup_pose` cost; its 0.091 s median was below internal Broker queue wait, response delivery, model execution, and the full Broker round trip.
   - YOLO compute, RGB capture, simulation pause/resume, exact-TF localization, numeric capture, pose admission, or DDS callback delivery is the first expected-budget violation in EXP-006; no configured budget was violated.
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
-  - H1: the parent/child READY handshake races with buffered camera capture, so the admitted pose carries a source stamp older than the child-owned ready_ros_ns and is rejected until the 240 s lease expires.
-  - H2: the child accepts the pose and enters dynamic planning, but parent-side child-result or manifest observation loses progress and incorrectly waits to the lease boundary.
-  - H3: Broker completion or `/cup_pose` delivery is lost independently of the READY boundary, leaving the consumer without a valid callback.
-latest_checkpoint: CP-031
-next_experiment: EXP-015-W6
+  - The W8 ceiling is enforced independently by adaptive contracts, the frozen Domain pool, Broker handler/queue validation, and the top-level cleanup active-pool identity check; all must admit W16 while W17 remains rejected.
+  - W10 can execute the EXP-028 catalog under C2 without fallback, but W16 itself remains runtime-untested unless separately authorized.
+latest_checkpoint: CP-040
+next_experiment: EXP-029-W16-RED
 ```
 
 ## CP-016 — Configured execution timeout restored
@@ -2681,4 +2681,165 @@ deletion_candidates:
 external_actions:
   - No branch push, merge, force-push, evidence deletion, or host-wide service/policy change was performed.
 next_command: NONE
+```
+
+## CP-040 — W16 ceiling and W10 runtime baseline
+
+```yaml
+checkpoint_id: CP-040
+status: ACTIVE
+last_valid_experiment: EXP-028-W8
+source_commit: e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+working_tree_status: Task-owned ledger update plus preserved user src/so101_demo_py/test/test_parallel_batch_resources.py and MUJOCO_LOG.TXT; no other dirty path.
+owned_processes: NONE; no SO-101, MoveIt, MuJoCo, Gazebo, Broker, Docker, GPU-compute, or ROS-domain runtime is active.
+preserved_processes: Existing codex and codex-task-so101-w6-w8-success-opt tmux sessions remain untouched; codex-cua is absent.
+confirmed_conclusions:
+  - CP-039 is the final trusted prior checkpoint: fixed W6 and W8 each passed 20/20 on first attempts with exact cleanup at f349cd8d1942c31a276b3237c1676eee9f8cce39.
+  - The current linked worktree is on codex/parallel-adaptive-worker-pool at e04b03700c9d341f263f84d0f75e9b8fd8a69a97 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969.
+  - Domains 0 and 215-230 had empty ROS graphs, but the first graph probe unintentionally left one ros2-daemon in each Domain. Exact per-Domain `ros2 daemon stop` retired all 17 task-created daemons; PID readback is empty. Claims 215-222 are RELEASED with cleanup_verified true; claims 223-230 are absent. No container or GPU compute application is active.
+  - Static inspection and post-GREEN rescan found independent W8 ceilings in adaptive contracts, the frozen Domain pool, Broker transport plus service queue/handler validation, top-level cleanup active-pool identity validation, the scaling launcher, and the exact fault injector target set.
+disproven_routes:
+  - Changing the default worker count to W16 or changing the existing fallback sequence is outside the requested contract.
+  - Reviving AdmissionAuthority, systemd Authority/watchdog, signature, or hard-cgroup admission designs is prohibited and unnecessary.
+open_risks:
+  - W10 full-stack memory, process, latency, broker, and cleanup behavior has not yet been measured.
+  - W16 support will be contract-tested only; no W16 live run is authorized.
+evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/preflight/host-state.txt SHA256 20f9626fbbf9ace49448c1a3509c7901c4bd208568e6185f2eebb2c30c849ecc
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/preflight/ros-daemon-cleanup.txt SHA256 0e7f3481cda487bb6c3b504439575a791322c9f1de73a0faba6d44e3c19d85e0
+retained_runs:
+  - All prior evidence remains under /data/work/so101-evidence/parallel-adaptive-worker/20260914-a01.
+  - The new handoff, dispatch receipt, and preflight are retained under /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01.
+archived_runs: []
+deletion_candidates:
+  - NONE for the new task before tests; prior candidates remain retained pending explicit authorization.
+next_command: Add focused W16/W17/default/domain/Broker/cleanup behavior tests, then run them against unchanged source using a fresh verified NVMe scratch.
+```
+
+## EXP-029-W16-RED — Optional ceiling contract
+
+```yaml
+experiment_id: EXP-029-W16-RED
+status: VALID
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T11:06:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T11:08:00+08:00
+  - status: VALID
+    at: 2026-09-15T11:11:00+08:00
+prior_experiment: EXP-028-W8
+hypothesis: The current product rejects W16 independently at adaptive option construction, Broker queue/handler validation, and top-level cleanup identity because those boundaries still encode W8.
+prediction: Tests written before production changes fail for W16 acceptance while confirming the default remains W8, its fallback ladder remains (6, 4, 2, 1), and W17 must remain rejected.
+single_variable: Add contract tests only; production source and configuration remain unchanged for RED.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Source is e04b03700c9d341f263f84d0f75e9b8fd8a69a97 in the existing linked worktree.
+  - The preserved user test_parallel_batch_resources.py and MUJOCO_LOG.TXT remain untouched and unstaged.
+  - The test uses exact /usr/bin/python3 with a unique previously nonexistent scratch/tmp below the registered durable evidence root and starts no live SO-101 stack.
+success_criteria:
+  - Focused tests collect and fail only because W16 or Domain 223-230 support is missing at the named runtime and cleanup boundaries.
+  - The tests independently assert W16 acceptance, W17 rejection, default W8/fallback compatibility, sixteen unique Domains 215-230, two-digit W10/W16 identities, and Broker W16 queue/handler limits.
+failure_criteria:
+  - Tests pass before implementation or fail because of import, fixture, scratch, or unrelated preserved-file behavior.
+invalid_criteria:
+  - Source, Python, TMPDIR, evidence-root, or preserved dirty-file provenance differs from the preconditions.
+provenance:
+  source_commit: e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: 0
+  gz_partition: no-live-stack
+commands:
+  - command: Seven focused default/domain/adaptive/CLI/cleanup/IPC/path tests using scratch/r29/tmp
+    exit_code: 1
+  - command: Focused scaling-launcher W16/W17 dry-run test using scratch/r29b/tmp
+    exit_code: 1
+observed:
+  - The first RED collected seven tests: six failed at the intended old ceiling boundaries and the two-digit W10/W16 path-format test passed. Pytest reported 6 failed, 1 passed, 0 errors in 0.49 s.
+  - The failed boundaries were the eight-entry default Domain pool, AdaptiveWorkerOptions W16 rejection, CLI W16 rejection, cleanup ACTIVE_POOL_IDENTITY rejection, AuthenticatedUnixServer handler rejection, and Broker queue-capacity rejection.
+  - The first shell's post-pytest result recorder used zsh's reserved status variable. This did not alter the pytest exit, full log, or JUnit; a checksum-sealed supplemental result records exit 1 and the 0.49 s pytest duration.
+  - The separate scaling launcher RED collected one test and failed one in 0.05 s because the wrapper rejected W16 as unsupported. W17 was not reached until W16 support exists.
+  - A post-implementation ceiling rescan found two deeper unchanged Broker limits. Supplemental scratch/r29c collected two tests and failed both at the intended service queue and container-entry runtime validation boundaries in 0.29 s.
+  - The same rescan found the maintained exact fault injector still capped at worker-08. Supplemental scratch/r29d collected one test and failed at TARGET_NOT_ALLOWED for worker-16 in 0.08 s.
+inferred:
+  - The old ceiling was independently enforced at every runtime, Broker, cleanup, launcher, and fault-injection boundary found by the final source rescan; no unrelated fixture, import, scratch, or preserved user-file error occurred in the authoritative RED runs.
+conclusion: VALID RED. Production lacked the requested W16 contract at adaptive/configuration, Broker transport/service/container entry, cleanup, scaling-launcher, and fault-injector boundaries.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp029-red.log SHA256 a3882660ef98395a09c3422ea4d5fedd55591f5ec9ad7654779a4f5e3316cb44
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/r29/red.xml SHA256 c97cfb115f031fa746ab2c4089aee6bdbee7a867513db7d0bcccca2bb913cea6
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp029-red-scaling.log SHA256 a9b233dcbeaaa5077b923014eb706f2c38654431fbff4e292c124a6c2e91d629
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/r29b/red.xml SHA256 b6e20b609259cb70bd8ab87f2153319afb2dd8b82c85fcde6f1595f3a5f15f6f
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp029-red-deep-broker.log SHA256 5384f2cd409d8259f820e4359fe78fb8784abf9b85fc61f119a15086b64cb196
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/r29c/red.xml SHA256 a24371500b84e99e9ac82a16655ba97a4f7987f268928963b0a69e3cb4db05b6
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp029-red-fault-injector.log SHA256 fab779f367f791f3fc48fb620cb6abdbea67e916eb0dae5f0c9f28f9fd487344
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/r29d/red.xml SHA256 8ff0117425bd96d804efd6044373fd4002628909b89f85fbd0130dc3ea9e845a
+decision: KEEP_AND_RUN_GREEN
+next_experiment: EXP-030-W16-GREEN
+```
+
+## EXP-030-W16-GREEN — Optional ceiling implementation
+
+```yaml
+experiment_id: EXP-030-W16-GREEN
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T11:11:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T11:12:00+08:00
+  - status: PASSED
+    at: 2026-09-15T11:35:32+08:00
+prior_experiment: EXP-029-W16-RED
+hypothesis: Raising only the shared adaptive, Broker, cleanup, Domain-pool, and explicit scaling-launcher ceilings to 16 will satisfy W16/W17 behavior without changing the W8 default, fallback ladder, C2 model policy, timeout policy, or two-digit identities.
+prediction: The eight focused tests pass, adjacent adaptive/IPC/resource/cleanup/CLI tests pass, and the complete ordinary so101_demo_py gate reports zero failures with benchmark_test excluded.
+single_variable: Supported optional worker ceiling and available Domain/connection/queue capacity increase from 8 to 16; defaults and runtime policies remain unchanged.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - EXP-029 is a valid RED against source e04b03700c9d341f263f84d0f75e9b8fd8a69a97.
+  - Production changes are limited to adaptive maximum 16, Domain pool 215-230, Broker handler/queue maximum 16, cleanup identity maximum 16, and scaling-launcher request validation.
+  - Maintained Chinese design/plan text states default W8, optional ceiling W16, and W10 as an explicit experiment; deprecated admission mechanisms remain absent.
+success_criteria:
+  - Focused GREEN passes all eleven W16/W17/default/domain/Broker/cleanup/path/launcher/fault-injector tests.
+  - Adjacent and complete ordinary package tests pass with unique verified NVMe scratch roots; benchmark_test is not collected.
+failure_criteria:
+  - Any task-owned focused, adjacent, or package test fails.
+invalid_criteria:
+  - Wrong Python/source mapping, reused scratch, overlong fixture path, missing dependency, or preserved dirty-file interference invalidates that invocation.
+provenance:
+  source_commit: WORKING_TREE_ON_e04b03700c9d341f263f84d0f75e9b8fd8a69a97
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: 0
+  gz_partition: no-live-stack
+commands:
+  - command: Eleven focused W16/W17/default/domain/Broker/cleanup/path/launcher/fault-injector tests using scratch/g30c/tmp
+    exit_code: 0
+  - command: Eight adjacent adaptive/CLI/IPC/Broker/container/fault-injector files using scratch/a30d/tmp
+    exit_code: 0
+  - command: Complete 160-file ordinary test collection with test_parallel_batch_resources.py first to avoid the proven cross-file `rc` fixture collision, using scratch/p30e/tmp
+    exit_code: 0
+observed:
+  - Focused GREEN passed 11/11 in 0.28 s. W16 is accepted and W17 rejected at adaptive options, CLI, Broker transport, Broker service, container-entry runtime validation, external cleanup, scaling launcher, and fault injector; W10/W16 identities remain two-digit.
+  - The final adjacent gate passed 344/344 in 8.05 s. The preserved user resource file passed 137/137 independently in the authoritative scratch/a30-resources-final gate.
+  - Two combined diagnostic gates exposed no product regression: CLI's existing `scratch/rc` claim directory can collide with the resource test's thirteenth short evidence root `rc`, making the otherwise valid concurrent-claim test depend on which thread wins. PDB recorded one rejection as ROS_DOMAIN_CLAIMED: 181 and the other as DIRECTORY_CONFLICT at `rc`.
+  - The authoritative complete ordinary collection therefore ran the resource file first and all other ordinary files after it in the same pytest invocation. It passed 3050/3050 in 61.72 s with four existing fork warnings; the benchmark suite was not collected.
+  - The first complete-gate diagnostic lacked frozen Torch site-packages and was invalid at collection. The next unordered complete run reproduced only the proven cross-file `rc` fixture collision. All diagnostic and authoritative scratch trees remain retained.
+  - `git diff --check`, zsh syntax validation, Python compilation, and a final source scan found no remaining adaptive W8 ceiling. Remaining literal 8 values are unrelated frame-size, journal-frame, and kinematic-sampling constants.
+inferred:
+  - The optional runtime ceiling is consistently W16 while the default remains W8 with fallback (6, 4, 2, 1), C2, frozen model identities, timeouts, and two-digit worker identities unchanged.
+  - W16 is contract- and ordinary-test supported only; no W16 live qualification is claimed or authorized.
+conclusion: The minimal W16 ceiling extension passes all focused, adjacent, and ordinary gates without changing default adaptive behavior or benchmark scope.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp030-focused-green-final.log SHA256 d5e68cd69f5c7643e255f2efb236c446e2d55118652f426ebc184d0bdb9e778f
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/g30c/green.xml SHA256 a6bab378d9f13da493de46f225a5b75617dbb842f4deab2839ed0d98326a3dd8
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp030-adjacent-final.log SHA256 b14524e7898977a06c8a70c260fb7137f0bb8714fd8e15884e477ac028875e0d
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/a30d/adjacent.xml SHA256 e80800d9f1e1622932855e9e81e8e5fa5ef1ed9b4df34d91e038f9efb28e89dd
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp030-adjacent-resources-final.log SHA256 c861e911cfcd165eb68905e3784689101c7c2fad1bee6e423cbfaa9d0aa72104
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/a30-resources-final/adjacent.xml SHA256 c6c250ea0ff52237b9f39d027a44a46a9426dc456223c042fd1708526568d6a3
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp030-full-ordinary-authoritative.log SHA256 e3b88873e9dd7195636ce8d8942206a26d1fe09504e94c86b79eaa07007d3935
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/p30e/so101-demo-py.xml SHA256 02454dc1bc4d40146c22c446bdd009702236ab7094ce0397e18f4a162a2545cd
+decision: COMMIT_IMMUTABLE_CANDIDATE_AND_RUN_EXACTLY_ONE_W10
+next_experiment: EXP-031-W10
 ```

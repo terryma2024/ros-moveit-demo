@@ -136,7 +136,7 @@ def _active_pool(runtime_root: Path):
         type(generation) is not int
         or generation <= 0
         or type(worker_count) is not int
-        or not 1 <= worker_count <= 8
+        or not 1 <= worker_count <= 16
     ):
         raise CleanupError("ACTIVE_POOL_IDENTITY")
     return generation, worker_count

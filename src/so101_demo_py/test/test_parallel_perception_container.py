@@ -7,6 +7,27 @@ from types import SimpleNamespace
 import pytest
 
 
+def test_runtime_concurrency_accepts_w16_and_rejects_w17():
+    from so101_demo.cli import parallel_perception_broker as cli
+
+    document = {
+        "queue_capacity_per_model": 16,
+        "connection_handler_count": 16,
+        "yolo_executor_count": 2,
+        "grounded_sam_executor_count": 1,
+    }
+
+    assert cli._validate_runtime_concurrency(document) is None
+    with pytest.raises(ValueError, match="BROKER_RUNTIME_QUEUE_CAPACITY"):
+        cli._validate_runtime_concurrency(
+            {**document, "queue_capacity_per_model": 17}
+        )
+    with pytest.raises(ValueError, match="BROKER_RUNTIME_CONCURRENCY"):
+        cli._validate_runtime_concurrency(
+            {**document, "connection_handler_count": 17}
+        )
+
+
 @pytest.mark.parametrize('mutation', ['none', 'bytes', 'new_file', 'generated'])
 def test_actual_copied_source_is_verified_before_install(tmp_path, mutation):
     import hashlib

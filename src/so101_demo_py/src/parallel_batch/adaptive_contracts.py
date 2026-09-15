@@ -1,4 +1,4 @@
-"""Strict contracts for the isolated adaptive W1--W8 worker pool."""
+"""Strict contracts for the isolated adaptive worker pool through W16."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .contracts import (
 )
 
 
-_MAX_ADAPTIVE_WORKER_COUNT = 8
+_MAX_ADAPTIVE_WORKER_COUNT = 16
 _MAX_POINT_COUNT = 20
 _MAX_ROS_DOMAIN_ID = 232
 _POOL_REQUEST_FACTORY_TOKEN = object()
@@ -31,7 +31,7 @@ _FROZEN_ADAPTIVE_VALUES = {
     "initial_points_per_worker": 3,
     "worker_start_timeout_s": 120.0,
     "max_infra_attempts_per_point": 5,
-    "ros_domain_ids": tuple(range(215, 223)),
+    "ros_domain_ids": tuple(range(215, 231)),
     "yolo_executor_count": 2,
 }
 

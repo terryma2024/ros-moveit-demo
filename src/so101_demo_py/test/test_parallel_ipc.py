@@ -1072,6 +1072,36 @@ def test_authenticated_readiness_control_round_trip_without_a_lease(tmp_path):
     assert response["payload"] == {"seen": "readiness"}
 
 
+def test_authenticated_server_accepts_sixteen_handlers_and_rejects_seventeen(tmp_path):
+    """The connection server supports the worker ceiling and rejects one above it."""
+
+    from so101_demo.runtime.parallel_ipc import (
+        AuthenticatedUnixServer,
+        IpcError,
+        WorkerTokenAuthority,
+    )
+
+    authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
+    server = AuthenticatedUnixServer(
+        tmp_path / "ipc/w16.sock",
+        authority,
+        lambda _message: {},
+        max_concurrent_connections=16,
+    )
+    try:
+        assert server.max_concurrent_connections == 16
+    finally:
+        server.close()
+
+    with pytest.raises(IpcError, match="MAX_CONCURRENT_CONNECTIONS_LIMIT"):
+        AuthenticatedUnixServer(
+            tmp_path / "ipc/w17.sock",
+            authority,
+            lambda _message: {},
+            max_concurrent_connections=17,
+        )
+
+
 def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_path, monkeypatch):
     from so101_demo.runtime import parallel_ipc
 
@@ -1135,8 +1165,8 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     ]
     adaptive_document = {
         **document,
-        "queue_capacity_per_model": 8,
-        "connection_handler_count": 8,
+        "queue_capacity_per_model": 16,
+        "connection_handler_count": 16,
         "yolo_executor_count": 2,
         "grounded_sam_executor_count": 1,
         "request_deadline_s": 75.0,
@@ -1183,7 +1213,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         lambda _service, *, endpoint: Server(),
     )
     adaptive_transport.serve(object(), endpoint=ipc_root / "perception.sock")
-    assert service_calls[0]["queue_capacity_per_model"] == 8
+    assert service_calls[0]["queue_capacity_per_model"] == 16
 
     from so101_demo.runtime.parallel_ipc import IpcError
     invalid_documents = [
@@ -1193,10 +1223,10 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         {**document, "run_mode": "dry_run"},
         {**document, "image_id": "sha256:" + "z" * 64},
         {**document, "queue_capacity_per_model": True},
-        {**document, "queue_capacity_per_model": 9},
+        {**document, "queue_capacity_per_model": 17},
         {**adaptive_document, "connection_handler_count": True},
         {**adaptive_document, "connection_handler_count": 0},
-        {**adaptive_document, "connection_handler_count": 9},
+        {**adaptive_document, "connection_handler_count": 17},
         {**adaptive_document, "yolo_executor_count": True},
         {**adaptive_document, "yolo_executor_count": 3},
         {**adaptive_document, "grounded_sam_executor_count": 2},

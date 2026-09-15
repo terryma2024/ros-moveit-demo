@@ -1784,7 +1784,7 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
         "initial_points_per_worker": 2,
         "worker_start_timeout_s": 45.5,
         "max_infra_attempts_per_point": 4,
-        "ros_domain_ids": list(range(215, 223)),
+        "ros_domain_ids": list(range(215, 231)),
         "yolo_executor_count": 4,
     }
 
@@ -1828,6 +1828,27 @@ def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
     )
 
     assert prepared.adaptive_request.options.levels == levels
+
+
+def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
+    """The CLI exposes W16 as optional capacity without changing its W8 default."""
+
+    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+
+    prepared = prepare_batch(
+        adaptive_argv(tmp_path / "w16", worker_count="16"),
+        provenance_verifier=verified,
+    )
+
+    assert prepared.adaptive_request.options.worker_count == 16
+    assert prepared.adaptive_request.options.levels == (16, 6, 4, 2, 1)
+    assert prepared.adaptive_request.options.ros_domain_ids == tuple(range(215, 231))
+
+    with pytest.raises(CliError, match="MAX_WORKER_COUNT"):
+        prepare_batch(
+            adaptive_argv(tmp_path / "w17", worker_count="17"),
+            provenance_verifier=verified,
+        )
 
 
 @pytest.mark.parametrize("fallbacks", ["6,4", "8,4", "4,6", "4,4", "4,,2"])

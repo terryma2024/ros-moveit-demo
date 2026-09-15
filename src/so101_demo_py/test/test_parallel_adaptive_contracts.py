@@ -20,7 +20,7 @@ def test_default_options_form_the_frozen_fallback_ladder():
     assert options.initial_points_per_worker == 3
     assert options.worker_start_timeout_s == 120.0
     assert options.max_infra_attempts_per_point == 5
-    assert options.ros_domain_ids == tuple(range(215, 223))
+    assert options.ros_domain_ids == tuple(range(215, 231))
     assert options.yolo_executor_count == 2
 
 
@@ -86,18 +86,21 @@ def test_options_reject_duplicate_or_ascending_fallbacks(fallbacks):
         )
 
 
-def test_options_reject_w9_and_insufficient_domains():
-    """The adaptive path is bounded to W8 and needs a Domain for every worker."""
+def test_options_accept_w16_reject_w17_and_require_enough_domains():
+    """The optional ceiling is W16 and every admitted worker needs one Domain."""
 
     from so101_demo.parallel_batch.adaptive_contracts import (
         AdaptiveWorkerOptions,
         ContractError,
     )
 
+    options = AdaptiveWorkerOptions(16, (), 3, 120.0, 1, tuple(range(215, 231)))
+    assert options.worker_count == 16
+    assert options.ros_domain_ids == tuple(range(215, 231))
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
-        AdaptiveWorkerOptions(9, (), 3, 120.0, 1, tuple(range(215, 224)))
+        AdaptiveWorkerOptions(17, (), 3, 120.0, 1, tuple(range(215, 232)))
     with pytest.raises(ContractError, match="ROS_DOMAIN_IDS"):
-        AdaptiveWorkerOptions(8, (6, 4, 2, 1), 3, 120.0, 5, tuple(range(215, 222)))
+        AdaptiveWorkerOptions(16, (), 3, 120.0, 1, tuple(range(215, 230)))
 
 
 def test_options_allow_w1_without_a_fallback():

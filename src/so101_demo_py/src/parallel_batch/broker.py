@@ -103,7 +103,7 @@ class PerceptionBroker:
             self._capacity = config.broker_queue_capacity_per_model
         elif (
             type(queue_capacity_per_model) is not int
-            or not 1 <= queue_capacity_per_model <= 8
+            or not 1 <= queue_capacity_per_model <= 16
         ):
             raise BrokerError('QUEUE_CAPACITY_PER_MODEL')
         else:

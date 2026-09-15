@@ -44,7 +44,7 @@ typeset -A seen
 typeset count
 for count in $counts; do
   [[ "$count" == <-> ]] || { print -u2 "invalid Worker count: $count"; exit 2; }
-  (( count == 1 || count == 2 || count == 4 || count == 6 || count == 8 )) || {
+  (( count >= 1 && count <= 16 )) || {
     print -u2 "unsupported Worker count: $count"
     exit 2
   }
@@ -60,6 +60,11 @@ typeset adaptive_config="$repo_root/src/so101_demo_py/config/mujoco/parallel_ada
 typeset yolo_weights="/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt"
 typeset grounded_root="/data/work/so101-models/grounded-sam-v2-scipy-lock"
 typeset -A batch_ids=(1 wy101 2 wy201 4 wy401 6 wy601 8 wy801)
+for count in $counts; do
+  if [[ -z "${batch_ids[$count]:-}" ]]; then
+    batch_ids[$count]="w${(l:2::0:)count}1"
+  fi
+done
 
 function batch_command() {
   typeset requested_count="$1"
