@@ -12,6 +12,7 @@ from tools.so101_pytest_gate import (
     discover_ordinary_modules,
     exact_executable,
     load_module_durations,
+    preserve_porcelain_status,
     split_lanes,
     validate_exact_coverage,
     validate_process_outcomes,
@@ -206,3 +207,7 @@ def test_only_explicit_audit_paths_may_be_dirty() -> None:
 
 def test_broad_dirty_override_is_diagnostic_only() -> None:
     validate_source_status(" M tools/runner.py", (), allow_dirty=True)
+
+
+def test_porcelain_status_preserves_the_leading_index_column() -> None:
+    assert preserve_porcelain_status(" M docs/ledger.md\n") == " M docs/ledger.md"

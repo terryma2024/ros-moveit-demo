@@ -88,6 +88,11 @@ def exact_executable(path: Path, cwd: Path) -> Path:
     return path if path.is_absolute() else (cwd / path).absolute()
 
 
+def preserve_porcelain_status(output: str) -> str:
+    """Remove terminal newlines without stripping Git's leading status column."""
+    return output.rstrip("\r\n")
+
+
 def validate_source_status(
     source_status: str,
     allowed_dirty_paths: Sequence[str],
@@ -553,6 +558,17 @@ def _git(repo_root: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def _git_status(repo_root: Path) -> str:
+    completed = subprocess.run(
+        ["git", "status", "--short"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return preserve_porcelain_status(completed.stdout)
+
+
 def _sha256(path: Path | None) -> str | None:
     if path is None or not path.is_file():
         return None
@@ -591,7 +607,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError(
             f"source commit mismatch: expected {arguments.expected_source_commit}, got {source_commit}"
         )
-    source_status = _git(repo_root, "status", "--short")
+    source_status = _git_status(repo_root)
     validate_source_status(
         source_status,
         arguments.allow_dirty_path,
@@ -665,7 +681,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
         collection.node_ids,
         (serial.node_ids, *(shard.node_ids for shard in shards)),
     )
-    final_source_status = _git(repo_root, "status", "--short")
+    final_source_status = _git_status(repo_root)
     if final_source_status != source_status:
         raise RuntimeError("source worktree changed during the pytest gate")
     all_execution = (serial, *shards)
