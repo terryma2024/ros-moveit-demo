@@ -339,7 +339,7 @@ def _validate_runtime_concurrency(spec):
             raise ValueError("BROKER_RUNTIME_CONCURRENCY")
 
 
-def main(argv=None, *, transport=None, authorize=None):
+def main(argv=None, *, transport=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'container':
         return container_main(argv[1:])
@@ -361,10 +361,6 @@ def main(argv=None, *, transport=None, authorize=None):
         from so101_demo.runtime.parallel_ipc import build_broker_transport
 
         transport = build_broker_transport(Path(args.runtime_spec))
-    if args.smoke_input is None and authorize is None:
-        authorize = getattr(transport, 'authorize', None)
-    if args.smoke_input is None and not callable(authorize):
-        raise ValueError('AUTHENTICATED_TRANSPORT_REQUIRED')
     versions = {}
     for pin in PINS:
         name, expected = pin.split('==')
@@ -389,15 +385,15 @@ def main(argv=None, *, transport=None, authorize=None):
             YOLO_ID: runtime_identity.get('yolo_executor_count', 1),
             GROUNDED_ID: runtime_identity.get('grounded_sam_executor_count', 1),
         },
-        provenance=provenance, authorize=authorize or (lambda request, snapshot: False))
+        provenance=provenance)
     runtime.start()
     if args.smoke_input is None and model_ready_path.is_file():
         spec = getattr(transport, 'runtime_identity', None)
         required = {
             "schema_version", "kind", "batch_id", "coordinator_epoch",
             "broker_generation", "run_mode", "image_id", "yolo_weights_sha256",
-            "grounded_manifest_sha256", "config_path", "authority_endpoint",
-            "authority_token_path", "request_deadline_s", "max_frame_bytes",
+            "grounded_manifest_sha256", "config_path", "request_deadline_s",
+            "max_frame_bytes",
         }
         adaptive = {
             "queue_capacity_per_model", "connection_handler_count",

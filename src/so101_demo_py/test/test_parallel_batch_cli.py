@@ -637,10 +637,10 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
     broker_spec = json.loads(composition.broker_spec_path.read_text())
     assert broker_spec["broker_generation"] == 1
     assert broker_spec["coordinator_epoch"] == composition.journal.coordinator_epoch
-    assert broker_spec["authority_endpoint"] == "/runtime/broker-authority.sock"
+    assert "authority_endpoint" not in broker_spec
     assert "queue_capacity_per_model" not in broker_spec
     assert broker_spec["config_path"] == "/runtime/runtime-config.yaml"
-    assert broker_spec["authority_token_path"] == "/runtime/broker-g1.token"
+    assert "authority_token_path" not in broker_spec
     worker_spec = json.loads(composition.worker_specs[0].read_text())
     assert worker_spec["broker_socket_path"] == str(root / "ipc/broker/perception.sock")
     assert worker_spec["broker_generation"] == 1
@@ -758,7 +758,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
         ProductionBatchComposition, _write_json, prepare_batch,
     )
     from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import BrokerTransport, _BrokerCoordinatorClient
+    from so101_demo.runtime.parallel_ipc import BrokerTransport
 
     class Probe:
         def snapshot(self):
@@ -816,20 +816,10 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
                 },
             },
         }
-        composition._start_servers()
-        authority_call = _BrokerCoordinatorClient(
-            composition.broker_authority_server.path,
-            composition.broker_token_path,
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=1.0,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
         transport = BrokerTransport(
             ipc_root=composition.broker_runtime_root,
             config=spec.config,
             generation=1,
-            authority_call=authority_call,
             deadline_s=1.0,
         )
         transport.bind_ready_identity(ready)
@@ -1315,7 +1305,7 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
     assert (spec.request.evidence_root / "cleanup-gates.json").stat().st_mode & 0o777 == 0o600
 
 
-def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
+def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
     import threading
 
     from so101_demo.cli.mujoco_parallel_batch import (
@@ -1329,10 +1319,8 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_ipc import (
         BrokerTransport,
-        _BrokerCoordinatorClient,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
-    from so101_demo.runtime.parallel_perception_runtime import Snapshot
 
     class Probe:
         def snapshot(self):
@@ -1417,19 +1405,10 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
                 "no_stale_node": True,
             },
         )
-        authority_call = _BrokerCoordinatorClient(
-            composition.broker_authority_server.path,
-                root / "ipc/broker/broker-g1.token",
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=1.0,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
         transport = BrokerTransport(
             ipc_root=root / "ipc/broker",
             config=spec.config,
             generation=1,
-            authority_call=authority_call,
             deadline_s=1.0,
         )
 
@@ -1491,23 +1470,7 @@ def test_broker_authority_verifies_the_exact_committed_start_event(tmp_path):
         )
         thread.join(timeout=2.0)
         assert response.candidate == {"source": "broker-process"}
-        request = response.request
-        snapshot = Snapshot(
-            (4, 5, 3),
-            12_000_000_000,
-            "task_camera_frame",
-            "wrong-start-key",
-            "VALIDATION_STARTED",
-            response.identity,
-        )
-        assert transport.authorize(request, snapshot) is False
-        valid_snapshot = Snapshot(
-            (4, 5, 3), 12_000_000_000, "task_camera_frame",
-            start_key, "VALIDATION_STARTED", response.identity,
-        )
-        assert transport.authorize(request, valid_snapshot) is True
-        composition.coordinator.request_stop(reason="RACE_STOP")
-        assert transport.authorize(request, valid_snapshot) is False
+        assert not hasattr(transport, "authorize")
     finally:
         if broker_server is not None:
             broker_server.close()
@@ -1656,6 +1619,9 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         broker_generation=1,
     )
     proxy._call = lambda _message: {
+        "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
+        "model_id": "plastic-cup-yolo11n-seg-v1",
+        "model_version": load_parallel_runtime_config(CONFIG).yolo_weights_sha256,
         "broker_generation": 1,
         "outcome": "NORMAL_REJECTION",
         "candidate": None,
@@ -2094,13 +2060,13 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
     real = batch_cli.AuthenticatedUnixServer
     calls = []
 
-    def fail_second(*args, **kwargs):
-        if len(calls) == 1:
+    def fail_first(*args, **kwargs):
+        if not calls:
             raise RuntimeError("constructor fault")
         calls.append(real(*args, **kwargs))
         return calls[-1]
 
-    monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_second)
+    monkeypatch.setattr(batch_cli, "AuthenticatedUnixServer", fail_first)
     with pytest.raises(RuntimeError, match="constructor fault"):
         ProductionBatchComposition(
             spec, resource_probe=Probe(), claim_root=scratch / "fc"
@@ -2474,8 +2440,6 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
     old_process = composition._start_broker()
     old_root = composition.broker_runtime_root
     old_spec = composition.broker_spec_path
-    old_token = composition.broker_token_path
-    old_token_bytes = old_token.read_bytes()
     ready_checks = []
     composition._wait_broker_ready = lambda **values: ready_checks.append(values) or True
     try:
@@ -2484,118 +2448,14 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         assert composition.broker_generation == 2
         assert composition.broker_runtime_root != old_root
         assert composition.broker_spec_path != old_spec
-        assert composition.broker_token_path != old_token
-        assert composition.broker_token_path.read_bytes() != old_token_bytes
+        assert "authority_token_path" not in json.loads(
+            composition.broker_spec_path.read_text()
+        )
         assert json.loads(composition.broker_spec_path.read_text())[
             "broker_generation"
         ] == 2
         assert ready_checks == [{"deadline_monotonic_s": supervisor.pause_deadline}]
         assert composition.coordinator.snapshot().broker_healthy is True
-    finally:
-        composition._release_partial()
-
-
-def test_authenticated_live_broker_health_down_pauses_without_lease_debit(
-        tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        ProductionBatchComposition,
-        prepare_batch,
-    )
-    from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import (
-        _BrokerCoordinatorClient,
-        IpcError,
-    )
-
-    class Probe:
-        def snapshot(self):
-            return ResourceSnapshot(32, 64.0, 16.0)
-
-        def ros_domain_in_use(self, _domain):
-            return False
-
-        def socket_in_use(self, _path):
-            return False
-
-    scratch = Path(os.environ["TMPDIR"]).parent
-    root = scratch / "f2h"
-    spec = prepare_batch(
-        argv(
-            root,
-            worker_count="1",
-            max_points_per_worker="1",
-            point_id=("task_start",),
-            run_mode="plan_only",
-        ),
-        provenance_verifier=lambda value: {
-            **verified(value), "image_id": "sha256:" + "b" * 64,
-        },
-    )
-    composition = ProductionBatchComposition(
-        spec,
-        resource_probe=Probe(),
-        claim_root=scratch / "f2c",
-        broker_command_builder=lambda _owner: ("broker",),
-    )
-    composition.coordinator.register_worker("worker-01", generation=1)
-    payload = {
-        "operation": "broker_health_down",
-        "outcome": "INFERENCE_TIMEOUT",
-        "request_id": "request-1",
-        "reason": "deadline exceeded",
-    }
-    message = {
-        "worker_id": "broker",
-        "worker_generation": 1,
-        "payload": payload,
-    }
-    try:
-        composition._start_broker_authority_server()
-        broker_client = _BrokerCoordinatorClient(
-            composition.broker_runtime_root / "broker-authority.sock",
-            composition.broker_token_path,
-            coordinator_epoch=composition.journal.coordinator_epoch,
-            generation=1,
-            deadline_s=spec.config.heartbeat_timeout_s,
-            max_frame_bytes=spec.config.broker_max_frame_bytes,
-        )
-        assert broker_client("broker_health_down", {
-            key: value for key, value in payload.items() if key != "operation"
-        }) is True
-        snapshot = composition.coordinator.snapshot()
-        assert snapshot.broker_healthy is False
-        assert composition.coordinator.grant_lease(
-            "worker-01", generation=1
-        ) is None
-        assert composition.coordinator.snapshot().workers[
-            "worker-01"
-        ].lease_count == 0
-
-        with pytest.raises(CliError, match="BROKER_GENERATION"):
-            composition._coordinator_handler({
-                **message, "worker_generation": 0,
-            })
-        with pytest.raises(CliError, match="BROKER_RPC_PAYLOAD"):
-            composition._coordinator_handler({
-                **message,
-                "payload": {**payload, "outcome": "MODEL_ERROR"},
-            })
-
-        authenticated = {
-            "schema_version": 1,
-            "kind": "coordinator_call",
-            "coordinator_epoch": composition.journal.coordinator_epoch,
-            "worker_id": "broker",
-            "worker_generation": 1,
-            "lease": None,
-            "request_id": "broker-health-down-1",
-            "idempotency_key": "broker-health-down-1",
-            "token": "00" * 32,
-            "payload": payload,
-        }
-        with pytest.raises(IpcError, match="TOKEN"):
-            composition.broker_authority.authenticate(authenticated)
     finally:
         composition._release_partial()
 
@@ -2979,6 +2839,11 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             if operation == "cancel_generation":
                 return {"payload": {"cancelled": True}}
             return {"payload": {
+                "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
+                "model_id": "plastic-cup-yolo11n-seg-v1",
+                "model_version": load_parallel_runtime_config(
+                    CONFIG
+                ).yolo_weights_sha256,
                 "broker_generation": 2,
                 "outcome": "NORMAL_REJECTION",
                 "candidate": None,

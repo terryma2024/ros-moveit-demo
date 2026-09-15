@@ -1174,35 +1174,6 @@ def _validate_rpc_payload(payload):
     return payload
 
 
-def _validate_broker_authority_payload(payload):
-    if type(payload) is not dict or type(payload.get("operation")) is not str:
-        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
-    expected = {
-        "authenticate_broker_message": {"operation", "message"},
-        "authorize_inference": {"operation", "request", "snapshot"},
-        "broker_health_down": {
-            "operation", "outcome", "request_id", "reason",
-        },
-    }.get(payload["operation"])
-    if expected is None or set(payload) != expected:
-        raise CliError("BROKER_RPC_PAYLOAD_SCHEMA")
-    if payload["operation"] in {
-        "authenticate_broker_message", "authorize_inference"
-    } and any(
-        type(payload[name]) is not dict for name in expected - {"operation"}
-    ):
-        raise CliError("BROKER_RPC_PAYLOAD_TYPE")
-    if payload["operation"] == "broker_health_down":
-        if payload["outcome"] not in {
-            "INFRA_ERROR", "QUEUE_TIMEOUT", "INFERENCE_TIMEOUT"
-        } or any(
-            not isinstance(payload[name], str) or not payload[name]
-            for name in ("request_id", "reason")
-        ):
-            raise CliError("BROKER_RPC_PAYLOAD_TYPE")
-    return payload
-
-
 class _CoordinatorRpcProxy:
     """Worker-side authenticated proxy with retry-safe idempotency identities."""
 
@@ -1790,6 +1761,11 @@ class _WorkerBrokerProxy:
                 snapshot.path.relative_to(self.resources.worker_root.parent)
             ),
             "input_sha256": snapshot.input_sha256,
+            "deadline_s": getattr(
+                self.client,
+                "deadline_s",
+                self.config.executing_hard_timeout_s,
+            ),
         }
         if execution_kind is ExecutionKind.ATTEMPT:
             identity["attempt_id"] = lease.attempt_id
@@ -1819,6 +1795,17 @@ class _WorkerBrokerProxy:
             },
         )
         value = self._call(message)
+        expected_model_version = (
+            self.config.yolo_weights_sha256
+            if model_id == self.config.yolo_model_id
+            else self.config.grounded_sam_manifest_sha256
+        )
+        if (
+            value.get("request_id") != request.request_id
+            or value.get("model_id") != request.model_id
+            or value.get("model_version") != expected_model_version
+        ):
+            raise CliError("BROKER_RESPONSE_IDENTITY")
         current_generation = self._refresh_broker(wait_until_healthy=False)
         if (
             value.get("broker_generation") != request_generation
@@ -2097,7 +2084,6 @@ class ProductionBatchComposition:
     ):
         self.worker_servers = []
         self._server_threads = []
-        self.broker_authority_server = None
         self.allocator = None
         self.journal = None
         try:
@@ -2257,14 +2243,11 @@ class ProductionBatchComposition:
             else provenance_revalidator
         )
         self.broker_spec_path = None
-        self.broker_authority_server = None
-        self._broker_authority_thread = None
         self.broker_generation = (
             self._prior_broker_generation() if spec.resume else 0
         )
         self.broker_runtime_root = self.authority.ipc_root / "broker"
         self.broker_input_root = spec.request.evidence_root / "broker-inputs"
-        self.broker_authority = None
         self.broker_socket_path = self.broker_runtime_root / "perception.sock"
         if spec.request.run_mode is not RunMode.DRY_RUN:
             if spec.resume:
@@ -2454,42 +2437,12 @@ class ProductionBatchComposition:
     def _prepare_broker_generation(self, generation):
         if type(generation) is not int or generation != self.broker_generation + 1:
             raise CliError("BROKER_GENERATION_SEQUENCE")
-        previous_server = self.broker_authority_server
-        previous_thread = self._broker_authority_thread
-        if previous_server is not None:
-            previous_server.close()
-            self.broker_authority_server = None
-            self._broker_authority_thread = None
-        if previous_thread is not None:
-            previous_thread.join(
-                timeout=self.spec.config.heartbeat_timeout_s + 1.0
-            )
-            if previous_thread.is_alive():
-                raise CliError("BROKER_AUTHORITY_SHUTDOWN_TIMEOUT")
         runtime_root = (
             self.authority.ipc_root / "broker"
             if generation == 1
             else self.authority.ipc_root / f"broker-g{generation}"
         )
         runtime_root.mkdir(mode=0o700)
-        authority = WorkerTokenAuthority(
-            self.spec.request.evidence_root,
-            coordinator_epoch=self.journal.coordinator_epoch,
-            ipc_root=runtime_root,
-        )
-        token_path = authority.issue("broker", generation)
-        authority_name = (
-            "authority.sock"
-            if self.adaptive_context is not None
-            else "broker-authority.sock"
-        )
-        authority_server = AuthenticatedUnixServer(
-            runtime_root / authority_name,
-            authority,
-            self._coordinator_handler,
-            deadline_s=self.spec.config.heartbeat_timeout_s,
-            max_frame_bytes=self.spec.config.broker_max_frame_bytes,
-        )
         config_copy = runtime_root / "runtime-config.yaml"
         _write_bytes(config_copy, self.spec.config_path.read_bytes())
         spec_path = runtime_root / "broker-spec.json"
@@ -2504,8 +2457,6 @@ class ProductionBatchComposition:
             "yolo_weights_sha256": self.spec.yolo_weights_sha256,
             "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
             "config_path": "/runtime/runtime-config.yaml",
-            "authority_endpoint": f"/runtime/{authority_name}",
-            "authority_token_path": f"/runtime/{token_path.name}",
             "request_deadline_s": self.spec.config.heartbeat_timeout_s,
             "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
         }
@@ -2534,21 +2485,7 @@ class ProductionBatchComposition:
         self.broker_runtime_root = runtime_root
         self.broker_socket_path = runtime_root / "perception.sock"
         self.broker_container_id_path = runtime_root / "container.cid"
-        self.broker_authority = authority
-        self.broker_token_path = token_path
         self.broker_spec_path = spec_path
-        self.broker_authority_server = authority_server
-        self._broker_authority_thread = None
-
-    def _start_broker_authority_server(self):
-        if self.broker_authority_server is None:
-            return
-        thread = threading.Thread(
-            target=self.broker_authority_server.serve_forever,
-            daemon=True,
-        )
-        thread.start()
-        self._broker_authority_thread = thread
 
     def _release_partial(self):
         for server in getattr(self, "worker_servers", ()):
@@ -2556,17 +2493,6 @@ class ProductionBatchComposition:
                 server.close()
             except Exception:
                 pass
-        server = getattr(self, "broker_authority_server", None)
-        if server is not None:
-            try:
-                server.close()
-                self.broker_authority_server = None
-            except Exception:
-                pass
-        thread = getattr(self, "_broker_authority_thread", None)
-        if thread is not None:
-            thread.join(timeout=self.spec.config.heartbeat_timeout_s + 1.0)
-            self._broker_authority_thread = None
         journal = getattr(self, "journal", None)
         if journal is not None:
             try:
@@ -2802,7 +2728,7 @@ class ProductionBatchComposition:
                     "lease": None,
                     "request_id": f"broker-health-{self.broker_generation}",
                     "idempotency_key": f"broker-health-{self.broker_generation}",
-                    "token": self.broker_token_path.read_text(encoding="ascii"),
+                    "token": "0" * 64,
                     "payload": {"operation": "health", "ready_sha256": ready_sha256},
                 }
                 response = client.call(message)
@@ -2845,7 +2771,6 @@ class ProductionBatchComposition:
             ) is not True:
                 raise CliError("BROKER_CONTAINER_RETIRE_FAILED")
             self._prepare_broker_generation(self.broker_generation + 1)
-            self._start_broker_authority_server()
             replacement = self._start_broker()
             self._wait_broker_ready(deadline_monotonic_s=deadline)
             self.coordinator.mark_broker_health(True)
@@ -3059,98 +2984,6 @@ class ProductionBatchComposition:
         operation = payload.get("operation")
         worker_id = message["worker_id"]
         generation = message["worker_generation"]
-        if worker_id == "broker":
-            _validate_broker_authority_payload(payload)
-            if generation != self.broker_generation:
-                raise CliError("BROKER_GENERATION")
-            if operation == "authenticate_broker_message":
-                inner = payload.get("message")
-                if type(inner) is not dict:
-                    raise CliError("BROKER_INNER_MESSAGE")
-                token_authority = (
-                    self.broker_authority
-                    if inner.get("worker_id") == "broker"
-                    else self.authority
-                )
-                token_authority.authenticate(inner)
-                return {"authenticated": True}
-            if operation == "broker_health_down":
-                self.coordinator.mark_broker_health(False)
-                return {"accepted": True}
-            if operation == "authorize_inference":
-                request = _inference_request(payload.get("request"))
-                snapshot = _snapshot(payload.get("snapshot"))
-                if snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(
-                    request
-                ):
-                    raise CliError("BROKER_START_IDENTITY")
-                worker = self.coordinator.snapshot().workers.get(request.worker_id)
-                if (
-                    worker is None
-                    or worker.state is not WorkerState.EXECUTING
-                    or worker.generation != request.worker_generation
-                    or worker.lease is None
-                    or worker.stop_requested
-                    or not worker.inference_allowed
-                ):
-                    return {"authorized": False}
-                lease = worker.lease
-                if any(
-                    getattr(lease, name) != getattr(request, name)
-                    for name in (
-                        "batch_id",
-                        "coordinator_epoch",
-                        "worker_id",
-                        "worker_generation",
-                        "point_id",
-                        "lease_generation",
-                    )
-                ) or lease.attempt_id != (
-                    request.attempt_id
-                    if request.execution_kind is ExecutionKind.ATTEMPT
-                    else request.validation_id
-                ):
-                    return {"authorized": False}
-                event = next(
-                    (
-                        item
-                        for item in self.journal.replay().events
-                        if item.idempotency_key == snapshot.start_event_id
-                    ),
-                    None,
-                )
-                expected_type = (
-                    "ATTEMPT_STARTED"
-                    if request.execution_kind is ExecutionKind.ATTEMPT
-                    else "VALIDATION_STARTED"
-                )
-                if (
-                    event is None
-                    or event.type != expected_type
-                    or snapshot.start_event_type != expected_type
-                    or event.coordinator_epoch != request.coordinator_epoch
-                ):
-                    return {"authorized": False}
-                identity = event.payload.get("identity")
-                if type(identity) is not dict:
-                    return {"authorized": False}
-                expected = {
-                    "batch_id": lease.batch_id,
-                    "coordinator_epoch": lease.coordinator_epoch,
-                    "worker_id": lease.worker_id,
-                    "worker_generation": lease.worker_generation,
-                    "point_id": lease.point_id,
-                    "attempt_id": lease.attempt_id,
-                    "lease_generation": lease.lease_generation,
-                }
-                authorized = (
-                    all(identity.get(name) == value for name, value in expected.items())
-                    and type(identity.get("gate_summary")) is dict
-                    and identity["gate_summary"].get("reset_epoch")
-                    == request.reset_epoch
-                )
-                return {"authorized": authorized}
-            raise CliError("BROKER_AUTHORITY_OPERATION")
         _validate_rpc_payload(payload)
         if operation in {"current_broker", "startup_broker"}:
             snapshot = self.coordinator.snapshot()
@@ -3242,21 +3075,12 @@ class ProductionBatchComposition:
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             self._server_threads.append(thread)
-        self._start_broker_authority_server()
 
     def _stop_servers(self):
         for server in self.worker_servers:
             server.close()
-        if self.broker_authority_server is not None:
-            self.broker_authority_server.close()
-            self.broker_authority_server = None
         for thread in self._server_threads:
             thread.join(timeout=1.0)
-        if self._broker_authority_thread is not None:
-            self._broker_authority_thread.join(
-                timeout=self.spec.config.heartbeat_timeout_s + 1.0
-            )
-            self._broker_authority_thread = None
 
     def _run_worker_local(self, path):
         resources = _resource_from_dict(json.loads(Path(path).read_text())["resources"])

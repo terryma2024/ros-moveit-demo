@@ -493,8 +493,6 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     ipc_root = tmp_path / "ipc"
     ipc_root.mkdir()
     owner.authority = SimpleNamespace(ipc_root=ipc_root)
-    owner.broker_authority_server = None
-    owner._broker_authority_thread = None
     owner.broker_generation = 0
     owner.adaptive_context = SimpleNamespace(
         request=SimpleNamespace(worker_count=worker_count),
@@ -515,12 +513,6 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     )
     owner._coordinator_handler = lambda _message: None
 
-    class Server:
-        def __init__(self, path, *_args, **_kwargs):
-            self.path = path
-
-    monkeypatch.setattr(cli, "AuthenticatedUnixServer", Server)
-
     owner._prepare_broker_generation(1)
 
     document = json.loads(owner.broker_spec_path.read_text(encoding="utf-8"))
@@ -535,5 +527,5 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     assert document["yolo_executor_count"] == yolo_executor_count
     assert document["grounded_sam_executor_count"] == 1
     assert document["request_deadline_s"] == expected_deadline
-    assert document["authority_endpoint"] == "/runtime/authority.sock"
-    assert owner.broker_authority_server.path.name == "authority.sock"
+    assert "authority_endpoint" not in document
+    assert "authority_token_path" not in document

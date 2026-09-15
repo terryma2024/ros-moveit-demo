@@ -310,6 +310,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
             "perception/input/rgb.npy"
         ),
         input_sha256="ab" * 32,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     candidate_document = {
@@ -430,6 +431,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
             "perception/input/rgb.npy"
         ),
         input_sha256="ab" * 32,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     response = SimpleNamespace(
@@ -632,7 +634,8 @@ def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
                 "worker-01/validations/task_start/attempt-1/working/"
                 "perception/input/rgb.npy"
             ),
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         requested.append(model_id)
@@ -767,7 +770,8 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
                 "worker-01/validations/task_start/attempt-1/working/"
                 "perception/input/rgb.npy"
             ),
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         return BrokerResponse(
@@ -1169,7 +1173,8 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
             point_id="task_start", lease_generation=1, reset_epoch="reset-2",
             image_timestamp_s=12.0,
             input_relative_path="worker-01/validations/task_start/attempt-1/working/perception/input/rgb.npy",
-            input_sha256=snapshot.input_sha256, validation_id="attempt-1",
+            input_sha256=snapshot.input_sha256, deadline_s=5.0,
+            validation_id="attempt-1",
         )
         before_send(request)
         calls.append(model_id)

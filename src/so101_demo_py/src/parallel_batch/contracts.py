@@ -252,37 +252,67 @@ def _validate_execution_identity(
 class InferenceRequest:
     request_id: str
     model_id: str
-    execution_kind: ExecutionKind
-    batch_id: str
-    coordinator_epoch: int
-    worker_id: str
-    worker_generation: int
-    point_id: str
-    lease_generation: int
-    reset_epoch: str
     image_timestamp_s: float
     input_relative_path: str
     input_sha256: str
+    deadline_s: float
+    execution_kind: ExecutionKind | None = None
+    batch_id: str | None = None
+    coordinator_epoch: int | None = None
+    worker_id: str | None = None
+    worker_generation: int | None = None
+    point_id: str | None = None
+    lease_generation: int | None = None
+    reset_epoch: str | None = None
     attempt_id: str | None = None
     validation_id: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("request_id", "model_id", "batch_id", "worker_id", "point_id", "reset_epoch"):
+        for name in ("request_id", "model_id"):
             object.__setattr__(self, name, _require_id(name, getattr(self, name)))
-        for name in ("coordinator_epoch", "worker_generation", "lease_generation"):
-            object.__setattr__(self, name, _require_positive_int(name, getattr(self, name)))
-        attempt_id, validation_id = _validate_execution_identity(
-            execution_kind=self.execution_kind,
-            attempt_id=self.attempt_id,
-            validation_id=self.validation_id,
+        scheduling = (
+            self.execution_kind,
+            self.batch_id,
+            self.coordinator_epoch,
+            self.worker_id,
+            self.worker_generation,
+            self.point_id,
+            self.lease_generation,
+            self.reset_epoch,
+            self.attempt_id,
+            self.validation_id,
         )
-        object.__setattr__(self, "attempt_id", attempt_id)
-        object.__setattr__(self, "validation_id", validation_id)
+        if any(value is not None for value in scheduling):
+            for name in ("batch_id", "worker_id", "point_id", "reset_epoch"):
+                object.__setattr__(
+                    self, name, _require_id(name, getattr(self, name))
+                )
+            for name in (
+                "coordinator_epoch",
+                "worker_generation",
+                "lease_generation",
+            ):
+                object.__setattr__(
+                    self,
+                    name,
+                    _require_positive_int(name, getattr(self, name)),
+                )
+            attempt_id, validation_id = _validate_execution_identity(
+                execution_kind=self.execution_kind,
+                attempt_id=self.attempt_id,
+                validation_id=self.validation_id,
+            )
+            object.__setattr__(self, "attempt_id", attempt_id)
+            object.__setattr__(self, "validation_id", validation_id)
         object.__setattr__(
             self,
             "image_timestamp_s",
             _require_finite("image_timestamp_s", self.image_timestamp_s),
         )
+        deadline_s = _require_finite("deadline_s", self.deadline_s)
+        if deadline_s <= 0:
+            raise ContractError("deadline_s")
+        object.__setattr__(self, "deadline_s", deadline_s)
         object.__setattr__(
             self,
             "input_relative_path",

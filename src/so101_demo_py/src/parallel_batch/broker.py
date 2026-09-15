@@ -1,11 +1,10 @@
 """
 Bounded, thread-safe model scheduling; candidates never authorize motion.
 
-The owner supplies current lease/start authorization and a monotonic host clock.
-Model warmup, transport, input verification and GPU process recovery live in the
-runtime adapter. Keep this instance for a batch; restart() advances its epoch.
-A replacement process must receive the supervisor's new generation and reject
-old transport envelopes before calling submit().
+The Broker owns correlation, queues, local deadlines, model health, and results.
+Batch leases, Worker generations, start events, journals, motion authority, and
+final result admission remain outside this module. Model warmup, transport,
+input verification and GPU process recovery live in the runtime adapter.
 """
 
 from collections import deque
@@ -69,6 +68,7 @@ class _Entry:
     generation: int
     queued: float
     queue_deadline: float
+    request_deadline: float | None
     admission: BrokerSubmission
     started: float | None = None
     inference_deadline: float | None = None
@@ -79,17 +79,17 @@ class PerceptionBroker:
     """Linearize admission, dispatch, completion and permanent fencing."""
 
     def __init__(
-        self, config, *, grounded_model_id, authorize, clock=time.monotonic,
+        self, config, *, grounded_model_id, clock=time.monotonic,
         generation=1, detectors=None, fault_hook=None,
         queue_capacity_per_model=None,
     ):
-        """Bind the frozen model limits and injected host authorization ports."""
+        """Bind frozen model limits and local scheduling resources."""
         if type(config) is not ParallelRuntimeConfig:
             raise BrokerError('RUNTIME_CONFIG_REQUIRED')
         _require_id('grounded_model_id', grounded_model_id)
         if grounded_model_id == config.yolo_model_id:
             raise BrokerError('DISTINCT_MODEL_IDS_REQUIRED')
-        if not callable(authorize) or not callable(clock):
+        if not callable(clock):
             raise BrokerError('CALLABLE_PORTS_REQUIRED')
         if fault_hook is not None and not callable(fault_hook):
             raise BrokerError('FAULT_HOOK_CALLABLE')
@@ -113,7 +113,7 @@ class PerceptionBroker:
         if any(model not in self._models or not callable(detector)
                for model, detector in self._detectors.items()):
             raise BrokerError('MODEL_DETECTORS_REQUIRED')
-        self._authorize, self._clock = authorize, clock
+        self._clock = clock
         self._fault_hook = fault_hook
         self._lock = threading.RLock()
         self._ready = dict.fromkeys(self._models, False)
@@ -121,7 +121,6 @@ class PerceptionBroker:
         self._workers = {model: deque() for model in self._models}
         self._model_turns = deque(self._models)
         self._entries = {}
-        self._inflight = {}
         self._fenced_generations = set()
         self._last_clock = None
 
@@ -173,8 +172,19 @@ class PerceptionBroker:
 
     def _fenced(self, entry):
         request = entry.request
-        return (entry.generation != self._generation or
-                (request.worker_id, request.worker_generation) in self._fenced_generations)
+        return (
+            entry.generation != self._generation
+            or (
+                request.worker_id is not None
+                and request.worker_generation is not None
+                and (request.worker_id, request.worker_generation)
+                in self._fenced_generations
+            )
+        )
+
+    @staticmethod
+    def _queue_owner(request):
+        return request.worker_id or request.request_id
 
     def _finish(self, entry, outcome, reason=None, candidate=None, *, completed=None,
                 model_result=False):
@@ -211,14 +221,15 @@ class PerceptionBroker:
         # All fallible/callback work precedes this atomic terminal publication
         # and reservation release under the state lock.
         queue = self._queues[request.model_id]
-        if request.worker_id in queue and request.request_id in queue[request.worker_id]:
-            queue[request.worker_id].remove(request.request_id)
-            if not queue[request.worker_id]:
-                del queue[request.worker_id]
-                self._workers[request.model_id].remove(request.worker_id)
-        key = (request.worker_id, request.model_id)
-        if self._inflight.get(key) == request.request_id:
-            del self._inflight[key]
+        owner = self._queue_owner(request)
+        if owner in queue and request.request_id in queue[owner]:
+            queue[owner].remove(request.request_id)
+            if not queue[owner]:
+                del queue[owner]
+                try:
+                    self._workers[request.model_id].remove(owner)
+                except ValueError:
+                    pass
         entry.response = response
         return entry.response
 
@@ -229,31 +240,58 @@ class PerceptionBroker:
         return entry.response
 
     def _guard(self, entry):
-        # Terminal rejections never regain a candidate, even after recovery.
+        self._expire_deadline(entry)
+
+    def _expire_deadline(self, entry):
+        """Apply only local fences, health, and deadlines; never call authority."""
         if entry.response is not None and entry.response.outcome is not ModelOutcome.QUALIFIED:
             return
         if self._fenced(entry):
             self._finish(entry, ModelOutcome.CANCELLED, 'GENERATION_FENCED')
-            return
-        try:
-            authorized = self._authorize(entry.request) is True
-        except Exception:
-            self._finish(entry, ModelOutcome.INFRA_ERROR, 'AUTHORIZATION_UNAVAILABLE')
-            self.set_model_ready(entry.request.model_id, False)
-            return
-        # The callback may block or reenter restart/cancel; recheck state afterward.
-        if self._fenced(entry):
-            self._finish(entry, ModelOutcome.CANCELLED, 'GENERATION_FENCED')
-        elif entry.response is not None and entry.response.outcome is not ModelOutcome.QUALIFIED:
-            return
-        elif not authorized:
-            self._finish(entry, ModelOutcome.CANCELLED, 'REQUEST_NOT_AUTHORIZED')
         elif not self.healthy:
             self._finish(entry, ModelOutcome.INFRA_ERROR, 'BROKER_NOT_READY')
+        elif (
+            entry.request_deadline is not None
+            and self._now() >= entry.request_deadline
+        ):
+            self._finish(
+                entry,
+                ModelOutcome.INFERENCE_TIMEOUT,
+                'REQUEST_DEADLINE_EXCEEDED',
+            )
         elif entry.started is None and self._now() >= entry.queue_deadline:
             self._finish(entry, ModelOutcome.QUEUE_TIMEOUT, 'QUEUE_DEADLINE_EXCEEDED')
         elif entry.started is not None and self._now() >= entry.inference_deadline:
             self._finish(entry, ModelOutcome.INFERENCE_TIMEOUT, 'INFERENCE_DEADLINE_EXCEEDED')
+
+    def expire_due(self):
+        """Expire all locally due work without remote authorization traffic."""
+        with self._lock:
+            changed = False
+            for entry in tuple(self._entries.values()):
+                before = entry.response
+                self._expire_deadline(entry)
+                changed = (entry.response is not before) or changed
+            return changed
+
+    def next_deadline_delay(self):
+        """Return seconds until the nearest live queue or inference deadline."""
+        with self._lock:
+            deadlines = []
+            for entry in self._entries.values():
+                if entry.response is not None and entry.response.outcome is not ModelOutcome.QUALIFIED:
+                    continue
+                deadline = (
+                    entry.queue_deadline
+                    if entry.started is None
+                    else entry.inference_deadline
+                )
+                if entry.request_deadline is not None:
+                    deadline = min(deadline, entry.request_deadline)
+                deadlines.append(deadline)
+            if not deadlines:
+                return None
+            return max(0.0, min(deadlines) - self._now())
 
     def set_model_ready(self, model_id, ready):
         """Runtime health loss invalidates every pending model request."""
@@ -273,14 +311,13 @@ class PerceptionBroker:
             copied = deepcopy(original)
         except Exception:
             return self._copy_failure(entry)
-        # No candidate copying or callback follows this final return guard.
-        self._guard(entry)
+        # Delivery performs only local deadline/fence checks.
+        self._expire_deadline(entry)
         if entry.response is original:
             return copied
         if entry.response.outcome is ModelOutcome.QUALIFIED:
-            # A pending poll/submit can reenter complete through authorization.
-            # Preserve that first result, but defer delivery to the next read
-            # rather than expose its cache or loop through more callbacks here.
+            # Preserve a result published by a reentrant local callback, but
+            # defer delivery to the next read rather than expose stale cache.
             return None
         # A candidate-free invalidation record is immutable and safe to expose.
         return entry.response
@@ -291,23 +328,34 @@ class PerceptionBroker:
             entry = self._lookup(request)
             if entry is None:
                 now = self._now()
+                request_deadline = (
+                    None
+                    if request.deadline_s is None
+                    else now + request.deadline_s
+                )
                 entry = _Entry(request, self._generation, now,
                                now + self._queue_timeout[request.model_id],
+                               request_deadline,
                                BrokerSubmission(False))
                 self._entries[request.request_id] = entry
                 self._guard(entry)
                 if entry.response is None:
-                    key = (request.worker_id, request.model_id)
                     counts = {model: sum(map(len, queue.values()))
                               for model, queue in self._queues.items()}
-                    reason = ('WORKER_MODEL_INFLIGHT' if key in self._inflight else
-                              'QUEUE_FULL' if counts[request.model_id] >= self._capacity or
-                              sum(counts.values()) >= self._total_capacity else None)
+                    reason = (
+                        'QUEUE_FULL'
+                        if counts[request.model_id] >= self._capacity
+                        or sum(counts.values()) >= self._total_capacity
+                        else None
+                    )
                     if reason is None:
-                        self._queues[request.model_id][request.worker_id] = deque(
-                            (request.request_id,))
-                        self._workers[request.model_id].append(request.worker_id)
-                        self._inflight[key] = request.request_id
+                        owner = self._queue_owner(request)
+                        if owner not in self._queues[request.model_id]:
+                            self._queues[request.model_id][owner] = deque()
+                            self._workers[request.model_id].append(owner)
+                        self._queues[request.model_id][owner].append(
+                            request.request_id
+                        )
                         entry.admission = BrokerSubmission(True)
                     else:
                         self._finish(entry, ModelOutcome.INFRA_ERROR, reason)
@@ -321,7 +369,7 @@ class PerceptionBroker:
             return BrokerSubmission(entry.admission.accepted, entry.admission.reason, response)
 
     def next_ready_request(self, model_id=None):
-        """Dispatch in model/Worker round-robin, after fresh lease/deadline checks."""
+        """Dispatch in model/client round-robin after local deadline checks."""
         with self._lock:
             if model_id is not None:
                 _require_id('model_id', model_id)
@@ -329,7 +377,7 @@ class PerceptionBroker:
                     raise BrokerError('UNKNOWN_MODEL')
             for entry in tuple(self._entries.values()):
                 if entry.response is None:
-                    self._guard(entry)
+                    self._expire_deadline(entry)
             if not self.healthy:
                 return None
             models = self._models if model_id is None else (model_id,)
@@ -341,8 +389,8 @@ class PerceptionBroker:
                     model = model_id
                 workers = self._workers[model]
                 while workers:
-                    worker = workers[0]
-                    entry = self._entries[self._queues[model][worker][0]]
+                    owner = workers[0]
+                    entry = self._entries[self._queues[model][owner][0]]
                     self._guard(entry)
                     if entry.response is not None:
                         continue
@@ -354,8 +402,11 @@ class PerceptionBroker:
                                      'QUEUE_DEADLINE_EXCEEDED', completed=started)
                         continue
                     workers.popleft()
-                    self._queues[model][worker].popleft()
-                    del self._queues[model][worker]
+                    self._queues[model][owner].popleft()
+                    if self._queues[model][owner]:
+                        workers.append(owner)
+                    else:
+                        del self._queues[model][owner]
                     entry.started = started
                     entry.inference_deadline = entry.started + self._inference_timeout[model]
                     return entry.request
@@ -381,7 +432,7 @@ class PerceptionBroker:
             if entry.response.outcome is ModelOutcome.INFRA_ERROR:
                 self.set_model_ready(request.model_id, False)
             # Copying a candidate can take time. Recheck the completion boundary
-            # after ownership transfer, just as after the authorization callback.
+            # after ownership transfer.
             self._guard(entry)
             return self._copy_response(entry)
 
@@ -408,12 +459,12 @@ class PerceptionBroker:
             return self._generation
 
     def poll_response(self, request):
-        """Poll terminal/audit evidence, expiring work even when no detector returns."""
+        """Poll terminal/audit evidence and local deadlines without remote I/O."""
         with self._lock:
             entry = self._lookup(request)
             if entry is None:
                 raise BrokerError('UNKNOWN_REQUEST')
-            self._guard(entry)
+            self._expire_deadline(entry)
             return self._copy_response(entry)
 
     def run_next(self):

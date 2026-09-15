@@ -207,7 +207,6 @@ def test_runtime_receives_executor_counts_from_adaptive_identity(
             return None
 
     transport = SimpleNamespace(
-        authorize=lambda *_args: True,
         runtime_identity={
             'yolo_executor_count': 2,
             'grounded_sam_executor_count': 1,

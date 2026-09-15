@@ -236,7 +236,7 @@ def test_server_contains_reply_disconnect_to_the_single_client(tmp_path):
     assert errors == []
 
 
-def test_broker_transport_authenticates_with_coordinator_before_real_socket_mutation(
+def test_broker_transport_validates_locally_before_real_socket_mutation(
     tmp_path,
 ):
     from so101_demo.parallel_batch.broker import BrokerResponse, BrokerSubmission
@@ -247,28 +247,15 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         NormalizedInferenceResponseIdentity,
     )
     from so101_demo.runtime.parallel_ipc import (
-        BrokerTransport, IpcError,
-        UnixRpcClient,
-        WorkerTokenAuthority,
+        BrokerTransport, IpcError, UnixRpcClient,
     )
     from so101_demo.runtime.parallel_perception_runtime import Snapshot
 
-    worker_authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
-    worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
-    worker_authority.bind_lease("worker-01", 2, request()["lease"])
-    authority_calls = []
-
-    def coordinator_authority(operation, payload):
-        authority_calls.append((operation, payload))
-        if operation == "authenticate_broker_message":
-            worker_authority.authenticate(payload["message"])
-        return True
-
+    (tmp_path / "ipc").mkdir(mode=0o700)
     transport = BrokerTransport(
         ipc_root=tmp_path / "ipc",
         config=SimpleNamespace(broker_max_frame_bytes=8 * 1024 * 1024),
         generation=1,
-        authority_call=coordinator_authority,
         deadline_s=1.0,
         runtime_identity={
             "connection_handler_count": 8,
@@ -294,6 +281,7 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
             "perception/input/rgb.npy"
         ),
         input_sha256="ef" * 32,
+        deadline_s=5.0,
         attempt_id="attempt-1",
     )
     snapshot = Snapshot(
@@ -378,34 +366,30 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
     assert reply["payload"]["outcome"] == "QUALIFIED"
     assert reply["payload"]["candidate"] == {"candidate": "real-service-result"}
     assert replay == reply
-    assert [call[0] for call in authority_calls] == [
-        "authenticate_broker_message",
-        "authorize_inference",
-        "authenticate_broker_message",
-    ]
-    assert service.mutations == [(inference, snapshot)]
+    assert service.mutations == [(inference, snapshot), (inference, snapshot)]
     metrics = transport.metrics_snapshot()
     assert metrics["logical_inference_count"] == 1
-    assert metrics["replay_count"] == 1
+    assert "replay_count" not in metrics
     assert metrics["transport_errors"].get("TRUNCATED_FRAME", 0) == 0
     assert {
-        "accepted", "received", "authenticated", "owner", "replay",
-        "serialized", "sent"
+        "accepted", "received", "validated", "serialized", "sent"
     }.issubset({event["event"] for event in metrics["events"]})
+    assert "authority_call_count" not in metrics
+    assert "journal_replay_hot_path_count" not in metrics
+    summary_path = transport.persist_metrics_summary()
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert persisted == {
+        "schema_version": 1,
+        "kind": "broker_concurrency_summary",
+        **metrics,
+    }
+    assert summary_path.stat().st_mode & 0o777 == 0o600
 
     assert transport.report_health_down({
         "outcome": "INFERENCE_TIMEOUT",
         "request_id": inference.request_id,
         "reason": "deadline exceeded",
     }) is True
-    assert authority_calls[-1] == (
-        "broker_health_down",
-        {
-            "outcome": "INFERENCE_TIMEOUT",
-            "request_id": inference.request_id,
-            "reason": "deadline exceeded",
-        },
-    )
     with pytest.raises(IpcError, match="BROKER_HEALTH_DOWN_OUTCOME"):
         transport.report_health_down({
             "outcome": "MODEL_ERROR",
@@ -440,7 +424,44 @@ def test_broker_transport_authenticates_with_coordinator_before_real_socket_muta
         "ready": ready,
         "ready_sha256": ready_sha,
     }
-    assert service.mutations == [(inference, snapshot)]
+    assert service.mutations == [(inference, snapshot), (inference, snapshot)]
+
+
+def test_broker_summary_survives_runtime_start_failure(tmp_path):
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.runtime.parallel_ipc import BrokerTransport
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    ipc_root = tmp_path / "ipc"
+    ipc_root.mkdir(mode=0o700)
+    config = load_parallel_runtime_config(
+        Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml"
+    )
+    transport = BrokerTransport(
+        ipc_root=ipc_root,
+        config=config,
+        generation=1,
+        deadline_s=1.0,
+    )
+
+    class FailedRuntime:
+        executor_counts = {YOLO_ID: 1, GROUNDED_ID: 1}
+        health_changed = lambda _healthy: None
+
+        def start(self):
+            raise RuntimeError("controlled startup failure")
+
+        def _unhealthy(self):
+            self.health_changed(False)
+
+    with pytest.raises(RuntimeError, match="controlled startup failure"):
+        transport.serve(FailedRuntime(), endpoint=ipc_root / "perception.sock")
+
+    summary = json.loads(
+        (ipc_root / "broker-concurrency-summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["kind"] == "broker_concurrency_summary"
+    assert summary["events"] == []
 
 
 def test_server_bounds_handler_and_response_send_to_one_absolute_deadline(tmp_path):
@@ -506,16 +527,19 @@ def test_server_handler_timeout_returns_structured_error(tmp_path):
         IpcError,
         UnixRpcClient,
         WorkerTokenAuthority,
+        _BrokerMetrics,
     )
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     authority.bind_lease("worker-01", 2, request()["lease"])
+    metrics = _BrokerMetrics()
     server = AuthenticatedUnixServer(
         tmp_path / "ipc/coordinator.sock",
         authority,
         lambda _message: time.sleep(0.20),
         deadline_s=0.05,
+        metrics=metrics,
     )
     thread = threading.Thread(target=server.serve_once)
     thread.start()
@@ -526,32 +550,28 @@ def test_server_handler_timeout_returns_structured_error(tmp_path):
         thread.join(timeout=1.0)
         server.close()
     assert not thread.is_alive()
+    timeout = next(
+        event for event in metrics.snapshot()["events"]
+        if event["event"] == "handler_timeout"
+    )
+    assert timeout["timeout_phase"] == "received"
+    assert type(timeout["phase_started_monotonic_s"]) is float
 
 
 def test_server_eight_distinct_requests_enter_handlers_concurrently():
     from so101_demo.runtime.parallel_ipc import (
         AuthenticatedUnixServer,
         UnixRpcClient,
-        WorkerTokenAuthority,
         _BrokerMetrics,
-        _CoordinatorBackedBrokerAuthority,
+        _StatelessBrokerDispatcher,
     )
 
     root = Path(os.environ["TMPDIR"]) / "eight"
     root.mkdir()
-    worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
-    worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
-    worker_authority.bind_lease("worker-01", 2, request()["lease"])
     metrics = _BrokerMetrics()
-    authority = _CoordinatorBackedBrokerAuthority(
-        worker_authority.ipc_root,
-        lambda operation, payload: (
-            worker_authority.authenticate(payload["message"])
-            if operation == "authenticate_broker_message"
-            else None
-        ),
-        metrics,
-    )
+    ipc_root = root / "ipc"
+    ipc_root.mkdir(mode=0o700)
+    authority = _StatelessBrokerDispatcher(ipc_root, metrics)
     all_entered = threading.Barrier(8)
     active = 0
     maximum_active = 0
@@ -584,6 +604,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
 
     def call(index):
         message = request(
+            kind="broker_call",
             request_id=f"request-{index}",
             idempotency_key=f"operation-{index}",
             payload={"operation": "infer"},
@@ -614,7 +635,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently():
     summary = metrics.snapshot()
     assert summary["pending_rpc_peak"] == 8
     assert summary["logical_inference_count"] == 8
-    assert summary["replay_count"] == 0
+    assert "replay_count" not in summary
     assert summary["transport_errors"].get("TRUNCATED_FRAME", 0) == 0
 
 
@@ -623,7 +644,6 @@ def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
-        _CoordinatorBackedBrokerAuthority,
     )
 
     root = Path(os.environ["TMPDIR"]) / "pending"
@@ -631,14 +651,7 @@ def test_pending_mutation_same_key_executes_once_and_replays_terminal_result():
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     worker_authority.bind_lease("worker-01", 2, request()["lease"])
-    authority = _CoordinatorBackedBrokerAuthority(
-        worker_authority.ipc_root,
-        lambda operation, payload: (
-            worker_authority.authenticate(payload["message"])
-            if operation == "authenticate_broker_message"
-            else None
-        ),
-    )
+    authority = worker_authority
     mutation_entered = threading.Event()
     release_mutation = threading.Event()
     mutation_calls = []
@@ -693,7 +706,6 @@ def test_pending_mutation_failure_is_published_before_waiters_wake():
     from so101_demo.runtime.parallel_ipc import (
         IpcError,
         WorkerTokenAuthority,
-        _CoordinatorBackedBrokerAuthority,
     )
 
     root = Path(os.environ["TMPDIR"]) / "failed"
@@ -701,10 +713,7 @@ def test_pending_mutation_failure_is_published_before_waiters_wake():
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
     worker_authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
     worker_authority.bind_lease("worker-01", 2, request()["lease"])
-    authority = _CoordinatorBackedBrokerAuthority(
-        worker_authority.ipc_root,
-        lambda _operation, payload: worker_authority.authenticate(payload["message"]),
-    )
+    authority = worker_authority
     mutation_entered = threading.Event()
     release_mutation = threading.Event()
     calls = []
@@ -1111,10 +1120,6 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     config.write_bytes(
         (Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml").read_bytes()
     )
-    token = ipc_root / "broker-g1.token"
-    token.write_text("ab" * 32, encoding="ascii")
-    token.chmod(0o600)
-    endpoint = ipc_root / "broker-authority.sock"
     document = {
         "schema_version": 1,
         "kind": "so101_parallel_broker_runtime",
@@ -1126,8 +1131,6 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         "yolo_weights_sha256": "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781",
         "grounded_manifest_sha256": "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775",
         "config_path": str(config),
-        "authority_endpoint": str(endpoint),
-        "authority_token_path": str(token),
         "request_deadline_s": 5.0,
         "max_frame_bytes": 8388608,
     }
@@ -1135,34 +1138,9 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     spec.write_text(
         json.dumps(document, sort_keys=True, separators=(",", ":")), encoding="utf-8"
     )
-    calls = []
-
-    class Client:
-        def __init__(self, *args, **kwargs):
-            calls.append((args, kwargs))
-
-        def __call__(self, _operation, _payload):
-            return True
-
-    monkeypatch.setattr(
-        parallel_ipc,
-        "_BrokerCoordinatorClient",
-        Client,
-    )
     transport = parallel_ipc.build_broker_transport(spec)
     assert transport.generation == 1
     assert transport.runtime_identity == document
-    assert calls == [
-        (
-            (endpoint, token),
-            {
-                "coordinator_epoch": 3,
-                "generation": 1,
-                "deadline_s": 5.0,
-                "max_frame_bytes": 8388608,
-            },
-        )
-    ]
     adaptive_document = {
         **document,
         "queue_capacity_per_model": 16,

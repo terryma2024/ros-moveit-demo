@@ -23,7 +23,8 @@ def req(worker='worker-01', request_id='a', *, model=YOLO, generation=1, **chang
               'point_id': 'point-1', 'lease_generation': 1, 'reset_epoch': 'reset-1',
               'image_timestamp_s': 1000.0,
               'input_relative_path': f'{worker}/attempts/point-1/attempt-1/input.npy',
-              'input_sha256': 'a' * 64, 'attempt_id': 'attempt-1'}
+              'input_sha256': 'a' * 64, 'deadline_s': 1000.0,
+              'attempt_id': 'attempt-1'}
     return InferenceRequest(**(values | changes))
 
 
@@ -32,11 +33,9 @@ def model_result(outcome=ModelOutcome.NORMAL_REJECTION):
     return ModelResult(outcome, {'mask': [1, 2]} if outcome == ModelOutcome.QUALIFIED else None)
 
 
-def harness(
-    *, ready=True, detectors=None, authorize=None, queue_capacity_per_model=None
-):
+def harness(*, ready=True, detectors=None, queue_capacity_per_model=None):
     from so101_demo.parallel_batch.broker import PerceptionBroker
-    control = SimpleNamespace(now=100.0, authorized=True)
+    control = SimpleNamespace(now=100.0)
     config = load_parallel_runtime_config(
         Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
     capacity_kwargs = (
@@ -44,7 +43,6 @@ def harness(
         else {'queue_capacity_per_model': queue_capacity_per_model}
     )
     broker = PerceptionBroker(config, grounded_model_id=GROUNDED,
-                              authorize=authorize or (lambda r: control.authorized),
                               clock=lambda: control.now, detectors=detectors,
                               **capacity_kwargs)
     if ready:
@@ -97,14 +95,13 @@ def test_model_specific_dequeue_never_takes_another_models_request():
 
 
 @pytest.mark.parametrize('running', [False, True])
-def test_queued_and_running_each_block_same_worker_model(running):
+def test_distinct_requests_from_same_worker_are_independently_admitted(running):
     broker, _ = harness()
     request = enqueue(broker, req())
     if running:
         assert broker.next_ready_request() == request
-    rejected = broker.submit(req(request_id='second', generation=2))
-    assert rejected.accepted is False
-    assert rejected.reason == 'WORKER_MODEL_INFLIGHT'
+    second = broker.submit(req(request_id='second', generation=2))
+    assert second.accepted is True
     assert broker.submit(req(request_id='grounded', model=GROUNDED)).accepted is True
 
 
@@ -185,7 +182,7 @@ def test_inference_deadline_starts_at_dispatch_and_never_returns_late_candidate(
     assert broker.complete(request, model_result()).outcome == ModelOutcome.INFERENCE_TIMEOUT
 
 
-def test_completion_before_deadline_returns_candidate_once_and_replays_first_result():
+def test_completion_before_deadline_returns_candidate_and_preserves_first_result():
     broker, clock = harness()
     request = start(broker, req())
     clock.now = 119.9
@@ -259,27 +256,6 @@ def test_health_requires_both_models_and_loss_invalidates_pending_work():
     assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate is None
 
 
-@pytest.mark.parametrize('boundary', ['submit', 'dispatch', 'complete', 'replay'])
-def test_lease_is_rechecked_and_loss_permanently_fences_request(boundary):
-    broker, clock = harness()
-    request = req()
-    if boundary != 'submit':
-        enqueue(broker, request)
-    if boundary in ('complete', 'replay'):
-        assert broker.next_ready_request() == request
-    if boundary == 'replay':
-        assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate
-    clock.authorized = False
-    if boundary == 'submit':
-        assert broker.submit(request).reason == 'REQUEST_NOT_AUTHORIZED'
-    elif boundary == 'dispatch':
-        assert broker.next_ready_request() is None
-    else:
-        assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate is None
-    clock.authorized = True
-    assert broker.submit(request).accepted is False
-
-
 def test_identity_collision_cannot_complete_or_replace_original():
     from so101_demo.parallel_batch.broker import BrokerError
     broker, _ = harness()
@@ -324,19 +300,6 @@ def test_injected_detector_result_obeys_same_generation_fence():
     assert response.candidate is None
 
 
-def test_authorization_callback_restart_cannot_let_old_candidate_escape():
-    broker, _ = harness()
-    request = start(broker, req())
-
-    def authorize(value):
-        broker.restart()
-        return True
-    broker._authorize = authorize
-    response = broker.complete(request, model_result(ModelOutcome.QUALIFIED))
-    assert response.outcome == ModelOutcome.CANCELLED
-    assert response.candidate is None
-
-
 def test_health_loss_fences_cached_candidate_even_after_recovery():
     broker, _ = harness()
     request = start(broker, req())
@@ -346,16 +309,6 @@ def test_health_loss_fences_cached_candidate_even_after_recovery():
     response = broker.poll_response(request)
     assert response.outcome == ModelOutcome.INFRA_ERROR
     assert response.candidate is None
-
-
-def test_authorization_transport_failure_marks_broker_unhealthy():
-    def unavailable(request):
-        raise ConnectionError('coordinator unavailable')
-    broker, _ = harness(authorize=unavailable)
-    response = broker.submit(req())
-    assert response.accepted is False
-    assert response.response.outcome == ModelOutcome.INFRA_ERROR
-    assert broker.healthy is False
 
 
 def test_timeout_poll_and_cancel_stay_responsive_while_detector_is_blocked():
@@ -407,11 +360,6 @@ def test_ready_requires_literal_boolean(ready):
     with pytest.raises(BrokerError, match='MODEL_READY_CONTRACT'):
         broker.set_model_ready(YOLO, ready)
     assert broker.healthy is False
-
-
-def test_authorization_requires_literal_true():
-    broker, _ = harness(authorize=lambda request: 'yes')
-    assert broker.submit(req()).accepted is False
 
 
 def test_missing_or_malformed_detector_result_is_infra_not_normal_rejection():
@@ -524,8 +472,7 @@ def test_candidate_copy_exception_terminates_work_atomically_and_marks_unhealthy
     assert response.candidate is None
     assert broker.healthy is False
     if copy_stage == 'store':
-        assert copying.competing.accepted is False
-        assert copying.competing.reason == 'WORKER_MODEL_INFLIGHT'
+        assert copying.competing.accepted is True
     broker.set_model_ready(YOLO, True)
     broker.set_model_ready(GROUNDED, True)
     assert broker.complete(request, model_result(ModelOutcome.QUALIFIED)).candidate is None
@@ -645,42 +592,21 @@ def test_reentrant_read_during_candidate_copy_does_not_release_or_duplicate_requ
                 assert receipt.response is None
             else:
                 assert broker.poll_response(request) is None
-            assert broker.submit(req(request_id='competing')).accepted is False
+            assert broker.submit(req(request_id='competing')).accepted is True
             return {'mask': [1, 2]}
 
     response = broker.complete(request, ModelResult(ModelOutcome.QUALIFIED, ReentrantCandidate()))
     assert response.outcome == ModelOutcome.QUALIFIED
-    assert broker.next_ready_request() is None
+    assert broker.next_ready_request().request_id == 'competing'
     assert broker.complete(request, model_result()) == response
 
 
-@pytest.mark.parametrize('operation', ['poll', 'submit'])
-@pytest.mark.parametrize('outcome', [
-    ModelOutcome.QUALIFIED, ModelOutcome.NORMAL_REJECTION,
-    ModelOutcome.INFRA_ERROR, ModelOutcome.CANCELLED,
-])
-def test_guard_reentrant_publication_never_exposes_cached_candidate(operation, outcome):
+def test_polling_is_local_and_does_not_call_remote_authority():
     broker, _ = harness()
     request = start(broker, req())
-    authorization = SimpleNamespace(calls=0)
+    calls = []
+    broker._authorize = calls.append
 
-    def authorize(value):
-        authorization.calls += 1
-        if authorization.calls == 2:
-            broker.complete(request, model_result(outcome))
-        return True
+    assert broker.poll_response(request) is None
 
-    broker._authorize = authorize
-    response = (broker.poll_response(request) if operation == 'poll'
-                else broker.submit(request).response)
-    # A poll/submit may defer a candidate published during its last guard until
-    # the next read. Either way, a returned candidate must have caller ownership.
-    if response is None:
-        response = broker.poll_response(request)
-    assert response.outcome == outcome
-    if outcome is ModelOutcome.QUALIFIED:
-        response.candidate['mask'].append('caller-mutation')
-        assert broker.poll_response(request).candidate == {'mask': [1, 2]}
-    else:
-        assert response.candidate is None
-        assert broker.poll_response(request) == response
+    assert calls == []

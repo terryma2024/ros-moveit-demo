@@ -1,9 +1,9 @@
-"""Shared detector service; transport and durable ACK authority are injected.
+"""Shared detector service with bounded, stateless request processing.
 
 Input SHA256 covers the exact .npy file bytes (including its header). The Worker
-seals the file 0400 before submission. Snapshot metadata is verified against the
-authenticated start-event port on every dispatch and completion. This module
-does not localize depth, access TF, publish ROS messages, or authorize motion.
+seals the file 0400 before submission. This module does not interpret batch
+leases, start events, Worker generations, or journals, and it does not localize
+depth, access TF, publish ROS messages, or authorize motion.
 """
 
 from dataclasses import dataclass
@@ -28,7 +28,7 @@ from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamT
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate, DetectionFrame, DetectionQuery
 from so101_demo.parallel_batch.broker import BrokerSubmission, ModelResult, PerceptionBroker
 from so101_demo.parallel_batch.contracts import (
-    ExecutionKind, InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
+    InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
     ParallelRuntimeConfig,
 )
 
@@ -62,19 +62,15 @@ def frozen_options(yolo_weights, grounded_root):
 
 @dataclass(frozen=True)
 class Snapshot:
-    """Authenticated metadata alongside the canonical Task 1 request identity."""
+    """Image metadata; legacy scheduling fields are opaque compatibility data."""
 
     shape: tuple
     source_stamp_ns: int
     source_frame_id: str
-    start_event_id: str
-    start_event_type: str
-    start_identity: NormalizedInferenceResponseIdentity
+    start_event_id: str | None = None
+    start_event_type: str | None = None
+    start_identity: NormalizedInferenceResponseIdentity | None = None
     query_class_id: str = 'plastic_cup'
-
-
-class StartAuthorizationRejected(ValueError):
-    """A verified negative authorization or mismatched execution identity."""
 
 
 def checked_path(path, *, owner=None, mode=None, directory=False):
@@ -157,7 +153,7 @@ def normalize_batch(batch, frame):
 class ParallelPerceptionRuntime:
     """One model pair per service generation, with irreversible unhealthy state."""
 
-    def __init__(self, *, input_root, ready_receipt, options, provenance, authorize,
+    def __init__(self, *, input_root, ready_receipt, options, provenance,
                  executor_counts=None,
                  readonly_mount=lambda root: bool(os.statvfs(root).f_flag & os.ST_RDONLY),
                  health_changed=lambda healthy: None):
@@ -177,7 +173,7 @@ class ParallelPerceptionRuntime:
             or self.executor_counts[GROUNDED_ID] != 1
         ):
             raise ValueError('EXECUTOR_COUNT')
-        self.authorize, self.readonly_mount = authorize, readonly_mount
+        self.readonly_mount = readonly_mount
         self.health_changed = health_changed
         self.detectors = {}
         self.healthy = False
@@ -196,7 +192,10 @@ class ParallelPerceptionRuntime:
             'reason': reason,
             'request_id': request.request_id,
             'model_id': request.model_id,
-            'execution_kind': request.execution_kind.value,
+            'execution_kind': (
+                None if request.execution_kind is None
+                else request.execution_kind.value
+            ),
             'batch_id': request.batch_id,
             'worker_id': request.worker_id,
             'worker_generation': request.worker_generation,
@@ -263,31 +262,23 @@ class ParallelPerceptionRuntime:
             self._unhealthy()
             raise ModelRuntimeInfrastructureError(f'START_FAILED: {error}') from error
 
-    def _authorized(self, request, snapshot):
+    def _frame(self, request, snapshot):
         if type(request) is not InferenceRequest or type(snapshot) is not Snapshot:
             raise ValueError('REQUEST_SNAPSHOT_REQUIRED')
-        expected = ('ATTEMPT_STARTED' if request.execution_kind is ExecutionKind.ATTEMPT
-                    else 'VALIDATION_STARTED')
-        if (snapshot.start_event_type != expected or not snapshot.start_event_id
-                or snapshot.start_identity != NormalizedInferenceResponseIdentity.from_request(request)):
-            raise StartAuthorizationRejected('START_ACK_IDENTITY')
-        authorized = self.authorize(request, snapshot)
-        if authorized is False:
-            raise StartAuthorizationRejected('START_ACK_REJECTED')
-        if authorized is not True:
-            raise ModelRuntimeInfrastructureError('INVALID_AUTHORITY_RESPONSE')
-
-    def _frame(self, request, snapshot):
-        self._authorized(request, snapshot)
-        branch, eid = (('attempts', request.attempt_id)
-                       if request.execution_kind is ExecutionKind.ATTEMPT
-                       else ('validations', request.validation_id))
-        expected = f'{request.worker_id}/{branch}/{request.point_id}/{eid}/working/perception/input/rgb.npy'
-        if request.input_relative_path != expected:
-            raise ValueError('EXECUTION_INPUT_PATH')
+        relative = Path(request.input_relative_path)
+        if (
+            relative.is_absolute()
+            or not relative.parts
+            or any(part in {'', '.', '..'} for part in relative.parts)
+        ):
+            raise ValueError('INPUT_RELATIVE_PATH')
         if self.readonly_mount(self.input_root) is not True:
             raise ValueError('READONLY_INPUT_MOUNT_REQUIRED')
-        path = checked_path(self.input_root / expected, owner=(os.getuid(), os.getgid()), mode=0o400)
+        path = checked_path(
+            self.input_root / relative,
+            owner=(os.getuid(), os.getgid()),
+            mode=0o400,
+        )
         path.relative_to(self.input_root)
         for parent in path.parents:
             if parent == self.input_root.parent:
@@ -352,7 +343,7 @@ class ParallelPerceptionRuntime:
 
 
 class PerceptionService:
-    """Bind authenticated snapshots to the one canonical bounded Broker.
+    """Bind immutable snapshots to the one canonical bounded Broker.
 
     Task 11 transport calls submit/run_next/poll_response; an independent timer
     must poll deadlines while run_next blocks on CUDA. The supervisor provides
@@ -373,13 +364,15 @@ class PerceptionService:
         self._started = False
         self._closed = threading.Event()
         self._work_available = threading.Event()
-        self._response_condition = threading.Condition(self._lock)
+        # Waiting/notification stays independent from snapshot ownership so
+        # request completion cannot block a concurrent submit or detector.
+        self._response_condition = threading.Condition()
         self._executor_threads = []
         self._watchdog_thread = None
         self._metrics = None
         kwargs = {} if clock is None else {'clock': clock}
         self.broker = PerceptionBroker(
-            config, grounded_model_id=GROUNDED_ID, authorize=self._authorize,
+            config, grounded_model_id=GROUNDED_ID,
             generation=generation, detectors={model: self._detect for model in (YOLO_ID, GROUNDED_ID)},
             queue_capacity_per_model=queue_capacity_per_model,
             **kwargs)
@@ -391,17 +384,6 @@ class PerceptionService:
     def _health_changed(self, healthy):
         for model in (YOLO_ID, GROUNDED_ID):
             self.broker.set_model_ready(model, healthy)
-
-    def _authorize(self, request):
-        with self._lock:
-            snapshot = self._snapshots.get(request.request_id)
-        if snapshot is None:
-            return False
-        try:
-            self.runtime._authorized(request, snapshot)
-            return True
-        except StartAuthorizationRejected:
-            return False
 
     def _detect(self, request, *, executor_index=0):
         with self._lock:
@@ -465,6 +447,8 @@ class PerceptionService:
                 continue
             if self._metrics is not None:
                 self._metrics.started(request, executor_index)
+            with self._response_condition:
+                self._response_condition.notify_all()
             try:
                 result = self._detect(
                     request,
@@ -475,20 +459,23 @@ class PerceptionService:
                     ModelOutcome.INFRA_ERROR,
                     reason=f'DETECTOR_RUNTIME_ERROR: {error}',
                 )
+            if self._metrics is not None:
+                self._metrics.model_completed(request, result.outcome.value)
             response = self.broker.complete(request, result)
             self._response_health(response)
             with self._response_condition:
                 self._response_condition.notify_all()
 
     def _watchdog_loop(self):
-        while not self._closed.wait(0.02):
-            changed = False
-            try:
+        while not self._closed.is_set():
+            with self._response_condition:
                 changed = self._sync_health()
-            finally:
+                if self._closed.is_set():
+                    return
+                delay = self.broker.next_deadline_delay()
                 if changed:
-                    with self._response_condition:
-                        self._response_condition.notify_all()
+                    self._response_condition.notify_all()
+                self._response_condition.wait(delay)
 
     def wait_response(self, request, timeout_s):
         if (
@@ -508,11 +495,9 @@ class PerceptionService:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return None
-                # Executor completion and the one independent deadline/
-                # authorization watchdog both notify this condition.  Waiting
-                # RPC handlers must not each repeat the watchdog's global scan:
-                # that turns N concurrent requests into N-squared coordinator
-                # authorization traffic and can starve the bounded C2 queue.
+                # Executor completion and the independent deadline watchdog
+                # notify this condition; request handlers never scan other
+                # clients' state or enter a Coordinator path.
                 self._response_condition.wait(remaining)
 
     def close(self, timeout_s):
@@ -528,6 +513,8 @@ class PerceptionService:
         for worker_id, generation in {
             (request.worker_id, request.worker_generation)
             for request in outstanding
+            if request.worker_id is not None
+            and request.worker_generation is not None
         }:
             self.broker.cancel_generation(worker_id, generation)
         self.runtime._unhealthy()
@@ -584,11 +571,11 @@ class PerceptionService:
                 self._requests.pop(response.request.request_id, None)
             with self._response_condition:
                 self._response_condition.notify_all()
-        health_losing = response is not None and response.outcome in {
-            ModelOutcome.INFRA_ERROR,
-            ModelOutcome.QUEUE_TIMEOUT,
-            ModelOutcome.INFERENCE_TIMEOUT,
-        }
+        health_losing = (
+            response is not None
+            and response.outcome is ModelOutcome.INFRA_ERROR
+            and response.reason != 'QUEUE_FULL'
+        )
         if not self.broker.healthy or health_losing:
             if response is not None:
                 self.runtime.record_failure(

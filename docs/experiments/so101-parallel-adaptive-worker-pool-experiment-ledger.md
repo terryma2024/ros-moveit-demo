@@ -2,12 +2,12 @@
 
 ```yaml
 task_id: so101-adaptive-worker-pool
-goal: Extend the optional adaptive-worker ceiling from W8 to W16 while preserving the default W8 ladder, then execute one isolated fixed-W10 twenty-point batch under the frozen EXP-028 policy.
-success_contract: Obtain a focused RED for every true W8 ceiling, minimally admit W16 while rejecting W17, retain default W8 and its fallback sequence, pass focused, adjacent, and complete ordinary package gates, then run exactly one fixed-W10/C2/YOLO-only execute batch with first-attempt correctness, full evidence, resource monitoring, and exact cleanup.
+goal: Replace the superseded strict inference-authorization path with a stateless bounded Broker, then qualify the frozen twenty-point W10/C2 execute policy without weakening motion authority, final-result admission, deadlines, cleanup, or physical evidence gates.
+success_contract: Prove a Coordinator-free Broker with exact W10/C2 response correlation, duplicate semantic recomputation, isolated backpressure and request deadlines, pass focused, adjacent, and complete ordinary gates, pass a ten-request C2 real-YOLO perception-only diagnostic, then complete exactly one fresh W10 execute qualification at 20/20 first attempts with exact cleanup.
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: e955907c6efc93a5ede31c6f6b450f361f99ee39
+current_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -44,10 +44,11 @@ disproven_routes:
   - YOLO compute, RGB capture, simulation pause/resume, exact-TF localization, numeric capture, pose admission, or DDS callback delivery is the first expected-budget violation in EXP-006; no configured budget was violated.
   - The two EXP-006 `TRUNCATED_FRAME` events are ordinary Broker internal queue waits; their failure boundary was the separate accept-eroded transport server-cycle deadline.
 open_hypotheses:
-  - The internal cause of the EXP-033 Broker inference handler stall is not localized because no detector failure receipt was persisted; any diagnosis or tuning requires separate authorization.
+  - Removing all Coordinator authentication, authorization, lease, start-event, and journal work from the inference request lifecycle will let bounded W10/C2 requests reach detector execution without weakening later motion or result gates.
+  - Queue/executor wakeup, transport lifecycle, or local deadline isolation may still expose an independent defect after the strict inference-authority path is removed.
   - W16 itself remains contract-tested but runtime-untested unless separately authorized.
-latest_checkpoint: CP-041
-next_experiment: NONE
+latest_checkpoint: CP-043
+next_experiment: EXP-035-STATELESS-BROKER-RED
 ```
 
 ## CP-016 — Configured execution timeout restored
@@ -2684,6 +2685,312 @@ deletion_candidates:
 external_actions:
   - No branch push, merge, force-push, evidence deletion, or host-wide service/policy change was performed.
 next_command: NONE
+```
+
+## CP-043 — Stateless perception Broker design pivot
+
+```yaml
+checkpoint_id: CP-043
+status: ACTIVE
+last_valid_experiment: EXP-030-W16-GREEN
+last_executed_experiment: EXP-033-W10-R2
+current_hypothesis: Removing all Coordinator authentication, authorization, lease, start-event, and journal work from the inference lifecycle will let bounded W10/C2 requests reach detector execution while stale motion and final-result admission remain rejected by their existing owners.
+source_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
+working_tree_status: Preserved user src/so101_demo_py/test/test_parallel_batch_resources.py is modified and MUJOCO_LOG.TXT is untracked; interrupted strict-authority task edits are present in the ledger, Broker, Coordinator, IPC, runtime, CLI, and tests and will be transformed with targeted patches only.
+owned_processes: NONE; so101-exp034-full-gate-r7.service is not-found/inactive, ROS Domains 0 and 215-224 are empty, Docker has no running container, and the GPU has no compute client.
+preserved_processes: Existing unrelated tmux sessions and host processes remain untouched.
+confirmed_conclusions:
+  - CP-042 and EXP-034-W10-AUTH-HOTPATH-RED are superseded by the user-approved stateless perception Broker design before EXP-034 ran.
+  - EXP-033 remains a valid W10 failure at Broker request completion before detector work, with physical action absent and exact cleanup complete; it is not acceptance evidence for the replacement design.
+  - The registered evidence root remains /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01 and the dispatch receipt 266aa04f-a2e4-4f86-a295-0f8b4a568809 was verified as exact 36-byte content.
+  - The Broker must own only correlation, bounded queues/executors, deadlines, health, model provenance, serialization, and metrics; Coordinator/Worker control sockets retain scheduling, action, cleanup, and final-result authority.
+disproven_routes:
+  - Adding or optimizing Coordinator inference authorization, start-event validation, or journal lookup is no longer part of the accepted architecture.
+  - EXP-034 strict-authority tests or instrumentation cannot qualify the stateless Broker.
+open_risks:
+  - Existing interrupted edits include strict Coordinator authorize_inference code and Broker authority metrics that must not survive on the inference path.
+  - Focused RED/GREEN, package, real-YOLO W10/C2, and fixed-W10 20-point acceptance are not yet complete.
+next_command: Run EXP-035-STATELESS-BROKER-RED from a fresh verified NVMe scratch after adding only the approved stateless Broker contract tests.
+retained_runs:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01 and every prior registered-root artifact remain retained.
+archived_runs: []
+deletion_candidates:
+  - Existing completed and invalid scratch, candidate, and runtime trees remain deletion candidates exactly as previously recorded; none is deleted without explicit user authorization.
+```
+
+## EXP-035-STATELESS-BROKER-RED — Coordinator-free inference contract
+
+```yaml
+experiment_id: EXP-035-STATELESS-BROKER-RED
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T14:54:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T15:04:00+08:00
+  - status: PASSED
+    at: 2026-09-15T15:06:00+08:00
+prior_experiment: EXP-033-W10-R2
+hypothesis: The current Broker cannot satisfy the approved stateless request/response boundary because inference still requires Coordinator-backed authentication/authorization and start-event identity.
+prediction: Focused tests fail before implementation when a Broker runs without an authority server, ten C2 completions are deliberately reordered, duplicate semantic inputs use distinct request IDs, queue-full is prompt, and one request deadline is isolated from another request.
+single_variable: Add only replacement contract tests; production inference code remains unchanged for RED.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Source begins at a982edc734b96a2f76ec8002c4c16c573f3639a5 with all existing dirty paths preserved.
+  - No ROS, MuJoCo, MoveIt, Gazebo, Docker, GPU, or physical action is started.
+  - Pytest uses exact /usr/bin/python3 with a unique previously nonexistent scratch/tmp under the registered durable evidence root and verified tempfile routing.
+success_criteria:
+  - Tests collect and fail only at absent stateless Broker contracts, including zero Coordinator callbacks and zero journal replay.
+failure_criteria:
+  - Tests pass against the old authority path or fail from import, scratch, socket-length, or fixture contamination.
+invalid_criteria:
+  - Source, Python, scratch, process, or preserved-user-change provenance differs from this record.
+provenance:
+  source_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install/so101_demo_py
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: 0
+  gz_partition: no-live-stack
+commands:
+  - command: PYTHONNOUSERSITE=1 /usr/bin/python3 -m pytest -p no:cacheprovider -q src/so101_demo_py/test/test_parallel_broker_hot_path.py --junitxml=/data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s35red3/red.xml
+    exit_code: 1
+observed:
+  - s35red1 collected five tests but all failed on missing so101_demo imports because the overlay was not sourced; retained as INVALID_ENV and excluded.
+  - s35red2 stopped before collection because the symlink-install module correctly resolved through this worktree build tree rather than the overly strict source-path preflight; retained as INVALID_PREFLIGHT and excluded.
+  - Authoritative s35red3 verified /usr/bin/python3, tempfile routing to the fresh NVMe scratch, and so101_demo resolution through this worktree build overlay before collecting five tests.
+  - All five tests failed at the intended absent contracts: BrokerTransport requires authority_call and PerceptionBroker requires authorize. No import, fixture, socket, ROS, simulator, Docker, or GPU boundary failed.
+inferred:
+  - The current inference path cannot start independently from Coordinator authority, before minimal scheduling-field, correlation, duplicate, queue, or request-deadline behavior can be exercised.
+conclusion: VALID RED; Coordinator authority is still a required construction dependency at both transport and Broker boundaries.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp035-stateless-broker-red-r3.log
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s35red3/red.xml
+decision: IMPLEMENT_MINIMAL_STATELESS_BOUNDARY
+next_experiment: EXP-036-STATELESS-BROKER-GREEN
+```
+
+## EXP-036-STATELESS-BROKER-GREEN — Focused implementation gate
+
+```yaml
+experiment_id: EXP-036-STATELESS-BROKER-GREEN
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T15:09:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T15:13:00+08:00
+  - status: PASSED
+    at: 2026-09-15T15:16:00+08:00
+prior_experiment: EXP-035-STATELESS-BROKER-RED
+hypothesis: The minimal stateless Broker boundary can serve ten independent clients through two YOLO executors without any Coordinator authority or journal dependency, while preserving exact correlation, queue bounds, duplicate recomputation, and isolated request deadlines.
+prediction: The five authoritative focused contract tests pass under the exact worktree overlay and a fresh verified NVMe scratch directory.
+single_variable: Transform the interrupted strict-authority implementation into the user-approved stateless inference boundary; do not change robot motion, final-result admission, model fallback policy, or adaptive Worker defaults.
+lifecycle: NO_LIVE_ROBOT_STACK
+preconditions:
+  - EXP-035 is a valid RED and all preserved user changes remain untouched.
+  - Pytest uses exact /usr/bin/python3 with a unique previously nonexistent scratch/tmp under the registered durable evidence root and verified tempfile routing.
+success_criteria:
+  - All five focused tests pass with W10/C2 reordered completions, exact request/model/version response identity, two recomputations for distinct IDs, prompt queue-full, isolated deadline failure, and metrics with no authority/journal fields.
+failure_criteria:
+  - Any focused contract fails or imports from outside the worktree build/install overlay.
+invalid_criteria:
+  - Scratch routing, Python identity, source provenance, or preserved-user-change isolation is not verified.
+observed:
+  - s36green1 stopped before collection because its provenance assertion was over-specific to a build-tree symlink representation; it is retained as INVALID_PREFLIGHT.
+  - s36green2 collected five tests: the two local queue/deadline contracts passed, while three fixture defects surfaced after the production boundary became reachable; no production contract failure was inferred from that run.
+  - s36green3 passed four tests and exposed only a nondeterministic executor-index assertion in the single-request fixture; C2 may correctly select executor 0 or 1.
+  - Authoritative s36green4 verified exact /usr/bin/python3, tempfile routing, and the specific parallel_ipc module inside this worktree, then passed all five tests in 0.92 s (1.19 s elapsed).
+conclusion: The focused stateless Broker contract is GREEN; no inference request entered Coordinator authorization or journal replay, and W10/C2 correlation and request isolation passed.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp036-stateless-broker-green-r4.log
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s36green4/green.xml
+decision: PROCEED_TO_INTEGRATION_GATE
+next_experiment: EXP-037-STATELESS-BROKER-INTEGRATION
+```
+
+## EXP-037-STATELESS-BROKER-INTEGRATION — Existing contract compatibility
+
+```yaml
+experiment_id: EXP-037-STATELESS-BROKER-INTEGRATION
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T15:17:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T15:20:00+08:00
+  - status: PASSED
+    at: 2026-09-15T15:31:00+08:00
+prior_experiment: EXP-036-STATELESS-BROKER-GREEN
+hypothesis: Removing the superseded inference-authority semantics and adapting existing Broker, IPC, runtime, fault, and CLI contracts will preserve all non-inference control-plane and detector safety invariants.
+prediction: Focused integration files pass after obsolete authority-specific assertions are replaced by stateless boundary assertions, with no edits to the preserved user resource test.
+single_variable: Integration compatibility for the approved Broker API and runtime specification only.
+lifecycle: NO_LIVE_ROBOT_STACK
+preconditions:
+  - EXP-036 authoritative focused gate passed.
+  - Every pytest invocation uses fresh verified NVMe scratch and exact /usr/bin/python3.
+success_criteria:
+  - Broker, IPC, perception-runtime, fault-injection, container, and CLI focused tests pass without Coordinator inference authorization or Broker authority socket/token expectations.
+failure_criteria:
+  - A non-obsolete safety invariant regresses or the focused integration files do not pass.
+invalid_criteria:
+  - Test provenance or scratch routing is not verified.
+observed:
+  - s37diag1 exposed only expected obsolete-constructor and authority-semantic tests after collection; it is diagnostic, not acceptance evidence.
+  - Targeted compatibility edits removed Coordinator inference authorization assertions, retained control-plane token/lease tests, and changed timeout/queue-full checks to require per-request isolation.
+  - Authoritative s37green1 passed 201 Broker, IPC, runtime, and fault-injection tests in 19.98 s.
+  - s37diag4 exposed four remaining obsolete Broker-authority/response-fixture assertions; s37green2 then stopped at a test indentation error before collection and is invalid.
+  - Authoritative s37green3 passed 142 CLI, adaptive-pool, and container tests in 4.47 s, including absence of Broker authority endpoint/token fields and preserved Worker control authority.
+conclusion: Focused integration is GREEN across 343 tests; the Broker has no Coordinator authority socket/token/callback, while Worker-local pose/motion admission and Coordinator final-result controls remain tested.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp037-stateless-broker-integration-green-r1.log
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s37green1/green.xml
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp037-stateless-broker-cli-green-r3.log
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s37green3/green.xml
+decision: PROCEED_TO_ORDINARY_PACKAGE_GATE
+next_experiment: EXP-038-ORDINARY-PACKAGE-GATE
+```
+
+## EXP-038-ORDINARY-PACKAGE-GATE — Full non-benchmark regression
+
+```yaml
+experiment_id: EXP-038-ORDINARY-PACKAGE-GATE
+status: PASSED
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T15:31:00+08:00
+  - status: RUNNING
+    at: 2026-09-15T15:43:25+08:00
+  - status: PASSED
+    at: 2026-09-15T15:50:00+08:00
+prior_experiment: EXP-037-STATELESS-BROKER-INTEGRATION
+hypothesis: The stateless Broker implementation preserves every ordinary non-benchmark package contract outside the focused integration set.
+prediction: The complete src/so101_demo_py/test suite passes under exact /usr/bin/python3 with benchmark_test excluded by path.
+single_variable: Full ordinary regression coverage; no further product change before the gate.
+lifecycle: NO_LIVE_ROBOT_STACK
+preconditions:
+  - EXP-036 and EXP-037 are GREEN.
+  - Exact worktree module provenance and fresh NVMe tempfile routing are verified.
+success_criteria:
+  - Complete ordinary test directory passes; benchmark_test is not collected.
+failure_criteria:
+  - Any ordinary test fails.
+invalid_criteria:
+  - Wrong Python/module/scratch provenance or benchmark collection.
+observed:
+  - s38package1 stopped before collection because the plain system Python environment lacked the established Torch dependency; it is retained as INVALID_ENV and excluded.
+  - s38package2 passed 3026 tests and exposed two pre-existing order-sensitive failures: the preserved user-owned concurrent Domain-claim test and the real-launch cleanup timing test. Both passed unchanged together in fresh s38rerun1.
+  - s38package3 passed 3027 tests and reproduced only the cleanup timing failure when process cleanup ran after multithreaded detector tests; this diagnostic run is retained and is not the acceptance result.
+  - s38package4 first established the clean ordering and passed 3028 tests. Subsequent review removed a legacy-required outer Broker envelope, the dead replay metric, and the remaining authority-server scaffolding, and made the caller end-to-end deadline mandatory.
+  - Post-review s38review2 passed 46 Broker/IPC tests; s38review3 exposed only short caller deadlines in legacy fake-clock fixtures; corrected s38review4 passed 424 expanded Broker/runtime/ROS tests and s38review5 passed 142 CLI/container tests. s38review1 is invalid because ROS setup rejected shell nounset before collection.
+  - s38package5 failed before test execution because systemd-run was given a non-executable script directly. s38package6 and s38package7 were stopped after exact unit identity readback when later review edits made their import state nonauthoritative; all are retained as diagnostics.
+  - Authoritative s38package8 ran in isolated user unit so101-exp038-full-gate-r8.service with the resource-sensitive test first, the real-launch process cleanup test second, and the remaining ordinary files afterward in one pytest process.
+  - The authoritative run verified /usr/bin/python3, worktree module provenance, and tempfile routing to the fresh /data NVMe scratch, excluded benchmark_test by path, passed all 3028 tests with four existing fork warnings in 331.90 s, and exited success in 333.24 s.
+conclusion: The complete ordinary non-benchmark package gate is GREEN; the stateless Broker change preserves all 3028 collected ordinary contracts when the established process/resource ordering is applied.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp038-ordinary-package-gate-r8-preflight.log SHA256 1e0f76c29f59e924cfde37f2ec39bbd500dd956bd915c671d31a6a8adba98daf
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp038-ordinary-package-gate-r8.log SHA256 d3e053b5eaca1cfa992c9815f5eef15cf463073459f450124ac05ab67fb08efa
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/tests/exp038-ordinary-package-gate-r8-elapsed.log SHA256 637f80f4fbda356e54a6c7797c8c227ff5603747bc7a6679374e5f8f29ecf837
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml SHA256 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+retained_runs:
+  - Every s38package1 through s38package8 and s38review1 through s38review5 tree, including authoritative s38package8, remains retained under the registered evidence root.
+deletion_candidates:
+  - Every EXP-038 scratch tree is a deletion candidate after readback but remains retained pending explicit user authorization.
+decision: CREATE_REVIEWABLE_CANDIDATE_THEN_RUN_REAL_YOLO
+next_experiment: EXP-039-REAL-YOLO-W10-C2
+```
+
+## EXP-039-REAL-YOLO-W10-C2 — Stateless real-detector concurrency qualification
+
+```yaml
+experiment_id: EXP-039-REAL-YOLO-W10-C2
+status: PLANNED
+prior_experiment: EXP-038-ORDINARY-PACKAGE-GATE
+hypothesis: A Broker image built from the committed stateless candidate can serve ten simultaneous immutable YOLO inputs with two CUDA executors without any Coordinator inference endpoint or journal access.
+prediction: All ten independent requests return correlated terminal YOLO responses; Broker metrics report ten logical inferences, bounded queueing, model_active_peak no greater than two, and no transport error.
+single_variable: Replace the prior authority-coupled Broker source/image with the committed stateless candidate; keep the frozen image base, dependency pins, YOLO weights, model hash, C2 executor policy, and request limits unchanged.
+lifecycle: PERCEPTION_ONLY_GPU
+preconditions:
+  - The post-review EXP-038 full package gate passes and task-owned changes are committed without the preserved user resource-test edit or MUJOCO_LOG.TXT.
+  - An immutable candidate-equivalent source/build/install tree and Broker image are verified against that commit and the frozen model hashes.
+  - No ROS simulator, MoveIt, controller, motion, Worker pool, Coordinator authority server, conflicting container, or unrelated GPU compute client is active.
+  - Ten sealed 0400 .npy inputs, a bounded W10/C2 runtime specification, socket lengths, container identity, and exact cleanup targets are frozen before launch.
+success_criteria:
+  - Ten concurrent clients receive ten exact request_id/model_id/model_version terminal responses with YOLO-first execution and no cross-wire.
+  - Metrics record logical_inference_count 10, queue depth within configured capacity, YOLO active peak at most 2, zero Coordinator inference calls, no Broker journal/replay field, and no transport errors.
+  - Exact cleanup leaves no task-owned Broker process, socket, container, or GPU client.
+failure_criteria:
+  - Any missing, duplicated, cross-wired, nonterminal, non-YOLO, provenance-invalid, over-C2, transport-error, authority-dependent, or cleanup-incomplete result.
+invalid_criteria:
+  - Candidate/image/model/config/input provenance differs from the frozen preflight, another process owns a required resource, or the experiment starts simulation or motion.
+decision: AWAIT_COMMITTED_CANDIDATE_AND_PREFLIGHT
+next_experiment: NONE_UNTIL_RESULT
+```
+
+## CP-042 — W10 Broker hot-path repair startup
+
+```yaml
+checkpoint_id: CP-042
+status: ACTIVE
+last_valid_experiment: EXP-030-W16-GREEN
+last_executed_experiment: EXP-033-W10-R2
+current_hypothesis: Repeated full coordinator-journal replay on the authorization hot path, amplified by the 20 ms service watchdog, starves W10 requests before useful detector work.
+source_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
+working_tree_status: Preserved user src/so101_demo_py/test/test_parallel_batch_resources.py is modified and MUJOCO_LOG.TXT is untracked; this ledger is the only task-owned change.
+owned_processes: NONE; no active SO-101 unit, ROS graph on Domains 0 or 215-224, container, GPU compute application, or held Domain lock was observed.
+preserved_processes: Existing tmux sessions codex and codex-task-so101-w10-resume are untouched.
+confirmed_conclusions:
+  - The checkout is the required linked worktree on codex/parallel-adaptive-worker-pool at a982edc734b96a2f76ec8002c4c16c573f3639a5 with submodule c16b5a5fe880b6e1857f56486dab4ae726576969.
+  - The registered evidence root is owned by uid 1000 with mode 0700; the installed so101_demo_py overlay resolves to this worktree.
+  - CP-041 remains authoritative: EXP-033 formed ten READY Workers and failed all ten first Broker requests before perception returned; W8 remains the highest runtime-qualified level.
+disproven_routes:
+  - Increasing request timeouts, authority handler count, or YOLO executor count is prohibited as a diagnosis substitute.
+open_risks:
+  - The retained EXP-033 evidence bounds but does not localize the stall within the Broker/authority path.
+next_command: Add phase and authorization/replay instrumentation plus a ten-client real-Coordinator regression, then run the fresh-scratch RED/A-B before any production fix.
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/preflight/w10-hot-path-startup.txt SHA256 f0cdb0b4a2d4780d135a21518238739ae158e199ff28388af67d81f9e8b7c167
+```
+
+## EXP-034-W10-AUTH-HOTPATH-RED — Real Coordinator authorization-path diagnostic
+
+```yaml
+experiment_id: EXP-034-W10-AUTH-HOTPATH-RED
+status: PLANNED
+prior_experiment: EXP-033-W10-R2
+hypothesis: Ten concurrent authenticated inference requests stall before model scheduling because each authorization invokes full journal replay and the 20 ms watchdog multiplies those calls across outstanding requests.
+prediction: Against unchanged production code and a real hash-chained Coordinator journal populated with EXP-033-scale renewals, ten clients produce excessive replay count/bytes and fail the bounded fast-detector completion contract before or at authorization/queueing; a single-variable cached in-memory authorization A/B reaches queued/model_started/completed for all ten.
+single_variable: Authorization lookup implementation only: current full journal replay versus an atomic Coordinator in-memory event-index lookup. Detector behavior is deterministic and fast; transport, authentication, request count, identities, deadlines, and C2 scheduling remain identical.
+lifecycle: ISOLATED_STACK
+preconditions:
+  - Source begins at a982edc734b96a2f76ec8002c4c16c573f3639a5 and preserved user dirty paths remain untouched.
+  - The reproducer uses real AuthenticatedUnixServer/client transport and real Coordinator authority/journal state with ten Workers and EXP-033-scale renewal history, but no ROS, MuJoCo, MoveIt, Gazebo, Docker, GPU, or physical action.
+  - Every pytest run uses a fresh previously nonexistent short scratch root under the registered durable evidence root with exact /usr/bin/python3 tempfile verification.
+success_criteria:
+  - Durable request traces distinguish accepted, authenticated, authorized, queued, model_started with executor index, model_completed, serialized, sent, timeout phase/start, authority call latency/count, and journal replay count/bytes.
+  - RED fails at the expected old authorization/replay hot path rather than import, socket path, scratch reuse, or fixture collision.
+  - The A/B changes the first failing boundary and excludes queue/executor wakeup and transport lifecycle as the initiating cause.
+failure_criteria:
+  - Old production completes within the bounded contract with low replay work, disproving the leading hypothesis and selecting exactly one competing hypothesis for the next experiment.
+invalid_criteria:
+  - Wrong source/import, overlong socket path, reused scratch, fixture collision, missing phase evidence, or unrelated host/runtime contamination.
+provenance:
+  source_commit: a982edc734b96a2f76ec8002c4c16c573f3639a5
+  install_overlay: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool/install/so101_demo_py
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: 0
+  gz_partition: no-live-stack
+commands:
+  - command: PENDING focused real-code W10 concurrency RED/A-B under a fresh registered scratch root
+    exit_code: PENDING
+observed:
+  - PENDING
+inferred:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/exp034-w10-auth-hotpath-red
+decision: PENDING
+next_experiment: NONE
 ```
 
 ## CP-040 — W16 ceiling and W10 runtime baseline
