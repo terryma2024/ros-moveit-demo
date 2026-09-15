@@ -259,10 +259,21 @@ class ExecutionProcessOwner:
         self._verify(owned)
         os.kill(owned.pid, signal.SIGINT)
 
-    def stop_after_cleanup(self, owned: OwnedExecution) -> None:
+    def stop_after_cleanup(self, owned: OwnedExecution, authorization=None) -> None:
         if not isinstance(owned, OwnedCoordinator):
             raise CoordinatorOwnershipError("ADAPTIVE_STOP_REQUIRES_WRAPPER_CLEANUP")
-        if not self._cleanup_checker(owned):
+        authorized = self._cleanup_checker(owned)
+        if authorization is not None:
+            authorized = (
+                getattr(authorization, "batch_id", None) == owned.batch_id
+                and getattr(authorization, "coordinator_epoch", None)
+                == owned.coordinator_epoch
+                and getattr(authorization, "batch_cleanup_complete", False) is True
+                and getattr(authorization, "owned_descendants_gone", False) is True
+                and getattr(authorization, "assigned_ros_domains_clear", False) is True
+                and isinstance(getattr(authorization, "receipt_sha256", None), str)
+            )
+        if not authorized:
             raise CoordinatorOwnershipError("CLEANUP_NOT_CONFIRMED")
         self._verify(owned)
         os.killpg(owned.pgid, signal.SIGTERM)

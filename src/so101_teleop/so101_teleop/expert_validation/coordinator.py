@@ -67,3 +67,37 @@ class CoordinatorStartRequest:
         object.__setattr__(self, "control_socket", control_socket)
         if _SHA256.fullmatch(self.control_token_sha256) is None:
             raise ValueError("CONTROL_TOKEN_SHA256")
+
+
+@dataclass(frozen=True)
+class CoordinatorBinding:
+    campaign_id: str
+    batch_id: str
+    batch_root: Path
+    control_socket: Path
+    coordinator_epoch: int
+    control_token: str
+    control_token_sha256: str
+
+    def __post_init__(self) -> None:
+        for name in ("campaign_id", "batch_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or _IDENTIFIER.fullmatch(value) is None:
+                raise ValueError(f"{name.upper()}_INVALID")
+        if (
+            isinstance(self.coordinator_epoch, bool)
+            or not isinstance(self.coordinator_epoch, int)
+            or self.coordinator_epoch <= 0
+        ):
+            raise ValueError("COORDINATOR_EPOCH_POSITIVE")
+        root = _absolute_normalized("BATCH_ROOT", self.batch_root)
+        socket_path = _absolute_normalized("CONTROL_SOCKET", self.control_socket)
+        if not socket_path.is_relative_to(root):
+            raise ValueError("CONTROL_SOCKET_OUTSIDE_BATCH_ROOT")
+        object.__setattr__(self, "batch_root", root)
+        object.__setattr__(self, "control_socket", socket_path)
+        if not isinstance(self.control_token, str) or not self.control_token:
+            raise ValueError("CONTROL_TOKEN")
+        digest = __import__("hashlib").sha256(self.control_token.encode("utf-8")).hexdigest()
+        if digest != self.control_token_sha256:
+            raise ValueError("CONTROL_TOKEN_SHA256")
