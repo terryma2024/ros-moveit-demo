@@ -7,6 +7,7 @@ from tools.so101_pytest_gate import (
     SERIAL_MODULES,
     CoverageError,
     ProcessOutcome,
+    _resource_metrics,
     assign_lpt,
     create_process_layout,
     discover_ordinary_modules,
@@ -214,6 +215,19 @@ def test_process_layout_reserves_the_linux_unix_socket_path_budget() -> None:
     assert validate_process_path_budget(run_root) == 106
     with pytest.raises(ValueError, match="AF_UNIX"):
         validate_process_path_budget(run_root.parent / "abc")
+
+
+def test_resource_metrics_accept_gnu_time_label_indentation(tmp_path: Path) -> None:
+    resource = tmp_path / "resource.txt"
+    resource.write_text(
+        "\tUser time (seconds): 859.00\n"
+        "\tSystem time (seconds): 12.53\n"
+        "\tPercent of CPU this job got: 103%\n"
+        "\tMaximum resident set size (kbytes): 2553912\n",
+        encoding="utf-8",
+    )
+
+    assert _resource_metrics(resource) == (2553912, 859.0, 12.53, 103.0)
 
 
 @pytest.mark.parametrize("worker_count", (1, 2, 4))

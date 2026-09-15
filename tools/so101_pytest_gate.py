@@ -359,7 +359,9 @@ def _resource_metrics(
 
     def number(label: str, cast):
         match = re.search(
-            rf"^{re.escape(label)}:\s*([0-9.]+)%?\s*$", text, re.MULTILINE
+            rf"^[ \t]*{re.escape(label)}:\s*([0-9.]+)%?\s*$",
+            text,
+            re.MULTILINE,
         )
         return cast(match.group(1)) if match else None
 

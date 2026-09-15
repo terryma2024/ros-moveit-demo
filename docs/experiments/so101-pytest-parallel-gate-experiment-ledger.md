@@ -5,7 +5,7 @@ success_contract: A repository-maintained deterministic runner passes focused RE
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
-current_commit: e81286bf5aa465168d7d611de349635cbcae8a9e
+current_commit: 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d
 evidence_root: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01
 confirmed_conclusions:
   - The required base is the current HEAD and the worktree was clean at dispatch (CP-001).
@@ -16,12 +16,15 @@ confirmed_conclusions:
   - EXP-019 completed normally with exit 1; it is INVALID for timing because a 108-byte Unix-socket path failed and its manifests expose 19 nested ordinary nodes omitted by top-level-only module discovery (EXP-019-W1 result update).
   - A 12-hex physical identity plus a pre-run 107-byte AF_UNIX budget gate fixes the reproduced socket-path boundary with 28 focused contracts GREEN (EXP-020-LAYOUT-BUDGET-RED-GREEN).
   - Recursive deterministic ordinary-module discovery includes nested contract and characterization tests while preserving benchmark exclusion, with 28 focused contracts GREEN (EXP-021-RECURSIVE-DISCOVERY-RED-GREEN).
+  - Candidate 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d passes 28 focused contracts and has a fresh dependency-complete merged overlay with exact package/import provenance (EXP-022-CANDIDATE-FOCUSED-AND-BUILD).
+  - EXP-023 passed exact 3055-node W1 correctness and cleanup, but its timing sample is INVALID because indented GNU-time labels produced null per-process CPU/RSS metrics (EXP-023 result update).
+  - Indented GNU-time resource labels parse exactly after a one-regex correction, with 29 focused contracts GREEN (EXP-024-RESOURCE-METRICS-RED-GREEN).
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
 open_hypotheses:
-  - The combined candidate can build with exact overlay provenance and pass W1/W2/W4 with identical 3054-node coverage.
+  - The resource-corrected committed candidate will pass fresh W1/W2/W4 with identical 3056-node exact coverage and complete resource summaries.
 latest_checkpoint: CP-005
-next_experiment: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
+next_experiment: EXP-025-CANDIDATE-REFRESH
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -1656,4 +1659,250 @@ evidence:
   - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp022
 decision: PENDING
 next_experiment: EXP-023-W1
+```
+
+### EXP-022 coordination deferral
+
+```yaml
+observed_at: 2026-09-15T20:19:52+08:00
+status: REMAINS_PLANNED
+coordination_status: RUNNING
+coordination_dispatch_id: DF261A05-3907-49C9-95BE-B303D7CF879B
+purpose: W10 fixed-Worker reproducibility rerun and guide update
+observed:
+  - OBSERVED: Fresh admission found no conflicting runtime process, ROS node, container, GPU client, or active task unit at the instant of the probe, but the authoritative coordination file had changed from COMPLETE to RUNNING.
+  - OBSERVED: Candidate commit 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d was already created before this status change was observed.
+decision: DEFER all build, pytest, colcon, ROS, container, GPU, and benchmark commands until a fresh coordination read returns COMPLETE or BLOCKED; do not disturb the external Worker rerun.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp022.txt
+```
+
+### EXP-022 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T20:46:29+08:00
+  - status: VALID
+    at: 2026-09-15T20:51:30+08:00
+provenance:
+  source_commit: 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+commands:
+  - command: git commit -m "fix: complete deterministic pytest gate isolation"
+    exit_code: 0
+  - command: exact-/usr/bin/python3 committed-candidate focused pytest plus Ruff check and format-check under scratch/aa
+    exit_code: 0
+  - command: in-place colcon build --packages-select so101_demo_py --symlink-install
+    exit_code: 1
+  - command: fresh seven-package dependency-closure colcon build with separate build base and merged install base under the registered evidence root
+    exit_code: 0
+  - command: exact Python/package/import/installed-manifest provenance readback from install-exp022
+    exit_code: 0
+observed:
+  - OBSERVED: Scoped commit 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d contains only `tools/so101_pytest_gate.py`, `src/so101_demo_py/test/test_pytest_full_gate_runner.py`, and this ledger.
+  - OBSERVED: Fresh scratch/aa passed all 28 focused tests in 0.05 seconds; pytest, Ruff check, and Ruff format-check exited 0.
+  - OBSERVED: The in-place package refresh failed because stale colcon develop state invoked unsupported `setup.py develop --uninstall`; the pre-existing build/install trees were preserved and not cleaned.
+  - OBSERVED: A fresh task-owned merged overlay then built the exact seven-package closure successfully in 2 minutes 15 seconds without modifying source or the stale in-place build tree.
+  - OBSERVED: `/usr/bin/python3`, the so101_demo source shim, all five required package prefixes, installed bundle source commit, package prefix, and mujoco_ros2_control dependency prefix passed exact provenance readback for candidate 1d18b088a.
+inferred:
+  - NONE
+conclusion: Candidate 1d18b088a is focused-verified and has a fresh dependency-complete overlay suitable for W1/W2/W4 measurements; the failed in-place refresh is retained as an environment diagnostic and does not invalidate the successful isolated rebuild.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp022-resume.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/aa
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp022.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp022
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp022-fresh.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp022-fresh
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp022-fresh-provenance.json
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+decision: KEEP
+next_experiment: EXP-023-W1
+```
+
+## EXP-023-W1 — Final-candidate serial baseline
+
+```yaml
+experiment_id: EXP-023-W1
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T20:51:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T20:53:14+08:00
+prior_experiment: EXP-022-CANDIDATE-FOCUSED-AND-BUILD
+hypothesis: Candidate 1d18b088a passes the complete 3054-node ordinary gate at W1 with exact once-only coverage and establishes the uncontaminated baseline for W2/W4.
+prediction: The five-module serial lane and one parallel shard both pass; all 3054 collected node IDs execute exactly once; nested contract/characterization nodes are present; benchmark paths are absent; the fail-closed summary is PASS with complete timing/resource/cleanup evidence.
+single_variable: worker_count=1
+lifecycle: REUSE_STACK
+preconditions:
+  - Commit 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d, /usr/bin/python3, merged install-exp022 overlay, source shim, timing input, five-module serial lane, and environment are frozen for W1/W2/W4.
+  - Fresh one-character run ID d is previously nonexistent and validates the 106-byte reserved AF_UNIX path budget.
+  - Only this ledger is dirty and explicitly allowlisted.
+  - Fresh coordination and process/ROS/container/GPU/unit admission must be conflict-free immediately before launch.
+success_criteria:
+  - PASS with 3054 expected and actual node IDs, identical exact collection hash, zero missing/duplicate/unexpected IDs, benchmark exclusion, all pytest/JUnit/provenance gates, cleanup readback, and complete resource summary.
+failure_criteria:
+  - Any test/process/coverage/provenance/JUnit/timeout/cleanup gate fails.
+invalid_criteria:
+  - Admission conflict, source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  runtime_source_shim: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/runtime-python
+  timing_input_sha256: 6a12dd688dd51a0926906e0aa5c9ee1c9489f66ffdd6b5adfcec52c08eec5a21
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp023-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/d
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp023-w1-outer-time.txt
+decision: PENDING
+next_experiment: EXP-024-W2
+```
+
+### EXP-023 result update
+
+```yaml
+status: INVALID
+status_history:
+  - status: INVALID
+    at: 2026-09-15T21:09:04+08:00
+commands:
+  - command: tools/so101_pytest_gate.py --workers 1 --evidence-root /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01 --run-id d --timings /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/s38package8/package.xml --python /usr/bin/python3 --expected-source-commit 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d --allow-dirty-path docs/experiments/so101-pytest-parallel-gate-experiment-ledger.md --timeout-s 1200
+    exit_code: 0
+observed:
+  - OBSERVED: The runner returned PASS with 3055 expected and actual node IDs, exact collection SHA256 `0c26a7aaeb045ec9bc70b3df773c0f30eee65344120ab83b74507b3d7e471cd4`, benchmark exclusion, unchanged source status, and all children reaped.
+  - OBSERVED: The prior 3054-node prediction was off by one because EXP-020 added a new focused socket-budget contract; 3055 is the authoritative committed-candidate collection count.
+  - OBSERVED: The serial lane passed 306 tests in 19.503 seconds; shard 1 passed 2749 tests in 843.918 seconds; total runner elapsed was 869.141 seconds and outer elapsed was 14:29.20.
+  - OBSERVED: The nested characterization and contract modules appear in the shard assignment and exact executed-node union.
+  - OBSERVED: GNU `time -v` resource files contain tab-indented labels and valid values, including shard user=859.00 seconds, system=12.53 seconds, CPU=103 percent, and peak RSS=2553912 KiB.
+  - OBSERVED: Runner summary fields `cpu_time_s=0.0`, `cpu_utilization_percent=0.0`, `maximum_rss_kib=null`, and per-process resource fields are null because `_resource_metrics` requires labels at column zero.
+inferred:
+  - NONE
+conclusion: W1 functional correctness and cleanup pass, but EXP-023 is INVALID for the formal timing comparison because the required machine-readable resource summary is incomplete.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/admission-exp023-w1.txt
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/d
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp023-w1-console.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp023-w1-outer-time.txt
+decision: RETAIN_INVALID_DIAGNOSTIC_AND_FIX
+next_experiment: EXP-024-RESOURCE-METRICS-RED-GREEN
+```
+
+## EXP-024-RESOURCE-METRICS-RED-GREEN — Parse indented GNU-time metrics
+
+```yaml
+experiment_id: EXP-024-RESOURCE-METRICS-RED-GREEN
+status: PLANNED
+prior_experiment: EXP-023-W1
+hypothesis: Accepting leading whitespace before exact GNU-time labels makes all resource fields machine-readable while retaining strict numeric parsing.
+prediction: A focused fixture containing tab-indented real-format labels fails with all-null metrics before implementation, then the complete focused suite and Ruff pass after allowing only leading whitespace in the anchored label regex.
+single_variable: Leading-whitespace handling in `_resource_metrics`; no runner scheduling, discovery, isolation, production, or ordinary-test semantic change.
+lifecycle: REUSE_STACK
+preconditions:
+  - EXP-023 is retained unchanged and excluded from timing comparison.
+  - Exact /usr/bin/python3 and distinct previously nonexistent /data scratch roots are used for RED and GREEN.
+success_criteria:
+  - RED fails only on missing parsed values; GREEN parses peak RSS, user time, system time, and CPU percent exactly; complete focused suite and Ruff checks pass.
+failure_criteria:
+  - Parser accepts malformed labels/numbers or any existing focused/static contract fails.
+invalid_criteria:
+  - Wrong Python/tempfile routing, scratch collision, unrelated source drift, or resource contamination.
+provenance:
+  source_commit: 1d18b088a87aaa8b6fb2b09bcfa1995325dd801d
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ab
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ac
+decision: PENDING
+next_experiment: EXP-025-CANDIDATE-REFRESH
+```
+
+### EXP-024 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: RUNNING
+    at: 2026-09-15T21:10:00+08:00
+  - status: VALID
+    at: 2026-09-15T21:12:00+08:00
+commands:
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest before parser correction under scratch/ab
+    exit_code: 1
+  - command: exact-/usr/bin/python3 tempfile preflight and focused runner pytest plus Ruff checks after parser correction under scratch/ac
+    exit_code: 1
+  - command: exact-/usr/bin/python3 tempfile preflight, complete focused runner pytest, Ruff check, and Ruff format-check after targeted import ordering under scratch/ad
+    exit_code: 0
+observed:
+  - OBSERVED: RED ran 29 tests and produced exactly one failure: the real-format tab-indented fixture parsed as `(None, None, None, None)` instead of `(2553912, 859.0, 12.53, 103.0)`.
+  - OBSERVED: Allowing only spaces and tabs before the otherwise exact anchored label made all 29 behavioral contracts pass.
+  - OBSERVED: The first GREEN had only an import-order Ruff failure; fresh post-ordering acceptance under scratch/ad passed all 29 focused tests in 0.05 seconds and both Ruff checks exited 0.
+inferred:
+  - NONE
+conclusion: The runner now records GNU-time peak RSS, user time, system time, and CPU percentage without loosening numeric or label matching.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ab
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ac
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/ad
+decision: KEEP
+next_experiment: EXP-025-CANDIDATE-REFRESH
+```
+
+## EXP-025-CANDIDATE-REFRESH — Commit metrics fix and refresh package manifest
+
+```yaml
+experiment_id: EXP-025-CANDIDATE-REFRESH
+status: PLANNED
+prior_experiment: EXP-024-RESOURCE-METRICS-RED-GREEN
+hypothesis: A scoped commit of the parser fix/test/ledger plus a fresh-build-base incremental so101_demo_py install into the existing task-owned merged overlay yields exact final-candidate provenance without rebuilding unchanged dependencies.
+prediction: Diff checks and scoped commit pass; so101_demo_py refresh succeeds without stale `--uninstall`; all merged prefixes remain intact; installed manifest source commit matches the new candidate.
+single_variable: Freeze the already GREEN resource parser correction and refresh only the commit-bearing Python package manifest in install-exp022.
+lifecycle: REBUILD_STACK
+preconditions:
+  - EXP-024 is VALID; only runner, focused-test, and ledger paths are dirty.
+  - install-exp022 is the valid seven-package merged overlay from EXP-022; dependency source/build outputs remain unchanged.
+  - A previously nonexistent build base and log base are used; no stale build tree is deleted or overwritten.
+success_criteria:
+  - `git diff --check`, scoped commit, focused acceptance, incremental package build, and exact package/import/manifest provenance all pass.
+failure_criteria:
+  - Any scope, test, static, build, or provenance gate fails.
+invalid_criteria:
+  - Unrelated dirty path, source drift, resource conflict, or dependency prefix drift.
+provenance:
+  source_commit: PENDING_COMMIT
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+commands:
+  - PENDING
+observed:
+  - PENDING
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-exp025.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/build-log-exp025
+decision: PENDING
+next_experiment: EXP-026-W1
 ```
