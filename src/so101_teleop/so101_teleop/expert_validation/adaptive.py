@@ -32,6 +32,7 @@ class AdaptiveStartRequest:
     yolo_weights_sha256: str
     grounded_sam_manifest_sha256: str
     broker_image_id: str
+    selected_point_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.campaign_id, str) or _IDENTIFIER.fullmatch(self.campaign_id) is None:
@@ -88,6 +89,12 @@ class AdaptiveStartRequest:
                 raise ValueError(f"{name.upper()}_INVALID")
         if not isinstance(self.broker_image_id, str) or not self.broker_image_id:
             raise ValueError("BROKER_IMAGE_ID")
+        point_ids = tuple(self.selected_point_ids)
+        if any(not isinstance(point_id, str) or not point_id for point_id in point_ids):
+            raise ValueError("SELECTED_POINT_IDS")
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("SELECTED_POINT_IDS")
+        object.__setattr__(self, "selected_point_ids", point_ids)
 
     @property
     def runtime_root(self) -> Path:
@@ -96,3 +103,11 @@ class AdaptiveStartRequest:
     @property
     def levels(self) -> tuple[int, ...]:
         return (self.preferred_worker_count, *self.fallback_worker_counts)
+
+    @property
+    def owner_kind(self) -> str:
+        return "ADAPTIVE_WRAPPER"
+
+    @property
+    def max_points_per_worker(self):
+        return None

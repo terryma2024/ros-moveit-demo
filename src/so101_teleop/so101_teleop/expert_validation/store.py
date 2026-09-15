@@ -515,6 +515,24 @@ class SupervisorStore:
             cleanup_receipt_sha256=row["cleanup_receipt_sha256"]
         )
 
+    def record_batch_cleanup(self, batch_id: str, receipt_sha256: str) -> None:
+        with self._transaction():
+            cursor = self._connection.execute(
+                "UPDATE campaign_batches SET state='CLEANED', cleanup_receipt_sha256=? "
+                "WHERE batch_id=?",
+                (receipt_sha256, batch_id),
+            )
+            if cursor.rowcount != 1:
+                raise StoreConflict("BATCH_NOT_FOUND")
+
+    def list_campaigns(self) -> tuple[dict, ...]:
+        return tuple(
+            dict(row)
+            for row in self._connection.execute(
+                "SELECT campaign_id, state, execution_mode FROM campaigns ORDER BY campaign_id"
+            )
+        )
+
     def reconcile(self) -> dict:
         ambiguous = tuple(
             row[0] for row in self._connection.execute(

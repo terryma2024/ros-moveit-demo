@@ -33,6 +33,7 @@ class CoordinatorStartRequest:
     control_socket: Path
     control_token_sha256: str
     coordinator_epoch: int = 1
+    selected_point_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("campaign_id", "batch_id"):
@@ -67,6 +68,16 @@ class CoordinatorStartRequest:
         object.__setattr__(self, "control_socket", control_socket)
         if _SHA256.fullmatch(self.control_token_sha256) is None:
             raise ValueError("CONTROL_TOKEN_SHA256")
+        point_ids = tuple(self.selected_point_ids)
+        if any(not isinstance(point_id, str) or not point_id for point_id in point_ids):
+            raise ValueError("SELECTED_POINT_IDS")
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("SELECTED_POINT_IDS")
+        object.__setattr__(self, "selected_point_ids", point_ids)
+
+    @property
+    def owner_kind(self) -> str:
+        return "COORDINATOR"
 
 
 @dataclass(frozen=True)
