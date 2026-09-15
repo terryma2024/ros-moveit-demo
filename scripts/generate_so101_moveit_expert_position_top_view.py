@@ -462,15 +462,25 @@ def svg_figure(
     outcomes: Mapping[str, Outcome] | None = None,
     manifest_note: str | None = None,
 ) -> str:
+    from so101_teleop.expert_validation.projection import Projection, project_xy
+
     width, height = 1600, 1100
     plot_left, plot_top, scale = 90.0, 115.0, 1300.0
     table_xmin, table_xmax, table_ymin, table_ymax = geometry.table_bounds
+    projection = Projection(
+        width_px=width,
+        height_px=height,
+        bounds_m=geometry.table_bounds,
+        pixels_per_m=scale,
+        offset_x_px=plot_left - table_xmin * scale,
+        offset_y_px=plot_top + table_ymax * scale,
+    )
 
     def px(x_m: float) -> float:
-        return plot_left + (x_m - table_xmin) * scale
+        return project_xy(projection, x_m, 0.0)[0]
 
     def py(y_m: float) -> float:
-        return plot_top + (table_ymax - y_m) * scale
+        return project_xy(projection, 0.0, y_m)[1]
 
     def rect(bounds: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
         xmin, xmax, ymin, ymax = bounds
