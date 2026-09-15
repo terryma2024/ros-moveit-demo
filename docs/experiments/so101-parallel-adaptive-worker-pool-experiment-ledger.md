@@ -2,12 +2,12 @@
 
 ```yaml
 task_id: so101-adaptive-worker-pool
-goal: Re-run the frozen fixed-W10/C2 SO-101 twenty-point execute pool once for reproducibility, then publish the maintained W1-W10 source data and deterministic SVG scaling chart in the parallel Worker source guide.
-success_contract: Preserve EXP-047, perform exactly one new valid fixed-W10 runtime attempt under the unchanged v4 production contract with complete failure-or-success evidence and exact cleanup, then derive a validated versioned dataset, deterministic checked SVG, natural Chinese guide update, and scoped local commits without changing the user dirty test.
+goal: Recover the frozen fixed-W10/C2 SO-101 twenty-point execute pool with durable failure diagnostics and one clean, valid 20/20 run.
+success_contract: Preserve EXP-047 and EXP-048, add startup and Broker-exit observability, then complete exactly one clean W10/C2 run with 20 first-attempt YOLO-only successes, unchanged acceptance criteria, exact cleanup, visual readback, and the user dirty test untouched.
 worktree: /data/work/ws_moveit/.worktrees/parallel-adaptive-worker-pool
 branch: codex/parallel-adaptive-worker-pool
 base_commit: 4c777fa722586be92a0b357b861ab4ce460a06ab
-current_commit: 4283eada24d6313bdc1fec4cf7a0fd8cc00d9ce6
+current_commit: 405e5987280ceefef54bbb08002cb60cb04e37d0
 evidence_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01
 confirmed_conclusions:
   - origin/main equals the reviewed baseline 4c777fa722586be92a0b357b861ab4ce460a06ab; startup preflight CP-001.
@@ -28,7 +28,9 @@ confirmed_conclusions:
   - EXP-006 supplemental causal audit confirmed that sample_13_far_center and sample_15_far_center `TRUNCATED_FRAME` errors came from the 5 s AuthenticatedUnixServer cycle deadline starting before accept and exhausting the handler/reply remainder; identical idempotent retries recovered both original QUALIFIED results.
   - EXP-006 used a 240 s consumer get_one timeout, so none of its 20 points timed out under current configuration; against the separate 5 s target SLO, 5/20 exceeded from get_one start to POSE_ACCEPTED and 4/20 exceeded from consumer READY to accepted.
   - The formal frozen C2 comparison qualifies W1, W2, W4, W6, and W8 with one complete 20/20 first-attempt sample each. W8 is fastest at 4.55 points/minute and W4 is the 96.5-percent-efficiency knee.
-  - EXP-048 is the second admitted W10 runtime failure and contributes no performance point. It stopped after POOL_STARTING and before POOL_RUNNING with 0/20 points; the exact cleanup readback passed and no third W10 run was launched.
+  - EXP-048 is the second admitted W10 runtime failure and contributes no performance point. It stopped after POOL_STARTING and before POOL_RUNNING with 0/20 points; the exact cleanup readback passed.
+  - EXP-049 is a fresh valid W10/C2 recovery sample: 20/20 first-attempt PASSED, YOLO-only, levels_used=[10], no retry/fallback/Worker reduction, runner/validator/cleanup exit zero, 315.32049167505465 s end to end, and fresh visual review passed.
+  - The EXP-049 clean-host A/B contradicts a persistent source, image, model, configuration, socket-length, W10/C2 capacity, or deterministic startup defect. EXP-047 and EXP-048 remain separate transient lifecycle failures; their exact external triggers are not confirmed because the decisive historical state was not retained.
   - CP-047 makes the Worker-to-x transform a single generator function used by valid and ideal series, value labels, Worker ticks, and failed-level markers; checked SVG coordinates place W8 at 883.8 and W10 at 1110.0 in every panel.
   - Task 15 preflight at CP-010 confirmed the required linked worktree and HEAD, preserved the three existing dirty paths, and found no conflicting process, ROS node on Domains 0/215-222, Docker container, GPU compute app, or tmux session.
   - Task 15 implementation through CP-011 is committed at 3677e9d97f1367f861496817cee5edeb4349871f; EXP-007R2 qualified eight authenticated Broker clients with C2 YOLO execution, queue depth five, eight distinct logical inferences, zero replay, and zero transport truncation.
@@ -49,7 +51,7 @@ disproven_routes:
 open_hypotheses:
   - Fixed-pool throughput should improve from W1 until shared C2 inference, host CPU/memory, and per-point motion lifecycles dominate; additional Workers beyond that knee may add startup/resource cost without proportional throughput.
   - The production Broker may not persist its optional concurrency summary before the frozen five-second Docker stop boundary; sealed request correlation remains authoritative, but queue/service distributions will be reported unavailable rather than estimated if the file is absent.
-latest_checkpoint: CP-047
+latest_checkpoint: CP-048
 next_experiment: NONE
 ```
 
@@ -4180,7 +4182,11 @@ next_experiment: NONE
 experiment_id: EXP-049-W10-SUCCESS-RECOVERY
 date: 2026-09-15
 dispatch_id: 4f896ffe-c94a-45fc-ab19-c4d6a7099aed
-status: RUNNING
+status: VALID
+status_history:
+  - {status: PLANNED, at: 2026-09-15T21:17:39+08:00}
+  - {status: RUNNING, at: 2026-09-15T21:49:38+08:00}
+  - {status: VALID, at: 2026-09-15T22:05:32+08:00}
 objective: >-
   Preserve actionable startup and Broker-exit diagnostics, then execute exactly
   one clean W10/C2 twenty-point run under the frozen EXP-040 contract.
@@ -4207,9 +4213,62 @@ red_green:
   candidate_full: 135 passed in 4.38 s
   ordinary_gate: collection blocked because /usr/bin/python3 lacks torch
 candidate:
-  build: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-03
+  source_commit: 405e5987280ceef54bbb08002cb60cb04e37d0
+  source_dirty: false
+  build: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-04
   build_status: PASS
 evidence_matrix: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/evidence-matrix.md
+runtime:
+  report: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10
+  runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/n
+  runner_code: 0
+  validator_code: 0
+  cleanup_code: 0
+result:
+  accepted: true
+  status: COMPLETED
+  points: 20/20 PASSED
+  first_attempt: 20
+  levels_used: [10]
+  initial_worker_count: 10
+  final_worker_count: 10
+  yolo: 20
+  grounded_sam_fallback: 0
+  infrastructure_retry: 0
+  fallback_transitions: []
+  correlation_errors: 0
+  aggregate_elapsed_s: 312.8061336108949
+  end_to_end_s: 315.32049167505465
+  twenty_point_execution_s: 215.4021017551422
+  throughput_points_per_min: 5.570976282135338
+  batch_cleanup_complete: true
+resources:
+  cgroup_memory_peak_max_b: 10148159488
+  cgroup_processes_max: 134
+  gpu_used_max_mib: 5412
+  host_mem_available_min_kib: 16586480
+provenance:
+  image_id: sha256:4fb57abe1109e7cc1c7fbf1780a7dd10b4167f12abfa59ba34b1903a60c4c972
+  yolo_weights_sha256: f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  catalog_sha256: c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5
+visual:
+  status: PASS
+  initial_contact_sheet_sha256: e4597d2a953783485fafaac9ba52cb377a34afbfec801c4fd3484dc797f8ef19
+  terminal_contact_sheet_sha256: f2325864b82e99c70e5a5e243eb424721e0473a6993cf8b6a1af8306748a7b89
+  readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10/visual-readback.txt
+ab_result:
+  confirmed: >-
+    Clean admission plus observability-only changes completed the unchanged
+    W10/C2 contract, disproving a persistent source, image, model,
+    configuration, socket-length, capacity, or deterministic startup defect.
+  root_cause_confidence: NOT_CONFIRMED
+  first_bad_boundaries:
+    exp047: Broker/container vanished after POOL_RUNNING and 10/20 passes.
+    exp048: Pool construction failed after POOL_STARTING and before generation root or POOL_RUNNING.
+  limit: >-
+    The missing historical container exit and startup exception state cannot
+    be reconstructed from a successful run; no OOM, saturation, or deadline
+    cause is inferred.
 protected_dirty_test:
   path: src/so101_demo_py/test/test_parallel_batch_resources.py
   diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
@@ -4219,6 +4278,16 @@ retention:
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe
   archived_runs: []
   deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-02
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-03
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-green-01
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-green-02
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-red-01
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-red-02
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-red-03
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/observability-red-04
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch/startup-stage-red-01
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49r
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49g
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49p
@@ -4232,8 +4301,12 @@ retention:
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49t
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49u
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49v
+    - /tmp/so101-debug-4f896ffe.VxVPZM
   deleted: []
-next_experiment: EXP-049-CLEAN-W10-C2
+cleanup:
+  status: PASS
+  readback_sha256: 323df8d370a9337af7b2c13870374a3e6bd01df26186e8f686c41f4e2d3f232b
+next_experiment: NONE
 ```
 
 ## CP-047 — Worker numeric x mapping unified and visually requalified
@@ -4292,6 +4365,71 @@ retention:
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-green-df261a05
     - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/chart-xmap-postcommit-df261a05
     - /tmp/so101-debug-df261a05/chrome-profile-v3
+  deleted: []
+cleanup: PASS
+next_experiment: NONE
+```
+
+## CP-048 — Clean fixed-W10 recovery qualified
+
+```yaml
+checkpoint_id: CP-048
+last_valid_experiment: EXP-049-W10-SUCCESS-RECOVERY
+last_runtime_experiment: EXP-049-W10-SUCCESS-RECOVERY
+status: COMPLETE
+prior_checkpoint: CP-047
+confirmed_conclusions:
+  - The one admitted clean W10/C2 execute run completed 20/20 frozen points on first attempts with levels_used=[10], YOLO-only inference, and no retry, fallback, or Worker reduction.
+  - Aggregate and coordinator state agree, runner/validator/cleanup returned zero, all owned resources were released, and fresh initial/terminal contact-sheet review passed.
+  - The clean-host A/B disproves a persistent frozen-contract defect. EXP-047 and EXP-048 remain separate transient lifecycle failures at their recorded first-bad boundaries; their exact external triggers remain NOT CONFIRMED because the decisive historical failure state was absent.
+implementation_commit: 405e5987280ceef54bbb08002cb60cb04e37d0
+runtime_evidence:
+  report: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10
+  runtime_root: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/n
+  evidence_validation_sha256: 52984353ba4a90e26b2305b80a64b7790bfd7bd3b3db03cbd969f3d3dfe2a0a7
+  final_cleanup_readback_sha256: 323df8d370a9337af7b2c13870374a3e6bd01df26186e8f686c41f4e2d3f232b
+  runner_code: 0
+  validator_code: 0
+  cleanup_code: 0
+visual_evidence:
+  status: PASS
+  initial_contact_sheet_sha256: e4597d2a953783485fafaac9ba52cb377a34afbfec801c4fd3484dc797f8ef19
+  terminal_contact_sheet_sha256: f2325864b82e99c70e5a5e243eb424721e0473a6993cf8b6a1af8306748a7b89
+  readback: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/w10/visual-readback.txt
+verification:
+  focused_tests: 41 passed in 0.41 s
+  candidate_focused_tests: 135 passed in 4.38 s
+  ordinary_gate: BLOCKED during collection because /usr/bin/python3 lacks torch
+  candidate_build: PASS
+  clean_candidate_source: /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-04
+protected_dirty_test:
+  path: src/so101_demo_py/test/test_parallel_batch_resources.py
+  diff_sha256: ae383016c78eca3c02e05f600d58fb4a65211f4783acf9612ea38e374baf380c
+  staged: false
+retention:
+  retained_runs:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/r/n
+  archived_runs: []
+  deletion_candidates:
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-02
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/candidate-src-03
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/w10-success-recovery-4f896ffe/scratch
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49b
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49c
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49d
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49e
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49f
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49g
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49p
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49q
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49r
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49s
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49t
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49u
+    - /data/work/so101-evidence/parallel-adaptive-worker/20260915-w10-a01/scratch/e49v
+    - /tmp/so101-debug-4f896ffe.VxVPZM
   deleted: []
 cleanup: PASS
 next_experiment: NONE
