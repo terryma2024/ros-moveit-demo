@@ -1,7 +1,7 @@
 ---
 task_id: so101-pytest-parallel-gate
-goal: Minimize wall-clock time of the complete ordinary src/so101_demo_py/test pytest gate without changing its collected cases or pass/fail semantics.
-success_contract: All 3056 ordinary pytest nodes execute exactly once and pass on the committed pytest-only candidate; compare pytest process concurrency 4, 6, 8, 10, and 12, then select the fastest valid full-suite result at the predeclared 10-percent stopping boundary.
+goal: Minimize wall-clock time of the complete ordinary src/so101_demo_py/test pytest gate without changing its collected cases or pass/fail semantics, with default startup concurrency set to 8.
+success_contract: Omitting --workers selects pytest subprocess concurrency 8 while explicit overrides remain supported; focused RED/GREEN and a fresh full ordinary pytest run pass before merging into codex/parallel-adaptive-worker-pool.
 worktree: /data/work/ws_moveit/.worktrees/pytest-gate-parallelism
 branch: codex/pytest-gate-parallelism
 base_commit: b0f9e7168198285fba4133026d9d3b132075f88b
@@ -28,9 +28,10 @@ confirmed_conclusions:
 disproven_routes:
   - Running W1/W2/W4 while the primary task is active is rejected as contaminated by the handoff's admission gate (CP-001).
   - SO-101 application Worker W1-W10 correctness validation is explicitly outside the resumed pytest-only optimization scope.
-open_hypotheses: []
+open_hypotheses:
+  - The existing required --workers argument can become an optional default of 8 without changing explicit override behavior or full-gate semantics (EXP-032-DEFAULT-P8-TDD).
 latest_checkpoint: CP-007
-next_experiment: WAIT_FOR_USER
+next_experiment: EXP-032-DEFAULT-P8-TDD
 ---
 
 # SO-101 pytest parallel gate experiment ledger
@@ -2497,4 +2498,124 @@ archived_runs:
 deletion_candidates:
   - All scratch trees and build/install/log trees under the registered evidence root after final readback; no deletion is authorized or performed.
 next_experiment: WAIT_FOR_USER
+```
+
+## EXP-032-DEFAULT-P8-TDD — Make pytest concurrency 8 the startup default
+
+```yaml
+experiment_id: EXP-032-DEFAULT-P8-TDD
+status: RUNNING
+status_history:
+  - status: PLANNED
+    at: 2026-09-15T23:17:30+08:00
+  - status: RUNNING
+    at: 2026-09-15T23:18:22+08:00
+prior_experiment: EXP-031-PYTEST-P12
+hypothesis: Making --workers optional with default 8 preserves explicit overrides and makes an otherwise valid invocation select concurrency 8.
+prediction: A focused parser contract fails before the implementation because --workers is required, then passes after the one-line parser change.
+single_variable: CLI default for pytest subprocess concurrency changes from required input to 8.
+lifecycle: REUSE_STACK
+preconditions:
+  - Source starts at commit 6c3763cf4d1df684c4e21f53cebcf4623c447eae with a clean worktree.
+  - Target worktree has one pre-existing dirty user file, src/so101_demo_py/test/test_parallel_batch_resources.py, which is outside this change and must remain untouched.
+  - No pytest, ROS daemon, Gazebo, or MuJoCo runtime process is active.
+success_criteria:
+  - Focused test demonstrates RED for the currently required option and GREEN after default 8 is implemented.
+  - Explicit --workers remains accepted.
+failure_criteria:
+  - Default is not 8, explicit override breaks, or any focused runner contract fails.
+invalid_criteria:
+  - Source drift outside the runner test, runner implementation, and this ledger; scratch collision; external interruption.
+provenance:
+  source_commit: 6c3763cf4d1df684c4e21f53cebcf4623c447eae
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - Add a focused parser contract, run it RED from fresh scratch/m, apply the minimal parser default, then rerun GREEN from the same isolated focused-test scratch.
+observed:
+  - Source has only this ledger dirty; target retains exactly its pre-existing test_parallel_batch_resources.py modification; scratch/m is absent and no relevant runtime process is active.
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/m
+decision: RUN
+next_experiment: EXP-033-DEFAULT-P8-FULL
+```
+
+### EXP-032 result update
+
+```yaml
+status: VALID
+status_history:
+  - status: VALID
+    at: 2026-09-15T23:20:28+08:00
+commands:
+  - command: /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_pytest_full_gate_runner.py::test_cli_defaults_to_eight_workers_when_omitted -q
+    exit_code: 1
+  - command: /usr/bin/python3 -m pytest -p no:cacheprovider src/so101_demo_py/test/test_pytest_full_gate_runner.py -q
+    exit_code: 0
+  - command: /home/lenovo/.local/bin/ruff check tools/so101_pytest_gate.py src/so101_demo_py/test/test_pytest_full_gate_runner.py
+    exit_code: 0
+  - command: /home/lenovo/.local/bin/ruff format --check tools/so101_pytest_gate.py src/so101_demo_py/test/test_pytest_full_gate_runner.py
+    exit_code: 0
+observed:
+  - OBSERVED: RED failed in 0.43 seconds because argparse still required --workers.
+  - OBSERVED: After the one-line default=8 change, all 30 focused contracts passed in 0.30 seconds.
+  - OBSERVED: An explicit-override compatibility contract then joined the suite; all 31 contracts passed in 0.31 seconds.
+  - OBSERVED: Ruff check and format-check both passed for the two modified pytest files.
+inferred:
+  - NONE
+conclusion: Omitting --workers now selects 8, and an explicit --workers 10 continues to override the default.
+evidence:
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/m
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/n
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/scratch/o
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp032-default-p8-red.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp032-default-p8-green.log
+  - /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp032-default-p8-compat.log
+decision: KEEP
+next_experiment: EXP-033-DEFAULT-P8-FULL
+```
+
+## EXP-033-DEFAULT-P8-FULL — Committed default-start full ordinary pytest verification
+
+```yaml
+experiment_id: EXP-033-DEFAULT-P8-FULL
+status: PLANNED
+prior_experiment: EXP-032-DEFAULT-P8-TDD
+hypothesis: The committed runner passes the full ordinary pytest gate when --workers is omitted, and records worker_count 8.
+prediction: Exact ordinary-node PASS with worker_count=8, unchanged collection semantics, readable JUnit evidence, and complete child cleanup.
+single_variable: Invoke the committed runner without --workers.
+lifecycle: REUSE_STACK
+preconditions:
+  - Default-P8 implementation and ledger are committed together; exact /usr/bin/python3 and task overlay/source shim provenance are preserved.
+  - A new one-character run ID is previously nonexistent and the timing input remains the validated EXP-028 P6 merged JUnit used by the prior P8 run.
+  - No conflicting pytest, ROS daemon, Gazebo, or MuJoCo process is active.
+success_criteria:
+  - Runner summary reports PASS, worker_count=8, exact expected/actual node equality, benchmark exclusion, and complete cleanup.
+failure_criteria:
+  - Any test/process/coverage/JUnit/provenance/timeout/cleanup gate fails or worker_count differs from 8.
+invalid_criteria:
+  - Source/environment/timing-input drift, scratch collision, or external interruption.
+provenance:
+  source_commit: PENDING_POST_COMMIT
+  install_overlay: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/install-exp022
+  runtime_executable: /usr/bin/python3
+  timing_input: /data/work/so101-evidence/pytest-parallel-gate/20260915-w1-w2-w4-a01/exp028-p6-fresh-timings.xml
+  ros_domain_id: UNSET_NO_ROS_RUNTIME
+  gz_partition: UNSET_NO_SIMULATOR
+commands:
+  - PENDING
+observed:
+  - PENDING
+inferred:
+  - NONE
+conclusion: PENDING
+evidence:
+  - PENDING_FRESH_RUN_ROOT
+decision: PENDING
+next_experiment: EXP-034-MERGE
 ```

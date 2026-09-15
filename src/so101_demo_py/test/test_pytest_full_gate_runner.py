@@ -7,6 +7,7 @@ from tools.so101_pytest_gate import (
     SERIAL_MODULES,
     CoverageError,
     ProcessOutcome,
+    _parser,
     _resource_metrics,
     assign_lpt,
     create_process_layout,
@@ -21,6 +22,29 @@ from tools.so101_pytest_gate import (
     validate_source_status,
     validate_worker_count,
 )
+
+
+def test_cli_defaults_to_eight_workers_when_omitted(tmp_path: Path) -> None:
+    arguments = _parser().parse_args(
+        ["--evidence-root", str(tmp_path), "--run-id", "default-workers"]
+    )
+
+    assert arguments.workers == 8
+
+
+def test_cli_explicit_workers_override_the_default(tmp_path: Path) -> None:
+    arguments = _parser().parse_args(
+        [
+            "--workers",
+            "10",
+            "--evidence-root",
+            str(tmp_path),
+            "--run-id",
+            "explicit-workers",
+        ]
+    )
+
+    assert arguments.workers == 10
 
 
 def test_lpt_assignment_is_deterministic_and_balances_the_longest_module() -> None:

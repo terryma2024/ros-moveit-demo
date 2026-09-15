@@ -792,7 +792,7 @@ def run_gate(arguments: argparse.Namespace) -> dict[str, object]:
 def _parser() -> argparse.ArgumentParser:
     repo_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workers", type=int, required=True)
+    parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--timings", type=Path)
